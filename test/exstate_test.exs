@@ -24,5 +24,14 @@ defmodule ExstateTest do
     [ expected_initial_state | _tail ] = test_config["initialConfiguration"]
 
     assert machine.initial == expected_initial_state
+
+    guide = Exstate.Guide.new(machine)
+            |> Exstate.Guide.on_transition!(fn (state) -> IO.inspect(state) end)
+
+    [ test_case | _tail ] = test_config["events"]
+    guide = guide |> Exstate.Guide.send(test_case["event"]["name"])
+
+    [ expected_next_state | _tail ] = test_case["nextConfiguration"]
+    assert guide.journey.current_state.id == expected_next_state
   end
 end
