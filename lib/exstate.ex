@@ -1,18 +1,21 @@
 defmodule Exstate do
+  alias Exstate.ScxmlParser
+
   @moduledoc """
   Documentation for Exstate.
   """
 
-  @doc """
-  Hello world.
+  #@doc """
+  #Parses SCXML document
 
-  ## Examples
+  ### Examples
 
-      iex> Exstate.hello()
-      :world
+  #    iex> Exstate.parse_scxml "basic.scxml"
+  #    :world
 
-  """
-  def hello do
-    :world
+  #"""
+  def parse_scxml path do
+    {:ok, xmldoc} = File.read Path.expand path
+    ScxmlParser.parse xmldoc
   end
 end
