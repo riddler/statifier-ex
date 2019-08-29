@@ -39,7 +39,7 @@ defmodule Exstate.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev},
-
+      {:poison, ">= 0.0.0"},
       {:sweet_xml, ">= 0.0.0"}
     ]
   end
