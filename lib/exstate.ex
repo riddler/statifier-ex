@@ -1,5 +1,5 @@
 defmodule Exstate do
-  alias Exstate.ScxmlParser
+  alias Exstate.Scxml
 
   @moduledoc """
   Documentation for Exstate.
@@ -16,6 +16,6 @@ defmodule Exstate do
   #"""
   def parse_scxml path do
     {:ok, xmldoc} = File.read Path.expand path
-    ScxmlParser.parse xmldoc
+    Scxml.parse xmldoc
   end
 end

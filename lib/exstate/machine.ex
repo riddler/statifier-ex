@@ -5,7 +5,11 @@ defmodule Exstate.Machine do
     %__MODULE__{initial_state: initial_state}
   end
 
-  def initial_state %__MODULE__{initial_state: foo} do
-    foo
-  end
+  #def initial_state(%__MODULE__{initial_state: state}) when state == "" do
+  #  "foo"
+  #end
+
+  #def initial_state %__MODULE__{initial_state: state} do
+  #  state
+  #end
 end
