@@ -1,4 +1,3 @@
-require IEx
 defmodule Exstate.Guide do
   defstruct [:machine, :on_transition, :journey]
 
@@ -14,7 +13,11 @@ defmodule Exstate.Guide do
     found_transition = Enum.find(guide.journey.current_state.transitions,
       fn transition -> transition.event == event end)
 
-    new_journey = guide.journey |> Exstate.Journey.transition!(found_transition.target)
-    %__MODULE__{guide | journey: new_journey}
+    if is_nil(found_transition) do
+      guide
+    else
+      new_journey = guide.journey |> Exstate.Journey.transition!(found_transition.target)
+      %__MODULE__{guide | journey: new_journey}
+    end
   end
 end
