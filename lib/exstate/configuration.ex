@@ -1,6 +1,11 @@
 defmodule Exstate.Configuration do
   defstruct [:active]
 
+  def initial(state) do
+    initial_config = state |> Exstate.State.get_initial
+    %__MODULE__{active: [initial_config]}
+  end
+
   def new(state) do
     %__MODULE__{active: [state]}
   end
