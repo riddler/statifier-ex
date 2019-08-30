@@ -36,8 +36,6 @@ defmodule Exstate.Machine do
       |> transitions
       |> Enum.find(fn transition -> transition.event == event end)
 
-    IO.inspect found_transition
-
     if is_nil(found_transition) do
       machine
     else
