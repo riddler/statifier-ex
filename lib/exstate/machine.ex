@@ -1,3 +1,4 @@
+require IEx
 defmodule Exstate.Machine do
   defstruct [
     # Definition of the machine
@@ -6,15 +7,19 @@ defmodule Exstate.Machine do
     # Root state
     :root,
 
+    :states,
+
     # Currently active states
     :configuration
   ]
 
   def new statechart do
     root = Exstate.State.new(statechart)
+
     %__MODULE__{
       #statechart: statechart,
       root: root,
+      states: Exstate.State.gather_states(root),
       configuration: Exstate.Configuration.initial(root)
     }
   end
@@ -45,13 +50,8 @@ defmodule Exstate.Machine do
   end
 
   def transition!(%__MODULE__{} = machine, transition) do
-    target_state = machine |> find_state_by_key(transition.target)
+    target_state = machine.states |> Enum.find(fn state -> state.id == transition.target end)
 
     %__MODULE__{machine | configuration: Exstate.Configuration.new(target_state)}
-  end
-
-  def find_state_by_key(%__MODULE__{} = machine, key) do
-    machine.root.states
-    |> Enum.find(fn state -> state.id == key end)
   end
 end

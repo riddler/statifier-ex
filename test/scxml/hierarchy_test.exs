@@ -12,6 +12,11 @@ defmodule HierarchyTest do
       |> Exstate.Machine.configuration_literal
 
     assert configuration_literal == test_config["initialConfiguration"]
+
+    Enum.each(test_config["events"], fn test_case ->
+      machine = machine |> Exstate.Machine.send(test_case["event"]["name"])
+      assert (machine |> Exstate.Machine.configuration_literal) == test_case["nextConfiguration"]
+    end)
   end
 
   #test "scxml test basic1" do

@@ -1,10 +1,9 @@
-require IEx
 defmodule Exstate.States.CompoundState do
   defstruct [
     :id,
     :initial_attribute,
-    #:initial,
     :states,
+    #:states_by_key,
     :transitions
   ]
 
@@ -17,44 +16,14 @@ defmodule Exstate.States.CompoundState do
     states = definition.states
       |> Enum.map(fn child -> Exstate.State.new(child) end)
 
-    #initial = Enum.find(states, fn state -> definition.initial == state.id end) ||
-    #  List.first states
-
-    #if initial.states do
-    #  initial = Enum.find(initial.states, fn state -> initial.initial_attribute == state.id end) ||
-    #    List.first initial.states
-    #end
-
-    #initial = Enum.find(states, fn state -> 
-    #  state |> get_initial(definition.
-    #  definition.initial == state.id end) ||
-    #  List.first states
-
-    #if initial.states do
-    #  initial = Enum.find(initial.states, fn state -> initial.initial_attribute == state.id end) ||
-    #    List.first initial.states
-    #end
-
-
-
-
-    #if definition.id == "" do
-    #  IEx.pry
-    #end
+    #states_by_key = states |> Map.new(fn child -> {child.id, child} end)
 
     %__MODULE__{
       id: definition.id,
       initial_attribute: definition.initial,
-      #initial: initial,
       states: states,
+      #states_by_key: states_by_key,
       transitions: transitions
     }
   end
-
-  #def initial(%__MODULE__{} = state) do
-  #  initial = Enum.find(state.states, fn child ->
-  #    child |> initial
-  #    state.initial_attribute == child.id end) ||
-  #    List.first state.states
-  #end
 end

@@ -9,6 +9,16 @@ defmodule Exstate.State do
       |> get_initial
   end
 
+  def gather_states(%Exstate.States.CompoundState{} = state) do
+    state.states
+      |> Enum.map(fn child -> child |> gather_states end)
+      |> List.flatten([state])
+  end
+
+  def gather_states(%Exstate.States.AtomicState{} = state) do
+    [state]
+  end
+
   def new(definition) do
     if length(definition.states) == 0 do
       Exstate.States.AtomicState.new definition
