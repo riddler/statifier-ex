@@ -1,4 +1,4 @@
-defmodule Exstate.States.CompoundState do
+defmodule Exstate.States.ParallelState do
   defstruct [
     :id,
     :initial_attribute,

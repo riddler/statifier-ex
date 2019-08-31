@@ -3,7 +3,7 @@ defmodule Exstate.Configuration do
 
   def initial(state) do
     initial_config = state |> Exstate.State.get_initial
-    %__MODULE__{active: [initial_config]}
+    %__MODULE__{active: initial_config}
   end
 
   def new(state) do

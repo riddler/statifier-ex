@@ -1,4 +1,3 @@
-require IEx
 defmodule Exstate.Machine do
   defstruct [
     # Definition of the machine

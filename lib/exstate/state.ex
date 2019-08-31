@@ -1,6 +1,6 @@
 defmodule Exstate.State do
   def get_initial(%Exstate.States.AtomicState{} = state) do
-    state
+    [state]
   end
 
   def get_initial(%Exstate.States.CompoundState{} = state) do
@@ -9,21 +9,39 @@ defmodule Exstate.State do
       |> get_initial
   end
 
+  def get_initial(%Exstate.States.ParallelState{} = state) do
+    state.states
+      |> Enum.map(fn child -> child |> get_initial end)
+      |> List.flatten
+  end
+
+
+
+  def gather_states(%Exstate.States.AtomicState{} = state) do
+    [state]
+  end
+
   def gather_states(%Exstate.States.CompoundState{} = state) do
     state.states
       |> Enum.map(fn child -> child |> gather_states end)
       |> List.flatten([state])
   end
 
-  def gather_states(%Exstate.States.AtomicState{} = state) do
-    [state]
+  def gather_states(%Exstate.States.ParallelState{} = state) do
+    state.states
+      |> Enum.map(fn child -> child |> gather_states end)
+      |> List.flatten([state])
   end
 
+
   def new(definition) do
-    if length(definition.states) == 0 do
-      Exstate.States.AtomicState.new definition
-    else
-      Exstate.States.CompoundState.new definition
+    cond do
+      length(definition.states) == 0 ->
+        Exstate.States.AtomicState.new definition
+      definition.type == "parallel" ->
+        Exstate.States.ParallelState.new definition
+      true ->
+        Exstate.States.CompoundState.new definition
     end
   end
 end

@@ -49,5 +49,21 @@ defmodule Exstate.ScxmlTest do
       ]
     } = statechart.root
   end
+
+  test "parses parallel0" do
+    scxml_path = "./test/fixtures/scxml/parallel/test0.scxml"
+    {:ok, xmldoc} = File.read Path.expand scxml_path
+
+    statechart = Exstate.Scxml.parse_statechart xmldoc
+
+    assert %{
+      states: [
+        %{ id: "p", type: "parallel", states: [
+          %{ id: "a" },
+          %{ id: "b" }
+        ]}
+      ]
+    } = statechart.root
+  end
 end
 

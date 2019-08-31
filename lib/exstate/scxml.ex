@@ -13,6 +13,7 @@ defmodule Exstate.Scxml do
   def xml_to_map xml do
     initial = xml |> xpath(~x"./@initial"s)
     id = xml |> xpath(~x"./@id"s)
+    type = xml |> xpath(~x"name()"s)
 
     transitions = xml
                   |> xpath(~x"./transition"l,
@@ -20,11 +21,12 @@ defmodule Exstate.Scxml do
                     event: ~x"./@event"s
                   )
     states = xml
-      |> xpath(~x"./state"l)
+      |> xpath(~x"./state | ./parallel"l)
       |> Enum.map(fn (state_element) -> xml_to_map(state_element) end)
 
     %{
       id: id,
+      type: type,
       initial: initial,
       transitions: transitions,
       states: states
