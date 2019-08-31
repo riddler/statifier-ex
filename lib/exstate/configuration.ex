@@ -6,8 +6,12 @@ defmodule Exstate.Configuration do
     %__MODULE__{active: initial_config}
   end
 
-  def new(state) do
-    %__MODULE__{active: [state]}
+  #def transition!(%__MODULE__{} = configuration, transition) do
+  #  target_state = machine.states |> Enum.find(fn state -> state.id == transition.target end)
+  #end
+
+  def new(new_config) do
+    %__MODULE__{active: new_config}
   end
 
   def literal(%__MODULE__{} = configuration) do

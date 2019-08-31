@@ -4,6 +4,5 @@ defmodule BasicTest do
 
   test_machines "basic", "basic0"
   test_machines "basic", "basic1"
-
-  # test_machines "basic", "basic2"
+  test_machines "basic", "basic2"
 end

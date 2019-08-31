@@ -17,9 +17,10 @@ defmodule MachineHelpers do
 
         assert configuration_literal == test_config["initialConfiguration"]
 
-        Enum.each(test_config["events"], fn test_case ->
-          machine = machine |> Exstate.Machine.send(test_case["event"]["name"])
-          assert (machine |> Exstate.Machine.configuration_literal) == test_case["nextConfiguration"]
+        Enum.reduce(test_config["events"], machine, fn test_case, acc ->
+          new_machine = acc |> Exstate.Machine.send(test_case["event"]["name"])
+          assert (new_machine |> Exstate.Machine.configuration_literal) == test_case["nextConfiguration"]
+          new_machine
         end)
       end
     end

@@ -3,4 +3,5 @@ defmodule ParallelTest do
   import MachineHelpers
 
   test_machines "parallel", "test0"
+  test_machines "parallel", "test1"
 end

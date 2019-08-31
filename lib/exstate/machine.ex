@@ -36,21 +36,34 @@ defmodule Exstate.Machine do
   end
 
   def send(%__MODULE__{} = machine, event) do
-    found_transition = machine
+    matching_transitions = machine
       |> transitions
-      |> Enum.find(fn transition -> transition.event == event end)
+      |> Enum.filter(fn transition -> transition.event == event end)
 
-    if is_nil(found_transition) do
+    if length(matching_transitions) == 0 do
       machine
     else
       machine
-      |> transition!(found_transition)
+      |> transition!(matching_transitions)
     end
   end
 
-  def transition!(%__MODULE__{} = machine, transition) do
-    target_state = machine.states |> Enum.find(fn state -> state.id == transition.target end)
+  def transition!(%__MODULE__{} = machine, transitions) do
+    changes = transitions
+      |> Enum.map(fn transition ->
+          %{
+            source: machine.states |> Enum.find(fn state -> state.id == transition.source end),
+            target: machine.states |> Enum.find(fn state -> state.id == transition.target end)
+          }
+        end)
 
-    %__MODULE__{machine | configuration: Exstate.Configuration.new(target_state)}
+
+    new_states = changes
+      |> Enum.reduce(machine.configuration.active, fn x, acc ->
+        new_list = acc |> List.delete(x.source)
+        new_list ++ [x.target]
+      end)
+
+    %__MODULE__{machine | configuration: Exstate.Configuration.new(new_states)}
   end
 end
