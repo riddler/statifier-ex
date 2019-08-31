@@ -14,7 +14,7 @@ defmodule Exstate.Machine do
   ]
 
   def new statechart do
-    root = Exstate.State.new(statechart)
+    root = Exstate.State.new(statechart.root)
 
     %__MODULE__{
       #statechart: statechart,

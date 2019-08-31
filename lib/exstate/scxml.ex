@@ -3,12 +3,14 @@ defmodule Exstate.Scxml do
 
   # Return a map of the statechart
   def parse_statechart xml_string do
-    xml = SweetXml.parse xml_string
-    root_element = SweetXml.xpath xml, ~x"/scxml"
-    sc_map root_element
+    xml_string
+    |> SweetXml.parse
+    |> SweetXml.xpath(~x"/scxml")
+    |> xml_to_map
+    |> Exstate.Statechart.new
   end
 
-  def sc_map xml do
+  def xml_to_map xml do
     initial = xml |> xpath(~x"./@initial"s)
     id = xml |> xpath(~x"./@id"s)
 
@@ -19,7 +21,7 @@ defmodule Exstate.Scxml do
                   )
     states = xml
       |> xpath(~x"./state"l)
-      |> Enum.map(fn (state_element) -> sc_map(state_element) end)
+      |> Enum.map(fn (state_element) -> xml_to_map(state_element) end)
 
     %{
       id: id,

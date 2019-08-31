@@ -1,7 +1,7 @@
 defmodule Exstate.Statechart do
-  alias Exstate.Statechart.StateDefinition
+  defstruct [ :root ]
 
-  def from_map map do
-    StateDefinition.new map[:id], map[:initial], map[:states], map[:transitions]
+  def new root do
+    %__MODULE__{root: root}
   end
 end

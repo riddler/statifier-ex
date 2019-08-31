@@ -5,57 +5,49 @@ defmodule Exstate.ScxmlTest do
     scxml_path = "./test/fixtures/scxml/basic/basic0.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    sc_map = Exstate.Scxml.parse_statechart xmldoc
+    statechart = Exstate.Scxml.parse_statechart xmldoc
 
     assert %{
-      id: "",
       initial: "a",
       states: [
-        %{ id: "a", initial: "", states: [], transitions: [] }
-      ],
-      transitions: []
-    } === sc_map
+        %{ id: "a", initial: ""}
+      ]
+    } = statechart.root
   end
 
   test "parses basic1" do
     scxml_path = "./test/fixtures/scxml/basic/basic1.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    sc_map = Exstate.Scxml.parse_statechart xmldoc
+    statechart = Exstate.Scxml.parse_statechart xmldoc
 
     assert %{
-      id: "",
-      initial: "",
       states: [
-        %{ id: "a", initial: "", states: [], transitions: [
+        %{ id: "a", transitions: [
           %{ event: "t", target: "b" }
         ]},
-        %{ id: "b", initial: "", states: [], transitions: []}
-      ],
-      transitions: []
-    } == sc_map
+        %{ id: "b", transitions: []}
+      ]
+    } = statechart.root
   end
 
   test "parses basic2" do
     scxml_path = "./test/fixtures/scxml/basic/basic2.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    sc_map = Exstate.Scxml.parse_statechart xmldoc
+    statechart = Exstate.Scxml.parse_statechart xmldoc
 
     assert %{
-      id: "",
-      initial: "",
       states: [
-        %{ id: "a", initial: "", states: [], transitions: [
+        %{ id: "a", transitions: [
           %{ event: "t", target: "b" }
         ]},
-        %{ id: "b", initial: "", states: [], transitions: [
+        %{ id: "b", transitions: [
           %{ event: "t2", target: "c" }
         ]},
-        %{ id: "c", initial: "", states: [], transitions: []}
-      ],
-      transitions: []
-    } == sc_map
+        %{ id: "c" }
+      ]
+    } = statechart.root
   end
 end
 
