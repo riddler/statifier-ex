@@ -4,7 +4,7 @@ defmodule Staart.MixProject do
   def project do
     [
       app: :staart,
-      version: "0.0.1",
+      version: "0.1.0",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
       docs: [extras: ["README.md"]],

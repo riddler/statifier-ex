@@ -10,7 +10,7 @@ by adding `staart` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:staart, "~> 0.0.1"}
+    {:staart, "~> 0.1.0"}
   ]
 end
 ```
