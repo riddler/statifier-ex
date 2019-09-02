@@ -1,4 +1,4 @@
-defmodule Exstate.Transition do
+defmodule Staart.Transition do
   defstruct [
     :source,
     :target,

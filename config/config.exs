@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure your application as:
 #
-#     config :exstate, key: :value
+#     config :staart, key: :value
 #
 # and access this configuration in your application as:
 #
-#     Application.get_env(:exstate, :key)
+#     Application.get_env(:staart, :key)
 #
 # You can also configure a third-party app:
 #

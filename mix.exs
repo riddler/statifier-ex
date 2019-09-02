@@ -1,9 +1,9 @@
-defmodule Exstate.MixProject do
+defmodule Staart.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :exstate,
+      app: :staart,
       version: "0.0.1",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
@@ -16,15 +16,15 @@ defmodule Exstate.MixProject do
   end
 
 
-  def description, do: "Statecharts for Elixir"
+  def description, do: "STAtechARTs for Elixir"
 
   def package do
     [
-      name: :exstate,
+      name: :staart,
       maintainers: ["JohnnyT"],
       licenses: ["MIT"],
       docs: [extras: ["README.md"]],
-      links: %{"GitHub" => "https://github.com/riddler/exstate"}
+      links: %{"GitHub" => "https://github.com/riddler/staart-ex"}
     ]
   end
 

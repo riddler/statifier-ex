@@ -1,4 +1,4 @@
-defmodule Exstate.Machine do
+defmodule Staart.Machine do
   defstruct [
     # Root state
     :root,
@@ -10,25 +10,25 @@ defmodule Exstate.Machine do
   ]
 
   def new statechart do
-    root = Exstate.State.new(statechart.root)
+    root = Staart.State.new(statechart.root)
 
     %__MODULE__{
       root: root,
-      states: Exstate.State.gather_states(root),
-      configuration: Exstate.Configuration.initial(root)
+      states: Staart.State.gather_states(root),
+      configuration: Staart.Configuration.initial(root)
     }
   end
 
   # Literal representation of the configuration
   def configuration_literal(%__MODULE__{} = machine) do
-    Exstate.Configuration.literal machine.configuration
+    Staart.Configuration.literal machine.configuration
   end
 
   # Transitions defined on current configuration
   def transitions(%__MODULE__{} = machine) do
     machine.configuration.active
     |> Enum.reduce([], fn state, acc ->
-      acc ++ Exstate.State.gather_transitions(state)
+      acc ++ Staart.State.gather_transitions(state)
     end)
     |> List.flatten
   end
@@ -63,9 +63,9 @@ defmodule Exstate.Machine do
       |> Enum.reduce(machine.configuration.active, fn x, acc ->
         new_list = acc |> List.delete(x.source)
 
-        new_list ++ (x.target |> Exstate.State.get_initial)
+        new_list ++ (x.target |> Staart.State.get_initial)
       end)
 
-    %__MODULE__{machine | configuration: Exstate.Configuration.new(new_states)}
+    %__MODULE__{machine | configuration: Staart.Configuration.new(new_states)}
   end
 end

@@ -1,4 +1,4 @@
-defmodule Exstate.Scxml do
+defmodule Staart.Scxml do
   import SweetXml
 
   # Return a map of the statechart
@@ -7,7 +7,7 @@ defmodule Exstate.Scxml do
     |> SweetXml.parse
     |> SweetXml.xpath(~x"/scxml")
     |> xml_to_map
-    |> Exstate.Statechart.new
+    |> Staart.Statechart.new
   end
 
   def xml_to_map xml do

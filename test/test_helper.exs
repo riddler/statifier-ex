@@ -11,15 +11,15 @@ defmodule MachineHelpers do
         {:ok, test_contents} = File.read Path.expand test_path
         {:ok, test_config} = Poison.decode test_contents
 
-        machine = Exstate.machine_from_file(scxml_path)
+        machine = Staart.machine_from_file(scxml_path)
         configuration_literal = machine
-          |> Exstate.Machine.configuration_literal
+          |> Staart.Machine.configuration_literal
 
         assert configuration_literal == test_config["initialConfiguration"]
 
         Enum.reduce(test_config["events"], machine, fn test_case, acc ->
-          new_machine = acc |> Exstate.Machine.send(test_case["event"]["name"])
-          assert (new_machine |> Exstate.Machine.configuration_literal) == test_case["nextConfiguration"]
+          new_machine = acc |> Staart.Machine.send(test_case["event"]["name"])
+          assert (new_machine |> Staart.Machine.configuration_literal) == test_case["nextConfiguration"]
           new_machine
         end)
       end

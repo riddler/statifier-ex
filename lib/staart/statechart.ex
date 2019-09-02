@@ -1,4 +1,4 @@
-defmodule Exstate.Statechart do
+defmodule Staart.Statechart do
   defstruct [ :root ]
 
   def new root do
