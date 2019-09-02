@@ -2,7 +2,7 @@
     "initialConfiguration" : ["a1"],
     "events" : [
         {
-            "event" : { "name" : "t" },
+            "event" : { "name" : "e-hier1" },
             "nextConfiguration" : ["a2"]
         }
     ]

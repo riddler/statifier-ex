@@ -21,13 +21,13 @@
 
     <state id="a">
         <state id="a1">
-            <transition target="a2" event="t"/>
+            <transition target="a2" event="e-hier1"/>
         </state>
 
         <state id="a2">
         </state>
 
-        <transition target="b" event="t"/>
+        <transition target="b" event="e-hier1"/>
     </state>
 
     <state id="b"/>

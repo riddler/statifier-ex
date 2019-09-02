@@ -30,7 +30,7 @@ after event t: [s5,s6,s9,s10]
 
                 <state id="s4"/>
 
-                <transition target="p3" event="t"/>
+                <transition target="p3" event="e-p2"/>
             </parallel>
 
             <parallel id="p3">
@@ -47,7 +47,7 @@ after event t: [s5,s6,s9,s10]
 
                 <state id="s8"/>
 
-                <transition target="p5" event="t"/>
+                <transition target="p5" event="e-p2"/>
             </parallel>
 
             <parallel id="p5">

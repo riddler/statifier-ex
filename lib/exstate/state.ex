@@ -21,27 +21,38 @@ defmodule Exstate.State do
     [state]
   end
 
-  def gather_states(%Exstate.States.CompoundState{} = state) do
+  def gather_states(state) do
     state.states
       |> Enum.map(fn child -> child |> gather_states end)
       |> List.flatten([state])
   end
 
-  def gather_states(%Exstate.States.ParallelState{} = state) do
-    state.states
-      |> Enum.map(fn child -> child |> gather_states end)
-      |> List.flatten([state])
+
+
+  def gather_transitions(%Exstate.States.AtomicState{} = state) do
+    state.transitions
   end
+
+  def gather_transitions(state) do
+    state.states
+      |> Enum.map(fn child -> child |> gather_transitions end)
+      |> List.flatten
+  end
+
 
 
   def new(definition) do
+    new definition, []
+  end
+
+  def new(definition, transitions) do
     cond do
       length(definition.states) == 0 ->
-        Exstate.States.AtomicState.new definition
+        Exstate.States.AtomicState.new definition, transitions
       definition.type == "parallel" ->
-        Exstate.States.ParallelState.new definition
+        Exstate.States.ParallelState.new definition, transitions
       true ->
-        Exstate.States.CompoundState.new definition
+        Exstate.States.CompoundState.new definition, transitions
     end
   end
 end

@@ -1,8 +1,5 @@
 defmodule Exstate.Machine do
   defstruct [
-    # Definition of the machine
-    :statechart,
-
     # Root state
     :root,
 
@@ -16,7 +13,6 @@ defmodule Exstate.Machine do
     root = Exstate.State.new(statechart.root)
 
     %__MODULE__{
-      #statechart: statechart,
       root: root,
       states: Exstate.State.gather_states(root),
       configuration: Exstate.Configuration.initial(root)
@@ -31,7 +27,9 @@ defmodule Exstate.Machine do
   # Transitions defined on current configuration
   def transitions(%__MODULE__{} = machine) do
     machine.configuration.active
-    |> Enum.map(fn state -> state.transitions end)
+    |> Enum.reduce([], fn state, acc ->
+      acc ++ Exstate.State.gather_transitions(state)
+    end)
     |> List.flatten
   end
 
@@ -43,8 +41,12 @@ defmodule Exstate.Machine do
     if length(matching_transitions) == 0 do
       machine
     else
+      # TODO: handle multiple transitions
+      [ first | _tail ] = matching_transitions
       machine
-      |> transition!(matching_transitions)
+      |> transition!([first])
+      #machine
+      #|> transition!(matching_transitions)
     end
   end
 
@@ -57,11 +59,11 @@ defmodule Exstate.Machine do
           }
         end)
 
-
     new_states = changes
       |> Enum.reduce(machine.configuration.active, fn x, acc ->
         new_list = acc |> List.delete(x.source)
-        new_list ++ [x.target]
+
+        new_list ++ (x.target |> Exstate.State.get_initial)
       end)
 
     %__MODULE__{machine | configuration: Exstate.Configuration.new(new_states)}
