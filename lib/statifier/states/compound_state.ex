@@ -1,4 +1,4 @@
-defmodule Staart.States.ParallelState do
+defmodule Statifier.States.CompoundState do
   defstruct [
     :id,
     :initial_attribute,
@@ -9,12 +9,12 @@ defmodule Staart.States.ParallelState do
   def new(definition, parent_transitions) do
     transitions = definition.transitions
                   |> Enum.map(fn transition ->
-                    Staart.Transition.new(definition.id, transition.target, transition.event)
+                    Statifier.Transition.new(definition.id, transition.target, transition.event)
                   end)
                   |> List.flatten(parent_transitions)
 
     states = definition.states
-      |> Enum.map(fn child -> Staart.State.new(child, transitions) end)
+      |> Enum.map(fn child -> Statifier.State.new(child, transitions) end)
 
     %__MODULE__{
       id: definition.id,

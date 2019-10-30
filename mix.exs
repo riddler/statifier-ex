@@ -1,9 +1,9 @@
-defmodule Staart.MixProject do
+defmodule Statifier.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :staart,
+      app: :statifier,
       version: "0.1.0",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
@@ -16,15 +16,15 @@ defmodule Staart.MixProject do
   end
 
 
-  def description, do: "STAtechARTs for Elixir"
+  def description, do: "Statecharts for Elixir"
 
   def package do
     [
-      name: :staart,
+      name: :statifier,
       maintainers: ["JohnnyT"],
       licenses: ["MIT"],
       docs: [extras: ["README.md"]],
-      links: %{"GitHub" => "https://github.com/riddler/staart-ex"}
+      links: %{"GitHub" => "https://github.com/riddler/statifier-ex"}
     ]
   end
 

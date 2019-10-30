@@ -1,8 +1,8 @@
-defmodule Staart.Configuration do
+defmodule Statifier.Configuration do
   defstruct [:active]
 
   def initial(state) do
-    initial_config = state |> Staart.State.get_initial
+    initial_config = state |> Statifier.State.get_initial
     %__MODULE__{active: initial_config}
   end
 

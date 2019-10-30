@@ -1,15 +1,15 @@
-defmodule Staart.State do
-  def get_initial(%Staart.States.AtomicState{} = state) do
+defmodule Statifier.State do
+  def get_initial(%Statifier.States.AtomicState{} = state) do
     [state]
   end
 
-  def get_initial(%Staart.States.CompoundState{} = state) do
+  def get_initial(%Statifier.States.CompoundState{} = state) do
     (Enum.find(state.states, fn child -> state.initial_attribute == child.id end) ||
       List.first state.states)
       |> get_initial
   end
 
-  def get_initial(%Staart.States.ParallelState{} = state) do
+  def get_initial(%Statifier.States.ParallelState{} = state) do
     state.states
       |> Enum.map(fn child -> child |> get_initial end)
       |> List.flatten
@@ -17,7 +17,7 @@ defmodule Staart.State do
 
 
 
-  def gather_states(%Staart.States.AtomicState{} = state) do
+  def gather_states(%Statifier.States.AtomicState{} = state) do
     [state]
   end
 
@@ -29,7 +29,7 @@ defmodule Staart.State do
 
 
 
-  def gather_transitions(%Staart.States.AtomicState{} = state) do
+  def gather_transitions(%Statifier.States.AtomicState{} = state) do
     state.transitions
   end
 
@@ -48,11 +48,11 @@ defmodule Staart.State do
   def new(definition, transitions) do
     cond do
       length(definition.states) == 0 ->
-        Staart.States.AtomicState.new definition, transitions
+        Statifier.States.AtomicState.new definition, transitions
       definition.type == "parallel" ->
-        Staart.States.ParallelState.new definition, transitions
+        Statifier.States.ParallelState.new definition, transitions
       true ->
-        Staart.States.CompoundState.new definition, transitions
+        Statifier.States.CompoundState.new definition, transitions
     end
   end
 end

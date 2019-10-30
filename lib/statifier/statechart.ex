@@ -1,4 +1,4 @@
-defmodule Staart.Statechart do
+defmodule Statifier.Statechart do
   defstruct [ :root ]
 
   def new root do

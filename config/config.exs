@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure your application as:
 #
-#     config :staart, key: :value
+#     config :statifier, key: :value
 #
 # and access this configuration in your application as:
 #
-#     Application.get_env(:staart, :key)
+#     Application.get_env(:statifier, :key)
 #
 # You can also configure a third-party app:
 #
