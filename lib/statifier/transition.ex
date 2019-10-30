@@ -1,4 +1,4 @@
-defmodule Staart.Transition do
+defmodule Statifier.Transition do
   defstruct [
     :source,
     :target,

@@ -1,11 +1,11 @@
-defmodule Staart.ScxmlTest do
+defmodule Statifier.ScxmlTest do
   use ExUnit.Case
 
   test "parses basic0" do
     scxml_path = "./test/fixtures/scxml/basic/basic0.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    statechart = Staart.Scxml.parse_statechart xmldoc
+    statechart = Statifier.Scxml.parse_statechart xmldoc
 
     assert %{
       initial: "a",
@@ -19,7 +19,7 @@ defmodule Staart.ScxmlTest do
     scxml_path = "./test/fixtures/scxml/basic/basic1.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    statechart = Staart.Scxml.parse_statechart xmldoc
+    statechart = Statifier.Scxml.parse_statechart xmldoc
 
     assert %{
       states: [
@@ -35,7 +35,7 @@ defmodule Staart.ScxmlTest do
     scxml_path = "./test/fixtures/scxml/basic/basic2.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    statechart = Staart.Scxml.parse_statechart xmldoc
+    statechart = Statifier.Scxml.parse_statechart xmldoc
 
     assert %{
       states: [
@@ -54,7 +54,7 @@ defmodule Staart.ScxmlTest do
     scxml_path = "./test/fixtures/scxml/parallel/test0.scxml"
     {:ok, xmldoc} = File.read Path.expand scxml_path
 
-    statechart = Staart.Scxml.parse_statechart xmldoc
+    statechart = Statifier.Scxml.parse_statechart xmldoc
 
     assert %{
       states: [

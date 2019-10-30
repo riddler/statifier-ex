@@ -1,4 +1,4 @@
-defmodule Staart.Scxml do
+defmodule Statifier.Scxml do
   import SweetXml
 
   # Return a map of the statechart
@@ -7,7 +7,7 @@ defmodule Staart.Scxml do
     |> SweetXml.parse
     |> SweetXml.xpath(~x"/scxml")
     |> xml_to_map
-    |> Staart.Statechart.new
+    |> Statifier.Statechart.new
   end
 
   def xml_to_map xml do

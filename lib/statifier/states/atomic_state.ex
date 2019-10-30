@@ -1,25 +1,19 @@
-defmodule Staart.States.CompoundState do
+defmodule Statifier.States.AtomicState do
   defstruct [
     :id,
-    :initial_attribute,
-    :states,
+    :path,
     :transitions
   ]
 
   def new(definition, parent_transitions) do
     transitions = definition.transitions
                   |> Enum.map(fn transition ->
-                    Staart.Transition.new(definition.id, transition.target, transition.event)
+                    Statifier.Transition.new(definition.id, transition.target, transition.event)
                   end)
                   |> List.flatten(parent_transitions)
 
-    states = definition.states
-      |> Enum.map(fn child -> Staart.State.new(child, transitions) end)
-
     %__MODULE__{
       id: definition.id,
-      initial_attribute: definition.initial,
-      states: states,
       transitions: transitions
     }
   end
