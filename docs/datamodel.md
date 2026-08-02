@@ -1,0 +1,72 @@
+# Datamodel
+
+Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
+`~> 3.5`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
+we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
+a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
+continuity with v1's converted W3C tests).
+
+## Why not ECMAScript
+
+- Embedding a JS engine trades away the security story that makes an Elixir SCXML
+  engine worth having. Predicator is non-evaluative by design: no `eval`, no side
+  channels, safe for end-user-authored documents.
+- The W3C tests that genuinely require ECMAScript are a bounded, known set; the
+  corpus tooling rewrites or excludes them. The conformance ceiling this imposes is
+  accepted and documented in the test manifest.
+- Real computation belongs in the host application, reached through `<invoke>`
+  handlers and external `<send>` - controlled, typed, supervised.
+
+## What the datamodel provides
+
+- `<datamodel>` / `<data>` with `expr`, child content, and `src` (fetch at
+  document-load time only, `binding="early"` and `late` both supported).
+- `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
+  auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
+  v1 refused to create intermediates).
+- `cond` on transitions and `<if>`/`<elseif>`, `expr` everywhere the spec allows.
+- System variables per spec 5.10: `_event`, `_sessionid` (a UXID, stable for the
+  session's lifetime), `_name`, `_ioprocessors`, and the `In(stateId)` predicate.
+
+## Evaluation contract
+
+Every evaluation goes through one module with one context type:
+
+- Expressions are compiled once at Machine-build time into
+  `{:compiled, instructions, source}`; static attribute values are `{:static, value}`.
+  One evaluator function handles both.
+- The evaluation context is built once per macrostep, not per expression.
+- Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
+  errors to `error.execution` internal events per spec. Leaves never swallow errors.
+- Type coercion to/from event data has one normalization function with defined rules,
+  shared by `<param>`, `<content>`, `namelist`, and `<donedata>`.
+
+## Statement sequences and `<script>`
+
+`<script>` (ECMAScript statements) stays unsupported. The direction we want instead:
+a small, safe statement layer in predicator itself - sequences of assignments and
+expression statements over the existing expression language, upstreamed as a
+predicator feature so every predicator embedding gets it. Until that exists,
+multi-step mutation is expressed as a sequence of `<assign>` elements, which covers
+most real `<script>` usage in the corpora.
+
+A possible follow-on (tracked as an issue, not promised): a converter that rewrites
+the *basic* `<script>` bodies found in the SCION corpus (assignments, increments)
+into `<assign>` sequences or the predicator statement form, so those tests can join
+the ratchet.
+
+## Upstreaming to predicator
+
+Seams found in v1 that belong in predicator rather than in statifier's glue:
+
+1. **Persistent bound context**: build a context once (data + host functions like
+   `In/1`), evaluate many expressions against it, rebind cheaply when data changes.
+   v1 rebuilt the full context map per expression.
+2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
+   assignment-with-creation should live beside it.
+3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
+   bare atom that every embedding normalizes ad hoc.
+4. **Statement sequences** (above).
+
+Each of these gets a beads issue here and a mirrored issue in predicator-ex when we
+hit the seam in implementation.

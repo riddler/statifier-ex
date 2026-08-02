@@ -1,0 +1,50 @@
+defmodule Statifier.MixProject do
+  use Mix.Project
+
+  @version "2.0.0-dev"
+  @source_url "https://github.com/riddler/statifier"
+
+  def project do
+    [
+      app: :statifier,
+      version: @version,
+      elixir: "~> 1.18",
+      elixirc_paths: elixirc_paths(Mix.env()),
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
+      name: "Statifier",
+      description: "A W3C SCXML-conformant statecharts engine for Elixir",
+      source_url: @source_url,
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.html": :test
+      ]
+    ]
+  end
+
+  def application do
+    [
+      extra_applications: [:logger]
+    ]
+  end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  defp deps do
+    [
+      {:predicator, "~> 3.5"},
+      {:saxy, "~> 1.6"},
+      {:uxid, "~> 2.9"},
+
+      # Dev / test
+      {:ex_quality, "~> 0.13", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+    ]
+  end
+end

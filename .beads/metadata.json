@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "statecharts_2",
+  "project_id": "1b81253b-f41e-447d-afe2-575d78f6ae61"
+}

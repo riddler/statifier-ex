@@ -1,0 +1,68 @@
+# Development workflow
+
+How work moves through this repo: who plans, who implements, how work is tracked,
+and how parallel work is coordinated.
+
+## Model roles
+
+Three tiers, used deliberately ([ADR-0007](adr/0007-beads-for-issue-tracking.md) for
+the tracking side):
+
+- **Fable - direction.** Architecture, ADRs, spec interpretation questions, corpus
+  strategy, review of plans and of finished phases. When a decision would create or
+  amend an ADR, it goes through Fable.
+- **Opus - planning.** `/create-plan` and `/iterate-plan` run on Opus: turning a
+  beads epic into a phased implementation plan with verification steps.
+- **Sonnet - implementation.** `/implement-plan` runs on Sonnet: executing an
+  approved plan, keeping `mix quality --profile loop` green while iterating, full
+  `mix quality` before commit.
+
+The skills encode these defaults in their frontmatter; an explicit user request
+overrides them.
+
+## Issue tracking: beads
+
+All task tracking is `bd` (beads). No markdown TODO lists, no GitHub issues for
+working items (GitHub issues become the public intake channel only once the project
+is published).
+
+- `bd ready` - find unblocked work; `bd show <id>` before starting.
+- Epics mirror the roadmap phases; issues link with dependencies so `bd ready`
+  reflects the real build order (parser before interpreter features, etc.).
+- Discovered work (a bug found mid-task, an upstream predicator seam) is captured
+  with `bd q` immediately, linked with `discovered-from`, and not chased mid-task.
+- Predicator/UXID upstream candidates get a `upstream` label so they can be swept
+  into the other repos' trackers.
+
+## Worktrees and parallel agents
+
+Parallel implementation happens in git worktrees under the sibling folder
+`../statecharts_2-worktrees/` (same convention as other riddler projects):
+
+    git worktree add ../statecharts_2-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
+
+Rules that make parallelism safe:
+
+- **One issue, one worktree, one branch.** The worktree name carries the beads issue
+  ID. Claim the issue (`bd update <id> --claim`) before creating the worktree.
+- **Beads is the shared state.** The Dolt-backed DB is shared across worktrees, so
+  claims, notes, and status changes are visible to every agent immediately. Use
+  `bd note` for progress that another agent might need; use merge-slot gates
+  (`bd merge-slot`) when several branches will land on the same files.
+- **Parallelize across module boundaries, not within them.** Good splits: parser DOM
+  vs corpus tooling; one interpreter function-family per plan phase; docs vs code.
+  If two ready issues touch the same module, take them sequentially instead.
+- **Every worktree runs the same gate.** `mix quality --profile loop` while
+  iterating, full `mix quality` before the branch is pushed or merged.
+- Merged worktrees are removed promptly (`git worktree remove`); the branch dies
+  with the merge.
+
+## Change flow
+
+1. Issue exists in beads (epic -> issue, dependencies linked).
+2. Plan (Opus) for anything non-trivial; plans live in `docs/plans/` and reference
+   the issue ID.
+3. Implement (Sonnet) in a worktree; ratchet additions (`mix test.baseline add`)
+   ride in the same PR as the feature.
+4. Full `mix quality` green, PR against `main`, review, merge, `bd close`.
+5. Decisions that surfaced during the work become ADR amendments (Fable).
