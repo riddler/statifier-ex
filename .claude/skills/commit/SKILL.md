@@ -15,9 +15,11 @@ This command handles the workflow for committing changes on a branch.
 - Commit messages follow the project style: short present-tense title, wrapped
   body, functional changes highlighted, no AI attribution.
 - Work usually maps to a beads issue; reference it in the commit body.
-- There is no per-commit changelog or version-bump ritual in this repo; versioning
-  is handled separately (mix.exs holds `2.0.0-dev` until release). Follow
-  CLAUDE.md conventions rather than any changelog workflow from other projects.
+- There is no version-bump ritual in this repo; `mix.exs` holds `2.0.0-dev` until
+  release and there are no alpha/beta/rc versions along the way.
+- User-facing changes need a changelog fragment in `changelog.d/` (Step 1.6).
+  `CHANGELOG.md` itself is never edited outside a release. Follow CLAUDE.md
+  conventions rather than any changelog workflow from other projects.
 
 ## Repo Convention: First Commit is .gitignore Only
 
@@ -91,6 +93,42 @@ Attempt to detect a related beads issue using these strategies in order.
    - If no valid issue detected, ask: "Is this commit related to a beads issue? (Enter issue ID or press Enter to skip)"
    - If the user provides an ID, validate with `bd show` before proceeding
    - If the user skips (Enter), continue without issue reference
+
+### Step 1.6: Changelog Fragment (only if user-facing)
+
+Decide whether this change needs an entry, then act. `changelog.d/README.md` is
+the authority; the short version:
+
+**Needs a fragment** - public API added/changed/removed, observable behavior
+change, an SCXML feature becoming supported, a user-visible bug fix, anything
+breaking.
+
+**No fragment** - test harness, corpus tooling, docs, ADRs, plans, internal
+refactors, quality gate / CI / agent tooling.
+
+While v2 is unreleased the rule is narrower still: write one only when **v2
+differs from v1**. Re-implementing something v1 already did is invisible to a
+user. Most Phase 0 work needs no fragment at all - that is the expected outcome,
+not a step you skipped.
+
+The test to apply: could someone who only calls the public API tell the
+difference? If not, skip it and move on.
+
+If it does need one, write `changelog.d/<issue-id>.md` before staging:
+
+```markdown
+### Changed
+
+- `Statifier.interpret/2` returns `{:ok, session}` instead of a bare session.
+```
+
+Standard headings only (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+`Security`), one line per change, no nested bullets, and for a breaking change
+say what to do about it. The fragment is staged with the change it describes.
+
+**Never edit `CHANGELOG.md` directly** - it is assembled from fragments at
+release, and editing it in a branch reintroduces exactly the merge conflicts
+fragments exist to prevent.
 
 ### Step 2: Construct the Commit Message
 
@@ -281,5 +319,7 @@ If verification shows files weren't committed:
 - Present the message for user approval BEFORE committing
 - Verify the commit immediately after creation (check for forbidden attribution)
 - Ratchet additions ride in the same commit/PR as the feature that unlocked them
+- Changelog fragments ride in the same commit as the change they describe; most
+  changes need none, and `CHANGELOG.md` is never edited outside a release
 - First commit of a fresh repo: `.gitignore` only
 - The user trusts your judgment - they asked you to commit
