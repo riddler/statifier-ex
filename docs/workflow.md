@@ -41,6 +41,12 @@ Parallel implementation happens in git worktrees under the sibling folder
 
     git worktree add ../statifier_2-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
 
+Two skills automate the pickup-to-worktree path: `/next-issue` picks and claims
+the next ready bead (presents choices by default; `--auto` lets an unattended
+agent take the top item), then invokes `/new-worktree`, which creates the
+worktree and warms its `deps/`, `_build/`, and dialyzer PLT from the main
+checkout so the first quality run is fast.
+
 Rules that make parallelism safe:
 
 - **One issue, one worktree, one branch.** The worktree name carries the beads issue

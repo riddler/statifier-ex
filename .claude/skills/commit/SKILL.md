@@ -107,10 +107,19 @@ Refs: st2-xxx
 ```
 
 **Style rules**:
-- Title: simple present tense, s-form ("Adds ...", "Fixes ...", "Implements ..."),
-  under 50 characters
-- Body: wrap at ~72 characters, active voice, same tense as the title
-  ("Adds", not "Added"), functional changes highlighted
+- Title: simple present tense, s-form ("Adds ...", "Fixes ...", "Implements ...")
+- Body: active voice, same tense as the title ("Adds", not "Added"),
+  functional changes highlighted
+
+**HARD limits** - verify each before presenting the message, and rewrite until
+all three hold. These are requirements, not guidelines:
+- **Subject line: under 50 characters.** Count it. If over, cut words, not
+  clarity.
+- **Body lines: 72 characters maximum.** Wrap anything longer.
+- **Total message: 40 lines maximum** (subject + blank lines + body + Refs),
+  and aim for well under that - most commits need fewer than 15. A message
+  approaching the cap should summarize at a higher level, not enumerate every
+  file or hunk. The diff itself carries the detail.
 - No need to mention code quality improvements - they are expected (unless the
   functional change is about code quality)
 - **Issue Reference Rules**:
@@ -259,8 +268,9 @@ If verification shows files weren't committed:
 
 ### Commit Message Style:
 - Present tense, s-form ("Adds", "Fixes", "Implements", "Ports")
-- Subject line: under 50 characters
-- Body: wrap at ~72 characters per line, same tense as the title
+- HARD limits (verify before presenting): subject under 50 characters, body
+  lines at most 72 characters, whole message at most 40 lines
+- Body: same tense as the title
 - Highlight functional changes; skip routine quality-only notes
 - Write as if the user wrote them (no AI attribution - see override instructions)
 - Reference the beads issue with `Refs: st2-xxx` when one applies
