@@ -9,8 +9,10 @@ argument-hint: ["optional: --auto, and/or bd ready filters (e.g. -l parser, -p 1
 
 Pick the next unblocked, unclaimed bead, claim it so other worktrees skip it,
 cut its worktree branch via `/new-worktree`, and route the work to the right
-follow-up. Beads is the only tracker here (ADR-0007, local-only, no remote) -
-there is no external issue system to promote to or reconcile against.
+follow-up. Beads is the only tracker here (ADR-0007) - there is no external
+issue system to promote to or reconcile against. Issue state syncs across
+machines through `refs/dolt/data` on git origin (`bd dolt pull` / `bd dolt
+push`); `.beads/issues.jsonl` is a passive export, never the sync channel.
 
 ## Modes
 
@@ -29,6 +31,16 @@ whichever call runs, so both modes scope identically. Re-verify against
 `bd ready --help` if these drift.
 
 ## Steps
+
+0. **Refresh beads (best-effort).** The Dolt DB syncs via `refs/dolt/data` on
+   git origin (github.com/riddler/statifier_2), so pull the latest issue state
+   before picking - another machine or agent may have claimed or closed work:
+   ```bash
+   bd dolt pull 2>/dev/null || true
+   ```
+   Non-fatal if offline; the local DB is then the best available view. On a
+   fresh clone with no `.beads/embeddeddolt/`, run `bd bootstrap` instead - it
+   clones the issue history from origin and wires the Dolt remote.
 
 1. **Pick and claim.**
 
@@ -54,6 +66,14 @@ whichever call runs, so both modes scope identically. Re-verify against
    auto-file. Report it, show `bd blocked` so it is clear what is waiting on
    what, and stop (skip every step below). In manual mode, offer
    `/create-issue` as the way to file something new.
+
+1.5. **Publish the claim (best-effort).** The claim is the lock, but it only
+   locks what other machines can see - push it right after claiming:
+   ```bash
+   bd dolt push 2>/dev/null || true
+   ```
+   Non-fatal if offline (agents in the same checkout's worktrees share the DB
+   directly and see the claim regardless); it publishes on the next push.
 
 2. **Compute the branch name** `<id>-<slug>`. Kebab-case the bead title into a
    short slug - 2-4 distinctive words, not a full transcription
@@ -93,6 +113,9 @@ whichever call runs, so both modes scope identically. Re-verify against
 
 - Claim before worktree, always - the claim is the lock (ADR-0010). Never
   create the worktree for an unclaimed bead.
+- Sync steps (0 and 1.5) are best-effort and must never gate the claim: if
+  `bd dolt pull`/`push` is slow, errors, or the machine is offline, proceed -
+  they retry on the next run. Never abort pickup on a sync failure.
 - Manual mode confirms the pick and the branch name before anything mutates the
   repo; the claim itself is cheap to reverse (`bd update <id> --status open`).
 - Discovered work found while triaging is filed with `bd q` and linked
