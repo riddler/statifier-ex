@@ -70,7 +70,7 @@ Attempt to detect a related beads issue using these strategies in order.
    git branch --show-current
    ```
    Worktree branches are named `<beads-id>-<slug>` (e.g.
-   `statecharts_2-abc-parallel-exit-sets`), so the issue ID is usually the prefix.
+   `st2-abc-parallel-exit-sets`), so the issue ID is usually the prefix.
 
 2. **Check modified plan documents** (if no issue from branch):
    ```bash
@@ -80,7 +80,7 @@ Attempt to detect a related beads issue using these strategies in order.
 
 3. **Check session context**:
    - Look for issue mentions in your conversation context
-   - The user may have mentioned "statecharts_2-abc" or claimed an issue earlier
+   - The user may have mentioned "st2-abc" or claimed an issue earlier
 
 4. **Validate the issue exists** (if an ID was found):
    ```bash
@@ -103,7 +103,7 @@ Adds [concise description of main change]
 - Why it was done
 - Any technical notes or context (ratchet additions, ADR citations)
 
-Refs: statecharts_2-xxx
+Refs: st2-xxx
 ```
 
 **Style rules**:
@@ -114,7 +114,7 @@ Refs: statecharts_2-xxx
 - No need to mention code quality improvements - they are expected (unless the
   functional change is about code quality)
 - **Issue Reference Rules**:
-  - If an issue was detected/provided, add `Refs: statecharts_2-xxx` on its own
+  - If an issue was detected/provided, add `Refs: st2-xxx` on its own
     line at the end, preceded by a blank line
   - Only add if the issue was validated via `bd show`
   - If no issue, omit this line entirely
@@ -127,7 +127,7 @@ Show the user the prepared commit in a clear format:
 ```
 I've analyzed your changes and prepared the following:
 
-**Related Issue**: statecharts_2-abc - "Implement parallel exit sets" (detected from branch name)
+**Related Issue**: st2-abc - "Implement parallel exit sets" (detected from branch name)
 
 **Git Commit Message**:
 ```
@@ -137,7 +137,7 @@ Implements exit set computation for parallel states
 - Handles cross-boundary exits out of parallel regions
 - Ratchets 4 newly passing SCION history tests into the registry
 
-Refs: statecharts_2-abc
+Refs: st2-abc
 ```
 
 **Files to commit**:
@@ -175,7 +175,7 @@ Implements exit set computation for parallel states
 - Handles cross-boundary exits out of parallel regions
 - Ratchets 4 newly passing SCION history tests into the registry
 
-Refs: statecharts_2-abc
+Refs: st2-abc
 COMMIT_MSG
 )"
    ```
@@ -187,7 +187,7 @@ COMMIT_MSG
    ```
 
    - **CHECK**: Message must NOT contain "Co-Authored-By", "Generated with", or "Claude"
-   - **CHECK**: If issue reference expected, verify "Refs: statecharts_2-xxx" appears
+   - **CHECK**: If issue reference expected, verify "Refs: st2-xxx" appears
    - **If attribution lines present**: STOP and see "Failure Recovery" section below
 
 5. **Show commit result**:
@@ -200,7 +200,7 @@ COMMIT_MSG
    Commit created successfully
    Commit: [short sha] [commit title]
    Files: [list]
-   Issue: statecharts_2-xxx (still open - close with `bd close` when the work is done)
+   Issue: st2-xxx (still open - close with `bd close` when the work is done)
    ```
 
 Do not push, and do not close the beads issue, unless explicitly asked (see the
@@ -263,7 +263,7 @@ If verification shows files weren't committed:
 - Body: wrap at ~72 characters per line, same tense as the title
 - Highlight functional changes; skip routine quality-only notes
 - Write as if the user wrote them (no AI attribution - see override instructions)
-- Reference the beads issue with `Refs: statecharts_2-xxx` when one applies
+- Reference the beads issue with `Refs: st2-xxx` when one applies
 
 ### Workflow:
 - Analyze ALL changes on the branch, not just session context

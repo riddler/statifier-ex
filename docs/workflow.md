@@ -37,9 +37,9 @@ is published).
 ## Worktrees and parallel agents
 
 Parallel implementation happens in git worktrees under the sibling folder
-`../statecharts_2-worktrees/` (same convention as other riddler projects):
+`../statifier_2-worktrees/` (same convention as other riddler projects):
 
-    git worktree add ../statecharts_2-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
+    git worktree add ../statifier_2-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
 
 Rules that make parallelism safe:
 

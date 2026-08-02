@@ -114,7 +114,7 @@ before any commit. Run `mix format` after writing any Elixir file. Never truncat
 
 ## Parallel work
 
-One beads issue = one branch = one worktree under `../statecharts_2-worktrees/`
+One beads issue = one branch = one worktree under `../statifier_2-worktrees/`
 named `<beads-id>-<slug>`. Claim the issue before creating the worktree; split
 work along module boundaries; every worktree runs the same quality gate. See
 `docs/workflow.md` and ADR-0010.
