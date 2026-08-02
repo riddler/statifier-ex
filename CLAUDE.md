@@ -111,6 +111,9 @@ before any commit. Run `mix format` after writing any Elixir file. Never truncat
 - Commit messages: title < 50 chars, simple present tense ("Adds ...", "Fixes ..."),
   body wrapped at ~72 chars, functional changes highlighted. No AI attribution
   trailers.
+- Changelog: user-facing changes get a fragment at `changelog.d/<issue-id>.md`;
+  never edit `CHANGELOG.md` outside a release. Most changes need no fragment -
+  see `changelog.d/README.md`. `mix.exs` stays `2.0.0-dev`; no alpha/beta/rc.
 
 ## Parallel work
 

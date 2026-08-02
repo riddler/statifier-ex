@@ -70,5 +70,27 @@ Rules that make parallelism safe:
    the issue ID.
 3. Implement (Sonnet) in a worktree; ratchet additions (`mix test.baseline add`)
    ride in the same PR as the feature.
-4. Full `mix quality` green, PR against `main`, review, merge, `bd close`.
-5. Decisions that surfaced during the work become ADR amendments (Fable).
+4. If the change is user-facing, write a changelog fragment
+   (`changelog.d/<issue-id>.md`); see `changelog.d/README.md` for when one is
+   needed. Most changes need none.
+5. Full `mix quality` green, PR against `main`, review, merge, `bd close`.
+6. Decisions that surfaced during the work become ADR amendments (Fable).
+
+## Versioning and the changelog
+
+`mix.exs` holds `2.0.0-dev` for the whole rewrite. Nothing is published until
+2.0.0 is complete - no alpha, beta, or release-candidate versions along the way,
+because there is no audience for a pre-release of an engine that cannot yet run
+a statechart. Progress is tracked by beads phases and by the regression ratchet,
+which are better signals than a version number.
+
+`CHANGELOG.md` carries v1's `0.1.0`-`1.9.0` history (same package continuing to
+2.0.0, so upgraders keep one continuous record) under a single `[Unreleased]`
+section that accumulates until release. Entries are never written into it
+directly during development: each issue drops a fragment in `changelog.d/`,
+which keeps concurrent worktrees from conflicting on the same block of the same
+file, and release assembles them.
+
+Because 2.0.0 replaces the entire engine, its eventual entry is written as a
+migration document for 1.x users, not as a transcript of the rewrite. During the
+rewrite a fragment is warranted only where v2 **differs** from v1.
