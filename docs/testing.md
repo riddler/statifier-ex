@@ -38,6 +38,11 @@ ex_statechart's Makefile + `cases.exs` scripts (which already do the bulk of the
 work: cloning the SCION scxml-test-framework, fetching W3C TXML and transforming via
 saxon, and emitting test files from the JSON case descriptions).
 
+`mise run corpus` is the single entrypoint for regeneration; the stages behind it
+and the scratch layout are documented in `tools/corpus/README.md`. Upstream
+downloads land in the gitignored `tools/corpus/scratch/`, so nothing fetched is
+committed.
+
 Target pipeline:
 
     upstream corpora (SCION json/scxml, W3C txml)

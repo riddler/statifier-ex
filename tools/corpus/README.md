@@ -1,38 +1,99 @@
 # Corpus tooling
 
 Generator for the SCION and W3C conformance test suites (see `docs/testing.md`
-and ADR-0006). Seeded verbatim from
+and ADR-0006). Seeded from
 [ex_statechart](https://github.com/camshaft/ex_statechart)'s Makefile and
-scripts, which already do the bulk of the work:
+scripts, retargeted to the v2 layout and driven by mise tasks.
 
-- `Makefile` - fetches the corpora and drives generation:
-  - W3C: downloads the IRP manifest + `.txml` sources from
-    https://www.w3.org/Voice/2013/scxml-irp, transforms `.txml -> .scxml` with
-    Saxon-HE and `scxml_w3/conf_elixir.xsl` (the datamodel-specific
-    transformation), then emits test cases via `scxml_w3/cases.exs` filtered by
-    `scxml_w3/manifest.exs` (mandatory vs optional, datamodel).
-  - SCION: clones https://github.com/jbeard4/scxml-test-framework, drops the
-    ecma-only trees, then emits test cases from the JSON case descriptions via
-    `scion/cases.exs`.
+## Regenerating
 
-## Adaptation needed (tracked in beads)
+One command, from anywhere in the repo:
 
-The scripts currently emit ex_statechart-style cases. To produce Statifier v2
-test files they must be updated to:
+```bash
+mise run corpus
+```
 
-1. Emit the v1-style test file shape: one module per file
-   (`SCIONTest.Category.NameTest` / `SCXMLTest.Section.TestNNN`),
-   `use Statifier.Case`, suite tags (`:scion` / `:scxml_w3`),
-   `@tag required_features: [...]` (derived via the feature detector),
-   inline XML heredoc (4-space base indent), single `test_scxml/4` call built
-   from the JSON events/configuration sequence.
-2. Rewrite the XSL for the predicator datamodel (v1's converted corpus used
-   `datamodel="elixir"`; the alias is accepted) rather than ex_statechart's
-   expression forms.
+That runs three stages, each also available on its own (`mise tasks` lists them):
+
+| Task | What it does |
+| --- | --- |
+| `mise run corpus:fetch` | Downloads the W3C IRP manifest and its `.txml` sources, Saxon-HE, and clones the SCION `scxml-test-framework` into `scratch/` |
+| `mise run corpus:transform` | Runs Saxon over each `.txml` with `scxml_w3/conf_elixir.xsl` to produce `.scxml` for the predicator datamodel |
+| `mise run corpus:emit` | Writes the generated test modules into `test/scion_tests/` and `test/scxml_tests/` |
+| `mise run corpus:clean` | Discards every upstream download; the next run refetches |
+
+Every stage is incremental and resumable: fetch skips files already on disk,
+transform reruns Saxon only where the `.txml` or the XSL is newer than the
+`.scxml`. `mise install` provisions the toolchain (Erlang, Elixir, and a JRE for
+Saxon); `curl`, `git`, and `unzip` come from the OS.
+
+### Seeding from a local mirror
+
+`www.w3.org` rate-limits a few hundred sequential requests with a 429, which
+turns a cold W3C fetch into a long throttled crawl. If you have another checkout
+holding the same `<conformance>/<spec>/<id>.{txml,description}` tree, point the
+fetcher at it:
+
+```bash
+CORPUS_W3_MIRROR=~/repos/github/ex_statechart/test/scxml_w3/cases mise run corpus:fetch
+```
+
+Only `.txml`, `.description`, and `manifest.xml` are copied, and only where the
+file is missing locally - a mirror's own `.scxml` output never displaces ours.
+`CORPUS_W3_MIRROR` is intentionally not set in `mise.toml`, since a value there
+would override the one you export.
+
+## Layout
+
+```
+tools/corpus/
+  scion/cases.exs           SCION emitter
+  scxml_w3/manifest.exs     W3C manifest parser + TXML fetcher
+  scxml_w3/conf_elixir.xsl  TXML -> SCXML for the predicator datamodel
+  scxml_w3/cases.exs        W3C emitter
+  scratch/                  gitignored; everything fetched from upstream
+    saxon/
+    scion/cases/<spec>/<name>.{json,scxml}
+    scxml_w3/cases/<conformance>/<spec>/<name>.{txml,scxml,description}
+```
+
+The tasks themselves live in `mise.toml` at the repo root, along with the
+`CORPUS_*` paths and upstream URLs they use.
+
+Nothing under `scratch/` is committed. The only generator output that enters git
+is the emitted test modules:
+
+- `test/scion_tests/<spec>/<name>_test.exs`
+- `test/scxml_tests/<conformance>/<spec>/<name>_test.exs`
+
+They are committed deliberately, so a regeneration lands as a reviewable diff.
+
+## Status
+
+Fetch and transform are retargeted and working: 198 W3C cases and 127 SCION
+cases. The **emit stage still produces ex_statechart-shaped modules**
+(`use Test.StateChart.Case`), which do not compile against v2 - so `mise run
+corpus` is not yet safe to run end to end, and `test/scion_tests/` and
+`test/scxml_tests/` are still empty. Until the emitters are rewritten, stop
+after transform:
+
+```bash
+mise run corpus:fetch && mise run corpus:transform
+```
+
+Remaining work, tracked in beads:
+
+1. **st2-00p.5** - rewrite `scxml_w3/conf_elixir.xsl` for the predicator
+   datamodel (v1's converted corpus used `datamodel="elixir"`; the alias is
+   accepted) rather than ex_statechart's expression forms.
+2. **st2-00p.6** / **st2-00p.7** - rewrite the SCION and W3C emitters to the v2
+   test file shape: one module per file (`SCIONTest.Category.NameTest` /
+   `SCXMLTest.Section.TestNNN`), `use Statifier.Case`, suite tags
+   (`:scion` / `:scxml_w3`), `@tag required_features: [...]` derived via the
+   feature detector, inline XML heredoc (4-space base indent), and a single
+   `test_scxml/4` call built from the events/configuration sequence.
 3. Record exclusions (irreducibly ECMAScript-dependent tests) in a committed
    manifest with reasons, per ADR-0004.
 
-Generated output is committed under `test/scion_tests/` and
-`test/scxml_tests/`; regeneration must produce a reviewable diff. v1's
-generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
+v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.

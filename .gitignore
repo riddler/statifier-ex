@@ -26,6 +26,11 @@ statifier-*.tar
 # dependency files) matches this directory name and would otherwise hide them.
 !changelog.d/
 
+# Corpus generator scratch space: upstream downloads (W3C TXML, Saxon-HE, the
+# SCION framework clone) and intermediate artifacts. No upstream artifact is
+# committed; only the generated test modules under test/{scion,scxml}_tests/ are.
+/tools/corpus/scratch/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
