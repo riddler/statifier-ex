@@ -12,6 +12,7 @@
 | [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted |
 | [0009](0009-ex-quality-as-quality-gate.md) | ex_quality is the quality gate | accepted |
 | [0010](0010-worktree-parallel-development.md) | Worktree parallel development via beads | accepted |
+| [0011](0011-quality-gate-config-not-agent-editable.md) | Quality gate config is not agent-editable | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
