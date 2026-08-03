@@ -72,8 +72,33 @@ Rules that make parallelism safe:
   touched the same files, so the split was wrong. `/refresh-worktree` aborts and
   reports rather than resolving; resolve deliberately, one agent at a time,
   behind `bd merge-slot`.
-- Merged worktrees are removed promptly (`git worktree remove`); the branch dies
-  with the merge.
+- Merged worktrees are removed promptly; the branch dies with the merge.
+  `/cleanup-worktrees` automates it, and `/next-issue` runs it at pickup, which
+  is when the previous branch has usually landed.
+
+## Merge policy: rebase only
+
+GitHub is configured to allow **rebase merging only**. This is not a style
+preference - it determines how every downstream tool detects that a branch
+landed, so it is written here rather than left in the repo settings.
+
+Rebase replays a branch's commits onto `main` as new SHAs. The branch tip
+therefore **never becomes an ancestor of `main`**, and two things follow:
+
+- **`git branch --merged origin/main` never lists a merged feature branch**, and
+  `git merge-base --is-ancestor` never confirms one. Any cleanup or close-on-
+  merge automation built on git ancestry silently does nothing, forever, while
+  appearing to work. Verified on PRs #2, #3 and #6.
+- **`git branch -d` refuses to delete a merged branch**, so deletion needs `-D` -
+  which would also discard a genuinely unmerged branch without warning.
+
+So merge detection asks GitHub, never git: `gh pr list --state merged --head
+<branch>`. That check is load-bearing for safety, not just for detection, and it
+is shared by `/cleanup-worktrees` and by the bead close-on-merge trigger.
+
+The upside: rebase preserves every commit and its message, so a branch may carry
+as many commits as the work needed. `/commit --auto` composes cleanly with this
+and no squash or cleanup pass is required before opening a PR.
 
 ## Change flow
 
@@ -94,7 +119,8 @@ Rules that make parallelism safe:
    merge keep a human gate.
 7. `bd close` once the branch is merged into `origin/main`, not at commit or at
    PR-open time; `bd dolt push` follows, after the git side has reached `origin`.
-8. Remove the merged worktree and let the branch die with the merge.
+8. Remove the merged worktree and let the branch die with the merge
+   (`/cleanup-worktrees`); refresh the surviving worktrees (`/refresh-worktree`).
 9. Decisions that surfaced during the work become ADR amendments (Fable).
 
 ## Versioning and the changelog

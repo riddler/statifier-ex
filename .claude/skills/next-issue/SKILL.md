@@ -42,6 +42,17 @@ whichever call runs, so both modes scope identically. Re-verify against
    fresh clone with no `.beads/embeddeddolt/`, run `bd bootstrap` instead - it
    clones the issue history from origin and wires the Dolt remote.
 
+0.5. **Clean up merged worktrees (best-effort).** Invoke
+   **`/cleanup-worktrees`**. Picking up new work is the natural moment for it:
+   the previous branch has usually landed by now, and its worktree and local
+   branch are still sitting there. Detection is GitHub PR state, never git
+   ancestry - the repo allows rebase merging only, so a merged branch is never
+   an ancestor of `main`.
+
+   Like the sync steps, this must never gate the pickup. If `gh` is
+   unauthenticated or offline, `/cleanup-worktrees` stops on its own and reports;
+   carry on picking work regardless.
+
 1. **Pick and claim.**
 
    **Manual mode:**
@@ -113,7 +124,8 @@ whichever call runs, so both modes scope identically. Re-verify against
 
 - Claim before worktree, always - the claim is the lock (ADR-0010). Never
   create the worktree for an unclaimed bead.
-- Sync steps (0 and 1.5) are best-effort and must never gate the claim: if
+- Sync and cleanup steps (0, 0.5 and 1.5) are best-effort and must never gate
+  the claim: if
   `bd dolt pull`/`push` is slow, errors, or the machine is offline, proceed -
   they retry on the next run. Never abort pickup on a sync failure.
 - Manual mode confirms the pick and the branch name before anything mutates the
