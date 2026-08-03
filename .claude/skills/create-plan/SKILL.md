@@ -19,15 +19,15 @@ Planning runs on the Opus tier per docs/workflow.md (implementation runs on Sonn
 
 ### File Location
 
-**ALWAYS** write the plan to: `docs/plans/YYYY-MM-DD-issue-id-description.md`
+**ALWAYS** write the plan to: `docs/plans/YYMMDD-issue-id-description.md`
 
-- `YYYY-MM-DD` = today's date
+- `YYMMDD` = today's date
 - `issue-id` = beads issue ID (omit if none)
 - `description` = brief kebab-case description
 
 Examples:
-- `docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md`
-- `docs/plans/2026-08-02-improve-error-events.md`
+- `docs/plans/260802-st2-a42-parallel-exit-sets.md`
+- `docs/plans/260802-improve-error-events.md`
 
 **NEVER** write the plan to `.claude/`, the project root, or any other directory.
 
@@ -58,7 +58,7 @@ When this command is invoked:
    - Immediately read any provided files FULLY
    - Begin the research process
    - **Supported inputs**:
-     - Research docs: `docs/research/YYYY-MM-DD-topic.md`
+     - Research docs: `docs/research/YYMMDD-topic.md`
      - Beads issue IDs: e.g. `st2-a42` (fetch with `bd show st2-a42`)
 
 2. **If no parameters provided**, respond with:
@@ -75,8 +75,8 @@ I'll analyze this information and work with you to create a comprehensive plan.
 
 Examples:
 - `/create-plan st2-a42` (beads issue ID)
-- `/create-plan docs/research/2026-08-02-history-restoration-flow.md`
-- `/create-plan think deeply about docs/research/2026-08-02-history-restoration-flow.md`
+- `/create-plan docs/research/260802-history-restoration-flow.md`
+- `/create-plan think deeply about docs/research/260802-history-restoration-flow.md`
 ```
 
 Then wait for the user's input.
@@ -86,7 +86,7 @@ Then wait for the user's input.
 ### Step 1: Context Gathering & Initial Analysis
 
 1. **Read all mentioned files immediately and FULLY**:
-   - Research documents (e.g., `docs/research/YYYY-MM-DD-topic.md`)
+   - Research documents (e.g., `docs/research/YYMMDD-topic.md`)
    - Related implementation plans in `docs/plans/`
    - Relevant ADRs in `docs/adr/` (accepted ADRs are settled; the plan must fit them)
    - Any XML test cases or JSON/data files mentioned
@@ -345,7 +345,7 @@ After structure approval:
 
    ```
    I've created the initial implementation plan at:
-   `docs/plans/YYYY-MM-DD-issue-id-description.md`
+   `docs/plans/YYMMDD-issue-id-description.md`
 
    Please review it and let me know:
    - Are the phases properly scoped?
@@ -517,7 +517,7 @@ Based on the issue, I understand we need to implement parallel-state exit set co
 ### From a research document:
 
 ```
-User: /create-plan docs/research/2026-08-02-history-restoration-flow.md
+User: /create-plan docs/research/260802-history-restoration-flow.md
 Assistant: Let me read that research document completely first...
 
 [Reads file fully]
@@ -534,8 +534,8 @@ The research includes file references and implementation notes. Let me structure
 
 **STOP. Before writing the plan file, verify ALL of the following:**
 
-- [ ] File path is `docs/plans/YYYY-MM-DD-...md` (NOT `.claude/`, NOT project root)
-- [ ] File name follows format: `YYYY-MM-DD-issue-id-kebab-description.md`
+- [ ] File path is `docs/plans/YYMMDD-...md` (NOT `.claude/`, NOT project root)
+- [ ] File name follows format: `YYMMDD-issue-id-kebab-description.md`
 - [ ] Document starts with `# [Name] Implementation Plan`
 - [ ] Contains ALL mandatory sections: Overview, Current State Analysis, Desired End State, What We're NOT Doing, Implementation Approach, Phase(s), Testing Strategy, References
 - [ ] Each Phase has Success Criteria split into Automated Verification and Manual Verification
