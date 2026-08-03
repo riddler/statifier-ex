@@ -42,6 +42,13 @@ being reversible. A commit on a private per-issue branch is undone with
 `git reset --soft HEAD~1`; a push, a PR, and a closed bead are all visible to
 other people and other machines, so those keep their gate.
 
+In `/implement-plan --loop` mode, each phase's own green automated gate counts
+as "the claimed issue's work is complete" for that increment's commit - the
+table's existing conditions (worktree branch, green gate, no unrelated
+changes) apply identically per phase; this only changes the granularity at
+which completeness is judged. See
+`.claude/skills/implement-plan/SKILL.md`'s `## Looped Execution Mode`.
+
 ## Non-interactive shell commands
 
 `cp`, `mv`, and `rm` may be aliased to `-i` on a developer's machine, which

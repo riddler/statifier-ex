@@ -229,6 +229,15 @@ Once aligned on approach:
    interpreter vs corpus tooling) so they can be parallelized across worktrees
    per docs/workflow.md.
 
+   A phase should also be the smallest unit that is independently
+   gate-verifiable and independently committable. If two candidate phases
+   would leave an intermediate `mix quality` gate red on their own (e.g. a
+   struct field added in one phase, consumed in the next, with nothing
+   exercising it in between), combine them into one phase rather than
+   splitting - this keeps `/implement-plan --loop`'s per-phase gate
+   meaningful, and it's the answer to grouping small phases together: sizing
+   at authoring time, not a runtime grouping mechanism.
+
 2. **Get feedback on structure** before writing details
 
 ### Step 4: Detailed Plan Writing
@@ -299,7 +308,7 @@ After structure approval:
 - [ ] Edge case handling verified manually (e.g. via iex session)
 - [ ] No regressions in related features
 
-**Implementation Note**: Use `mix quality --profile loop` between edits while iterating; run the full `mix quality` as the phase gate. After completing this phase and all automated verification passes, pause here for manual confirmation from the human that the manual testing was successful before proceeding to the next phase.
+**Implementation Note**: Use `mix quality --profile loop` between edits while iterating; run the full `mix quality` as the phase gate. In interactive execution, pause here for manual confirmation from the human that the manual testing was successful before proceeding to the next phase. In looped (`--loop`) execution, this phase's Automated Verification gates advancement automatically (via `/commit --auto`); Manual Verification items are deferred and surfaced once at the end instead of blocking here.
 
 ---
 

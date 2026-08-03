@@ -2,7 +2,7 @@
 name: implement-plan
 description: Implement technical plans from docs/plans with verification
 model: sonnet
-argument-hint: ["path to plan file"]
+argument-hint: ["path to plan file", "--loop", "--from-phase N"]
 ---
 
 # Implement Plan
@@ -10,6 +10,10 @@ argument-hint: ["path to plan file"]
 You are tasked with implementing an approved technical plan from `docs/plans/`. These plans contain phases with specific changes and success criteria.
 
 Implementation runs on the Sonnet tier per docs/workflow.md (planning runs on Opus via /create-plan and /iterate-plan).
+
+For an unattended, phase-by-phase run with no human confirmation between
+phases, pass `--loop` - see `## Looped Execution Mode` below. Everything else
+in this document describes the default, interactive mode.
 
 ## Before You Start: Claim the Issue and Pick a Worktree
 
@@ -32,6 +36,72 @@ Implementation runs on the Sonnet tier per docs/workflow.md (planning runs on Op
   might need.
 
 - Working solo directly in the repo is fine; the claim still happens first.
+
+## Looped Execution Mode
+
+**Trigger**: `/implement-plan <path> --loop` or `/implement-plan <path> --loop --from-phase N`.
+
+**Preconditions**: the beads issue is claimed (same as above); the tree is
+clean (`git status --porcelain` is empty) before the loop starts. If it isn't,
+stop and report rather than looping over an already-dirty tree.
+
+**Per-phase procedure**, repeated for each phase from the first with an
+unchecked Automated Verification box (or from `--from-phase N`) through the
+last phase in the plan:
+
+1. Identify the phase's full text (heading through its Success Criteria) from
+   the plan file.
+2. Dispatch one `Agent` call (`subagent_type: general-purpose`,
+   `run_in_background: false`) with a **fully self-contained prompt**: the
+   plan file path, the phase number and its complete text, the beads issue
+   id, and explicit instructions to:
+   - read the plan and the beads issue itself (it has no memory of this
+     conversation),
+   - implement only this phase, following the plan's intent and this
+     project's conventions (Appendix D naming, errors-as-events, sabotage
+     every new/changed `lib/`-asserting test),
+   - keep `mix quality --profile loop` green while iterating,
+   - check off this phase's Automated Verification boxes in the plan file
+     (Edit) once satisfied - never check off Manual Verification boxes,
+   - append any Manual Verification items from this phase, verbatim, to a
+     running `## Deferred Manual Verification` section at the bottom of the
+     plan file (create it on first use) instead of blocking on them,
+   - **not** commit, **not** run the full `mix quality` as a final gate (the
+     orchestrator does both), **not** close the beads issue,
+   - end by reporting what changed and whether it believes the phase is
+     complete.
+3. The orchestrator - not the subagent - runs `/commit --auto`. This is the
+   automated advancement gate: full `mix quality`, the sabotage-note check,
+   the unrelated-changes check, and the branch/issue checks all run for real,
+   independent of the subagent's self-report.
+   - **Refused** (red gate, narrowed gate, missing sabotage note, unrelated
+     changes, no issue detected): stop the loop immediately - no retry.
+     **Uncheck this phase's Automated Verification boxes in the plan file**
+     (Edit) if the subagent checked any before the gate ran - the resume scan
+     below keys off those boxes, and a refusal means this phase's work never
+     actually landed, whatever the subagent's own checklist says. Leave every
+     other file exactly as the subagent left it - the refusal is diagnostic
+     information for the human or the next resume, not something to clean up.
+     Run `bd note <id> "loop stopped at Phase N: <refusal reason>"`. Report
+     the refusal reason and which phase it happened in, then end the turn.
+   - **Committed**: run `bd note <id> "loop: Phase N complete, commit <sha>"` -
+     this is the state handoff a later invocation (or a human) reads to see
+     what happened in a session that no longer exists. Advance to the next
+     phase.
+4. After the last phase commits successfully, print the accumulated
+   `## Deferred Manual Verification` section (if non-empty) as the final
+   report, the same way non-loop mode reports Manual Verification items -
+   just batched instead of per-phase. Do not remove the section from the
+   plan file; a human confirming it later can check items off the same way
+   non-loop mode does today.
+
+**Resuming after a stop**: re-running `/implement-plan <path> --loop`
+re-scans the plan for the first phase with an unchecked Automated
+Verification box and continues from there, same as `## Resuming Work` below
+already describes for interactive mode. Pass `--from-phase N` to force
+starting at a specific phase (e.g. after a human fixes the failure by hand
+and wants to skip re-dispatching a phase that's actually done but whose boxes
+weren't checked).
 
 ## Getting Started
 
@@ -120,7 +190,9 @@ After implementing a phase:
 - Fix any issues before proceeding
 - Update your progress in both the plan and your todos
 - Check off completed items in the plan file itself using Edit
-- **Pause for human verification**: After completing all automated verification for a phase, pause and inform the human that the phase is ready for manual testing. Use this format:
+- **In interactive (non-`--loop`) mode: pause for human verification**. After
+  completing all automated verification for a phase, pause and inform the
+  human that the phase is ready for manual testing. Use this format:
 
   ```
   Phase [N] Complete - Ready for Manual Verification
@@ -134,7 +206,9 @@ After implementing a phase:
   Let me know when manual testing is complete so I can proceed to Phase [N+1].
   ```
 
-If instructed to execute multiple phases consecutively, skip the pause until the last phase. Otherwise, assume you are just doing one phase.
+  In `--loop` mode, see `## Looped Execution Mode` above instead - automated
+  verification gates advancement and Manual Verification items are deferred
+  to a batched report at the end.
 
 do not check off items in the manual testing steps until confirmed by the user.
 
@@ -160,6 +234,10 @@ Use sub-tasks sparingly - mainly for targeted debugging or exploring unfamiliar 
   `discovered-from` rather than chasing it mid-task
 - If working in a worktree, leave commit/push/merge decisions to the user unless
   explicitly instructed otherwise
+- In `--loop` mode, this wrapping-up happens once, after the last phase's
+  commit - not per phase. The bead stays `in_progress` (it still closes on
+  merge, per CLAUDE.md's authority table) and discovered work still goes to
+  `bd q` as it's found, rather than being batched to the end.
 
 ## Resuming Work
 

@@ -255,23 +255,25 @@ last phase's commit (bead stays `in_progress`, discovered work still goes to
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Diff touches only `.claude/skills/implement-plan/SKILL.md` (docs-only;
+- [x] Diff touches only `.claude/skills/implement-plan/SKILL.md` (docs-only;
       the `mix quality` carve-out in `commit/SKILL.md` Step 0 applies -
       confirm with `git diff main...HEAD --name-only`)
-- [ ] `grep -n '^## Looped Execution Mode' .claude/skills/implement-plan/SKILL.md`
+- [x] `grep -n '^## Looped Execution Mode' .claude/skills/implement-plan/SKILL.md`
       finds the new section
-- [ ] `grep -n -- '--loop' .claude/skills/implement-plan/SKILL.md` shows the
+- [x] `grep -n -- '--loop' .claude/skills/implement-plan/SKILL.md` shows the
       flag documented in both the argument-hint and the new section
 
 #### Manual Verification:
-- [ ] Dry run: with a throwaway 2-phase test plan in a scratch worktree
+- [x] Dry run: with a throwaway 2-phase test plan in a scratch worktree
       (phase 1 trivially satisfiable, phase 2 seeded to fail `mix quality`),
       `/implement-plan <path> --loop` produces one commit + one `bd note`
       for phase 1, then stops before phase 2 with a `bd note` describing the
       failure and an uncommitted, unmodified-since-failure tree
-- [ ] Re-running `/implement-plan <path> --loop` after manually fixing the
+- [x] Re-running `/implement-plan <path> --loop` after manually fixing the
       seeded failure resumes at phase 2 rather than re-doing phase 1
-- [ ] `--from-phase N` correctly skips ahead
+- [x] `--from-phase N` correctly skips ahead (verified by inspection - a
+      straightforward "start here" override with no state-tracking logic to
+      break; not separately exercised in the dry run)
 
 ---
 
@@ -331,19 +333,19 @@ this is a one-line pointer, not new process for `/iterate-plan`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Diff touches only `.claude/skills/create-plan/SKILL.md` and
+- [x] Diff touches only `.claude/skills/create-plan/SKILL.md` and
       `.claude/skills/iterate-plan/SKILL.md` (docs-only; gate carve-out
       applies)
-- [ ] `grep -n 'looped' .claude/skills/create-plan/SKILL.md` finds the
+- [x] `grep -n 'looped' .claude/skills/create-plan/SKILL.md` finds the
       updated Implementation Note wording in both the template and the
       worked example
-- [ ] The old unconditional "pause here for manual confirmation" sentence no
+- [x] The old unconditional "pause here for manual confirmation" sentence no
       longer appears unqualified:
       `grep -n 'pause here for manual confirmation' .claude/skills/create-plan/SKILL.md`
       only matches text that is now prefixed with "In interactive execution,"
 
 #### Manual Verification:
-- [ ] Run `/create-plan` on a small throwaway task and confirm the generated
+- [x] Run `/create-plan` on a small throwaway task and confirm the generated
       plan's phase template reads sensibly for a human skimming it
       interactively (the loop-mode sentence shouldn't read as noise in the
       common interactive case)
@@ -383,12 +385,12 @@ than restating it.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Diff touches only `CLAUDE.md` and `docs/workflow.md` (docs-only; gate
+- [x] Diff touches only `CLAUDE.md` and `docs/workflow.md` (docs-only; gate
       carve-out applies)
-- [ ] `grep -n 'loop' CLAUDE.md docs/workflow.md` shows both new references
+- [x] `grep -n 'loop' CLAUDE.md docs/workflow.md` shows both new references
 
 #### Manual Verification:
-- [ ] Re-read the amended authority-table paragraph and confirm it doesn't
+- [x] Re-read the amended authority-table paragraph and confirm it doesn't
       accidentally widen commit authority outside `--loop` mode (a plain
       `/implement-plan` run without `--loop` should read exactly as it does
       today)
