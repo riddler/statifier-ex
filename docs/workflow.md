@@ -48,7 +48,10 @@ Two skills automate the pickup-to-worktree path: `/next-issue` picks and claims
 the next ready bead (presents choices by default; `--auto` lets an unattended
 agent take the top item), then invokes `/new-worktree`, which creates the
 worktree and warms its `deps/`, `_build/`, and dialyzer PLT from the main
-checkout so the first quality run is fast.
+checkout so the first quality run is fast. `/new-worktree` appends a fixed
+instruction to every seeded prompt telling the session to finish with
+`/commit --auto` rather than a raw `git commit`, so the Refs-trailer and
+unrelated-changes checks in `/commit` fire even for unattended sessions.
 
 `/next-issues` is the batch form: it takes up to `n` ready beads (default 3,
 refused above 4) whose [area label](#area-labels) sets are pairwise disjoint,
