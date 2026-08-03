@@ -98,6 +98,11 @@ rules the gate expects you to follow.
 - Functions taking a state/session put it as the first argument (pipeline
   threading).
 - XML in tests: triple-quoted heredocs, 4-space base indentation.
+- Sabotage every new test that asserts `lib/` behavior: break the code it covers,
+  confirm it goes red, revert, and note the mutation in one line above the test -
+  `# sabotage: enter_states/2 skips the initial child -> red`. Generated corpus
+  files are exempt; harness plumbing states its exemption (`# sabotage: n/a - ...`)
+  rather than omitting the line. See `docs/testing.md`.
 - Commit messages: title < 50 chars, simple present tense ("Adds ...", "Fixes ..."),
   body wrapped at ~72 chars, functional changes highlighted. No AI attribution
   trailers.

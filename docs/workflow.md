@@ -173,23 +173,29 @@ and no squash or cleanup pass is required before opening a PR.
    the issue ID.
 3. Implement (Sonnet) in a worktree; ratchet additions (`mix test.baseline add`)
    ride in the same PR as the feature.
-4. If the change is user-facing, write a changelog fragment
+4. Sabotage the new tests: break the `lib/` code each one covers, confirm it goes
+   red, revert, and record the mutation in a one-line comment above the test
+   (`# sabotage: ... -> red`). See
+   [Sabotage testing](testing.md#sabotage-testing) for the format and the
+   exemptions. This is a real cost in time and it is the step that decides whether
+   the internal suite is worth running.
+5. If the change is user-facing, write a changelog fragment
    (`changelog.d/<issue-id>.md`); see `changelog.d/README.md` for when one is
    needed. Most changes need none.
-5. Full `mix quality` green (a change touching no Elixir code has no gate to run),
+6. Full `mix quality` green (a change touching no Elixir code has no gate to run),
    then commit on the worktree branch (`/commit`, or `/commit --auto` to skip the
    approval prompt). An agent may take this step on its own - see the authority
    table in `CLAUDE.md`.
-6. Push and open a PR against `main` when asked for it (`/merge-request`).
+7. Push and open a PR against `main` when asked for it (`/merge-request`).
    Finishing the work is not itself a request to publish it, so this step and the
    merge keep a human gate.
-7. `bd close` once the branch is merged into `origin/main`, not at commit or at
+8. `bd close` once the branch is merged into `origin/main`, not at commit or at
    PR-open time; `bd dolt push` follows, after the git side has reached `origin`.
    `/cleanup-worktrees` does both, keyed on the `Refs:` trailers in the merged
    PR's commits, so every bead the branch carried is closed.
-8. Remove the merged worktree and let the branch die with the merge (same skill,
+9. Remove the merged worktree and let the branch die with the merge (same skill,
    same detection); refresh the surviving worktrees (`/refresh-worktree`).
-9. Decisions that surfaced during the work become ADR amendments (Fable).
+10. Decisions that surfaced during the work become ADR amendments (Fable).
 
 ## Versioning and the changelog
 

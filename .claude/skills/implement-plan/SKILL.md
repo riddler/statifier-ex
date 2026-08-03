@@ -54,8 +54,8 @@ Plans are carefully designed, but reality can be messy. Your job is to:
 - Implement each phase fully before moving to the next
 - Verify your work makes sense in the broader codebase context
 - Update checkboxes in the plan as you complete sections
-- Keep `mix quality --profile loop` green between edits; run `mix format` after
-  writing any Elixir file
+- Keep `mix quality --profile loop` green between edits; the gate's Format stage
+  formats for you, so do not run `mix format` as a separate step
 
 When things don't match the plan exactly, think about why and communicate clearly. The plan is your guide, but your judgment matters too.
 
@@ -89,6 +89,30 @@ If you encounter a mismatch:
 
 After implementing a phase:
 
+- **Sabotage every new or changed test that asserts `lib/` behavior.** A test that
+  passed on its first run has not been verified yet, only observed. For each one:
+  break the `lib/` code it covers with a single plausible mutation (invert a
+  condition, drop a clause, skip a recursive call, return the input unchanged),
+  run that test, confirm it fails *for the right reason*, revert the mutation,
+  confirm green. Then record it in one line directly above the test:
+
+  ```elixir
+  # sabotage: enter_states/2 skips the initial child -> red
+  test "compound state enters its initial descendant" do
+  ```
+
+  Rules that matter here:
+  - A test that stays green under sabotage is broken. Fix the test - never weaken
+    the mutation until it reddens.
+  - Deleting a function body or raising is not a mutation; everything fails, so
+    nothing is learned.
+  - Generated corpus files (`test/scion_tests/`, `test/scxml_tests/`) are exempt.
+    Harness plumbing that asserts no `lib/` behavior is exempt too, but says so:
+    `# sabotage: n/a - <why>`. Never leave the line off silently.
+  - This is slow on purpose. Budget for it in the phase rather than deferring it;
+    /commit checks for the notes and will refuse the commit without them.
+
+  See `docs/testing.md` for the full rationale.
 - Run the success criteria checks: `mix quality --profile loop` while iterating,
   then the full `mix quality` gate for the phase (this is also the pre-commit
   bar). Use `mix quality --format json --report -` if you need to route on the
