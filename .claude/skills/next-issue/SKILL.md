@@ -91,34 +91,52 @@ whichever call runs, so both modes scope identically. Re-verify against
    (`/new-worktree` refuses to guess one, so this skill must produce the full
    name). Manual mode: present it for confirmation.
 
-3. **Stand up the worktree.** Invoke **`/new-worktree <id>-<slug>`** - it cuts
-   the branch off `main`, creates `../statifier_2-worktrees/<id>-<slug>`, warms
-   `deps/`, `_build/`, and the dialyzer PLT, and verifies the loop profile is
-   green. Subsequent work on the issue happens inside that worktree.
+3. **Read the bead.** `bd show <id>` - description, acceptance, dependencies,
+   notes. This is the input to the triage decision in step 4, so it has to
+   happen before the worktree is stood up, not after.
 
-4. **Seed context.** `bd show <id>` so the session opens already knowing the
-   task: description, acceptance, dependencies, notes.
+4. **Triage.** Do not reflexively research - judge what the issue needs from
+   what is already in hand (type, description, priority, which module it
+   touches), then pick exactly one bucket. The model roles come from
+   docs/workflow.md.
 
-5. **Report**: the chosen bead, that it was claimed, the worktree/branch
-   created, and the quality-check result from `/new-worktree`.
-
-6. **Triage and launch the follow-up.** Do not reflexively research - judge
-   what the issue needs from what is already in hand (type, description,
-   priority, which module it touches), then route to exactly one path. The
-   model roles come from docs/workflow.md.
-
-   | Bucket | Route to | When |
+   | Bucket | Seed command | When |
    |---|---|---|
-   | **Code-heavy** | **`/research-codebase <id>`** | Touches the interpreter core, parser, or another multi-module subsystem; blast radius unclear; existing structure (or the v1 reference at `../statifier`) must be mapped before planning. |
-   | **Plan-only** | **`/create-plan <id>`** | Well-understood but multi-step or cross-cutting enough to deserve a plan in `docs/plans/`; a separate research doc would be redundant. Runs on Opus per its frontmatter. |
-   | **Just-do-it** | *(implement inline, in the worktree)* | Bounded doc / chore / config / small utility with low blast radius. Skip the artifacts and start implementing immediately, keeping `mix quality --profile loop` green. |
+   | **Code-heavy** | `/research-codebase <id>` | Touches the interpreter core, parser, or another multi-module subsystem; blast radius unclear; existing structure (or the v1 reference at `../statifier`) must be mapped before planning. |
+   | **Plan-only** | `/create-plan <id>` | Well-understood but multi-step or cross-cutting enough to deserve a plan in `docs/plans/`; a separate research doc would be redundant. Runs on Opus per its frontmatter. |
+   | **Just-do-it** | *(no seed command - omit `--`)* | Bounded doc / chore / config / small utility with low blast radius. Skip the artifacts and start implementing immediately, keeping `mix quality --profile loop` green. |
+
+   Just-do-it has no skill to invoke, so it omits the `--` and lets
+   `/new-worktree` use its generic seed ("Work bead `<id>` ... start with
+   `bd show`"). That is the one bucket where the seeded session legitimately
+   reads the bead and starts working, because that is the whole instruction.
 
    - When genuinely uncertain between two buckets, pick the heavier one
      (research > plan > just-do-it) - skipped diligence costs more than an
      unnecessary research pass.
    - **Manual mode:** state the chosen bucket and a one-line rationale, and let
-     the user override before launching.
+     the user override before the worktree is created.
    - **Agent-auto mode:** announce bucket + rationale, then proceed.
+
+5. **Stand up the worktree, seeded with the routing.** Invoke
+   **`/new-worktree <id>-<slug> -- <seed command>`** - it cuts the branch off
+   `main`, creates `../statifier_2-worktrees/<id>-<slug>`, warms `deps/`,
+   `_build/`, and the dialyzer PLT, verifies the loop profile is green, and
+   opens a tmux window running a Claude session on the seed command.
+
+   **Pass the bucket's command through.** The triage decision was made here,
+   with the bead in hand; the session that acts on it is a different process
+   with none of that context. Dropping the command means it re-derives the
+   bucket from scratch, usually differently, and the diligence this step just
+   paid for is spent twice.
+
+6. **Hand off - do not do the work here.** The seeded session in the tmux
+   window owns the issue from this point. Doing it in this session as well is
+   two sessions editing one worktree.
+
+   **Report**: the chosen bead, that it was claimed, the branch and worktree
+   created, the quality-check result from `/new-worktree`, the bucket and its
+   one-line rationale, and the tmux window to jump to.
 
 ## Guidelines
 
@@ -134,6 +152,10 @@ whichever call runs, so both modes scope identically. Re-verify against
   `discovered-from`, not chased now.
 - Compose with `/create-issue` and `/new-worktree` rather than duplicating
   their logic.
+- **This skill dispatches, it does not implement.** Triage happens here because
+  the bead is in hand; the work happens in the seeded session because that is
+  where the worktree is. Splitting it the other way - deciding there, working
+  here - is how one issue gets worked twice.
 - Re-verify exact `bd` flags against `bd ready --help` if this drifts -
   `bd ready --claim --json` and `bd update --claim` are confirmed current as of
   the bd version in use (2026-08).

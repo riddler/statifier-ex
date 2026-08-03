@@ -19,10 +19,25 @@ worktree exists - the claim is the lock, the worktree is just the workspace.
 
 ## Input
 
-`$ARGUMENTS` (or ask) = the branch name, which is also the worktree folder name:
-`<beads-id>-<slug>`, e.g. `st2-00p.3-regression-ratchet`. Keep the slug to 2-4
-distinctive kebab-case words from the issue title, not a full transcription. If
-given only a bead id, ask for the slug - it matters and should not be guessed.
+`$ARGUMENTS` = the branch name, optionally followed by `--` and the command to
+seed the new session with.
+
+**Branch name** (or ask) is also the worktree folder name: `<beads-id>-<slug>`,
+e.g. `st2-00p.3-regression-ratchet`. Keep the slug to 2-4 distinctive kebab-case
+words from the issue title, not a full transcription. If given only a bead id,
+ask for the slug - it matters and should not be guessed.
+
+**Seed command** (optional) is what the tmux session in step 5 runs, e.g.:
+
+```
+/new-worktree st2-00p.3-regression-ratchet -- /create-plan st2-00p.3
+```
+
+This is how `/next-issue` hands its triage decision (research / plan /
+implement) to the session that will act on it. Without it the decision is lost
+and the new session re-derives it from scratch, usually differently. Omitted -
+someone invoking this skill directly - falls back to a generic seed that tells
+the session to read the bead and decide for itself.
 
 ## Steps
 
@@ -109,7 +124,20 @@ given only a bead id, ask for the slug - it matters and should not be guessed.
      -c "/Users/johnnyt/repos/github/statifier_2-worktrees/<name>")
    [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
    tmux send-keys -t "$win" \
-     "claude --permission-mode auto 'Work bead <id> in this worktree. Start with bd show <id>.'" Enter
+     "claude --permission-mode auto '<seed>'" Enter
+   ```
+
+   `<seed>` is the seed command from the input when one was given - pass it
+   through verbatim, including the leading slash:
+
+   ```
+   claude --permission-mode auto '/create-plan st2-00p.3'
+   ```
+
+   With no seed command, fall back to:
+
+   ```
+   claude --permission-mode auto 'Work bead <id> in this worktree. Start with bd show <id>.'
    ```
 
    **Check `$win` is non-empty before any command that targets it, and never
@@ -139,9 +167,11 @@ given only a bead id, ask for the slug - it matters and should not be guessed.
    - **`-d` on `new-window`** so creating three worktrees in a row does not yank
      focus three times. The user jumps to the one they want when they are ready.
 
-   The seeded prompt points at `bd show` rather than restating the bead: the
+   The fallback prompt points at `bd show` rather than restating the bead: the
    beads DB is shared across worktrees, so the new session reads it directly,
-   and a restated description goes stale.
+   and a restated description goes stale. The same reasoning is why a seed
+   command passes only the bead id - `/create-plan st2-00p.3`, not a paraphrase
+   of what to plan.
 
    `--permission-mode auto` starts the seeded session in auto mode, so it makes
    routine calls without stopping to confirm each one - the point of fanning
