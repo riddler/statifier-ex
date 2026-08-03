@@ -196,6 +196,11 @@ the session to read the bead and decide for itself.
   it automatically - the clone is a best-effort warm, never a correctness risk.
 - The beads DB is shared across worktrees (Dolt-backed), so `bd` commands work
   identically from the worktree.
-- The tmux window outlives the worktree: `/cleanup-worktrees` removes the
-  directory and branch at merge but does not close the window, which is then
-  sitting in a path that no longer exists. Close it by hand for now.
+- `/cleanup-worktrees` takes the window down at merge: it matches the window by
+  **name and path together**, asks the session inside to `/exit`, and only then
+  removes the directory and closes the window. Both halves of that match come
+  from this step, so renaming the window or moving the worktree afterwards
+  means cleanup will not find it and will leave it open rather than guess.
+- A **busy** session blocks its own worktree's cleanup and is reported, so a
+  sweep run while an agent is mid-turn is safe and re-running it later finishes
+  the job.
