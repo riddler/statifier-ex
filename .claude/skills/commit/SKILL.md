@@ -29,6 +29,8 @@ have their own triggers in CLAUDE.md's authority table.
 - the gate was narrowed - a `--quick` or `--test-scope changed` run is not a
   green gate for commit purposes
 - the current branch is `main`
+- the diff adds a test with no sabotage note (Step 0) - auto mode may sabotage
+  the test itself and continue, but may not commit an unverified test
 - the working tree carries changes unrelated to the claimed issue
 - Step 1.5 found no beads issue (interactive mode asks the user; auto mode has
   nobody to ask, so it stops and says so)
@@ -88,6 +90,28 @@ This carve-out is narrow and it is not a judgment call: one Elixir file in the
 diff and the full gate runs. When it applies, say so in the Step 4 report
 ("docs only, no quality gate applicable") rather than letting a reader assume
 a green gate that never ran.
+
+**Sabotage notes on new tests.** A green gate says the tests pass, not that they
+can fail. If the diff adds or changes tests, check that each one carries its
+sabotage note (docs/testing.md):
+
+```bash
+git diff main...HEAD -U0 -- test/ ':!test/scion_tests' ':!test/scxml_tests' | grep -n '^+.*\btest \"'
+```
+
+For each added `test "..."` line, read its surrounding context and confirm a
+`# sabotage:` comment sits directly above it - either a real mutation
+(`# sabotage: <what was broken> -> red`) or a stated exemption
+(`# sabotage: n/a - <why>`).
+
+A missing note is not a formatting nit to fix in passing. It means the test was
+never run against broken code, so nobody knows whether it can fail. **Stop and
+sabotage it now** - break the `lib/` code it covers, watch it go red, revert,
+write the note - then re-run the gate. In auto mode, refuse and report which
+tests are unverified; do not invent a note for a sabotage that was never run,
+which is the one failure mode this check cannot detect afterwards.
+
+Generated corpus files are excluded by the pathspec above and need no notes.
 
 ### Step 1: Analyze Changes
 
