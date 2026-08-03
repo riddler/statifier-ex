@@ -100,8 +100,106 @@ sweep every worktree under `../statifier_2-worktrees/`.
    replays commits under new SHAs, so it reports commits for every merged
    branch. `headRefOid` is the only local-vs-merged comparison that holds here.
 
+3.5. **Quiesce the session running in the worktree.** `/new-worktree` opens a
+   tmux window per worktree with a Claude session seeded on the bead. Removing
+   the directory out from under a live session yanks the tree away mid-turn and
+   leaves an orphaned window sitting in a path that no longer exists.
+
+   **Do this after the dirty and SHA checks, not before.** A worktree that is
+   about to be skipped should keep its session; shutting one down and then
+   deciding not to clean up is pure loss. The residual race - the session
+   dirties the tree between step 3 and the removal - costs nothing, because
+   `git worktree remove` refuses on a dirty tree anyway. That refusal is the
+   backstop, so it stays a reported error rather than lost work.
+
+   **Find the window from the worktree, and require both signals to agree.**
+   ```bash
+   tmux list-panes -a -F '#{window_id} #{window_name} #{pane_current_path}' \
+     | awk -v n='<name>' -v p='<path>' '$2 == n && $3 == p { print $1 }'
+   ```
+   `/new-worktree` sets the window name to the worktree directory name and
+   opens it with `-c <worktree path>`, so a real match agrees on both. Matching
+   on name alone would close a window a human renamed onto something else;
+   matching on path alone would close a stray shell someone happened to `cd`
+   there. Requiring both is what keeps an unrelated window safe.
+
+   - **No match** -> no window for this worktree. Nothing to quiesce, nothing
+     to close, not an error. Continue to step 4.
+   - **More than one match** -> ambiguous. Skip the quiesce and the window
+     close, report it, and do not remove the worktree either - two windows
+     claiming one worktree is a state a human should look at.
+
+   Everything below targets `$win`, the captured window id. **Check it is
+   non-empty before every command that uses it.** An empty `-t ""` does not
+   error - tmux resolves it to the *current* window, so a stray `kill-window`
+   lands on whatever the user is sitting in. `/new-worktree` records the same
+   trap costing a live window during development.
+
+   **Is a session even running?**
+   ```bash
+   tmux list-panes -t "$win" -F '#{pane_current_command}'
+   ```
+   A bare shell (`fish`, `zsh`, `bash`, `sh`) means no session to quiesce -
+   skip to the window close in step 4, no error. **Do not test this by
+   grepping for `claude`.** The CLI is installed as a version-named binary
+   (`~/.local/share/claude/versions/2.1.220`), so `pane_current_command` reads
+   `2.1.220`, not `claude`, and a `claude` grep reports "no session" for every
+   live one - the silent no-op this skill exists to avoid, arriving by a third
+   route. Verified 2026-08-02.
+
+   **Idle check.** Capture the pane and require *both* conditions:
+   ```bash
+   tmux capture-pane -p -t "$win"
+   ```
+   1. **No turn in flight.** A running turn renders a spinner line carrying an
+      elapsed timer: `· Cooking… (45s · ↓ 2.5k tokens)`. Match the timer
+      (`\([0-9]+s · `) or `esc to interrupt` - **never the verb**, which is
+      randomized per frame (`Cooking…`, `Forging…`, and many others).
+   2. **The input box is empty.**
+      ```bash
+      tmux capture-pane -p -t "$win" | grep '❯' | tail -1
+      ```
+      Idle is exactly `❯ ` with nothing but whitespace after it. Take the
+      **last** `❯` line - the transcript echoes every user message with the
+      same marker, so an earlier one says nothing about the current state.
+      Anything else is one of two things worth stopping for:
+      - a half-typed draft (`❯ half a draft`) - a human's unsent text, and
+        losing it is the same class of loss as a dirty tree
+      - a dialog awaiting an answer, which renders as ` ❯ 1. Yes` (a tool
+        permission prompt, a trust-this-folder prompt)
+
+      That second case is why this check is not optional. **No spinner is drawn
+      while a dialog is up**, so condition 1 alone reads a session blocked
+      mid-tool-call as idle and shuts it down. Verified 2026-08-02.
+
+   Sample twice, ~3s apart, and require idle both times. One capture can land
+   in the gap between a turn ending and the next tool call starting.
+
+   **Busy -> skip the whole worktree.** Report it as `session busy, skipped`
+   and leave the worktree, the branch and the window alone. This is the same
+   stance as the dirty-tree skip: report, do not force.
+
+   **Idle -> shut it down cleanly.**
+   ```bash
+   tmux send-keys -t "$win" C-u
+   tmux send-keys -t "$win" '/exit' Enter
+   ```
+   `C-u` clears the input line first so `/exit` cannot be appended to leftover
+   text. Then poll until the pane is back at a shell, up to 15s:
+   ```bash
+   tmux list-panes -t "$win" -F '#{pane_current_command}'
+   ```
+   Observed round trip is ~2s. `/exit` is a clean quit: the session flushes its
+   state and any pending bead writes on the way out.
+
+   **If it has not exited after 15s, skip the worktree and report it.** Never
+   `kill-pane`, never `kill-window` on a live session, never SIGKILL. A session
+   that will not take `/exit` is one that is doing something, and the whole
+   point of this step is to not be the thing that interrupts it.
+
 4. **Remove, in this order.** Order matters: the branch cannot be deleted while
-   a worktree has it checked out.
+   a worktree has it checked out, and the window cannot be closed until the
+   session inside it is gone.
    ```bash
    git worktree remove <path>
    git worktree prune
@@ -109,6 +207,19 @@ sweep every worktree under `../statifier_2-worktrees/`.
    ```
    `-D` is correct here and only here - step 2 confirmed the merge, so the
    commits are on `main` under different SHAs.
+
+   Then close the window step 3.5 identified, if there was one:
+   ```bash
+   tmux list-panes -t "$win" -F '#{pane_current_command}'   # all bare shells?
+   tmux kill-window -t "$win"
+   ```
+   Two preconditions, both cheap and both load-bearing: `$win` is non-empty
+   (see the empty-target trap above), and **every** pane in the window is a
+   bare shell. A window the user split to run something else still has that
+   something else in it, and `kill-window` takes the whole window, not the pane
+   this skill cares about. Any pane running a non-shell command -> leave the
+   window open and report `window kept, other panes busy`. The worktree is
+   still removed; a leftover window is untidy, not destructive.
 
 4.5. **Close the beads that just landed.** A closed bead is a claim about
    `main`, not about a green branch. Closing at commit or PR-open time makes
@@ -175,16 +286,22 @@ sweep every worktree under `../statifier_2-worktrees/`.
    Cleanup here is purely local, which is the whole reason it needs automating -
    nothing else was ever going to do it.
 
-7. **Report** one line per worktree, naming the beads closed:
+7. **Report** one line per worktree, naming the beads closed and what happened
+   to the session and window:
 
    | Worktree | Result |
    |---|---|
-   | `st2-qww.1-team-maintainer-optin` | merged in PR #6, closed st2-qww.1, removed, branch deleted |
-   | `st2-qww.4-close-on-merge` | merged in PR #10, closed st2-qww.4 + st2-qww.6, removed |
+   | `st2-qww.1-team-maintainer-optin` | merged in PR #6, closed st2-qww.1, session exited, removed, branch deleted, window closed |
+   | `st2-qww.4-close-on-merge` | merged in PR #10, closed st2-qww.4 + st2-qww.6, no window, removed |
    | `st2-00p.3-regression-ratchet` | open PR #11, kept |
    | `st2-vbu-strict-credo` | no PR, kept |
    | `st2-92f-area-labels` | dirty, skipped |
+   | `st2-8k2-send-queue` | merged in PR #13, **session busy, skipped** |
    | `st2-lzn-tmux-windows` | merged in PR #12, **no `Refs:` trailer, no bead closed** |
+
+   **A busy session is a skip worth naming, not a footnote.** It is the one
+   outcome where re-running the sweep later finishes the job on its own, and
+   the user needs to know there is a job left to finish.
 
    **Nothing to clean is a success, and must say so explicitly** - "no merged
    worktrees found, 3 live worktrees kept, no beads closed" rather than silence.
@@ -199,6 +316,14 @@ sweep every worktree under `../statifier_2-worktrees/`.
 - **Never `--force` a worktree removal, never `-D` an unmerged branch.** Both
   destroy work that exists nowhere else. Every skip is reported so a human can
   deal with it.
+- **Never kill a Claude session, only ask it to exit.** `/exit` and a timeout,
+  never a signal. A session that will not exit is busy by definition, and the
+  same "report, do not force" rule that governs a dirty tree governs it.
+- **tmux is convenience, never a gate.** No tmux, no server, no window, a
+  window with no session in it - all of them are normal and none of them are
+  errors. `/new-worktree` treats the window as optional on the way up; this
+  skill treats it as optional on the way down. The worktree and the bead are
+  the work; the window is a place to sit.
 - Pairs with `/refresh-worktree`: same moment, opposite direction. That one
   rebases the survivors onto the new `origin/main`; this one removes the
   worktree of the branch that just landed. Run this first - refreshing a
