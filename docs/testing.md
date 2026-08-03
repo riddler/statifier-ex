@@ -130,6 +130,11 @@ test that depends on an unsupported feature flunks with the feature named, so it
 never masquerade as passing. Feature detection lives in `test/support`, not `lib/` -
 it is harness code, not library surface.
 
+The W3C corpus also has a recorded exclusion set: tests whose `.txml` templates
+have no predicator equivalent (ADR-0004), listed with a reason atom in
+`tools/corpus/scxml_w3/exclusions.exs`. That file is the source of truth; this
+paragraph does not duplicate its entries.
+
 ## Quality gate
 
 - `mix quality --profile loop` - inner loop: format, compile, credo, changed-scope

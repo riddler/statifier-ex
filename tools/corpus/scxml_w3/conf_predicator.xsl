@@ -1,5 +1,18 @@
 <?xml version="1.0"?>
 <!-- Copyright 1998-2003 W3C (MIT, ERCIM, Keio), All Rights Reserved. See http://www.w3.org/Consortium/Legal/. -->
+<!-- Emits predicator expressions (ADR-0004), not ECMAScript.
+
+     Boundness: predicator 3.5 has no undefined literal and no typeof/bound
+     predicate. `===` is the one operator that compares the internal :undefined
+     an unbound identifier evaluates to, so boundness is written as a comparison
+     against _statifier_unbound - an identifier no generated document ever
+     binds. Revisit if predicator grows a typed undefined (docs/datamodel.md
+     seam 3).
+
+     Templates with no predicator equivalent emit nothing useful on purpose;
+     their tests are listed in exclusions.exs. Do not "fix" them by emitting
+     ECMAScript - v1's corpus did that and the tests passed for the wrong
+     reason. -->
 <xsl:stylesheet
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:conf="http://www.w3.org/2005/scxml-conformance"
@@ -42,7 +55,7 @@
 
 <!-- datamodel -->
 <xsl:template match="//@conf:datamodel">
-	<xsl:attribute name="datamodel">elixir</xsl:attribute>
+	<xsl:attribute name="datamodel">predicator</xsl:attribute>
 </xsl:template>
 
 
@@ -197,9 +210,8 @@
 	<xsl:attribute name="expr">_event.<xsl:value-of select="."/></xsl:attribute>
 </xsl:template>
 
-<!-- returns the raw message structure as a string -->
+<!-- returns the raw message structure as a string.  Stubbed: BasicHTTP only. -->
 <xsl:template match="//@conf:eventRaw">
-	<xsl:attribute name="expr">_event.raw</xsl:attribute>
 </xsl:template>
 
 
@@ -284,13 +296,11 @@ events which cause the test to fail.  The default value provided here is pretty 
 		<xsl:attribute name="cond">
 		<xsl:analyze-string select="."
 			regex="([0-9]+)([=&lt;&gt;]=?)(.*)">
-					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/>
-						<xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
+					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/><xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
 						<xsl:choose>
 							<xsl:when test="$op='='">==</xsl:when>
 							<xsl:otherwise><xsl:value-of select="$op"/></xsl:otherwise>
-					 </xsl:choose>
-					 	<xsl:value-of select="regex-group(3)"/>
+					 </xsl:choose><xsl:value-of select="regex-group(3)"/>
 					</xsl:matching-substring>
 
 		</xsl:analyze-string>
@@ -301,8 +311,7 @@ events which cause the test to fail.  The default value provided here is pretty 
 		<xsl:attribute name="cond">
 		<xsl:analyze-string select="."
 			regex="([0-9]+)([=&lt;&gt;]=?)(.*)">
-					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/>
-						<xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
+					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/><xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
 						<xsl:choose>
 							<xsl:when test="$op='='">==</xsl:when>
 							<xsl:otherwise><xsl:value-of select="$op"/></xsl:otherwise>
@@ -319,13 +328,11 @@ events which cause the test to fail.  The default value provided here is pretty 
 		<xsl:attribute name="cond">
 		<xsl:analyze-string select="."
 			regex="([0-9]+)([=&lt;&gt;]=?)(.*)">
-					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/>
-						<xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
+					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/><xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
 						<xsl:choose>
-							<xsl:when test="$op='='">===</xsl:when>
+							<xsl:when test="$op='='">==</xsl:when>
 							<xsl:otherwise><xsl:value-of select="$op"/></xsl:otherwise>
-					 </xsl:choose>
-							<xsl:value-of select="regex-group(3)"/>
+					 </xsl:choose><xsl:value-of select="regex-group(3)"/>
 					</xsl:matching-substring>
 
 		</xsl:analyze-string>
@@ -368,14 +375,13 @@ events which cause the test to fail.  The default value provided here is pretty 
 </xsl:template>
 
 <!-- test on the value of two vars -->
-<xsl:template match="//@conf:compareIDVal"> 
+<xsl:template match="//@conf:compareIDVal">
 		<xsl:attribute name="cond">
 		<xsl:analyze-string select="."
 			regex="([0-9]+)([=&lt;&gt;]=?)([0-9+])">
-					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/>
-						<xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
+					<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/><xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
 						<xsl:choose>
-							<xsl:when test="$op='='">=</xsl:when>
+							<xsl:when test="$op='='">==</xsl:when>
 							<xsl:otherwise><xsl:value-of select="$op"/></xsl:otherwise>
 					 </xsl:choose>Var<xsl:value-of select="regex-group(3)"/>
 					</xsl:matching-substring>
@@ -399,13 +405,11 @@ events which cause the test to fail.  The default value provided here is pretty 
 		<xsl:attribute name="cond">
 		<xsl:analyze-string select="."
 			regex="([0-9]+)([=&lt;&gt;]=?)(.*)">
-					<xsl:matching-substring>_event.data['Var<xsl:value-of select="regex-group(1)"/><xsl:text>']</xsl:text>
-						<xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
+					<xsl:matching-substring>_event.data['Var<xsl:value-of select="regex-group(1)"/><xsl:text>']</xsl:text><xsl:variable name="op"><xsl:value-of select="regex-group(2)"/></xsl:variable>
 						<xsl:choose>
 							<xsl:when test="$op='='">==</xsl:when>
 							<xsl:otherwise><xsl:value-of select="$op"/></xsl:otherwise>
-					 </xsl:choose>
-							<xsl:value-of select="regex-group(3)"/>
+					 </xsl:choose><xsl:value-of select="regex-group(3)"/>
 					</xsl:matching-substring>
 
 		</xsl:analyze-string>
@@ -441,31 +445,17 @@ is the second argument -->
 </xsl:template>
 
 <xsl:template match="//@conf:emptyEventData">
-	<xsl:attribute name="cond">typeof _event.data === 'undefined'</xsl:attribute>
+	<xsl:attribute name="cond">_event.data === _statifier_unbound</xsl:attribute>
 </xsl:template>
 
 <!-- return true if the _name system var has the specified quoted value -->
 <xsl:template match="//@conf:nameVarVal">
-	<xsl:attribute name="cond">_name  === '<xsl:value-of select="."/>'</xsl:attribute>
+	<xsl:attribute name="cond">_name == '<xsl:value-of select="."/>'</xsl:attribute>
 </xsl:template>
 
-<!-- return true if first var's value is a prefix of the second var's value.  Input has form "n m" where n and m are ints.-->
+<!-- return true if first var's value is a prefix of the second var's value.  Input has form "n m" where n and m are ints.
+     Stubbed: predicator has no string prefix/substring function (test224, exclusions.exs). -->
 <xsl:template match="//@conf:varPrefix">
-			<xsl:attribute name="cond">
-		<xsl:analyze-string select="."
-			regex="(\w+)(\W)(\w+)">
-					<xsl:matching-substring>
-					<!-- the underscore.string.startswith function compressed into one line below: 
-							<xsl:text>(function(str, starts){
-							      if (starts === '') return true;
-							      if (str == null || starts == null) return false;
-							      str = String(str); starts = String(starts);
-							      return str.length >= starts.length &amp;&amp; str.slice(0, starts.length) === starts;
-							    })(</xsl:text>Var<xsl:value-of select="regex-group(3)"/>, Var<xsl:value-of select="regex-group(1)"/><xsl:text>)</xsl:text> -->
-<xsl:text>(function(str, starts){if (starts === '') return true;if (str == null || starts == null) return false;str = String(str); starts = String(starts);return str.length >= starts.length &amp;&amp; str.slice(0, starts.length) === starts;})(</xsl:text>Var<xsl:value-of select="regex-group(3)"/>, Var<xsl:value-of select="regex-group(1)"/><xsl:text>)</xsl:text>
-					</xsl:matching-substring>
-		</xsl:analyze-string>
-	</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:inState">
@@ -474,27 +464,27 @@ is the second argument -->
 
 <!-- returns a value that cannot be converted into a Boolean -->
 <xsl:template match="//@conf:nonBoolean">
-	<xsl:attribute name="cond">return</xsl:attribute>
+	<xsl:attribute name="cond">1</xsl:attribute>
 </xsl:template>
 
 <!-- true if id has a value -->
 <xsl:template match="//@conf:isBound">
-	<xsl:attribute name="cond">Var<xsl:value-of select="." /></xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> !== _statifier_unbound</xsl:attribute>
 </xsl:template>
 
 <!-- return true if specified var has been created but is not bound -->
 <xsl:template match="//@conf:unboundVar">
-	<xsl:attribute name="cond">typeof Var<xsl:value-of select="." /> === 'undefined' </xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
 </xsl:template>
 
 <!-- true if system var has a value -->
 <xsl:template match="//@conf:systemVarIsBound">
-	<xsl:attribute name="cond"><xsl:value-of select="." /></xsl:attribute>
+	<xsl:attribute name="cond"><xsl:value-of select="." /> !== _statifier_unbound</xsl:attribute>
 </xsl:template>
 
 <!-- true if id does not have a value -->
 <xsl:template match="//@conf:noValue">
-	<xsl:attribute name="cond">!Var<xsl:value-of select="." /></xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
 </xsl:template>
 
 <!-- always returns true -->
@@ -509,45 +499,41 @@ is the second argument -->
 
 <!-- returns true if all the required fields of _event are bound -->
   <xsl:template match="//@conf:eventFieldsAreBound">
-    <xsl:attribute name="cond">'name' in _event &amp;&amp; 'type' in _event &amp;&amp; 'sendid' in _event &amp;&amp; 'origin' in _event &amp;&amp; 'origintype' in _event &amp;&amp; 'invokeid' in _event &amp;&amp; 'data' in _event</xsl:attribute>
-  </xsl:template> 
+    <xsl:attribute name="cond">_event.name !== _statifier_unbound and _event.type !== _statifier_unbound and _event.sendid !== _statifier_unbound and _event.origin !== _statifier_unbound and _event.origintype !== _statifier_unbound and _event.invokeid !== _statifier_unbound and _event.data !== _statifier_unbound</xsl:attribute>
+  </xsl:template>
 
-<!-- returns true if  _event.data contains the specified item -->
+<!-- returns true if  _event.data contains the specified item.
+     Stubbed: predicator's `in` needs a list operand, not a map; unused by both trees. -->
 <xsl:template match="//@conf:eventDataHasField">
-	<xsl:attribute name="cond"><xsl:value-of select="."/> in _event.data</xsl:attribute>
 </xsl:template>
 
 <!-- returns true if specified field of _event has no value -->
 <xsl:template match="//@conf:eventFieldHasNoValue">
-	<xsl:attribute name="cond">typeof _event.<xsl:value-of select="." /> === 'undefined' </xsl:attribute>
+	<xsl:attribute name="cond">_event.<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
 </xsl:template>
 
-<!-- true if the language of _event matches the processor's datamodel -->
+<!-- true if the language of _event matches the processor's datamodel.  Unused by both trees. -->
 <xsl:template match="//@conf:eventLanguageMatchesDatamodel">
-	<xsl:attribute name="cond"> _event.language == 'ecmascript'</xsl:attribute>
+	<xsl:attribute name="cond">_event.language == 'predicator'</xsl:attribute>
 </xsl:template>
 
 <!-- true if _event was delivered on the specified i/o processor -->
 <xsl:template match="//@conf:originTypeEq">
-	<xsl:attribute name="cond"> _event.origintype == '<xsl:value-of select="."/>'</xsl:attribute>
+	<xsl:attribute name="cond">_event.origintype == '<xsl:value-of select="."/>'</xsl:attribute>
 </xsl:template>
 
 
 
 
-<!-- scripting -->
+<!-- scripting.  Stubbed: <script> is permanently out of scope (ADR-0004; test302-304). -->
 
 <xsl:template match="conf:script">
- <script xmlns="http://www.w3.org/2005/07/scxml">var Var1 = 1</script>
 </xsl:template>
 
-
 <xsl:template match="//@conf:scriptGoodSrc">
-	<xsl:attribute name="src">D:\W3C\SCXMLTests\test300.js</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:scriptBadSrc">
-	<xsl:attribute name="src">D:\foo</xsl:attribute>
 </xsl:template>
 
 <!-- sends an event back to the sender of the current event -->
@@ -576,7 +562,7 @@ is the second argument -->
 
 <!-- this should produce expr that yields an array containing 1 2 3 in that order -->
 <xsl:template match="//@conf:arrayExpr123">
-	<xsl:attribute name="expr">1, 2, 3]</xsl:attribute>
+	<xsl:attribute name="expr">[1,2,3]</xsl:attribute>
 </xsl:template>
 
 <!-- this should yield an expr that evaluates to something that is not a valid array  -->
@@ -598,13 +584,10 @@ is the second argument -->
 </xsl:template>
 
 <!-- this should add an extra item onto the end of the specified array, which
-is of the same type as array123 -->
+is of the same type as array123.
+Stubbed: predicator has no list concatenation (test525, exclusions.exs). -->
 <xsl:template match="conf:extendArray">
-	<assign xmlns="http://www.w3.org/2005/07/scxml">
-	  <xsl:attribute name="location">Var<xsl:value-of select="@id"/></xsl:attribute>
-	  <xsl:attribute name="expr">[].concat(Var<xsl:value-of select="@id"/>, [4])</xsl:attribute>
-	  </assign>
-	</xsl:template>
+</xsl:template>
 
 <!-- this should create a multidimensional array all of whose cells are set to the specified value.  Not
 currently used for any tests  -->
@@ -614,132 +597,68 @@ currently used for any tests  -->
 
 
 <!-- this  should create a <foreach> statement that increments the values of the specified array.  Not
-currently used for any tests -->
+currently used for any tests.
+Stubbed: relies on <script>, permanently out of scope (ADR-0004). -->
 <xsl:template match="conf:incrementArray">
-  <xsl:variable name="targetArray">Var<xsl:value-of select="@id"/></xsl:variable>
-<foreach xmlns="http://www.w3.org/2005/07/scxml">
-  	<xsl:attribute name="item">item</xsl:attribute>
-  	<xsl:attribute name="index">index</xsl:attribute>
-  	<xsl:attribute name="array"><xsl:value-of select="$targetArray"/></xsl:attribute>
-<script>
-<xsl:value-of select="$targetArray"/>[index][0] = <xsl:value-of select="$targetArray"/>[index][0] + 1
-<xsl:value-of select="$targetArray"/>[index][1] = <xsl:value-of select="$targetArray"/>[index][1] + 1
-</script>
-</foreach>
 </xsl:template>
-<!-- this should return true iff each cell in the specified multidimensional array has the specified value. Not
-currently used for any tests -->
-<xsl:template match="//@conf:arrayVal">
-		<xsl:attribute name="cond">
-		<xsl:analyze-string select="."
-			regex="([0-9]+)(\W+)(.*)">
-					<xsl:matching-substring>
-				    <xsl:variable name="targetArray">Var<xsl:value-of select="regex-group(1)"/></xsl:variable>
-					<xsl:variable name="value"><xsl:value-of select="regex-group(3)"/></xsl:variable>
-<xsl:value-of select="$targetArray"/>[0][0]== <xsl:value-of select="$value"/> &amp;&amp; <xsl:value-of select="$targetArray"/>[0][1] == <xsl:value-of select="$value"/>  &amp;&amp; <xsl:value-of select="$targetArray"/>[1][0] == <xsl:value-of select="$value"/> &amp;&amp; <xsl:value-of select="$targetArray"/>[1][1] == <xsl:value-of select="$value"/>
-</xsl:matching-substring>
 
-		</xsl:analyze-string>
-	</xsl:attribute>
+<!-- this should return true iff each cell in the specified multidimensional array has the specified value. Not
+currently used for any tests.
+Stubbed: multidimensional array comparison has no predicator equivalent. -->
+<xsl:template match="//@conf:arrayVal">
 </xsl:template>
 
 <!-- SITE SPECIFIC INFORMATION FOR BASIC HTTP EVENT I/O PROCESSOR
-This template must be edited by each site that expects to test the Basic HTTP Event I/O
-processor.  Other templates for the Basic HTTP Event I/O tests are below it -->
+
+BasicHTTP Event I/O Processor support is out of scope (exclusions.exs,
+:needs_basichttp). Every template below is stubbed rather than emitting the
+regex-based ECMAScript forms the upstream stylesheet used. -->
 
 <xsl:template match="//@conf:testOnServer">
- <xsl:attribute name="target">SITE_SPECIFIC_ADDRESS<xsl:value-of select="." /></xsl:attribute>
 </xsl:template>
 
-<!-- use this template to import or set up anything you need for the code in
-the basic http tests.  In the case of python, we have to import the regexp module.-->
 <xsl:template match="conf:setUpHTTPTest">
-<!-- <script xmlns="http://www.w3.org/2005/07/scxml">import re</script> -->
 </xsl:template>
 
-<!-- return an expression evaluating to the basic http access URI -->
 <xsl:template match="//@conf:basicHTTPAccessURI">
- <xsl:attribute name="expr">_ioprocessors['basichttp']['location']</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:basicHTTPAccessURITarget">
- <xsl:attribute name="targetexpr">_ioprocessors['basichttp']['location']</xsl:attribute>
 </xsl:template>
 
-<!-- generate an cond that evaluates to true if POST was used to send the message -->
 <xsl:template match="//@conf:methodIsPost">
- <xsl:attribute name="cond">_event.raw.search('POST') !== -1</xsl:attribute>
 </xsl:template>
 
-<!-- generate a namelist attribute containing all the ids listed in the attribute's value -->
 <xsl:template match="//@conf:multipleNamelist">
- <xsl:attribute name="namelist">
- <xsl:analyze-string select="." regex="([0-9]+)">
-<xsl:matching-substring>Var<xsl:value-of select="regex-group(1)"/><xsl:text>&#xa;</xsl:text></xsl:matching-substring>
-</xsl:analyze-string>
-</xsl:attribute>
 </xsl:template>
 
-<!-- generate a cond that evaluates to true if the event is external -->
-<xsl:template match="//@conf:eventIsExternal">
- <xsl:attribute name="cond">_event.type === 'external'</xsl:attribute>
-</xsl:template>
-
-<!-- returns true if _event/raw contains the var with the specified value -->
 <xsl:template match="//@conf:eventIdParamHasValue">
- <xsl:attribute name="cond"><xsl:analyze-string select="." regex="(\S+)(\s+)(\S+)">
-<xsl:matching-substring>_event.raw.search(/Var<xsl:value-of select="regex-group(1)"/>=<xsl:value-of select="regex-group(3)"/>/) !== -1</xsl:matching-substring></xsl:analyze-string></xsl:attribute>
 </xsl:template>
 
-<!-- returns true if _event/raw contains the param with the specified value -->
 <xsl:template match="//@conf:eventNamedParamHasValue">
- <xsl:attribute name="cond"><xsl:analyze-string select="." regex="(\S+)(\s+)(\S+)">
- <xsl:matching-substring>_event.raw.search('<xsl:value-of select="regex-group(1)"/>=<xsl:value-of select="regex-group(3)"/>') !== -1</xsl:matching-substring></xsl:analyze-string></xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:messageBodyEquals">
- <xsl:attribute name="cond">_event.raw.search(/<xsl:value-of select="."/>/) !== -1</xsl:attribute>
 </xsl:template>
 
-
-<!-- the following templates produce an expr that extracts the relevant item from _event.raw -->
 <xsl:template match="//@conf:getNamedParamVal">
- <xsl:attribute name="expr">_event.raw.match(/<xsl:value-of select="."/>=(\S+)$/)[1]</xsl:attribute>
 </xsl:template>
 
-<!--  if input is 1, find param Var1, etc.  -->
 <xsl:template match="//@conf:getIDParamVal">
- <xsl:attribute name="expr">_event.raw.match(/Var<xsl:value-of select="."/>=(\S+)$/)[1]</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:getNthParamName">
- <xsl:attribute name="expr">txt.match(/\n\n(.*)/)[2].split('&amp;')[<xsl:value-of select="."/>].split('=')[0]</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:getNthParamVal">
- <xsl:attribute name="expr">txt.match(/\n\n(.*)/)[2].split('&amp;')[<xsl:value-of select="."/>].split('=')[1]</xsl:attribute>
 </xsl:template>
 
-<!-- this should produce an 'expr' that evaluates to a valid SCXML Message structure -->
 <xsl:template match="//@conf:scxmlEventExpr">
- <xsl:attribute name="expr">'&lt;message source="' + _ioprocessors['basichttp'] + '"'
-+ 'xmlns:scxml="http://www.w3.org/2005/07/scxml" version="1.0"  xmlns:xsi=:http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://www.w3.org/2005/07/scxml scxml-message.xsd" sourcetype=:scxml"'
-+' 'name="name"' + '"' + <xsl:value-of select="."/> + '"' + /&gt;'</xsl:attribute>
- </xsl:template>
-
-<!-- this should produce a <content> tag containing material to use as the message body.  This
-content must include the address, so the far side can send a response back to us -->
-<xsl:template match="conf:msgContent">
-<content xmlns="http://www.w3.org/2005/07/scxml">
-	<xsl:attribute name="expr">'address=' + _ioprocessors['basichttp'] + "'"</xsl:attribute>
-	</content>
 </xsl:template>
 
-<!-- this should produce a test on _event.raw that checks whether the body matches the
-expression defined in the previous template.  This may need to be tightened up because
-it allows anything after the = -->
+<xsl:template match="conf:msgContent">
+</xsl:template>
+
 <xsl:template match="//@conf:msgIsBody">
- <xsl:attribute name="cond">_event.raw.match(/\n\naddress=(.*)$/)</xsl:attribute>
 </xsl:template>
 </xsl:stylesheet>

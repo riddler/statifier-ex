@@ -18,8 +18,9 @@ That runs three stages, each also available on its own (`mise tasks` lists them)
 | Task | What it does |
 | --- | --- |
 | `mise run corpus:fetch` | Downloads the W3C IRP manifest and its `.txml` sources, Saxon-HE, and clones the SCION `scxml-test-framework` into `scratch/` |
-| `mise run corpus:transform` | Runs Saxon over each `.txml` with `scxml_w3/conf_elixir.xsl` to produce `.scxml` for the predicator datamodel |
+| `mise run corpus:transform` | Runs Saxon over each `.txml` with `scxml_w3/conf_predicator.xsl` to produce `.scxml` for the predicator datamodel |
 | `mise run corpus:emit` | Writes the generated test modules into `test/scion_tests/` and `test/scxml_tests/` |
+| `mise run corpus:check` | Asserts every transformed mandatory W3C expression compiles under predicator, skipping `exclusions.exs` entries and allowing the values the W3C tests deliberately require to be invalid |
 | `mise run corpus:clean` | Discards every upstream download; the next run refetches |
 
 Every stage is incremental and resumable: fetch skips files already on disk,
@@ -49,7 +50,8 @@ would override the one you export.
 tools/corpus/
   scion/cases.exs           SCION emitter
   scxml_w3/manifest.exs     W3C manifest parser + TXML fetcher
-  scxml_w3/conf_elixir.xsl  TXML -> SCXML for the predicator datamodel
+  scxml_w3/conf_predicator.xsl  TXML -> SCXML for the predicator datamodel
+  scxml_w3/exclusions.exs   tests with no predicator equivalent, with reasons
   scxml_w3/cases.exs        W3C emitter
   scratch/                  gitignored; everything fetched from upstream
     saxon/
@@ -83,17 +85,17 @@ mise run corpus:fetch && mise run corpus:transform
 
 Remaining work, tracked in beads:
 
-1. **st2-00p.5** - rewrite `scxml_w3/conf_elixir.xsl` for the predicator
-   datamodel (v1's converted corpus used `datamodel="elixir"`; the alias is
-   accepted) rather than ex_statechart's expression forms.
-2. **st2-00p.6** / **st2-00p.7** - rewrite the SCION and W3C emitters to the v2
+1. **st2-00p.6** / **st2-00p.7** - rewrite the SCION and W3C emitters to the v2
    test file shape: one module per file (`SCIONTest.Category.NameTest` /
    `SCXMLTest.Section.TestNNN`), `use Statifier.Case`, suite tags
    (`:scion` / `:scxml_w3`), `@tag required_features: [...]` derived via the
    feature detector, inline XML heredoc (4-space base indent), and a single
    `test_scxml/4` call built from the events/configuration sequence.
-3. Record exclusions (irreducibly ECMAScript-dependent tests) in a committed
-   manifest with reasons, per ADR-0004.
+
+Tests with no predicator equivalent (script, list concatenation, string
+prefix, and the BasicHTTP Event I/O Processor tree) are recorded in
+`scxml_w3/exclusions.exs` with a reason atom per ADR-0004; `st2-00p.7`'s
+emitter skips them.
 
 v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.
