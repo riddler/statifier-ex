@@ -188,7 +188,9 @@ and no squash or cleanup pass is required before opening a PR.
 6. Full `mix quality` green (a change touching no Elixir code has no gate to run),
    then commit on the worktree branch (`/commit`, or `/commit --auto` to skip the
    approval prompt). An agent may take this step on its own - see the authority
-   table in `CLAUDE.md`.
+   table in `CLAUDE.md`. (`/implement-plan --loop` performs this step once per
+   phase rather than once at the end - see
+   `.claude/skills/implement-plan/SKILL.md`'s `## Looped Execution Mode`.)
 7. Push and open a PR against `main` when asked for it (`/merge-request`).
    Finishing the work is not itself a request to publish it, so this step and the
    merge keep a human gate.

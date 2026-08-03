@@ -130,6 +130,10 @@ Get user confirmation before proceeding.
    - If modifying scope, update "What We're NOT Doing" section
    - If changing approach, update "Implementation Approach" section
    - Maintain the distinction between automated vs manual success criteria
+   - If a phase's Implementation Note or sizing is edited, keep it consistent
+     with the interactive/`--loop` wording and sizing rule introduced in
+     `/create-plan`'s template (see that skill's Phase template and Step 3) -
+     link by name, don't restate the wording
 
 3. **Preserve quality standards**:
    - Include specific file paths and line numbers for new content
