@@ -16,6 +16,9 @@ defmodule Statifier.MixProject do
       description: "A W3C SCXML-conformant statecharts engine for Elixir",
       source_url: @source_url,
       test_coverage: [tool: ExCoveralls],
+      # The regression ratchet ships as mix tasks, so Mix itself has to be in
+      # the PLT or every Mix.shell/0 call reads as an unknown function.
+      dialyzer: [plt_add_apps: [:mix]],
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,

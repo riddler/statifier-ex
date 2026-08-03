@@ -21,14 +21,31 @@ whole coupling surface; keep it that way.
 
 ## The regression ratchet
 
-- `test/passing_tests.json` - the registry of tests that must always pass.
-- `mix test.regression` - runs exactly the registry; any failure is a blocking
-  regression. Wired into `mix quality` as a custom stage once the corpus lands.
-- `mix test.baseline` - reports newly passing tests; `mix test.baseline add` verifies
-  then ratchets them into the registry.
+- `test/passing_tests.json` - the registry of tests that must always pass. Three
+  lists (`internal_tests`, `scion_tests`, `w3c_tests`), whose entries are literal
+  paths or globs. The internal list is globbed, so unit tests are covered the moment
+  they are written; the conformance lists start empty and are grown one verified test
+  at a time.
+- `mix test.regression` - runs exactly what the registry expands to, including the
+  tags the excluded-by-default suites need. Any failure is a blocking regression, and
+  an entry that matches no file on disk fails the run too: silently dropping a deleted
+  entry would shrink the ratchet, which is the one thing it exists to prevent. Wired
+  into `mix quality` as a custom stage once the corpus lands (st2-00p.10).
+- `mix test.baseline` - runs every conformance test the registry does not track yet,
+  one file at a time, and reports which now pass. `--add` ratchets those in;
+  `mix test.baseline add <files>` verifies specific files and is all-or-nothing.
+  Nothing enters the registry without passing first.
+
+Both tasks are thin wrappers over `Mix.Statifier.RegressionRegistry`, which holds the
+load/expand/categorize/add logic and writes the JSON back with sorted keys and one
+entry per line, so ratcheting a test in is a one-line diff.
 
 The ratchet only moves forward. A feature PR that makes tests pass adds them in the
-same PR. v1 final baseline for reference: 90/127 SCION, 27/59 W3C.
+same PR; a test that used to pass and now does not is a regression to fix, never a
+line to delete.
+
+v2 starts from zero because it has no engine yet. v1's final baseline - **90/127
+SCION, 27/59 W3C** - is the reference target to beat, not a seed to copy in.
 
 ## Corpus generation
 
@@ -56,4 +73,6 @@ it is harness code, not library surface.
   tests. Use between edits.
 - `mix quality` - full gate: adds dialyzer, deps audit, full suite with coverage,
   regression stage. Required green before commit; enforced in CI.
-- Coverage target: 95%+ on `lib/`.
+- Coverage: the gate fails below **90%** (`coveralls.json`); 95%+ is the target to
+  aim at. Raising the floor as the suite grows is a decision for a human, and
+  lowering it is not a way to go green.

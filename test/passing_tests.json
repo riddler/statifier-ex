@@ -1,0 +1,11 @@
+{
+  "description": "Registry of tests that must always pass. Grown only by `mix test.baseline add`, which verifies a test passes before ratcheting it in; enforced by `mix test.regression`. The conformance lists start empty - v2 has no engine yet, so the ratchet moves forward from zero.",
+  "internal_tests": [
+    "test/mix/**/*_test.exs",
+    "test/statifier/**/*_test.exs",
+    "test/statifier_test.exs"
+  ],
+  "last_updated": "2026-08-02",
+  "scion_tests": [],
+  "w3c_tests": []
+}
