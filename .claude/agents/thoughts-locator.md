@@ -43,7 +43,7 @@ docs/
 ├── workflow.md       # Model roles, beads, worktrees
 ├── adr/              # Architecture decision records (0001-...)
 │   └── README.md     # ADR index with status
-├── research/         # Research documents (YYYY-MM-DD-topic.md)
+├── research/         # Research documents (YYMMDD-topic.md)
 └── plans/            # Implementation plans
 ```
 
@@ -71,11 +71,11 @@ Structure your findings like this:
 - `docs/adr/0006-reuse-conformance-corpus-and-regression-ratchet.md` - Corpus reuse and ratchet (accepted)
 
 ### Research Documents
-- `docs/research/2026-07-14-history-state-semantics.md` - Research on shallow vs deep history restoration
-- `docs/research/2026-07-02-send-delay-effects.md` - Contains section on delayed send effects
+- `docs/research/260714-history-state-semantics.md` - Research on shallow vs deep history restoration
+- `docs/research/260702-send-delay-effects.md` - Contains section on delayed send effects
 
 ### Implementation Plans
-- `docs/plans/2026-07-20-st-42-parallel-exit-sets.md` - Plan for parallel exit set computation
+- `docs/plans/260720-st-42-parallel-exit-sets.md` - Plan for parallel exit set computation
 
 ### Design Docs
 - `docs/datamodel.md` - Section on evaluation contract relevant to the question
@@ -98,7 +98,7 @@ Total: 7 relevant documents found
    - Top-level design docs for standing conventions
 
 3. **Look for patterns**:
-   - Research files named `YYYY-MM-DD-topic.md`
+   - Research files named `YYMMDD-topic.md`
    - Plan files often carry a beads issue ID in the name
    - ADRs numbered `NNNN-kebab-title.md`
 

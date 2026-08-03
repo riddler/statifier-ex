@@ -83,7 +83,7 @@ Use the issue as the research prompt:
   - Dependencies and integration points
 - Apply all the standard research workflow steps below
 - The final research document filename should include the issue ID
-  (e.g., `docs/research/2026-08-02-st2-a42-parallel-exit-sets.md`)
+  (e.g., `docs/research/260802-st2-a42-parallel-exit-sets.md`)
 
 ### Step 4: After Research Completes
 
@@ -163,14 +163,14 @@ Use the issue as the research prompt:
 
 5. **Gather metadata for the research document:**
    - Collect date/time with timezone, git commit hash, and branch name (see Step 2 commands above)
-   - Filename: `docs/research/YYYY-MM-DD-description.md`
-     - Format: `YYYY-MM-DD-[issue-id-]description.md` where:
-       - YYYY-MM-DD is today's date
+   - Filename: `docs/research/YYMMDD-description.md`
+     - Format: `YYMMDD-[issue-id-]description.md` where:
+       - YYMMDD is today's date
        - issue-id is the beads issue ID (omit if none)
        - description is a brief kebab-case description of the research topic
      - Examples:
-       - With issue: `2026-08-02-st2-a42-parallel-exit-sets.md`
-       - Without issue: `2026-08-02-history-restoration-flow.md`
+       - With issue: `260802-st2-a42-parallel-exit-sets.md`
+       - Without issue: `260802-history-restoration-flow.md`
 
 6. **Generate research document:**
    - Use the metadata gathered in step 5
@@ -237,7 +237,7 @@ Use the issue as the research prompt:
 
      [Relevant insights from docs/ with references]
      - `docs/adr/0003-pure-core-with-effects.md` - Decision about X
-     - `docs/research/2026-07-14-topic.md` - Past exploration of Y
+     - `docs/research/260714-topic.md` - Past exploration of Y
 
      ## Related Research
 

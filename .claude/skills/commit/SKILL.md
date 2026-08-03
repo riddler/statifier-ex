@@ -141,7 +141,7 @@ Attempt to detect a related beads issue using these strategies in order.
    ```bash
    git diff main...HEAD --name-only | grep 'docs/plans/'
    ```
-   - Plan filenames carry the issue ID: `YYYY-MM-DD-<issue-id>-*.md`
+   - Plan filenames carry the issue ID: `YYMMDD-<issue-id>-*.md`
 
 3. **Check session context**:
    - Look for issue mentions in your conversation context

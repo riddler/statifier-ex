@@ -16,7 +16,7 @@ Plan iteration runs on the Opus tier per docs/workflow.md (implementation runs o
 When this command is invoked:
 
 1. **Parse the input to identify**:
-   - Plan file path (e.g., `docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md`)
+   - Plan file path (e.g., `docs/plans/260802-st2-a42-parallel-exit-sets.md`)
    - Requested changes/feedback
 
 2. **Handle different input scenarios**:
@@ -26,7 +26,7 @@ When this command is invoked:
    ```
    I'll help you iterate on an existing implementation plan.
 
-   Which plan would you like to update? Please provide the path to the plan file (e.g., `docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md`).
+   Which plan would you like to update? Please provide the path to the plan file (e.g., `docs/plans/260802-st2-a42-parallel-exit-sets.md`).
 
    Tip: You can list recent plans with `ls -lt docs/plans/ | head`
    ```
@@ -242,14 +242,14 @@ When spawning research sub-tasks:
 **Scenario 1: User provides everything upfront**
 
 ```
-User: /iterate-plan docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md - add phase for ratcheting newly passing tests
+User: /iterate-plan docs/plans/260802-st2-a42-parallel-exit-sets.md - add phase for ratcheting newly passing tests
 Assistant: [Reads plan, researches ratchet mechanics, updates plan]
 ```
 
 **Scenario 2: User provides just plan file**
 
 ```
-User: /iterate-plan docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md
+User: /iterate-plan docs/plans/260802-st2-a42-parallel-exit-sets.md
 Assistant: I've found the plan. What changes would you like to make?
 User: Split Phase 2 into two phases - one for the compiler, one for the interpreter
 Assistant: [Proceeds with update]
@@ -260,7 +260,7 @@ Assistant: [Proceeds with update]
 ```
 User: /iterate-plan
 Assistant: Which plan would you like to update? Please provide the path...
-User: docs/plans/2026-08-02-st2-a42-parallel-exit-sets.md
+User: docs/plans/260802-st2-a42-parallel-exit-sets.md
 Assistant: I've found the plan. What changes would you like to make?
 User: Add more specific success criteria
 Assistant: [Proceeds with update]
