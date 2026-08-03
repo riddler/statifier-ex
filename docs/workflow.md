@@ -49,8 +49,17 @@ checkout so the first quality run is fast.
 
 Rules that make parallelism safe:
 
-- **One issue, one worktree, one branch.** The worktree name carries the beads issue
-  ID. Claim the issue (`bd update <id> --claim`) before creating the worktree.
+- **One worktree, one branch - usually one issue.** The worktree name carries a
+  beads issue ID. Claim the issue (`bd update <id> --claim`) before creating the
+  worktree.
+
+  Several small issues touching the same files may share a branch as separate
+  commits, one issue per commit. That is often the better split: forcing them
+  into parallel worktrees manufactures the rebase conflicts the module
+  boundaries exist to prevent. `/cleanup-worktrees` closes beads from the
+  `Refs:` trailers in the merged PR's commits rather than from the branch name,
+  so a branch carrying several closes all of them. When one does, its name
+  reflects the primary issue.
 - **Beads is the shared state.** The Dolt-backed DB is shared across worktrees, so
   claims, notes, and status changes are visible to every agent immediately. Use
   `bd note` for progress that another agent might need; use merge-slot gates
@@ -119,8 +128,10 @@ and no squash or cleanup pass is required before opening a PR.
    merge keep a human gate.
 7. `bd close` once the branch is merged into `origin/main`, not at commit or at
    PR-open time; `bd dolt push` follows, after the git side has reached `origin`.
-8. Remove the merged worktree and let the branch die with the merge
-   (`/cleanup-worktrees`); refresh the surviving worktrees (`/refresh-worktree`).
+   `/cleanup-worktrees` does both, keyed on the `Refs:` trailers in the merged
+   PR's commits, so every bead the branch carried is closed.
+8. Remove the merged worktree and let the branch die with the merge (same skill,
+   same detection); refresh the surviving worktrees (`/refresh-worktree`).
 9. Decisions that surfaced during the work become ADR amendments (Fable).
 
 ## Versioning and the changelog

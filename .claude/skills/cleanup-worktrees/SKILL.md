@@ -1,6 +1,6 @@
 ---
 name: cleanup-worktrees
-description: Remove worktrees and local branches whose PRs have merged, using GitHub PR state rather than git ancestry
+description: Land merged work - close the beads whose PRs have merged, remove their worktrees and local branches, using GitHub PR state rather than git ancestry
 model: sonnet
 argument-hint: ["optional: one worktree/branch name; omit to sweep all"]
 ---
@@ -110,7 +110,50 @@ sweep every worktree under `../statifier_2-worktrees/`.
    `-D` is correct here and only here - step 2 confirmed the merge, so the
    commits are on `main` under different SHAs.
 
-5. **Prune remote-tracking refs once**, after the loop:
+4.5. **Close the beads that just landed.** A closed bead is a claim about
+   `main`, not about a green branch. Closing at commit or PR-open time makes
+   `bd ready` offer downstream work against code that is not on `main` yet, and
+   `refs/dolt/data` propagates that wrong state to other machines within
+   minutes - the collision ADR-0010 makes beads the coordination bus to prevent.
+   The merge is the moment that claim becomes true, so it is the moment to close.
+
+   **Which beads: read the `Refs:` trailers, not the branch name.** Every commit
+   carries `Refs: st2-xxx` (`/commit` Step 2), so the merged PR's commits say
+   exactly which beads landed:
+   ```bash
+   gh pr view <number> --json commits --jq '.commits[].messageBody' \
+     | grep -oE 'st2-[a-z0-9]+(\.[0-9]+)?' | sort -u
+   ```
+   The branch name carries only one ID, so keying on it silently drops every
+   other bead a multi-commit branch closed. Trailers scale to a branch carrying
+   several beads; branch names do not.
+
+   For each ID found:
+   ```bash
+   bd show <id>          # confirm it exists and is not already closed
+   bd close <id> --reason="Merged to origin/main via PR #<number>"
+   ```
+   Already-closed is a no-op, not an error - say so and move on. An ID that
+   does not resolve is worth reporting rather than swallowing: it usually means
+   a typo'd trailer, and the bead it meant to close is still open.
+
+   **Close before removing the worktree** (step 4 already ran) but **do not let
+   a `bd` failure block cleanup**, and never close a bead for a branch whose
+   merge step 2 did not confirm.
+
+5. **Publish the closes.**
+   ```bash
+   bd dolt push
+   ```
+   A close nobody else can see does not do the job: other machines keep offering
+   the same work until the close reaches `refs/dolt/data`. The git side is
+   already on `origin` by definition here - the PR merged - so this is exactly
+   the trigger CLAUDE.md's authority table names.
+
+   Skip it when nothing was closed. Non-fatal if offline; report that the closes
+   are local and will publish on the next push.
+
+6. **Prune remote-tracking refs once**, after the loop:
    ```bash
    git fetch --prune
    ```
@@ -118,18 +161,20 @@ sweep every worktree under `../statifier_2-worktrees/`.
    Cleanup here is purely local, which is the whole reason it needs automating -
    nothing else was ever going to do it.
 
-6. **Report** one line per worktree:
+7. **Report** one line per worktree, naming the beads closed:
 
    | Worktree | Result |
    |---|---|
-   | `st2-qww.1-team-maintainer-optin` | merged in PR #6, removed, branch deleted |
-   | `st2-00p.3-regression-ratchet` | open PR #9, kept |
+   | `st2-qww.1-team-maintainer-optin` | merged in PR #6, closed st2-qww.1, removed, branch deleted |
+   | `st2-qww.4-close-on-merge` | merged in PR #10, closed st2-qww.4 + st2-qww.6, removed |
+   | `st2-00p.3-regression-ratchet` | open PR #11, kept |
    | `st2-vbu-strict-credo` | no PR, kept |
    | `st2-92f-area-labels` | dirty, skipped |
 
    **Nothing to clean is a success, and must say so explicitly** - "no merged
-   worktrees found, 3 live worktrees kept" rather than silence. A silent sweep
-   is indistinguishable from the ancestry bug this skill exists to avoid.
+   worktrees found, 3 live worktrees kept, no beads closed" rather than silence.
+   A silent sweep is indistinguishable from the ancestry bug this skill exists
+   to avoid.
 
 ## Guidelines
 
@@ -143,8 +188,11 @@ sweep every worktree under `../statifier_2-worktrees/`.
   rebases the survivors onto the new `origin/main`; this one removes the
   worktree of the branch that just landed. Run this first - refreshing a
   worktree that is about to be deleted is wasted work.
-- Shares its merge-detection step with the bead close-on-merge trigger
-  (st2-qww.4). Both answer "did this branch land", and both must answer it the
-  same way.
-- Safe to re-run: worktrees with no merged PR are kept, and a clean sweep is a
-  no-op.
+- **Never close a bead the merge check did not confirm.** Bead closing and
+  worktree removal share one detection step on purpose: they answer the same
+  question, "did this branch land", and answering it two ways is how they drift.
+- **A branch may carry several beads.** Trailer-driven closing is what makes
+  that safe, so grouping related beads onto one branch is a real option rather
+  than something the tooling punishes. See the note in `/merge-request`.
+- Safe to re-run: worktrees with no merged PR are kept, already-closed beads
+  are a no-op, and a clean sweep changes nothing.

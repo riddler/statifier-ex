@@ -167,8 +167,15 @@ which `/new-worktree` shapes as `<beads-id>-<slug>`.
 - **Confirmation is not a formality.** If the user declines, the branch stays
   local and nothing is lost. That asymmetry is the whole argument for putting
   the gate at this step rather than at commit.
-- **One bead, one branch, one PR.** A PR carrying two beads cannot be closed by
-  a merge trigger that maps a branch to an issue, and it defeats the module
-  boundaries the worktree split exists to enforce.
-- After the merge, the survivors need `/refresh-worktree` and this branch's
-  worktree needs removing (st2-qww.5).
+- **One bead per branch is the default, not a law.** Several small beads that
+  touch the same files belong on one branch as separate commits; splitting them
+  across parallel worktrees manufactures exactly the rebase conflicts the module
+  boundaries exist to avoid. Group them when they are the same work, split them
+  when they are not.
+
+  This is safe because `/cleanup-worktrees` closes beads from the `Refs:`
+  trailers in the merged PR's commits, not from the branch name, so every bead a
+  branch carries gets closed. Keep one bead per **commit** so those trailers stay
+  unambiguous, and name every bead the PR closes in its body.
+- After the merge, the survivors need `/refresh-worktree`, and this branch's
+  worktree and beads are handled by `/cleanup-worktrees`.
