@@ -118,15 +118,29 @@ sweep every worktree under `../statifier_2-worktrees/`.
    The merge is the moment that claim becomes true, so it is the moment to close.
 
    **Which beads: read the `Refs:` trailers, not the branch name.** Every commit
-   carries `Refs: st2-xxx` (`/commit` Step 2), so the merged PR's commits say
-   exactly which beads landed:
+   carries `Refs: st2-xxx` on its own line at the end (`/commit` Step 2), so the
+   merged PR's commits say exactly which beads landed:
    ```bash
    gh pr view <number> --json commits --jq '.commits[].messageBody' \
+     | grep -E '^Refs:' \
      | grep -oE 'st2-[a-z0-9]+(\.[0-9]+)?' | sort -u
    ```
    The branch name carries only one ID, so keying on it silently drops every
    other bead a multi-commit branch closed. Trailers scale to a branch carrying
    several beads; branch names do not.
+
+   **The `^Refs:` anchor is required, not tidiness.** Commit bodies here
+   routinely name other beads in prose - citing a design note, crediting a
+   discovery, explaining a deviation - and an unanchored match closes every one
+   of them. Fixture on `main`: `146c69f` names `st2-00p.1` and `st2-gnr` in its
+   body and carries no `Refs:` line at all, so without the anchor a merge
+   containing it would close two unrelated beads. Anchored, it correctly closes
+   nothing.
+
+   **A merged PR whose commits carry no `Refs:` line closes nothing - report
+   that, do not pass over it.** It means either work that skipped `/commit`, or
+   trailers forgotten on a grouped branch. Both leave beads open that a human
+   expected closed, and silence here is indistinguishable from success.
 
    For each ID found:
    ```bash
@@ -170,6 +184,7 @@ sweep every worktree under `../statifier_2-worktrees/`.
    | `st2-00p.3-regression-ratchet` | open PR #11, kept |
    | `st2-vbu-strict-credo` | no PR, kept |
    | `st2-92f-area-labels` | dirty, skipped |
+   | `st2-lzn-tmux-windows` | merged in PR #12, **no `Refs:` trailer, no bead closed** |
 
    **Nothing to clean is a success, and must say so explicitly** - "no merged
    worktrees found, 3 live worktrees kept, no beads closed" rather than silence.
