@@ -60,6 +60,18 @@ Rules that make parallelism safe:
   If two ready issues touch the same module, take them sequentially instead.
 - **Every worktree runs the same gate.** `mix quality --profile loop` while
   iterating, full `mix quality` before the branch is pushed or merged.
+- **Refresh the survivors when a branch lands.** A worktree is cut from
+  `origin/main` and warmed from the main checkout at one moment in time; every
+  merge after that leaves it behind. `/refresh-worktree` rebases the live
+  worktrees onto the new `origin/main`, repairs `deps/` and the dialyzer PLT if
+  `mix.lock` moved, and re-runs the loop profile. Run it after any merge, and
+  without fail after one that touched `mix.lock`, `.quality.exs`, or
+  `.credo.exs` - those move the gate itself, so an unrefreshed worktree goes red
+  for reasons that have nothing to do with the work in it.
+- **A rebase conflict is a process signal, not a chore.** It means two branches
+  touched the same files, so the split was wrong. `/refresh-worktree` aborts and
+  reports rather than resolving; resolve deliberately, one agent at a time,
+  behind `bd merge-slot`.
 - Merged worktrees are removed promptly (`git worktree remove`); the branch dies
   with the merge.
 
