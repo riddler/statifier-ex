@@ -56,10 +56,11 @@ sweep every worktree under `../statifier_2-worktrees/`.
 
 2. **Per worktree, ask GitHub whether its branch merged.**
    ```bash
-   gh pr list --state merged --head <branch> --json number,mergedAt --jq '.[0]'
+   gh pr list --state merged --head <branch> --json number,mergedAt,headRefOid --jq '.[0]'
    ```
-   - **A merged PR** -> eligible for cleanup, carry the PR number into the
-     report.
+   - **A merged PR** -> eligible for cleanup. Carry the PR number **and
+     `headRefOid`** forward: that SHA is the branch tip GitHub actually merged,
+     and step 3 needs it.
    - **No PR, or a PR that is open or closed-unmerged** -> leave everything
      alone and record why. An open PR means work in review; a closed-unmerged
      one means work someone abandoned but did not delete, which is theirs to
@@ -77,12 +78,27 @@ sweep every worktree under `../statifier_2-worktrees/`.
    `git worktree remove` already refuses on a dirty tree; that refusal is a
    feature, so do not route around it.
 
-   Also check for commits that never reached the remote:
+   Also check for commits made after the push, by comparing the local tip to
+   the SHA GitHub merged (`headRefOid` from step 2):
    ```bash
-   git -C <path> log @{upstream}..HEAD --oneline
+   git -C <path> rev-parse HEAD
    ```
-   Output here on a branch whose PR merged means someone committed after the
-   merge. Skip it and report - those commits exist nowhere else.
+   Equal means nothing was committed after the push and the worktree is safe to
+   remove. Different means someone committed on top after the merge; those
+   commits are on no remote and nowhere in `main`, so skip the worktree and
+   report the SHAs.
+
+   **Do not use `git log @{upstream}..HEAD` for this.** The upstream ref is
+   gone precisely when this skill runs: GitHub deletes the remote branch on
+   merge, so `@{upstream}` does not resolve and the command exits with
+   `fatal: ambiguous argument`, not empty output. Read literally, that fatal
+   looks like unpushed commits and skips **every** merged worktree - the same
+   silent no-op this skill exists to prevent, arriving by a different route.
+   Observed live cleaning up PRs #8 and #9.
+
+   `git log origin/main..HEAD` is not a substitute either: rebase merging
+   replays commits under new SHAs, so it reports commits for every merged
+   branch. `headRefOid` is the only local-vs-merged comparison that holds here.
 
 4. **Remove, in this order.** Order matters: the branch cannot be deleted while
    a worktree has it checked out.
