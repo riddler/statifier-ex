@@ -133,7 +133,11 @@
           # public functions, and it already specs them.
           {Credo.Check.Readability.SpecParameterNames, []},
           {Credo.Check.Readability.Specs, []},
-          {Credo.Check.Readability.StringSigils, []},
+          # Excluded from the generated W3C corpus: the description strings are
+          # copied verbatim from the IRP manifest and often quote spec text like
+          # 'type' or "internal", which the check would rather see as a sigil.
+          # Machine-emitted, not hand-authored - not worth reshaping (docs/testing.md).
+          {Credo.Check.Readability.StringSigils, [files: %{excluded: ["test/scxml_tests/"]}]},
           {Credo.Check.Readability.StrictModuleLayout, []},
           {Credo.Check.Readability.TrailingBlankLine, []},
           {Credo.Check.Readability.TrailingWhiteSpace, []},

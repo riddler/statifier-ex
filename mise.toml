@@ -136,8 +136,10 @@ run = '''
 set -euo pipefail
 mkdir -p "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
 
+# Plain `elixir`, not `mix run`: cases.exs needs xmerl, which Mix prunes from
+# the code path (see scxml_w3/cases.exs, scxml_w3/manifest.exs).
 find "$CORPUS_W3_CASES" -type f -iname '*.scxml' -print0 | sort -z | xargs -0 \
-  mix run "$CORPUS_DIR/scxml_w3/cases.exs" "$CORPUS_W3_OUT" "$CORPUS_W3_CASES"
+  elixir "$CORPUS_DIR/scxml_w3/cases.exs" "$CORPUS_W3_OUT" "$CORPUS_W3_CASES"
 
 find "$CORPUS_SCION_CASES" -type f -iname '*.json' -print0 | sort -z | xargs -0 \
   mix run "$CORPUS_DIR/scion/cases.exs" "$CORPUS_SCION_OUT" "$CORPUS_SCION_CASES"
