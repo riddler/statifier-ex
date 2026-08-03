@@ -79,6 +79,10 @@ mix test --include scion --include scxml_w3   # full conformance run
 mix test.regression          # ratchet: registry tests must pass (once corpus lands)
 ```
 
+Toolchain and repo tasks live in `mise.toml`: `mise install` provisions Erlang,
+Elixir, and the JRE Saxon needs; `mise run corpus` regenerates the conformance
+corpus (`mise tasks` lists the stages, `tools/corpus/README.md` explains them).
+
 Run `mix quality --profile loop` between edits; full `mix quality` must be green
 before any commit. The gate formats your code for you - do not run `mix format`
 as a separate step. See the ExQuality section at the end of this file for the

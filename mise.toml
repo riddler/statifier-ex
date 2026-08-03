@@ -1,0 +1,149 @@
+# mise config for statifier v2: toolchain, environment, and repo tasks.
+#
+#   mise install        provision the toolchain below
+#   mise tasks          list the tasks
+#   mise run corpus     regenerate the conformance corpus
+
+[tools]
+erlang = "27.3"
+elixir = "1.18.3-otp-27"
+# Saxon-HE is a JAR; the corpus generator needs a JRE to run the TXML -> SCXML
+# transform. Nothing in lib/ or test/ needs Java.
+java = "temurin-21.0.11+10.0.LTS"
+
+[env]
+# Upstream sources for the conformance corpora.
+CORPUS_W3_SUITE = "https://www.w3.org/Voice/2013/scxml-irp"
+CORPUS_SAXON_URL = "https://downloads.sourceforge.net/project/saxon/Saxon-HE/9.7/SaxonHE9-7-0-14J.zip"
+CORPUS_SCION_SUITE = "https://github.com/jbeard4/scxml-test-framework.git"
+
+# CORPUS_W3_MIRROR is deliberately NOT set here - a value in this block would
+# override one exported in your shell. Export it yourself to seed the W3C cases
+# from a local checkout in the same <conformance>/<spec>/<id>.{txml,description}
+# layout the fetcher writes; w3.org 429s a few hundred sequential requests, so
+# that turns a long throttled crawl into a copy. See tools/corpus/README.md.
+
+# Generator inputs, committed.
+CORPUS_DIR = "{{config_root}}/tools/corpus"
+CORPUS_XSL = "{{config_root}}/tools/corpus/scxml_w3/conf_elixir.xsl"
+
+# Scratch space, gitignored: everything fetched from upstream plus the
+# intermediate .scxml files.
+CORPUS_SCRATCH = "{{config_root}}/tools/corpus/scratch"
+CORPUS_SAXON_DIR = "{{config_root}}/tools/corpus/scratch/saxon"
+CORPUS_W3_CASES = "{{config_root}}/tools/corpus/scratch/scxml_w3/cases"
+CORPUS_SCION_CASES = "{{config_root}}/tools/corpus/scratch/scion/cases"
+
+# Generator output, committed: regeneration lands as a reviewable diff.
+CORPUS_W3_OUT = "{{config_root}}/test/scxml_tests"
+CORPUS_SCION_OUT = "{{config_root}}/test/scion_tests"
+
+[tasks.corpus]
+description = "Regenerate the SCION + W3C conformance corpus (fetch, transform, emit)"
+depends = ["corpus:fetch", "corpus:transform", "corpus:emit"]
+
+[tasks."corpus:fetch"]
+description = "Download the W3C manifest + TXML, Saxon-HE, and the SCION framework"
+depends = ["corpus:fetch:w3", "corpus:fetch:saxon", "corpus:fetch:scion"]
+
+[tasks."corpus:fetch:w3"]
+description = "Download the W3C IRP manifest and its TXML sources"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+mkdir -p "$CORPUS_W3_CASES"
+if [ -n "${CORPUS_W3_MIRROR:-}" ] && [ -d "$CORPUS_W3_MIRROR" ]; then
+  echo "seeding from mirror $CORPUS_W3_MIRROR"
+  seeded=0
+  # Upstream sources only. A mirror may also hold .scxml from someone else's
+  # transform; copying those in would make corpus:transform skip its own work.
+  while IFS= read -r -d '' rel; do
+    dest="$CORPUS_W3_CASES/${rel#./}"
+    [ -f "$dest" ] && continue
+    mkdir -p "$(dirname "$dest")"
+    cp -f "$CORPUS_W3_MIRROR/${rel#./}" "$dest"
+    seeded=$((seeded + 1))
+  done < <(cd "$CORPUS_W3_MIRROR" && find . -type f \
+    \( -name '*.txml' -o -name '*.description' -o -name 'manifest.xml' \) -print0)
+  echo "seeded $seeded file(s)"
+fi
+if [ ! -f "$CORPUS_W3_CASES/manifest.xml" ]; then
+  curl -fsSL "$CORPUS_W3_SUITE/manifest.xml" -o "$CORPUS_W3_CASES/manifest.xml"
+fi
+# Plain `elixir`, not `mix run`: this script needs xmerl, which Mix prunes from
+# the code path, and nothing from the project. It skips TXML already on disk, so
+# a run interrupted by w3.org's rate limiter resumes cheaply.
+elixir "$CORPUS_DIR/scxml_w3/manifest.exs" \
+  "$CORPUS_W3_CASES/manifest.xml" "$CORPUS_W3_CASES/.manifest" "$CORPUS_W3_SUITE"
+'''
+
+[tasks."corpus:fetch:saxon"]
+description = "Download Saxon-HE for the TXML -> SCXML transform"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+if [ -f "$CORPUS_SAXON_DIR/saxon9he.jar" ]; then exit 0; fi
+mkdir -p "$CORPUS_SAXON_DIR"
+curl -fsSL "$CORPUS_SAXON_URL" -o "$CORPUS_SAXON_DIR/saxon.zip"
+unzip -oq "$CORPUS_SAXON_DIR/saxon.zip" -d "$CORPUS_SAXON_DIR"
+rm -f "$CORPUS_SAXON_DIR/saxon.zip"
+'''
+
+[tasks."corpus:fetch:scion"]
+description = "Clone the SCION scxml-test-framework, dropping its ecma-only trees"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+if [ -d "$CORPUS_SCION_CASES" ]; then exit 0; fi
+scion_root="$(dirname "$CORPUS_SCION_CASES")"
+rm -rf "$scion_root"
+mkdir -p "$scion_root"
+git clone --depth 1 "$CORPUS_SCION_SUITE" "$scion_root/checkout"
+rm -rf "$scion_root"/checkout/test/w3c-ecma{,-in-review,-modified}
+mv "$scion_root/checkout/test" "$CORPUS_SCION_CASES"
+rm -rf "$scion_root/checkout"
+# The root transition is not supported.
+sed -i.bak -e '25,28d' "$CORPUS_SCION_CASES/internal-transitions/test0.scxml"
+rm -f "$CORPUS_SCION_CASES/internal-transitions/test0.scxml.bak"
+'''
+
+[tasks."corpus:transform"]
+description = "Transform W3C TXML -> SCXML for the predicator datamodel, via Saxon"
+depends = ["corpus:fetch:w3", "corpus:fetch:saxon"]
+shell = "bash -c"
+run = '''
+set -euo pipefail
+count=0
+while IFS= read -r txml; do
+  scxml="${txml%.txml}.scxml"
+  if [ -f "$scxml" ] && [ ! "$txml" -nt "$scxml" ] && [ ! "$CORPUS_XSL" -nt "$scxml" ]; then
+    continue
+  fi
+  java -jar "$CORPUS_SAXON_DIR/saxon9he.jar" --suppressXsltNamespaceCheck:on \
+    -s:"$txml" -xsl:"$CORPUS_XSL" -o:"$scxml"
+  count=$((count + 1))
+done < <(find "$CORPUS_W3_CASES" -type f -iname '*.txml' | sort)
+echo "transformed $count file(s)"
+'''
+
+[tasks."corpus:emit"]
+description = "Write the generated test modules into test/{scion,scxml}_tests/"
+depends = ["corpus:transform", "corpus:fetch:scion"]
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+mkdir -p "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
+
+find "$CORPUS_W3_CASES" -type f -iname '*.scxml' -print0 | sort -z | xargs -0 \
+  mix run "$CORPUS_DIR/scxml_w3/cases.exs" "$CORPUS_W3_OUT" "$CORPUS_W3_CASES"
+
+find "$CORPUS_SCION_CASES" -type f -iname '*.json' -print0 | sort -z | xargs -0 \
+  mix run "$CORPUS_DIR/scion/cases.exs" "$CORPUS_SCION_OUT" "$CORPUS_SCION_CASES"
+'''
+
+[tasks."corpus:clean"]
+description = "Discard every upstream download; the next corpus run refetches"
+shell = "bash -c"
+run = 'rm -rf "$CORPUS_SCRATCH"'
