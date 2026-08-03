@@ -73,29 +73,43 @@ They are committed deliberately, so a regeneration lands as a reviewable diff.
 ## Status
 
 Fetch and transform are retargeted and working: 198 W3C cases and 127 SCION
-cases. The **emit stage still produces ex_statechart-shaped modules**
+cases. The **W3C emit stage is rewritten to the v2 shape** (`st2-00p.7`):
+`SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
+`@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
+inline XML heredoc (4-space base indent, pretty-printed from the transformed
+`.scxml`, comments stripped), and a single `test_scxml/4` call. 162 of the 198
+W3C cases emit; the rest are filtered out (see below). `test/scxml_tests/` is
+populated.
+
+The **SCION emit stage still produces ex_statechart-shaped modules**
 (`use Test.StateChart.Case`), which do not compile against v2 - so `mise run
-corpus` is not yet safe to run end to end, and `test/scion_tests/` and
-`test/scxml_tests/` are still empty. Until the emitters are rewritten, stop
-after transform:
+corpus` is not yet safe to run end to end, and `test/scion_tests/` is still
+empty. Until it is rewritten, regenerate the W3C suite on its own:
 
 ```bash
-mise run corpus:fetch && mise run corpus:transform
+mise run corpus:fetch:w3 && mise run corpus:fetch:saxon && mise run corpus:transform
+find "$CORPUS_W3_CASES" -type f -iname '*.scxml' -print0 | sort -z | xargs -0 \
+  elixir tools/corpus/scxml_w3/cases.exs test/scxml_tests "$CORPUS_W3_CASES"
 ```
 
 Remaining work, tracked in beads:
 
-1. **st2-00p.6** / **st2-00p.7** - rewrite the SCION and W3C emitters to the v2
-   test file shape: one module per file (`SCIONTest.Category.NameTest` /
-   `SCXMLTest.Section.TestNNN`), `use Statifier.Case`, suite tags
-   (`:scion` / `:scxml_w3`), `@tag required_features: [...]` derived via the
+1. **st2-00p.6** - rewrite the SCION emitter to the v2 test file shape: one
+   module per file (`SCIONTest.Category.NameTest`), `use Statifier.Case`,
+   `@moduletag :scion`, `@tag required_features: [...]` derived via the
    feature detector, inline XML heredoc (4-space base indent), and a single
    `test_scxml/4` call built from the events/configuration sequence.
 
-Tests with no predicator equivalent (script, list concatenation, string
-prefix, and the BasicHTTP Event I/O Processor tree) are recorded in
-`scxml_w3/exclusions.exs` with a reason atom per ADR-0004; `st2-00p.7`'s
-emitter skips them.
+Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
+
+- **datamodel**: only inputs `conf_predicator.xsl` transformed to
+  `datamodel="predicator"` are emitted. The datamodel-specific optional suites
+  (`ecma-profile`, ...) test literal ECMAScript/XPath behavior the XSL leaves
+  untouched, so they keep their original datamodel and are out of scope for
+  the predicator commitment (docs/datamodel.md).
+- **exclusions.exs**: tests with no predicator equivalent (script, list
+  concatenation, string prefix, and the BasicHTTP Event I/O Processor tree),
+  recorded with a reason atom per ADR-0004.
 
 v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.
