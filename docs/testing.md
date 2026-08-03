@@ -139,3 +139,8 @@ it is harness code, not library surface.
 - Coverage: the gate fails below **90%** (`coveralls.json`); 95%+ is the target to
   aim at. Raising the floor as the suite grows is a decision for a human, and
   lowering it is not a way to go green.
+- Coverage measures `lib/` only: `coveralls.json` skips `test/support/`, which is
+  harness code rather than library surface. The harness is still tested directly
+  (`feature_detector_test.exs`, `case_test.exs`) - it is just not what the floor
+  is set for, and counting it would let the harness's own line count move a
+  number that exists to describe the engine.
