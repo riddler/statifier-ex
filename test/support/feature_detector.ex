@@ -25,7 +25,7 @@ defmodule Statifier.FeatureDetector do
       iex> Statifier.FeatureDetector.detect_features("<scxml><state id='s1'/></scxml>")
       MapSet.new([:basic_states])
   """
-  @spec detect_features(String.t()) :: MapSet.t(atom())
+  @spec detect_features(xml :: String.t()) :: MapSet.t(atom())
   def detect_features(xml) when is_binary(xml) do
     MapSet.new()
     |> detect_elements(xml)
@@ -86,7 +86,7 @@ defmodule Statifier.FeatureDetector do
   they may work in simple cases. A feature absent from the registry counts as
   unsupported.
   """
-  @spec validate_features(MapSet.t(atom())) ::
+  @spec validate_features(detected_features :: MapSet.t(atom())) ::
           {:ok, MapSet.t(atom())} | {:error, MapSet.t(atom())}
   def validate_features(detected_features) do
     registry = feature_registry()
