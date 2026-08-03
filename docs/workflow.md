@@ -33,6 +33,9 @@ is published).
   with `bd q` immediately, linked with `discovered-from`, and not chased mid-task.
 - Predicator/UXID upstream candidates get a `upstream` label so they can be swept
   into the other repos' trackers.
+- Every bead that changes files carries an `area:` label; see
+  [Area labels](#area-labels) for the vocabulary and the batching rule it exists
+  to make mechanical.
 
 ## Worktrees and parallel agents
 
@@ -66,7 +69,8 @@ Rules that make parallelism safe:
   (`bd merge-slot`) when several branches will land on the same files.
 - **Parallelize across module boundaries, not within them.** Good splits: parser DOM
   vs corpus tooling; one interpreter function-family per plan phase; docs vs code.
-  If two ready issues touch the same module, take them sequentially instead.
+  If two ready issues touch the same module, take them sequentially instead. The
+  `area:` labels below make that a set intersection rather than a judgment call.
 - **Every worktree runs the same gate.** `mix quality --profile loop` while
   iterating, full `mix quality` before the branch is pushed or merged.
 - **Refresh the survivors when a branch lands.** A worktree is cut from
@@ -84,6 +88,52 @@ Rules that make parallelism safe:
 - Merged worktrees are removed promptly; the branch dies with the merge.
   `/cleanup-worktrees` automates it, and `/next-issue` runs it at pickup, which
   is when the previous branch has usually landed.
+
+### Area labels
+
+Every bead that changes files carries at least one `area:` label naming the part
+of the tree it touches. A bead may carry several.
+
+| Label | Covers |
+|---|---|
+| `area:interpreter` | `lib/statifier/interpreter/**` |
+| `area:parser` | `lib/statifier/parser/**` |
+| `area:datamodel` | `lib/statifier/datamodel/**` |
+| `area:corpus` | `tools/corpus/**`, `test/scion_tests/**`, `test/scxml_tests/**` |
+| `area:test-harness` | `test/support/**`, `lib/mix/tasks/test.*.ex`, `test/passing_tests.json` |
+| `area:skills` | `.claude/skills/**` |
+| `area:docs` | `docs/**`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `changelog.d/**` |
+| `area:build` | `mix.exs`, `mix.lock`, `.quality.exs`, `.credo.exs`, `.gitignore` |
+
+**Two beads are batchable iff their area sets are disjoint.** That is the whole
+rule, and it is what lets a picker claim several beads at once without a human
+adjudicating each pair: `bd ready` already filters natively on `-l/--label`,
+`--label-any` and `--exclude-label`, so asking for a disjoint set is a flag, not
+an analysis.
+
+**`area:build` is exclusive: a bead carrying it batches with nothing** and lands
+on `main` alone. It moves `mix.lock` and the credo config that every other
+worktree's warmed `_build` and quality gate depend on, so a parallel branch does
+not merely conflict with it - it goes red for reasons that have nothing to do
+with the work in it (the same failure mode `/refresh-worktree` exists to repair).
+
+Two clarifications that come up:
+
+- **Areas are about file collision, not subject matter.** Two beads both "about
+  the corpus" that touch disjoint files are batchable. Two beads in different
+  subsystems that both edit `mix.exs` are not. When in doubt, label by the paths
+  named in the acceptance criteria.
+- **The label is a prediction, deliberately.** It is written before the work
+  exists, so it is not derived from a diff and should not be. A branch that ends
+  up touching an area it was not labeled with is worth noticing at merge time,
+  not silently accepting - it means the split that the batch was built on was
+  wrong.
+
+The one class of bead with no area label is work that changes no files in this
+repo: the `upstream` beads, whose work happens in predicator. They collide with
+nothing here, so an area label on them would block batches for no reason. When
+one lands and bumps `mix.lock`, that bump is `area:build` work and gets its own
+bead.
 
 ## Merge policy: rebase only
 

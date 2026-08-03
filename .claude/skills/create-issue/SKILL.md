@@ -56,13 +56,23 @@ mirror the roadmap phases - if the new issue belongs to an epic, link it as a ch
 
 ## Apply labels
 
-- Add topical labels the user mentions (e.g. `parser`, `interpreter`, `corpus`, `docs`).
+- Add at least one **`area:`** label to every issue that will change files in this
+  repo - `area:interpreter`, `area:parser`, `area:datamodel`, `area:corpus`,
+  `area:test-harness`, `area:skills`, `area:docs`, `area:build`. The vocabulary
+  and the paths each covers are in
+  [docs/workflow.md](../../../docs/workflow.md#area-labels). This is not a
+  topical tag: it is what lets a batch picker tell whether two issues collide,
+  so label by the paths in the acceptance criteria, not by subject matter, and
+  use `area:build` for anything touching `mix.exs`, `mix.lock`, `.quality.exs`,
+  or `.credo.exs` - those beads batch with nothing.
+- Add topical labels the user mentions (e.g. `tooling`, `workflow`, `quality`).
 - Add the **`upstream`** label when the issue is an upstream candidate for
   predicator, uxid, or ex_quality (a seam or fix that belongs in those repos), so
-  it can be swept into their trackers later.
+  it can be swept into their trackers later. An `upstream` issue changes no files
+  here, so it takes no `area:` label.
 
 ```bash
-bd label <id> upstream
+bd update <id> --add-label area:parser --add-label upstream
 ```
 
 ## Report back
