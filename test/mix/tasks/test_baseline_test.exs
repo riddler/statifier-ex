@@ -216,7 +216,9 @@ defmodule Mix.Tasks.Test.BaselineTest do
     test "returns :ok when there is nothing to check", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir, %{"scion_tests" => []})
 
-      capture_io(fn -> assert :ok = Baseline.run(["--registry", path]) end)
+      capture_io(fn ->
+        assert :ok = Baseline.execute(["--registry", path], opts(tmp_dir))
+      end)
     end
 
     test "turns a failure into a Mix error, so the shell exits non-zero" do

@@ -81,24 +81,20 @@ inline XML heredoc (4-space base indent, pretty-printed from the transformed
 W3C cases emit; the rest are filtered out (see below). `test/scxml_tests/` is
 populated.
 
-The **SCION emit stage still produces ex_statechart-shaped modules**
-(`use Test.StateChart.Case`), which do not compile against v2 - so `mise run
-corpus` is not yet safe to run end to end, and `test/scion_tests/` is still
-empty. Until it is rewritten, regenerate the W3C suite on its own:
-
-```bash
-mise run corpus:fetch:w3 && mise run corpus:fetch:saxon && mise run corpus:transform
-find "$CORPUS_W3_CASES" -type f -iname '*.scxml' -print0 | sort -z | xargs -0 \
-  elixir tools/corpus/scxml_w3/cases.exs test/scxml_tests "$CORPUS_W3_CASES"
-```
+The **SCION emit stage is also rewritten to the v2 shape** (`st2-00p.6`):
+`SCIONTest.<Spec>.<Name>Test`, `use Statifier.Case`, `@moduletag :scion`,
+`@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
+inline XML heredoc (4-space base indent, raw source unmodified - no
+xmerl re-serialization), and a single `test_scxml/4` call. All 127 SCION cases
+emit; `test/scion_tests/` is populated. `mise run corpus` (fetch, transform,
+emit for both W3C and SCION) now runs end to end without error.
 
 Remaining work, tracked in beads:
 
-1. **st2-00p.6** - rewrite the SCION emitter to the v2 test file shape: one
-   module per file (`SCIONTest.Category.NameTest`), `use Statifier.Case`,
-   `@moduletag :scion`, `@tag required_features: [...]` derived via the
-   feature detector, inline XML heredoc (4-space base indent), and a single
-   `test_scxml/4` call built from the events/configuration sequence.
+1. **st2-00p.8** - committed exclusion manifest with reasons for the SCION
+   suite.
+2. **st2-yo4** - normalize corpus emit output to snake_case paths and
+   PascalCase modules.
 
 Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 
