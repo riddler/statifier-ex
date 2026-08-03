@@ -57,6 +57,44 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
+## Agent authority in this repo
+
+**This repository opts into the team-maintainer profile** described in the Beads
+block above. Conservative stays the default everywhere else: a clone of a repo
+that has not written an opt-in like this one gets the conservative rules, and so
+does this repo for any action the table below does not name.
+
+The grant is per action, and every action has a trigger. Authority is not
+blanket - an action whose trigger has not fired is still unauthorized, and an
+explicit "do not commit", "do not push", or equivalent from the current user or
+orchestrator overrides every row here.
+
+| Action | Trigger | Still unauthorized when |
+|---|---|---|
+| `bd` task tracking (`create`, `claim`, `update`, `note`) | any time | never - this is the default profile too |
+| `mix quality` in any profile | any time | never - running the gate costs nothing but time |
+| `git commit` on the issue's worktree branch | the claimed issue's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on `main`, on a red gate, on a `--quick` or `--test-scope changed` run, or with unrelated changes in the tree |
+| `git rebase` onto `origin/main` in a worktree (`/refresh-worktree`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
+| `git push`, `gh pr create` (`/merge-request`) | the user asks for it in their own words | inferred from "the work is done"; finishing an issue is not a request to publish it |
+| `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed |
+| `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet |
+| `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
+
+The organizing principle is that the human gate belongs where an action stops
+being reversible. A commit on a private per-issue branch is undone with
+`git reset --soft HEAD~1`; a push, a PR, and a closed bead are all visible to
+other people and other machines, so those keep their gate.
+
+## Non-interactive shell commands
+
+`cp`, `mv`, and `rm` may be aliased to `-i` on a developer's machine, which
+hangs an agent forever on a y/n prompt it cannot see. Always pass the
+non-interactive form: `cp -f`, `mv -f`, `rm -f`, `rm -rf`, `cp -rf`. Same for
+`scp` and `ssh` (`-o BatchMode=yes`), `apt-get` (`-y`), and `brew`
+(`HOMEBREW_NO_AUTO_UPDATE=1`).
+
+Also avoid `bd edit`, which opens `$EDITOR` and blocks. Use
+`bd update <id> --title/--description/--notes/--design` instead.
 
 ## What this project is
 

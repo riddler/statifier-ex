@@ -85,8 +85,15 @@ Rules that make parallelism safe:
 4. If the change is user-facing, write a changelog fragment
    (`changelog.d/<issue-id>.md`); see `changelog.d/README.md` for when one is
    needed. Most changes need none.
-5. Full `mix quality` green, PR against `main`, review, merge, `bd close`.
-6. Decisions that surfaced during the work become ADR amendments (Fable).
+5. Full `mix quality` green (a change touching no Elixir code has no gate to run),
+   then commit on the worktree branch. An agent may take this step on its own -
+   see the authority table in `CLAUDE.md`.
+6. Push and open a PR against `main` when asked for it. Finishing the work is not
+   itself a request to publish it, so this step and the merge keep a human gate.
+7. `bd close` once the branch is merged into `origin/main`, not at commit or at
+   PR-open time; `bd dolt push` follows, after the git side has reached `origin`.
+8. Remove the merged worktree and let the branch die with the merge.
+9. Decisions that surfaced during the work become ADR amendments (Fable).
 
 ## Versioning and the changelog
 
