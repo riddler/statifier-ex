@@ -19,7 +19,10 @@ before creating the worktree, posts progress via `bd note`, and uses merge-slot
 gates when branches will touch the same files. Work is split along module
 boundaries (parser vs corpus vs docs vs distinct interpreter areas); two ready
 issues in the same module are taken sequentially. Every worktree runs the same
-quality gate (ADR-0009) before pushing. Worktrees are removed at merge.
+quality gate (ADR-0009) before pushing. Worktrees are removed at merge, by
+`/cleanup-worktrees`, which detects the merge from GitHub PR state rather than
+git ancestry - the repo allows rebase merging only, so a merged branch is never
+an ancestor of `main` (see docs/workflow.md, "Merge policy: rebase only").
 
 ## Consequences
 
