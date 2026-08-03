@@ -2,16 +2,44 @@
 name: commit
 description: Analyze changes, run the quality gate, and create a well-formed commit
 model: sonnet
-argument-hint: ["optional: beads issue ID or branch context"]
+argument-hint: ["--auto", "optional: beads issue ID or branch context"]
 ---
 
 # Commit Changes
 
 This command handles the workflow for committing changes on a branch.
 
+## Modes
+
+**Interactive (default).** Every step below runs, including Step 3, which
+presents the message and waits for approval.
+
+**Auto (`/commit --auto`).** Step 3 is skipped; nothing else changes. Every
+mechanized check still runs: the gate in Step 0, the hard message limits in
+Step 2, and the attribution verification in Step 4. Auto mode does not lower a
+bar, it removes a prompt.
+
+Auto mode is safe because of what it commits to: a per-issue worktree branch,
+where a commit is undone with `git reset --soft HEAD~1` and nobody else has
+seen it. It is not authorization to push, open a PR, or close a bead - those
+have their own triggers in CLAUDE.md's authority table.
+
+**Auto mode refuses, reports, and stops** rather than committing when:
+- the quality gate is red (Step 0)
+- the gate was narrowed - a `--quick` or `--test-scope changed` run is not a
+  green gate for commit purposes
+- the current branch is `main`
+- the working tree carries changes unrelated to the claimed issue
+- Step 1.5 found no beads issue (interactive mode asks the user; auto mode has
+  nobody to ask, so it stops and says so)
+
+A refusal is a report, not a fallback to interactive. Say which condition fired
+and what would clear it.
+
 ## Important Context
 
-- Full `mix quality` must be green before any commit (docs/workflow.md, ADR-0009).
+- Full `mix quality` must be green before any commit (docs/workflow.md, ADR-0009),
+  with one carve-out in Step 0 for changes touching no Elixir code.
 - Commit messages follow the project style: short present-tense title, wrapped
   body, functional changes highlighted, no AI attribution.
 - Work usually maps to a beads issue; reference it in the commit body.
@@ -49,6 +77,17 @@ stage nothing but `.gitignore`.
    you need machine-readable results.
 2. Fix ALL issues reported before proceeding
 3. DO NOT proceed to commit until `mix quality` is green
+
+**Carve-out: a change touching no Elixir code has no gate to run.** If
+`git diff main...HEAD --name-only` (plus unstaged files) touches nothing under
+`lib/`, `test/`, `config/`, and neither `mix.exs` nor `mix.lock`, the gate has
+nothing to measure - skills, docs, ADRs, and beads exports cannot break a
+build. Skip `mix quality` and review the diff instead.
+
+This carve-out is narrow and it is not a judgment call: one Elixir file in the
+diff and the full gate runs. When it applies, say so in the Step 4 report
+("docs only, no quality gate applicable") rather than letting a reader assume
+a green gate that never ran.
 
 ### Step 1: Analyze Changes
 
@@ -93,6 +132,9 @@ Attempt to detect a related beads issue using these strategies in order.
    - If no valid issue detected, ask: "Is this commit related to a beads issue? (Enter issue ID or press Enter to skip)"
    - If the user provides an ID, validate with `bd show` before proceeding
    - If the user skips (Enter), continue without issue reference
+   - **In auto mode there is nobody to ask.** Stop and report that no issue was
+     detected, naming the branch it looked at. An unattended commit with no
+     `Refs:` line is work that later cannot be traced back to why it happened.
 
 ### Step 1.6: Changelog Fragment (only if user-facing)
 
@@ -167,7 +209,12 @@ all three hold. These are requirements, not guidelines:
   - If no issue, omit this line entirely
 - **NO attribution lines** (see override instructions at top)
 
-### Step 3: Present for Approval
+### Step 3: Present for Approval (interactive mode only)
+
+**In auto mode, skip this step entirely and go to Step 4.** Do not print the
+message and proceed anyway - a prompt nobody answers is noise, and the whole
+point of `--auto` is that this step is gone. The message still had to satisfy
+every hard limit in Step 2 to get here.
 
 Show the user the prepared commit in a clear format:
 
@@ -198,7 +245,13 @@ Shall I proceed with this commit?
 
 **Note**: If no issue was detected or provided, omit the "Related Issue" line from the approval message.
 
-### Step 4: Execute After Approval
+### Step 4: Execute
+
+Interactive mode reaches this step after approval; auto mode reaches it
+directly from Step 2. The steps themselves are identical in both modes - in
+particular, the Step 4.4 verification is **not** optional in auto mode. It is
+the only thing standing between an unattended commit and a "Co-Authored-By"
+line the user never wanted.
 
 **CRITICAL REMINDER**: NO co-author or attribution lines (see override instructions at top)
 
@@ -247,11 +300,14 @@ COMMIT_MSG
    Commit created successfully
    Commit: [short sha] [commit title]
    Files: [list]
-   Issue: st2-xxx (still open - close with `bd close` when the work is done)
+   Gate: full mix quality green   (or: docs only, no quality gate applicable)
+   Issue: st2-xxx (left in_progress - it closes on merge, not on commit)
    ```
 
-Do not push, and do not close the beads issue, unless explicitly asked (see the
-agent profile rules in CLAUDE.md).
+Do not push and do not close the beads issue. This holds in both modes and is
+not something `--auto` relaxes: `bd close` fires on merge into `origin/main`,
+and push/PR fire on an explicit request, per CLAUDE.md's authority table.
+Leaving the bead `in_progress` is the correct end state for this skill.
 
 ## Failure Recovery
 
@@ -284,12 +340,24 @@ Would you like me to:
 2. Reset and recreate the commit
 ```
 
+**In auto mode, take Option 1 without asking**, then report that it fired. The
+fix is deterministic and the commit is local, so stopping to ask converts a
+self-healing case into a stall. Report it either way - repeated attribution
+leaks mean the override at the top of this skill is losing to something, and
+that is worth knowing.
+
 ### If Quality Checks Fail
 
 If `mix quality` fails in Step 0:
 1. Show the full error output to the user
 2. Ask if they want you to fix the issues or if they'll handle it
 3. DO NOT proceed to commit until the full gate passes
+
+In auto mode, do not fix the failures unasked. A red gate on unattended work
+means the change is not finished, and quietly repairing it turns one reviewable
+commit into a commit plus an unreviewed fix. Report the failing stages with
+their `file:line` findings and stop. The exception is a formatting-only failure,
+which `mix format` resolves without changing behavior.
 
 ### If Files Are Missing After Commit
 
@@ -315,9 +383,12 @@ If verification shows files weren't committed:
 
 ### Workflow:
 - Analyze ALL changes on the branch, not just session context
-- Full `mix quality` green before commit - no exceptions
-- Present the message for user approval BEFORE committing
+- Full `mix quality` green before commit, unless the diff touches no Elixir code
+  and there is no gate to run (Step 0 carve-out)
+- Present the message for user approval BEFORE committing, in interactive mode;
+  `--auto` skips that prompt and nothing else
 - Verify the commit immediately after creation (check for forbidden attribution)
+  in both modes
 - Ratchet additions ride in the same commit/PR as the feature that unlocked them
 - Changelog fragments ride in the same commit as the change they describe; most
   changes need none, and `CHANGELOG.md` is never edited outside a release
