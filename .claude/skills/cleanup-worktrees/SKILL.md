@@ -155,22 +155,48 @@ sweep every worktree under `../statifier_2-worktrees/`.
       elapsed timer: `· Cooking… (45s · ↓ 2.5k tokens)`. Match the timer
       (`\([0-9]+s · `) or `esc to interrupt` - **never the verb**, which is
       randomized per frame (`Cooking…`, `Forging…`, and many others).
-   2. **The input box is empty.**
+   2. **The input box is empty - of real text.**
       ```bash
-      tmux capture-pane -p -t "$win" | grep '❯' | tail -1
+      tmux capture-pane -e -p -t "$win" | grep '❯' | tail -1
       ```
-      Idle is exactly `❯ ` with nothing but whitespace after it. Take the
-      **last** `❯` line - the transcript echoes every user message with the
-      same marker, so an earlier one says nothing about the current state.
-      Anything else is one of two things worth stopping for:
-      - a half-typed draft (`❯ half a draft`) - a human's unsent text, and
-        losing it is the same class of loss as a dirty tree
-      - a dialog awaiting an answer, which renders as ` ❯ 1. Yes` (a tool
-        permission prompt, a trust-this-folder prompt)
+      Use **`-e`**, not plain `-p`. Claude Code renders a greyed-out suggested
+      next prompt in an otherwise-empty input box, and in plain `-p` output
+      that placeholder text lands right after the `❯` indistinguishable from
+      something the user actually typed - a session with nothing typed reads
+      as "busy" and the whole worktree gets skipped for no reason. `-e` keeps
+      the ANSI styling, and the placeholder is always wrapped in a dim/faint
+      SGR sequence (`\e[2m ... \e[0m`) that real typed input never carries.
+      Verified live 2026-08-03 against two idle sessions showing a suggested
+      prompt with nothing typed - captured raw:
+      ```
+      ❯ [2mdiscard the model change[0m
+      ❯ [2mbd link st2-meo --depends-on st2-qw9[0m
+      ```
+      (`[2m` / `[0m` above stand for the literal `ESC [ 2 m` / `ESC [ 0 m`
+      bytes.) An empty box with no suggestion at all captures as plain
+      `❯ [39m` - nothing but a color-reset code after the marker.
 
-      That second case is why this check is not optional. **No spinner is drawn
-      while a dialog is up**, so condition 1 alone reads a session blocked
-      mid-tool-call as idle and shuts it down. Verified 2026-08-02.
+      Take the **last** `❯` line - the transcript echoes every user message
+      with the same marker, so an earlier one says nothing about the current
+      state. Classify what follows the last `❯ `:
+      - **Nothing, or only SGR codes** (`\e[39m`, `\e[0m`, ...) with no visible
+        characters -> empty, idle.
+      - **Visible text wholly wrapped in `\e[2m ... \e[0m`**, nothing visible
+        outside that span -> Claude's suggested-prompt placeholder, idle.
+      - **Anything else with visible text** -> stop. Either:
+        - a half-typed draft (`❯ half a draft`) - a human's unsent text, and
+          losing it is the same class of loss as a dirty tree, or
+        - a dialog awaiting an answer, which renders as ` ❯ 1. Yes` (a tool
+          permission prompt, a trust-this-folder prompt) - real, non-dim text,
+          same as a draft.
+        Genuinely typed text is not styled dim - only the suggestion
+        placeholder is - so this distinction does not depend on the glyph
+        stream alone the way the old plain-`-p` check did.
+
+      The dialog case is why this check is not optional at all, dim-stripping
+      aside. **No spinner is drawn while a dialog is up**, so condition 1 alone
+      reads a session blocked mid-tool-call as idle and shuts it down.
+      Verified 2026-08-02.
 
    Sample twice, ~3s apart, and require idle both times. One capture can land
    in the gap between a turn ending and the next tool call starting.
