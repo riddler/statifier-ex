@@ -15,7 +15,8 @@ checkout - that carries the compiled beams and the dialyxir PLT, so the first
 
 The beads issue should already be claimed (`bd update <id> --claim`) before the
 worktree exists - the claim is the lock, the worktree is just the workspace.
-`/next-issue` handles claim + naming and then invokes this skill.
+`/next-issue` handles claim + naming and then invokes this skill; `/next-issues`
+does the same for a batch of beads, once per bead.
 
 ## Input
 

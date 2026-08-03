@@ -50,6 +50,13 @@ agent take the top item), then invokes `/new-worktree`, which creates the
 worktree and warms its `deps/`, `_build/`, and dialyzer PLT from the main
 checkout so the first quality run is fast.
 
+`/next-issues` is the batch form: it takes up to `n` ready beads (default 3,
+refused above 4) whose [area label](#area-labels) sets are pairwise disjoint,
+highest priority first, claims all of them, and then runs `/new-worktree` once
+per bead. `n` is a ceiling, not a target - a short batch means the rest of the
+ready queue collided, and the skill reports what it skipped and why rather than
+leaving that looking like an empty queue.
+
 Rules that make parallelism safe:
 
 - **One worktree, one branch - usually one issue.** The worktree name carries a
@@ -106,8 +113,8 @@ of the tree it touches. A bead may carry several.
 | `area:build` | `mix.exs`, `mix.lock`, `.quality.exs`, `.credo.exs`, `.gitignore` |
 
 **Two beads are batchable iff their area sets are disjoint.** That is the whole
-rule, and it is what lets a picker claim several beads at once without a human
-adjudicating each pair: `bd ready` already filters natively on `-l/--label`,
+rule, and it is what lets `/next-issues` claim several beads at once without a
+human adjudicating each pair: `bd ready` already filters natively on `-l/--label`,
 `--label-any` and `--exclude-label`, so asking for a disjoint set is a flag, not
 an analysis.
 
