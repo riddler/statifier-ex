@@ -119,27 +119,42 @@ the session to read the bead and decide for itself.
    step. Do not create a second one.
 
    ```bash
+   FINISH=" When the work is complete, finish with /commit --auto - it writes the Refs trailer and refuses if the tree carries changes unrelated to <id>. Do not run git commit directly."
+
    win=$(tmux new-window -d -P -F '#{window_id}' \
      -t '=statifier_2:' \
      -n '<name>' \
      -c "/Users/johnnyt/repos/github/statifier_2-worktrees/<name>")
    [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
    tmux send-keys -t "$win" \
-     "claude --permission-mode auto '<seed>'" Enter
+     "claude --permission-mode auto '<seed>.$FINISH'" Enter
    ```
 
    `<seed>` is the seed command from the input when one was given - pass it
    through verbatim, including the leading slash:
 
    ```
-   claude --permission-mode auto '/create-plan st2-00p.3'
+   claude --permission-mode auto '/create-plan st2-00p.3.$FINISH'
    ```
 
    With no seed command, fall back to:
 
    ```
-   claude --permission-mode auto 'Work bead <id> in this worktree. Start with bd show <id>.'
+   claude --permission-mode auto 'Work bead <id> in this worktree. Start with bd show <id>.$FINISH'
    ```
+
+   The finishing clause is appended unconditionally, to every bucket's seed and
+   to the fallback, because this step is the one place all three buckets
+   (`/next-issue`, `/next-issues`, and a direct `/new-worktree` invocation)
+   converge - editing it here reaches every seeded session without touching
+   the bucket-selection skills themselves. It specifies `/commit --auto`
+   rather than bare `/commit` because the tmux session runs unattended under
+   `--permission-mode auto`: `/commit`'s interactive approval step would stall
+   with nobody watching the window to answer it. This does not grant commit
+   authority beyond what CLAUDE.md's authority table already grants (issue
+   complete and full `mix quality` green) - it only routes that authority
+   through the skill that performs the Refs-trailer and unrelated-changes
+   checks, instead of a bare `git commit` that skips them.
 
    **Check `$win` is non-empty before any command that targets it, and never
    chain a follow-up with `;`.** An empty `-t ""` does not error - tmux resolves
