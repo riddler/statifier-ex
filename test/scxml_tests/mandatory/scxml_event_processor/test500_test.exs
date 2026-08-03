@@ -1,9 +1,8 @@
-defmodule SCXMLTest.Onentry.Test376 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test500 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
-         :assign_elements,
          :basic_states,
          :conditional_transitions,
          :data_elements,
@@ -12,25 +11,18 @@ defmodule SCXMLTest.Onentry.Test376 do
          :eventless_transitions,
          :final_states,
          :log_elements,
-         :onentry_actions,
-         :send_elements
+         :onentry_actions
        ]
-  @tag conformance: "mandatory", spec: "onentry"
-  test "test376" do
+  @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
+  test "test500" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="predicator" version="1.0">
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
         <datamodel>
-            <data id="Var1" expr="1" />
+            <data id="Var1" expr="_ioprocessors['http://www.w3.org/TR/scxml/#SCXMLEventProcessor'].location" />
         </datamodel>
         <state id="s0">
-            <onentry>
-                <send target="baz" event="event1" />
-            </onentry>
-            <onentry>
-                <assign location="Var1" expr="Var1 + 1" />
-            </onentry>
-            <transition cond="Var1==2" target="pass" />
+            <transition cond="Var1 !== _statifier_unbound" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">
@@ -47,7 +39,7 @@ defmodule SCXMLTest.Onentry.Test376 do
     """
 
     description =
-      "The SCXML processor MUST treat each [onentry] handler as a separate block of executable content."
+      "SCXML Processors that support the BasicHTTP Event I/O Processor MUST maintain a 'scxml' entry in the _ioprocessors system variable. The Processor MUST maintain a 'location' field inside this entry whose value holds an address that external entities can use to communicate with this SCXML session using the SCXML Event I/O Processor."
 
     test_scxml(xml, description, ["pass"], [])
   end

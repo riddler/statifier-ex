@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test495 do
+defmodule SCXMLTest.OnEntry.Test375 do
   use Statifier.Case
 
   @moduletag :scxml_w3
@@ -9,24 +9,26 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test495 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_elements,
+         :raise_elements,
          :wildcard_events
        ]
-  @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test495" do
+  @tag conformance: "mandatory", spec: "onentry"
+  test "test375" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="predicator" version="1.0">
         <state id="s0">
             <onentry>
-                <send event="event1" type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" />
-                <send event="event2" target="#_internal" type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" />
+                <raise event="event1" />
             </onentry>
-            <transition event="event1" target="fail" />
-            <transition event="event2" target="s1" />
+            <onentry>
+                <raise event="event2" />
+            </onentry>
+            <transition event="event1" target="s1" />
+            <transition event="*" target="fail" />
         </state>
         <state id="s1">
-            <transition event="event1" target="pass" />
+            <transition event="event2" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">
@@ -43,7 +45,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test495 do
     """
 
     description =
-      "If no errors occur, the receiving Processor MUST convert the message into an SCXML event, using the mapping defined above and insert it into the appropriate queue, as defined in Send Targets."
+      "The SCXML processor MUST execute the onentry handlers of a state in document order when the state is entered."
 
     test_scxml(xml, description, ["pass"], [])
   end

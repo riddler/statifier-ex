@@ -89,12 +89,15 @@ xmerl re-serialization), and a single `test_scxml/4` call. All 127 SCION cases
 emit; `test/scion_tests/` is populated. `mise run corpus` (fetch, transform,
 emit for both W3C and SCION) now runs end to end without error.
 
+Emit also normalizes every generated path segment and module name
+(`tools/corpus/normalize.exs`, shared by both emitters): upstream
+camelCase/acronym/symbol-separated names become snake_case paths and the
+matching PascalCase module segments (`st2-yo4`).
+
 Remaining work, tracked in beads:
 
 1. **st2-00p.8** - committed exclusion manifest with reasons for the SCION
    suite.
-2. **st2-yo4** - normalize corpus emit output to snake_case paths and
-   PascalCase modules.
 
 Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 

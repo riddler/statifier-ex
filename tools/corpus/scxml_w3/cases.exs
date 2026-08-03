@@ -24,6 +24,7 @@
 # since this runs outside Mix and test/support is not compiled in.
 
 Code.require_file(Path.join([__DIR__, "..", "..", "..", "test/support/feature_detector.ex"]))
+Code.require_file(Path.join([__DIR__, "..", "normalize.exs"]))
 
 defmodule Cases.XmlFormat do
   @moduledoc """
@@ -116,6 +117,9 @@ Enum.each(inputs, fn input ->
   [conformance, spec | _rest] = Path.split(rel)
   name = Path.basename(rel, ".scxml")
 
+  normalized_spec = Cases.Normalize.identifier(spec)
+  normalized_name = Cases.Normalize.identifier(name)
+
   if Map.has_key?(exclusions, name) do
     :skip
   else
@@ -141,7 +145,12 @@ Enum.each(inputs, fn input ->
         |> String.replace("\\", "\\\\")
         |> String.replace("\#{", "\\\#{")
 
-      module = Module.concat(["SCXMLTest", Macro.camelize(spec), Macro.camelize(name)])
+      module =
+        Module.concat([
+          "SCXMLTest",
+          Macro.camelize(normalized_spec),
+          Macro.camelize(normalized_name)
+        ])
 
       source = """
       defmodule #{inspect(module)} do
@@ -161,7 +170,7 @@ Enum.each(inputs, fn input ->
       end
       """
 
-      out = Path.join([out_root, conformance, spec, name <> "_test.exs"])
+      out = Path.join([out_root, conformance, normalized_spec, normalized_name <> "_test.exs"])
       out |> Path.dirname() |> File.mkdir_p!()
       File.write!(out, Code.format_string!(source) |> IO.iodata_to_binary() |> Kernel.<>("\n"))
     end

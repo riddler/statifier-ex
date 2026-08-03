@@ -1,35 +1,24 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test350 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test348 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
-         :assign_elements,
          :basic_states,
-         :data_elements,
-         :datamodel,
          :event_transitions,
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_delay_expressions,
          :send_elements,
-         :target_expressions,
          :wildcard_events
        ]
   @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test350" do
+  test "test348" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" datamodel="predicator" version="1.0">
-        <datamodel>
-            <data id="Var1" expr="'#_scxml_'" />
-            <data id="Var2" expr="_sessionid" />
-        </datamodel>
         <state id="s0">
             <onentry>
-                <assign location="Var1" expr="Var1 + Var2" />
-                <send delay="5s" event="timeout" />
-                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" targetexpr="Var1" event="s0Event" />
+                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" event="s0Event" />
             </onentry>
             <transition event="s0Event" target="pass" />
             <transition event="*" target="fail" />
@@ -48,7 +37,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test350 do
     """
 
     description =
-      "target'. The sending SCXML Processor MUST take the value of this attribute from the 'target' attribute of the send element. The receiving SCXML Processor MUST use this value to determine which session to deliver the message to."
+      "name'. The sending SCXML Processor MUST take the value of this attribute from the 'event' attribute of the send element. The receiving SCXML Processor MUST use it as the value the 'name' field in the event that it generates."
 
     test_scxml(xml, description, ["pass"], [])
   end

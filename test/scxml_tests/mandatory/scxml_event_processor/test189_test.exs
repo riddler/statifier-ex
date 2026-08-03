@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test348 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test189 do
   use Statifier.Case
 
   @moduletag :scxml_w3
@@ -8,20 +8,20 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test348 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_elements,
-         :wildcard_events
+         :send_elements
        ]
   @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test348" do
+  test "test189" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" datamodel="predicator" version="1.0">
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
         <state id="s0">
             <onentry>
-                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" event="s0Event" />
+                <send event="event2" />
+                <send event="event1" target="#_internal" />
             </onentry>
-            <transition event="s0Event" target="pass" />
-            <transition event="*" target="fail" />
+            <transition event="event1" target="pass" />
+            <transition event="event2" target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -37,7 +37,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test348 do
     """
 
     description =
-      "name'. The sending SCXML Processor MUST take the value of this attribute from the 'event' attribute of the send element. The receiving SCXML Processor MUST use it as the value the 'name' field in the event that it generates."
+      "When using the scxml event i/o processor] If the target is the special term '#_internal', the Processor MUST add the event to the internal event queue of the sending session"
 
     test_scxml(xml, description, ["pass"], [])
   end

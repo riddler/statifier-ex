@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test193 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test495 do
   use Statifier.Case
 
   @moduletag :scxml_w3
@@ -9,26 +9,25 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test193 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_delay_expressions,
-         :send_elements
+         :send_elements,
+         :wildcard_events
        ]
-  @tag conformance: "optional", spec: "SCXMLEventProcessor"
-  test "test193" do
+  @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
+  test "test495" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
         <state id="s0">
             <onentry>
-                <send event="internal" />
                 <send event="event1" type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" />
-                <send event="timeout" delay="1s" />
+                <send event="event2" target="#_internal" type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" />
             </onentry>
             <transition event="event1" target="fail" />
-            <transition event="internal" target="s1" />
+            <transition event="event2" target="s1" />
         </state>
         <state id="s1">
             <transition event="event1" target="pass" />
-            <transition event="timeout" target="fail" />
+            <transition event="*" target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -44,7 +43,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test193 do
     """
 
     description =
-      "[When using the scxml event i/o processor] If neither the 'target' nor the 'targetexpr' attribute is specified, the SCXML Processor MUST add the event to the external event queue of the sending session."
+      "If no errors occur, the receiving Processor MUST convert the message into an SCXML event, using the mapping defined above and insert it into the appropriate queue, as defined in Send Targets."
 
     test_scxml(xml, description, ["pass"], [])
   end

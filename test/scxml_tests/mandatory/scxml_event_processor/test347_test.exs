@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test192 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test347 do
   use Statifier.Case
 
   @moduletag :scxml_w3
@@ -15,40 +15,37 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test192 do
          :send_elements
        ]
   @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test192" do
+  test "test347" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" datamodel="predicator" version="1.0">
         <state id="s0" initial="s01">
-            <onentry>
-                <send event="timeout" delay="5s" />
-            </onentry>
-            <invoke type="scxml" id="invokedChild">
+            <invoke id="child" type="scxml">
                 <content>
-                    <scxml initial="sub0" version="1.0" datamodel="predicator">
+                    <scxml initial="sub0" version="1.0" datamodel="predicator" name="machineName">
                         <state id="sub0">
                             <onentry>
-                                <send event="childToParent" target="#_parent" />
-                                <send event="timeout" delay="3s" />
+                                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" target="#_parent" event="childToParent" />
                             </onentry>
-                            <transition event="parentToChild" target="subFinal">
-                                <send target="#_parent" event="eventReceived" />
-                            </transition>
-                            <transition event="timeout" target="subFinal" />
+                            <transition event="parentToChild" target="subFinal" />
                         </state>
                         <final id="subFinal" />
                     </scxml>
                 </content>
             </invoke>
+            <onentry>
+                <send delay="20s" event="timeout" />
+            </onentry>
             <transition event="timeout" target="fail" />
-            <transition event="done.invoke" target="fail" />
             <state id="s01">
-                <transition event="childToParent" target="s02">
-                    <send target="#_invokedChild" event="parentToChild" />
-                </transition>
+                <transition event="childToParent" target="s02" />
             </state>
             <state id="s02">
-                <transition event="eventReceived" target="pass" />
+                <onentry>
+                    <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" target="#_child" event="parentToChild" />
+                </onentry>
+                <transition event="done.invoke" target="pass" />
+                <transition event="error" target="fail" />
             </state>
         </state>
         <final id="pass">
@@ -65,7 +62,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test192 do
     """
 
     description =
-      "[When using the scxml event i/o processor] If the target is the special term '#_invokeid', where invokeid is the invokeid of an SCXML session that the sending session has created by invoke, the Processor MUST must add the event to the external queue of that session."
+      "SCXML Processors MUST support sending messages to and receiving messages from other SCXML sessions using the SCXML Event I/O Processor."
 
     test_scxml(xml, description, ["pass"], [])
   end

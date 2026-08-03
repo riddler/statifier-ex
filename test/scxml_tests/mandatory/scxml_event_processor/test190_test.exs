@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test190 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test190 do
   use Statifier.Case
 
   @moduletag :scxml_w3
