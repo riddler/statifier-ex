@@ -1,35 +1,37 @@
-defmodule SCXMLTest.Onentry.Test375 do
+defmodule SCXMLTest.OnEntry.Test376 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
+         :assign_elements,
          :basic_states,
-         :compound_states,
+         :conditional_transitions,
+         :data_elements,
+         :datamodel,
          :event_transitions,
+         :eventless_transitions,
          :final_states,
          :log_elements,
          :onentry_actions,
-         :raise_elements,
-         :wildcard_events
+         :send_elements
        ]
   @tag conformance: "mandatory", spec: "onentry"
-  test "test375" do
+  test "test376" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="predicator" version="1.0">
+        <datamodel>
+            <data id="Var1" expr="1" />
+        </datamodel>
         <state id="s0">
             <onentry>
-                <raise event="event1" />
+                <send target="baz" event="event1" />
             </onentry>
             <onentry>
-                <raise event="event2" />
+                <assign location="Var1" expr="Var1 + 1" />
             </onentry>
-            <transition event="event1" target="s1" />
-            <transition event="*" target="fail" />
-        </state>
-        <state id="s1">
-            <transition event="event2" target="pass" />
-            <transition event="*" target="fail" />
+            <transition cond="Var1==2" target="pass" />
+            <transition target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -45,7 +47,7 @@ defmodule SCXMLTest.Onentry.Test375 do
     """
 
     description =
-      "The SCXML processor MUST execute the onentry handlers of a state in document order when the state is entered."
+      "The SCXML processor MUST treat each [onentry] handler as a separate block of executable content."
 
     test_scxml(xml, description, ["pass"], [])
   end

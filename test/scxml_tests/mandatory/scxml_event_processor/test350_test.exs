@@ -1,8 +1,9 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test501 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test350 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
+         :assign_elements,
          :basic_states,
          :data_elements,
          :datamodel,
@@ -16,19 +17,21 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test501 do
          :wildcard_events
        ]
   @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test501" do
+  test "test350" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" datamodel="predicator" version="1.0">
         <datamodel>
-            <data id="Var1" expr="_ioprocessors['http://www.w3.org/TR/scxml/#SCXMLEventProcessor'].location" />
+            <data id="Var1" expr="'#_scxml_'" />
+            <data id="Var2" expr="_sessionid" />
         </datamodel>
         <state id="s0">
             <onentry>
-                <send targetexpr="Var1" event="foo" />
-                <send event="timeout" delay="2s" />
+                <assign location="Var1" expr="Var1 + Var2" />
+                <send delay="5s" event="timeout" />
+                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" targetexpr="Var1" event="s0Event" />
             </onentry>
-            <transition event="foo" target="pass" />
+            <transition event="s0Event" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">
@@ -45,7 +48,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test501 do
     """
 
     description =
-      "The 'location' field inside the entry for the SCXML Event I/O Processor in the _ioprocessors system variable MUST hold an address that external entities can use to communicate with this SCXML session using the SCXML Event I/O Processor."
+      "target'. The sending SCXML Processor MUST take the value of this attribute from the 'target' attribute of the send element. The receiving SCXML Processor MUST use this value to determine which session to deliver the message to."
 
     test_scxml(xml, description, ["pass"], [])
   end

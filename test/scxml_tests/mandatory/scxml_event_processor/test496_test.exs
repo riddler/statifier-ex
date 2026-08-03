@@ -1,4 +1,4 @@
-defmodule SCXMLTest.SCXMLEventProcessor.Test189 do
+defmodule SCXMLTest.ScxmlEventProcessor.Test496 do
   use Statifier.Case
 
   @moduletag :scxml_w3
@@ -8,20 +8,22 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test189 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_elements
+         :raise_elements,
+         :send_elements,
+         :wildcard_events
        ]
   @tag conformance: "mandatory", spec: "SCXMLEventProcessor"
-  test "test189" do
+  test "test496" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
         <state id="s0">
             <onentry>
-                <send event="event2" />
-                <send event="event1" target="#_internal" />
+                <send type="http://www.w3.org/TR/scxml/#SCXMLEventProcessor" event="event" target="#_scxml_foo" />
+                <raise event="foo" />
             </onentry>
-            <transition event="event1" target="pass" />
-            <transition event="event2" target="fail" />
+            <transition event="error.communication" target="pass" />
+            <transition event="*" target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -37,7 +39,7 @@ defmodule SCXMLTest.SCXMLEventProcessor.Test189 do
     """
 
     description =
-      "When using the scxml event i/o processor] If the target is the special term '#_internal', the Processor MUST add the event to the internal event queue of the sending session"
+      "If the sending SCXML session specifies a session that does not exist or is inaccessible, the SCXML Processor MUST place the error error.communication on the internal event queue of the sending session."
 
     test_scxml(xml, description, ["pass"], [])
   end

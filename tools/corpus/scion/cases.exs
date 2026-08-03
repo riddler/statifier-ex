@@ -11,18 +11,7 @@
 # since `mix run` defaults to MIX_ENV=dev and test/support is not compiled in.
 
 Code.require_file(Path.join([__DIR__, "..", "..", "..", "test/support/feature_detector.ex"]))
-
-defmodule Cases.Normalize do
-  @moduledoc """
-  Upstream spec/name segments are not always valid Elixir identifiers
-  (`more-parallel`, `hierarchy+documentOrder`, `deep-initial`); replace every
-  run of non-alphanumeric characters with `_` before building module/path
-  segments, keeping the original string for tags and test descriptions.
-  """
-
-  @spec identifier(String.t()) :: String.t()
-  def identifier(s), do: String.replace(s, ~r/[^a-zA-Z0-9]+/, "_")
-end
+Code.require_file(Path.join([__DIR__, "..", "normalize.exs"]))
 
 [out_root, in_root | inputs] = System.argv()
 

@@ -134,6 +134,7 @@ dir = "{{config_root}}"
 shell = "bash -c"
 run = '''
 set -euo pipefail
+rm -rf "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
 mkdir -p "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
 
 # Plain `elixir`, not `mix run`: cases.exs needs xmerl, which Mix prunes from

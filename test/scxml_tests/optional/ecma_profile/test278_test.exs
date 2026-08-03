@@ -1,9 +1,8 @@
-defmodule SCXMLTest.Onexit.Test378 do
+defmodule SCXMLTest.EcmaProfile.Test278 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
-         :assign_elements,
          :basic_states,
          :compound_states,
          :conditional_transitions,
@@ -13,30 +12,21 @@ defmodule SCXMLTest.Onexit.Test378 do
          :eventless_transitions,
          :final_states,
          :log_elements,
-         :onentry_actions,
-         :onexit_actions,
-         :send_elements
+         :onentry_actions
        ]
-  @tag conformance: "mandatory", spec: "onexit"
-  test "test378" do
+  @tag conformance: "optional", spec: "ecma-profile"
+  test "test278" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
-        <datamodel>
-            <data id="Var1" expr="1" />
-        </datamodel>
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
         <state id="s0">
-            <onexit>
-                <send target="baz" event="event1" />
-            </onexit>
-            <onexit>
-                <assign location="Var1" expr="Var1 + 1" />
-            </onexit>
-            <transition target="s1" />
+            <transition cond="Var1==1" target="pass" />
+            <transition target="fail" />
         </state>
         <state id="s1">
-            <transition cond="Var1==2" target="pass" />
-            <transition target="fail" />
+            <datamodel>
+                <data id="Var1" expr="1" />
+            </datamodel>
         </state>
         <final id="pass">
             <onentry>
@@ -52,7 +42,7 @@ defmodule SCXMLTest.Onexit.Test378 do
     """
 
     description =
-      "The SCXML processor MUST treat each [onexit] handler as a separate block of executable content."
+      "In the ECMAScript data model, the SCXML processor MUST allow any data element to be accessed from any state."
 
     test_scxml(xml, description, ["pass"], [])
   end
