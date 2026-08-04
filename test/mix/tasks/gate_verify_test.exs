@@ -1,0 +1,98 @@
+defmodule Mix.Tasks.Gate.VerifyTest do
+  use ExUnit.Case, async: true
+
+  alias Mix.Tasks.Gate.Verify
+
+  # The task's only side effect is the `mix quality` shell-out, so every test
+  # feeds it a synthetic report through a stub runner.
+  defp runner(report, status \\ 0) do
+    fn ["quality", "--report", "-"] -> {JSON.encode!(report), status} end
+  end
+
+  defp report(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "status" => "ok",
+        "profile" => nil,
+        "scope" => "all",
+        "stages" => [stage("Format"), stage("Credo"), stage("Tests")]
+      },
+      overrides
+    )
+  end
+
+  defp stage(name, overrides \\ %{}) do
+    Map.merge(%{"name" => name, "status" => "ok", "summary" => "", "findings" => []}, overrides)
+  end
+
+  defp skipped(name, summary), do: stage(name, %{"status" => "skipped", "summary" => summary})
+
+  # sabotage: drop the stage count from attestation/2's line -> red
+  test "a full green run attests, naming its scope and stage count" do
+    assert {:ok, output} = Verify.execute([], runner: runner(report()))
+    assert output == "Full gate green: scope all, no profile, 3 stages considered."
+  end
+
+  # sabotage: drop the profile_problem/1 clause matching a binary profile -> red
+  test "a profiled run is not a full gate" do
+    assert {:error, reason} = Verify.execute([], runner: runner(report(%{"profile" => "loop"})))
+    assert reason == "Not a full gate: run used profile :loop."
+  end
+
+  # sabotage: have scope_problem/1 accept any scope -> red
+  test "a scoped run is not a full gate" do
+    assert {:error, reason} = Verify.execute([], runner: runner(report(%{"scope" => "changed"})))
+    assert reason == "Not a full gate: scope was changed rather than all."
+  end
+
+  # sabotage: have status_problem/2 return nil for a non-ok status -> red
+  test "a red gate names the stages that failed" do
+    stages = [stage("Format"), stage("Credo", %{"status" => "error"})]
+
+    assert {:error, reason} =
+             Verify.execute([],
+               runner: runner(report(%{"status" => "error", "stages" => stages}))
+             )
+
+    assert reason == "Not a full gate: the gate is red (Credo)."
+  end
+
+  # sabotage: have narrowing?/1 return false for every summary -> red
+  test "a stage skipped for a reason naming this run is not a full gate" do
+    stages = [stage("Format"), skipped("Dialyzer", "--quick")]
+
+    assert {:error, reason} = Verify.execute([], runner: runner(report(%{"stages" => stages})))
+    assert reason == "Not a full gate: Dialyzer was skipped (--quick)."
+  end
+
+  # sabotage: have narrowing?/1 return true for every summary -> red
+  test "a stage skipped for a project-level reason attests and is named" do
+    stages = [stage("Format"), skipped("Sobelow", ":sobelow not installed")]
+
+    assert {:ok, output} = Verify.execute([], runner: runner(report(%{"stages" => stages})))
+
+    assert output ==
+             "Full gate green: scope all, no profile, 2 stages considered.\n" <>
+               "Not checked by this project at all: Sobelow (:sobelow not installed)"
+  end
+
+  # sabotage: report only the first problem instead of joining them all -> red
+  test "several narrowings are all reported" do
+    stages = [skipped("Dialyzer", "not in profile :loop")]
+    overrides = %{"profile" => "loop", "scope" => "changed", "stages" => stages}
+
+    assert {:error, reason} = Verify.execute([], runner: runner(report(overrides)))
+
+    assert reason ==
+             "Not a full gate: run used profile :loop and scope was changed rather than all " <>
+               "and Dialyzer was skipped (not in profile :loop)."
+  end
+
+  # sabotage: decode the report with a fallback to %{} instead of erroring -> red
+  test "output that is not a report fails rather than attesting" do
+    assert {:error, reason} =
+             Verify.execute([], runner: fn _args -> {"** (Mix) no such task\n", 1} end)
+
+    assert reason == "no report to verify: `mix quality --report -` exited 1 without one"
+  end
+end

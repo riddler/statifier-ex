@@ -27,7 +27,10 @@ have their own triggers in CLAUDE.md's authority table.
 **Auto mode refuses, reports, and stops** rather than committing when:
 - the quality gate is red (Step 0)
 - the gate was narrowed - a `--quick` or `--test-scope changed` run is not a
-  green gate for commit purposes
+  green gate for commit purposes, and `mix gate.verify` exits non-zero on one
+- the `Gate guard` stage is red (Step 0): the diff changes what the gate checks
+  and no entry in `docs/quality-gate-changes.md` names it. Auto mode never
+  writes that entry - ADR-0011 makes it a human's call
 - the current branch is `main`
 - the diff adds a test with no sabotage note (Step 0) - auto mode may sabotage
   the test itself and continue, but may not commit an unverified test
@@ -73,12 +76,18 @@ stage nothing but `.gitignore`.
 
 ### Step 0: Pre-commit Checks
 
-1. Run the full quality gate: `mix quality` (format, compile, credo, dialyzer,
-   deps audit, full suite with coverage). While fixing issues, iterate with
-   `mix quality --profile loop`; use `mix quality --format json --report -` if
-   you need machine-readable results.
+1. Run the full quality gate: `mix gate.verify`. It runs `mix quality` (format,
+   compile, credo, dialyzer, deps audit, gate guard, full suite with coverage)
+   and exits non-zero unless the run it performed was a full one - no profile,
+   scope `all`, nothing skipped by `--quick` or `--skip`. While fixing issues,
+   iterate with `mix quality --profile loop`; use
+   `mix quality --format json --report -` if you need machine-readable results.
 2. Fix ALL issues reported before proceeding
-3. DO NOT proceed to commit until `mix quality` is green
+3. DO NOT proceed to commit until `mix gate.verify` prints its attestation line
+
+The attestation replaces judging the gate's breadth by eye: a narrowed run is no
+longer something to remember not to report as a full one, it is a non-zero exit.
+A `Gate guard` failure is its own case - see "If Quality Checks Fail" below.
 
 **Carve-out: a change touching no Elixir code has no gate to run.** If
 `git diff main...HEAD --name-only` (plus unstaged files) touches nothing under
@@ -372,10 +381,19 @@ that is worth knowing.
 
 ### If Quality Checks Fail
 
-If `mix quality` fails in Step 0:
+If Step 0 fails:
 1. Show the full error output to the user
 2. Ask if they want you to fix the issues or if they'll handle it
 3. DO NOT proceed to commit until the full gate passes
+
+A red `Gate guard` stage is not a failure to fix. It says the diff changes what
+the gate checks, which ADR-0011 makes a human's call: report the finding, name
+the file it points at, and stop. Writing the `docs/quality-gate-changes.md`
+entry yourself is granting yourself the permission the check exists to withhold.
+
+`Not a full gate:` from `mix gate.verify` is a different thing again - the gate
+was not red, it was narrow. Re-run it unnarrowed rather than reporting the
+green.
 
 In auto mode, do not fix the failures unasked. A red gate on unattended work
 means the change is not finished, and quietly repairing it turns one reviewable
