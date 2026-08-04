@@ -38,7 +38,7 @@ defmodule Statifier.MixProject do
 
   defp deps do
     [
-      {:predicator, "~> 3.5"},
+      {:predicator, "~> 3.6"},
       {:saxy, "~> 1.6"},
       {:uxid, "~> 2.9"},
 
