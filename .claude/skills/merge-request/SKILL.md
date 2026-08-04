@@ -51,15 +51,16 @@ which `/new-worktree` shapes as `<beads-id>-<slug>`.
 
 3. **Run the full gate.**
    ```bash
-   mix quality
+   mix gate.verify
    ```
-   Never truncate the output. **Refuse on red** - report the failing stages with
-   their `file:line` findings and stop. Do not push a branch whose gate is red
-   in the hope that CI disagrees.
+   It runs `mix quality` and attests that the run was a full one. Never truncate
+   the output. **Refuse on red** - report the failing stages with their
+   `file:line` findings and stop. Do not push a branch whose gate is red in the
+   hope that CI disagrees.
 
    A narrowed run does not count: `--quick`, `--profile loop`, and
-   `--test-scope changed` all skip checks a reviewer will assume ran. Only a
-   full `mix quality` clears this step.
+   `--test-scope changed` all skip checks a reviewer will assume ran, and
+   `mix gate.verify` exits non-zero rather than attesting to one.
 
    **Carve-out**, matching `/commit` Step 0: if the diff touches nothing under
    `lib/`, `test/`, `config/`, and neither `mix.exs` nor `mix.lock`, there is no

@@ -83,6 +83,10 @@ Rules that make parallelism safe:
   `area:` labels below make that a set intersection rather than a judgment call.
 - **Every worktree runs the same gate.** `mix quality --profile loop` while
   iterating, full `mix quality` before the branch is pushed or merged.
+- **The gate's own config is not agent-editable** (ADR-0011). The `Gate guard`
+  stage fails a full run when the branch changes what the gate checks without an
+  entry in `docs/quality-gate-changes.md` naming the file, and `mix gate.verify`
+  is how a run proves it was full rather than profiled or scoped.
 - **Refresh the survivors when a branch lands.** A worktree is cut from
   `origin/main` and warmed from the main checkout at one moment in time; every
   merge after that leaves it behind. `/refresh-worktree` rebases the live
