@@ -63,7 +63,11 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `In/1`), evaluate many expressions against it, rebind cheaply when data changes.
    v1 rebuilt the full context map per expression.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
-   assignment-with-creation should live beside it.
+   assignment-with-creation should live beside it. Landed in predicator 3.6.0:
+   `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is
+   ECMAScript-like; a container collision raises `:not_a_container`; list
+   assignment past the end pads with `:undefined`; a negative index raises
+   `:invalid_index`.
 3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
    bare atom that every embedding normalizes ad hoc.
 4. **Statement sequences** (above).
