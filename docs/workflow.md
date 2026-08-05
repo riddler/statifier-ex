@@ -71,8 +71,13 @@ Rules that make parallelism safe:
   into parallel worktrees manufactures the rebase conflicts the module
   boundaries exist to prevent. `/cleanup-worktrees` closes beads from the
   `Refs:` trailers in the merged PR's commits rather than from the branch name,
-  so a branch carrying several closes all of them. When one does, its name
-  reflects the primary issue.
+  so a branch carrying several closes all of them.
+
+  The name is a label fixed at creation - it names the bead the worktree was
+  cut for. When a branch grows to carry several beads, it keeps that name;
+  neither the branch nor the worktree directory is renamed. A stale-looking
+  name is the expected outcome, because the `Refs:` trailers are what close
+  beads (ADR-0010).
 - **Beads is the shared state.** The Dolt-backed DB is shared across worktrees, so
   claims, notes, and status changes are visible to every agent immediately. Use
   `bd note` for progress that another agent might need; use merge-slot gates

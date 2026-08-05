@@ -28,6 +28,9 @@ e.g. `st2-00p.3-regression-ratchet`. Keep the slug to 2-4 distinctive kebab-case
 words from the issue title, not a full transcription. If given only a bead id,
 ask for the slug - it matters and should not be guessed.
 
+The name is fixed at creation and never renamed afterwards, even if the branch
+grows to carry more beads (ADR-0010).
+
 **Seed command** (optional) is what the tmux session in step 5 runs, e.g.:
 
 ```

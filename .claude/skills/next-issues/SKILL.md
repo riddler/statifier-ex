@@ -109,6 +109,9 @@ much more alarming fact.
    refuses to guess one, so this skill produces the full name. Manual mode:
    confirm the names alongside the batch in step 3.
 
+   Each name is fixed at creation and never renamed afterwards, even if the
+   branch grows to carry more beads (ADR-0010).
+
 5. **Claim every bead - all of them, before any worktree exists.**
    ```bash
    bd update <id> --claim   # once per bead in the batch
