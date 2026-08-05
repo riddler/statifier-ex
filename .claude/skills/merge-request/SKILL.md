@@ -2,7 +2,7 @@
 name: merge-request
 description: Run the full gate, push the worktree branch, open a PR against main, and record it on the bead
 model: sonnet
-argument-hint: ["optional: beads issue ID; omit to detect from the branch name"]
+argument-hint: ["optional: beads issue ID; omit to detect from the commits' Refs: trailers"]
 ---
 
 # Merge Request
@@ -21,8 +21,8 @@ into `origin/main` (st2-qww.4). A PR is a request, not an outcome.
 
 ## Input
 
-`$ARGUMENTS` = optional beads issue ID. Omitted, it comes from the branch name,
-which `/new-worktree` shapes as `<beads-id>-<slug>`.
+`$ARGUMENTS` = optional beads issue ID. Omitted, the beads come from the `Refs:`
+trailers on the branch's own commits, falling back to the branch prefix (step 2).
 
 ## Steps
 
@@ -42,12 +42,22 @@ which `/new-worktree` shapes as `<beads-id>-<slug>`.
    ```
    Empty means nothing to open a PR for. Say so and stop.
 
-2. **Resolve the bead.** From `$ARGUMENTS` or the branch prefix, then validate:
+2. **Resolve the beads.** From `$ARGUMENTS` if given. Otherwise read the
+   trailers the branch's own commits carry - the same anchored match
+   `/cleanup-worktrees` closes on, so the PR body and the eventual closes agree:
    ```bash
-   bd show <id>
+   git log origin/main..HEAD --pretty=%B \
+     | grep -E '^Refs:' \
+     | grep -oE 'st2-[a-z0-9]+(\.[0-9]+)?' | sort -u
    ```
-   STOP if it does not resolve. A PR that cannot be traced to a bead is work
-   nobody can find later, and the `bd note` in step 7 has nowhere to go.
+   Fall back to the branch prefix only when that finds nothing (a branch whose
+   commits predate the `Refs:` convention). The prefix is a creation-time label
+   and names at most one bead (ADR-0010), so a branch carrying several would
+   otherwise reach the PR body naming only the first.
+
+   Validate each with `bd show <id>`. STOP if none resolves. A PR that cannot be
+   traced to a bead is work nobody can find later, and the `bd note` in step 7
+   has nowhere to go.
 
 3. **Run the full gate.**
    ```bash
@@ -126,7 +136,8 @@ which `/new-worktree` shapes as `<beads-id>-<slug>`.
    - **What** - the shape of the change, not a file list; the diff has that
    - **Notes** - anything surprising, deliberately deferred, or worth a second
      opinion, plus which gate ran
-   - The bead reference: `Closes st2-xxx` (and the epic, if it has one)
+   - The bead references: `Closes st2-xxx` for **every** bead the branch's
+     trailers name, one per line (and the epic, if they share one)
 
    No AI attribution in the title or the body, same rule as commit messages
    (CLAUDE.md, and the override in `/commit`).
@@ -136,6 +147,9 @@ which `/new-worktree` shapes as `<beads-id>-<slug>`.
    bd dolt push
    bd note <id> "PR: <url>"
    ```
+   Run the `bd note` once per bead step 2 resolved - a bead whose PR URL was
+   never recorded is one nobody can follow from the issue to the review.
+
    `bd dolt push` is not optional and not a nicety. Issue state travels over
    `refs/dolt/data` on the same remote as the code; a PR whose bead was never
    pushed is invisible to every other machine, so a reviewer pulling the branch

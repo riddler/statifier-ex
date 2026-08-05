@@ -91,6 +91,9 @@ whichever call runs, so both modes scope identically. Re-verify against
    (`/new-worktree` refuses to guess one, so this skill must produce the full
    name). Manual mode: present it for confirmation.
 
+   The name is fixed at creation and never renamed afterwards, even if the
+   branch grows to carry more beads (ADR-0010).
+
 3. **Read the bead.** `bd show <id>` - description, acceptance, dependencies,
    notes. This is the input to the triage decision in step 4, so it has to
    happen before the worktree is stood up, not after.
