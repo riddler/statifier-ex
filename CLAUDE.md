@@ -71,6 +71,7 @@ Read before making design decisions:
 
 - `docs/architecture.md` - layers, design principles
 - `docs/datamodel.md` - predicator commitment, upstream seams
+- `docs/observability.md` - debuggability seams the interpreter must keep (ADR-0012)
 - `docs/testing.md` - conformance corpus, regression ratchet
 - `docs/workflow.md` - model roles, beads, worktrees
 - `docs/adr/` - the reasoning; cite ADR numbers instead of re-arguing them
