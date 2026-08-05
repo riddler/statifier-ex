@@ -106,7 +106,16 @@ starts at the plan stage and runs through implementation from there.
 | **Code-heavy** | research | `research-codebase` -> `create-plan` -> `implement-plan --loop` | Touches the interpreter core, parser, or another multi-module subsystem; blast radius unclear; existing structure (or the v1 reference at `../statifier`) must be mapped before planning. |
 | **Plan-only** | plan | `create-plan` -> `implement-plan --loop` | Well understood but multi-step or cross-cutting enough to deserve a plan in `docs/plans/`; a research doc would be redundant. |
 | **Just-do-it** | implement | one implementation subagent, no artifacts | Bounded doc / chore / config / small utility, low blast radius. |
-| **Direction** | *(not routed)* | - | ADR-shaped work, spec interpretation, corpus strategy. `docs/workflow.md` names Fable for this tier; `/work` has no route to it yet. **Say so and stop rather than silently sizing it as code-heavy** - tracked by `st2-ltj`. |
+| **Direction** | direction | direction stage (Step 3) -> resumes into the sequence below | ADR-shaped work: architecture decisions, spec interpretation, corpus strategy, review of plans or of finished phases. `docs/workflow.md` names Fable for this tier. |
+
+**Direction still goes through the worktree-per-bead path, deliberately.** An
+ADR is a `docs/` change and often precedes the code it governs, so a warmed
+Elixir worktree is wasted setup for it - but wasted is not harmful, and the
+alternative is a second pickup path that only Direction beads use, forking the
+flow this skill exists to keep singular (see "Sizing happens here" below). One
+path that occasionally warms a build it does not need is cheaper than two paths
+to keep in sync, so Direction enters at Step 0 like every other bucket and pays
+the same worktree cost.
 
 **Sizing happens here, with the codebase in reach.** That is the whole reason it
 lives in this skill rather than in `/next-issue`: read the files the bead names
@@ -139,6 +148,7 @@ than restarting.
 |---|---|---|---|
 | Research | `/research-codebase <id>` | `general-purpose` | `opus` |
 | Plan | `/create-plan <id>` | `general-purpose` | `opus` |
+| Direction | *(no stage skill - prompt below)* | `general-purpose` | `fable` |
 | Implement | `/implement-plan <path> --loop` | `general-purpose` | `sonnet` |
 
 Every spawn obeys these invariants:
@@ -148,7 +158,11 @@ Every spawn obeys these invariants:
   Agent-call override governs only the subagent's turns *before* the skill
   fires - the `bd show`, the file reads. Keeping the two equal is the point: if
   they ever diverge, the frontmatter is what actually runs and this table is
-  wrong.
+  wrong. **Direction is the one row with nothing to mirror** - none of the five
+  existing skills fit what it produces (a decision, not a plan or an
+  implementation), so its prompt is composed directly in the Agent call instead
+  of dispatched through the Skill tool. `fable` there is the model, full stop,
+  not an override of a frontmatter that does not exist.
 - **`run_in_background: false`.** Each stage feeds the next; there is nothing to
   do while one runs.
 - **The prompt must be fully self-contained**: the bead id, the artifact path
@@ -167,6 +181,40 @@ Every spawn obeys these invariants:
   `--permission-mode auto`'s classifier blocks `tmux send-keys ... 'claude'`
   (st2-d9g, and `new-worktree/SKILL.md`'s closing note). In-process Agent
   subagents are unaffected and are the only mechanism this skill uses.
+
+### Direction stage prompt
+
+No skill wraps this stage, so the prompt is written out here and composed
+directly into the Agent call. Tell the subagent to:
+
+- read the bead in full (`bd show <id>`) and the files it names;
+- read the existing entries under `docs/adr/` (and `docs/architecture.md`,
+  `docs/datamodel.md` where relevant) to see whether the bead is asking for a
+  new ADR, an amendment to one already accepted, or a narrower
+  spec-interpretation or corpus-strategy call that does not warrant its own
+  ADR;
+- write the decision as a new `docs/adr/NNNN-<slug>.md` at the next free
+  number, in the same Context / Decision / Consequences shape and with the
+  same `Status: accepted (<date>)` heading every other ADR in the repo
+  carries. There is no `proposed` state here: a second status would need
+  something to sweep for drafts that were never promoted, and an ADR nobody
+  promoted reads as settled anyway. The human gate on this work is the
+  review of the branch it lands on, same as any other change. A call too
+  narrow for its own ADR goes to `docs/research/` instead, naming the bead;
+- return the artifact path and a one-line statement of the decision it made
+  (or the open question it could not resolve, recorded in the artifact per
+  the "no human is available" invariant above).
+
+Same invariants as every other row: self-contained prompt, `run_in_background:
+false`, no human available, return the artifact path, no nested `claude` CLI.
+
+**What happens after the artifact** follows Step 2's "buckets are entry points
+into one sequence" framing. Some Direction beads are done once the ADR lands -
+the decision was the whole deliverable, and Step 5 reports the ADR path as the
+terminal artifact. Others exist to unblock implementation the bead also asks
+for; once the direction question has an answer, `/work` re-enters Step 2 and
+sizes whatever is left the normal way (commonly plan-only or just-do-it, since
+the hard call is already made) rather than treating Direction as a dead end.
 
 `general-purpose` is the right agent type because its tool list is `*`: it has
 both the Skill tool (to invoke the stage skill) and the Agent tool (so the
