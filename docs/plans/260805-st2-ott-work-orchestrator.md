@@ -327,9 +327,9 @@ self-report.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `.claude/skills/work/SKILL.md` exists with valid YAML frontmatter
+- [x] `.claude/skills/work/SKILL.md` exists with valid YAML frontmatter
       (`name: work`, `model: opus`, `description`, `argument-hint`)
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] The triage table has four rows and the Direction row names `st2-ltj` as
@@ -701,3 +701,14 @@ None. No interpreter or parser behavior changes; no ratchet movement.
   turn): https://code.claude.com/docs/en/skills
 - Claude Code sub-agents reference (three-layer default spawn depth):
   https://code.claude.com/docs/en/sub-agents
+
+## Deferred Manual Verification
+
+### Phase 1
+
+- [ ] The triage table has four rows and the Direction row names `st2-ltj` as
+      the seam rather than routing ADR-shaped work to a code tier
+- [ ] The stage table's `model` column matches each stage skill's `model:`
+      frontmatter exactly (`research-codebase: opus`, `create-plan: opus`,
+      `implement-plan: sonnet`)
+- [ ] `/work` appears in the `/` menu with its description
