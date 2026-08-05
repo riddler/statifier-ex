@@ -281,8 +281,8 @@ Not added to the `:loop` profile's `stages:` list, matching `gate_guard`.
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix test test/mix/statifier/adr_guard_test.exs test/mix/tasks/adr_check_test.exs`
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix test test/mix/statifier/adr_guard_test.exs test/mix/tasks/adr_check_test.exs`
       passes on its own
 
 #### Manual Verification:
@@ -307,6 +307,12 @@ the mutation in a one-line comment above the test, mirroring
 ---
 
 ## Phase 2: LLM-based ADR judge (ADR-0012) with adversarial verification
+
+**Split out to its own issue, `st2-qcc` (2026-08-04).** It is local-only by
+design - it makes model calls, so it never runs in CI or in `--profile loop` -
+and keeping it off st2-meo lets the mechanical, offline guard in Phase 1 land
+and be reviewed without network calls and API keys in the same diff. The rest
+of this section stands as that issue's design.
 
 ### Overview
 

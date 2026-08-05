@@ -48,6 +48,19 @@
       args: ["gate.check", "--format", "json"],
       kind: :reader,
       skip_exit_code: 2
+    ],
+    # The ADR guard reads the same diff for lines that look like violations of
+    # the mechanically-checkable ADRs (0002 naming, 0003 effects, 0004 eval,
+    # 0008 UXIDs), so architectural drift is a named failure rather than
+    # something review has to catch. Reader, and absent from the loop profile,
+    # for the same reasons as the gate guard above.
+    [
+      key: :adr_guard,
+      name: "ADR guard",
+      command: "mix",
+      args: ["adr.check", "--format", "json"],
+      kind: :reader,
+      skip_exit_code: 2
     ]
   ]
 ]
