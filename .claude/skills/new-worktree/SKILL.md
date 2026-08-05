@@ -135,26 +135,46 @@ the session to read the bead and decide for itself.
    ```bash
    FINISH=" When the work is complete, finish with /commit --auto - it writes the Refs trailer and refuses if the tree carries changes unrelated to <id>. Do not run git commit directly."
 
+   case '<seed>' in
+     '/create-plan'*|'/research-codebase'*) MODEL=opus ;;
+     *)                                     MODEL=sonnet ;;
+   esac
+
    win=$(tmux new-window -d -P -F '#{window_id}' \
      -t '=statifier_2:' \
      -n '<name>' \
      -c "/Users/johnnyt/repos/github/statifier_2-worktrees/<name>")
    [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
    tmux send-keys -t "$win" \
-     "claude --permission-mode auto '<seed>.$FINISH'" Enter
+     "claude --permission-mode auto --model $MODEL '<seed>.$FINISH'" Enter
    ```
+
+   The model is derived from the seed, not left to whatever default the
+   launched session would otherwise inherit (`~/.claude/settings.json`'s
+   global default, which may not be Sonnet or Opus at all): `/create-plan` and
+   `/research-codebase` get `--model opus`, matching the model role docs
+   assign to planning and research (`docs/workflow.md`); every other seed -
+   `/implement-plan`, `just-do-it`'s generic fallback, or anything else
+   `/next-issue` or `/next-issues` route here - gets `--model sonnet`. A
+   skill's own `model:` frontmatter (e.g. `create-plan`'s) governs that skill's
+   invocation once the session is already running; it does not govern the CLI
+   session itself, which is why this step's launch command has to pick
+   explicitly. New seed buckets fall into the `sonnet` default automatically,
+   so `/next-issue`'s triage table (or a new one) never has to touch this case
+   statement to stay correct.
 
    `<seed>` is the seed command from the input when one was given - pass it
    through verbatim, including the leading slash:
 
    ```
-   claude --permission-mode auto '/create-plan st2-00p.3.$FINISH'
+   claude --permission-mode auto --model opus '/create-plan st2-00p.3.$FINISH'
    ```
 
-   With no seed command, fall back to:
+   With no seed command, fall back to (`MODEL` resolves to `sonnet` via the
+   `case` default above):
 
    ```
-   claude --permission-mode auto 'Work bead <id> in this worktree. Start with bd show <id>.$FINISH'
+   claude --permission-mode auto --model sonnet 'Work bead <id> in this worktree. Start with bd show <id>.$FINISH'
    ```
 
    The finishing clause is appended unconditionally, to every bucket's seed and
@@ -212,10 +232,12 @@ the session to read the bead and decide for itself.
 
 6. **Report.** State the worktree path, the branch and what it was cut from,
    that caches were cloned (and whether the PLT came along), the quality
-   result, and **the tmux window** (its name and id, or why it was skipped) so
-   the user can jump to it with the prefix key. Remind that subsequent work on
-   this issue happens **inside the worktree**, and the worktree is removed at
-   merge (`git worktree remove ../statifier_2-worktrees/<name>`).
+   result, **the tmux window** (its name and id, or why it was skipped), and
+   **the model it launched with** (`opus` or `sonnet`, from step 5's `case`)
+   so the user can jump to it with the prefix key and knows which model is
+   running there without switching to the window. Remind that subsequent work
+   on this issue happens **inside the worktree**, and the worktree is removed
+   at merge (`git worktree remove ../statifier_2-worktrees/<name>`).
 
 ## Notes
 
