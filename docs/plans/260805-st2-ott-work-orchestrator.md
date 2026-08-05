@@ -546,10 +546,10 @@ directly. Note that `/work` is the entry point that reaches both, and that
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `grep -n "work" docs/workflow.md` shows `/work` in the model-roles and
+- [x] `grep -n "work" docs/workflow.md` shows `/work` in the model-roles and
       worktrees sections
-- [ ] `grep -n "st2-ltj" docs/workflow.md` shows the Fable seam recorded
-- [ ] Full quality gate passes: `mix quality`
+- [x] `grep -n "st2-ltj" docs/workflow.md` shows the Fable seam recorded
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] The frontmatter-vs-override precedence rule is stated in a way a future
@@ -729,3 +729,10 @@ None. No interpreter or parser behavior changes; no ratchet movement.
 - [ ] The no-seed fallback produces a valid `/work` invocation for a dotted bead
       id (`st2-00p.3`)
 - [ ] The `$win` non-empty guard and the no-`;`-chaining rule are untouched
+
+### Phase 4
+
+- [ ] The frontmatter-vs-override precedence rule is stated in a way a future
+      agent will find before assuming the override wins
+- [ ] No section still describes `/next-issue` as triaging
+- [ ] House style: `docs/workflow.md` is hyphen-only ASCII; the additions match
