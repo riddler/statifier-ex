@@ -4,8 +4,8 @@ defmodule Mix.Statifier.AdrJudgeTest do
   alias Mix.Statifier.AdrJudge
 
   # Every test drives analyze/2 with a hand-written diff and a stub caller, so
-  # nothing here needs a fixture repository, a real API key, or a real network
-  # call - the one seam this module exists to keep pure.
+  # nothing here needs a fixture repository, the real `claude` CLI, or a real
+  # network call - the one seam this module exists to keep pure.
   defp source(diff, adr_text \\ "ADR-0012 placeholder text for tests.") do
     %{diff: diff, adr_text: adr_text}
   end
@@ -203,6 +203,61 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
   end
 
+  # The `claude` CLI routinely answers "respond with JSON only" by wrapping
+  # the JSON in a markdown code fence anyway - discovered by actually running
+  # `mix adr.judge` against the real CLI, where it silently zeroed every
+  # finding before this was handled.
+  # sabotage: have extract_json/1 return the input unchanged instead of
+  #           stripping a fenced block -> red (JSON.decode/1 fails on the
+  #           fence markers, so this candidate would vanish)
+  test "a propose response wrapped in a markdown code fence still parses" do
+    fenced = "```json\n#{candidate_json()}\n```"
+    caller = stub_caller({:ok, fenced}, {:ok, ~s({"violation": true})})
+
+    assert [finding] = AdrJudge.analyze(source(core_diff()), caller: caller)
+    assert finding.file == "lib/statifier/interpreter.ex"
+  end
+
+  # A CLI response answering with a prose preamble - the model narrating an
+  # analysis, sometimes several unrelated fenced shell commands - before its
+  # actual fenced verdict is common enough (also discovered against the real
+  # CLI) that a fence strip anchored to the start of the response never fires
+  # on it, and the leftover prose fails JSON.decode/1 the same way an
+  # unparseable response does. That failure mode is safe for refute (it
+  # defaults to "not a violation" either way) but would be a silent false
+  # negative for propose: a genuine candidate named only in prose is dropped
+  # rather than reaching the refute pass at all.
+  # sabotage: have extract_json/1 take the *first* fenced block via
+  #           Regex.run/2 instead of the *last* via Regex.scan/2, so a
+  #           preamble's own fenced shell command is read as the answer
+  #           instead of the trailing verdict -> red
+  test "a propose response with a prose preamble before its fenced answer still parses" do
+    prefaced =
+      "Let me check the file first.\n```\ncat foo.ex\n```\n\n```json\n#{candidate_json()}\n```"
+
+    caller = stub_caller({:ok, prefaced}, {:ok, ~s({"violation": true})})
+
+    assert [finding] = AdrJudge.analyze(source(core_diff()), caller: caller)
+    assert finding.file == "lib/statifier/interpreter.ex"
+  end
+
+  # sabotage: have extract_json/1 take the *first* fenced block instead of
+  #           the *last*, so a rambling refute response's own hallucinated
+  #           shell-command fence is read as the verdict instead of the
+  #           trailing `{"violation": true}` -> red (the real verdict, a
+  #           survival, would be overturned by the earlier, unrelated fence
+  #           failing to parse as `%{"violation" => true}`)
+  test "a refute response with a prose preamble before its fenced verdict still survives" do
+    prefaced =
+      "I'll examine the file.\n```\ngrep -n trace lib/statifier/interpreter.ex\n```\n\n" <>
+        ~s(```json\n{"violation": true}\n```)
+
+    caller = stub_caller({:ok, candidate_json()}, {:ok, prefaced})
+
+    assert [finding] = AdrJudge.analyze(source(core_diff()), caller: caller)
+    assert finding.file == "lib/statifier/interpreter.ex"
+  end
+
   describe "core_chunks/1" do
     # sabotage: match "+++ b/" only, so a deleted core file (which has no
     #           "+++ b/" line) is dropped from scope -> red
@@ -246,42 +301,46 @@ defmodule Mix.Statifier.AdrJudgeTest do
     end
   end
 
-  describe "parse_response/1 (the pure half of call_anthropic/1)" do
-    # sabotage: match any status as success instead of only 200 -> red
-    test "a 200 response returns the completion text" do
-      response = {:ok, %{status: 200, body: %{"content" => [%{"text" => "hello"}]}}}
-
-      assert AdrJudge.parse_response(response) == {:ok, "hello"}
+  describe "parse_cli_response/1 (the pure half of call_claude_cli/1)" do
+    defp cli_events(extra) do
+      JSON.encode!([%{"type" => "system", "subtype" => "init"} | extra])
     end
 
-    # sabotage: have the non-200 clause return {:ok, inspect(response_body)}
-    #           instead of {:error, _} -> red
-    test "a non-200 response is an error naming the status" do
-      response = {:ok, %{status: 429, body: %{"error" => "rate limited"}}}
+    # sabotage: match any "result" event as success instead of requiring
+    #           "is_error" => false -> red
+    test "a successful result event returns its text" do
+      output = cli_events([%{"type" => "result", "is_error" => false, "result" => "hello"}])
 
-      assert {:error, message} = AdrJudge.parse_response(response)
-      assert message =~ "429"
+      assert AdrJudge.parse_cli_response(output) == {:ok, "hello"}
     end
 
-    # sabotage: drop the {:error, reason} clause, so a transport error falls
-    #           through to a FunctionClauseError instead of a message -> red
-    test "a transport error is an error naming the reason" do
-      assert {:error, message} = AdrJudge.parse_response({:error, :timeout})
-      assert message =~ "timeout"
-    end
-  end
+    # sabotage: drop the `is_error` guard from the success match, so an
+    #           errored result event still returns its "result" text -> red
+    test "an errored result event is an error, not the text it carries" do
+      output =
+        cli_events([%{"type" => "result", "is_error" => true, "result" => "rate limited"}])
 
-  # `Req` is absent from the :test build (mix.exs: `only: :dev`), so this
-  # exercises call_anthropic/1's environment guard without ever loading Req
-  # or touching the network - the true branch (an environment where Req is
-  # loaded) is exactly the network call the rest of this suite exists to
-  # never make.
-  # sabotage: drop the `Code.ensure_loaded?(Req)` guard from call_anthropic/1,
-  #           so it always attempts `post_to_anthropic/1` -> red (raises
-  #           UndefinedFunctionError under :test)
-  test "call_anthropic/1 reports its dependency missing rather than crashing under :test" do
-    assert AdrJudge.call_anthropic("prompt") ==
-             {:error, "the Req dependency is unavailable in this environment"}
+      assert {:error, message} = AdrJudge.parse_cli_response(output)
+      assert message =~ "rate limited"
+    end
+
+    # sabotage: default find_result/1 to the first event instead of the one
+    #           with type "result", so a missing result event silently reads
+    #           the init event -> red
+    test "no result event in the stream is an error naming the raw output" do
+      output = cli_events([])
+
+      assert {:error, message} = AdrJudge.parse_cli_response(output)
+      assert message =~ "unparseable or error result"
+      assert message =~ "system"
+    end
+
+    # sabotage: drop the `JSON.decode/1` guard, so unparseable stdout raises
+    #           instead of returning {:error, _} -> red
+    test "unparseable stdout is an error rather than a raise" do
+      assert {:error, message} = AdrJudge.parse_cli_response("not json")
+      assert message =~ "not json"
+    end
   end
 
   describe "collect/1" do
@@ -292,19 +351,19 @@ defmodule Mix.Statifier.AdrJudgeTest do
       end
     end
 
-    # sabotage: check `System.get_env/1` directly instead of
-    #           `Keyword.get(opts, :api_key, ...)`, so the injected nil is
-    #           never honored -> red
-    test "no API key is reported before any git call runs" do
-      assert AdrJudge.collect(api_key: nil, runner: runner([])) == :no_api_key
+    # sabotage: check `System.find_executable/1` directly instead of
+    #           `Keyword.get_lazy(opts, :cli_available, ...)`, so the injected
+    #           false is never honored -> red
+    test "the claude CLI missing is reported before any git call runs" do
+      assert AdrJudge.collect(cli_available: false, runner: runner([])) == :no_cli
     end
 
-    # sabotage: check base-ref resolution before the API key -> red (this
+    # sabotage: check base-ref resolution before CLI availability -> red (this
     #           test would still pass on that ordering, so it is paired with
-    #           the no-API-key test above to pin the order that matters: an
-    #           unset key must never depend on git resolving anything)
-    test "reports no base ref rather than guessing one, once a key is present" do
-      assert AdrJudge.collect(api_key: "sk-test", runner: runner([])) == :no_base_ref
+    #           the no-CLI test above to pin the order that matters: an
+    #           unavailable CLI must never depend on git resolving anything)
+    test "reports no base ref rather than guessing one, once the CLI is available" do
+      assert AdrJudge.collect(cli_available: true, runner: runner([])) == :no_base_ref
     end
 
     # sabotage: scope the core-changes check to @lib_prefix instead of
@@ -324,7 +383,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
           """, 0}}
       ]
 
-      assert AdrJudge.collect(api_key: "sk-test", runner: runner(responses)) == :no_core_changes
+      assert AdrJudge.collect(cli_available: true, runner: runner(responses)) == :no_core_changes
     end
 
     # sabotage: drop `opts[:base]` from the candidate list -> red
@@ -337,7 +396,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
       assert {:ok, sourced} =
                AdrJudge.collect(
-                 api_key: "sk-test",
+                 cli_available: true,
                  base: "upstream/trunk",
                  runner: runner(responses)
                )
@@ -350,7 +409,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     test "a failing git command is reported, not raised" do
       responses = [{"origin/main", {"origin/main\n", 0}}, {"merge-base", {"fatal: bad\n", 128}}]
 
-      assert {:error, message} = AdrJudge.collect(api_key: "sk-test", runner: runner(responses))
+      assert {:error, message} = AdrJudge.collect(cli_available: true, runner: runner(responses))
       assert message =~ "exited 128"
     end
 
@@ -382,7 +441,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
           {"", 1}
       end
 
-      assert {:ok, sourced} = AdrJudge.collect(api_key: "sk-test", runner: untracked)
+      assert {:ok, sourced} = AdrJudge.collect(cli_available: true, runner: untracked)
       assert [{"lib/statifier/new.ex", _chunk}] = AdrJudge.core_chunks(sourced.diff)
 
       assert_received {:diffed, "lib/statifier/new.ex"}
@@ -415,7 +474,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
           {"", 1}
       end
 
-      assert AdrJudge.collect(api_key: "sk-test", runner: untracked) == :no_core_changes
+      assert AdrJudge.collect(cli_available: true, runner: untracked) == :no_core_changes
     end
 
     # Exercises the real `git` shell-out rather than an injected runner, so
@@ -426,7 +485,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     # what matters is that the real `git` subprocess runs without raising.
     # sabotage: point git/1 at a nonexistent binary -> red (raises ErlangError)
     test "the default runner talks to the repository's real git" do
-      result = AdrJudge.collect(api_key: "sk-test")
+      result = AdrJudge.collect(cli_available: true)
 
       assert result in [:no_base_ref, :no_core_changes] or
                match?({:ok, _sourced}, result) or

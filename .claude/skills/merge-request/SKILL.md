@@ -132,6 +132,15 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    gate to run. Skip it and say so in the PR body and the final report, so a
    skipped gate is never mistaken for a green one.
 
+   Then run the ADR judge: `mix quality --profile merge`. It makes real
+   `claude` CLI calls, which is why it is disabled in the gate `mix
+   gate.verify` just ran and lives in this profile instead - a check that
+   costs money and a network round trip has no business running on every
+   `mix quality`. It skips cleanly (no `claude` CLI on `PATH`, no
+   `lib/statifier/` changes, no base ref) when it has nothing to check; a skip
+   is fine to push through. A finding is not - refuse on one exactly as on a
+   red gate, report it, and stop.
+
 5. **Check for a changelog fragment.** Only when the diff touches public API
    under `lib/`:
    ```bash
