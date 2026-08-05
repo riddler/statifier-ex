@@ -68,8 +68,26 @@ last phase in the plan:
      plan file (create it on first use) instead of blocking on them,
    - **not** commit, **not** run the full `mix quality` as a final gate (the
      orchestrator does both), **not** close the beads issue,
+   - **implement this phase itself**: this loop is already the per-phase
+     orchestrator, so do not delegate the phase to a further subagent and do
+     not invoke `/implement-plan` (or `/work`) itself - either one would
+     re-dispatch phases a level down, outside this orchestrator's
+     `/commit --auto` advancement gate, and past the spawn depth this design
+     intends. A narrowly-scoped sub-task for debugging or exploring
+     unfamiliar territory (per `## If You Get Stuck` below) is still fine -
+     the rule is against delegating the phase itself, not against every use
+     of a subagent,
    - end by reporting what changed and whether it believes the phase is
      complete.
+
+   (`general-purpose` stays the agent type here rather than a narrower one:
+   the "use sub-tasks sparingly" allowance below means the phase subagent
+   still legitimately needs the Agent tool for a targeted debugging or
+   exploration sub-task, and no project-defined agent type under
+   `.claude/agents/` combines Edit/Write/Bash with a trimmed-down Agent/Skill
+   set - building one is out of scope for the bug the instruction above
+   fixes and is filed separately rather than done here. The prompt
+   instruction above is therefore the fix, not a tool restriction.)
 3. The orchestrator - not the subagent - runs `/commit --auto`. This is the
    automated advancement gate: full `mix quality`, the sabotage-note check,
    the unrelated-changes check, and the branch/issue checks all run for real,
