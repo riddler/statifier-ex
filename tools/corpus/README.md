@@ -73,37 +73,47 @@ They are committed deliberately, so a regeneration lands as a reviewable diff.
 
 ## Status
 
-Fetch and transform are retargeted and working: 198 W3C cases and 316 SCION
-cases (127 native + the 189-case `w3c-ecma` duplicate of the W3C IRP suite,
-kept by `corpus:fetch:scion` and filtered at emit time - see
-`tools/corpus/scion/exclusions.exs`). The **W3C emit stage is rewritten to
-the v2 shape** (`st2-00p.7`):
+The pipeline runs end to end: fetch, transform, and both emitters take an
+empty `scratch/` tree to a populated `test/scion_tests/` and
+`test/scxml_tests/`, and the emitted output is committed.
+
+Fetch and transform pull 198 W3C cases and 316 SCION cases (127 native + the
+189-case `w3c-ecma` duplicate of the W3C IRP suite, kept by
+`corpus:fetch:scion` and filtered at emit time - see
+`tools/corpus/scion/exclusions.exs`). The **W3C emitter** produces
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
 `.scxml`, comments stripped), and a single `test_scxml/4` call. 162 of the 198
-W3C cases emit; the rest are filtered out (see below). `test/scxml_tests/` is
-populated.
+W3C cases emit (159 mandatory + 3 optional); the rest are filtered out (see
+below). `test/scxml_tests/` is populated.
 
-The **SCION emit stage is also rewritten to the v2 shape** (`st2-00p.6`):
-`SCIONTest.<Spec>.<Name>Test`, `use Statifier.Case`, `@moduletag :scion`,
-`@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
-inline XML heredoc (4-space base indent, raw source unmodified - no
-xmerl re-serialization), and a single `test_scxml/4` call. 118 of the 127
-native SCION cases emit; the rest are excluded per
-`tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/` is
-populated. `mise run corpus` (fetch, transform, emit for both W3C and SCION)
-now runs end to end without error.
+The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
+`use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
+derived via `Statifier.FeatureDetector`, inline XML heredoc (4-space base
+indent, raw source unmodified - no xmerl re-serialization), and a single
+`test_scxml/4` call. 118 of the 127 native SCION cases emit; the rest are
+excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
+is populated.
 
 Emit also normalizes every generated path segment and module name
 (`tools/corpus/normalize.exs`, shared by both emitters): upstream
 camelCase/acronym/symbol-separated names become snake_case paths and the
 matching PascalCase module segments (`st2-yo4`).
 
+Regeneration was verified reproducible on 2026-08-05: a cold run from an
+empty `scratch/` tree, followed by a second `corpus:emit`, produced a
+byte-identical, zero-diff match against the committed corpus. Because the
+checkout has `core.ignorecase=true`, a case-only path drift between the
+committed tree and the emitter's output (upstream camelCase segment vs.
+emitted snake_case segment) is invisible to `git status` on a
+case-insensitive filesystem; `test/corpus/emitted_paths_test.exs` asserts the
+path-shape invariant directly so that class of drift fails a gate instead of
+waiting for a case-sensitive filesystem to surface it.
+
 Remaining work, tracked in beads:
 
-1. **st2-00p.9** - generate and commit the conformance corpus.
-2. **st2-00p.10** - wire the regression ratchet into `mix quality`.
+1. **st2-00p.10** - wire the regression ratchet into `mix quality`.
 
 Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 
