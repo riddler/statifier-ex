@@ -40,10 +40,12 @@ A CLI session is the exception that proves the rule: `model:` does not govern a
 session launched with the skill as a prompt argument, which is why
 `/new-worktree` passes `--model opus` explicitly on the `claude` command line.
 
-Fable has no automated route yet (`st2-ltj`). `/work`'s sizing step carries a
-Direction bucket for ADR-shaped work, spec interpretation, and corpus strategy,
-but it names the bucket and stops rather than silently sizing that work at a
-code tier.
+`/work`'s sizing step carries a Direction bucket for ADR-shaped work, spec
+interpretation, and corpus strategy, routed to a Fable subagent that has no
+stage skill of its own - its prompt is composed directly in `/work` rather than
+dispatched through the Skill tool, since none of the existing skills produce a
+decision rather than a plan or an implementation. See
+`.claude/skills/work/SKILL.md`'s Step 3 for the prompt.
 
 ## Issue tracking: beads
 
