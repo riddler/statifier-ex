@@ -255,3 +255,17 @@ the session to read the bead and decide for itself.
 - A **busy** session blocks its own worktree's cleanup and is reported, so a
   sweep run while an agent is mid-turn is safe and re-running it later finishes
   the job.
+- **A seeded session cannot spawn a nested `claude` session of its own.**
+  `--permission-mode auto` (step 5) blocks `tmux send-keys ... 'claude' Enter`
+  via the auto-mode classifier - observed live 2026-08-03 in the st2-5bk
+  worktree, needed as a fixture for a bead whose acceptance criteria required
+  observing a live session's terminal rendering. This is not model-specific;
+  the classifier decision is the same regardless of which model is driving.
+  If a bead needs a live Claude session to observe (spinner frames, dialog
+  layout, the input box's suggested-prompt placeholder, or similar), do not
+  try to launch one - use a **sibling worktree session** instead. `/next-issues`
+  routinely stands up two or three seeded sessions in the same tmux server, so
+  a batch run always has live sessions available to `tmux capture-pane`
+  against, with nothing new to launch and nothing to clean up afterward. They
+  are also more representative than a bare `claude` started in a scratch
+  directory, since they are real sessions in real worktrees.
