@@ -16,7 +16,9 @@
 #     datamodel="predicator" are emitted. The datamodel-specific optional
 #     suites (ecma-profile, ...) test literal ECMAScript/XPath behavior the
 #     XSL leaves untouched, so they carry their original datamodel and are
-#     out of scope for this datamodel commitment (docs/datamodel.md).
+#     out of scope for this datamodel commitment (docs/datamodel.md). These
+#     do not count toward the "excluded" tally below - that count is
+#     manifest-driven only, matching the SCION emitter's behavior.
 #   - exclusions.exs: tests with no predicator equivalent (ADR-0004), skipped
 #     with the reason recorded there.
 #
@@ -107,22 +109,11 @@ defmodule Cases.XmlFormat do
   end
 end
 
-exclusions_path = Path.join(__DIR__, "exclusions.exs")
-{exclusions, _bindings} = Code.eval_file(exclusions_path)
-
-[out_root, in_root | inputs] = System.argv()
-
-Enum.each(inputs, fn input ->
-  rel = Path.relative_to(input, in_root)
-  [conformance, spec | _rest] = Path.split(rel)
-  name = Path.basename(rel, ".scxml")
-
-  normalized_spec = Cases.Normalize.identifier(spec)
-  normalized_name = Cases.Normalize.identifier(name)
-
-  if Map.has_key?(exclusions, name) do
-    :skip
-  else
+defmodule Cases.Emit do
+  @spec emit_case(String.t(), String.t(), String.t(), String.t(), String.t(), String.t()) ::
+          :emitted | :skipped
+  def emit_case(out_root, input, conformance, spec, normalized_spec, normalized_name) do
+    name = Path.basename(input, ".scxml")
     {formatted_xml, datamodel} = input |> File.read!() |> Cases.XmlFormat.format()
 
     if datamodel == "predicator" do
@@ -173,6 +164,53 @@ Enum.each(inputs, fn input ->
       out = Path.join([out_root, conformance, normalized_spec, normalized_name <> "_test.exs"])
       out |> Path.dirname() |> File.mkdir_p!()
       File.write!(out, Code.format_string!(source) |> IO.iodata_to_binary() |> Kernel.<>("\n"))
+      :emitted
+    else
+      :skipped
     end
   end
-end)
+end
+
+exclusions_path = Path.join(__DIR__, "exclusions.exs")
+{exclusions, _bindings} = Code.eval_file(exclusions_path)
+
+[out_root, in_root | inputs] = System.argv()
+
+{matched, emitted, excluded} =
+  Enum.reduce(inputs, {MapSet.new(), 0, 0}, fn input, {matched, emitted, excluded} ->
+    rel = Path.relative_to(input, in_root)
+    [conformance, spec | _rest] = Path.split(rel)
+    name = Path.basename(rel, ".scxml")
+
+    normalized_spec = Cases.Normalize.identifier(spec)
+    normalized_name = Cases.Normalize.identifier(name)
+
+    if Map.has_key?(exclusions, name) do
+      {MapSet.put(matched, name), emitted, excluded + 1}
+    else
+      case Cases.Emit.emit_case(
+             out_root,
+             input,
+             conformance,
+             spec,
+             normalized_spec,
+             normalized_name
+           ) do
+        :emitted -> {matched, emitted + 1, excluded}
+        :skipped -> {matched, emitted, excluded}
+      end
+    end
+  end)
+
+stale = Map.keys(exclusions) -- MapSet.to_list(matched)
+
+if stale != [] do
+  IO.puts(
+    :stderr,
+    "stale scxml_w3 exclusions.exs entries (matched nothing): #{Enum.join(stale, ", ")}"
+  )
+
+  System.halt(1)
+end
+
+IO.puts("emitted #{emitted} W3C case(s), excluded #{excluded}")
