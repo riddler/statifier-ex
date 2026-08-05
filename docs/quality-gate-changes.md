@@ -13,6 +13,16 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-04 - st2-meo
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: registers the adr_guard custom stage
+
+Reason: adds the ADR guard to the run, so a likely violation of ADR-0002,
+0003, 0004 or 0008 is a named failure. Adds a stage; loosens nothing, skips
+nothing, and lowers no threshold.
+
 ## 2026-08-04 - st2-h6p
 
 Approved-by: JohnnyT (in session)
