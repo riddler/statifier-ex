@@ -11,7 +11,7 @@ Fan out. Pick several ready beads that are safe to work on at the same time,
 claim all of them, and give each its own branch, worktree and tmux window.
 
 `/next-issue` is the one-at-a-time form of this: pick, claim, one worktree, one
-follow-up route. Running it three times gets three worktrees, but nothing checks
+seeded session. Running it three times gets three worktrees, but nothing checks
 that those three beads can coexist - that judgment lands on whoever is watching,
 once per run. This skill makes the collision check the mechanism: two beads are
 batchable iff their `area:` label sets are disjoint (docs/workflow.md), so a
@@ -268,20 +268,14 @@ finalized, not discovered afterward in a report.
    Non-fatal if offline; agents in this checkout's worktrees share the DB
    directly and see the claims regardless.
 
-7. **Triage each bead, then stand up its worktree.** For each bead in the batch,
-   `bd show <id>`, pick exactly one bucket using the triage table in
-   `/next-issue` (research / plan / just-do-it), then invoke:
+7. **Stand up a worktree per bead.** For each bead in the batch, invoke:
 
-   **`/new-worktree <id>-<slug> -- <seed command>`**
+   **`/new-worktree <id>-<slug> -- /work <id> --auto`**
 
    which cuts the branch off `main`, warms `deps/`, `_build/` and the PLT,
    verifies the loop profile is green, and opens a tmux window running a Claude
-   session seeded on that command. Just-do-it omits the `--` and takes
-   `/new-worktree`'s generic seed.
-
-   Pass the bucket's command through for the same reason `/next-issue` does: the
-   triage decision is made here, with the bead in hand, and the session that acts
-   on it is a different process with none of that context.
+   session seeded on that command. The seed is the same for every bead: sizing
+   the job needs the codebase, so `/work` does it in the worktree, not here.
 
    Worktrees are created **one at a time, in batch order.** Each one clones
    `deps/` and `_build/` from this checkout and then runs a quality gate; running
@@ -291,9 +285,9 @@ finalized, not discovered afterward in a report.
 
 8. **Report the batch.** One row per bead:
 
-   | Bead | Branch | Worktree | tmux window | Bucket |
-   |---|---|---|---|---|
-   | `st2-abc` | `st2-abc-slug` | `../statifier_2-worktrees/st2-abc-slug` | `st2-abc-slug` (`@42`) | `/create-plan st2-abc` |
+   | Bead | Branch | Worktree | tmux window |
+   |---|---|---|---|
+   | `st2-abc` | `st2-abc-slug` | `../statifier_2-worktrees/st2-abc-slug` | `st2-abc-slug` (`@42`) |
 
    Then, always and separately:
 
@@ -334,11 +328,10 @@ finalized, not discovered afterward in a report.
 - `n > 4` is refused, not silently clamped. Someone asking for 8 has a wrong
   model of where the constraint is, and clamping hides that. The same applies
   to more than four explicit bead ids.
-- Discovered work found while triaging is filed with `bd q` and linked
+- Discovered work found while picking is filed with `bd q` and linked
   `discovered-from`, not chased now.
-- Compose with `/next-issue`'s triage table, `/new-worktree` and
-  `/cleanup-worktrees` rather than duplicating their logic. The only thing that
-  lives here is selection.
+- Compose with `/new-worktree`, `/cleanup-worktrees` and `/work` rather than
+  duplicating their logic. The only thing that lives here is selection.
 - Re-verify exact `bd` flags against `bd ready --help` if this drifts -
   `bd ready --json`, `bd show --json`, `bd update --claim`, `bd update --notes`
   and `git worktree list --porcelain` are confirmed current as of the bd
