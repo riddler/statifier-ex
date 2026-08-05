@@ -59,6 +59,17 @@ the session to read the bead and decide for itself.
    (`--no-track` keeps the new branch push-safe; drop to `main` only in the
    offline/fallback case above.)
 
+   Then trust the new worktree path:
+   ```bash
+   mise trust ../statifier_2-worktrees/<name>
+   ```
+   mise trusts `mise.toml` per directory path, not per repo, so the freshly
+   created worktree path is untrusted even though it's the same repo content -
+   without this, the first mise-managed command run there (step 4) prompts to
+   trust the config and hangs a non-interactive agent session the same way an
+   unaliased `-i` flag does (see CLAUDE.md's "Non-interactive shell commands"
+   section).
+
 3. **Warm the caches.** Clone `deps/` and `_build/` from this checkout into the
    worktree. On APFS `cp -Rc` uses copy-on-write clonefiles, so this is nearly
    instant and costs almost no disk:
