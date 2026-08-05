@@ -398,13 +398,13 @@ relocation - the table now lives only in `/work`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] No triage table remains in either file:
+- [x] No triage table remains in either file:
       `grep -rn "just-do-it\|Just-do-it" .claude/skills/next-issue*/` returns
       nothing
-- [ ] Both seed `/work`:
+- [x] Both seed `/work`:
       `grep -n "work <id> --auto" .claude/skills/next-issue/SKILL.md .claude/skills/next-issues/SKILL.md`
       returns a hit in each
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `/next-issue`'s step numbering still reads coherently with step 4 gone
@@ -712,3 +712,12 @@ None. No interpreter or parser behavior changes; no ratchet movement.
       frontmatter exactly (`research-codebase: opus`, `create-plan: opus`,
       `implement-plan: sonnet`)
 - [ ] `/work` appears in the `/` menu with its description
+
+### Phase 2
+
+- [ ] `/next-issue`'s step numbering still reads coherently with step 4 gone
+      (steps 5 and 6 either renumber or the gap is deliberate and obvious)
+- [ ] No dangling cross-reference to the removed table anywhere in
+      `.claude/skills/` (`grep -rn "triage" .claude/skills/`)
+- [ ] Reading `/next-issue` end to end, the seed is explained as uniform *by
+      design*, not as an unexplained constant
