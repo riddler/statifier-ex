@@ -26,9 +26,9 @@ defmodule Mix.Tasks.Adr.Judge do
 
   Exit status is 0 when nothing looks off, 1 when a finding survived the
   refute pass, and 2 for any of three skip conditions, each with its own
-  reason: `ANTHROPIC_API_KEY` unset, the diff touching no `lib/statifier/`
-  files, or no base ref resolving. `skip_exit_code: 2` turns each into a skip
-  rather than a failure or a silent pass.
+  reason: the `claude` CLI not on `PATH`, the diff touching no
+  `lib/statifier/` files, or no base ref resolving. `skip_exit_code: 2` turns
+  each into a skip rather than a failure or a silent pass.
   """
 
   use Mix.Task
@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Adr.Judge do
 
   @switches [base: :string, format: :string]
 
-  @no_api_key_reason "ANTHROPIC_API_KEY not set"
+  @no_cli_reason "claude CLI not on PATH"
   @no_core_changes_reason "no lib/statifier/ files in this diff"
   @no_base_ref_reason "no base ref: neither origin/main nor main resolves"
 
@@ -60,9 +60,9 @@ defmodule Mix.Tasks.Adr.Judge do
   Runs the judge and reports the outcome instead of halting.
 
   `opts` are passed through to both `Mix.Statifier.AdrJudge.collect/1` and
-  `Mix.Statifier.AdrJudge.analyze/2`, so `opts[:runner]`, `opts[:api_key]` and
-  `opts[:caller]` drive this without a real git history, a real key, or a
-  real network call.
+  `Mix.Statifier.AdrJudge.analyze/2`, so `opts[:runner]`, `opts[:cli_available]`
+  and `opts[:caller]` drive this without a real git history, a real `claude`
+  CLI on `PATH`, or a real network call.
   """
   @spec execute(argv :: [String.t()], opts :: keyword()) ::
           {:ok, iodata()} | {:skip, String.t()} | {:error, iodata()}
@@ -73,7 +73,7 @@ defmodule Mix.Tasks.Adr.Judge do
 
     case AdrJudge.collect(opts) do
       {:ok, source} -> source |> AdrJudge.analyze(opts) |> respond(json?)
-      :no_api_key -> {:skip, skipped(@no_api_key_reason, json?)}
+      :no_cli -> {:skip, skipped(@no_cli_reason, json?)}
       :no_core_changes -> {:skip, skipped(@no_core_changes_reason, json?)}
       :no_base_ref -> {:skip, skipped(@no_base_ref_reason, json?)}
       {:error, reason} -> {:error, failed(reason, json?)}

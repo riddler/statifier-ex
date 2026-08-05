@@ -73,24 +73,27 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     ])
   end
 
-  # sabotage: match `System.get_env(@api_key_env)` directly in execute/2
+  # sabotage: match `System.find_executable("claude")` directly in execute/2
   #           instead of routing through AdrJudge.collect/1's
-  #           `Keyword.get(opts, :api_key, ...)`, so the injected nil is
-  #           never honored -> red
-  test "no API key is a skip that names the missing key, not a failure" do
+  #           `Keyword.get_lazy(opts, :cli_available, ...)`, so the injected
+  #           false is never honored -> red
+  test "no claude CLI is a skip that names it missing, not a failure" do
     assert {:skip, json} =
-             Judge.execute(["--format", "json"], api_key: nil, runner: resolving(core_diff()))
+             Judge.execute(["--format", "json"],
+               cli_available: false,
+               runner: resolving(core_diff())
+             )
 
-    assert {:ok, %{"summary" => "ANTHROPIC_API_KEY not set", "findings" => []}} =
+    assert {:ok, %{"summary" => "claude CLI not on PATH", "findings" => []}} =
              JSON.decode(json)
   end
 
-  # sabotage: swap the :no_base_ref and :no_api_key clauses in execute/2's
-  #           case, so a missing base with a present key reports the API-key
-  #           reason instead -> red
+  # sabotage: swap the :no_base_ref and :no_cli clauses in execute/2's
+  #           case, so a missing base with an available CLI reports the
+  #           CLI-missing reason instead -> red
   test "no base ref is a skip that names the missing base, not a failure" do
     assert {:skip, json} =
-             Judge.execute(["--format", "json"], api_key: "sk-test", runner: runner([]))
+             Judge.execute(["--format", "json"], cli_available: true, runner: runner([]))
 
     assert {:ok, %{"summary" => "no base ref: neither origin/main nor main resolves"}} =
              JSON.decode(json)
@@ -101,7 +104,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   test "a diff touching no lib/statifier/ files is a skip that says so" do
     assert {:skip, json} =
              Judge.execute(["--format", "json"],
-               api_key: "sk-test",
+               cli_available: true,
                runner: resolving(docs_only_diff())
              )
 
@@ -113,7 +116,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   test "a surviving finding is an error carrying the ExQuality finding contract" do
     assert {:error, json} =
              Judge.execute(["--format", "json"],
-               api_key: "sk-test",
+               cli_available: true,
                runner: resolving(core_diff()),
                caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
              )
@@ -141,7 +144,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   test "a candidate overturned by the refute pass is a clean pass, not a finding" do
     assert {:ok, json} =
              Judge.execute(["--format", "json"],
-               api_key: "sk-test",
+               cli_available: true,
                runner: resolving(core_diff()),
                caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false})})
              )
@@ -154,7 +157,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   test "the summary counts the findings it reports" do
     assert {:error, json} =
              Judge.execute(["--format", "json"],
-               api_key: "sk-test",
+               cli_available: true,
                runner: resolving(core_diff()),
                caller: stub_caller({:ok, two_candidates_json()}, {:ok, ~s({"violation": true})})
              )
@@ -168,7 +171,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     responses = [{"origin/main", {"origin/main\n", 0}}, {"merge-base", {"fatal: bad\n", 128}}]
 
     assert {:error, json} =
-             Judge.execute(["--format", "json"], api_key: "sk-test", runner: runner(responses))
+             Judge.execute(["--format", "json"], cli_available: true, runner: runner(responses))
 
     assert {:ok, %{"summary" => "ADR judge could not read git", "findings" => [finding]}} =
              JSON.decode(json)
@@ -186,7 +189,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
 
     assert {:error, json} =
              Judge.execute(["--base", "upstream/trunk", "--format", "json"],
-               api_key: "sk-test",
+               cli_available: true,
                runner: runner(responses),
                caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
              )
@@ -199,7 +202,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     test "a finding is reported as prose naming the file, check and next step" do
       assert {:error, output} =
                Judge.execute([],
-                 api_key: "sk-test",
+                 cli_available: true,
                  runner: resolving(core_diff()),
                  caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
                )
@@ -217,7 +220,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     test "a clean run says so and nothing else" do
       assert {:ok, output} =
                Judge.execute([],
-                 api_key: "sk-test",
+                 cli_available: true,
                  runner: resolving(core_diff()),
                  caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false})})
                )
@@ -227,16 +230,17 @@ defmodule Mix.Tasks.Adr.JudgeTest do
 
     # sabotage: have skipped/2 return the JSON document in prose mode -> red
     test "a skip states its reason as prose" do
-      assert {:skip, output} = Judge.execute([], api_key: nil, runner: resolving(core_diff()))
+      assert {:skip, output} =
+               Judge.execute([], cli_available: false, runner: resolving(core_diff()))
 
-      assert output == "ANTHROPIC_API_KEY not set"
+      assert output == "claude CLI not on PATH"
     end
 
     # sabotage: have failed/2 drop the git reason from the prose message -> red
     test "a git failure states what git said" do
       responses = [{"origin/main", {"origin/main\n", 0}}, {"merge-base", {"fatal: bad\n", 128}}]
 
-      assert {:error, output} = Judge.execute([], api_key: "sk-test", runner: runner(responses))
+      assert {:error, output} = Judge.execute([], cli_available: true, runner: runner(responses))
 
       text = IO.iodata_to_binary(output)
 

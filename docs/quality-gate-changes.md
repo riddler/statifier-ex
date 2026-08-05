@@ -17,15 +17,21 @@ where an agent grants itself one.
 
 Approved-by: JohnnyT (in session)
 
-- .quality.exs: registers the adr_judge custom stage
+- .quality.exs: registers the adr_judge custom stage, disabled by default,
+  with a :merge profile that re-enables it
 
 Reason: adds an LLM-backed judge for ADR-0012 (debuggability), the one
 in-scope ADR whose rule is a judgment call rather than a name or call-site
 pattern. A candidate only reaches gate-failure status after surviving an
-independent adversarial refute pass. It is a reader, absent from the loop
-profile and from CI, and skips cleanly (no API key, no lib/statifier/
-changes, no base ref) rather than failing when it cannot run. Adds a stage;
-loosens nothing, skips no existing check, and lowers no threshold.
+independent adversarial refute pass. It shells out to the developer's own
+`claude` CLI (`System.cmd/3`, no tool access, no MCP servers) rather than
+calling the Anthropic API directly, so it rides the developer's existing
+Claude Code auth instead of needing its own API key. It is a reader, absent
+from a bare `mix quality`, from `--profile loop`, and from CI; it runs only
+under `--profile merge`, which `/merge-request` invokes before pushing. It
+skips cleanly (claude CLI not on PATH, no lib/statifier/ changes, no base
+ref) rather than failing when it cannot run. Adds a stage; loosens nothing,
+skips no existing check, and lowers no threshold.
 
 ## 2026-08-04 - st2-meo
 

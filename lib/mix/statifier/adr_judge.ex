@@ -12,12 +12,20 @@ defmodule Mix.Statifier.AdrJudge do
 
   `analyze/2` is pure given a diff plus ADR text and an `opts[:caller]` (a
   function from a prompt string to a `{:ok, response} | {:error, reason}`
-  tuple; real calls go through `Req` in production via `call_anthropic/1`, a
-  stub in tests). `collect/1` gathers that source the same way
-  `Mix.Statifier.GateGuard` and `Mix.Statifier.AdrGuard` do, plus two checks
-  those guards do not need: an API key, checked before any git call runs
-  (there is no point diffing if the stage cannot call out), and whether the
-  diff touches `lib/statifier/` at all.
+  tuple; real calls shell out to the `claude` CLI in production via
+  `call_claude_cli/1`, a stub in tests). `collect/1` gathers that source the
+  same way `Mix.Statifier.GateGuard` and `Mix.Statifier.AdrGuard` do, plus two
+  checks those guards do not need: whether the `claude` CLI is on `PATH`,
+  checked before any git call runs (there is no point diffing if the stage
+  cannot call out), and whether the diff touches `lib/statifier/` at all.
+
+  Local-only by design, and now purely so: `call_claude_cli/1` shells out to
+  the developer's own `claude` CLI (`System.cmd/3`) rather than calling the
+  Anthropic API directly, so the stage rides the developer's existing Claude
+  Code auth instead of needing its own `ANTHROPIC_API_KEY`. `--tools ""` and
+  `--strict-mcp-config` keep the call a single non-agentic completion - no
+  tool access, no MCP servers - so the judge can only read the prompt this
+  module built, never the repository on its own.
 
   Every parse failure or ambiguous model response fails closed rather than
   raising: an unparseable propose response yields no candidates, and an
@@ -40,11 +48,9 @@ defmodule Mix.Statifier.AdrJudge do
 
   @core_prefix "lib/statifier/"
   @adr_path "docs/adr/0012-debuggability-designed-into-the-core.md"
-  @api_key_env "ANTHROPIC_API_KEY"
+  @cli_name "claude"
   @default_model "claude-haiku-4-5-20251001"
   @model_env "STATIFIER_ADR_JUDGE_MODEL"
-  @anthropic_version "2023-06-01"
-  @anthropic_url "https://api.anthropic.com/v1/messages"
 
   # Pinned because `diff.mnemonicPrefix` in a developer's git config would
   # otherwise rename the prefixes out from under the parser.
@@ -53,13 +59,13 @@ defmodule Mix.Statifier.AdrJudge do
   @doc """
   Turns a diff plus ADR-0012's text into adversarially-verified findings.
 
-  `opts[:caller]` defaults to `call_anthropic/1`, a real network call - tests
-  always inject a stub, since this is the one seam the whole module exists to
-  keep pure.
+  `opts[:caller]` defaults to `call_claude_cli/1`, a real shell-out to the
+  `claude` CLI - tests always inject a stub, since this is the one seam the
+  whole module exists to keep pure.
   """
   @spec analyze(source :: source(), opts :: keyword()) :: [finding()]
   def analyze(source, opts \\ []) do
-    caller = Keyword.get(opts, :caller, &call_anthropic/1)
+    caller = Keyword.get(opts, :caller, &call_claude_cli/1)
     chunks = core_chunks(source.diff)
 
     source.adr_text
@@ -71,28 +77,31 @@ defmodule Mix.Statifier.AdrJudge do
   @doc """
   Reads the diff, and ADR-0012's text, the judge needs.
 
-  Checked in order: `opts[:api_key]` (falling back to `ANTHROPIC_API_KEY`)
-  first, since there is nothing to gain from touching git without one; then
-  base-ref resolution (`opts[:base]`, then `origin/main`, then `main`),
-  mirroring `Mix.Statifier.AdrGuard`; then whether the diff touches
-  `lib/statifier/` at all. Each unmet condition returns its own atom so the
-  task can report a distinct skip reason instead of a single opaque one.
+  Checked in order: `opts[:cli_available]` (falling back to
+  `System.find_executable/1`) first, since there is nothing to gain from
+  touching git when the stage has no way to call out; then base-ref
+  resolution (`opts[:base]`, then `origin/main`, then `main`), mirroring
+  `Mix.Statifier.AdrGuard`; then whether the diff touches `lib/statifier/` at
+  all. Each unmet condition returns its own atom so the task can report a
+  distinct skip reason instead of a single opaque one.
 
   `opts[:runner]` replaces the `git` shell-out with a function of an argument
   list returning `{output, status}`, mirroring `Mix.Statifier.AdrGuard`.
   """
   @spec collect(opts :: keyword()) ::
-          {:ok, source()} | {:error, String.t()} | :no_base_ref | :no_api_key | :no_core_changes
+          {:ok, source()} | {:error, String.t()} | :no_base_ref | :no_cli | :no_core_changes
   def collect(opts) do
-    case api_key(opts) do
-      nil -> :no_api_key
-      _key -> collect_with_key(opts)
+    case cli_available?(opts) do
+      false -> :no_cli
+      true -> collect_with_cli(opts)
     end
   end
 
-  defp api_key(opts), do: Keyword.get(opts, :api_key, System.get_env(@api_key_env))
+  defp cli_available?(opts) do
+    Keyword.get_lazy(opts, :cli_available, fn -> System.find_executable(@cli_name) != nil end)
+  end
 
-  defp collect_with_key(opts) do
+  defp collect_with_cli(opts) do
     runner = Keyword.get(opts, :runner, &git/1)
     candidates = Enum.reject([opts[:base], "origin/main", "main"], &is_nil/1)
 
@@ -225,6 +234,10 @@ defmodule Mix.Statifier.AdrJudge do
     """
     PROPOSE PASS
 
+    You have no tool access in this session: do not attempt to read, grep, or
+    list any file. Judge only from the ADR text and diff hunks given below -
+    they are everything you get.
+
     You are reviewing a code change against ADR-0012 (debuggability designed
     into the core). Read the full ADR text and the diff hunks below, and list
     any changes that likely violate it: a microstep-resumability regression, a
@@ -237,15 +250,19 @@ defmodule Mix.Statifier.AdrJudge do
     Diff hunks touching lib/statifier/:
     #{hunks_text}
 
-    Respond with JSON only: a list of candidate violations, each an object
-    with "file", "line", and "claim" (one sentence). Respond with [] if you
-    find none.
+    Respond with JSON only, no other text: a list of candidate violations,
+    each an object with "file", "line", and "claim" (one sentence). Respond
+    with [] if you find none.
     """
   end
 
   defp refute_prompt(adr_text, candidate) do
     """
     REFUTE PASS
+
+    You have no tool access in this session: do not attempt to read, grep, or
+    list any file. Judge only from the ADR text and the candidate claim given
+    below - they are everything you get.
 
     You are adversarially reviewing a claimed ADR-0012 violation. Argue
     against it being a real violation if a good-faith argument exists. Only
@@ -259,15 +276,15 @@ defmodule Mix.Statifier.AdrJudge do
     line: #{candidate.line}
     claim: #{candidate.claim}
 
-    Respond with JSON only: {"violation": true} if the claim survives your
-    challenge as a genuine ADR-0012 violation, or {"violation": false} if you
-    have overturned it. If you are genuinely uncertain, respond
-    {"violation": false} - ties go to "not a violation".
+    Respond with JSON only, no other text: {"violation": true} if the claim
+    survives your challenge as a genuine ADR-0012 violation, or
+    {"violation": false} if you have overturned it. If you are genuinely
+    uncertain, respond {"violation": false} - ties go to "not a violation".
     """
   end
 
   defp parse_propose(text) do
-    case JSON.decode(text) do
+    case text |> extract_json() |> JSON.decode() do
       {:ok, list} when is_list(list) -> Enum.flat_map(list, &normalize_candidate/1)
       _other -> []
     end
@@ -286,9 +303,35 @@ defmodule Mix.Statifier.AdrJudge do
   # An ambiguous or unparseable verdict reads as "not a violation" - refute
   # wins the tie, matching the explicit-verdict default the prompt states.
   defp parse_refute(text) do
-    case JSON.decode(text) do
+    case text |> extract_json() |> JSON.decode() do
       {:ok, %{"violation" => true}} -> true
       _other -> false
+    end
+  end
+
+  # "Respond with JSON only" is a request, not an enforced response format:
+  # the `claude` CLI, unlike a direct Messages API call, routinely answers
+  # with a prose preamble - sometimes several hallucinated tool-call or shell
+  # code fences, since the model does not always notice it has been given no
+  # tools (the prompt tells it so, but not every response listens) - and puts
+  # the actual JSON verdict in its own fenced block only at the end. Anchoring
+  # a fence strip to the start/end of the whole response only strips a fence
+  # that already has nothing before or after it, which is the one case that
+  # does not need help: `JSON.decode/1` fails on the leftover prose either
+  # way, and both parse functions read that failure identically to a real
+  # "no candidates" / "not a violation" - so a genuine verdict buried in
+  # prose would silently vanish rather than surviving, which for the refute
+  # pass in particular is a false negative in the safe direction (it costs a
+  # finding, not causes one) but is still real signal being thrown away.
+  # Scanning for every fenced block and taking the last one, rather than the
+  # first, is deliberate: a rambling response's earlier fences are shell
+  # commands it imagined running, and the verdict - if it gives one at all -
+  # comes after them. Falling back to the trimmed response when there is no
+  # fence at all keeps a plain, unfenced reply working too.
+  defp extract_json(text) do
+    case Regex.scan(~r/```(?:json)?\s*\n?(.*?)```/s, text) do
+      [] -> String.trim(text)
+      matches -> matches |> List.last() |> Enum.at(1) |> String.trim()
     end
   end
 
@@ -305,78 +348,66 @@ defmodule Mix.Statifier.AdrJudge do
   # -- production caller --------------------------------------------------------
 
   @doc """
-  The default `opts[:caller]`: one real Anthropic Messages API call.
+  The default `opts[:caller]`: one non-agentic `claude` CLI completion.
 
-  Only its network-touching half - building the request and handing it to
-  `Req.post/2` - is unexercised by the test suite; every test injects its own
-  `caller`, so this is the only place in the module that touches the network.
-  `parse_response/1`, the half that turns a Req-shaped result into this
-  function's return value, is pure and directly tested.
+  `--tools ""` and `--strict-mcp-config` strip every tool and MCP server from
+  the child session, so the prompt this module built is the only thing the
+  call can see - no reading the repository, no reaching out on its own.
+  `--output-format json` makes the reply parseable instead of scraping
+  terminal prose, and `--model` carries `STATIFIER_ADR_JUDGE_MODEL` (falling
+  back to the haiku default) the same way the direct-API version did.
+
+  Only its shell-out half is unexercised by the test suite; every test
+  injects its own `caller`, so this is the only place in the module that
+  spawns a process. `parse_cli_response/1`, the half that turns the CLI's
+  stdout into this function's return value, is pure and directly tested.
   """
-  @spec call_anthropic(prompt :: String.t()) :: {:ok, String.t()} | {:error, term()}
-  def call_anthropic(prompt) do
-    # `Req` is a dev-only dependency (`mix.exs`: `only: :dev`) - this module
-    # is the one seam in the gate that needs it, everywhere else talks to
-    # `mix` subprocesses instead. `mix quality`'s compile stage builds both
-    # :dev and :test with `--warnings-as-errors`, and Req is absent from the
-    # :test build entirely, so a direct `Req.post/2` call would fail that
-    # build. `apply/3` defers the lookup to runtime, where the real call only
-    # ever happens under :dev (nothing in the test suite calls this
-    # function - every test injects its own `opts[:caller]`).
-    if Code.ensure_loaded?(Req) do
-      prompt |> post_to_anthropic() |> parse_response()
-    else
-      {:error, "the Req dependency is unavailable in this environment"}
+  @spec call_claude_cli(prompt :: String.t()) :: {:ok, String.t()} | {:error, term()}
+  def call_claude_cli(prompt) do
+    model = System.get_env(@model_env, @default_model)
+
+    args = [
+      "-p",
+      prompt,
+      "--output-format",
+      "json",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--model",
+      model
+    ]
+
+    case System.cmd(@cli_name, args, stderr_to_stdout: false) do
+      {output, 0} -> parse_cli_response(output)
+      {output, status} -> {:error, "claude CLI exited #{status}: #{output}"}
     end
   end
 
-  defp post_to_anthropic(prompt) do
-    model = System.get_env(@model_env, @default_model)
-    api_key = System.get_env(@api_key_env)
-
-    body = %{
-      model: model,
-      max_tokens: 4096,
-      messages: [%{role: "user", content: prompt}]
-    }
-
-    opts = [
-      json: body,
-      headers: [
-        {"x-api-key", api_key},
-        {"anthropic-version", @anthropic_version}
-      ]
-    ]
-
-    # `apply/3` is deliberate, not the "arg count is known" case Credo's
-    # check exists for: a direct `Req.post/2` call fails `mix quality`'s
-    # compile stage under :test, where Req is absent from the dev-only build
-    # entirely (see `call_anthropic/1`'s comment above).
-    # credo:disable-for-next-line Credo.Check.Refactor.Apply
-    apply(Req, :post, [@anthropic_url, opts])
-  end
-
   @doc """
-  Turns a `Req.post/2`-shaped result into `call_anthropic/1`'s return value.
+  Turns `claude --output-format json`'s stdout into `call_claude_cli/1`'s
+  return value.
 
-  Matched as a plain map, not `%Req.Response{}`: a struct-name pattern here
-  would need Req's struct definition at compile time, which is exactly what
-  `call_anthropic/1`'s environment guard exists to avoid. A struct is a map at
-  runtime, so this matches the real response just as precisely, and stays
-  pure and directly testable with a fabricated result - no `Req` dependency,
-  loaded or not, needed to exercise it.
+  The CLI prints a JSON array of stream events; the one this cares about has
+  `"type": "result"`, and `"is_error": false` is the only shape read as
+  success - anything else (a malformed array, no `result` event, an error
+  result) fails closed to `{:error, _}` rather than guessing at partial text.
+  Pure and directly testable with a fabricated array - no real CLI needed to
+  exercise it.
   """
-  @spec parse_response(result :: {:ok, map()} | {:error, term()}) ::
-          {:ok, String.t()} | {:error, String.t()}
-  def parse_response({:ok, %{status: 200, body: %{"content" => [%{"text" => text} | _rest]}}}) do
-    {:ok, text}
+  @spec parse_cli_response(output :: String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def parse_cli_response(output) do
+    with {:ok, events} <- JSON.decode(output),
+         %{"is_error" => false, "result" => text} <- find_result(events) do
+      {:ok, text}
+    else
+      _other -> {:error, "claude CLI returned an unparseable or error result: #{inspect(output)}"}
+    end
   end
 
-  def parse_response({:ok, %{status: status, body: response_body}}) do
-    {:error, "anthropic API returned #{status}: #{inspect(response_body)}"}
+  defp find_result(events) when is_list(events) do
+    Enum.find(events, %{}, &(&1["type"] == "result"))
   end
 
-  def parse_response({:error, reason}) do
-    {:error, "anthropic API call failed: #{inspect(reason)}"}
-  end
+  defp find_result(_other), do: %{}
 end
