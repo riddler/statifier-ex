@@ -135,6 +135,11 @@ have no predicator equivalent (ADR-0004), listed with a reason atom in
 `tools/corpus/scxml_w3/exclusions.exs`. That file is the source of truth; this
 paragraph does not duplicate its entries.
 
+The SCION corpus has its own recorded exclusion set for the same reason
+(ADR-0004), plus SCION's own untransformed duplicate of the W3C IRP suite,
+listed with a reason atom in `tools/corpus/scion/exclusions.exs`. That file
+is the source of truth; this paragraph does not duplicate its entries.
+
 ## Quality gate
 
 - `mix quality --profile loop` - inner loop: format, compile, credo, changed-scope

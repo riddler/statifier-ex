@@ -49,6 +49,7 @@ would override the one you export.
 ```
 tools/corpus/
   scion/cases.exs           SCION emitter
+  scion/exclusions.exs      SCION cases with no predicator equivalent, or that duplicate the W3C corpus, with reasons
   scxml_w3/manifest.exs     W3C manifest parser + TXML fetcher
   scxml_w3/conf_predicator.xsl  TXML -> SCXML for the predicator datamodel
   scxml_w3/exclusions.exs   tests with no predicator equivalent, with reasons
@@ -72,8 +73,11 @@ They are committed deliberately, so a regeneration lands as a reviewable diff.
 
 ## Status
 
-Fetch and transform are retargeted and working: 198 W3C cases and 127 SCION
-cases. The **W3C emit stage is rewritten to the v2 shape** (`st2-00p.7`):
+Fetch and transform are retargeted and working: 198 W3C cases and 316 SCION
+cases (127 native + the 189-case `w3c-ecma` duplicate of the W3C IRP suite,
+kept by `corpus:fetch:scion` and filtered at emit time - see
+`tools/corpus/scion/exclusions.exs`). The **W3C emit stage is rewritten to
+the v2 shape** (`st2-00p.7`):
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
@@ -85,9 +89,11 @@ The **SCION emit stage is also rewritten to the v2 shape** (`st2-00p.6`):
 `SCIONTest.<Spec>.<Name>Test`, `use Statifier.Case`, `@moduletag :scion`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, raw source unmodified - no
-xmerl re-serialization), and a single `test_scxml/4` call. All 127 SCION cases
-emit; `test/scion_tests/` is populated. `mise run corpus` (fetch, transform,
-emit for both W3C and SCION) now runs end to end without error.
+xmerl re-serialization), and a single `test_scxml/4` call. 118 of the 127
+native SCION cases emit; the rest are excluded per
+`tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/` is
+populated. `mise run corpus` (fetch, transform, emit for both W3C and SCION)
+now runs end to end without error.
 
 Emit also normalizes every generated path segment and module name
 (`tools/corpus/normalize.exs`, shared by both emitters): upstream
@@ -96,8 +102,8 @@ matching PascalCase module segments (`st2-yo4`).
 
 Remaining work, tracked in beads:
 
-1. **st2-00p.8** - committed exclusion manifest with reasons for the SCION
-   suite.
+1. **st2-00p.9** - generate and commit the conformance corpus.
+2. **st2-00p.10** - wire the regression ratchet into `mix quality`.
 
 Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 
@@ -109,6 +115,12 @@ Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 - **exclusions.exs**: tests with no predicator equivalent (script, list
   concatenation, string prefix, and the BasicHTTP Event I/O Processor tree),
   recorded with a reason atom per ADR-0004.
+
+One filter applies before a SCION case is emitted, in `scion/cases.exs`:
+
+- **exclusions.exs**: cases with no predicator equivalent (`<script>`,
+  `<script src>`), and the `w3c-ecma` tree - SCION's own untransformed
+  duplicate of the W3C IRP suite - recorded with a reason atom per ADR-0004.
 
 v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.

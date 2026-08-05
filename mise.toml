@@ -91,7 +91,7 @@ rm -f "$CORPUS_SAXON_DIR/saxon.zip"
 '''
 
 [tasks."corpus:fetch:scion"]
-description = "Clone the SCION scxml-test-framework, dropping its ecma-only trees"
+description = "Clone the SCION scxml-test-framework"
 shell = "bash -c"
 run = '''
 set -euo pipefail
@@ -100,7 +100,6 @@ scion_root="$(dirname "$CORPUS_SCION_CASES")"
 rm -rf "$scion_root"
 mkdir -p "$scion_root"
 git clone --depth 1 "$CORPUS_SCION_SUITE" "$scion_root/checkout"
-rm -rf "$scion_root"/checkout/test/w3c-ecma{,-in-review,-modified}
 mv "$scion_root/checkout/test" "$CORPUS_SCION_CASES"
 rm -rf "$scion_root/checkout"
 # The root transition is not supported.
