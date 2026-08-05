@@ -1,0 +1,436 @@
+defmodule Mix.Statifier.AdrJudgeTest do
+  use ExUnit.Case, async: true
+
+  alias Mix.Statifier.AdrJudge
+
+  # Every test drives analyze/2 with a hand-written diff and a stub caller, so
+  # nothing here needs a fixture repository, a real API key, or a real network
+  # call - the one seam this module exists to keep pure.
+  defp source(diff, adr_text \\ "ADR-0012 placeholder text for tests.") do
+    %{diff: diff, adr_text: adr_text}
+  end
+
+  defp core_diff(path \\ "lib/statifier/interpreter.ex") do
+    """
+    diff --git a/#{path} b/#{path}
+    --- a/#{path}
+    +++ b/#{path}
+    @@ -10,1 +10,0 @@
+    -    trace(:exit_set, state)
+    """
+  end
+
+  defp stub_caller(propose_response, refute_response) do
+    fn prompt ->
+      if String.contains?(prompt, "PROPOSE PASS"), do: propose_response, else: refute_response
+    end
+  end
+
+  defp candidate_json do
+    JSON.encode!([
+      %{
+        "file" => "lib/statifier/interpreter.ex",
+        "line" => 10,
+        "claim" => "drops a trace effect at the exit-set boundary"
+      }
+    ])
+  end
+
+  # sabotage: drop the Enum.filter(&survives_refute?/3) call from analyze/2,
+  #           reporting every proposed candidate regardless of the refute
+  #           pass -> red on "produces zero findings" below
+  test "a candidate the refute pass fails to overturn becomes exactly one finding" do
+    caller = stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
+
+    assert [finding] = AdrJudge.analyze(source(core_diff()), caller: caller)
+
+    assert %{
+             file: "lib/statifier/interpreter.ex",
+             line: 10,
+             severity: "error",
+             check: "adr-0012-debuggability"
+           } = finding
+
+    assert finding.message =~ "trace effect"
+  end
+
+  # sabotage: have parse_refute/1 default to true instead of false on an
+  #           explicit {"violation": false} verdict -> red
+  test "a candidate overturned by the refute pass produces zero findings" do
+    caller = stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false})})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: have parse_propose/1 fall back to a one-item placeholder list
+  #           instead of [] when the propose pass returns "[]" -> red
+  test "the propose pass finding nothing produces zero findings" do
+    caller = stub_caller({:ok, "[]"}, {:ok, ~s({"violation": true})})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # An ambiguous or unparseable refute response is not silently promoted into
+  # a finding: refute wins the tie by suppressing it, per the adversarial
+  # design the moduledoc documents.
+  # sabotage: default parse_refute/1 to true instead of false on unparseable
+  #           JSON -> red
+  test "an unparseable refute response overturns the candidate, not survives it" do
+    caller = stub_caller({:ok, candidate_json()}, {:ok, "not json"})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: have parse_propose/1 return a one-item placeholder list instead
+  #           of [] on unparseable JSON -> red
+  test "an unparseable propose response produces zero findings, not a spurious one" do
+    caller = stub_caller({:ok, "not json"}, {:ok, ~s({"violation": true})})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: have propose/3 raise a MatchError on a caller {:error, _} by
+  #           pattern-matching `{:ok, text} = caller.(...)` instead of
+  #           case-ing over both outcomes -> red (the test crashes)
+  test "a caller error on the propose pass produces zero findings rather than raising" do
+    caller = stub_caller({:error, :timeout}, {:ok, ~s({"violation": true})})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: have survives_refute?/3 return true unconditionally on a
+  #           caller {:error, _} instead of false -> red
+  test "a caller error on the refute pass overturns the candidate rather than raising" do
+    caller = stub_caller({:ok, candidate_json()}, {:error, :timeout})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: scope core_chunks/1 to @lib_prefix ("lib/") instead of
+  #           @core_prefix ("lib/statifier/"), so a docs/-only hunk reaches
+  #           the propose prompt too -> red
+  test "only diff hunks under lib/statifier/ reach the propose prompt" do
+    parent = self()
+
+    diff =
+      """
+      diff --git a/docs/adr/0013-something.md b/docs/adr/0013-something.md
+      --- a/docs/adr/0013-something.md
+      +++ b/docs/adr/0013-something.md
+      @@ -1,0 +1,1 @@
+      +Some prose.
+      """ <> core_diff()
+
+    spy = fn prompt ->
+      send(parent, {:prompt, prompt})
+      if String.contains?(prompt, "PROPOSE PASS"), do: {:ok, "[]"}, else: {:ok, "{}"}
+    end
+
+    AdrJudge.analyze(source(diff), caller: spy)
+
+    assert_received {:prompt, propose_prompt}
+    assert propose_prompt =~ "lib/statifier/interpreter.ex"
+    refute propose_prompt =~ "0013-something"
+  end
+
+  # sabotage: have propose_prompt/2 omit the ADR text argument -> red
+  test "the full ADR-0012 text reaches the propose prompt" do
+    parent = self()
+
+    spy = fn prompt ->
+      send(parent, {:prompt, prompt})
+      if String.contains?(prompt, "PROPOSE PASS"), do: {:ok, "[]"}, else: {:ok, "{}"}
+    end
+
+    AdrJudge.analyze(source(core_diff(), "unique-adr-marker-xyz"), caller: spy)
+
+    assert_received {:prompt, propose_prompt}
+    assert propose_prompt =~ "unique-adr-marker-xyz"
+  end
+
+  # sabotage: have normalize_candidate/1 accept any map, dropping the
+  #           `is_binary(file) and is_binary(claim)` guard -> red
+  test "a malformed candidate alongside a well-formed one is dropped, not both kept" do
+    propose =
+      JSON.encode!([
+        %{
+          "file" => "lib/statifier/interpreter.ex",
+          "line" => 10,
+          "claim" => "drops a trace effect"
+        },
+        %{"line" => 5, "claim" => "missing its file key"},
+        %{"file" => "lib/statifier/interpreter.ex", "line" => 6}
+      ])
+
+    caller = stub_caller({:ok, propose}, {:ok, ~s({"violation": true})})
+
+    assert [finding] = AdrJudge.analyze(source(core_diff()), caller: caller)
+    assert finding.line == 10
+  end
+
+  # sabotage: have normalize_line/1 accept a non-integer line instead of
+  #           falling back to nil -> red (the finding would carry the raw
+  #           string "ten" as its line instead of nil)
+  test "a non-integer line normalizes to nil rather than passing through" do
+    propose =
+      JSON.encode!([
+        %{"file" => "lib/statifier/interpreter.ex", "line" => "ten", "claim" => "drops a trace"}
+      ])
+
+    caller = stub_caller({:ok, propose}, {:ok, ~s({"violation": true})})
+
+    assert [%{line: nil}] = AdrJudge.analyze(source(core_diff()), caller: caller)
+  end
+
+  # sabotage: have propose/3 match on `{status, text}` for any status
+  #           instead of only `{:ok, text}`, so a bare non-tuple response
+  #           crashes the FunctionClauseError case into a raise -> red
+  test "a caller response that is neither {:ok, _} nor {:error, _} produces zero findings" do
+    caller = fn prompt ->
+      if String.contains?(prompt, "PROPOSE PASS"),
+        do: :unexpected,
+        else: {:ok, ~s({"violation": true})}
+    end
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  # sabotage: have survives_refute?/3 read a bare non-tuple refute response
+  #           as a survival instead of falling through to false -> red
+  test "a refute response that is neither {:ok, _} nor {:error, _} overturns the candidate" do
+    caller = stub_caller({:ok, candidate_json()}, :unexpected)
+
+    assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
+  end
+
+  describe "core_chunks/1" do
+    # sabotage: match "+++ b/" only, so a deleted core file (which has no
+    #           "+++ b/" line) is dropped from scope -> red
+    test "a deleted core file is attributed by its old path" do
+      diff = """
+      diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+      deleted file mode 100644
+      --- a/lib/statifier/interpreter.ex
+      +++ /dev/null
+      @@ -1,1 +0,0 @@
+      -defmodule Statifier.Interpreter do
+      """
+
+      assert [{"lib/statifier/interpreter.ex", _chunk}] = AdrJudge.core_chunks(diff)
+    end
+
+    # sabotage: drop the String.starts_with?/2 filter, so every file in the
+    #           diff reads as a core chunk -> red
+    test "a file outside lib/statifier/ is not a core chunk" do
+      diff = """
+      diff --git a/lib/mix/statifier/adr_guard.ex b/lib/mix/statifier/adr_guard.ex
+      --- a/lib/mix/statifier/adr_guard.ex
+      +++ b/lib/mix/statifier/adr_guard.ex
+      @@ -1,0 +1,1 @@
+      +  # unrelated
+      """
+
+      assert AdrJudge.core_chunks(diff) == []
+    end
+
+    # sabotage: have chunk_path/1 return the empty string instead of nil when
+    #           neither header line is present, so a headerless chunk is
+    #           attributed to path "" instead of dropped -> red
+    test "a diff chunk with neither header line is attributed to nothing" do
+      diff = """
+      diff --git a/lib/statifier/blob.dat b/lib/statifier/blob.dat
+      Binary files a/lib/statifier/blob.dat and b/lib/statifier/blob.dat differ
+      """
+
+      assert AdrJudge.core_chunks(diff) == []
+    end
+  end
+
+  describe "parse_response/1 (the pure half of call_anthropic/1)" do
+    # sabotage: match any status as success instead of only 200 -> red
+    test "a 200 response returns the completion text" do
+      response = {:ok, %{status: 200, body: %{"content" => [%{"text" => "hello"}]}}}
+
+      assert AdrJudge.parse_response(response) == {:ok, "hello"}
+    end
+
+    # sabotage: have the non-200 clause return {:ok, inspect(response_body)}
+    #           instead of {:error, _} -> red
+    test "a non-200 response is an error naming the status" do
+      response = {:ok, %{status: 429, body: %{"error" => "rate limited"}}}
+
+      assert {:error, message} = AdrJudge.parse_response(response)
+      assert message =~ "429"
+    end
+
+    # sabotage: drop the {:error, reason} clause, so a transport error falls
+    #           through to a FunctionClauseError instead of a message -> red
+    test "a transport error is an error naming the reason" do
+      assert {:error, message} = AdrJudge.parse_response({:error, :timeout})
+      assert message =~ "timeout"
+    end
+  end
+
+  # `Req` is absent from the :test build (mix.exs: `only: :dev`), so this
+  # exercises call_anthropic/1's environment guard without ever loading Req
+  # or touching the network - the true branch (an environment where Req is
+  # loaded) is exactly the network call the rest of this suite exists to
+  # never make.
+  # sabotage: drop the `Code.ensure_loaded?(Req)` guard from call_anthropic/1,
+  #           so it always attempts `post_to_anthropic/1` -> red (raises
+  #           UndefinedFunctionError under :test)
+  test "call_anthropic/1 reports its dependency missing rather than crashing under :test" do
+    assert AdrJudge.call_anthropic("prompt") ==
+             {:error, "the Req dependency is unavailable in this environment"}
+  end
+
+  describe "collect/1" do
+    defp runner(responses) do
+      fn [subcommand | rest] ->
+        key = if subcommand == "rev-parse", do: List.last(rest), else: subcommand
+        Map.get(Map.new(responses), key, {"", 1})
+      end
+    end
+
+    # sabotage: check `System.get_env/1` directly instead of
+    #           `Keyword.get(opts, :api_key, ...)`, so the injected nil is
+    #           never honored -> red
+    test "no API key is reported before any git call runs" do
+      assert AdrJudge.collect(api_key: nil, runner: runner([])) == :no_api_key
+    end
+
+    # sabotage: check base-ref resolution before the API key -> red (this
+    #           test would still pass on that ordering, so it is paired with
+    #           the no-API-key test above to pin the order that matters: an
+    #           unset key must never depend on git resolving anything)
+    test "reports no base ref rather than guessing one, once a key is present" do
+      assert AdrJudge.collect(api_key: "sk-test", runner: runner([])) == :no_base_ref
+    end
+
+    # sabotage: scope the core-changes check to @lib_prefix instead of
+    #           @core_prefix, so a docs/-only diff still reads as a core
+    #           change -> red
+    test "a diff touching no lib/statifier/ files is reported, not silently passed" do
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff",
+         {"""
+          diff --git a/docs/adr/0013-something.md b/docs/adr/0013-something.md
+          --- a/docs/adr/0013-something.md
+          +++ b/docs/adr/0013-something.md
+          @@ -1,0 +1,1 @@
+          +Some prose.
+          """, 0}}
+      ]
+
+      assert AdrJudge.collect(api_key: "sk-test", runner: runner(responses)) == :no_core_changes
+    end
+
+    # sabotage: drop `opts[:base]` from the candidate list -> red
+    test "prefers an explicit base over origin/main" do
+      responses = [
+        {"upstream/trunk", {"upstream/trunk\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff", {core_diff(), 0}}
+      ]
+
+      assert {:ok, sourced} =
+               AdrJudge.collect(
+                 api_key: "sk-test",
+                 base: "upstream/trunk",
+                 runner: runner(responses)
+               )
+
+      assert sourced.diff =~ "lib/statifier/interpreter.ex"
+      assert sourced.adr_text =~ "Debuggability"
+    end
+
+    # sabotage: raise instead of returning {:error, _} when git fails -> red
+    test "a failing git command is reported, not raised" do
+      responses = [{"origin/main", {"origin/main\n", 0}}, {"merge-base", {"fatal: bad\n", 128}}]
+
+      assert {:error, message} = AdrJudge.collect(api_key: "sk-test", runner: runner(responses))
+      assert message =~ "exited 128"
+    end
+
+    # A file git has never seen is absent from `git diff` entirely, so a
+    # brand-new interpreter module would be invisible to this check.
+    # sabotage: drop untracked_diff/1 from collect_from/3 -> red
+    # sabotage: drop the @core_prefix filter, so scratch.exs is diffed too -> red
+    test "an untracked file under lib/statifier/ is diffed" do
+      parent = self()
+
+      untracked = fn
+        ["rev-parse" | _rest] = args ->
+          if List.last(args) == "origin/main", do: {"origin/main\n", 0}, else: {"", 1}
+
+        ["merge-base" | _rest] ->
+          {"abc123\n", 0}
+
+        ["ls-files" | _rest] ->
+          {"lib/statifier/new.ex\nscratch.exs\n", 0}
+
+        ["diff", "--no-index" | _rest] = args ->
+          send(parent, {:diffed, List.last(args)})
+          {core_diff(List.last(args)), 1}
+
+        ["diff" | _rest] ->
+          {"", 0}
+
+        _other ->
+          {"", 1}
+      end
+
+      assert {:ok, sourced} = AdrJudge.collect(api_key: "sk-test", runner: untracked)
+      assert [{"lib/statifier/new.ex", _chunk}] = AdrJudge.core_chunks(sourced.diff)
+
+      assert_received {:diffed, "lib/statifier/new.ex"}
+      refute_received {:diffed, "scratch.exs"}
+    end
+
+    # `git diff --no-index` normally exits 0 or 1; any other status means the
+    # comparison itself failed, and the untracked file is dropped rather than
+    # reported with a garbled diff.
+    # sabotage: widen `status in [0, 1]` to `is_integer(status)`, so a status
+    #           2 also reads as a diffable output -> red
+    test "an untracked file git cannot diff contributes nothing rather than garbage" do
+      untracked = fn
+        ["rev-parse" | _rest] = args ->
+          if List.last(args) == "origin/main", do: {"origin/main\n", 0}, else: {"", 1}
+
+        ["merge-base" | _rest] ->
+          {"abc123\n", 0}
+
+        ["ls-files" | _rest] ->
+          {"lib/statifier/broken.ex\n", 0}
+
+        ["diff", "--no-index" | _rest] ->
+          {"fatal: unreadable file\n", 2}
+
+        ["diff" | _rest] ->
+          {"", 0}
+
+        _other ->
+          {"", 1}
+      end
+
+      assert AdrJudge.collect(api_key: "sk-test", runner: untracked) == :no_core_changes
+    end
+
+    # Exercises the real `git` shell-out rather than an injected runner, so
+    # the default `opts[:runner]` wiring is asserted too - not just the
+    # injected path every other test in this module uses. The outcome is
+    # environment-dependent (this branch may or may not touch
+    # lib/statifier/), so every legitimate collect/1 outcome is accepted;
+    # what matters is that the real `git` subprocess runs without raising.
+    # sabotage: point git/1 at a nonexistent binary -> red (raises ErlangError)
+    test "the default runner talks to the repository's real git" do
+      result = AdrJudge.collect(api_key: "sk-test")
+
+      assert result in [:no_base_ref, :no_core_changes] or
+               match?({:ok, _sourced}, result) or
+               match?({:error, _reason}, result)
+    end
+  end
+end

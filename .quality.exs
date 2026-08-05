@@ -61,6 +61,20 @@
       args: ["adr.check", "--format", "json"],
       kind: :reader,
       skip_exit_code: 2
+    ],
+    # The ADR judge scopes to ADR-0012 (debuggability), the one in-scope ADR
+    # whose rule is a judgment call rather than a name or call-site pattern.
+    # It makes real model calls, so it is local-only by design: never in CI,
+    # never in the loop profile, and it skips cleanly (ANTHROPIC_API_KEY
+    # unset, no lib/statifier/ changes, or no base ref) rather than failing
+    # when it cannot run.
+    [
+      key: :adr_judge,
+      name: "ADR judge",
+      command: "mix",
+      args: ["adr.judge", "--format", "json"],
+      kind: :reader,
+      skip_exit_code: 2
     ]
   ]
 ]

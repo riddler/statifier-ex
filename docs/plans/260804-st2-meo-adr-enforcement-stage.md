@@ -424,8 +424,8 @@ loosens nothing.
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix test test/mix/statifier/adr_judge_test.exs test/mix/tasks/adr_judge_test.exs`
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix test test/mix/statifier/adr_judge_test.exs test/mix/tasks/adr_judge_test.exs`
       passes on its own, using a stub `opts[:caller]` - no real network call
       in the suite
 
@@ -520,3 +520,35 @@ None - no conformance corpus interaction.
 - Custom-stage contract: `deps/ex_quality/docs/stages.md#custom-stages`,
   `deps/ex_quality/docs/configuration.md#custom-stages`
 - Layer/module naming convention the path globs follow: `docs/architecture.md`
+
+## Deferred Manual Verification
+
+These require a human with a real `ANTHROPIC_API_KEY` and are not achievable
+in an automated/offline setting. Carried over verbatim from Phase 2's Manual
+Verification section (st2-qcc):
+
+- [ ] With `ANTHROPIC_API_KEY` unset, `mix adr.judge` reports skipped with
+      reason `"ANTHROPIC_API_KEY not set"`, not a failure
+- [ ] With the key set but a diff touching only `docs/`, reports skipped with
+      reason `"no lib/statifier/ files in this diff"`
+- [ ] With the key set and a hand-crafted diff that drops a phase-boundary
+      trace effect from a stubbed interpreter function, `mix adr.judge
+      --format json` against a real API call produces exactly one
+      `adr-0012-debuggability` finding naming that file/line
+- [ ] The same setup with a refute-model stub that overturns the candidate
+      produces zero findings, confirming the adversarial gate actually
+      suppresses a single-pass false positive rather than always agreeing
+      with the propose pass
+- [ ] (Manual Testing Steps, step 3) With a real `ANTHROPIC_API_KEY` exported,
+      run `mix adr.judge --format json` against a hand-crafted diff that
+      removes a trace-effect call from a stubbed interpreter function, to see
+      the propose/refute pipeline produce (or correctly withhold) a finding
+      end-to-end against the real API.
+
+Note: the first two skip-reason items above were, in practice, exercised
+automatically during Phase 2 implementation - `mix quality`'s ADR judge stage
+reported `skipped (ANTHROPIC_API_KEY not set)` in this environment (no key
+set), and the unit/task-level test suites exercise both skip reasons directly
+with a stub runner. They stay listed here because the plan frames them as
+manual steps against a real key; the two remaining items need a real network
+call end-to-end and cannot be automated.

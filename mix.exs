@@ -44,6 +44,9 @@ defmodule Statifier.MixProject do
 
       # Dev / test
       {:ex_quality, "~> 0.13", only: :dev, runtime: false},
+      # HTTP client for the ADR judge stage's Anthropic API calls (mix
+      # adr.judge). Dev-only: the stage never runs in CI or --profile loop.
+      {:req, "~> 0.5", only: :dev, runtime: false},
       # 1.8.0-dev, tracked as a git dep, for exactly one check:
       # Credo.Check.Readability.SpecParameterNames, which is absent from 1.7.x.
       # mix.lock pins the SHA, so builds stay reproducible.

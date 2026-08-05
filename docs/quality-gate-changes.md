@@ -13,6 +13,20 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-05 - st2-qcc
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: registers the adr_judge custom stage
+
+Reason: adds an LLM-backed judge for ADR-0012 (debuggability), the one
+in-scope ADR whose rule is a judgment call rather than a name or call-site
+pattern. A candidate only reaches gate-failure status after surviving an
+independent adversarial refute pass. It is a reader, absent from the loop
+profile and from CI, and skips cleanly (no API key, no lib/statifier/
+changes, no base ref) rather than failing when it cannot run. Adds a stage;
+loosens nothing, skips no existing check, and lowers no threshold.
+
 ## 2026-08-04 - st2-meo
 
 Approved-by: JohnnyT (in session)
