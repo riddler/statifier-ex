@@ -31,3 +31,20 @@ Approved-by: JohnnyT (in session)
 
 Reason: bootstraps the check itself. Adds a stage to the run; loosens nothing,
 skips nothing, and lowers no threshold.
+
+## 2026-08-05 - st2-21b
+
+Approved-by: JohnnyT (in session)
+
+- .sobelow-conf: adds the file, setting exit: "low" and excluding two dev-only
+  Mix support modules by path
+- mix.exs: adds :sobelow as a dev dep, so the Sobelow stage runs instead of
+  reporting itself skipped
+
+Reason: the gate did no security scanning at all before this. The threshold is
+set stricter than ExQuality's default, not looser: Sobelow downgrades Traversal,
+RCE and SQL findings to low confidence outside a Phoenix controller, so "medium"
+would leave those checks unable to block anything in a library. The two excluded
+files are Mix task support that reads developer-configured paths and never ship;
+the exclusion is by path with its reason in .sobelow-conf, and no threshold was
+lowered.

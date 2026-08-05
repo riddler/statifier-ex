@@ -66,7 +66,8 @@ defmodule Mix.Statifier.GateGuardTest do
           ~s|      {:ex_quality, "~> 0.5", only: [:dev, :test]},|,
           ~s|      {:credo, "~> 1.7", only: [:dev, :test]},|,
           ~s|      {:excoveralls, "~> 0.18", only: :test},|,
-          ~s|      {:dialyxir, "~> 1.4", only: [:dev]},|
+          ~s|      {:dialyxir, "~> 1.4", only: [:dev]},|,
+          ~s|      {:sobelow, "~> 0.14", only: :dev, runtime: false},|
         ] do
       assert [%{file: "mix.exs", line: 10, check: "gate-config"}] =
                GateGuard.analyze(source(file_diff("mix.exs", [line])))
