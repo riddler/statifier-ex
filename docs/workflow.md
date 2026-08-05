@@ -20,6 +20,31 @@ the tracking side):
 The skills encode these defaults in their frontmatter; an explicit user request
 overrides them.
 
+The tiers govern two things, not one: **which model a skill runs on**, and
+**which model an orchestrator assigns to a stage it delegates**. `/work` is the
+orchestrator. It runs on Opus and drives the sequence as subagents, assigning
+Opus to the research (`/research-codebase`) and planning (`/create-plan`) stages
+and Sonnet to implementation (`/implement-plan --loop`) - the same split the
+frontmatter already encodes, applied per stage inside one session.
+
+**Frontmatter beats the Agent-call override.** A skill's `model:` applies for
+the turn the skill is active, so a Sonnet subagent that invokes `/create-plan`
+(frontmatter `opus`) runs that skill on Opus regardless of what model the
+spawning call passed. The override governs only the subagent's turns *before*
+the skill fires - the `bd show`, the file reads, the setup. An orchestrator's
+per-stage model must therefore **mirror** the stage skill's frontmatter rather
+than contradict it: where the two diverge, the frontmatter is what runs and the
+orchestrator's table is simply wrong.
+
+A CLI session is the exception that proves the rule: `model:` does not govern a
+session launched with the skill as a prompt argument, which is why
+`/new-worktree` passes `--model opus` explicitly on the `claude` command line.
+
+Fable has no automated route yet (`st2-ltj`). `/work`'s sizing step carries a
+Direction bucket for ADR-shaped work, spec interpretation, and corpus strategy,
+but it names the bucket and stops rather than silently sizing that work at a
+code tier.
+
 ## Issue tracking: beads
 
 All task tracking is `bd` (beads). No markdown TODO lists, no GitHub issues for
@@ -48,10 +73,19 @@ Two skills automate the pickup-to-worktree path: `/next-issue` picks and claims
 the next ready bead (presents choices by default; `--auto` lets an unattended
 agent take the top item), then invokes `/new-worktree`, which creates the
 worktree and warms its `deps/`, `_build/`, and dialyzer PLT from the main
-checkout so the first quality run is fast. `/new-worktree` appends a fixed
-instruction to every seeded prompt telling the session to finish with
-`/commit --auto` rather than a raw `git commit`, so the Refs-trailer and
-unrelated-changes checks in `/commit` fire even for unattended sessions.
+checkout so the first quality run is fast.
+
+The pickers only pick and claim; they do not size the job. Every seeded session
+launches `--model opus` running `/work <id> --auto`, uniformly, whichever bead
+was picked. `/work` then sizes the job **in the worktree**, where the codebase
+is readable rather than merely described, and drives the research / plan /
+implement stages as subagents on the tiers above. That is why the seed is a
+constant: the decision it used to carry needed a checkout to make.
+
+`/new-worktree` appends a fixed instruction to every seeded prompt telling the
+session to finish with `/commit --auto` rather than a raw `git commit`, so the
+Refs-trailer and unrelated-changes checks in `/commit` fire even for unattended
+sessions.
 
 `/next-issues` is the batch form: it takes up to `n` ready beads (default 3,
 refused above 4) whose [area label](#area-labels) sets are pairwise disjoint,
@@ -185,6 +219,13 @@ and no squash or cleanup pass is required before opening a PR.
    the issue ID.
 3. Implement (Sonnet) in a worktree; ratchet additions (`mix test.baseline add`)
    ride in the same PR as the feature.
+
+   Steps 2 and 3 are usually reached through `/work`, the single entry point for
+   working a bead: it sizes the job in the worktree and spawns `/create-plan`
+   and `/implement-plan --loop` as subagents on the tiers in
+   [Model roles](#model-roles), preceded by `/research-codebase` when the blast
+   radius is unclear. Invoking either skill directly is still fine for work
+   already sized.
 4. Sabotage the new tests: break the `lib/` code each one covers, confirm it goes
    red, revert, and record the mutation in a one-line comment above the test
    (`# sabotage: ... -> red`). See
