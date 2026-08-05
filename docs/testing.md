@@ -10,10 +10,11 @@ touch no library internals - everything goes through one `Statifier.Case` module
 1. **Internal tests** (`test/statifier/...`) - unit tests for parser, machine
    compiler, interpreter functions, datamodel. Written fresh for v2, pattern-matching
    style. Run by default with `mix test`.
-2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 127+ tests from the SCION
-   project. Excluded by default.
-3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 59+ mandatory conformance
-   tests. Excluded by default.
+2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 118 emitted tests out of
+   127 native upstream SCION cases (9 excluded, see `tools/corpus/README.md`).
+   Excluded by default.
+3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 162 emitted tests (159
+   mandatory + 3 optional) out of 198 upstream W3C cases. Excluded by default.
 
 `Statifier.Case.test_scxml/4` needs exactly four things from the library: parse,
 build/initialize, synchronous send-event, and the active leaf-state set. That is the
