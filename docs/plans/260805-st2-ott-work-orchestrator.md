@@ -618,11 +618,11 @@ and the new paragraph generalizes it rather than replacing it.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] The clause exists:
+- [x] The clause exists:
       `grep -n "belongs to the session that owns the work" CLAUDE.md`
-- [ ] The table is unchanged - no row added, removed, or retriggered:
+- [x] The table is unchanged - no row added, removed, or retriggered:
       `git diff CLAUDE.md` touches no line beginning with `| `
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] Read the authority section end to end: the new paragraph reads as a
@@ -736,3 +736,13 @@ None. No interpreter or parser behavior changes; no ratchet movement.
       agent will find before assuming the override wins
 - [ ] No section still describes `/next-issue` as triaging
 - [ ] House style: `docs/workflow.md` is hyphen-only ASCII; the additions match
+
+### Phase 5
+
+- [ ] Read the authority section end to end: the new paragraph reads as a
+      constraint on *who* may act, distinct from the `--loop` paragraph's
+      constraint on *when*
+- [ ] `.claude/skills/implement-plan/SKILL.md:70-72` still states its own
+      not-commit instruction - the clause backstops that prompt text, it does
+      not replace it
+- [ ] House style: `CLAUDE.md` is hyphen-only ASCII; the addition matches
