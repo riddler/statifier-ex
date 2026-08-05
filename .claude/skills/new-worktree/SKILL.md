@@ -34,14 +34,15 @@ grows to carry more beads (ADR-0010).
 **Seed command** (optional) is what the tmux session in step 5 runs, e.g.:
 
 ```
-/new-worktree st2-00p.3-regression-ratchet -- /create-plan st2-00p.3
+/new-worktree st2-00p.3-regression-ratchet -- /work st2-00p.3 --auto
 ```
 
-This is how `/next-issue` hands its triage decision (research / plan /
-implement) to the session that will act on it. Without it the decision is lost
-and the new session re-derives it from scratch, usually differently. Omitted -
-someone invoking this skill directly - falls back to a generic seed that tells
-the session to read the bead and decide for itself.
+The seed names the *orchestrator*, not a stage: `/work` sizes the job in the
+worktree, where the codebase is readable, and drives research / plan /
+implement itself. This is how `/next-issue` and `/next-issues` hand a claimed
+bead to the session that will act on it - all they pass is the id. Omitted -
+someone invoking this skill directly - falls back to the same `/work` seed, so
+a hand-made worktree behaves exactly like a routed one.
 
 ## Steps
 
@@ -135,53 +136,44 @@ the session to read the bead and decide for itself.
    ```bash
    FINISH=" When the work is complete, finish with /commit --auto - it writes the Refs trailer and refuses if the tree carries changes unrelated to <id>. Do not run git commit directly."
 
-   case '<seed>' in
-     '/create-plan'*|'/research-codebase'*) MODEL=opus ;;
-     *)                                     MODEL=sonnet ;;
-   esac
-
    win=$(tmux new-window -d -P -F '#{window_id}' \
      -t '=statifier_2:' \
      -n '<name>' \
      -c "/Users/johnnyt/repos/github/statifier_2-worktrees/<name>")
    [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
    tmux send-keys -t "$win" \
-     "claude --permission-mode auto --model $MODEL '<seed>.$FINISH'" Enter
+     "claude --permission-mode auto --model opus '<seed>.$FINISH'" Enter
    ```
 
-   The model is derived from the seed, not left to whatever default the
-   launched session would otherwise inherit (`~/.claude/settings.json`'s
-   global default, which may not be Sonnet or Opus at all): `/create-plan` and
-   `/research-codebase` get `--model opus`, matching the model role docs
-   assign to planning and research (`docs/workflow.md`); every other seed -
-   `/implement-plan`, `just-do-it`'s generic fallback, or anything else
-   `/next-issue` or `/next-issues` route here - gets `--model sonnet`. A
-   skill's own `model:` frontmatter (e.g. `create-plan`'s) governs that skill's
-   invocation once the session is already running; it does not govern the CLI
-   session itself, which is why this step's launch command has to pick
-   explicitly. New seed buckets fall into the `sonnet` default automatically,
-   so `/next-issue`'s triage table (or a new one) never has to touch this case
-   statement to stay correct.
+   `--model` is still passed explicitly, never left to whatever default the
+   launched session would otherwise inherit (`~/.claude/settings.json`'s global
+   default, which may not be Opus or Sonnet at all). It is now a *constant*
+   because every seeded session runs `/work`, which orchestrates on Opus and
+   assigns the implementation tier to its own subagents. The tier split did not
+   disappear - it moved inside the session, where `docs/workflow.md`'s model
+   roles are applied per stage instead of per launch. A skill's own `model:`
+   frontmatter (e.g. `work`'s) governs that skill's invocation once the session
+   is already running; it does not govern the CLI session itself, which is why
+   this line exists at all and must not be "simplified" away.
 
    `<seed>` is the seed command from the input when one was given - pass it
    through verbatim, including the leading slash:
 
    ```
-   claude --permission-mode auto --model opus '/create-plan st2-00p.3.$FINISH'
+   claude --permission-mode auto --model opus '/work st2-00p.3 --auto.$FINISH'
    ```
 
-   With no seed command, fall back to (`MODEL` resolves to `sonnet` via the
-   `case` default above):
+   With no seed command, fall back to the same orchestrator:
 
    ```
-   claude --permission-mode auto --model sonnet 'Work bead <id> in this worktree. Start with bd show <id>.$FINISH'
+   claude --permission-mode auto --model opus '/work <id> --auto.$FINISH'
    ```
 
-   The finishing clause is appended unconditionally, to every bucket's seed and
-   to the fallback, because this step is the one place all three buckets
+   The finishing clause is appended unconditionally, to a given seed and to the
+   fallback, because this step is the one place every caller
    (`/next-issue`, `/next-issues`, and a direct `/new-worktree` invocation)
-   converge - editing it here reaches every seeded session without touching
-   the bucket-selection skills themselves. It specifies `/commit --auto`
+   converges - editing it here reaches every seeded session without touching
+   the calling skills themselves. It specifies `/commit --auto`
    rather than bare `/commit` because the tmux session runs unattended under
    `--permission-mode auto`: `/commit`'s interactive approval step would stall
    with nobody watching the window to answer it. This does not grant commit
@@ -217,11 +209,10 @@ the session to read the bead and decide for itself.
    - **`-d` on `new-window`** so creating three worktrees in a row does not yank
      focus three times. The user jumps to the one they want when they are ready.
 
-   The fallback prompt points at `bd show` rather than restating the bead: the
-   beads DB is shared across worktrees, so the new session reads it directly,
-   and a restated description goes stale. The same reasoning is why a seed
-   command passes only the bead id - `/create-plan st2-00p.3`, not a paraphrase
-   of what to plan.
+   Both forms pass only the bead id, never a paraphrase of the work: the beads
+   DB is shared across worktrees, so the new session reads the bead directly
+   with `bd show`, while a restated description goes stale the moment the bead
+   is updated.
 
    `--permission-mode auto` starts the seeded session in auto mode, so it makes
    routine calls without stopping to confirm each one - the point of fanning
@@ -233,7 +224,7 @@ the session to read the bead and decide for itself.
 6. **Report.** State the worktree path, the branch and what it was cut from,
    that caches were cloned (and whether the PLT came along), the quality
    result, **the tmux window** (its name and id, or why it was skipped), and
-   **the model it launched with** (`opus` or `sonnet`, from step 5's `case`)
+   **the model it launched with** (`opus`, per step 5)
    so the user can jump to it with the prefix key and knows which model is
    running there without switching to the window. Remind that subsequent work
    on this issue happens **inside the worktree**, and the worktree is removed

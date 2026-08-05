@@ -481,11 +481,11 @@ The replacement prose must keep st2-o9a's finding and add this bead's:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] No `case`-based model derivation remains:
+- [x] No `case`-based model derivation remains:
       `grep -n "MODEL=" .claude/skills/new-worktree/SKILL.md` returns nothing
-- [ ] `grep -n "model opus" .claude/skills/new-worktree/SKILL.md` shows the
+- [x] `grep -n "model opus" .claude/skills/new-worktree/SKILL.md` shows the
       constant in the launch command
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] The prose explains why the explicit `--model` survives even as a constant
@@ -721,3 +721,11 @@ None. No interpreter or parser behavior changes; no ratchet movement.
       `.claude/skills/` (`grep -rn "triage" .claude/skills/`)
 - [ ] Reading `/next-issue` end to end, the seed is explained as uniform *by
       design*, not as an unexplained constant
+
+### Phase 3
+
+- [ ] The prose explains why the explicit `--model` survives even as a constant
+      (st2-o9a's finding), so a future reader does not "simplify" it away
+- [ ] The no-seed fallback produces a valid `/work` invocation for a dotted bead
+      id (`st2-00p.3`)
+- [ ] The `$win` non-empty guard and the no-`;`-chaining rule are untouched
