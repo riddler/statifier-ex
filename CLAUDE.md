@@ -49,6 +49,16 @@ changes) apply identically per phase; this only changes the granularity at
 which completeness is judged. See
 `.claude/skills/implement-plan/SKILL.md`'s `## Looped Execution Mode`.
 
+Where the `--loop` paragraph constrains *when* a trigger has fired, this one
+constrains *who* may act on it. Authority in this table always
+belongs to the session that owns the work, not to a subagent it delegates to. A
+subagent spawned to implement a phase or a chore does not commit, does not run
+the full gate as its own bar, and does not close a bead - the orchestrator that
+spawned it runs `/commit --auto` afterwards, so the gate is independent of the
+subagent's self-report. A subagent that believes it has satisfied a trigger
+reports that; it does not act on it. This narrows the table rather than widening
+it: an edit that widened it would be a human's call, not an agent's.
+
 ## Non-interactive shell commands
 
 `cp`, `mv`, and `rm` may be aliased to `-i` on a developer's machine, which
