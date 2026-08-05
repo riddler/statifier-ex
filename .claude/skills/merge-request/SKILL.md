@@ -56,10 +56,65 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    otherwise reach the PR body naming only the first.
 
    Validate each with `bd show <id>`. STOP if none resolves. A PR that cannot be
-   traced to a bead is work nobody can find later, and the `bd note` in step 7
+   traced to a bead is work nobody can find later, and the `bd note` in step 8
    has nowhere to go.
 
-3. **Run the full gate.**
+3. **Fetch and rebase onto `origin/main`.** The gate in step 4 only means
+   something if it attests to the tree that will actually merge, not to branch
+   + stale main. Rebase has to happen here, before the gate - rebasing between
+   the confirmation in step 6 and the push in step 7 would invalidate the very
+   attestation the gate exists to produce, which is the bug this step exists to
+   close wearing a different hat.
+   ```bash
+   git fetch origin
+   ```
+   Check whether there is anything to replay before touching the build:
+   ```bash
+   git rev-list --count HEAD..origin/main
+   ```
+   Zero means `origin/main` has not moved since the branch was cut - nothing to
+   rebase and no reason to invalidate warm build caches. Say so and go straight
+   to step 4.
+
+   Otherwise, rebase:
+   ```bash
+   git rebase origin/main
+   ```
+   **On conflict: abort and report, do not resolve unasked** - CLAUDE.md's
+   authority table is explicit that a conflict during this rebase is still
+   unauthorized. Capture the conflicting files before aborting, the same order
+   `/refresh-worktree` step 3d uses, since the abort clears the conflict state
+   a report assembled afterward would otherwise have nothing left to name:
+   ```bash
+   git diff --name-only --diff-filter=U   # capture, then
+   git rebase --abort                     # abort
+   ```
+   Report the conflicting files and stop. Do not fall through to the gate or
+   the push with the branch left un-rebased - an aborted rebase ends this run.
+
+   If the rebase moved `mix.lock`, repair the build before step 4 runs, the
+   same way `/refresh-worktree` step 3e does: `mix deps.get`, then clone the
+   dialyzer PLT from the main checkout if it has already been rebuilt for the
+   new dep set, or note that the next full gate run will rebuild it. Reuse that
+   logic rather than reimplementing it here, and do not re-clone `deps/` or
+   `_build/` wholesale - a live worktree has its own incremental state and a
+   wholesale clone forces a full recompile. A lockfile that did not move is the
+   common case and needs none of this.
+
+   Record what moved, for step 6's confirmation: the pre-rebase tip, the
+   `origin/main` commit rebased onto, and whether any commits were replayed.
+
+   **On the no-op case:** even when there is nothing to replay, step 4's gate
+   still runs. The fast path above skips the rebase and the build repair, not
+   the gate - it is the expensive parts that are wasted on an unmoved main, not
+   the cheap one. `mix gate.verify` attests to *this* tree, and the simplest
+   way to know the tree has not drifted since `/commit` last ran it is to ask
+   again rather than track how long ago it was green and whether anything else
+   touched the tree since. That bookkeeping would cost more reasoning than the
+   redundant gate run costs seconds. One code path - the gate always runs at
+   step 4 - beats two.
+
+4. **Run the full gate.**
    ```bash
    mix gate.verify
    ```
@@ -77,7 +132,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    gate to run. Skip it and say so in the PR body and the final report, so a
    skipped gate is never mistaken for a green one.
 
-4. **Check for a changelog fragment.** Only when the diff touches public API
+5. **Check for a changelog fragment.** Only when the diff touches public API
    under `lib/`:
    ```bash
    git diff origin/main...HEAD --name-only
@@ -94,12 +149,15 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    to users about observable behavior, and guessing at one produces a release
    note describing something the code may not do.
 
-5. **Confirm before pushing.** Show the user what is about to become public:
+6. **Confirm before pushing.** Show the user what is about to become public,
+   including what step 3 found on `origin/main`:
 
    ```
    Ready to open a PR for st2-xxx - "<issue title>"
 
    Branch:    st2-xxx-slug -> main
+   Rebased:   origin/main was already current, no commits replayed
+              (or: onto <sha>, N commits replayed)
    Commits:   3
    Gate:      full mix quality green   (or: docs only, no gate applicable)
    Changelog: changelog.d/st2-xxx.md   (or: not needed - internal tooling)
@@ -112,17 +170,22 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    Wait for an answer. This is the one confirmation this skill does not skip,
    and there is no `--auto` for it.
 
-6. **Push, then open the PR.**
+7. **Push, then open the PR.**
    ```bash
    git push -u origin <branch>
    ```
-   If the branch was rebased after a previous push (`/refresh-worktree` rewrites
-   commits), the remote counterpart has diverged and the push needs
-   `--force-with-lease` - never a bare `--force`, which discards commits pushed
-   from elsewhere without telling you:
+   If the branch had already been pushed before step 3 ran - the common case,
+   since a worktree usually gets at least one push before its PR is ready - the
+   rebase in step 3 rewrote commits the remote already has, and the remote
+   counterpart has diverged. Same if `/refresh-worktree` rebased it independently
+   between pushes. Either way the push needs `--force-with-lease` - never a bare
+   `--force`, which discards commits pushed from elsewhere without telling you:
    ```bash
    git push --force-with-lease
    ```
+   A branch that was rebased in step 3 but never pushed before (the first push
+   for this branch) needs neither flag - there is nothing on the remote yet to
+   diverge from.
 
    Then:
    ```bash
@@ -142,7 +205,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    No AI attribution in the title or the body, same rule as commit messages
    (CLAUDE.md, and the override in `/commit`).
 
-7. **Sync beads, then record the PR.**
+8. **Sync beads, then record the PR.**
    ```bash
    bd dolt push
    bd note <id> "PR: <url>"
@@ -158,7 +221,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
 
    Leave the bead `in_progress`. Do not close it.
 
-8. **Report.**
+9. **Report.**
    ```
    PR opened: <url>
    Branch:    st2-xxx-slug -> main (3 commits)
