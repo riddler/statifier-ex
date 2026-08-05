@@ -57,6 +57,19 @@ Everything else maps to `bd ready`'s native filter flags (`-p/--priority`,
 `--parent`, ...) and is passed straight through. Re-verify against
 `bd ready --help` if these drift.
 
+**Exception: `--label-any` is broken upstream as of bd 1.1.2 (filed
+[beads#5358](https://github.com/gastownhall/beads/issues/5358)) - it is
+silently ignored in embedded-Dolt workspaces (`bd ready`'s WHERE builder never
+emits an OR-set clause for it), so passing it straight through returns the
+*unfiltered* ready set with no error. `bd ready --help` still advertises it
+and always will until the upstream fix lands, so do not quietly drop it from
+this list on a future re-verification pass without checking whether #5358 has
+closed. Until it does: translate `--label-any l1,l2,...` into the OR form
+yourself - run `bd ready --json -l <label>` once per label (each single-label
+`-l` call is trivially both AND and OR for one label) and union the results by
+id before step 3. `-l`/`--label` (AND) is unaffected and passes through
+normally.
+
 `n` is a **ceiling, not a target.** Returning two when three were asked for is
 the right outcome when the third collides. The report must say so explicitly - a
 silently short batch reads as "there was no more work", which is a different and
@@ -88,6 +101,16 @@ finalized, not discovered afterward in a report.
    Results come back priority-sorted already. **Empty (`[]`)** -> nothing ready
    and unclaimed. Do not auto-file. Report it, show `bd blocked` so it is clear
    what is waiting on what, and stop. In manual mode, offer `/create-issue`.
+
+   **Do not trust a label filter you cannot verify.** Whenever `FILTERS`
+   includes any label flag (`-l`/`--label`, or the `--label-any` translation
+   above), also fetch the unfiltered count (`bd ready --json | jq 'length'`)
+   and compare it to the filtered count. Equal counts with a nonempty
+   unfiltered set is suspicious enough to say so rather than proceed
+   silently - it is exactly the symptom a `bd` flag being silently ignored
+   produces (see the `--label-any` exception above). Report the mismatch,
+   show both counts, and stop rather than building a candidate table from a
+   set that was never actually filtered.
 
    **Explicit-selection mode:** `bd show <id> --json` for each listed id
    instead. An id that does not resolve is reported and dropped from the
