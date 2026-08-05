@@ -50,6 +50,7 @@ defmodule Statifier.MixProject do
       {:credo, github: "rrrene/credo", branch: "master", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
+      {:sobelow, "~> 0.14", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

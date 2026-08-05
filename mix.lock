@@ -16,5 +16,6 @@
   "nimble_parsec": {:hex, :nimble_parsec, "1.4.2", "8efba0122db06df95bfaa78f791344a89352ba04baedd3849593bfce4d0dc1c6", [:mix], [], "hexpm", "4b21398942dda052b403bbe1da991ccd03a053668d147d53fb8c4e0efe09c973"},
   "predicator": {:hex, :predicator, "3.6.0", "8b8ac3be61c2842eaaeaff52701f0af760cf9e5a01b2f5f945b9e15115e701b4", [:mix], [{:jason, "~> 1.4", [hex: :jason, repo: "hexpm", optional: false]}], "hexpm", "13a3c1978283d60e382ce8a3184cf3043d1b02e632440ff8bb12e76be3dc6217"},
   "saxy": {:hex, :saxy, "1.6.1", "742eff28f553c066d0b54e84662dbf384a1d1f38595472ed15f6e0a33038bbe1", [:mix], [], "hexpm", "8989d504424ba29460a61950f8968380651413fa05e63b6118084db057da1a6b"},
+  "sobelow": {:hex, :sobelow, "0.14.1", "2f81e8632f15574cba2402bcddff5497b413c01e6f094bc0ab94e83c2f74db81", [:mix], [{:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}], "hexpm", "8fac9a2bd90fdc4b15d6fca6e1608efb7f7c600fa75800813b794ee9364c87f2"},
   "uxid": {:hex, :uxid, "2.9.0", "e61508fa4d0f997995fd3958d0033acceb70f23e5ec85ea3144485b8b9683c61", [:mix], [{:ecto, "~> 3.12", [hex: :ecto, repo: "hexpm", optional: true]}], "hexpm", "af4a43db3e9f25b7b182eb1870c712224e9a205f39676d98e6cfaaf3fe6029c1"},
 }
