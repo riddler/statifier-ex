@@ -207,12 +207,12 @@ collision surface; the `bd` flag drift note gains `git worktree list
 - [ ] `/commit --auto` succeeds (no Elixir touched, so the quality gate has
       nothing to run; the change commits on diff review per CLAUDE.md, and
       `/commit --auto` writes the Refs trailer and refuses unrelated changes)
-- [ ] `docs/plans/260805-st2-7jr-selection-choices.md` and the rewritten
+- [x] `docs/plans/260805-st2-7jr-selection-choices.md` and the rewritten
       `.claude/skills/next-issues/SKILL.md` are the only changes in the tree
 
 #### Manual Verification:
 
-- [ ] Dry-read the rewritten skill against the four motivating runs from the
+- [x] Dry-read the rewritten skill against the four motivating runs from the
       bead; each resolves in a single invocation:
       1. Default n=3 with area:build beads present -> build beads shown as
          lands-alone options, not silently dropped
@@ -220,10 +220,10 @@ collision surface; the `bd` flag drift note gains `git worktree list
          shown, sequencing alternative offered
       3. `st2-21b st2-qww.7` -> lands-alone surfaced as a choice
       4. `st2-qww.7` -> live-worktree collision surfaced with override option
-- [ ] All six acceptance criteria on st2-7jr are satisfied by the new text
-- [ ] `--auto` path reads as claim-without-confirmation end to end, with the
+- [x] All six acceptance criteria on st2-7jr are satisfied by the new text
+- [x] `--auto` path reads as claim-without-confirmation end to end, with the
       live-worktree skip reported
-- [ ] The skill still composes (selection only; `/new-worktree`,
+- [x] The skill still composes (selection only; `/new-worktree`,
       `/cleanup-worktrees`, triage table untouched)
 
 **Implementation Note**: No Elixir is touched, so `mix quality --profile loop`
