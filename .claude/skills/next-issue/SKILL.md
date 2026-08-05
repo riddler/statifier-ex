@@ -53,6 +53,14 @@ whichever call runs, so both modes scope identically. Re-verify against
    unauthenticated or offline, `/cleanup-worktrees` stops on its own and reports;
    carry on picking work regardless.
 
+   **Run this every invocation, even if `/cleanup-worktrees` already ran earlier
+   in the session.** "Already ran this session" is not the same claim as "ran
+   immediately before this pickup" - a branch can land on `origin/main` in
+   between. This skill has no live-worktree survey downstream to go stale from
+   a skipped 0.5 (`/next-issues` does; see its step 0.5/2 for that hardening),
+   but re-running here is still cheap and keeps a dead worktree from sitting
+   alongside the one this step is about to create.
+
 1. **Pick and claim.**
 
    **Manual mode:**

@@ -79,6 +79,14 @@ finalized, not discovered afterward in a report.
    three or four dead ones. Never let it gate the pickup - if `gh` is
    unauthenticated or offline it stops on its own and reports; carry on.
 
+   **Run this every invocation, even if `/cleanup-worktrees` already ran earlier
+   in the session.** Step 2's live-worktree survey is only sound for the window
+   "since the last sweep", and a fanned-out session can land on `origin/main`
+   in the minutes between an earlier cleanup and this run - "cleanup already ran
+   this session" is not the same claim as "cleanup ran immediately before this
+   survey". Re-running is never wasted: the cost is one `gh` call per worktree,
+   against a survey that reports a collision that has already resolved.
+
 1. **List candidates.**
 
    **Default and filtered forms:**
@@ -109,6 +117,29 @@ finalized, not discovered afterward in a report.
    bead id, or whose bead cannot be fetched, is reported and treated as
    holding no areas - best-effort, never fatal, never blocks the survey.
    `upstream`-labeled beads hold no areas, same as in batching.
+
+   **This survey must not simply trust that step 0.5 ran and succeeded.** For
+   each live worktree found here, also check whether its branch already
+   merged - the same query `/cleanup-worktrees` uses:
+   ```bash
+   gh pr list --state merged --head <branch> --json number,mergedAt --jq '.[0]'
+   ```
+   A merged result means the worktree is stale regardless of *why* it survived
+   cleanup (0.5 was treated as already satisfied by an earlier run, `gh` was
+   briefly down, the session inside it was busy) - treat it as holding no
+   areas, same as a worktree whose bead cannot be fetched. This is what turns
+   a skipped or failed 0.5 into a correct-but-untidy survey instead of a wrong
+   one; it is the fix for the failure mode observed live 2026-08-05, where a
+   merged-but-not-removed worktree for st2-o9a caused st2-d9g to be reported
+   as colliding with work that had already landed on `main` minutes earlier.
+
+   If `gh` itself is unavailable for this check, say so once (not once per
+   worktree) and fall back to trusting the raw worktree list, the same
+   best-effort stance as step 0.5. A survey degraded this way can still
+   overstate held areas, so name that limitation next to any **collides with
+   live worktree** verdict step 3 produces from it - a suppressed candidate
+   should read as "possibly stale, `gh` was unavailable to confirm" rather
+   than presented as a hard fact.
 
 3. **Annotate every candidate with its verdict - select nothing yet.** Walk
    the candidate list (from step 1) and give each one a verdict:
