@@ -1,4 +1,4 @@
-# Quality Configuration for Statifier v2
+# Quality Configuration for Statifier-ex
 #
 # Two ways to run:
 #

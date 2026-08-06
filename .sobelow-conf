@@ -1,4 +1,4 @@
-# Sobelow configuration for Statifier v2 (st2-21b).
+# Sobelow configuration for Statifier-ex (st-21b).
 #
 # Read by `mix sobelow` and, in the quality gate, by ExQuality's Sobelow stage,
 # which passes the parts of this file that say *what* to scan through to the

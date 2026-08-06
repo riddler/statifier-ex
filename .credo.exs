@@ -1,5 +1,5 @@
 # Credo configuration, generated with `mix credo gen.config` and then edited
-# (st2-vbu).
+# (st-vbu).
 #
 # Generating this file means the repo now owns the full check list. That is the
 # tradeoff made deliberately: explicit control over which checks run, at the
@@ -229,7 +229,7 @@
           # functions are literal ports of the W3C SCXML Appendix D pseudocode,
           # so structurally similar functions are intentional and correct. This
           # check would fight spec fidelity. Do not enable without revisiting
-          # that (st2-vbu).
+          # that (st-vbu).
           {Credo.Check.Design.DuplicatedCode, []},
           {Credo.Check.Design.SkipTestWithoutComment, []},
           {Credo.Check.Readability.AliasAs, []},
