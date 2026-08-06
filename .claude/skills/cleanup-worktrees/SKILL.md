@@ -40,7 +40,7 @@ gh pr view <branch> --json state,mergedAt
 ## Input
 
 `$ARGUMENTS` = optional worktree or branch name to clean just that one. Omitted,
-sweep every worktree under `../statifier_2-worktrees/`.
+sweep every worktree under `../statifier-ex-worktrees/`.
 
 ## Steps
 
@@ -49,7 +49,7 @@ sweep every worktree under `../statifier_2-worktrees/`.
    git worktree list --porcelain
    ```
    Parse into `(path, branch)` pairs and **drop the main checkout**
-   (`/Users/johnnyt/repos/github/statifier_2`). Removing it would take the
+   (`/Users/johnnyt/repos/github/statifier-ex`). Removing it would take the
    repository with it.
 
    No worktrees is a normal outcome. Say so and stop.

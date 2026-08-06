@@ -33,7 +33,7 @@ whichever call runs, so both modes scope identically. Re-verify against
 ## Steps
 
 0. **Refresh beads (best-effort).** The Dolt DB syncs via `refs/dolt/data` on
-   git origin (github.com/riddler/statifier_2), so pull the latest issue state
+   git origin (github.com/riddler/statifier-ex), so pull the latest issue state
    before picking - another machine or agent may have claimed or closed work:
    ```bash
    bd dolt pull 2>/dev/null || true
@@ -111,7 +111,7 @@ whichever call runs, so both modes scope identically. Re-verify against
 
 4. **Stand up the worktree, seeded with `/work`.** Invoke
    **`/new-worktree <id>-<slug> -- /work <id> --auto`** - it cuts the branch off
-   `main`, creates `../statifier_2-worktrees/<id>-<slug>`, warms `deps/`,
+   `main`, creates `../statifier-ex-worktrees/<id>-<slug>`, warms `deps/`,
    `_build/`, and the dialyzer PLT, verifies the loop profile is green, and
    opens a tmux window running a Claude session on that seed.
 

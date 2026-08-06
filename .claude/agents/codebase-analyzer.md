@@ -37,7 +37,7 @@ You are a specialist at understanding HOW code works. Your job is to analyze imp
    - Identify conventions and best practices
    - Find integration points between systems
 
-## Project Context: Statifier v2
+## Project Context: Statifier
 
 This is a plain Elixir library (no Phoenix, no Ecto): an SCXML statecharts engine
 that is a literal port of the W3C SCXML Appendix D algorithm over a pure functional

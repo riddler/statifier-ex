@@ -67,9 +67,9 @@ is published).
 ## Worktrees and parallel agents
 
 Parallel implementation happens in git worktrees under the sibling folder
-`../statifier_2-worktrees/` (same convention as other riddler projects):
+`../statifier-ex-worktrees/` (same convention as other riddler projects):
 
-    git worktree add ../statifier_2-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
+    git worktree add ../statifier-ex-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
 
 Two skills automate the pickup-to-worktree path: `/next-issue` picks and claims
 the next ready bead (presents choices by default; `--auto` lets an unattended

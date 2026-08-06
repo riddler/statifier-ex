@@ -13,7 +13,7 @@ coordination bus (ADR-0007).
 
 ## Decision
 
-Parallel work happens in worktrees under `../statifier_2-worktrees/`, one issue
+Parallel work happens in worktrees under `../statifier-ex-worktrees/`, one issue
 per worktree per branch, named `<beads-id>-<slug>`. An agent claims the beads issue
 before creating the worktree, posts progress via `bd note`, and uses merge-slot
 gates when branches will touch the same files. Work is split along module

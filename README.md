@@ -1,4 +1,4 @@
-# Statifier v2
+# Statifier
 
 A W3C SCXML-conformant statecharts engine for Elixir. Ground-up rewrite of
 [statifier](https://github.com/riddler/statifier) v1.x.

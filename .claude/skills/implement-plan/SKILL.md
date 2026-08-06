@@ -24,10 +24,10 @@ in this document describes the default, interactive mode.
   ```
 
 - **When working in parallel with other agents**, do the work in a git worktree
-  under `../statifier_2-worktrees/` named `<beads-id>-<slug>` per ADR-0010:
+  under `../statifier-ex-worktrees/` named `<beads-id>-<slug>` per ADR-0010:
 
   ```bash
-  git worktree add ../statifier_2-worktrees/<beads-id>-<slug> -b <beads-id>-<slug>
+  git worktree add ../statifier-ex-worktrees/<beads-id>-<slug> -b <beads-id>-<slug>
   ```
 
   One issue = one branch = one worktree. Run the same quality gates inside the

@@ -1,6 +1,6 @@
 ---
 name: new-worktree
-description: Create a per-issue worktree under ../statifier_2-worktrees/ with a new branch off main, warm it (deps, _build, dialyzer PLT) so the first quality run is fast, and open a tmux window there with a Claude session seeded on the bead
+description: Create a per-issue worktree under ../statifier-ex-worktrees/ with a new branch off main, warm it (deps, _build, dialyzer PLT) so the first quality run is fast, and open a tmux window there with a Claude session seeded on the bead
 model: sonnet
 argument-hint: ["branch/worktree name, e.g. st2-00p.3-regression-ratchet"]
 ---
@@ -8,7 +8,7 @@ argument-hint: ["branch/worktree name, e.g. st2-00p.3-regression-ratchet"]
 # New Worktree
 
 Stand up a fresh worktree for one beads issue, per ADR-0010: one issue, one
-branch, one worktree under `../statifier_2-worktrees/`, named `<beads-id>-<slug>`.
+branch, one worktree under `../statifier-ex-worktrees/`, named `<beads-id>-<slug>`.
 Then warm the worktree's build caches by cloning `deps/` and `_build/` from this
 checkout - that carries the compiled beams and the dialyxir PLT, so the first
 `mix quality` there recompiles only the delta instead of rebuilding the world.
@@ -46,26 +46,26 @@ a hand-made worktree behaves exactly like a routed one.
 
 ## Steps
 
-1. **Guard.** From the main checkout (`/Users/johnnyt/repos/github/statifier_2`):
+1. **Guard.** From the main checkout (`/Users/johnnyt/repos/github/statifier-ex`):
    - `git branch --list <name>` - if the branch already exists, STOP and report.
      Offer a different name or let the user delete the old one. Never force.
-   - `ls ../statifier_2-worktrees/<name>` - same rule if the folder exists.
+   - `ls ../statifier-ex-worktrees/<name>` - same rule if the folder exists.
    - `git fetch origin` so the branch is cut from the latest `origin/main`
-     (github.com/riddler/statifier_2), not a stale local copy. If the fetch
+     (github.com/riddler/statifier-ex), not a stale local copy. If the fetch
      fails (offline) or `origin/main` does not exist yet, fall back to local
      `main` and say so in the report.
 
 2. **Create the worktree + branch.**
    ```bash
-   mkdir -p ../statifier_2-worktrees
-   git worktree add ../statifier_2-worktrees/<name> -b <name> --no-track origin/main
+   mkdir -p ../statifier-ex-worktrees
+   git worktree add ../statifier-ex-worktrees/<name> -b <name> --no-track origin/main
    ```
    (`--no-track` keeps the new branch push-safe; drop to `main` only in the
    offline/fallback case above.)
 
    Then trust the new worktree path:
    ```bash
-   mise trust ../statifier_2-worktrees/<name>
+   mise trust ../statifier-ex-worktrees/<name>
    ```
    mise trusts `mise.toml` per directory path, not per repo, so the freshly
    created worktree path is untrusted even though it's the same repo content -
@@ -78,8 +78,8 @@ a hand-made worktree behaves exactly like a routed one.
    worktree. On APFS `cp -Rc` uses copy-on-write clonefiles, so this is nearly
    instant and costs almost no disk:
    ```bash
-   cp -Rc deps _build ../statifier_2-worktrees/<name>/ 2>/dev/null \
-     || cp -R deps _build ../statifier_2-worktrees/<name>/
+   cp -Rc deps _build ../statifier-ex-worktrees/<name>/ 2>/dev/null \
+     || cp -R deps _build ../statifier-ex-worktrees/<name>/
    ```
    This carries:
    - compiled dep and app beams (incremental recompile only for changed files)
@@ -94,7 +94,7 @@ a hand-made worktree behaves exactly like a routed one.
 
 4. **Verify the worktree is green.** In the worktree:
    ```bash
-   cd ../statifier_2-worktrees/<name>
+   cd ../statifier-ex-worktrees/<name>
    mix deps.get        # no-op unless mix.lock changed since the clone
    mix quality --profile loop
    ```
@@ -110,17 +110,17 @@ a hand-made worktree behaves exactly like a routed one.
    report. The worktree is the deliverable; the window is convenience. Never
    fail worktree creation because the window could not be made.
 
-   Windows live in the existing per-project session (`statifier_2`), matching
+   Windows live in the existing per-project session (`statifier-ex`), matching
    the convention already in use - one session per project, windows within it.
    Do not create a session per worktree.
 
    ```bash
    # exact-match target (=): a sibling session named statifier exists for v1.
    # ALWAYS quote a '=' target - fish and zsh expand a leading = as a command
-   # path (equals-expansion), so bare -t =statifier_2: dies with
-   # "statifier_2: not found" before tmux ever sees it. Verified 2026-08-02.
-   tmux has-session -t '=statifier_2' 2>/dev/null \
-     || tmux new-session -d -s statifier_2 -c /Users/johnnyt/repos/github/statifier_2
+   # path (equals-expansion), so bare -t =statifier-ex: dies with
+   # "statifier-ex: not found" before tmux ever sees it. Verified 2026-08-02.
+   tmux has-session -t '=statifier-ex' 2>/dev/null \
+     || tmux new-session -d -s statifier-ex -c /Users/johnnyt/repos/github/statifier-ex
    ```
 
    **Guard on the window name** before creating anything, the same way steps 1
@@ -128,7 +128,7 @@ a hand-made worktree behaves exactly like a routed one.
    same name in one session is exactly the state where the wrong one gets typed
    into:
    ```bash
-   tmux list-windows -t '=statifier_2' -F '#{window_name}' | grep -Fxq '<name>'
+   tmux list-windows -t '=statifier-ex' -F '#{window_name}' | grep -Fxq '<name>'
    ```
    A hit means the window already exists - report it and skip the rest of this
    step. Do not create a second one.
@@ -137,9 +137,9 @@ a hand-made worktree behaves exactly like a routed one.
    FINISH=" When the work is complete, finish with /commit --auto - it writes the Refs trailer and refuses if the tree carries changes unrelated to <id>. Do not run git commit directly."
 
    win=$(tmux new-window -d -P -F '#{window_id}' \
-     -t '=statifier_2:' \
+     -t '=statifier-ex:' \
      -n '<name>' \
-     -c "/Users/johnnyt/repos/github/statifier_2-worktrees/<name>")
+     -c "/Users/johnnyt/repos/github/statifier-ex-worktrees/<name>")
    [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
    tmux send-keys -t "$win" \
      "claude --permission-mode auto --model opus '<seed>.$FINISH'" Enter
@@ -202,7 +202,7 @@ a hand-made worktree behaves exactly like a routed one.
      dotted bead ids this repo uses (`st2-00p.3-...`).
 
      Note: tmux 3.6b does in fact resolve
-     `statifier_2:st2-00p.3-regression-ratchet` to the right window - the
+     `statifier-ex:st2-00p.3-regression-ratchet` to the right window - the
      dotted name is not ambiguous in practice, tested 2026-08-02. Window id is
      still what to use, but for renumbering stability, not because name
      targeting is broken.
@@ -228,7 +228,7 @@ a hand-made worktree behaves exactly like a routed one.
    so the user can jump to it with the prefix key and knows which model is
    running there without switching to the window. Remind that subsequent work
    on this issue happens **inside the worktree**, and the worktree is removed
-   at merge (`git worktree remove ../statifier_2-worktrees/<name>`).
+   at merge (`git worktree remove ../statifier-ex-worktrees/<name>`).
 
 ## Notes
 

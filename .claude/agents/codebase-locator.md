@@ -38,7 +38,7 @@ You are a specialist at finding WHERE code lives in a codebase. Your job is to l
 
 ## Search Strategy
 
-### Project Layout: Statifier v2
+### Project Layout: Statifier
 
 This is a plain Elixir library (no Phoenix, no Ecto). Know these locations before
 searching:
