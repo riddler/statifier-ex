@@ -90,6 +90,11 @@ them anyway:
   metadata reference these indexes; tooling maps them back to locations.
 - Locations and indexes are compile-time-immutable Machine data - no runtime
   cost beyond memory, no invalidation story.
+- Expression-level locations are in scope, not just SCXML element locations:
+  compiled expressions retain predicator's span side table alongside the
+  instructions, so an expression failure names the failing subexpression, not
+  just the owning transition. Shape and sequencing are settled by ADR-0014
+  (spans, `on_unbound: :error`, table travels with the instructions).
 
 ## Constraint 4: steps are counted, causes are stamped
 
@@ -146,6 +151,8 @@ For the Phase 1 interpreter work and its reviews:
 - [ ] `microstep` step function exists; macrostep folds over it
 - [ ] trace effect types defined with the vocabulary above; emission gated
 - [ ] compiler retains locations on states, transitions, executable content
+- [ ] compiled expressions carry their span table with the instructions
+      (ADR-0014)
 - [ ] compiler assigns document-order indexes to transitions and
       executable-content nodes
 - [ ] internally raised events carry cause metadata (identity + step)
