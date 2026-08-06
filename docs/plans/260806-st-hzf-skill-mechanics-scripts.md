@@ -401,11 +401,11 @@ areas; `gh` unavailable degrades once; main checkout dropped; dotted bead ids
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `find .claude/scripts -name '*.rb' -exec /usr/bin/ruby -c {} +` is clean
-- [ ] Exactly one definition of the bead-id regex:
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `find .claude/scripts -name '*.rb' -exec /usr/bin/ruby -c {} +` is clean
+- [x] Exactly one definition of the bead-id regex:
       `grep -rn 'st-\[a-z0-9\]' .claude/scripts/ | wc -l` is 1
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `ruby .claude/scripts/repo_state.rb` run in this worktree and in the main
@@ -1550,6 +1550,14 @@ before considering the plan fully landed.
 - [ ] `docs/skill-automation.md`'s "what must never be scripted" list covers all
       12 risks in the research doc's Risks section
 - [ ] No gem was installed to make the suite run
+
+### Phase 2
+
+- [ ] `ruby .claude/scripts/repo_state.rb` run in this worktree and in the main
+      checkout reports `checkout` correctly in both
+- [ ] `ruby .claude/scripts/worktree_survey.rb` output matches what
+      `git worktree list` plus `gh pr list` say by hand
+- [ ] The `146c69f` fixture is the real commit body, not a paraphrase
 
 ## Open Questions
 
