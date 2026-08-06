@@ -305,11 +305,11 @@ bit, and every `cp`/`rm`/`mv` argv carries its non-interactive flag.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `/usr/bin/ruby -c` parses every file under `.claude/scripts/` (no 2.7+
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `/usr/bin/ruby -c` parses every file under `.claude/scripts/` (no 2.7+
       syntax): `find .claude/scripts -name '*.rb' -exec /usr/bin/ruby -c {} +`
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `docs/skill-automation.md` and `.claude/scripts/README.md` exist
+- [x] Full quality gate passes: `mix quality`
+- [x] `docs/skill-automation.md` and `.claude/scripts/README.md` exist
 
 #### Manual Verification:
 - [ ] The envelope example in `README.md` and the one in the research doc agree
@@ -1537,6 +1537,19 @@ shrinking the latter is a gate-guarded action.
   `docs/plans/260805-st2-7jr-selection-choices.md`,
   `docs/plans/260803-st2-gm6-looped-plan-execution.md`,
   `docs/plans/260804-st2-h6p-gate-weakening-check.md`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (`--loop`) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The envelope example in `README.md` and the one in the research doc agree
+- [ ] `docs/skill-automation.md`'s "what must never be scripted" list covers all
+      12 risks in the research doc's Risks section
+- [ ] No gem was installed to make the suite run
 
 ## Open Questions
 
