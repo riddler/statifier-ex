@@ -453,9 +453,14 @@ is the second argument -->
 	<xsl:attribute name="cond">_name == '<xsl:value-of select="."/>'</xsl:attribute>
 </xsl:template>
 
-<!-- return true if first var's value is a prefix of the second var's value.  Input has form "n m" where n and m are ints.
-     Stubbed: predicator has no string prefix/substring function (test224, exclusions.exs). -->
+<!-- return true if first var's value is a prefix of the second var's value.  Input has form "n m" where n and m are ints. -->
 <xsl:template match="//@conf:varPrefix">
+	<xsl:attribute name="cond">
+	<xsl:analyze-string select="."
+		regex="(\w+)\s+(\w+)">
+<xsl:matching-substring>starts_with(Var<xsl:value-of select="regex-group(2)"/>, Var<xsl:value-of select="regex-group(1)"/>)</xsl:matching-substring>
+	</xsl:analyze-string>
+</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:inState">
@@ -584,10 +589,13 @@ is the second argument -->
 </xsl:template>
 
 <!-- this should add an extra item onto the end of the specified array, which
-is of the same type as array123.
-Stubbed: predicator has no list concatenation (test525, exclusions.exs). -->
+is of the same type as array123. -->
 <xsl:template match="conf:extendArray">
-</xsl:template>
+	<assign xmlns="http://www.w3.org/2005/07/scxml">
+	  <xsl:attribute name="location">Var<xsl:value-of select="@id"/></xsl:attribute>
+	  <xsl:attribute name="expr">concat(Var<xsl:value-of select="@id"/>, [4])</xsl:attribute>
+	  </assign>
+	</xsl:template>
 
 <!-- this should create a multidimensional array all of whose cells are set to the specified value.  Not
 currently used for any tests  -->

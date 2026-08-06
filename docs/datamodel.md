@@ -71,10 +71,11 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
 3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
    bare atom that every embedding normalizes ad hoc.
 4. **Statement sequences** (above).
-5. **String prefix/substring**: no function tests or extracts a substring
-   (`tools/corpus/scxml_w3/exclusions.exs` test224).
-6. **List concatenation**: `+` raises `TypeMismatchError` on `list + list`; there is
-   no way to append or merge lists (`tools/corpus/scxml_w3/exclusions.exs` test525).
+5. **String prefix/substring**: landed in predicator 3.7.0 (`starts_with/2`,
+   `ends_with/2`, `substring/2,3`, `index_of/2`); `conf:varPrefix` (test224) no
+   longer needs an exclusion.
+6. **List concatenation**: landed in predicator 3.7.0 (`concat/2`, and list `+`
+   list); `conf:extendArray` (test525) no longer needs an exclusion.
 
 Each of these gets a beads issue here and a mirrored issue in predicator-ex when we
 hit the seam in implementation.
