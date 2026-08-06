@@ -4,7 +4,7 @@ Status: accepted (2026-08-02)
 
 ## Context
 
-Statifier v2 is a ground-up rewrite whose direction is shaped up front (see
+Statifier is a ground-up rewrite whose direction is shaped up front (see
 `docs/architecture.md`) and refined continuously during implementation, by several
 people and several AI models. Decisions made in conversation evaporate; decisions
 made in code are invisible until someone trips over them.

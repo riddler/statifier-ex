@@ -2,7 +2,7 @@ defmodule Statifier.MixProject do
   use Mix.Project
 
   @version "2.0.0-dev"
-  @source_url "https://github.com/riddler/statifier"
+  @source_url "https://github.com/riddler/statifier-ex"
 
   def project do
     [

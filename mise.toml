@@ -1,4 +1,4 @@
-# mise config for statifier v2: toolchain, environment, and repo tasks.
+# mise config for statifier-ex: toolchain, environment, and repo tasks.
 #
 #   mise install        provision the toolchain below
 #   mise tasks          list the tasks

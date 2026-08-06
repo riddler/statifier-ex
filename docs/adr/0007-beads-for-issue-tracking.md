@@ -4,7 +4,7 @@ Status: accepted (2026-08-02)
 
 ## Context
 
-Work needs a tracker that survives this repo's unusual lifecycle (statifier_2
+Work needs a tracker that survives this repo's unusual lifecycle (statifier-ex
 will eventually replace the statifier GitHub project, possibly via force-push or
 repo recreation), works for multiple AI agents in parallel worktrees, and supports
 dependency ordering across a long phased roadmap. GitHub issues are tied to the

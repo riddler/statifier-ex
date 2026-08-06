@@ -1,9 +1,9 @@
 # Architecture
 
-Statifier v2 is a ground-up rewrite of [statifier](https://github.com/riddler/statifier)
-(v1.x, kept as a read-only reference in `../statifier`). The rewrite exists to fix
-structural problems that v1 could only patch around; the reasoning for each major
-decision lives in `docs/adr/`.
+Statifier is a ground-up rewrite of [statifier](https://github.com/riddler/statifier)
+(the original, kept as a read-only reference in `../statifier`). The rewrite exists
+to fix structural problems the original could only patch around; the reasoning for
+each major decision lives in `docs/adr/`.
 
 ## Design principles
 

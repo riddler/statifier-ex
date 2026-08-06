@@ -12,7 +12,7 @@ change warrants an entry at all.
 
 ## [Unreleased]
 
-Statifier v2 is a ground-up rewrite of the SCXML engine (see `docs/`). It is not
+Statifier is a ground-up rewrite of the SCXML engine (see `docs/`). It is not
 released and not published: `mix.exs` stays at `2.0.0-dev` for the duration, and
 there are no alpha, beta, or release-candidate versions along the way. This
 section accumulates until the engine is complete, then becomes `[2.0.0]`.

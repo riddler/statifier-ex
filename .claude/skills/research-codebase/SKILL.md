@@ -188,7 +188,7 @@ Use the issue as the research prompt:
      researcher: Claude
      git_commit: [Current commit hash]
      branch: [Current branch name]
-     repository: statifier_2
+     repository: statifier-ex
      beads_issue: [Issue ID, if applicable]
      topic: "[User's Question/Topic]"
      tags: [research, codebase, relevant-component-names]

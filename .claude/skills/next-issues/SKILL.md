@@ -287,7 +287,7 @@ finalized, not discovered afterward in a report.
 
    | Bead | Branch | Worktree | tmux window |
    |---|---|---|---|
-   | `st2-abc` | `st2-abc-slug` | `../statifier_2-worktrees/st2-abc-slug` | `st2-abc-slug` (`@42`) |
+   | `st2-abc` | `st2-abc-slug` | `../statifier-ex-worktrees/st2-abc-slug` | `st2-abc-slug` (`@42`) |
 
    Then, always and separately:
 

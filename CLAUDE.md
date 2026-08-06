@@ -72,10 +72,10 @@ Also avoid `bd edit`, which opens `$EDITOR` and blocks. Use
 
 ## What this project is
 
-Statifier v2: a ground-up rewrite of the SCXML statecharts engine at
-`../statifier` (v1, read-only reference). The rewrite is a literal port of the
-W3C SCXML Appendix D algorithm over a pure functional core. Always refer to
-state machines as **state charts**.
+Statifier-ex: a ground-up rewrite of the SCXML statecharts engine at
+`../statifier` (the original, read-only reference). The rewrite is a literal
+port of the W3C SCXML Appendix D algorithm over a pure functional core. Always
+refer to state machines as **state charts**.
 
 Read before making design decisions:
 

@@ -25,7 +25,7 @@ one refreshes the survivors.
 
 `$ARGUMENTS` = optional. One worktree or branch name refreshes just that
 worktree. No argument sweeps every live worktree under
-`../statifier_2-worktrees/`. The main checkout is never a target - it is not a
+`../statifier-ex-worktrees/`. The main checkout is never a target - it is not a
 feature branch and is not rebased.
 
 ## Steps
@@ -35,7 +35,7 @@ feature branch and is not rebased.
    git worktree list --porcelain
    ```
    Parse into `(path, branch)` pairs and drop the main checkout
-   (`/Users/johnnyt/repos/github/statifier_2`). With an argument, keep only the
+   (`/Users/johnnyt/repos/github/statifier-ex`). With an argument, keep only the
    matching one; if it matches nothing, STOP and report what is live.
 
    No live worktrees is a normal outcome, not an error - say so and stop.
@@ -108,7 +108,7 @@ feature branch and is not rebased.
       here - the clone is a copy-on-write file operation against a multi-minute
       build:
       ```bash
-      cp -c /Users/johnnyt/repos/github/statifier_2/_build/dev/dialyxir_*.plt* \
+      cp -c /Users/johnnyt/repos/github/statifier-ex/_build/dev/dialyxir_*.plt* \
             <path>/_build/dev/ 2>/dev/null || true
       ```
       If it is absent or also stale, note that the next full `mix quality` in
