@@ -95,4 +95,32 @@ defmodule Mix.Tasks.Gate.VerifyTest do
 
     assert reason == "no report to verify: `mix quality --report -` exited 1 without one"
   end
+
+  # sabotage: have status_problem/2's fallback clause return nil -> red
+  test "a report with no status and no failed stages is not a full gate" do
+    stages = [stage("Format")]
+    report = Map.delete(report(%{"stages" => stages}), "status")
+
+    assert {:error, reason} = Verify.execute([], runner: runner(report))
+    assert reason == "Not a full gate: the run did not report status ok."
+  end
+
+  # sabotage: have scope_problem/1's fallback clause return nil -> red
+  test "a report with no scope at all is not a full gate" do
+    report = Map.delete(report(), "scope")
+
+    assert {:error, reason} = Verify.execute([], runner: runner(report))
+    assert reason == "Not a full gate: the run reported no scope."
+  end
+
+  # sabotage: have narrowing?/1's fallback clause return true -> red
+  test "a skipped stage with no summary is not treated as narrowing" do
+    stages = [stage("Format"), skipped("Sobelow", "") |> Map.delete("summary")]
+
+    assert {:ok, output} = Verify.execute([], runner: runner(report(%{"stages" => stages})))
+
+    assert output ==
+             "Full gate green: scope all, no profile, 2 stages considered.\n" <>
+               "Not checked by this project at all: Sobelow ()"
+  end
 end
