@@ -95,7 +95,7 @@ defmodule Mix.Statifier.GateGuardTest do
           "  @moduletag :skip",
           "  @moduletag :pending",
           "  @tag skip: true",
-          "  @tag pending: \"waiting on st2-xyz\""
+          "  @tag pending: \"waiting on st-xyz\""
         ] do
       diff = file_diff("test/statifier/document_test.exs", [tag], 42)
 
@@ -192,7 +192,7 @@ defmodule Mix.Statifier.GateGuardTest do
     diff =
       file_diff(".quality.exs", ["  strict: false"]) <>
         ledger_diff([
-          "## 2026-08-04 - st2-h6p",
+          "## 2026-08-04 - st-h6p",
           "",
           "Approved-by: JohnnyT",
           "",
@@ -206,7 +206,7 @@ defmodule Mix.Statifier.GateGuardTest do
   test "a ledger entry with no Approved-by line clears nothing" do
     diff =
       file_diff(".quality.exs", ["  strict: false"]) <>
-        ledger_diff(["## 2026-08-04 - st2-h6p", "", "- .quality.exs: loosened credo"])
+        ledger_diff(["## 2026-08-04 - st-h6p", "", "- .quality.exs: loosened credo"])
 
     assert [%{file: ".quality.exs"}] = GateGuard.analyze(source(diff))
   end

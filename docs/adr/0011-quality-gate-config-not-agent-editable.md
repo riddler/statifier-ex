@@ -13,7 +13,7 @@ threshold, not by `--skip` flags or `enabled: false` in `.quality.exs` or
 `.credo.exs`, not by `@tag :skip` on a failing test, not by narrowing scope.
 That rule currently lives only as a reminder an agent has to read and recall
 mid-session; nothing records it as a project decision, and nothing catches a
-violation if an agent forgets. st2-h6p tracks the mechanical half - a check
+violation if an agent forgets. st-h6p tracks the mechanical half - a check
 that catches these edits. This ADR is the policy half: making the rule a
 decision the project has made, not a suggestion an agent might weigh against
 deadline pressure.
@@ -46,7 +46,7 @@ a commit, not a push. It has no trigger, so it stays unauthorized.
 
 - A red gate is a stop-and-ask condition for config changes, same as any
   other action the authority table doesn't name.
-- st2-h6p can cite this ADR as the policy a config-tampering check enforces,
+- st-h6p can cite this ADR as the policy a config-tampering check enforces,
   instead of inventing its own rationale.
 - Reviewers can point at ADR-0011 instead of re-litigating whether a given
   `.quality.exs` edit was legitimate.

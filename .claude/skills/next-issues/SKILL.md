@@ -38,7 +38,7 @@ Parse `$ARGUMENTS`:
   has to rebase past the ones that land first. Offer to run with 4.
 - **`--auto` present** -> **agent-auto mode**: select and claim without
   confirmation. For unattended agents.
-- **One or more bead IDs** (tokens matching the `st2-` id shape) ->
+- **One or more bead IDs** (tokens matching the `st-` id shape) ->
   **explicit-selection mode**: "consider exactly these", not a `bd ready`
   filter. Validate each with `bd show <id>`; an unknown id is reported, not
   silently dropped. Explicit selection skips the `bd ready` listing as the
@@ -153,7 +153,7 @@ finalized, not discovered afterward in a report.
    areas, same as a worktree whose bead cannot be fetched. This is what turns
    a skipped or failed 0.5 into a correct-but-untidy survey instead of a wrong
    one; it is the fix for the failure mode observed live 2026-08-05, where a
-   merged-but-not-removed worktree for st2-o9a caused st2-d9g to be reported
+   merged-but-not-removed worktree for st-o9a caused st-d9g to be reported
    as colliding with work that had already landed on `main` minutes earlier.
 
    If `gh` itself is unavailable for this check, say so once (not once per
@@ -198,8 +198,8 @@ finalized, not discovered afterward in a report.
 
    **Explicit-selection mode:** build the legal options around the requested
    set instead of one greedy walk - the largest legal subset of exactly the
-   requested ids, plus sequencing suggestions for the rest (e.g. "st2-meo
-   alone now, st2-qww.7 after it lands" when they collide, or "st2-qww.7
+   requested ids, plus sequencing suggestions for the rest (e.g. "st-meo
+   alone now, st-qww.7 after it lands" when they collide, or "st-qww.7
    after the live worktree holding `area:skills` merges").
 
 4. **Present the picker (manual mode).** Show the full candidate table first
@@ -214,8 +214,8 @@ finalized, not discovered afterward in a report.
         recommendation - explicit-list subsets, sequencing splits.
      3. **Override**: take a bead despite a named live-worktree or in-batch
         collision. The option text names the specific risk it accepts (e.g.
-        "take st2-qww.7 despite area:skills collision with worktree
-        st2-abc-slug").
+        "take st-qww.7 despite area:skills collision with worktree
+        st-abc-slug").
    - Where it is not available, present the same options as a plain-text list
      and ask for a reply.
 
@@ -287,7 +287,7 @@ finalized, not discovered afterward in a report.
 
    | Bead | Branch | Worktree | tmux window |
    |---|---|---|---|
-   | `st2-abc` | `st2-abc-slug` | `../statifier-ex-worktrees/st2-abc-slug` | `st2-abc-slug` (`@42`) |
+   | `st-abc` | `st-abc-slug` | `../statifier-ex-worktrees/st-abc-slug` | `st-abc-slug` (`@42`) |
 
    Then, always and separately:
 

@@ -56,7 +56,7 @@ Rewrite progress is tracked by beads phases and by the regression ratchet
 
 One file per issue, named for the beads issue ID:
 
-    changelog.d/st2-abc.md
+    changelog.d/st-abc.md
 
 Contents are the Keep a Changelog section heading followed by the entry:
 

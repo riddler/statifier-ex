@@ -99,7 +99,7 @@ is populated.
 Emit also normalizes every generated path segment and module name
 (`tools/corpus/normalize.exs`, shared by both emitters): upstream
 camelCase/acronym/symbol-separated names become snake_case paths and the
-matching PascalCase module segments (`st2-yo4`).
+matching PascalCase module segments (`st-yo4`).
 
 Regeneration was verified reproducible on 2026-08-05: a cold run from an
 empty `scratch/` tree, followed by a second `corpus:emit`, produced a
@@ -113,7 +113,7 @@ waiting for a case-sensitive filesystem to surface it.
 
 Remaining work, tracked in beads:
 
-1. **st2-00p.10** - wire the regression ratchet into `mix quality`.
+1. **st-00p.10** - wire the regression ratchet into `mix quality`.
 
 Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 

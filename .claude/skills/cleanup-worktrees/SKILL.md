@@ -170,7 +170,7 @@ sweep every worktree under `../statifier-ex-worktrees/`.
       prompt with nothing typed - captured raw:
       ```
       ❯ [2mdiscard the model change[0m
-      ❯ [2mbd link st2-meo --depends-on st2-qw9[0m
+      ❯ [2mbd link st-meo --depends-on st-qw9[0m
       ```
       (`[2m` / `[0m` above stand for the literal `ESC [ 2 m` / `ESC [ 0 m`
       bytes.) An empty box with no suggestion at all captures as plain
@@ -255,12 +255,12 @@ sweep every worktree under `../statifier-ex-worktrees/`.
    The merge is the moment that claim becomes true, so it is the moment to close.
 
    **Which beads: read the `Refs:` trailers, not the branch name.** Every commit
-   carries `Refs: st2-xxx` on its own line at the end (`/commit` Step 2), so the
+   carries `Refs: st-xxx` on its own line at the end (`/commit` Step 2), so the
    merged PR's commits say exactly which beads landed:
    ```bash
    gh pr view <number> --json commits --jq '.commits[].messageBody' \
      | grep -E '^Refs:' \
-     | grep -oE 'st2-[a-z0-9]+(\.[0-9]+)?' | sort -u
+     | grep -oE 'st-[a-z0-9]+(\.[0-9]+)?' | sort -u
    ```
    The branch name carries only one ID, so keying on it silently drops every
    other bead a multi-commit branch closed. Trailers scale to a branch carrying
@@ -269,7 +269,7 @@ sweep every worktree under `../statifier-ex-worktrees/`.
    **The `^Refs:` anchor is required, not tidiness.** Commit bodies here
    routinely name other beads in prose - citing a design note, crediting a
    discovery, explaining a deviation - and an unanchored match closes every one
-   of them. Fixture on `main`: `146c69f` names `st2-00p.1` and `st2-gnr` in its
+   of them. Fixture on `main`: `146c69f` names `st-00p.1` and `st-gnr` in its
    body and carries no `Refs:` line at all, so without the anchor a merge
    containing it would close two unrelated beads. Anchored, it correctly closes
    nothing.
@@ -317,13 +317,13 @@ sweep every worktree under `../statifier-ex-worktrees/`.
 
    | Worktree | Result |
    |---|---|
-   | `st2-qww.1-team-maintainer-optin` | merged in PR #6, closed st2-qww.1, session exited, removed, branch deleted, window closed |
-   | `st2-qww.4-close-on-merge` | merged in PR #10, closed st2-qww.4 + st2-qww.6, no window, removed |
-   | `st2-00p.3-regression-ratchet` | open PR #11, kept |
-   | `st2-vbu-strict-credo` | no PR, kept |
-   | `st2-92f-area-labels` | dirty, skipped |
-   | `st2-8k2-send-queue` | merged in PR #13, **session busy, skipped** |
-   | `st2-lzn-tmux-windows` | merged in PR #12, **no `Refs:` trailer, no bead closed** |
+   | `st-qww.1-team-maintainer-optin` | merged in PR #6, closed st-qww.1, session exited, removed, branch deleted, window closed |
+   | `st-qww.4-close-on-merge` | merged in PR #10, closed st-qww.4 + st-qww.6, no window, removed |
+   | `st-00p.3-regression-ratchet` | open PR #11, kept |
+   | `st-vbu-strict-credo` | no PR, kept |
+   | `st-92f-area-labels` | dirty, skipped |
+   | `st-8k2-send-queue` | merged in PR #13, **session busy, skipped** |
+   | `st-lzn-tmux-windows` | merged in PR #12, **no `Refs:` trailer, no bead closed** |
 
    **A busy session is a skip worth naming, not a footnote.** It is the one
    outcome where re-running the sweep later finishes the job on its own, and

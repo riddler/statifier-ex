@@ -9,7 +9,7 @@ argument-hint: ["optional: beads issue ID; omit to detect from the commits' Refs
 
 Take a finished worktree branch from local commits to an open pull request.
 
-This is where the confirmation removed from `/commit --auto` (st2-qww.2) went.
+This is where the confirmation removed from `/commit --auto` (st-qww.2) went.
 A commit on a per-issue branch is private and undone with
 `git reset --soft HEAD~1`; a push and a PR are visible to other people and
 other machines, enter review queues, and send notifications. CLAUDE.md's
@@ -17,7 +17,7 @@ authority table puts the human gate here for exactly that reason, so this skill
 confirms before pushing even when everything else it checks is green.
 
 The bead is **not** closed here. It stays `in_progress` until the branch merges
-into `origin/main` (st2-qww.4). A PR is a request, not an outcome.
+into `origin/main` (st-qww.4). A PR is a request, not an outcome.
 
 ## Input
 
@@ -48,7 +48,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    ```bash
    git log origin/main..HEAD --pretty=%B \
      | grep -E '^Refs:' \
-     | grep -oE 'st2-[a-z0-9]+(\.[0-9]+)?' | sort -u
+     | grep -oE 'st-[a-z0-9]+(\.[0-9]+)?' | sort -u
    ```
    Fall back to the branch prefix only when that finds nothing (a branch whose
    commits predate the `Refs:` convention). The prefix is a creation-time label
@@ -162,14 +162,14 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    including what step 3 found on `origin/main`:
 
    ```
-   Ready to open a PR for st2-xxx - "<issue title>"
+   Ready to open a PR for st-xxx - "<issue title>"
 
-   Branch:    st2-xxx-slug -> main
+   Branch:    st-xxx-slug -> main
    Rebased:   origin/main was already current, no commits replayed
               (or: onto <sha>, N commits replayed)
    Commits:   3
    Gate:      full mix quality green   (or: docs only, no gate applicable)
-   Changelog: changelog.d/st2-xxx.md   (or: not needed - internal tooling)
+   Changelog: changelog.d/st-xxx.md   (or: not needed - internal tooling)
 
    <proposed PR title>
 
@@ -208,7 +208,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    - **What** - the shape of the change, not a file list; the diff has that
    - **Notes** - anything surprising, deliberately deferred, or worth a second
      opinion, plus which gate ran
-   - The bead references: `Closes st2-xxx` for **every** bead the branch's
+   - The bead references: `Closes st-xxx` for **every** bead the branch's
      trailers name, one per line (and the epic, if they share one)
 
    No AI attribution in the title or the body, same rule as commit messages
@@ -233,9 +233,9 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
 9. **Report.**
    ```
    PR opened: <url>
-   Branch:    st2-xxx-slug -> main (3 commits)
+   Branch:    st-xxx-slug -> main (3 commits)
    Gate:      full mix quality green
-   Bead:      st2-xxx in_progress, PR URL recorded, dolt pushed
+   Bead:      st-xxx in_progress, PR URL recorded, dolt pushed
    Next:      merge is a human decision; the bead closes on merge, not here
    ```
 
@@ -247,7 +247,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
   which is why `/commit --auto` producing several commits on a branch is fine
   and needs no cleanup pass. It also means the branch tip never becomes an
   ancestor of `main`, so merge detection anywhere downstream must use `gh` PR
-  state rather than git ancestry (st2-qww.5).
+  state rather than git ancestry (st-qww.5).
 - **Never close the bead here.** `bd close` fires on merge into `origin/main`,
   verified against the remote. Closing at PR-open time asserts to every other
   machine that the work landed when it has not.

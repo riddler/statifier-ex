@@ -146,14 +146,14 @@ Attempt to detect a related beads issue using these strategies in order.
    and use it; the other strategies do not run.
 
 2. **The bead this session was seeded with.** `/new-worktree` names the bead
-   twice in every seeded prompt - in the seed command (`/create-plan st2-abc`)
-   and in the fixed finishing clause ("unrelated to st2-abc"). That is one bead,
+   twice in every seeded prompt - in the seed command (`/create-plan st-abc`)
+   and in the fixed finishing clause ("unrelated to st-abc"). That is one bead,
    in this session, stated by whoever started it. It is a stronger signal than
    anything derived from the branch, and on a branch carrying several beads it
    is the only signal that names the bead *this commit* is for.
 
    This is not the same as inferring from claimed `in_progress` beads, which is
-   ambiguous across parallel worktrees (st2-qww.7) and is not a strategy here.
+   ambiguous across parallel worktrees (st-qww.7) and is not a strategy here.
 
 3. **A plan document in the diff.**
    ```bash
@@ -235,7 +235,7 @@ Adds [concise description of main change]
 - Why it was done
 - Any technical notes or context (ratchet additions, ADR citations)
 
-Refs: st2-xxx
+Refs: st-xxx
 ```
 
 **Style rules**:
@@ -255,7 +255,7 @@ all three hold. These are requirements, not guidelines:
 - No need to mention code quality improvements - they are expected (unless the
   functional change is about code quality)
 - **Issue Reference Rules**:
-  - If an issue was detected/provided, add `Refs: st2-xxx` on its own
+  - If an issue was detected/provided, add `Refs: st-xxx` on its own
     line at the end, preceded by a blank line
   - Only add if the issue was validated via `bd show`
   - If no issue, omit this line entirely
@@ -273,7 +273,7 @@ Show the user the prepared commit in a clear format:
 ```
 I've analyzed your changes and prepared the following:
 
-**Related Issue**: st2-abc - "Implement parallel exit sets" (from seeded prompt)
+**Related Issue**: st-abc - "Implement parallel exit sets" (from seeded prompt)
 
 **Git Commit Message**:
 ```
@@ -283,7 +283,7 @@ Implements exit set computation for parallel states
 - Handles cross-boundary exits out of parallel regions
 - Ratchets 4 newly passing SCION history tests into the registry
 
-Refs: st2-abc
+Refs: st-abc
 ```
 
 **Files to commit**:
@@ -327,7 +327,7 @@ Implements exit set computation for parallel states
 - Handles cross-boundary exits out of parallel regions
 - Ratchets 4 newly passing SCION history tests into the registry
 
-Refs: st2-abc
+Refs: st-abc
 COMMIT_MSG
 )"
    ```
@@ -339,7 +339,7 @@ COMMIT_MSG
    ```
 
    - **CHECK**: Message must NOT contain "Co-Authored-By", "Generated with", or "Claude"
-   - **CHECK**: If issue reference expected, verify "Refs: st2-xxx" appears
+   - **CHECK**: If issue reference expected, verify "Refs: st-xxx" appears
    - **If attribution lines present**: STOP and see "Failure Recovery" section below
 
 5. **Show commit result**:
@@ -353,7 +353,7 @@ COMMIT_MSG
    Commit: [short sha] [commit title]
    Files: [list]
    Gate: full mix quality green   (or: docs only, no quality gate applicable)
-   Issue: st2-xxx (from seeded prompt; left in_progress - it closes on merge)
+   Issue: st-xxx (from seeded prompt; left in_progress - it closes on merge)
    ```
 
    Name the Step 1.5 strategy the bead came from, so a prefix-derived ID is
@@ -443,7 +443,7 @@ If verification shows files weren't committed:
 - Body: same tense as the title
 - Highlight functional changes; skip routine quality-only notes
 - Write as if the user wrote them (no AI attribution - see override instructions)
-- Reference the beads issue with `Refs: st2-xxx` when one applies
+- Reference the beads issue with `Refs: st-xxx` when one applies
 
 ### Workflow:
 - Analyze ALL changes on the branch, not just session context

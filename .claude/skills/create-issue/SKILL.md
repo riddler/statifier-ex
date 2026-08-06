@@ -80,8 +80,8 @@ bd update <id> --add-label area:parser --add-label upstream
 Print the created issue ID and title, e.g.:
 
 ```
-Created st2-b57: Implement compute_exit_set for parallel states (task, p2)
-Linked: depends-on st2-a42; labeled: interpreter
+Created st-b57: Implement compute_exit_set for parallel states (task, p2)
+Linked: depends-on st-a42; labeled: interpreter
 ```
 
 Do not commit, push, or sync the beads database unless explicitly asked.
