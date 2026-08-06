@@ -2,7 +2,7 @@
 name: new-worktree
 description: Create a per-issue worktree under ../statifier-ex-worktrees/ with a new branch off main, warm it (deps, _build, dialyzer PLT) so the first quality run is fast, and open a tmux window there with a Claude session seeded on the bead
 model: sonnet
-argument-hint: ["branch/worktree name, e.g. st2-00p.3-regression-ratchet"]
+argument-hint: ["branch/worktree name, e.g. st-00p.3-regression-ratchet"]
 ---
 
 # New Worktree
@@ -24,7 +24,7 @@ does the same for a batch of beads, once per bead.
 seed the new session with.
 
 **Branch name** (or ask) is also the worktree folder name: `<beads-id>-<slug>`,
-e.g. `st2-00p.3-regression-ratchet`. Keep the slug to 2-4 distinctive kebab-case
+e.g. `st-00p.3-regression-ratchet`. Keep the slug to 2-4 distinctive kebab-case
 words from the issue title, not a full transcription. If given only a bead id,
 ask for the slug - it matters and should not be guessed.
 
@@ -34,7 +34,7 @@ grows to carry more beads (ADR-0010).
 **Seed command** (optional) is what the tmux session in step 5 runs, e.g.:
 
 ```
-/new-worktree st2-00p.3-regression-ratchet -- /work st2-00p.3 --auto
+/new-worktree st-00p.3-regression-ratchet -- /work st-00p.3 --auto
 ```
 
 The seed names the *orchestrator*, not a stage: `/work` sizes the job in the
@@ -160,7 +160,7 @@ a hand-made worktree behaves exactly like a routed one.
    through verbatim, including the leading slash:
 
    ```
-   claude --permission-mode auto --model opus '/work st2-00p.3 --auto.$FINISH'
+   claude --permission-mode auto --model opus '/work st-00p.3 --auto.$FINISH'
    ```
 
    With no seed command, fall back to the same orchestrator:
@@ -188,9 +188,9 @@ a hand-made worktree behaves exactly like a routed one.
    the user is sitting in. A `;` after a failed `new-window` is enough to do it:
    this cost a live window during development of this step (2026-08-02).
 
-   `<id>` is the bead id at the front of the branch name (`st2-lzn` from
-   `st2-lzn-tmux-window-per-worktree`, `st2-00p.3` from
-   `st2-00p.3-regression-ratchet`).
+   `<id>` is the bead id at the front of the branch name (`st-lzn` from
+   `st-lzn-tmux-window-per-worktree`, `st-00p.3` from
+   `st-00p.3-regression-ratchet`).
 
    Two details are load-bearing:
 
@@ -199,10 +199,10 @@ a hand-made worktree behaves exactly like a routed one.
      `renumber-windows on` (which renumbers every window whenever one is
      closed), unambiguous against a session or window whose name shares a
      prefix, and it sidesteps `session:window.pane` parsing entirely for the
-     dotted bead ids this repo uses (`st2-00p.3-...`).
+     dotted bead ids this repo uses (`st-00p.3-...`).
 
      Note: tmux 3.6b does in fact resolve
-     `statifier-ex:st2-00p.3-regression-ratchet` to the right window - the
+     `statifier-ex:st-00p.3-regression-ratchet` to the right window - the
      dotted name is not ambiguous in practice, tested 2026-08-02. Window id is
      still what to use, but for renumbering stability, not because name
      targeting is broken.
@@ -248,7 +248,7 @@ a hand-made worktree behaves exactly like a routed one.
   the job.
 - **A seeded session cannot spawn a nested `claude` session of its own.**
   `--permission-mode auto` (step 5) blocks `tmux send-keys ... 'claude' Enter`
-  via the auto-mode classifier - observed live 2026-08-03 in the st2-5bk
+  via the auto-mode classifier - observed live 2026-08-03 in the st-5bk
   worktree, needed as a fixture for a bead whose acceptance criteria required
   observing a live session's terminal rendering. This is not model-specific;
   the classifier decision is the same regardless of which model is driving.

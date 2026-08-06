@@ -13,7 +13,7 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
-## 2026-08-06 - st2-l42
+## 2026-08-06 - st-l42
 
 Approved-by: JohnnyT (in session)
 
@@ -22,7 +22,7 @@ Approved-by: JohnnyT (in session)
 
 Reason: `test/statifier_test.exs` was the `mix new` scaffold ("greets the
 world" against `Statifier.hello/0`), deleted as part of backfilling sabotage
-notes (st2-l42's acceptance criterion: give the scaffold test a real
+notes (st-l42's acceptance criterion: give the scaffold test a real
 assertion or remove it - it had neither real behavior nor a doctest
 distinct from the one already covering the same function). `hello/0` was
 removed from `lib/statifier.ex` alongside it, so nothing this entry drops was
@@ -31,7 +31,7 @@ test.regression`) fails outright with a dead entry left in place, since it
 matches no file on disk. Removes a dead reference; loosens no check, skips no
 test, and lowers no threshold.
 
-## 2026-08-06 - st2-00p.10
+## 2026-08-06 - st-00p.10
 
 Approved-by: JohnnyT (in session)
 
@@ -46,7 +46,7 @@ loop profile's `stages:` allow-list, so `mix quality --profile loop` does not
 run it. Adds a stage; loosens nothing, skips no existing check, and lowers no
 threshold.
 
-## 2026-08-05 - st2-qcc
+## 2026-08-05 - st-qcc
 
 Approved-by: JohnnyT (in session)
 
@@ -66,7 +66,7 @@ skips cleanly (claude CLI not on PATH, no lib/statifier/ changes, no base
 ref) rather than failing when it cannot run. Adds a stage; loosens nothing,
 skips no existing check, and lowers no threshold.
 
-## 2026-08-04 - st2-meo
+## 2026-08-04 - st-meo
 
 Approved-by: JohnnyT (in session)
 
@@ -76,7 +76,7 @@ Reason: adds the ADR guard to the run, so a likely violation of ADR-0002,
 0003, 0004 or 0008 is a named failure. Adds a stage; loosens nothing, skips
 nothing, and lowers no threshold.
 
-## 2026-08-04 - st2-h6p
+## 2026-08-04 - st-h6p
 
 Approved-by: JohnnyT (in session)
 
@@ -85,7 +85,7 @@ Approved-by: JohnnyT (in session)
 Reason: bootstraps the check itself. Adds a stage to the run; loosens nothing,
 skips nothing, and lowers no threshold.
 
-## 2026-08-05 - st2-21b
+## 2026-08-05 - st-21b
 
 Approved-by: JohnnyT (in session)
 

@@ -24,7 +24,7 @@ You are tasked with conducting comprehensive research across the codebase to ans
 When this command is invoked:
 
 1. **Check if a beads issue ID was provided as a parameter**:
-   - If an issue ID is provided (e.g., `/research-codebase st2-a42`), skip the default message
+   - If an issue ID is provided (e.g., `/research-codebase st-a42`), skip the default message
    - Proceed directly to the Beads Issue Research workflow below
 
 2. **If no parameters provided**, respond with:
@@ -33,7 +33,7 @@ When this command is invoked:
 I'm ready to research the codebase. Please provide:
 
 - A research question or area of interest, OR
-- A beads issue ID (e.g., st2-a42) to research
+- A beads issue ID (e.g., st-a42) to research
 
 I'll analyze it thoroughly by exploring relevant components and connections.
 ```
@@ -83,7 +83,7 @@ Use the issue as the research prompt:
   - Dependencies and integration points
 - Apply all the standard research workflow steps below
 - The final research document filename should include the issue ID
-  (e.g., `docs/research/260802-st2-a42-parallel-exit-sets.md`)
+  (e.g., `docs/research/260802-st-a42-parallel-exit-sets.md`)
 
 ### Step 4: After Research Completes
 
@@ -169,7 +169,7 @@ Use the issue as the research prompt:
        - issue-id is the beads issue ID (omit if none)
        - description is a brief kebab-case description of the research topic
      - Examples:
-       - With issue: `260802-st2-a42-parallel-exit-sets.md`
+       - With issue: `260802-st-a42-parallel-exit-sets.md`
        - Without issue: `260802-history-restoration-flow.md`
 
 6. **Generate research document:**

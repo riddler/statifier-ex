@@ -2,7 +2,7 @@
 name: refresh-worktree
 description: Rebase live worktrees onto the latest origin/main after a branch lands, repair their build caches if mix.lock moved, and confirm each is green again
 model: sonnet
-argument-hint: ["optional: one worktree/branch name, e.g. st2-uot-refresh-worktree; omit to sweep all"]
+argument-hint: ["optional: one worktree/branch name, e.g. st-uot-refresh-worktree; omit to sweep all"]
 ---
 
 # Refresh Worktree
@@ -17,7 +17,7 @@ That staleness is the failure mode this skill exists to prevent: a worktree that
 was green when created goes red for reasons that have nothing to do with the
 work inside it, and the agent working there starts debugging its own change.
 
-Pairs with the merge-time cleanup in st2-qww.5 - same moment, opposite
+Pairs with the merge-time cleanup in st-qww.5 - same moment, opposite
 direction: that one removes the worktree of the branch that just landed, this
 one refreshes the survivors.
 
@@ -84,7 +84,7 @@ feature branch and is not rebased.
       git -C <path> rebase --abort                     # abort
       ```
       A rebase conflict means two branches touched the same files, which means
-      the `area:` labels were wrong or the batch was picked badly (st2-92f).
+      the `area:` labels were wrong or the batch was picked badly (st-92f).
       That is signal for a human, not something to paper over mid-sweep;
       aborting leaves the worktree exactly as it was. Name the conflicting
       files in the report and mark it `conflict`. `bd merge-slot` is the
@@ -133,27 +133,27 @@ feature branch and is not rebased.
 
    | Worktree | Result |
    |---|---|
-   | `st2-00p.3-regression-ratchet` | rebased onto 146c69f, lock unchanged, loop green |
-   | `st2-00p.4-corpus-layout` | current, skipped |
-   | `st2-qww.1-team-maintainer` | **conflict** in `docs/workflow.md`, aborted, unchanged |
-   | `st2-vbu-strict-credo` | dirty, skipped |
+   | `st-00p.3-regression-ratchet` | rebased onto 146c69f, lock unchanged, loop green |
+   | `st-00p.4-corpus-layout` | current, skipped |
+   | `st-qww.1-team-maintainer` | **conflict** in `docs/workflow.md`, aborted, unchanged |
+   | `st-vbu-strict-credo` | dirty, skipped |
 
    End with the ones needing a human: conflicts, dirty worktrees, red gates.
    Silence about a skipped worktree reads as success.
 
 ## Guidelines
 
-- **Rebase, never merge.** The repo allows rebase merging only (st2-qww.5), so
+- **Rebase, never merge.** The repo allows rebase merging only (st-qww.5), so
   keeping branches linear against `main` matches how they will land and avoids
   a merge commit the PR cannot use.
 - **Nothing here is pushed.** Rebasing a branch rewrites its commits; if it has
   already been pushed, its remote counterpart now diverges and the eventual
   push needs `--force-with-lease`. That is `/merge-request`'s decision to make
-  (st2-qww.3), not this skill's.
+  (st-qww.3), not this skill's.
 - **When to run:** after any branch merges into `origin/main`, and always after
   a change that moved `mix.lock`, `.quality.exs`, or `.credo.exs` - those move
   the gate every other worktree is measured against. Once the merge path is
-  automated (st2-qww.4), whatever closes the loop on a merge should invoke this
+  automated (st-qww.4), whatever closes the loop on a merge should invoke this
   so "a branch landed" and "everyone else is current" are one event.
 - A sweep is safe to re-run: current worktrees are skipped, and the fast path
   costs a `merge-base` check.

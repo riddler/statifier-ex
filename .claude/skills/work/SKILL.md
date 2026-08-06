@@ -22,7 +22,7 @@ own model.
 
 Parse `$ARGUMENTS`:
 
-- **A token matching the `st2-` id shape** (`st2-abc`, `st2-00p.3`) ->
+- **A token matching the `st-` id shape** (`st-abc`, `st-00p.3`) ->
   **bead mode**: that is the bead to work.
 - **`--auto` present** -> **unattended mode**: no checkpoint pauses, no
   questions. This is what `/new-worktree` seeds. Without it, `/work` pauses at
@@ -30,8 +30,8 @@ Parse `$ARGUMENTS`:
 - **Anything else** -> **intake mode**: the free text is the work description
   and a bead must be created from it before anything else happens.
 
-    /work st2-abc                                  # bead mode, interactive
-    /work st2-abc --auto                           # bead mode, unattended
+    /work st-abc                                  # bead mode, interactive
+    /work st-abc --auto                           # bead mode, unattended
     /work "add retry backoff to the send queue"    # intake mode
 
 ## Step 0: Locate self
@@ -179,7 +179,7 @@ Every spawn obeys these invariants:
   stage.
 - **Never a nested `claude` CLI.** A seeded session cannot spawn one -
   `--permission-mode auto`'s classifier blocks `tmux send-keys ... 'claude'`
-  (st2-d9g, and `new-worktree/SKILL.md`'s closing note). In-process Agent
+  (st-d9g, and `new-worktree/SKILL.md`'s closing note). In-process Agent
   subagents are unaffected and are the only mechanism this skill uses.
 
 ### Direction stage prompt

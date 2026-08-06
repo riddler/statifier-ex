@@ -26,7 +26,7 @@ Planning runs on the Opus tier per docs/workflow.md (implementation runs on Sonn
 - `description` = brief kebab-case description
 
 Examples:
-- `docs/plans/260802-st2-a42-parallel-exit-sets.md`
+- `docs/plans/260802-st-a42-parallel-exit-sets.md`
 - `docs/plans/260802-improve-error-events.md`
 
 **NEVER** write the plan to `.claude/`, the project root, or any other directory.
@@ -59,7 +59,7 @@ When this command is invoked:
    - Begin the research process
    - **Supported inputs**:
      - Research docs: `docs/research/YYMMDD-topic.md`
-     - Beads issue IDs: e.g. `st2-a42` (fetch with `bd show st2-a42`)
+     - Beads issue IDs: e.g. `st-a42` (fetch with `bd show st-a42`)
 
 2. **If no parameters provided**, respond with:
 
@@ -74,7 +74,7 @@ Please provide:
 I'll analyze this information and work with you to create a comprehensive plan.
 
 Examples:
-- `/create-plan st2-a42` (beads issue ID)
+- `/create-plan st-a42` (beads issue ID)
 - `/create-plan docs/research/260802-history-restoration-flow.md`
 - `/create-plan think deeply about docs/research/260802-history-restoration-flow.md`
 ```
@@ -259,7 +259,7 @@ After structure approval:
 
 ## Overview
 
-[Brief description of what we're implementing and why. Beads issue: st2-xxx]
+[Brief description of what we're implementing and why. Beads issue: st-xxx]
 
 ## Current State Analysis
 
@@ -345,7 +345,7 @@ After structure approval:
 - Source document: `docs/research/[relevant].md`
 - Related ADRs: `docs/adr/NNNN-...`
 - Similar implementation: `[file:line]`
-- Beads issue: `st2-xxx`
+- Beads issue: `st-xxx`
 ````
 
 ### Step 5: Review
@@ -513,10 +513,10 @@ tasks = [
 ### From a beads issue:
 
 ```
-User: /create-plan st2-a42
-Assistant: Let me fetch the details for issue st2-a42...
+User: /create-plan st-a42
+Assistant: Let me fetch the details for issue st-a42...
 
-[Runs bd show st2-a42]
+[Runs bd show st-a42]
 
 Based on the issue, I understand we need to implement parallel-state exit set computation. Let me research the codebase...
 
