@@ -15,6 +15,7 @@
 | [0011](0011-quality-gate-config-not-agent-editable.md) | Quality gate config is not agent-editable | accepted |
 | [0012](0012-debuggability-designed-into-the-core.md) | Debuggability is designed into the core | accepted |
 | [0013](0013-archive-v1-statifier-repo-in-place.md) | Archive the v1 statifier repo in place | accepted |
+| [0014](0014-expression-spans-in-cond-diagnostics.md) | Expression-level spans are part of the retained-location constraint | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
