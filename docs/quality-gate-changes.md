@@ -13,6 +13,21 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-06 - st2-00p.10
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: registers the regression custom stage, which runs `mix
+  test.regression` against `test/passing_tests.json`
+
+Reason: makes a regression ratchet failure a named stage (`Regression
+ratchet`) instead of a count buried in the Tests stage's own output
+(docs/testing.md). It is a reader - like the Tests stage, it reads the build
+Compile already produced rather than writing to it - and is absent from the
+loop profile's `stages:` allow-list, so `mix quality --profile loop` does not
+run it. Adds a stage; loosens nothing, skips no existing check, and lowers no
+threshold.
+
 ## 2026-08-05 - st2-qcc
 
 Approved-by: JohnnyT (in session)
