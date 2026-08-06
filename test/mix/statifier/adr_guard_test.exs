@@ -344,5 +344,54 @@ defmodule Mix.Statifier.AdrGuardTest do
       assert {:ok, %{diff: diff}} = AdrGuard.collect(base: "HEAD")
       assert is_binary(diff)
     end
+
+    # `git diff --no-index` normally exits 0 or 1; any other status means the
+    # comparison itself failed, and the untracked file is dropped rather than
+    # reported with a garbled diff. Mirrors the same guard in
+    # Mix.Statifier.AdrJudge.
+    # sabotage: widen `status in [0, 1]` to `is_integer(status)`, so a status
+    #           2 also reads as a diffable output -> red (the "fatal:
+    #           unreadable file" text leaks into the diff instead of being
+    #           dropped)
+    test "an untracked file git cannot diff contributes nothing rather than garbage" do
+      untracked = fn
+        ["rev-parse" | _rest] = args ->
+          if List.last(args) == "origin/main", do: {"origin/main\n", 0}, else: {"", 1}
+
+        ["merge-base" | _rest] ->
+          {"abc123\n", 0}
+
+        ["ls-files" | _rest] ->
+          {"lib/statifier/broken.ex\n", 0}
+
+        ["diff", "--no-index" | _rest] ->
+          {"fatal: unreadable file\n", 2}
+
+        ["diff" | _rest] ->
+          {"", 0}
+
+        _other ->
+          {"", 1}
+      end
+
+      assert {:ok, %{diff: diff}} = AdrGuard.collect(runner: untracked)
+      assert diff == ""
+    end
+  end
+
+  # `@@` headers with no `-<n> +<n>` shape are not something a real diff
+  # emits, but the parser falls back to line 0 rather than crashing on one.
+  # sabotage: have hunk_start/1 fall back to 1 instead of 0 on an
+  #           unparseable header -> red
+  test "an unparseable hunk header falls back to line 0 rather than crashing" do
+    diff = """
+    diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+    --- a/lib/statifier/interpreter.ex
+    +++ b/lib/statifier/interpreter.ex
+    @@ garbled hunk header @@
+    +    Logger.debug("x")
+    """
+
+    assert [%{line: 0, check: "adr-0003-effects"}] = AdrGuard.analyze(%{diff: diff})
   end
 end

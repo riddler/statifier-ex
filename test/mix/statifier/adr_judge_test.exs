@@ -341,6 +341,16 @@ defmodule Mix.Statifier.AdrJudgeTest do
       assert {:error, message} = AdrJudge.parse_cli_response("not json")
       assert message =~ "not json"
     end
+
+    # `JSON.decode/1` can succeed on valid JSON that is not a list at all (an
+    # object, here), which find_result/1 must not crash on.
+    # sabotage: have find_result/1 wrap a non-list in `[other]` instead of
+    #           falling back to `%{}` -> red (a top-level object with its own
+    #           "type" key could then masquerade as the result event)
+    test "a non-list decoded response is an error rather than crashing" do
+      assert {:error, message} = AdrJudge.parse_cli_response(~s({"unexpected": "shape"}))
+      assert message =~ "unparseable or error result"
+    end
   end
 
   describe "collect/1" do

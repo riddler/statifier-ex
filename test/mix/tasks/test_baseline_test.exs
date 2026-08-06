@@ -108,6 +108,22 @@ defmodule Mix.Tasks.Test.BaselineTest do
       refute_received {:ran, _other}
     end
 
+    # sabotage: have categories("w3c") return {:ok, [:scion]} instead of
+    #           {:ok, [:w3c]} -> red
+    @tag :tmp_dir
+    test "--only w3c restricts the scan to the w3c suite", %{tmp_dir: tmp_dir} do
+      w3c = corpus(tmp_dir, "scxml_tests/test144_test.exs")
+      corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      path = registry(tmp_dir)
+
+      capture_io(fn ->
+        assert :ok = Baseline.execute(["--only", "w3c", "--registry", path], opts(tmp_dir))
+      end)
+
+      assert_received {:ran, ^w3c}
+      refute_received {:ran, _other}
+    end
+
     @tag :tmp_dir
     test "rejects an unknown suite", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir)
@@ -225,6 +241,40 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert_raise Mix.Error, ~r/could not read/, fn ->
         Baseline.run(["--registry", "no/such.json"])
       end
+    end
+
+    # Exercises the real `mix test` shell-out (mix_test/1, the default
+    # `opts[:runner]`) rather than a stub, and calls run/1 itself - the only
+    # way to reach run/1's `:ok -> :ok` clause, which no other test in this
+    # file reaches. run/1 has no `opts` parameter to inject a stub through, so
+    # this spawns exactly one real nested `mix test` process (`add` verifies
+    # one file at a time) against a throwaway file that always passes,
+    # instead of the whole suite. The file is `internal`-categorized (no
+    # scion_tests/scxml_tests in its path), so it is verified but not written
+    # to the registry - internal tests are covered by the registry's globs
+    # already.
+    # sabotage: have mix_test/1 return a hardcoded 1 instead of the real
+    #           status -> red (the always-passing dummy file would then be
+    #           reported as not passing)
+    @tag :tmp_dir
+    test "run/1 returns :ok for a real passing add", %{tmp_dir: tmp_dir} do
+      dummy = Path.join(tmp_dir, "baseline_dummy_test.exs")
+
+      File.write!(dummy, """
+      defmodule Statifier.BaselineDummyTest do
+        use ExUnit.Case, async: true
+
+        test "trivially true" do
+          assert true
+        end
+      end
+      """)
+
+      path = registry(tmp_dir)
+
+      capture_io(fn ->
+        assert :ok = Baseline.run(["add", dummy, "--registry", path])
+      end)
     end
   end
 

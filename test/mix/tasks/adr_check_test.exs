@@ -125,6 +125,20 @@ defmodule Mix.Tasks.Adr.CheckTest do
     assert {:ok, %{"stats" => %{"finding_count" => 1}}} = JSON.decode(json)
   end
 
+  # Exercises the real `git` shell-out rather than an injected runner, so the
+  # default `opts \\ []` clause of execute/2 is asserted too - every other
+  # test in this file injects a runner explicitly, which never reaches that
+  # default. `--base HEAD` is used because it always resolves, so the outcome
+  # here does not depend on which branches exist in the checkout.
+  # sabotage: change execute/2's default opts from `[]` to
+  #           `[runner: fn _ -> {"", 1} end]` -> red (a runner that fails
+  #           every git call forces `:no_base_ref`, which the real default
+  #           never produces for a ref that always resolves)
+  test "execute/1 falls back to the real git runner" do
+    assert {tag, _output} = Check.execute(["--base", "HEAD", "--format", "json"])
+    refute tag == :skip
+  end
+
   describe "without --format json" do
     # sabotage: print the JSON document when no format is given -> red
     test "a finding is reported as prose naming the file, check and next step" do
