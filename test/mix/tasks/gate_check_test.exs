@@ -160,5 +160,20 @@ defmodule Mix.Tasks.Gate.CheckTest do
       assert {:error, output} = Check.execute([], runner: resolving(diff))
       assert IO.iodata_to_binary(output) =~ "test/statifier/document_test.exs:42"
     end
+
+    # sabotage: have skipped/1's non-json clause return the JSON document too -> red
+    test "no base ref is a skip that writes its own reason as prose" do
+      assert {:skip, output} = Check.execute([], runner: runner([]))
+      assert IO.iodata_to_binary(output) == "no base ref: neither origin/main nor main resolves"
+    end
+
+    # sabotage: have failed/2's non-json clause drop the reason from the message -> red
+    test "a failing git command reports the reason as prose" do
+      responses = [{"origin/main", {"origin/main\n", 0}}, {"merge-base", {"fatal: bad\n", 128}}]
+
+      assert {:error, output} = Check.execute([], runner: runner(responses))
+      assert IO.iodata_to_binary(output) =~ "gate check could not read git:"
+      assert IO.iodata_to_binary(output) =~ "exited 128"
+    end
   end
 end
