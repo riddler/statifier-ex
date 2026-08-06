@@ -197,6 +197,33 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     assert {:ok, %{"stats" => %{"finding_count" => 1}}} = JSON.decode(json)
   end
 
+  # Exercises the real `git` shell-out and real `System.find_executable/1`
+  # rather than injected stubs, so the default `opts \\ []` clause of
+  # execute/2 is asserted too - every other test in this file injects both
+  # explicitly, which never reaches that default. `--base HEAD` is used
+  # because it always resolves and this checkout's own working tree never
+  # touches lib/statifier/ (only test/ files), so `collect/1` always returns
+  # before ever calling a `caller` - this can never shell out to the real
+  # `claude` CLI, regardless of whether it happens to be on this machine's
+  # PATH.
+  #
+  # This asserts the specific "no core changes" skip reason, which assumes
+  # the `claude` CLI is on PATH in the environment running this suite (true
+  # of every developer/CI environment this task is built for - it is the
+  # tool `mix adr.judge` itself shells out to). If that assumption ever stops
+  # holding here, this test needs `cli_available: true` added back like
+  # every other test in the file.
+  # sabotage: change execute/2's default opts from `[]` to
+  #           `[cli_available: false]` -> red: the unsabotaged default reaches
+  #           git and finds no lib/statifier/ diff against HEAD, while the
+  #           sabotaged default never gets past the CLI check, so the skip
+  #           reason changes from "no lib/statifier/ files in this diff" to
+  #           "claude CLI not on PATH"
+  test "execute/1 falls back to the real cli_available and git checks" do
+    assert {:skip, json} = Judge.execute(["--base", "HEAD", "--format", "json"])
+    assert {:ok, %{"summary" => "no lib/statifier/ files in this diff"}} = JSON.decode(json)
+  end
+
   describe "without --format json" do
     # sabotage: print the JSON document when no format is given -> red
     test "a finding is reported as prose naming the file, check and next step" do

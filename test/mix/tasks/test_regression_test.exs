@@ -96,6 +96,36 @@ defmodule Mix.Tasks.Test.RegressionTest do
     end
   end
 
+  # Exercises the real `mix test` shell-out (mix_test/1, the default
+  # `opts[:runner]`) rather than a stub, and calls run/1 itself rather than
+  # execute/2 - the only way to reach run/1's `:ok -> :ok` clause, which no
+  # other test in this file reaches. run/1 has no `opts` parameter to inject a
+  # stub through, so this spawns exactly one real nested `mix test` process
+  # against a throwaway file that always passes, instead of the whole suite.
+  # sabotage: have mix_test/1 return a hardcoded 1 instead of the real
+  #           status -> red (the always-passing dummy file would then be
+  #           reported as a regression)
+  @tag :tmp_dir
+  test "run/1 returns :ok for a real passing run", %{tmp_dir: tmp_dir} do
+    dummy = Path.join(tmp_dir, "regression_dummy_test.exs")
+
+    File.write!(dummy, """
+    defmodule Statifier.RegressionDummyTest do
+      use ExUnit.Case, async: true
+
+      test "trivially true" do
+        assert true
+      end
+    end
+    """)
+
+    path = registry(tmp_dir, %{"internal_tests" => [dummy]})
+
+    capture_io(fn ->
+      assert :ok = Regression.run(["--registry", path])
+    end)
+  end
+
   test "defaults to the project registry path" do
     assert {:error, message} = Regression.execute(["--registry", "no/such.json"])
     assert message =~ "no/such.json"
