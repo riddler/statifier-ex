@@ -13,6 +13,28 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-06 - st-4hk
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: header comment says "Statifier-ex" instead of "Statifier v2"
+- .credo.exs: two comment references to the bead that generated it are now
+  `st-vbu` instead of `st2-vbu`
+- .sobelow-conf: header comment says "Statifier-ex (st-21b)" instead of
+  "Statifier v2 (st2-21b)"
+
+Reason: the project renamed statifier_2 -> statifier-ex and the bd issue
+prefix migrated st2 -> st, so these three lines name a project and two beads
+that no longer exist. All four edits are inside comments: no check is added,
+removed, reordered, or reconfigured, no threshold moves, and the three files
+parse to exactly the configuration they did before. The entry exists because
+the guard is mechanical about the path, not because the change is a judgment
+call about a check - but it is recorded here rather than exempted, since the
+guard's value comes from having no path around it. The rest of the rename
+landed in PR #55 and in this branch's first commit; these were held back
+because ADR-0011 makes editing a guarded file a human's call even when the
+edit is a comment.
+
 ## 2026-08-06 - st-l42
 
 Approved-by: JohnnyT (in session)
