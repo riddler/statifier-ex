@@ -14,12 +14,6 @@
   "test302" => {:needs_script, "conf:script - predicator has no statement layer"},
   "test303" => {:needs_script, "conf:script"},
   "test304" => {:needs_script, "conf:script"},
-  "test224" =>
-    {:needs_predicator_feature,
-     "conf:varPrefix - no string prefix/substring function (docs/datamodel.md seam 5)"},
-  "test525" =>
-    {:needs_predicator_feature,
-     "conf:extendArray - no list concatenation; `Var1 + [4]` raises TypeMismatchError (docs/datamodel.md seam 6)"},
   "test509" => {:needs_basichttp, "BasicHTTP Event I/O Processor MUST accept POST requests"},
   "test510" =>
     {:needs_basichttp, "BasicHTTP Event I/O Processor MUST validate and enqueue the message"},
