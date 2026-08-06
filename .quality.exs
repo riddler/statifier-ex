@@ -48,13 +48,6 @@
   # It reads git and source and writes nothing, so it is a reader. It is absent
   # from the loop profile's stages, so it is a pre-commit concern rather than an
   # every-edit one.
-  #
-  # Once the conformance corpus is ported, the regression ratchet joins it as a
-  # stage of its own, so a regression is a named failure rather than a buried
-  # test count:
-  #
-  #   [key: :regression, name: "Regression ratchet", command: "mix",
-  #    args: ["test.regression"]]
   custom: [
     [
       key: :gate_guard,
@@ -63,6 +56,35 @@
       args: ["gate.check", "--format", "json"],
       kind: :reader,
       skip_exit_code: 2
+    ],
+    # The regression ratchet (test/passing_tests.json) is the set of tests that
+    # must always pass; `mix test.regression` runs exactly what it expands to,
+    # so a regression is a named stage failure instead of a count buried in the
+    # Tests stage's own output (docs/testing.md). Compile has already built
+    # dev and test by the time the analysis phase starts, so - like the Tests
+    # stage itself - this reads the existing build rather than writing to it,
+    # and is a reader. `stages:` in a profile is an allow-list, so leaving
+    # :regression off the loop profile's explicit list below is what keeps it
+    # out - no separate opt-out is needed - and it runs only on a bare
+    # `mix quality`.
+    #
+    # Today `internal_tests` globs cover nearly the whole internal suite, so on
+    # a bare `mix quality` this largely re-runs work the Tests stage already
+    # did. That duplication is accepted for now rather than narrowing the
+    # registry to dodge it: `test/passing_tests.json` is itself a guarded path
+    # (ADR-0011), so trimming it to avoid overlap would need its own ledger
+    # entry and would weaken the ratchet's coverage to make the gate faster -
+    # backwards for what this stage exists to protect. The conformance lists
+    # (`scion_tests`, `w3c_tests`) are still empty; once `mix test.baseline`
+    # starts growing them, this stage's marginal cost over the Tests stage
+    # shrinks toward zero and its value - a named failure instead of a buried
+    # count - becomes the point.
+    [
+      key: :regression,
+      name: "Regression ratchet",
+      command: "mix",
+      args: ["test.regression"],
+      kind: :reader
     ],
     # The ADR guard reads the same diff for lines that look like violations of
     # the mechanically-checkable ADRs (0002 naming, 0003 effects, 0004 eval,

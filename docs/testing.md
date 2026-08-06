@@ -89,7 +89,9 @@ been trusted for a year.
   tags the excluded-by-default suites need. Any failure is a blocking regression, and
   an entry that matches no file on disk fails the run too: silently dropping a deleted
   entry would shrink the ratchet, which is the one thing it exists to prevent. Wired
-  into `mix quality` as a custom stage once the corpus lands (st2-00p.10).
+  into `mix quality` as the `Regression ratchet` custom stage (`.quality.exs`), absent
+  from the `:loop` profile so a regression is a named failure on a bare `mix quality`
+  rather than a buried test count.
 - `mix test.baseline` - runs every conformance test the registry does not track yet,
   one file at a time, and reports which now pass. `--add` ratchets those in;
   `mix test.baseline add <files>` verifies specific files and is all-or-nothing.
