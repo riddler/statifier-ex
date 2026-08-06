@@ -13,6 +13,24 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-06 - st2-l42
+
+Approved-by: JohnnyT (in session)
+
+- test/passing_tests.json: removes the literal `test/statifier_test.exs`
+  entry from `internal_tests`
+
+Reason: `test/statifier_test.exs` was the `mix new` scaffold ("greets the
+world" against `Statifier.hello/0`), deleted as part of backfilling sabotage
+notes (st2-l42's acceptance criterion: give the scaffold test a real
+assertion or remove it - it had neither real behavior nor a doctest
+distinct from the one already covering the same function). `hello/0` was
+removed from `lib/statifier.ex` alongside it, so nothing this entry drops was
+verifying real behavior; the ratchet's own regression stage (`mix
+test.regression`) fails outright with a dead entry left in place, since it
+matches no file on disk. Removes a dead reference; loosens no check, skips no
+test, and lowers no threshold.
+
 ## 2026-08-06 - st2-00p.10
 
 Approved-by: JohnnyT (in session)

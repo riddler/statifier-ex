@@ -110,16 +110,20 @@ defmodule Statifier.FeatureDetectorTest do
   }
 
   describe "detect_features/1" do
+    # sabotage: n/a - FeatureDetector lives in test/support/, not lib/; each
+    #           generated test asserts one @samples entry against it
     for {feature, xml} <- @samples do
       test "detects #{feature}" do
         assert unquote(feature) in FeatureDetector.detect_features(unquote(xml))
       end
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "returns an empty set for a document with no recognised features" do
       assert MapSet.new() == FeatureDetector.detect_features(~s(<scxml version="1.0"/>))
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "detects several features in one document" do
       xml = """
       <scxml>
@@ -149,6 +153,7 @@ defmodule Statifier.FeatureDetectorTest do
              )
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "does not mistake finalize for a final state" do
       xml = ~s(<scxml><state id="s"><invoke><finalize/></invoke></state></scxml>)
       features = FeatureDetector.detect_features(xml)
@@ -157,6 +162,7 @@ defmodule Statifier.FeatureDetectorTest do
       refute :final_states in features
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "does not report eventless or targetless transitions when both are present" do
       xml = ~s(<scxml><state id="s"><transition event="go" target="t"/></state></scxml>)
       features = FeatureDetector.detect_features(xml)
@@ -167,18 +173,21 @@ defmodule Statifier.FeatureDetectorTest do
   end
 
   describe "feature_registry/0" do
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "every feature is unsupported until an engine lands" do
       assert Enum.all?(FeatureDetector.feature_registry(), fn {_feature, status} ->
                status == :unsupported
              end)
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "statuses are drawn from the known set" do
       assert Enum.all?(FeatureDetector.feature_registry(), fn {_feature, status} ->
                status in [:supported, :partial, :unsupported]
              end)
     end
 
+    # sabotage: add a feature_registry/0 entry with no matching @samples key -> red
     test "every registry entry has a detection sample" do
       assert MapSet.new(Map.keys(FeatureDetector.feature_registry())) ==
                MapSet.new(Map.keys(@samples))
@@ -186,11 +195,13 @@ defmodule Statifier.FeatureDetectorTest do
   end
 
   describe "validate_features/1" do
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "accepts an empty set" do
       assert {:ok, features} = FeatureDetector.validate_features(MapSet.new())
       assert MapSet.size(features) == 0
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "reports unsupported features by name" do
       assert {:error, unsupported} =
                FeatureDetector.validate_features(MapSet.new([:basic_states, :send_elements]))
@@ -198,6 +209,7 @@ defmodule Statifier.FeatureDetectorTest do
       assert unsupported == MapSet.new([:basic_states, :send_elements])
     end
 
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "treats a feature missing from the registry as unsupported" do
       assert {:error, unsupported} =
                FeatureDetector.validate_features(MapSet.new([:not_a_real_feature]))
