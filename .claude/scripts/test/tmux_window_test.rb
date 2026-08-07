@@ -74,6 +74,29 @@ class TmuxWindowClassifyTest < Minitest::Test
     text = fixture("dim_placeholder.txt")
     assert_equal "idle", TmuxWindow.classify(text)
   end
+
+  # Input chips (st-byl): a pasted-text placeholder, a pasted-image
+  # placeholder, and an @-file mention, captured 2026-08-07 from a real
+  # st-byl-capture:1 session via tmux load-buffer/paste-buffer, C-v against a
+  # clipboard PNG, and a literal send-keys of "@README.md". None of the three
+  # came back dim-wrapped, so no idle-rule change was needed - these tests
+  # exist to keep that verified rather than merely asserted in a bead.
+  # sabotage: last.sub(/\A.*?❯ ?/, "") changed to strip the whole line instead
+  # of just the prefix, so after_marker is always "" -> red (every chip test
+  # here goes idle)
+  def test_pasted_text_chip_is_busy
+    assert_equal "busy", TmuxWindow.classify(fixture("chip_pasted_text.txt"))
+  end
+
+  # sabotage: wholly_dim_wrapped? changed to `true` unconditionally -> red
+  def test_pasted_image_chip_is_busy
+    assert_equal "busy", TmuxWindow.classify(fixture("chip_image.txt"))
+  end
+
+  # sabotage: only_styling? changed to always return `true` -> red
+  def test_at_file_mention_chip_is_busy
+    assert_equal "busy", TmuxWindow.classify(fixture("chip_file_mention.txt"))
+  end
 end
 
 class TmuxWindowTest < Minitest::Test
