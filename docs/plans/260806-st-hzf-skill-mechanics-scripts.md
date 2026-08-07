@@ -912,12 +912,12 @@ leaves non-`file:line` text alone and is idempotent.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `ruby .claude/scripts/plan_state.rb docs/plans/260806-st-hzf-skill-mechanics-scripts.md`
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `ruby .claude/scripts/plan_state.rb docs/plans/260806-st-hzf-skill-mechanics-scripts.md`
       reports `sections_missing: []` and every phase in this document
-- [ ] `ruby .claude/scripts/doc_meta.rb filename --dir docs/plans --issue st-hzf
+- [x] `ruby .claude/scripts/doc_meta.rb filename --dir docs/plans --issue st-hzf
       --description skill-mechanics-scripts` reproduces this file's name
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `plan_state.rb` parses the three most recent plans in `docs/plans/`
@@ -1595,6 +1595,13 @@ before considering the plan fully landed.
 - [ ] `gate.rb` on a full run agrees stage-for-stage with a bare `mix quality`,
       including every `○` line
 - [ ] No argument combination reaches `mix quality --skip`
+
+### Phase 8
+
+- [ ] `plan_state.rb` parses the three most recent plans in `docs/plans/`
+      without `sections_missing` false positives
+- [ ] `permalinks.rb --dry-run` over an existing research doc proposes only
+      correct rewrites
 
 ## Open Questions
 
