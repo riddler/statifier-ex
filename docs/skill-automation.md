@@ -8,6 +8,13 @@ The research document that produced the first snapshot of this table is
 dated and stays as-is; this one is what future work reads and updates as
 scripts land and skills get rewritten.
 
+**The decision this record implements is ADR-0015** (skill mechanics live in
+scripts, judgment lives in prose), which states the five constraints - step
+scoping and the banned-operation list, one definition site for shared
+mechanics, the JSON envelope, judgment stays in prose, and the gate must
+measure the scripts. Cite ADR-0015 rather than re-arguing any of them here;
+this document records *what was classified how*, not *why the split exists*.
+
 See `.claude/scripts/README.md` for the script contract itself (envelope
 shape, Ruby version, test harness) and
 `docs/plans/260806-st-hzf-skill-mechanics-scripts.md` for the phased

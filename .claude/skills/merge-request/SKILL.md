@@ -108,18 +108,25 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    ```
    Wraps `mix gate.verify` and `mix quality --format json --report -`. Never
    truncate `data.stages` or `data.attestation_message`. **Refuse on red** -
-   `ok: false` means either `data.status != "ok"` or a stage came back
-   skipped (`data.skipped_stages`); report the failing stages with their
-   `file:line` findings and stop. Do not push a branch whose gate is red in
-   the hope that CI disagrees.
+   `ok: false` means either `data.status != "ok"` or a stage the gate could
+   not measure on this run came back skipped; report the failing stages with
+   their `file:line` findings and stop. Do not push a branch whose gate is
+   red in the hope that CI disagrees.
+
+   Entries in `data.skipped_stages` marked `project_level: true`
+   (`:doctor not installed`, `disabled in .quality.exs`) do not block - they
+   are standing gaps in what the project checks at all, not failures of this
+   run. Still name them in the PR body and the final report; a stage that
+   never ran is never a stage that passed.
 
    A narrowed run does not count - this script accepts no `--skip`, `--quick`,
    or narrowing `--profile`; passing one is a usage error, not a narrower run.
    `data.attested` mirrors `mix gate.verify`'s own attestation.
 
    **Carve-out**, matching `/commit` Step 0: `data.applicable` false means the
-   diff touches nothing under `lib/`, `test/`, `config/`, `mix.exs`, or
-   `mix.lock` - there is no gate to run. `data.carve_out_reason` explains why.
+   diff touches nothing under `lib/`, `test/`, `config/`, `.claude/scripts/`,
+   `mix.exs`, or `mix.lock` - there is no gate to run.
+   `data.carve_out_reason` explains why.
    Skip it and say so in the PR body and the final report, so a skipped gate
    is never mistaken for a green one.
 
