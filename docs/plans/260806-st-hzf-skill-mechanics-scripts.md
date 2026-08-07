@@ -747,11 +747,11 @@ dependency edges not batched across; `n > 4` blocks; ceiling-not-target
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green, including the phantom-collision
+- [x] `ruby .claude/scripts/test/run.rb` is green, including the phantom-collision
       regression fixture
-- [ ] `ruby .claude/scripts/select_batch.rb --n 3 --auto` runs against the live
+- [x] `ruby .claude/scripts/select_batch.rb --n 3 --auto` runs against the live
       repo and emits a valid envelope
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] The verdict a live run gives each ready bead matches what
@@ -1582,6 +1582,13 @@ before considering the plan fully landed.
 - [ ] The fixtures are real captures, not hand-typed escape sequences
 - [ ] `tmux_window.rb open --dry-run` renders a command line that could be
       pasted into fish unchanged
+
+### Phase 6
+
+- [ ] The verdict a live run gives each ready bead matches what
+      `.claude/skills/next-issues/SKILL.md:170-185`'s table gives by hand
+- [ ] `st-hzf`'s own `area:skills` hold is reported as a live collision for any
+      other `area:skills` bead
 
 ## Open Questions
 
