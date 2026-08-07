@@ -264,6 +264,7 @@ class TmuxWindowTest < Minitest::Test
   # --- classify (subcommand) ------------------------------------------------
 
   def test_classify_cmd_requires_both_samples_idle
+    @fake.expect(["tmux", "list-panes", "-t", "@2", "-F", '#{pane_current_command}'], out: "claude\n")
     @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf \e[39m\n")
     @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf \e[39m\n")
 
@@ -275,6 +276,7 @@ class TmuxWindowTest < Minitest::Test
   end
 
   def test_classify_cmd_one_busy_sample_is_enough_to_call_it_busy
+    @fake.expect(["tmux", "list-panes", "-t", "@2", "-F", '#{pane_current_command}'], out: "claude\n")
     @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf half a draft\n")
     @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf \e[39m\n")
 
@@ -290,6 +292,47 @@ class TmuxWindowTest < Minitest::Test
     assert_equal 1, code
     assert_equal "empty_window_id", env["blocked"].first["code"]
     assert_empty @fake.calls
+  end
+
+  # st-zgf: a pane at a bare shell prompt (claude already exited - by /exit,
+  # by crash, or the session never having been started) must report
+  # "exited", not fall through to the byte-level idle/busy classifier. The
+  # byte classifier would read an empty shell prompt as "idle", which then
+  # sent /cleanup-worktrees into a full quiesce (typing /exit into a plain
+  # shell) on a window that was ready to close from the start.
+  # sabotage: classify_cmd's `if bare_shell_panes?(panes_res)` branch
+  # deleted, falling straight through to capture_and_classify -> red
+  # (FakeSh::UnexpectedCommand: no capture-pane expectation is registered)
+  def test_classify_cmd_reports_exited_when_pane_is_a_bare_shell
+    @fake.expect(["tmux", "list-panes", "-t", "@2", "-F", '#{pane_current_command}'], out: "fish\n")
+    # No capture-pane expectation - a bare-shell pane must never reach the
+    # byte-level classifier at all.
+
+    code, env = run_tmux(["classify", "@2"])
+
+    assert_equal 0, code
+    assert_equal "exited", env["data"]["status"]
+    assert_equal "@2", env["data"]["window_id"]
+  end
+
+  def test_classify_cmd_bare_shell_check_covers_every_pane_in_the_window
+    @fake.expect(["tmux", "list-panes", "-t", "@2", "-F", '#{pane_current_command}'], out: "fish\nzsh\n")
+
+    code, env = run_tmux(["classify", "@2"])
+
+    assert_equal 0, code
+    assert_equal "exited", env["data"]["status"]
+  end
+
+  def test_classify_cmd_falls_through_to_byte_classifier_when_list_panes_fails
+    @fake.expect(["tmux", "list-panes", "-t", "@2", "-F", '#{pane_current_command}'], exitstatus: 1)
+    @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf \e[39m\n")
+    @fake.expect(["tmux", "capture-pane", "-e", "-p", "-t", "@2"], out: "\xe2\x9d\xaf \e[39m\n")
+
+    code, env = run_tmux(["classify", "@2"])
+
+    assert_equal 0, code
+    assert_equal "idle", env["data"]["status"]
   end
 
   # --- quiesce -------------------------------------------------------------
