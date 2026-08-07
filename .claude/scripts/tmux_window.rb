@@ -313,6 +313,21 @@ module TmuxWindow
         return env.emit(io)
       end
 
+      # Check what the pane is actually running before ever touching the
+      # byte-level classifier below. A pane sitting at a bare shell prompt -
+      # claude already exited, quiesce already ran, or the session was never
+      # started - is not "idle"; idle/busy is a distinction between two
+      # states of a running claude session, and a bare shell is neither.
+      # Same predicate poll_for_shell and close_window use against
+      # pane_current_command, so all three agree on what "exited" means.
+      panes_argv = ["tmux", "list-panes", "-t", window_id, "-F", '#{pane_current_command}']
+      panes_res = Sh.run(panes_argv, envelope: env)
+      if bare_shell_panes?(panes_res)
+        env.data["window_id"] = window_id
+        env.data["status"] = "exited"
+        return env.emit(io)
+      end
+
       first = capture_and_classify(window_id, env)
       TmuxWindow.sleep_fn.call(CLASSIFY_SAMPLE_INTERVAL_SECONDS)
       second = capture_and_classify(window_id, env)
@@ -385,8 +400,7 @@ module TmuxWindow
     def poll_for_shell(window_id, poll_argv, env)
       QUIESCE_MAX_POLLS.times do |i|
         res = Sh.run(poll_argv, envelope: env)
-        commands = res.out.to_s.each_line.map(&:chomp).reject(&:empty?)
-        return true if res.success? && !commands.empty? && commands.all? { |c| SHELL_COMMANDS.include?(c) }
+        return true if bare_shell_panes?(res)
 
         TmuxWindow.sleep_fn.call(QUIESCE_POLL_INTERVAL_SECONDS) unless i == QUIESCE_MAX_POLLS - 1
       end
@@ -413,10 +427,7 @@ module TmuxWindow
         return env.emit(io)
       end
 
-      commands = res.out.to_s.each_line.map(&:chomp).reject(&:empty?)
-      all_bare_shells = !commands.empty? && commands.all? { |c| SHELL_COMMANDS.include?(c) }
-
-      unless all_bare_shells
+      unless bare_shell_panes?(res)
         env.data["window_id"] = window_id
         env.data["closed"] = false
         env.data["reason"] = "window kept, other panes busy"
@@ -447,6 +458,25 @@ module TmuxWindow
     end
 
     # --- shared helpers ------------------------------------------------------
+
+    # The one definition of "every pane in this window is a bare shell, not
+    # claude" - poll_for_shell (quiesce), close_window, and classify_cmd all
+    # decide the same thing against the same `pane_current_command` output
+    # and must not fork the semantics. `res` is a Sh::Result from a
+    # `tmux list-panes -F '#{pane_current_command}'` call; a failed capture
+    # is never treated as bare shells, so callers fail toward "still
+    # running" rather than toward "safe to close/skip".
+    # sabotage: body replaced with `false` unconditionally -> red across all
+    # three call sites (test_close_kills_the_window_when_every_pane_is_a_bare_shell,
+    # test_classify_cmd_reports_exited_when_pane_is_a_bare_shell,
+    # test_quiesce_sends_ctrl_u_then_exit_then_polls_to_a_bare_shell) -
+    # proof this is one shared definition, not three copies.
+    def bare_shell_panes?(res)
+      return false unless res.success?
+
+      commands = res.out.to_s.each_line.map(&:chomp).reject(&:empty?)
+      !commands.empty? && commands.all? { |c| SHELL_COMMANDS.include?(c) }
+    end
 
     def blank?(value)
       value.to_s.strip.empty?

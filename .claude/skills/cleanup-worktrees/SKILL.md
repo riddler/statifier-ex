@@ -77,6 +77,12 @@ sweep every worktree under `../statifier-ex-worktrees/`.
    ```
    `data.status: "busy"` - skip this worktree's removal entirely, report
    `"session busy, skipped"`, leave the worktree, branch, and window alone.
+   `data.status: "exited"` - the pane is not running claude at all (checked
+   via `pane_current_command` before the byte-level idle/busy classifier
+   ever runs - a bare shell prompt is not "idle", it is already down).
+   Skip quiesce entirely - there is no claude session to ask to `/exit` -
+   and carry `window_id` straight to step 3's close, exactly like quiesce's
+   own `"exited"` below.
    `data.status: "idle"` - continue:
    ```bash
    .claude/scripts/tmux_window.rb quiesce <window_id>
@@ -85,7 +91,8 @@ sweep every worktree under `../statifier-ex-worktrees/`.
    escalate past this. `data.status: "exited"` - the session is down; carry
    `window_id` forward to step 3's close.
 
-3. **Remove, per candidate that passed step 2** (no window, or quiesced):
+3. **Remove, per candidate that passed step 2** (no window, classify already
+   `"exited"`, or quiesced):
    ```bash
    .claude/scripts/worktree_cleanup.rb <name>
    ```
@@ -95,7 +102,8 @@ sweep every worktree under `../statifier-ex-worktrees/`.
    `git branch -D`, and a `git fetch --prune` of its own - see "How to read
    the result" for what each result string means.
 
-   If step 2 quiesced a session, close its window now that removal succeeded:
+   If step 2 found a `window_id` (classify already `"exited"`, or quiesce
+   reached `"exited"`), close its window now that removal succeeded:
    ```bash
    .claude/scripts/tmux_window.rb close <window_id>
    ```
