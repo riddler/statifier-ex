@@ -243,10 +243,22 @@ look for the full skill-by-skill breakdown behind this total.
   a bounded yes/no over the edit alone.
 - **`/work`'s bucket choice** (Step 2) - sizing happens "with the codebase in
   reach", the same reason phase sizing stays off this list.
+- **The candidate table's `summary` field** (`select_batch.rb`, decided by
+  `st-sdv`) - the table is a decision input read across separate runs, and a
+  model-written summary would make the same bead read differently run to run;
+  the cost also scales with every ready candidate on an interactive path that
+  blocks the picker, and since `bd` descriptions here already open with a
+  topic sentence, a deterministic first-sentence cut mostly reproduces what a
+  summarizer would have written anyway. Unlike the entries above, this one is
+  excluded for determinism, not for a missing codebase or authority - and the
+  door stays open regardless: a Haiku pass can be layered over the same
+  envelope field later without an envelope or skill change.
 
 Each of these needs either the codebase in reach or an authority a subagent
-does not hold - the two disqualifying properties this section's mechanism
-cannot supply no matter which model runs the prompt.
+does not hold, except the candidate-table entry just above, which needs
+determinism on an interactive path instead - the three disqualifying
+properties this section's mechanism cannot supply no matter which model runs
+the prompt.
 
 ### Why no Haiku agent is being added
 
