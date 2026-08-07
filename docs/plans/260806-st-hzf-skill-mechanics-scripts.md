@@ -584,12 +584,12 @@ the extraction. Assert the `mix.lock`-unchanged fast path issues no
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green, including the ordering assertion
-- [ ] `grep -rln 'rebase --abort' .claude/scripts/` returns exactly
+- [x] `ruby .claude/scripts/test/run.rb` is green, including the ordering assertion
+- [x] `grep -rln 'rebase --abort' .claude/scripts/` returns exactly
       `rebase_onto.rb`
-- [ ] `grep -rn 'force' .claude/scripts/worktree_cleanup.rb` returns only the
+- [x] `grep -rn 'force' .claude/scripts/worktree_cleanup.rb` returns only the
       comment forbidding it
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `worktree_create.rb --dry-run <name>` emits the same command sequence the
@@ -1566,6 +1566,14 @@ before considering the plan fully landed.
       than a crash
 - [ ] `bead.rb resolve` on this worktree names `st-hzf` with `strategy:
       "plan_doc"`, not `"branch_prefix"`
+
+### Phase 4
+
+- [ ] `worktree_create.rb --dry-run <name>` emits the same command sequence the
+      current `/new-worktree` prose specifies, in the same order
+- [ ] `worktree_refresh.rb --dry-run` over the live worktrees classifies each
+      the same way a manual read of `git worktree list` does
+- [ ] The PLT glob still matches a real file in this repo's `_build/dev/`
 
 ## Open Questions
 
