@@ -54,7 +54,10 @@ defmodule Statifier.Parser do
   Malformed input returns `{:error, %Statifier.Parser.ParseError{}}` and this
   function never raises - `Saxy.parse_string/4` reports errors as tuples, and
   the location-desync guard aborts through `{:stop, _}`, which Saxy hands
-  back as an ordinary result.
+  back as an ordinary result. The one path where Saxy itself breaks that
+  contract, a truncated prolog comment or processing instruction, is caught
+  and converted (`Statifier.Parser.ParseError.from_exception/1`), so "never
+  raises" holds for every binary and not merely every *well-formed-ish* one.
   """
 
   alias Statifier.Parser.DOM
@@ -71,16 +74,27 @@ defmodule Statifier.Parser do
   @spec parse(source :: binary()) :: {:ok, DOM.Element.t()} | {:error, ParseError.t()}
   def parse(source) when is_binary(source) do
     markup = Markup.scan(source)
-    initial_state = Handler.init(source, markup)
 
-    # `cdata_as_characters: false` keeps CDATA on its own event rather than
-    # disguising it as character data. Both are coalesced into one text node
-    # either way; the separate event is what lets the handler stay honest
-    # about which of the two it saw.
-    case Saxy.parse_string(source, Handler, initial_state, cdata_as_characters: false) do
+    case run_saxy(source, Handler.init(source, markup)) do
       {:ok, {:error, %ParseError{} = error}} -> {:error, error}
       {:ok, %DOM.Element{} = root} -> {:ok, root}
       {:error, %Saxy.ParseError{} = error} -> {:error, ParseError.from_saxy(error, source)}
+      {:crashed, exception} -> {:error, ParseError.from_exception(exception)}
     end
+  end
+
+  # `cdata_as_characters: false` keeps CDATA on its own event rather than
+  # disguising it as character data. Both are coalesced into one text node
+  # either way; the separate event is what lets the handler stay honest about
+  # which of the two it saw.
+  #
+  # The rescue is not a rescue-to-default: it converts, it does not recover.
+  # Saxy 1.6.1 raises on a truncated prolog comment or PI instead of
+  # returning (see `ParseError.from_exception/1`), and this parser's stated
+  # contract is that no binary makes it raise.
+  defp run_saxy(source, initial_state) do
+    Saxy.parse_string(source, Handler, initial_state, cdata_as_characters: false)
+  rescue
+    exception -> {:crashed, exception}
   end
 end
