@@ -134,8 +134,8 @@ defmodule Statifier.TmpDirTest do
   describe "wired through the :isolated_tmp_dir tag" do
     setup {TmpDir, :setup_tmp_dir}
 
-    # sabotage: n/a - harness plumbing, asserts test/support/ not lib/
     @tag :isolated_tmp_dir
+    # sabotage: n/a - harness plumbing, asserts test/support/ not lib/
     test "the tag hands the test a real, empty directory under root/0", %{tmp_dir: tmp_dir} do
       assert File.dir?(tmp_dir)
       assert File.ls!(tmp_dir) == []
