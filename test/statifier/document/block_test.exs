@@ -18,16 +18,14 @@ defmodule Statifier.Document.BlockTest do
   end
 
   describe "@enforce_keys" do
-    # sabotage: drop :location from Block's @enforce_keys -> struct!(Block, [])
-    # stops raising for :location, reddening this match
+    # sabotage: drop :location from Block's @enforce_keys -> red
     test "struct!/2 with no fields raises ArgumentError naming :location" do
       assert_raise ArgumentError, ~r/:location/, fn -> struct!(Block, []) end
     end
   end
 
   describe "defaults" do
-    # sabotage: change Block's content default from [] to nil -> the
-    # pattern match on content: [] goes red
+    # sabotage: change Block's content default from [] to nil -> red
     test "content defaults to an empty list" do
       block = struct!(Block, location: loc(0))
 
@@ -36,9 +34,8 @@ defmodule Statifier.Document.BlockTest do
   end
 
   describe "content order" do
-    # sabotage: drop :content from Block's defstruct fields entirely -> the
-    # struct literal below fails to compile (unknown key :content),
-    # reddening this test
+    # sabotage: drop :content from Block's defstruct fields entirely -> red
+    # (struct literal below fails to compile, unknown key :content)
     test "a Raise and a Log round-trip source order" do
       raise_ = %Raise{event: "go", location: loc(1)}
       log = %Log{expr: "1 > 0", location: loc(2)}

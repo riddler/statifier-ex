@@ -16,16 +16,14 @@ defmodule Statifier.Document.LogTest do
   end
 
   describe "@enforce_keys" do
-    # sabotage: drop :location from Log's @enforce_keys -> struct!(Log, [])
-    # stops raising for :location, reddening this match
+    # sabotage: drop :location from Log's @enforce_keys -> red
     test "struct!/2 with no fields raises ArgumentError naming :location" do
       assert_raise ArgumentError, ~r/:location/, fn -> struct!(Log, []) end
     end
   end
 
   describe "defaults" do
-    # sabotage: change Log's label default from nil to "" -> the pattern
-    # match on label: nil goes red
+    # sabotage: change Log's label default from nil to "" -> red
     test "label and expr default to nil, never the empty string" do
       log = struct!(Log, location: loc())
 
@@ -34,9 +32,8 @@ defmodule Statifier.Document.LogTest do
   end
 
   describe "attribute_locations" do
-    # sabotage: drop :expr from Log's defstruct fields entirely -> the
-    # struct literal below fails to compile (unknown key :expr), reddening
-    # this test
+    # sabotage: drop :expr from Log's defstruct fields entirely -> red
+    # (struct literal below fails to compile, unknown key :expr)
     test "a populated attribute_locations distinguishes a written key from an absent one" do
       log = %Log{
         expr: "x > 1",

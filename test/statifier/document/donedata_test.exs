@@ -17,17 +17,14 @@ defmodule Statifier.Document.DonedataTest do
   end
 
   describe "@enforce_keys" do
-    # sabotage: drop :location from Donedata's @enforce_keys ->
-    # struct!(Donedata, []) stops raising for :location, reddening this
-    # match
+    # sabotage: drop :location from Donedata's @enforce_keys -> red
     test "struct!/2 with no fields raises ArgumentError naming :location" do
       assert_raise ArgumentError, ~r/:location/, fn -> struct!(Donedata, []) end
     end
   end
 
   describe "defaults" do
-    # sabotage: change Donedata's content default from nil to %Content{}
-    # (or any non-nil value) -> the pattern match on content: nil goes red
+    # sabotage: change Donedata's content default from nil to %Content{} -> red
     test "content defaults to nil" do
       donedata = struct!(Donedata, location: loc())
 
@@ -36,9 +33,8 @@ defmodule Statifier.Document.DonedataTest do
   end
 
   describe "content" do
-    # sabotage: drop :content from Donedata's defstruct fields entirely ->
-    # the struct literal below fails to compile (unknown key :content),
-    # reddening this test
+    # sabotage: drop :content from Donedata's defstruct fields entirely -> red
+    # (struct literal below fails to compile, unknown key :content)
     test "holds a Content node when the element has one" do
       content = %Content{text: "done", location: loc()}
       donedata = %Donedata{content: content, location: loc()}
