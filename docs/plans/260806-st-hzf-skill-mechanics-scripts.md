@@ -476,12 +476,12 @@ without `--seeded-bead`; closed-bead warning present; a test asserting no
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `ruby .claude/scripts/bead.rb show st-hzf` returns a valid envelope whose
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `ruby .claude/scripts/bead.rb show st-hzf` returns a valid envelope whose
       `data.notes` is an array
-- [ ] `grep -rn 'bd close\|bd edit' .claude/scripts/*.rb .claude/scripts/lib/`
+- [x] `grep -rn 'bd close\|bd edit' .claude/scripts/*.rb .claude/scripts/lib/`
       returns only comments
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `bd show --json` on the installed `bd` still carries every field the
@@ -1558,6 +1558,14 @@ before considering the plan fully landed.
 - [ ] `ruby .claude/scripts/worktree_survey.rb` output matches what
       `git worktree list` plus `gh pr list` say by hand
 - [ ] The `146c69f` fixture is the real commit body, not a paraphrase
+
+### Phase 3
+
+- [ ] `bd show --json` on the installed `bd` still carries every field the
+      wrapper reads; any missing field degrades to `null` with a warning rather
+      than a crash
+- [ ] `bead.rb resolve` on this worktree names `st-hzf` with `strategy:
+      "plan_doc"`, not `"branch_prefix"`
 
 ## Open Questions
 
