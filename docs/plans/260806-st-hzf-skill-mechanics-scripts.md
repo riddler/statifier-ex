@@ -820,12 +820,12 @@ no write attempted.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `ruby .claude/scripts/gate.rb --profile loop` on this worktree emits
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `ruby .claude/scripts/gate.rb --profile loop` on this worktree emits
       `"attested": false`
-- [ ] `grep -rn 'quality-gate-changes' .claude/scripts/` returns only comments
+- [x] `grep -rn 'quality-gate-changes' .claude/scripts/` returns only comments
       and a read-only existence check
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `gate.rb` on a full run agrees stage-for-stage with a bare `mix quality`,
@@ -1589,6 +1589,12 @@ before considering the plan fully landed.
       `.claude/skills/next-issues/SKILL.md:170-185`'s table gives by hand
 - [ ] `st-hzf`'s own `area:skills` hold is reported as a live collision for any
       other `area:skills` bead
+
+### Phase 7
+
+- [ ] `gate.rb` on a full run agrees stage-for-stage with a bare `mix quality`,
+      including every `○` line
+- [ ] No argument combination reaches `mix quality --skip`
 
 ## Open Questions
 
