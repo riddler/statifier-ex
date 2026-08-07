@@ -3,7 +3,11 @@ Code.require_file("tools/corpus/scxml_w3/check_exprs.exs", File.cwd!())
 defmodule Corpus.CheckExprsTest do
   use ExUnit.Case, async: true
 
+  import Statifier.TmpDir, only: [setup_tmp_dir: 1]
+
   alias Corpus.CheckExprs
+
+  setup :setup_tmp_dir
 
   describe "check/2" do
     # sabotage: swap Predicator.compile for Predicator.context_location in the
@@ -23,7 +27,7 @@ defmodule Corpus.CheckExprsTest do
     # sabotage: check_file/2 ignoring the allowlist argument (always using
     # CheckExprs.allowlist/0) -> the file-local override below would land in
     # :unexpected instead of :expected, red
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "an allowlisted invalid value is reported as expected, not unexpected", %{
       tmp_dir: tmp_dir
     } do
@@ -39,7 +43,7 @@ defmodule Corpus.CheckExprsTest do
     # sabotage: drop the Map.has_key?(allowlist, ...) branch entirely, treating
     # every compile/resolve failure as unexpected -> the allowlisted case above
     # would land in :unexpected too, red (this test pins the un-allowlisted case)
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "an un-allowlisted invalid value is reported as unexpected", %{tmp_dir: tmp_dir} do
       path = write(tmp_dir, "test901.scxml", ~s|<scxml><transition location="42"/></scxml>|)
 
@@ -52,7 +56,7 @@ defmodule Corpus.CheckExprsTest do
   end
 
   describe "run/3" do
-    @describetag :tmp_dir
+    @describetag :isolated_tmp_dir
 
     setup %{tmp_dir: tmp_dir} do
       exclusions_path = Path.join(tmp_dir, "exclusions.exs")

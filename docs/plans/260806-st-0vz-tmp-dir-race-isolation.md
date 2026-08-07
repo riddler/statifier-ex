@@ -418,18 +418,18 @@ and `docs/testing.md`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] No ExUnit tmp_dir tag remains:
+- [x] Full quality gate passes: `mix quality`
+- [x] No ExUnit tmp_dir tag remains:
       `! grep -rn "tag :tmp_dir\b" test/ --include=*.exs`
-- [ ] Concurrency loop is green 10/10 (fish):
+- [x] Concurrency loop is green 10/10 (fish):
       `for i in (seq 1 10); mix test test/mix test/corpus & mix test.regression & wait; end`
       (bash: `for i in $(seq 1 10); do mix test test/mix test/corpus & mix test.regression & wait; done`)
-- [ ] The two runs land in disjoint trees: after one loop iteration,
+- [x] The two runs land in disjoint trees: after one loop iteration,
       `ls tmp` shows both `regression/` and at least one `Mix.Statifier.*`
       directory, and `ls tmp/regression` shows the ratchet's copies
-- [ ] Ratchet still covers the same files (no registry shrink):
+- [x] Ratchet still covers the same files (no registry shrink):
       `mix test.regression` reports the same file count as before the change
-- [ ] Gate guard clean: `mix gate.check` reports no guarded-path change
+- [x] Gate guard clean: `mix gate.check` reports no guarded-path change
 
 #### Manual Verification:
 - [ ] The diff is mechanical: no test's assertions or fixtures changed, only
@@ -660,5 +660,23 @@ for manual confirmation before proceeding. In looped (`--loop`) execution,
 this phase's Automated Verification gates advancement automatically (via
 `/commit --auto`); Manual Verification items are deferred and surfaced once at
 the end.
+
+---
+
+### Phase 2
+
+- [ ] The diff is mechanical: no test's assertions or fixtures changed, only
+      tag names and one setup line per module
+- [ ] The pre-fix repro (stash Phase 2, keep Phase 1) is observed to fail at
+      least once over a longer loop, confirming the loop above exercises the
+      real race rather than passing vacuously
+- [ ] `tmp/regression/` is git-ignored in practice (`git status` clean after a
+      ratchet run)
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+the full `mix quality` as the phase gate. In interactive execution, pause here
+for manual confirmation before proceeding. In looped (`--loop`) execution,
+this phase's Automated Verification gates advancement automatically; Manual
+Verification items are deferred to the end.
 
 ---

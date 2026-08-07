@@ -2,9 +2,12 @@ defmodule Mix.Tasks.Test.RegressionTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
+  import Statifier.TmpDir, only: [setup_tmp_dir: 1]
 
   alias Mix.Statifier.RegressionRegistry
   alias Mix.Tasks.Test.Regression
+
+  setup :setup_tmp_dir
 
   # The task's only side effect is a `mix test` shell-out, so every test drives
   # it with a stub runner that records the arguments it was handed.
@@ -30,7 +33,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     path
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "runs exactly the registry, with the tags its suites need", %{tmp_dir: tmp_dir} do
     scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
     internal = test_file(tmp_dir, "statifier/document_test.exs")
@@ -47,7 +50,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     assert output =~ "All 2 regression test files passed."
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "a failing run is a regression, not a test-count report", %{tmp_dir: tmp_dir} do
     scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
     path = registry(tmp_dir, %{"scion_tests" => [scion]})
@@ -59,7 +62,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     end)
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "an entry matching no file fails instead of silently shrinking the ratchet", %{
     tmp_dir: tmp_dir
   } do
@@ -72,7 +75,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     refute_received {:ran, _args}
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "an empty registry does not fall through to the whole suite", %{tmp_dir: tmp_dir} do
     path = registry(tmp_dir, %{"scion_tests" => [], "w3c_tests" => []})
 
@@ -81,7 +84,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     refute_received {:ran, _args}
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "a broken registry is reported, not treated as empty", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "passing_tests.json")
     File.write!(path, "{oops")
@@ -105,7 +108,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
   # sabotage: have mix_test/1 return a hardcoded 1 instead of the real
   #           status -> red (the always-passing dummy file would then be
   #           reported as a regression)
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "run/1 returns :ok for a real passing run", %{tmp_dir: tmp_dir} do
     dummy = Path.join(tmp_dir, "regression_dummy_test.exs")
 
@@ -133,7 +136,7 @@ defmodule Mix.Tasks.Test.RegressionTest do
     assert RegressionRegistry.default_path() == "test/passing_tests.json"
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "a single-file registry reports in the singular", %{tmp_dir: tmp_dir} do
     scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
     path = registry(tmp_dir, %{"scion_tests" => [scion]})
@@ -144,5 +147,12 @@ defmodule Mix.Tasks.Test.RegressionTest do
       end)
 
     assert output =~ "Running 1 regression test file..."
+  end
+
+  # sabotage: change test_env/0 to return [] -> red
+  test "the spawned run gets its own scratch root" do
+    assert [{var, root}] = Regression.test_env()
+    assert var == Statifier.TmpDir.env_var()
+    refute root == Statifier.TmpDir.default_root()
   end
 end

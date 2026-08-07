@@ -30,6 +30,7 @@ defmodule Mix.Tasks.Test.Regression do
   alias Mix.Statifier.RegressionRegistry
 
   @switches [registry: :string]
+  @tmp_root "tmp/regression"
 
   @impl Mix.Task
   def run(argv) do
@@ -92,9 +93,24 @@ defmodule Mix.Tasks.Test.Regression do
   defp plural([_one], singular, _plural), do: singular
   defp plural(_many, _singular, plural), do: plural
 
+  @doc """
+  Environment for the spawned `mix test`.
+
+  The ratchet runs concurrently with `mix quality`'s own Tests stage, in the
+  same working directory, over largely the same modules. Scratch directories
+  are rooted per OS process (`Statifier.TmpDir`), so without a distinct root
+  the two runs delete each other's directories mid-test (st-0vz).
+  """
+  @spec test_env() :: [{String.t(), String.t()}]
+  def test_env, do: [{"STATIFIER_TMP_ROOT", @tmp_root}]
+
   defp mix_test(args) do
     {_output, status} =
-      System.cmd("mix", ["test" | args], into: IO.stream(:stdio, :line), stderr_to_stdout: true)
+      System.cmd("mix", ["test" | args],
+        into: IO.stream(:stdio, :line),
+        stderr_to_stdout: true,
+        env: test_env()
+      )
 
     status
   end
