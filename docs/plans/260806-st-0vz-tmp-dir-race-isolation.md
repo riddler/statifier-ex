@@ -503,12 +503,12 @@ sabotage bullets - "Scratch directories in tests: `@tag :isolated_tmp_dir`
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The guard is real: temporarily add `@tag :tmp_dir` to any test, confirm
+- [x] Full quality gate passes: `mix quality`
+- [x] The guard is real: temporarily add `@tag :tmp_dir` to any test, confirm
       `mix test` goes red naming that file, then revert
-- [ ] The guard does not flag itself: `mix test` green with the guard file in
+- [x] The guard does not flag itself: `mix test` green with the guard file in
       the scanned set
-- [ ] Gate guard clean: `mix gate.check` reports no guarded-path change
+- [x] Gate guard clean: `mix gate.check` reports no guarded-path change
 
 #### Manual Verification:
 - [ ] `docs/testing.md` explains the concurrency reason, not just the rule -
@@ -678,5 +678,18 @@ the full `mix quality` as the phase gate. In interactive execution, pause here
 for manual confirmation before proceeding. In looped (`--loop`) execution,
 this phase's Automated Verification gates advancement automatically; Manual
 Verification items are deferred to the end.
+
+---
+
+### Phase 3
+
+- [ ] `docs/testing.md` explains the concurrency reason, not just the rule -
+      a rule without its reason gets "simplified" away later
+- [ ] Wording in `docs/testing.md` matches the file's existing house style
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+the full `mix quality` as the phase gate. In interactive execution, pause here
+for manual confirmation. In looped (`--loop`) execution, Automated
+Verification gates advancement; Manual Verification is surfaced at the end.
 
 ---

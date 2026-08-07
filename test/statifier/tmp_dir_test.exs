@@ -142,4 +142,19 @@ defmodule Statifier.TmpDirTest do
       assert String.starts_with?(tmp_dir, Path.expand(TmpDir.root()))
     end
   end
+
+  # sabotage: n/a - harness plumbing, guards a convention rather than lib/
+  test "no test file uses ExUnit's built-in tmp_dir tag" do
+    # Built at runtime so this file does not match its own assertion.
+    pattern = ~r/@(?:describe)?tag\s+:#{"tmp" <> "_dir"}\b/
+
+    offenders =
+      "test/**/*.exs"
+      |> Path.wildcard()
+      |> Enum.filter(&(&1 |> File.read!() |> then(fn src -> Regex.match?(pattern, src) end)))
+
+    assert offenders == [],
+           "use @tag :isolated_tmp_dir (Statifier.TmpDir) - ExUnit's tag hardcodes a shared tmp/ root (st-0vz): " <>
+             Enum.join(offenders, ", ")
+  end
 end
