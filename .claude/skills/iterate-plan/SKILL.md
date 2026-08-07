@@ -60,7 +60,18 @@ When this command is invoked:
    - Understand the current structure, phases, and scope
    - Note the success criteria and implementation approach
 
-2. **Understand the requested changes**:
+2. **Check its structural state**:
+   ```bash
+   ruby .claude/scripts/plan_state.rb validate <path>
+   ```
+   `data.sections_missing`, `data.phases` (each with its `automated`/`manual`
+   checkbox counts and `complete`), `data.next_phase`, and
+   `data.deferred_manual_section` are the same structural facts a hand read
+   would otherwise reconstruct by eye - read them here so the edits in Step 4
+   start from an accurate picture of what is already checked, missing, or
+   deferred.
+
+3. **Understand the requested changes**:
    - Parse what the user wants to add/modify/remove
    - Identify if changes require codebase research
    - Determine scope of the update
@@ -134,6 +145,11 @@ Get user confirmation before proceeding.
      with the interactive/`--loop` wording and sizing rule introduced in
      `/create-plan`'s template (see that skill's Phase template and Step 3) -
      link by name, don't restate the wording
+   - **Flag, don't silently edit, a change that would contradict an accepted
+     ADR** - that needs a direction-level decision per docs/workflow.md.
+     `plan_state.rb` has no ADR awareness and never will; this stays a
+     judgment call made here, in the session, not something delegated to a
+     script.
 
 3. **Preserve quality standards**:
    - Include specific file paths and line numbers for new content
@@ -143,6 +159,15 @@ Get user confirmation before proceeding.
      per-phase gate, `mix quality --format json --report -` for machine-readable
      results
    - Keep language clear and actionable
+
+4. **Re-validate the structure**:
+   ```bash
+   ruby .claude/scripts/plan_state.rb validate <path>
+   ```
+   `data.sections_missing` must come back empty and every phase you touched
+   should still have both an Automated and a Manual Verification list. Fix and
+   re-run before presenting the update - the same check Step 1 ran before any
+   edits, now confirming the edits kept the document well-formed.
 
 ### Step 5: Review
 
@@ -269,3 +294,8 @@ Assistant: I've found the plan. What changes would you like to make?
 User: Add more specific success criteria
 Assistant: [Proceeds with update]
 ```
+
+---
+
+See `.claude/scripts/README.md` for the envelope contract shared by every
+script this skill calls.
