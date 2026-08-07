@@ -132,9 +132,9 @@ module TmuxWindow
     end
 
     # False when what follows the marker is nothing, or only SGR codes
-    # (\e[39m, \e[0m, ...) with no visible characters.
+    # (\e[39m, \e[0m, ...) or whitespace with no visible characters.
     def visible_text?(after_marker)
-      !after_marker.gsub(SGR, "").strip.empty?
+      !only_styling?(after_marker)
     end
 
     # True when every visible character after the marker sits inside a
@@ -143,8 +143,14 @@ module TmuxWindow
     # this is real typed text (a draft, or a dialog like " ❯ 1. Yes"), not a
     # placeholder.
     def wholly_dim_wrapped?(after_marker)
-      remaining = after_marker.gsub(DIM_SPAN, "")
-      remaining.gsub(SGR, "").strip.empty?
+      only_styling?(after_marker.gsub(DIM_SPAN, ""))
+    end
+
+    # True when nothing but SGR codes and whitespace is left. Whitespace goes
+    # through [[:space:]], not the shared blank?'s String#strip, because strip
+    # leaves U+00A0 behind.
+    def only_styling?(chunk)
+      chunk.gsub(SGR, "").gsub(/[[:space:]]/, "").empty?
     end
 
     # --- ensure-session ----------------------------------------------------
