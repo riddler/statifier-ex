@@ -419,6 +419,100 @@ class GateTest < Minitest::Test
     assert_empty Gate.scan_sabotage(diff)
   end
 
+  # sabotage: change `idx -= 1` to `idx -= 2` in sabotage_note_above? -> red
+  def test_sabotage_scan_accepts_a_two_line_wrapped_note
+    diff = <<~DIFF
+      diff --git a/test/statifier/foo_test.exs b/test/statifier/foo_test.exs
+      --- a/test/statifier/foo_test.exs
+      +++ b/test/statifier/foo_test.exs
+      @@ -10,0 +11,4 @@
+      +  # sabotage: enter_states/2 skips the initial child
+      +  # -> red
+      +  test "does the thing" do
+      +  end
+    DIFF
+
+    assert_empty Gate.scan_sabotage(diff)
+  end
+
+  # sabotage: change COMMENT_LINE_RE from /\A\s*#/ to /\A\s*##/ -> red
+  def test_sabotage_scan_accepts_a_three_line_wrapped_note
+    diff = <<~DIFF
+      diff --git a/test/statifier/foo_test.exs b/test/statifier/foo_test.exs
+      --- a/test/statifier/foo_test.exs
+      +++ b/test/statifier/foo_test.exs
+      @@ -10,0 +11,5 @@
+      +  # sabotage: enter_states/2 skips the initial
+      +  # child when the parent is compound and the
+      +  # default transition is absent -> red
+      +  test "does the thing" do
+      +  end
+    DIFF
+
+    assert_empty Gate.scan_sabotage(diff)
+  end
+
+  # sabotage: change COMMENT_LINE_RE from /\A\s*#/ to /\A\s*#?/ so the blank
+  # line matches too and the walk keeps going past it -> red
+  def test_sabotage_scan_flags_a_blank_line_between_note_and_test
+    diff = <<~DIFF
+      diff --git a/test/statifier/foo_test.exs b/test/statifier/foo_test.exs
+      --- a/test/statifier/foo_test.exs
+      +++ b/test/statifier/foo_test.exs
+      @@ -10,0 +11,4 @@
+      +  # sabotage: enter_states/2 skips the initial child -> red
+      +
+      +  test "does the thing" do
+      +  end
+    DIFF
+
+    missing = Gate.scan_sabotage(diff)
+
+    assert_equal 1, missing.length
+    assert_equal "test/statifier/foo_test.exs", missing.first[:file]
+  end
+
+  # sabotage: change the early-return condition in sabotage_note_above? from
+  # `added_lines[idx] =~ SABOTAGE_NOTE_RE` to `added_lines[idx] =~
+  # COMMENT_LINE_RE` (any comment counts as a note) -> red
+  def test_sabotage_scan_flags_a_comment_block_with_no_sabotage_note
+    diff = <<~DIFF
+      diff --git a/test/statifier/foo_test.exs b/test/statifier/foo_test.exs
+      --- a/test/statifier/foo_test.exs
+      +++ b/test/statifier/foo_test.exs
+      @@ -10,0 +11,4 @@
+      +  # this test covers the happy path
+      +  # nothing more to say here
+      +  test "does the thing" do
+      +  end
+    DIFF
+
+    missing = Gate.scan_sabotage(diff)
+
+    assert_equal 1, missing.length
+    assert_equal "test/statifier/foo_test.exs", missing.first[:file]
+  end
+
+  # sabotage: drop `added_lines = []` from the `@@` hunk-boundary branch in
+  # scan_sabotage -> red
+  def test_sabotage_scan_flags_a_note_separated_by_a_hunk_boundary
+    diff = <<~DIFF
+      diff --git a/test/statifier/foo_test.exs b/test/statifier/foo_test.exs
+      --- a/test/statifier/foo_test.exs
+      +++ b/test/statifier/foo_test.exs
+      @@ -5,0 +6,1 @@
+      +  # sabotage: enter_states/2 skips the initial child -> red
+      @@ -10,0 +12,2 @@
+      +  test "does the thing" do
+      +  end
+    DIFF
+
+    missing = Gate.scan_sabotage(diff)
+
+    assert_equal 1, missing.length
+    assert_equal "test/statifier/foo_test.exs", missing.first[:file]
+  end
+
   def test_sabotage_scan_ignores_scion_and_scxml_test_dirs
     diff = <<~DIFF
       diff --git a/test/scion_tests/foo_test.exs b/test/scion_tests/foo_test.exs

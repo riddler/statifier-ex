@@ -78,6 +78,12 @@ module Gate
   SABOTAGE_NOTE_RE = /#\s*sabotage:/.freeze
   TEST_LINE_RE = /\btest\s+"/.freeze
 
+  # Any comment line, used to walk the contiguous comment block above a test
+  # line - a `# sabotage:` note may wrap across several `#`-prefixed lines,
+  # and every line in that block has to keep matching this for the walk to
+  # continue (a blank line or code line stops it, same as a missing note).
+  COMMENT_LINE_RE = /\A\s*#/.freeze
+
   # Defense in depth: the pathspec on SABOTAGE_DIFF_ARGS already keeps these
   # out of the diff at the git level. Filtering them again here means the
   # scan is still correct even if this method is ever handed diff text from
@@ -117,24 +123,24 @@ module Gate
     end
 
     # Parses a -U0 unified diff for added `test "..."` lines with no
-    # `# sabotage:` note on the line immediately above them within the same
-    # hunk. Report-only - see the module doc.
+    # `# sabotage:` note anywhere in the contiguous comment block directly
+    # above them within the same hunk. Report-only - see the module doc.
     def scan_sabotage(diff_text)
       missing = []
       current_file = nil
-      prev_added = nil
+      added_lines = []
 
       diff_text.to_s.each_line do |raw|
         line = raw.chomp
 
         if line.start_with?("+++ ")
           current_file = line.sub(%r{\A\+\+\+ (b/)?}, "")
-          prev_added = nil
+          added_lines = []
           next
         end
 
         if line.start_with?("@@")
-          prev_added = nil
+          added_lines = []
           next
         end
 
@@ -143,14 +149,31 @@ module Gate
         content = line[1..-1].to_s
         exempt = EXEMPT_TEST_DIR_PREFIXES.any? { |prefix| current_file.to_s.start_with?(prefix) }
 
-        if !exempt && content =~ TEST_LINE_RE && !(prev_added && prev_added =~ SABOTAGE_NOTE_RE)
+        if !exempt && content =~ TEST_LINE_RE && !sabotage_note_above?(added_lines)
           missing << { file: current_file, text: content.strip }
         end
 
-        prev_added = content
+        added_lines << content
       end
 
       missing
+    end
+
+    # Walks upward from the end of `added_lines` (the added lines seen so
+    # far in the current hunk, in file order) over the contiguous run of
+    # comment lines immediately preceding the test line, looking for a
+    # `# sabotage:` note anywhere in that block. Stops at the first
+    # non-comment line - a blank line or code line breaks contiguity, so a
+    # note separated from the test by one is treated the same as no note at
+    # all.
+    def sabotage_note_above?(added_lines)
+      idx = added_lines.length - 1
+      while idx >= 0 && added_lines[idx] =~ COMMENT_LINE_RE
+        return true if added_lines[idx] =~ SABOTAGE_NOTE_RE
+
+        idx -= 1
+      end
+      false
     end
 
     def sabotage_missing(env)
