@@ -5,10 +5,15 @@ require "tmpdir"
 require "fileutils"
 
 # The mechanical enforcement of ADR-0015 constraint 1 (scripts are
-# step-scoped; the banned-operation list is absolute). It lives here rather
-# than in lib/mix/statifier/adr_guard.ex because that guard scans Elixir
-# under lib/statifier/ and would need a second language to cover Ruby - see
-# ADR-0015's Consequences.
+# step-scoped; the banned-operation list is absolute). This file is the
+# authoritative and permanent enforcement site - not a stopgap until the ADR
+# guard (lib/mix/statifier/adr_guard.ex) learns Ruby. That guard checks only
+# added diff lines, honors an inline ADR-citation escape hatch, and skips
+# without a base ref; an absolute whole-tree ban needs the opposite of all
+# three, which is what a full-content scan on every gate run gives. See
+# ADR-0015's Consequences (amended under st-biu) for the decision record.
+# New constraint-1 rules go here, and the drift check at the bottom of
+# ContractTest keeps this file's coverage matched to the ADR's own text.
 #
 # The guardrail test that survives every later phase of st-hzf. Contract
 # holds the scanning rules as pure functions over lines of source (so they
@@ -27,6 +32,23 @@ module Contract
     "bd close" => /\bbd\s+close\b/,
     "bd edit" => /\bbd\s+edit\b/
   }.freeze
+
+  # The files ADR-0015 constraint 1 forbids scripts to write, keyed exactly
+  # as the ADR names them (the drift check below compares these keys to the
+  # ADR's own text). The regexes are looser than the keys so a relative or
+  # absolute path spelling still matches.
+  GUARDED_WRITE_TARGETS = {
+    "docs/quality-gate-changes.md" => /quality-gate-changes\.md/,
+    ".quality.exs" => /\.quality\.exs/,
+    ".credo.exs" => /\.credo\.exs/,
+    "coveralls.json" => /coveralls\.json/,
+    ".sobelow-conf" => /\.sobelow-conf/
+  }.freeze
+
+  # Same false-negative trade as code_only: a write routed through a
+  # variable holding the path, or through a shelled-out `cp`, is not caught.
+  # Straight-line stdlib Ruby writes files with these calls on one line.
+  WRITE_CALL = /File\.(open|write)|IO\.write/.freeze
 
   NON_INTERACTIVE_FLAG = /-\S*f\S*/.freeze # any dash-flag containing an f, e.g. -f, -Rf, -rf, -Rfc
 
@@ -69,18 +91,18 @@ module Contract
     code.gsub(/["'\[\],]/, " ")
   end
 
-  def ledger_write?(content)
-    each_code_line(content) do |code, _lineno|
-      return true if code =~ /quality-gate-changes\.md/ && code =~ /File\.(open|write)|IO\.write/
-    end
-    false
-  end
+  # Returns [[lineno, label], ...] for every line that writes one of the
+  # guarded files (the ledger and the gate's config files).
+  def guarded_writes(content)
+    hits = []
+    each_code_line(content) do |code, lineno|
+      next unless code =~ WRITE_CALL
 
-  def quality_exs_write?(content)
-    each_code_line(content) do |code, _lineno|
-      return true if code =~ /\.quality\.exs/ && code =~ /File\.(open|write)|IO\.write/
+      GUARDED_WRITE_TARGETS.each do |label, pattern|
+        hits << [lineno, label] if code =~ pattern
+      end
     end
-    false
+    hits
   end
 
   # Returns lines using system(...) or backtick execution instead of Sh.
@@ -120,15 +142,27 @@ class ContractRulesTest < Minitest::Test
     assert_equal [[1, "bd edit"]], Contract.banned_calls(%(Sh.run(["bd", "edit", id])\n))
   end
 
-  def test_ledger_write_detected
-    assert Contract.ledger_write?(%(File.open("docs/quality-gate-changes.md", "a") { |f| f.puts x }\n))
-    refute Contract.ledger_write?(%(File.exist?("docs/quality-gate-changes.md")\n))
-    refute Contract.ledger_write?(%(# writing to docs/quality-gate-changes.md is not allowed\n))
+  def test_guarded_writes_detected_for_every_target
+    expected = {
+      "docs/quality-gate-changes.md" => %(File.open("docs/quality-gate-changes.md", "a") { |f| f.puts x }\n),
+      ".quality.exs" => %(File.write(".quality.exs", content)\n),
+      ".credo.exs" => %(File.write(".credo.exs", content)\n),
+      "coveralls.json" => %(File.write("coveralls.json", content)\n),
+      ".sobelow-conf" => %(IO.write(File.open(".sobelow-conf"), content)\n)
+    }
+
+    assert_equal Contract::GUARDED_WRITE_TARGETS.keys.sort, expected.keys.sort,
+                 "this test must plant a write for every guarded target"
+
+    expected.each do |label, line|
+      assert_equal [[1, label]], Contract.guarded_writes(line)
+    end
   end
 
-  def test_quality_exs_write_detected
-    assert Contract.quality_exs_write?(%(File.write(".quality.exs", content)\n))
-    refute Contract.quality_exs_write?(%(File.exist?(".quality.exs")\n))
+  def test_guarded_writes_ignores_reads_and_comments
+    assert_empty Contract.guarded_writes(%(File.exist?("docs/quality-gate-changes.md")\n))
+    assert_empty Contract.guarded_writes(%(File.read(".quality.exs")\n))
+    assert_empty Contract.guarded_writes(%(# writing to docs/quality-gate-changes.md is not allowed\n))
   end
 
   def test_system_or_backticks_detected
@@ -173,14 +207,14 @@ class ContractTest < Minitest::Test
     assert_empty offenders, "banned call(s) found outside comments: #{offenders.join(', ')}"
   end
 
-  def test_no_write_to_quality_gate_changes_ledger
-    offenders = non_test_files.select { |f| Contract.ledger_write?(File.read(f)) }
-    assert_empty offenders, "a write to docs/quality-gate-changes.md found in: #{offenders.join(', ')}"
-  end
-
-  def test_no_quality_exs_write
-    offenders = non_test_files.select { |f| Contract.quality_exs_write?(File.read(f)) }
-    assert_empty offenders, ".quality.exs write found in: #{offenders.join(', ')}"
+  def test_no_writes_to_ledger_or_gate_config
+    offenders = []
+    non_test_files.each do |file|
+      Contract.guarded_writes(File.read(file)).each do |(lineno, label)|
+        offenders << "#{file}:#{lineno} (#{label})"
+      end
+    end
+    assert_empty offenders, "write(s) to a guarded file found in: #{offenders.join(', ')}"
   end
 
   def test_no_system_or_backticks_everything_goes_through_sh
@@ -222,11 +256,36 @@ class ContractTest < Minitest::Test
   def test_meta_the_scan_actually_catches_a_planted_violation
     Dir.mktmpdir do |dir|
       planted = File.join(dir, "planted.rb")
-      File.write(planted, %(Sh.run(["git", "push", "origin", "main"])\n))
+      File.write(planted, %(Sh.run(["git", "push", "origin", "main"])\nFile.write(".credo.exs", weakened)\n))
 
-      hits = Contract.banned_calls(File.read(planted))
+      content = File.read(planted)
 
-      refute_empty hits, "the contract scan failed to catch a planted git push"
+      refute_empty Contract.banned_calls(content), "the contract scan failed to catch a planted git push"
+      refute_empty Contract.guarded_writes(content), "the contract scan failed to catch a planted .credo.exs write"
     end
+  end
+
+  # The drift check ADR-0015's Consequences promise: every backticked
+  # operation constraint 1 names must have a matching Contract rule. The
+  # scope path (.claude/scripts/) and script names cited as examples
+  # (ship.rb) are not operations and are filtered out. This is what makes
+  # the ADR text and this file unable to drift apart silently - the gap it
+  # closes was real: the write checks originally covered .quality.exs but
+  # not .credo.exs, coveralls.json, or .sobelow-conf.
+  def test_contract_coverage_matches_adr_0015_constraint_1
+    adr_path = File.join(SCRIPTS_ROOT, "..", "..", "docs", "adr", "0015-skill-mechanics-in-scripts.md")
+    adr = File.read(adr_path)
+
+    constraint_1 = adr[/^\*\*1\..*?(?=^\*\*2\.)/m]
+    refute_nil constraint_1, "could not locate constraint 1 in ADR-0015 (did its heading format change?)"
+
+    operations = constraint_1.scan(/`([^`]+)`/).flatten
+                             .reject { |t| t == ".claude/scripts/" || t.end_with?(".rb") }
+    refute_empty operations, "constraint 1 no longer names any backticked operations - drift check is vacuous"
+
+    covered = Contract::BANNED_CALLS.keys + Contract::GUARDED_WRITE_TARGETS.keys
+    missing = operations - covered
+
+    assert_empty missing, "ADR-0015 constraint 1 names operations Contract does not cover: #{missing.join(', ')}"
   end
 end
