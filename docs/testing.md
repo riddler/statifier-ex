@@ -119,13 +119,22 @@ runs of the same test compute byte-identical paths and race on
 `rm_rf!`/`mkdir_p!` (st-0vz).
 
 Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead - same `tmp_dir`
-context key, same directory shape, but the root is settable per OS process via
-`STATIFIER_TMP_ROOT` (default `"tmp"`). `mix test.regression` sets it to
-`tmp/regression` for its spawned `mix test`, so the ratchet's scratch tree
-never overlaps the Tests stage's. ExUnit's own `@tag :tmp_dir` /
-`@describetag :tmp_dir` is banned repo-wide; `test/statifier/tmp_dir_test.exs`
-enforces it by scanning `test/**/*.exs` and failing with the offending file
-names.
+context key, same directory shape, but `root/0` always ends in a
+`System.pid()` segment, so two concurrent OS processes cannot resolve to the
+same scratch path even if they somehow agree on everything else (st-iao;
+`test/statifier/tmp_dir_test.exs` itself used to do exactly that, mutating
+`STATIFIER_TMP_ROOT` process-globally mid-run). `STATIFIER_TMP_ROOT` (default
+`"tmp"`) still exists, but only to choose where a run's pid-scoped tree lives
+for readability - `mix test.regression` sets it to `tmp/regression` so the
+ratchet's directories are easy to pick out by eye, not because isolation
+depends on it. ExUnit's own `@tag :tmp_dir` / `@describetag :tmp_dir` is
+banned repo-wide; `test/statifier/tmp_dir_test.exs` enforces it by scanning
+`test/**/*.exs` and failing with the offending file names.
+
+Directories accumulate: each OS process leaves its own `tmp/<root>/<pid>/`
+subtree behind rather than being swept, so a failure stays inspectable and no
+`setup` callback risks deleting a tree a concurrent run is still using. Clear
+`tmp/` by hand between sessions if that bothers you.
 
 ## Corpus generation
 
