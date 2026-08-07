@@ -674,10 +674,10 @@ issues no kill of any kind.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green, including every pane fixture
-- [ ] `grep -rn 'kill-pane\|kill -9\|SIGKILL' .claude/scripts/` returns only
+- [x] `ruby .claude/scripts/test/run.rb` is green, including every pane fixture
+- [x] `grep -rn 'kill-pane\|kill -9\|SIGKILL' .claude/scripts/` returns only
       the comment forbidding them
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `tmux_window.rb classify` against a live busy window in this tmux session
@@ -1574,6 +1574,14 @@ before considering the plan fully landed.
 - [ ] `worktree_refresh.rb --dry-run` over the live worktrees classifies each
       the same way a manual read of `git worktree list` does
 - [ ] The PLT glob still matches a real file in this repo's `_build/dev/`
+
+### Phase 5
+
+- [ ] `tmux_window.rb classify` against a live busy window in this tmux session
+      reports busy, and against an idle one reports idle
+- [ ] The fixtures are real captures, not hand-typed escape sequences
+- [ ] `tmux_window.rb open --dry-run` renders a command line that could be
+      pasted into fish unchanged
 
 ## Open Questions
 
