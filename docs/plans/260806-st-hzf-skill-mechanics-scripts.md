@@ -1242,14 +1242,14 @@ confirm before changing; L200-204 no open questions; L132-136 link to
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] The `^Refs:` pipeline appears in no SKILL.md:
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] The `^Refs:` pipeline appears in no SKILL.md:
       `grep -rn "grep -oE 'st-" .claude/skills/` returns nothing
-- [ ] `rebase --abort` appears in no SKILL.md:
+- [x] `rebase --abort` appears in no SKILL.md:
       `grep -rln 'rebase --abort' .claude/skills/` returns nothing
-- [ ] `plan_state.rb validate` on the three newest plans reports no missing
+- [x] `plan_state.rb validate` on the three newest plans reports no missing
       sections
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `/merge-request`'s step 6 confirmation is still an unconditional human
@@ -1620,6 +1620,24 @@ before considering the plan fully landed.
       `/new-worktree <id>-<slug> -- /work <id> --auto` invocation
 - [ ] The `--label-any` workaround note survived the rewrite
 
+
+### Phase 11
+
+- [ ] `/merge-request`'s step 6 confirmation is still an unconditional human
+      gate with no automated path around it
+- [ ] `/create-plan`'s single template is byte-identical to the one that
+      produced this document
+- [ ] `/research-codebase`'s documentarian charter is unmodified
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for manual confirmation from the human that the manual
+testing was successful before proceeding to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end instead of blocking here.
+
+---
 ## Open Questions
 
 No human was available during planning, so these are recorded here rather than

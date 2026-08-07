@@ -19,33 +19,23 @@ Planning runs on the Opus tier per docs/workflow.md (implementation runs on Sonn
 
 ### File Location
 
-**ALWAYS** write the plan to: `docs/plans/YYMMDD-issue-id-description.md`
-
-- `YYMMDD` = today's date
-- `issue-id` = beads issue ID (omit if none)
-- `description` = brief kebab-case description
-
-Examples:
-- `docs/plans/260802-st-a42-parallel-exit-sets.md`
-- `docs/plans/260802-improve-error-events.md`
+**ALWAYS** write the plan to `docs/plans/YYMMDD-issue-id-description.md`, built with:
+```bash
+ruby .claude/scripts/doc_meta.rb filename --dir docs/plans --description "<kebab-description>" [--issue ISSUE_ID]
+```
+`data.path` is the filename rule - `YYMMDD-[issue-id-]kebab-description.md` -
+the single definition site this skill shares with `/research-codebase`, so the
+two cannot drift.
 
 **NEVER** write the plan to `.claude/`, the project root, or any other directory.
 
 ### Template Structure
 
-The plan document **MUST** include ALL of the following sections in this order:
-
-1. `# [Feature/Task Name] Implementation Plan` (title)
-2. `## Overview` (brief description, beads issue ID)
-3. `## Current State Analysis` (what exists, constraints)
-4. `## Desired End State` (specification of end state, how to verify)
-5. `## What We're NOT Doing` (explicit out-of-scope items)
-6. `## Implementation Approach` (high-level strategy)
-7. `## Phase N: [Name]` (one or more phases, each with Overview, Changes Required, and Success Criteria split into Automated/Manual Verification)
-8. `## Testing Strategy` (unit, conformance, manual)
-9. `## References` (source docs, related research, ADR numbers, file:line refs)
-
-Optional sections (include if applicable): `## Performance Considerations`, `## Corpus/Ratchet Notes`
+The one authoritative template lives under "Step 4: Detailed Plan Writing"
+below. It must include every section it lists, in that order, and every Phase
+must split its Success Criteria into Automated and Manual Verification -
+`plan_state.rb validate` (Step 4 again) checks this mechanically before you
+present the plan.
 
 ---
 
@@ -229,8 +219,8 @@ Once aligned on approach:
    interpreter vs corpus tooling) so they can be parallelized across worktrees
    per docs/workflow.md.
 
-   A phase should also be the smallest unit that is independently
-   gate-verifiable and independently committable. If two candidate phases
+   **A phase should also be the smallest unit that is independently
+   gate-verifiable and independently committable.** If two candidate phases
    would leave an intermediate `mix quality` gate red on their own (e.g. a
    struct field added in one phase, consumed in the next, with nothing
    exercising it in between), combine them into one phase rather than
@@ -246,13 +236,23 @@ After structure approval:
 
 1. **CRITICAL: You MUST write the plan to disk before presenting your summary.**
    - **Re-read the "MANDATORY Output Requirements" section at the top of this document NOW**
-   - Compose the full document content following the MANDATORY template structure
-   - Write the file to `docs/plans/` using the MANDATORY naming convention
+   - Compose the full document content following the template below
+   - Write the file to the path `doc_meta.rb filename` produced
+   - Validate before presenting it:
+     ```bash
+     ruby .claude/scripts/plan_state.rb validate <path>
+     ```
+     `data.sections_missing` must be empty - it checks for exactly the nine
+     mandatory sections (title, Overview, Current State Analysis, Desired End
+     State, What We're NOT Doing, Implementation Approach, at least one Phase,
+     Testing Strategy, References), in order. Fix and re-validate before
+     moving on; do not present a plan `plan_state.rb validate` still flags.
    - Present the proposed file path and a brief description to the user
    - Ask the user for permission to write the file
    - Upon approval, write the file using the Write tool
    - Confirm the file was written successfully
-2. **Use this template structure** (see also MANDATORY Output Requirements above):
+2. **The template** (this is the one authoritative statement of it in this
+   skill - do not restate it elsewhere):
 
 ````markdown
 # [Feature/Task Name] Implementation Plan
@@ -347,6 +347,9 @@ After structure approval:
 - Similar implementation: `[file:line]`
 - Beads issue: `st-xxx`
 ````
+
+   `## Performance Considerations` and `## Corpus/Ratchet Notes` are optional
+   - include them only when applicable to this plan.
 
 ### Step 5: Review
 
@@ -539,14 +542,5 @@ The research includes file references and implementation notes. Let me structure
 
 ---
 
-## Pre-Write Checklist
-
-**STOP. Before writing the plan file, verify ALL of the following:**
-
-- [ ] File path is `docs/plans/YYMMDD-...md` (NOT `.claude/`, NOT project root)
-- [ ] File name follows format: `YYMMDD-issue-id-kebab-description.md`
-- [ ] Document starts with `# [Name] Implementation Plan`
-- [ ] Contains ALL mandatory sections: Overview, Current State Analysis, Desired End State, What We're NOT Doing, Implementation Approach, Phase(s), Testing Strategy, References
-- [ ] Each Phase has Success Criteria split into Automated Verification and Manual Verification
-- [ ] Automated criteria use the ex_quality commands (`mix quality --profile loop`, `mix quality`)
-- [ ] No unresolved open questions remain in the document
+See `.claude/scripts/README.md` for the envelope contract shared by every
+script this skill calls.

@@ -24,36 +24,38 @@ into `origin/main` (st-qww.4). A PR is a request, not an outcome.
 `$ARGUMENTS` = optional beads issue ID. Omitted, the beads come from the `Refs:`
 trailers on the branch's own commits, falling back to the branch prefix (step 2).
 
-## Steps
+## What to run
 
 1. **Establish where you are.**
    ```bash
-   git branch --show-current
-   git status --porcelain
+   ruby .claude/scripts/repo_state.rb
    ```
-   STOP if the branch is `main` - this skill operates on per-issue worktree
-   branches only. STOP if the tree is dirty: an uncommitted change is either
-   part of this work and belongs in a commit, or is unrelated and belongs
-   somewhere else. Do not stage it here.
+   STOP if `data.is_main` - this skill operates on per-issue worktree branches
+   only. STOP if `data.dirty` - an uncommitted change is either part of this
+   work and belongs in a commit, or is unrelated and belongs somewhere else.
+   Do not stage it here.
 
    Confirm there is something to push:
    ```bash
    git log origin/main..HEAD --oneline
    ```
-   Empty means nothing to open a PR for. Say so and stop.
+   Empty means nothing to open a PR for. Say so and stop. (`repo_state.rb`'s
+   own `unpushed`/`commits_ahead` are relative to the branch's upstream, not
+   `origin/main`, so this one check stays hand-run.)
 
-2. **Resolve the beads.** From `$ARGUMENTS` if given. Otherwise read the
-   trailers the branch's own commits carry - the same anchored match
-   `/cleanup-worktrees` closes on, so the PR body and the eventual closes agree:
-   ```bash
-   git log origin/main..HEAD --pretty=%B \
-     | grep -E '^Refs:' \
-     | grep -oE 'st-[a-z0-9]+(\.[0-9]+)?' | sort -u
-   ```
-   Fall back to the branch prefix only when that finds nothing (a branch whose
-   commits predate the `Refs:` convention). The prefix is a creation-time label
-   and names at most one bead (ADR-0010), so a branch carrying several would
-   otherwise reach the PR body naming only the first.
+2. **Resolve the beads.** From `$ARGUMENTS` if given. Otherwise read
+   `data.refs_beads` from step 1's `repo_state.rb` output - the same anchored
+   `Refs:` extraction (`lib/refs.rb`) that `/cleanup-worktrees` closes on via
+   `pr_state.rb beads`, so the PR body and the eventual closes agree.
+
+   `data.refs_beads` is computed over commits not yet on the branch's upstream.
+   **If `data.upstream` is `null`** (the branch has never been pushed - the
+   first `/merge-request` run for it) or `refs_beads` comes back empty, fall
+   back to `data.branch_bead.id`. The prefix is a creation-time label and names
+   at most one bead (ADR-0010), so a branch carrying several would otherwise
+   reach the PR body naming only the first - this is the same limitation the
+   original hand-written fallback carried, now triggered by the same
+   condition.
 
    Validate each with `bd show <id>`. STOP if none resolves. A PR that cannot be
    traced to a bead is work nobody can find later, and the `bd note` in step 8
@@ -67,84 +69,76 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    close wearing a different hat.
    ```bash
    git fetch origin
+   ruby .claude/scripts/rebase_onto.rb .
    ```
-   Check whether there is anything to replay before touching the build:
-   ```bash
-   git rev-list --count HEAD..origin/main
-   ```
-   Zero means `origin/main` has not moved since the branch was cut - nothing to
-   rebase and no reason to invalidate warm build caches. Say so and go straight
-   to step 4.
+   `rebase_onto.rb` is the same shared rebase-with-repair block
+   `/refresh-worktree` step 3d/3e uses (`RebaseOnto.perform`, not a prose
+   cross-reference): it checks whether `origin/main` has moved before touching
+   anything, rebases, repairs `mix.lock` drift (`mix deps.get`, then a
+   best-effort PLT copy from the main checkout) only when the lockfile moved,
+   and never re-clones `deps/` or `_build/` wholesale.
 
-   Otherwise, rebase:
-   ```bash
-   git rebase origin/main
-   ```
-   **On conflict: abort and report, do not resolve unasked** - CLAUDE.md's
-   authority table is explicit that a conflict during this rebase is still
-   unauthorized. Capture the conflicting files before aborting, the same order
-   `/refresh-worktree` step 3d uses, since the abort clears the conflict state
-   a report assembled afterward would otherwise have nothing left to name:
-   ```bash
-   git diff --name-only --diff-filter=U   # capture, then
-   git rebase --abort                     # abort
-   ```
-   Report the conflicting files and stop. Do not fall through to the gate or
-   the push with the branch left un-rebased - an aborted rebase ends this run.
+   Read `data.status`:
+   - `"rebased"` - `data.target` (the `origin/main` sha rebased onto),
+     `data.lock_changed`, `data.repaired` feed step 6's confirmation.
+   - **`"conflict"`** (`blocked` code `rebase_conflict`, `needs: "human"`) -
+     `data.files` (or the `blocked` message) names the conflicting files.
+     **The script has already captured the files and aborted the rebase** -
+     capture-then-abort is baked into `rebase_onto.rb` itself, the same order
+     `/refresh-worktree` step 3d uses, since the abort clears the conflict
+     state a report assembled afterward would otherwise have nothing left to
+     name. Report the conflicting files and stop. Do not fall through to the
+     gate or the push with the branch left un-rebased - **an aborted rebase
+     ends this run.** There is no resolve path here or in the script: CLAUDE.md's
+     authority table is explicit that resolving a rebase conflict unasked is
+     unauthorized.
 
-   If the rebase moved `mix.lock`, repair the build before step 4 runs, the
-   same way `/refresh-worktree` step 3e does: `mix deps.get`, then clone the
-   dialyzer PLT from the main checkout if it has already been rebuilt for the
-   new dep set, or note that the next full gate run will rebuild it. Reuse that
-   logic rather than reimplementing it here, and do not re-clone `deps/` or
-   `_build/` wholesale - a live worktree has its own incremental state and a
-   wholesale clone forces a full recompile. A lockfile that did not move is the
-   common case and needs none of this.
-
-   Record what moved, for step 6's confirmation: the pre-rebase tip, the
-   `origin/main` commit rebased onto, and whether any commits were replayed.
-
-   **On the no-op case:** even when there is nothing to replay, step 4's gate
-   still runs. The fast path above skips the rebase and the build repair, not
-   the gate - it is the expensive parts that are wasted on an unmoved main, not
-   the cheap one. `mix gate.verify` attests to *this* tree, and the simplest
-   way to know the tree has not drifted since `/commit` last ran it is to ask
-   again rather than track how long ago it was green and whether anything else
-   touched the tree since. That bookkeeping would cost more reasoning than the
-   redundant gate run costs seconds. One code path - the gate always runs at
-   step 4 - beats two.
+   **On the no-op case** (nothing to replay): `rebase_onto.rb` still ran; step
+   4's gate still runs regardless. What the no-op case skips is the expensive
+   parts (the rebase, the build repair), not the gate - `mix gate.verify`
+   attests to *this* tree, and the simplest way to know the tree has not
+   drifted since `/commit` last ran it is to ask again rather than track how
+   long ago it was green and whether anything else touched the tree since.
+   That bookkeeping would cost more reasoning than the redundant gate run
+   costs seconds. One code path - the gate always runs at step 4 - beats two.
 
 4. **Run the full gate.**
    ```bash
-   mix gate.verify
+   ruby .claude/scripts/gate.rb
    ```
-   It runs `mix quality` and attests that the run was a full one. Never truncate
-   the output. **Refuse on red** - report the failing stages with their
-   `file:line` findings and stop. Do not push a branch whose gate is red in the
-   hope that CI disagrees.
+   Wraps `mix gate.verify` and `mix quality --format json --report -`. Never
+   truncate `data.stages` or `data.attestation_message`. **Refuse on red** -
+   `ok: false` means either `data.status != "ok"` or a stage came back
+   skipped (`data.skipped_stages`); report the failing stages with their
+   `file:line` findings and stop. Do not push a branch whose gate is red in
+   the hope that CI disagrees.
 
-   A narrowed run does not count: `--quick`, `--profile loop`, and
-   `--test-scope changed` all skip checks a reviewer will assume ran, and
-   `mix gate.verify` exits non-zero rather than attesting to one.
+   A narrowed run does not count - this script accepts no `--skip`, `--quick`,
+   or narrowing `--profile`; passing one is a usage error, not a narrower run.
+   `data.attested` mirrors `mix gate.verify`'s own attestation.
 
-   **Carve-out**, matching `/commit` Step 0: if the diff touches nothing under
-   `lib/`, `test/`, `config/`, and neither `mix.exs` nor `mix.lock`, there is no
-   gate to run. Skip it and say so in the PR body and the final report, so a
-   skipped gate is never mistaken for a green one.
+   **Carve-out**, matching `/commit` Step 0: `data.applicable` false means the
+   diff touches nothing under `lib/`, `test/`, `config/`, `mix.exs`, or
+   `mix.lock` - there is no gate to run. `data.carve_out_reason` explains why.
+   Skip it and say so in the PR body and the final report, so a skipped gate
+   is never mistaken for a green one.
 
-   Then run the ADR judge: `mix quality --profile merge`. It makes real
-   `claude` CLI calls, which is why it is disabled in the gate `mix
-   gate.verify` just ran and lives in this profile instead - a check that
-   costs money and a network round trip has no business running on every
-   `mix quality`. It skips cleanly (no `claude` CLI on `PATH`, no
-   `lib/statifier/` changes, no base ref) when it has nothing to check; a skip
-   is fine to push through. A finding is not - refuse on one exactly as on a
-   red gate, report it, and stop.
-
-5. **Check for a changelog fragment.** Only when the diff touches public API
-   under `lib/`:
+   Then run the ADR judge - no script wraps this, since it makes real `claude`
+   CLI calls and costs money and a network round trip, which is why it is
+   disabled in the `gate.rb`/`mix gate.verify` run above and lives in its own
+   profile instead:
    ```bash
-   git diff origin/main...HEAD --name-only
+   mix quality --profile merge
+   ```
+   It skips cleanly (no `claude` CLI on `PATH`, no `lib/statifier/` changes, no
+   base ref) when it has nothing to check; a skip is fine to push through. A
+   finding is not - refuse on one exactly as on a red gate, report it, and
+   stop.
+
+5. **Check for a changelog fragment.** Only when `data.touches_elixir` (from
+   step 1's `repo_state.rb`) is true and the diff touches public API under
+   `lib/`:
+   ```bash
    ls changelog.d/
    ```
    `changelog.d/README.md` is the authority and most changes need none - test
@@ -179,7 +173,10 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    Wait for an answer. This is the one confirmation this skill does not skip,
    and there is no `--auto` for it.
 
-7. **Push, then open the PR.**
+7. **Push, then open the PR.** No script touches these - `.claude/scripts/`'s
+   own contract bans a `git push` or `gh pr create` code path anywhere under
+   it (`.claude/scripts/README.md`'s "Step-scoping" section), so this stays a
+   hand-run command:
    ```bash
    git push -u origin <branch>
    ```
@@ -214,7 +211,9 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    No AI attribution in the title or the body, same rule as commit messages
    (CLAUDE.md, and the override in `/commit`).
 
-8. **Sync beads, then record the PR.**
+8. **Sync beads, then record the PR.** Also hand-run - `bd close` is on the
+   same banned-operation list, and this step never closes anything, but
+   `bd dolt push`/`bd note` are ordinary bead commands no script wraps:
    ```bash
    bd dolt push
    bd note <id> "PR: <url>"
@@ -247,7 +246,8 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
   which is why `/commit --auto` producing several commits on a branch is fine
   and needs no cleanup pass. It also means the branch tip never becomes an
   ancestor of `main`, so merge detection anywhere downstream must use `gh` PR
-  state rather than git ancestry (st-qww.5).
+  state rather than git ancestry (st-qww.5) - which is exactly why `pr_state.rb`
+  exists (see `/cleanup-worktrees`).
 - **Never close the bead here.** `bd close` fires on merge into `origin/main`,
   verified against the remote. Closing at PR-open time asserts to every other
   machine that the work landed when it has not.
@@ -266,3 +266,5 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
   unambiguous, and name every bead the PR closes in its body.
 - After the merge, the survivors need `/refresh-worktree`, and this branch's
   worktree and beads are handled by `/cleanup-worktrees`.
+- See `.claude/scripts/README.md` for the envelope contract shared by every
+  script this skill calls.

@@ -61,17 +61,7 @@ When a beads issue ID is provided:
    - Inform the user
    - Ask if they want to provide a different issue ID or research question
 
-### Step 2: Gather Metadata
-
-Collect metadata for the research document:
-
-```bash
-date +%Y-%m-%dT%H:%M:%S%z
-git rev-parse HEAD
-git branch --show-current
-```
-
-### Step 3: Frame the Research Question
+### Step 2: Frame the Research Question
 
 Use the issue as the research prompt:
 
@@ -83,9 +73,10 @@ Use the issue as the research prompt:
   - Dependencies and integration points
 - Apply all the standard research workflow steps below
 - The final research document filename should include the issue ID
-  (e.g., `docs/research/260802-st-a42-parallel-exit-sets.md`)
+  (e.g., `docs/research/260802-st-a42-parallel-exit-sets.md`) - step 5 below
+  produces it via `doc_meta.rb filename`
 
-### Step 4: After Research Completes
+### Step 3: After Research Completes
 
 1. **Record the research on the issue**:
    ```bash
@@ -161,42 +152,41 @@ Use the issue as the research prompt:
    - Highlight patterns, connections, and architectural decisions (with ADR numbers)
    - Answer the user's specific questions with concrete evidence
 
-5. **Gather metadata for the research document:**
-   - Collect date/time with timezone, git commit hash, and branch name (see Step 2 commands above)
-   - Filename: `docs/research/YYMMDD-description.md`
-     - Format: `YYMMDD-[issue-id-]description.md` where:
-       - YYMMDD is today's date
-       - issue-id is the beads issue ID (omit if none)
-       - description is a brief kebab-case description of the research topic
-     - Examples:
-       - With issue: `260802-st-a42-parallel-exit-sets.md`
-       - Without issue: `260802-history-restoration-flow.md`
-
-6. **Generate research document:**
-   - Use the metadata gathered in step 5
+5. **Gather metadata and generate the research document:**
+   - Get the metadata triple and the filename in one call each:
+     ```bash
+     ruby .claude/scripts/doc_meta.rb metadata
+     ruby .claude/scripts/doc_meta.rb filename --dir docs/research --description "<kebab-topic>" [--issue ISSUE_ID]
+     ```
+     `metadata`'s `data.date`, `data.git_commit`, `data.branch` and
+     `filename`'s `data.path` are the same fields the old hand-run
+     `date`/`git rev-parse HEAD`/`git branch --show-current` triple and
+     filename rule produced - `doc_meta.rb` is the single definition site for
+     both `/research-codebase` and `/create-plan` (`YYMMDD-[issue-id-]
+     description.md`), so the two skills cannot drift.
+   - Render the frontmatter block:
+     ```bash
+     ruby .claude/scripts/doc_meta.rb frontmatter --topic "<User's Question/Topic>" \
+       [--beads-issue ISSUE_ID] --tags "research,codebase,<component>" [--status complete]
+     ```
+     `data.frontmatter` is the ready-to-paste `---`-delimited block (`date`,
+     `researcher: Claude`, `git_commit`, `branch`, `repository: statifier-ex`,
+     `beads_issue`, `topic`, `tags`, `status: complete`, `last_updated`,
+     `last_updated_by: Claude`, in that order, optional fields omitted when
+     empty). **Never write the document with placeholder values** in place of
+     any of these - if a value isn't available yet, get it from `doc_meta.rb`
+     first rather than filling in a stand-in.
    - **CRITICAL: You MUST propose the complete document and write it to disk before presenting your summary.**
-     1. Compose the full document content (frontmatter + body)
-     2. Present the proposed file path and a brief description to the user
+     1. Compose the full document content: the frontmatter block above, followed by body content you write yourself
+     2. Present the proposed file path (`doc_meta.rb filename`'s `data.path`) and a brief description to the user
      3. Ask the user for permission to write the file
      4. Upon approval, write the file using the Write tool
      5. Confirm the file was written successfully
-   - Structure the document with YAML frontmatter followed by content:
+   - Body structure (`doc_meta.rb` emits frontmatter and a filename only -
+     never a section skeleton, so this shape is yours to hold in mind and
+     write, not to copy from a script):
 
      ```markdown
-     ---
-     date: [Current date and time with timezone in ISO format]
-     researcher: Claude
-     git_commit: [Current commit hash]
-     branch: [Current branch name]
-     repository: statifier-ex
-     beads_issue: [Issue ID, if applicable]
-     topic: "[User's Question/Topic]"
-     tags: [research, codebase, relevant-component-names]
-     status: complete
-     last_updated: [Current date in YYYY-MM-DD format]
-     last_updated_by: Claude
-     ---
-
      # Research: [User's Question/Topic]
 
      **Date**: [Current date and time with timezone]
@@ -248,25 +238,33 @@ Use the issue as the research prompt:
      [Any areas that need further investigation]
      ```
 
-7. **Add GitHub permalinks (if applicable):**
-   - Check if on main branch or if commit is pushed: `git branch --show-current` and `git status`
-   - If on main/master or pushed, generate GitHub permalinks:
-     - Get repo info: `gh repo view --json owner,name`
-     - Create permalinks: `https://github.com/{owner}/{repo}/blob/{commit}/{file}#L{line}`
-   - Replace local file references with permalinks in the document
+6. **Add GitHub permalinks (if applicable):**
+   - Check if on main branch or if commit is pushed: `git branch --show-current` and `git status` - this judgment call (does a permalink to this commit resolve for anyone else yet) stays here; the rewrite itself is mechanical
+   - If on main/master or pushed, rewrite the document in place:
+     ```bash
+     ruby .claude/scripts/permalinks.rb docs/research/<filename>
+     ```
+     This finds every backtick-quoted `` `file:line` `` (or `` `file:line-line` ``)
+     reference already in the document and turns it into
+     `[`file:line`](https://github.com/{owner}/{repo}/blob/{commit}/{file}#L{line})`,
+     idempotently - a second run touches nothing already rewritten. `data.count`
+     is how many it changed; `data.substitutions` lists each one.
 
-8. **Present findings:**
+7. **Present findings:**
    - Present a concise summary of findings to the user
    - Include key file references for easy navigation
    - Ask if they have follow-up questions or need clarification
 
-9. **Handle follow-up questions:**
-   - If the user has follow-up questions, append to the same research document
-   - Update the frontmatter fields `last_updated` and `last_updated_by` to reflect the update
-   - Add `last_updated_note: "Added follow-up research for [brief description]"` to frontmatter
-   - Add a new section: `## Follow-up Research [timestamp]`
-   - Spawn new sub-agents as needed for additional investigation
-   - Continue updating the document
+8. **Handle follow-up questions:**
+   - If the user has follow-up questions, spawn new sub-agents as needed for additional investigation, then append your findings to the same research document under a new `## Follow-up Research [timestamp]` section
+   - Update the frontmatter and add the heading in one call:
+     ```bash
+     ruby .claude/scripts/doc_meta.rb follow-up docs/research/<filename> --note "Added follow-up research for [brief description]"
+     ```
+     This bumps `last_updated`, sets `last_updated_note` to the given text, and
+     appends a `## Follow-up Research <timestamp>` heading - nothing else; write
+     your findings as body content under that heading yourself, the same way
+     `doc_meta.rb`'s filename/frontmatter calls never write body content either.
 
 ## Important notes
 
@@ -289,7 +287,7 @@ Use the issue as the research prompt:
 - **Critical ordering**: Follow the numbered steps exactly
   - ALWAYS read mentioned files first before spawning sub-tasks (step 1)
   - ALWAYS wait for all sub-agents to complete before synthesizing (step 4)
-  - ALWAYS gather metadata before writing the document (step 5 before step 6)
+  - ALWAYS gather metadata before writing the document (step 5)
   - NEVER write the research document with placeholder values
 - **Frontmatter consistency**:
   - Always include frontmatter at the beginning of research documents
@@ -297,3 +295,5 @@ Use the issue as the research prompt:
   - Update frontmatter when adding follow-up research
   - Use snake_case for multi-word field names (e.g., `last_updated`, `git_commit`)
   - Tags should be relevant to the research topic and components studied
+- See `.claude/scripts/README.md` for the envelope contract shared by every
+  script this skill calls.
