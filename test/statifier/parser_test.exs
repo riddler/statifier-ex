@@ -192,6 +192,30 @@ defmodule Statifier.ParserTest do
              } = parse!(xml)
     end
 
+    # A text run that follows a *closing* tag is the only thing that pins the
+    # cursor advance in the :end_element clause. The interleaving test above
+    # cannot: its sibling is self-closing, so the start and end records share
+    # a span and skipping the advance is a no-op.
+    #
+    # sabotage: the :end_element clause of handle_event/3 keeps the old cursor
+    # (`cursor: state.cursor`) instead of advancing past the end tag -> the
+    # trailing run's span starts back inside the sibling and slices to
+    # "x</alpha>after", reddening the slice assertion below
+    test "a text run after a closing tag starts past it, not inside the sibling" do
+      xml = "<root>before<alpha>x</alpha>after</root>"
+
+      assert %DOM.Element{
+               children: [
+                 %DOM.Text{value: "before", location: before_loc},
+                 %DOM.Element{name: "alpha"},
+                 %DOM.Text{value: "after", location: after_loc}
+               ]
+             } = parse!(xml)
+
+      assert Location.slice(before_loc, xml) == "before"
+      assert Location.slice(after_loc, xml) == "after"
+    end
+
     # sabotage: add_text/2 replaces the open text node's value with the new
     # characters instead of appending (`value: characters`) -> only the last
     # of the three events survives, reddening the coalesced value assertion
