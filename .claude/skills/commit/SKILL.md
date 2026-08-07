@@ -100,18 +100,33 @@ the carve-out below).
 
 Read the result:
 - `data.applicable` false means the diff touches nothing under `lib/`, `test/`,
-  `config/`, and neither `mix.exs` nor `mix.lock` - there is no gate to run,
-  and `data.carve_out_reason` says so. **This carve-out is narrow and it is not
-  a judgment call**: one Elixir file in the diff and `data.applicable` is true,
-  full stop. When it applies, say so in the Step 4 report ("docs only, no
-  quality gate applicable") rather than letting a reader assume a green gate
-  that never ran.
+  `config/`, `.claude/scripts/`, and neither `mix.exs` nor `mix.lock` - there is
+  no gate to run, and `data.carve_out_reason` says so. **This carve-out is
+  narrow and it is not a judgment call**: one file from that list in the diff
+  and `data.applicable` is true, full stop. When it applies, say so in the
+  Step 4 report ("docs only, no quality gate applicable") rather than letting a
+  reader assume a green gate that never ran.
+
+  `.claude/scripts/` is on that list because the gate's `Script tests` stage
+  runs the Ruby suite covering it (ADR-0011 ledger entry st-hzf). The carve-out
+  tracks **what the gate measures**, not what the Elixir build compiles - if a
+  future stage measures something else outside `lib/`, it belongs here and in
+  `lib/touches_elixir.rb`'s `gate_applicable?` too. A stage the carve-out does
+  not know about is a stage that never runs on the branches it exists for.
 - `ok: false` with `data.applicable: true` is a real gate failure - see "If
   Quality Checks Fail" below, including the `Gate guard` case.
-- `data.skipped_stages` non-empty means `ok` is already false for you (the
-  script enforces this), but read the list anyway when reporting - "a skipped
-  stage is not a passing one" (CLAUDE.md) applies to what you tell the user
-  too, not just to what gates the commit.
+- `data.skipped_stages` lists every skipped stage, and each entry says which
+  kind it is. An entry with `project_level: false` has already set `ok` false
+  for you - the gate could not measure that stage on this run. An entry with
+  `project_level: true` (`:doctor not installed`, `disabled in .quality.exs`)
+  does not block: it is a standing gap in what this project checks at all,
+  identical on every run, and gating on it would mean refusing every commit
+  forever.
+
+  **Read the list either way when reporting.** "A skipped stage is not a
+  passing one" (CLAUDE.md) governs what you tell the user, not only what
+  gates the commit - so a project-level skip still gets named in the Step 4
+  report rather than rounded up to "gate green".
 
 **Sabotage notes on new tests.** `data.sabotage.missing` lists any new
 `test "..."` line in the diff with no `# sabotage:` comment directly above it.

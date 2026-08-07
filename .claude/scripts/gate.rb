@@ -15,15 +15,31 @@ require_relative "lib/touches_elixir"
 #
 # Three rules that are load-bearing, not incidental:
 #
-# 1. `data.skipped_stages` always stays in the payload, and `ok` is false
-#    whenever the gate ran (`data.applicable`) and any stage came back
-#    skipped, for any reason. CLAUDE.md: "a skipped stage is not a passing
-#    one" - a summary that drops it launders exactly what that rule
-#    protects. This is *stricter* than `mix gate.verify`'s own
-#    `data.attested`, which lets a project-level skip (e.g. `adr_judge`
-#    disabled) still attest - the two fields answer different questions on
-#    purpose: `attested` mirrors ADR-0011's narrowing test, `ok` mirrors
-#    CLAUDE.md's "say so, don't summarize it away" rule.
+# 1. `data.skipped_stages` always stays in the payload, for every skip,
+#    whatever the reason. CLAUDE.md: "a skipped stage is not a passing one" -
+#    a summary that drops it launders exactly what that rule protects.
+#
+#    Whether a skip *blocks* is a second question, and CLAUDE.md answers it
+#    in the same breath: "the reason says whether the gap is in this run or
+#    in what the project checks at all." Those are different failures.
+#
+#    - A gap **in this run** blocks. Dialyzer skipping because the PLT is
+#      missing, Tests skipping because compilation half-failed: the gate was
+#      asked to measure something and could not, so `ok` is false.
+#    - A gap in **what the project checks at all** is reported, not blocked.
+#      `:doctor not installed`, `:gettext not installed`, `adr_judge
+#      disabled in .quality.exs` are standing project properties, true on
+#      every run including the ones that were green when the policy was
+#      written. Blocking on them makes `ok` false on *every* full gate run
+#      forever, which does not enforce the rule - it deletes the signal, and
+#      the first thing anyone does with a check that is always red is stop
+#      reading it.
+#
+#    `PROJECT_LEVEL_SKIP_RE` draws that line, and it is deliberately narrow:
+#    anything it does not match blocks. Adding a pattern to it is the same
+#    class of decision as editing the gate config, so it belongs in review.
+#    This is still stricter than `mix gate.verify`'s `data.attested`, which
+#    mirrors only ADR-0011's narrowing test.
 # 2. This script accepts exactly one profile argument, `--profile loop`, and
 #    forwarding it always sets `attested: false`. Every other `--profile`
 #    value, and `--skip`/`--quick` in any form, are simply not options this
@@ -35,6 +51,20 @@ require_relative "lib/touches_elixir"
 #    docs/quality-gate-changes.md - see test/contract_test.rb.
 module Gate
   LEDGER_PATH = "docs/quality-gate-changes.md"
+
+  # Skip reasons that describe the project's standing configuration rather
+  # than a failure of this run. Matched against a stage's `summary` from the
+  # `mix quality` JSON report. See rule 1 in the module doc for why this is
+  # narrow and why widening it is a review decision, not a convenience.
+  #
+  #   ":doctor not installed"        - optional dep the project never added
+  #   ":gettext not installed"       - same
+  #   "disabled in .quality.exs"     - e.g. adr_judge, off outside --profile merge
+  PROJECT_LEVEL_SKIP_RE = /
+    \bnot\s+installed\b
+    |
+    \bdisabled\s+in\s+\.quality\.exs\b
+  /x.freeze
 
   SABOTAGE_DIFF_ARGS = %w[
     git diff main...HEAD -U0 -- test/ :!test/scion_tests :!test/scxml_tests
@@ -65,11 +95,12 @@ module Gate
       end.compact
     end
 
-    # The carve-out predicate, computed identically to repo_state.rb's
-    # `touches_elixir` (see lib/touches_elixir.rb) so /commit's Step 0 and
-    # this script cannot drift apart the way the `^Refs:` extraction once
-    # did.
-    def touches_elixir?(env)
+    # The carve-out predicate (see lib/touches_elixir.rb) so /commit's Step 0
+    # and this script cannot drift apart the way the `^Refs:` extraction once
+    # did. Note this is `gate_applicable?`, not `any?`: it is wider than
+    # repo_state.rb's `touches_elixir` because the gate's `Script tests` stage
+    # measures `.claude/scripts/`, which touches no Elixir.
+    def gate_applicable?(env)
       diff_res = Sh.run(%w[git diff --name-only main...HEAD], envelope: env)
       diff_files =
         if diff_res.success?
@@ -82,7 +113,7 @@ module Gate
       status_res = Sh.run(%w[git status --porcelain], envelope: env)
       dirty_files = parse_status_porcelain(status_res.out)
 
-      TouchesElixir.any?((diff_files + dirty_files).uniq)
+      TouchesElixir.gate_applicable?((diff_files + dirty_files).uniq)
     end
 
     # Parses a -U0 unified diff for added `test "..."` lines with no
@@ -132,7 +163,17 @@ module Gate
     def skipped_from(stages)
       Array(stages)
         .select { |s| s["status"] == "skipped" }
-        .map { |s| { name: s["name"], summary: s["summary"] } }
+        .map do |s|
+          summary = s["summary"]
+          { name: s["name"], summary: summary, project_level: project_level_skip?(summary) }
+        end
+    end
+
+    # True when the skip describes what this project checks at all, rather
+    # than something this run could not do. See rule 1 in the module doc -
+    # narrow on purpose; an unrecognized skip reason blocks.
+    def project_level_skip?(summary)
+      !(summary.to_s =~ PROJECT_LEVEL_SKIP_RE).nil?
     end
 
     # `data.gate_guard` is a report, never repaired: the ledger existence
@@ -189,7 +230,7 @@ module Gate
       env = Envelope.new(script: "gate")
       loop_mode = options[:profile] == "loop"
 
-      applicable = touches_elixir?(env)
+      applicable = gate_applicable?(env)
 
       missing = sabotage_missing(env)
       env.data[:sabotage] = { missing: missing }
@@ -204,7 +245,8 @@ module Gate
       env.data[:applicable] = applicable
       env.data[:carve_out_reason] =
         applicable ? nil : (
-          "no changes under lib/, test/, config/, mix.exs, or mix.lock - nothing for the quality gate to measure"
+          "no changes under lib/, test/, config/, mix.exs, mix.lock, or .claude/scripts/ - " \
+          "nothing for the quality gate to measure"
         )
 
       # The carve-out ("skip mix quality and review the diff instead") is a
@@ -252,10 +294,23 @@ module Gate
       env.fail! if report["status"] && report["status"] != "ok"
 
       skipped.each do |s|
-        env.block!(
-          code: "stage_skipped",
-          message: "#{s[:name]} was skipped (#{s[:summary]}) - a skipped stage is not a passing one"
-        )
+        if s[:project_level]
+          # Reported, never blocking: this is a gap in what the project
+          # checks at all, not in what this run measured. It is identical on
+          # a green run and a red one, so gating on it would only ever mean
+          # "the gate is permanently red".
+          env.warn(
+            code: "stage_skipped_project_level",
+            message: "#{s[:name]} was skipped (#{s[:summary]}) - a standing project gap, not a failure " \
+                     "of this run; still not a passing stage, so say so when reporting"
+          )
+        else
+          env.block!(
+            code: "stage_skipped",
+            message: "#{s[:name]} was skipped (#{s[:summary]}) - the gate could not measure it on this " \
+                     "run, and a skipped stage is not a passing one"
+          )
+        end
       end
 
       env.emit(io)

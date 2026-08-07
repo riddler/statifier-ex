@@ -48,6 +48,11 @@ class GateTest < Minitest::Test
     @fake.expect(%w[git status --porcelain], out: "")
   end
 
+  def expect_scripts_only_diff
+    @fake.expect(%w[git diff --name-only main...HEAD], out: ".claude/scripts/gate.rb\n")
+    @fake.expect(%w[git status --porcelain], out: "")
+  end
+
   def expect_no_sabotage_diff(out: "")
     @fake.expect(
       %w[git diff main...HEAD -U0 -- test/ :!test/scion_tests :!test/scxml_tests],
@@ -103,13 +108,16 @@ class GateTest < Minitest::Test
     end
   end
 
-  def test_skipped_stage_forces_ok_false_even_though_status_is_ok
+  # A skip the gate hit *on this run* blocks: it was asked to measure
+  # something and could not. See gate.rb rule 1.
+  # sabotage: make PROJECT_LEVEL_SKIP_RE match /./ -> red
+  def test_run_level_skipped_stage_forces_ok_false_even_though_status_is_ok
     report = {
       "status" => "ok",
       "scope" => "all",
       "stages" => [
         { "name" => "Format", "status" => "ok", "summary" => "clean" },
-        { "name" => "Sobelow", "status" => "skipped", "summary" => ":sobelow not installed" }
+        { "name" => "Dialyzer", "status" => "skipped", "summary" => "PLT missing, run mix dialyzer --plt" }
       ]
     }
 
@@ -124,13 +132,88 @@ class GateTest < Minitest::Test
       assert_equal 1, code
       assert_equal false, env["ok"]
       assert_equal 1, env["data"]["skipped_stages"].length
-      assert_equal "Sobelow", env["data"]["skipped_stages"].first["name"]
+      assert_equal "Dialyzer", env["data"]["skipped_stages"].first["name"]
+      assert_equal false, env["data"]["skipped_stages"].first["project_level"]
       assert_equal 1, env["blocked"].length
       assert_equal "stage_skipped", env["blocked"].first["code"]
       # Skipped stages are a report, not evidence the run failed - so this
       # must still show up in data, not silently vanish.
       assert_equal report["stages"], env["data"]["stages"]
     end
+  end
+
+  # A stage the project never installed is a standing gap, identical on every
+  # run. Blocking on it would make ok false on every full gate run forever,
+  # which deletes the signal rather than enforcing it. It is still reported,
+  # in data and as a warning - CLAUDE.md's "a skipped stage is not a passing
+  # one" governs what you *say*, and this keeps it sayable.
+  # sabotage: env.warn -> env.block! in the project_level branch -> red
+  def test_project_level_skips_are_reported_but_never_block
+    report = {
+      "status" => "ok",
+      "scope" => "all",
+      "stages" => [
+        { "name" => "Format", "status" => "ok", "summary" => "clean" },
+        { "name" => "Doctor", "status" => "skipped", "summary" => ":doctor not installed" },
+        { "name" => "Gettext", "status" => "skipped", "summary" => ":gettext not installed" },
+        { "name" => "ADR judge", "status" => "skipped", "summary" => "disabled in .quality.exs" }
+      ]
+    }
+
+    in_tmp_cwd do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
+      @fake.expect(%w[mix gate.verify], out: "Full gate green...\n")
+
+      code, env = run_gate
+
+      assert_equal 0, code
+      assert_equal true, env["ok"]
+      assert_equal [], env["blocked"]
+      # Reported, not laundered: all three still surface, and each carries a
+      # warning a caller has to actively ignore.
+      assert_equal 3, env["data"]["skipped_stages"].length
+      assert(env["data"]["skipped_stages"].all? { |s| s["project_level"] })
+      codes = env["warnings"].map { |w| w["code"] }
+      assert_equal 3, codes.count("stage_skipped_project_level")
+    end
+  end
+
+  # The mix of both: the project-level skips must not mask the run-level one.
+  # sabotage: `skipped.each` -> `skipped.first` in gate.rb -> red
+  def test_a_run_level_skip_still_blocks_alongside_project_level_ones
+    report = {
+      "status" => "ok",
+      "scope" => "all",
+      "stages" => [
+        { "name" => "Doctor", "status" => "skipped", "summary" => ":doctor not installed" },
+        { "name" => "Tests", "status" => "skipped", "summary" => "compilation failed" }
+      ]
+    }
+
+    in_tmp_cwd do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
+      @fake.expect(%w[mix gate.verify], out: "Full gate green...\n")
+
+      code, env = run_gate
+
+      assert_equal 1, code
+      assert_equal false, env["ok"]
+      assert_equal 1, env["blocked"].length
+      assert_match(/Tests was skipped/, env["blocked"].first["message"])
+    end
+  end
+
+  # sabotage: widen PROJECT_LEVEL_SKIP_RE with `|.` -> red
+  def test_unrecognized_skip_reason_blocks_by_default
+    refute Gate.project_level_skip?("some new reason nobody anticipated")
+    refute Gate.project_level_skip?(nil)
+    refute Gate.project_level_skip?("")
+    assert Gate.project_level_skip?(":doctor not installed")
+    assert Gate.project_level_skip?("disabled in .quality.exs")
   end
 
   def test_red_gate_fails_without_being_blocked
@@ -226,8 +309,30 @@ class GateTest < Minitest::Test
     $stderr = original
   end
 
+  # sabotage: TouchesElixir.gate_applicable? delegating to PATTERNS instead of
+  # GATE_PATTERNS -> red (the branch carves out and the gate never runs)
+  def test_scripts_only_change_is_gate_applicable_and_runs_the_gate
+    in_tmp_cwd do
+      expect_scripts_only_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[mix quality --report -], out: JSON.generate(GREEN_REPORT))
+      @fake.expect(%w[mix gate.verify], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
+
+      code, env = run_gate
+
+      assert_equal 0, code
+      assert_equal true, env["data"]["applicable"]
+      assert_nil env["data"]["carve_out_reason"]
+      assert_equal "all", env["data"]["ran"]
+    end
+  end
+
   # --- Carve-out predicate: matches /commit's Step 0 (L97-98) exactly ---
 
+  # `any?` answers a question about the Elixir build and must NOT widen when
+  # the gate grows a stage measuring something else - that is what
+  # gate_applicable? is for. See lib/touches_elixir.rb.
+  # sabotage: add %r{\A\.claude/scripts/} to PATTERNS -> red
   def test_touches_elixir_predicate_matches_commit_skill_wording
     matching = %w[
       lib/statifier/interpreter.ex
@@ -246,6 +351,26 @@ class GateTest < Minitest::Test
 
     matching.each { |path| assert TouchesElixir.any?([path]), "expected #{path} to touch elixir" }
     non_matching.each { |path| refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir" }
+  end
+
+  # sabotage: drop GATED_NON_ELIXIR_PATTERNS from GATE_PATTERNS -> red
+  def test_gate_applicable_is_strictly_wider_than_touches_elixir
+    # Everything that touches the build still applies.
+    %w[lib/statifier/interpreter.ex mix.exs].each do |path|
+      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+    end
+
+    # The Script tests stage measures these, so they no longer carve out -
+    # even though they touch no Elixir at all.
+    %w[.claude/scripts/gate.rb .claude/scripts/lib/refs.rb .claude/scripts/test/run.rb].each do |path|
+      refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir"
+      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+    end
+
+    # A skill or doc change still carves out - no stage measures it.
+    %w[.claude/skills/commit/SKILL.md docs/adr/0011.md README.md].each do |path|
+      refute TouchesElixir.gate_applicable?([path]), "expected #{path} to carve out"
+    end
   end
 
   # --- Sabotage scan ---

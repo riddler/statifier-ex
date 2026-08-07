@@ -133,22 +133,25 @@ ruby .claude/scripts/test/run.rb
 ruby .claude/scripts/test/run.rb -n /pattern/   # run a subset by name
 ```
 
-**`mix quality` does NOT run this suite**, and this project does not add a
-stage that would: doing so edits `.quality.exs`, which needs an ADR-0011
-ledger entry, and that entry is a human's call, not an agent's to make for
-itself. `.claude/**` is not a gate-guarded path at all, so this suite gets
-its own stdlib test harness instead (`test/run.rb`, minitest, no gems).
+**`mix quality` runs this suite** as the `Script tests` stage, registered in
+`.quality.exs` with an ADR-0011 ledger entry (`docs/quality-gate-changes.md`,
+st-hzf). Running `test/run.rb` directly is still the fast inner loop - half a
+second against the gate's minutes - but a green `mix quality` now does mean
+the Ruby suite passed.
 
-**A phase (or any change) touching `.claude/scripts/` must run both checks
-separately:**
+It was hand-run only at first, on the reasoning that registering a stage
+needs a human's ledger call. That was the wrong trade: `.claude/**` is not a
+gate-guarded path, and this branch touches no `lib/`, `test/`, `config/` or
+`mix.exs`, so the gate carved out of ~8k lines of new Ruby entirely and
+reported green having measured none of it. st-hzf's own Phase 12 left a test
+red and reported the phase done; only a hand-run caught it.
 
-```sh
-ruby .claude/scripts/test/run.rb
-mix quality
-```
-
-A green `mix quality` says nothing about whether the Ruby suite passed, and
-vice versa.
+Registering the stage also widened the carve-out predicate - see
+`lib/touches_elixir.rb`, where `any?` still means "touches the Elixir build"
+and `gate_applicable?` adds `.claude/scripts/` on top. A gate stage that
+measures something outside the Elixir build has to be reflected in the
+predicate that decides whether the gate runs at all, or it never fires on the
+branches it exists for.
 
 ## `gate.rb`: the quality-gate wrapper
 
@@ -156,9 +159,21 @@ Wraps `mix gate.verify` and `mix quality --format json --report -`. The most
 constrained script here - see
 `docs/plans/260806-st-hzf-skill-mechanics-scripts.md` Phase 7.
 
-- `data.skipped_stages` always stays in the payload, and `ok` is false
-  whenever the gate applied and any stage came back skipped - a skipped
-  stage is never a passing one, whatever the reason.
+- `data.skipped_stages` always stays in the payload, for every skip. Whether
+  a skip *blocks* follows CLAUDE.md's own distinction - "the reason says
+  whether the gap is in this run or in what the project checks at all":
+  - a gap **in this run** (Dialyzer skipped for a missing PLT, Tests skipped
+    because compilation failed) sets `ok` false;
+  - a gap in **what the project checks at all** (`:doctor not installed`,
+    `disabled in .quality.exs`) is reported with `project_level: true` and a
+    `stage_skipped_project_level` warning, and does not block.
+
+  The second case is not a softening. It is true on every run including the
+  green ones, so blocking on it would make `ok` false on every full gate run
+  forever - which deletes the signal rather than enforcing it. Either way a
+  skipped stage is never a passing one, and both kinds must appear in what
+  you report. `PROJECT_LEVEL_SKIP_RE` is narrow by design: an unrecognized
+  skip reason blocks, and widening it is a review decision.
 - Only one profile argument is accepted: `--profile loop`. It always sets
   `data.attested` to `false`. No `--skip`, `--quick`, or other `--profile`
   value is defined by this script's parser, so passing one is a usage error

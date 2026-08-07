@@ -4,11 +4,22 @@ require "minitest/autorun"
 require "tmpdir"
 require "fileutils"
 
+# The mechanical enforcement of ADR-0015 constraint 1 (scripts are
+# step-scoped; the banned-operation list is absolute). It lives here rather
+# than in lib/mix/statifier/adr_guard.ex because that guard scans Elixir
+# under lib/statifier/ and would need a second language to cover Ruby - see
+# ADR-0015's Consequences.
+#
 # The guardrail test that survives every later phase of st-hzf. Contract
 # holds the scanning rules as pure functions over lines of source (so they
 # can be unit-tested against synthetic fixtures, proving the regexes really
 # catch what they claim to), and ContractTest applies them to the real files
 # under .claude/scripts/.
+#
+# This test is why `git push` and `gh pr create` are hand-run commands in
+# /merge-request rather than a script step: CLAUDE.md's authority table puts
+# the human gate at the seam between commit and push, and a script spanning
+# that seam would relocate a decision nobody decided to move.
 module Contract
   BANNED_CALLS = {
     "git push" => /\bgit\s+push\b/,

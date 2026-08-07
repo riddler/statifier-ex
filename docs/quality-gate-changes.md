@@ -13,6 +13,41 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-06 - st-hzf
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: registers the script_tests custom stage, which runs
+  `ruby .claude/scripts/test/run.rb` (the minitest suite covering
+  `.claude/scripts/`)
+
+Reason: st-hzf extracted the deterministic mechanics of all 13 skills into
+Ruby under `.claude/scripts/` - roughly 8k lines that drive commit, push, PR,
+worktree and bead mechanics. That code had a test suite from Phase 1, but the
+suite ran only by hand: the branch touches no `lib/`, `test/`, `config/` or
+`mix.exs`, so a bare `mix quality` carved out of it entirely and reported a
+green gate that had measured nothing that changed. Nothing mechanical stood
+between a red Ruby suite and a push.
+
+The gap is not hypothetical. st-hzf's own Phase 12 left `plan_state_test.rb`
+red, filed it as discovered work (st-trm) rather than fixing it, and reported
+the phase complete; only a hand-run caught it before the commit. That is
+precisely the failure mode the gate exists to make impossible.
+
+Adds a stage; loosens nothing, skips no existing check, and lowers no
+threshold. It is a reader, absent from the loop profile's `stages:`
+allow-list, and carries no `skip_exit_code` - a missing Ruby makes it red
+rather than skipped, since a stage that can quietly report itself skipped
+would reintroduce the same gap in a different shape.
+
+Registering it also required widening the gate's carve-out predicate
+(`.claude/scripts/lib/touches_elixir.rb`): `touches_elixir` still means what
+its name says, and a new `gate_applicable?` adds `.claude/scripts/` on top,
+because the gate now measures something that is not the Elixir build. That
+file is not a guarded path; it is named here because the carve-out is what
+decides whether this stage runs at all, and an entry that omitted it would
+describe half the change.
+
 ## 2026-08-06 - st-4hk
 
 Approved-by: JohnnyT (in session)

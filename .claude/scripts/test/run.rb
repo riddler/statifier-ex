@@ -7,10 +7,11 @@
 #   ruby .claude/scripts/test/run.rb
 #   ruby .claude/scripts/test/run.rb -n /pattern/
 #
-# mix quality does NOT run this suite (see README.md: adding a stage would
-# edit .quality.exs and needs an ADR-0011 ledger entry, which is a human's
-# call). A phase touching .claude/scripts/ must run both this and
-# mix quality separately.
+# `mix quality` DOES run this suite, as the `Script tests` stage (registered
+# in .quality.exs, ledger entry st-hzf per ADR-0011). Running it directly is
+# still the fast inner loop - it takes about half a second, where the gate
+# takes minutes - but it is no longer the only thing standing between a red
+# suite and a push.
 
 require "minitest/autorun"
 
