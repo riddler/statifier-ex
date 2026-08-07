@@ -7,6 +7,7 @@ require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/refs"
 require_relative "lib/areas"
+require_relative "lib/summary"
 require_relative "bead"
 require_relative "worktree_survey"
 
@@ -242,6 +243,7 @@ module SelectBatch
       {
         id: issue["id"],
         title: issue["title"],
+        summary: Summary.of(issue["description"]),
         priority: issue["priority"],
         issue_type: issue["issue_type"],
         areas: areas,
@@ -255,6 +257,7 @@ module SelectBatch
       {
         "id" => c[:id],
         "title" => c[:title],
+        "summary" => c[:summary],
         "priority" => c[:priority],
         "issue_type" => c[:issue_type],
         "areas" => c[:areas],

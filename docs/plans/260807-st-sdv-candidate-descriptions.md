@@ -345,12 +345,12 @@ unaffected. Add tests asserting:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Ruby suite green: `ruby .claude/scripts/test/run.rb`
-- [ ] Syntax check passes on 2.6:
+- [x] Ruby suite green: `ruby .claude/scripts/test/run.rb`
+- [x] Syntax check passes on 2.6:
       `find .claude/scripts -name '*.rb' -exec /usr/bin/ruby -c {} +`
-- [ ] Full quality gate passes, including the `Script tests` stage:
+- [x] Full quality gate passes, including the `Script tests` stage:
       `mix quality`
-- [ ] A real run emits the field:
+- [x] A real run emits the field:
       `ruby .claude/scripts/select_batch.rb --n 3` and every entry in
       `data.candidates` has both `title` and `summary`
 
@@ -610,5 +610,23 @@ proceeding to the next phase. In looped (`--loop`) execution, this phase's
 Automated Verification gates advancement automatically (via `/commit --auto`);
 Manual Verification items are deferred and surfaced once at the end instead of
 blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Each new test was actually sabotaged: the named mutation was applied,
+      the test went red for the right reason, and the mutation was reverted
+      (docs/testing.md) - the note is the record of that, not a substitute
+- [ ] The summaries in the real run read as sentences, not as mid-clause cuts
+- [ ] No 2.7+ syntax slipped in (`.claude/scripts/README.md`'s banned list)
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for manual confirmation from the human that the manual
+testing was successful before proceeding to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end instead of blocking here.
 
 ---
