@@ -18,6 +18,9 @@ hold even when `/work` is typed into an already-running Sonnet session: a
 skill's `model:` governs the turn it is active for, independent of the session's
 own model.
 
+See `.claude/scripts/README.md` for the envelope contract shared by every
+script this skill calls.
+
 ## Input
 
 Parse `$ARGUMENTS`:
@@ -40,14 +43,12 @@ Everything downstream branches on this, because CLAUDE.md forbids committing on
 `main`:
 
 ```bash
-if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
-  echo main-checkout
-else
-  echo worktree
-fi
+ruby .claude/scripts/repo_state.rb
 ```
 
-In the main checkout both resolve to `.git`; in a linked worktree `--git-dir` is
+`data.checkout` is `"main"` or `"worktree"`. `repo_state.rb` compares
+`git rev-parse --git-dir` against `--git-common-dir` under the hood: in the main
+checkout both resolve to `.git`; in a linked worktree `--git-dir` is
 `.git/worktrees/<name>` while `--git-common-dir` is the shared `.git`. This is
 more robust than comparing `git rev-parse --show-toplevel` against a hardcoded
 path - it survives the checkout being moved or cloned elsewhere.
@@ -62,12 +63,12 @@ path - it survives the checkout being moved or cloned elsewhere.
 
 ## Step 1: Get a claimed bead
 
-**Bead mode.** `bd show <id>` - description, acceptance, dependencies, notes.
-This is the input to sizing, so it happens before anything is spawned. If the
-bead is not already `in_progress`, claim it:
+**Bead mode.** `ruby .claude/scripts/bead.rb show <id>` - description,
+acceptance, dependencies, notes. This is the input to sizing, so it happens
+before anything is spawned. If the bead is not already `in_progress`, claim it:
 
 ```bash
-bd update <id> --claim
+ruby .claude/scripts/bead.rb claim <id>
 ```
 
 The claim is the lock (ADR-0010). An epic is not workable: report it, point at
@@ -77,7 +78,8 @@ its children, and stop.
 The bead **must** carry, before it is claimed:
 
 - a description,
-- acceptance criteria (`bd create ... --acceptance "..."`),
+- acceptance criteria (`ruby .claude/scripts/bead.rb create ... --description "..."`
+  and the equivalent acceptance-criteria step `/create-issue` performs),
 - at least one `area:` label from `docs/workflow.md`'s vocabulary.
 
 The area label is not optional and is not something to backfill later: an
@@ -88,8 +90,8 @@ picker will refuse to touch. Intake owes the label at creation.
 Then claim and publish:
 
 ```bash
-bd update <id> --claim
-bd dolt push 2>/dev/null || true
+ruby .claude/scripts/bead.rb claim <id>
+ruby .claude/scripts/bead.rb sync push
 ```
 
 The push is best-effort and never gates the claim - agents in this checkout's
@@ -129,11 +131,19 @@ research pass.
 **Skip stages already satisfied.** Before spawning anything, check for work that
 already exists:
 
-- a `docs/research/` doc naming this bead,
-- a `docs/plans/` plan naming this bead,
-- `bd show <id>`'s notes - `/implement-plan --loop` writes
-  `loop: Phase N complete, commit <sha>` after each phase, and
-  `loop stopped at Phase N: <reason>` when it refuses.
+```bash
+ruby .claude/scripts/work_state.rb <id>
+```
+
+This composes `bead.rb show`'s already-parsed loop notes
+(`data.loop_notes`/`data.last_loop_note` - `/implement-plan --loop` writes
+`loop: Phase N complete, commit <sha>` after each phase, and
+`loop stopped at Phase N: <reason>` when it refuses), a `docs/research/` lookup
+by bead id (`data.research_docs`), and a `docs/plans/` lookup plus
+`plan_state.rb`'s own parse of whatever plan it finds (`data.plan_docs`,
+`data.plan.next_phase`, `data.plan.phases`). **It reports; it does not choose a
+bucket** - reading `data.plan.next_phase` still requires the same judgment this
+step already exercises about what stage that implies.
 
 Enter the sequence at the first unsatisfied stage. This is the seam that makes
 `/work <id>` re-invocable: after a stopped loop, re-running it resumes rather
@@ -162,7 +172,10 @@ Every spawn obeys these invariants:
   existing skills fit what it produces (a decision, not a plan or an
   implementation), so its prompt is composed directly in the Agent call instead
   of dispatched through the Skill tool. `fable` there is the model, full stop,
-  not an override of a frontmatter that does not exist.
+  not an override of a frontmatter that does not exist. This is also why Haiku
+  routing (`docs/skill-automation.md`) only ever applies to prompts composed
+  directly in an Agent call, never to a step dispatched through the Skill tool -
+  a skill's own `model:` always wins for its own turn.
 - **`run_in_background: false`.** Each stage feeds the next; there is nothing to
   do while one runs.
 - **The prompt must be fully self-contained**: the bead id, the artifact path
@@ -238,7 +251,7 @@ depth.
 On a **stopped loop**, the subagent returns the refusal reason and the phase.
 Report both verbatim; do not retry and do not clean up the tree - the refusal is
 diagnostic information. Re-running `/work <id>` later resumes via step 2's
-artifact scan.
+`work_state.rb` scan.
 
 **Just-do-it** is the same shape without a plan: one Sonnet subagent implements
 the bead and is told explicitly **not** to commit; `/work` runs `/commit --auto`
@@ -265,13 +278,13 @@ Always report:
 
 - **This skill orchestrates, it does not implement.** No `Edit`/`Write` to
   `lib/`, `test/`, or `docs/` content. The only things this session does itself
-  are `bd` calls, the just-do-it `/commit --auto` gate, and its own report.
-  Everything else is a subagent.
+  are `bd` calls (via `bead.rb`), the just-do-it `/commit --auto` gate, and its
+  own report. Everything else is a subagent.
 - **Sizing happens here, in the worktree**, because this is the session that can
   read the code. That is why it moved out of `/next-issue`, and re-adding a
   bucket decision upstream of the worktree undoes the point of this skill.
-- Sync steps (`bd dolt pull`/`push`) are best-effort and never gate a claim.
-  Offline is not a reason to abort.
+- Sync steps (`bead.rb sync pull`/`push`) are best-effort and never gate a
+  claim. Offline is not a reason to abort.
 - Discovered work found along the way is filed with `bd q` and linked
   `discovered-from`, not chased now.
 - Compose with `/create-issue`, `/new-worktree`, and the three stage skills
@@ -280,3 +293,10 @@ Always report:
 - The bead stays `in_progress` when the work is done - it closes on merge, per
   CLAUDE.md's authority table. Push, PR, and `bd close` all still need an
   explicit human ask; finishing the work is not a request to publish it.
+
+## Model routing
+
+The "does this need new research" and similar bounded classifications that
+`/create-plan`/`/iterate-plan` make are Haiku-eligible; `/work`'s own bucket
+choice and the Direction stage's judgment are not. See
+`docs/skill-automation.md`'s Model routing section for the full record and why.

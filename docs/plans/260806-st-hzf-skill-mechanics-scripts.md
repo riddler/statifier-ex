@@ -1419,14 +1419,14 @@ delegation points and linking to this document - no restatement.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `ruby .claude/scripts/commit_message.rb --check` rejects a message with a
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `ruby .claude/scripts/commit_message.rb --check` rejects a message with a
       52-char subject, an 80-char body line, 41 lines, a missing `Refs:`, and a
       `Co-Authored-By` line
-- [ ] `docs/skill-automation.md`'s skill-to-script map names every script under
+- [x] `docs/skill-automation.md`'s skill-to-script map names every script under
       `.claude/scripts/` and every one of the 13 skills
-- [ ] No script gained a forbidden operation: `contract_test.rb` still green
-- [ ] Full quality gate passes: `mix quality`
+- [x] No script gained a forbidden operation: `contract_test.rb` still green
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] Read `git diff .claude/skills/commit/SKILL.md` line by line against the
@@ -1628,6 +1628,28 @@ before considering the plan fully landed.
 - [ ] `/create-plan`'s single template is byte-identical to the one that
       produced this document
 - [ ] `/research-codebase`'s documentarian charter is unmodified
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for manual confirmation from the human that the manual
+testing was successful before proceeding to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 12
+
+- [ ] Read `git diff .claude/skills/commit/SKILL.md` line by line against the
+      surviving-prose list - the sabotage paragraph and the authority boundary
+      are present verbatim
+- [ ] `/implement-plan` L248-250's contradiction is resolved in favor of
+      CLAUDE.md's table, and no other behavior moved
+- [ ] The next `/commit --auto` after this phase behaves identically to the
+      previous one (this phase's own commit is the test)
+- [ ] All 21 Haiku delegation points in the record trace back to a real step in
+      a real skill
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive

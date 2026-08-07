@@ -47,25 +47,38 @@ phase/checkbox parsing - Phase 8). `commit` and `work` sit in between.
 
 ## Skill-to-script map
 
-Filled in as Phases 9-12 land. The mapping below is the intended target,
-stated now so every later phase has a fixed destination; the "Status" column
-is updated as each rewrite phase lands.
+Landed for all 13 skills as of Phase 12 - the mapping below was the intended
+target from Phase 1 onward, and every "Landing phase" now has a matching
+`git log` commit on this branch.
 
-| Skill | Scripts it will call | Landing phase | Status |
+Scripts a skill calls only indirectly (e.g. `worktree_cleanup.rb` requires
+`worktree_survey.rb` and `pr_state.rb` internally; `select_batch.rb` requires
+`bead.rb` and `worktree_survey.rb` internally) are named once, on the script
+that composes them, rather than repeated on every skill downstream of it -
+each script's own file lists its `require_relative`s.
+
+| Skill | Scripts it calls | Landing phase | Status |
 |---|---|---|---|
-| `create-issue` | `.claude/scripts/bead.rb create` | 10 | not started |
-| `next-issue` | `select_batch.rb` (n=1), `worktree_survey.rb`, `bead.rb ready` | 10 | not started |
-| `next-issues` | `select_batch.rb`, `worktree_survey.rb`, `bead.rb ready` | 10 | not started |
-| `new-worktree` | `worktree_create.rb`, `tmux_window.rb open` | 9 | not started |
-| `refresh-worktree` | `worktree_survey.rb`, `worktree_refresh.rb`, `rebase_onto.rb`, `gate.rb --profile loop` | 9 | not started |
-| `cleanup-worktrees` | `worktree_survey.rb`, `pr_state.rb`, `tmux_window.rb find\|classify\|quiesce\|close`, `worktree_cleanup.rb` | 9 | not started |
-| `merge-request` | `repo_state.rb`, `rebase_onto.rb`, `gate.rb`, `pr_state.rb`, `refs.rb` | 11 | not started |
-| `commit` | `repo_state.rb`, `gate.rb`, `bead.rb resolve`, `refs.rb` | 12 | not started |
-| `work` | `repo_state.rb`, `bead.rb show` | 12 | not started |
-| `research-codebase` | `doc_meta.rb` | 11 | not started |
-| `create-plan` | `doc_meta.rb`, `plan_state.rb` | 11 | not started |
-| `iterate-plan` | `doc_meta.rb`, `plan_state.rb`, `permalinks.rb` | 11 | not started |
-| `implement-plan` | `plan_state.rb`, `gate.rb` | 12 | not started |
+| `create-issue` | `bead.rb create\|link\|label` | 10 | landed |
+| `next-issue` | `select_batch.rb` (n=1), `bead.rb sync\|claim\|show` | 10 | landed |
+| `next-issues` | `select_batch.rb`, `bead.rb sync\|claim\|note` | 10 | landed |
+| `new-worktree` | `worktree_create.rb`, `tmux_window.rb ensure-session\|open` | 9 | landed |
+| `refresh-worktree` | `worktree_refresh.rb` (composes `worktree_survey.rb`, `rebase_onto.rb`) | 9 | landed |
+| `cleanup-worktrees` | `worktree_cleanup.rb` (composes `worktree_survey.rb`, `pr_state.rb`), `tmux_window.rb find\|classify\|quiesce\|close` | 9 | landed |
+| `merge-request` | `repo_state.rb`, `rebase_onto.rb`, `gate.rb` | 11 | landed |
+| `commit` | `gate.rb`, `repo_state.rb`, `bead.rb resolve`, `commit_message.rb` | 12 | landed |
+| `work` | `repo_state.rb`, `bead.rb show\|claim\|sync`, `work_state.rb` (composes `bead.rb show`, `plan_state.rb`) | 12 | landed |
+| `research-codebase` | `doc_meta.rb`, `permalinks.rb` | 11 | landed |
+| `create-plan` | `doc_meta.rb`, `plan_state.rb` | 11 | landed |
+| `iterate-plan` | `plan_state.rb` | 11 | landed |
+| `implement-plan` | `plan_state.rb`, `repo_state.rb`, `bead.rb claim\|note` | 12 | landed |
+
+Every script under `.claude/scripts/*.rb` is named on at least one row above,
+directly or as a parenthetical composed-by note: `bead.rb`, `commit_message.rb`,
+`doc_meta.rb`, `gate.rb`, `permalinks.rb`, `plan_state.rb`, `pr_state.rb`,
+`rebase_onto.rb`, `repo_state.rb`, `select_batch.rb`, `tmux_window.rb`,
+`work_state.rb`, `worktree_cleanup.rb`, `worktree_create.rb`,
+`worktree_refresh.rb`, `worktree_survey.rb`.
 
 ## What must never be scripted
 
@@ -138,8 +151,104 @@ risks.
 
 ## Model routing
 
-Placeholder - filled by Phase 12, which records which steps were routed to
-Haiku via a per-call `model:` on an inline Agent prompt (the only mechanism
-available, since a skill's own `model:` frontmatter beats an Agent-call
-override for any step dispatched through the Skill tool - see
-`docs/workflow.md:6-48`) and why.
+### The mechanism and its limit
+
+A skill's `model:` frontmatter beats an Agent-call `model:` override for the
+turn that skill is active (`docs/workflow.md:6-48`, `work/SKILL.md`'s Step 3
+invariants). Haiku routing therefore applies **only** to a prompt composed
+directly in an Agent call - never to a step dispatched through the Skill tool,
+because the dispatched skill's own frontmatter would immediately override it.
+This is why `/work`'s Direction stage (`work/SKILL.md`'s "Direction stage
+prompt") composes its prompt inline rather than through a stage skill: it is
+the one row in the Step 3 table with no skill to dispatch through at all, and
+not coincidentally the shape every other Haiku delegation point below also
+takes - a prompt built inline in the calling skill, never a subagent invoking
+another skill.
+
+No `.claude/agents/` definition exists or is being added for this. The bead
+asks that delegation points be identified and recorded, not that a
+speculative agent be built - see "Why no Haiku agent is being added" below.
+
+### The 21 delegation points
+
+Grouped into five kinds. Each traces to a real step in a real skill; none of
+these are hypothetical.
+
+1. **Branch slug generation** (4 points) - `next-issue/SKILL.md` step 2,
+   `next-issues/SKILL.md` step 5, `work/SKILL.md` Step 0 ("compute the branch
+   name `<id>-<slug>`"), `new-worktree/SKILL.md`'s Input section ("If given
+   only a bead id, ask for the slug"). One bead title in, one 2-4-word
+   kebab-case slug out. The cheapest and most frequently executed judgment in
+   the set - every worktree creation touches one of these four call sites.
+2. **Commit and PR body drafting** (2 points) - `commit/SKILL.md` Step 2 (the
+   commit message body: what was done, why, technical notes), `merge-request/
+   SKILL.md` step 7 (the PR body's Why/What/Notes). Prose only; the hard
+   limits and the attribution check stay in `commit_message.rb`, which no
+   drafting step may bypass - a drafted message still has to pass the
+   validator before it is ever shown or committed.
+3. **Diff and change summarization** (2 points) - `commit/SKILL.md` Step 1's
+   "what features were added / what bugs were fixed / what was refactored"
+   classification over the diff, and `next-issue/SKILL.md`'s one-line "why
+   now" per ready-bead candidate.
+4. **Bounded classification** (4 points) - `create-issue/SKILL.md`'s type and
+   priority inference ("infer type and priority when obvious"),
+   `iterate-plan/SKILL.md`'s "does this need new research" binary,
+   `implement-plan/SKILL.md`'s refusal-reason classification (naming which of
+   the loop's stop conditions fired, for the report), `create-plan/SKILL.md`'s
+   unresolved-open-questions scan before a plan is finalized.
+5. **Kebab description for artifact filenames** (1 point, called from 3
+   sites) - the `description` slug in
+   `docs/{plans,research}/YYMMDD-<id>-<description>.md`, composed inline
+   wherever `research-codebase/SKILL.md`, `create-plan/SKILL.md`, or
+   `iterate-plan/SKILL.md` calls `doc_meta.rb filename --description`.
+
+The 21 is the sum of the classification summary table's (b) column above,
+tallied per skill by the original audit: `create-issue` 2, `next-issue` 3,
+`next-issues` 2, `new-worktree` 1, `merge-request` 2, `commit` 3, `work` 2,
+`research-codebase` 2, `create-plan` 1, `iterate-plan` 1, `implement-plan` 2
+(`refresh-worktree` and `cleanup-worktrees` carry none - both are ~85-100%
+scriptable mechanics with no bounded-text step left over). Every one of those
+falls into one of the five kinds above; a skill can carry more than one
+instance of a kind, which is why the per-skill counts do not all match the
+number of kinds a skill is listed under above. The five kinds are the durable
+classification this section keeps current; the per-skill tally is the
+original count from
+`docs/research/260806-st-hzf-skill-mechanics-scripts.md`'s classification
+table and "Haiku delegation candidates" section, which remains the place to
+look for the full skill-by-skill breakdown behind this total.
+
+### What is explicitly not routed to Haiku, and why
+
+- **Phase sizing** (`create-plan/SKILL.md`) - "the smallest independently
+  gate-verifiable and independently committable unit" needs the codebase in
+  reach, not a title.
+- **The `/next-issues` picker** - presents, does not impose; the choice
+  belongs to whichever session has the authority to accept a collision risk,
+  which a Haiku subagent does not hold.
+- **"Changes unrelated to the claimed issue"** (`commit/SKILL.md`) - the one
+  auto-refusal condition with no mechanical test at all; delegating it would
+  just move the judgment call, not remove it.
+- **The sabotage judgment** (`implement-plan/SKILL.md`, `commit/SKILL.md`) -
+  confirming a mutation actually reddened the test for the right reason
+  requires reading the diff against the code, not classifying text.
+- **ADR-contradiction detection** (`iterate-plan/SKILL.md`) - flagging a plan
+  edit that contradicts an accepted ADR needs the ADR corpus in context, not
+  a bounded yes/no over the edit alone.
+- **`/work`'s bucket choice** (Step 2) - sizing happens "with the codebase in
+  reach", the same reason phase sizing stays off this list.
+
+Each of these needs either the codebase in reach or an authority a subagent
+does not hold - the two disqualifying properties this section's mechanism
+cannot supply no matter which model runs the prompt.
+
+### Why no Haiku agent is being added
+
+The bead's acceptance criteria ask to "record which steps were routed to
+Haiku and why" - identification and recording, not a new capability. A
+`.claude/agents/` definition is a separate change with its own verification
+(a tool roster to choose, a system prompt to write, its own test that it
+actually improves on the session model for these bounded tasks), and adding
+one speculatively ahead of that verification would put an unused agent in the
+roster. The mechanism this section names (a per-call `model: haiku` on an
+Agent call composed inline) needs no new agent type to use - `general-purpose`
+already carries it - so nothing here is blocked on one existing.
