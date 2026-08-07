@@ -434,8 +434,8 @@ for the single-bead case.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is green (no Elixir and no script change in this phase)
-- [ ] Both files' frontmatter is intact and the skills still load:
+- [x] `mix quality` is green (no Elixir and no script change in this phase)
+- [x] Both files' frontmatter is intact and the skills still load:
       `ruby -e 'ARGV.each { |f| abort f unless File.read(f).start_with?("---\n") }' .claude/skills/next-issue/SKILL.md .claude/skills/next-issues/SKILL.md`
 
 #### Manual Verification:
@@ -628,5 +628,23 @@ testing was successful before proceeding to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically (via `/commit --auto`); Manual Verification items are deferred
 and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The column requirement is stated as a requirement in both files - a
+      model reading either one cannot conclude the summary column is optional
+- [ ] The two files agree; neither has invented a different column set
+- [ ] The AskUserQuestion guidance produces option text a reader can act on
+      without expanding anything
+- [ ] House style matched: both SKILL.md files use plain hyphens today
+
+**Implementation Note**: In interactive execution, pause here for manual
+confirmation from the human that the manual verification was successful before
+proceeding to the next phase. In looped (`--loop`) execution, this phase's
+Automated Verification gates advancement automatically (via `/commit --auto`);
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
 
 ---
