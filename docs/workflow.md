@@ -156,7 +156,7 @@ of the tree it touches. A bead may carry several.
 | `area:datamodel` | `lib/statifier/datamodel/**` |
 | `area:corpus` | `tools/corpus/**`, `test/scion_tests/**`, `test/scxml_tests/**` |
 | `area:test-harness` | `test/support/**`, `lib/mix/tasks/test.*.ex`, `test/passing_tests.json` |
-| `area:skills` | `.claude/skills/**` |
+| `area:skills` | `.claude/skills/**`, `.claude/scripts/**` |
 | `area:docs` | `docs/**`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `changelog.d/**` |
 | `area:build` | `mix.exs`, `mix.lock`, `.quality.exs`, `.credo.exs`, `.gitignore` |
 
