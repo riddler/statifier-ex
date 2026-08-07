@@ -6,28 +6,36 @@ defmodule Statifier.TmpDirTest do
 
   alias Statifier.TmpDir
 
+  # Every override below derives from this process's own current root
+  # (`TmpDir.root()`) rather than a hardcoded literal, and every mutation is
+  # restored in `on_exit`. A hardcoded literal is exactly what let two
+  # concurrent `mix test` OS processes running this file agree on the same
+  # `STATIFIER_TMP_ROOT` value transiently and race each other's
+  # `setup_tmp_dir/1` `rm_rf!` calls (st-iao); deriving from this process's
+  # own root keeps every override unique to it regardless.
+  defp restore_env(nil), do: System.delete_env(TmpDir.env_var())
+  defp restore_env(value), do: System.put_env(TmpDir.env_var(), value)
+
   describe "root/0" do
     # sabotage: n/a - harness plumbing, asserts test/support/ not lib/
     test "defaults to \"tmp\" when STATIFIER_TMP_ROOT is unset" do
+      previous = System.get_env(TmpDir.env_var())
       System.delete_env(TmpDir.env_var())
 
-      assert TmpDir.root() == "tmp"
+      on_exit(fn -> restore_env(previous) end)
+
+      assert TmpDir.root() == Path.join(TmpDir.default_root(), TmpDir.process_id())
     end
 
     # sabotage: n/a - harness plumbing, asserts test/support/ not lib/
     test "honors STATIFIER_TMP_ROOT when set" do
       previous = System.get_env(TmpDir.env_var())
-      System.put_env(TmpDir.env_var(), "tmp/probe")
+      override = Path.join(TmpDir.root(), "probe")
+      System.put_env(TmpDir.env_var(), override)
 
-      on_exit(fn ->
-        if previous do
-          System.put_env(TmpDir.env_var(), previous)
-        else
-          System.delete_env(TmpDir.env_var())
-        end
-      end)
+      on_exit(fn -> restore_env(previous) end)
 
-      assert TmpDir.root() == "tmp/probe"
+      assert TmpDir.root() == Path.join(override, TmpDir.process_id())
     end
   end
 
@@ -42,15 +50,9 @@ defmodule Statifier.TmpDirTest do
   describe "path_for/2" do
     setup do
       previous = System.get_env(TmpDir.env_var())
-      System.put_env(TmpDir.env_var(), "tmp/path_for_test")
+      System.put_env(TmpDir.env_var(), Path.join(TmpDir.root(), "path_for_test"))
 
-      on_exit(fn ->
-        if previous do
-          System.put_env(TmpDir.env_var(), previous)
-        else
-          System.delete_env(TmpDir.env_var())
-        end
-      end)
+      on_exit(fn -> restore_env(previous) end)
 
       :ok
     end
@@ -59,7 +61,7 @@ defmodule Statifier.TmpDirTest do
     test "nests under root/0" do
       path = TmpDir.path_for(__MODULE__, :some_test)
 
-      assert String.starts_with?(path, Path.expand("tmp/path_for_test"))
+      assert String.starts_with?(path, Path.expand(TmpDir.root()))
     end
 
     # sabotage: n/a - harness plumbing, asserts test/support/ not lib/
@@ -89,16 +91,13 @@ defmodule Statifier.TmpDirTest do
   describe "setup_tmp_dir/1" do
     setup do
       previous = System.get_env(TmpDir.env_var())
-      System.put_env(TmpDir.env_var(), "tmp/setup_tmp_dir_test")
+      override = Path.join(TmpDir.root(), "setup_tmp_dir_test")
+      System.put_env(TmpDir.env_var(), override)
+      scratch_root = TmpDir.root()
 
       on_exit(fn ->
-        if previous do
-          System.put_env(TmpDir.env_var(), previous)
-        else
-          System.delete_env(TmpDir.env_var())
-        end
-
-        File.rm_rf!(Path.expand("tmp/setup_tmp_dir_test"))
+        restore_env(previous)
+        File.rm_rf!(Path.expand(scratch_root))
       end)
 
       :ok

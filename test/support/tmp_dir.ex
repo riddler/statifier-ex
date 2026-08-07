@@ -9,9 +9,30 @@ defmodule Statifier.TmpDir do
   stages of a bare `mix quality` are - race on the same paths (st-0vz).
 
   Tag a test `@tag :isolated_tmp_dir` and it receives `:tmp_dir` in its
-  context, same as ExUnit's tag provides. The root is `STATIFIER_TMP_ROOT`,
-  defaulting to `"tmp"`; `mix test.regression` sets it so the ratchet's child
-  run cannot collide with the Tests stage.
+  context, same as ExUnit's tag provides.
+
+  `root/0` is scoped by `System.pid()` (st-iao): every concurrent `mix test`
+  OS process gets a distinct segment appended to its root, so two runs cannot
+  compute the same scratch path even if `STATIFIER_TMP_ROOT` somehow resolves
+  to the same value in both - which is exactly what happened before this
+  segment existed, when `test/statifier/tmp_dir_test.exs` briefly set the
+  variable to the same hardcoded literal in two concurrent processes and their
+  `setup_tmp_dir/1` calls raced each other's `rm_rf!`. `STATIFIER_TMP_ROOT`
+  (default `"tmp"`) is no longer load-bearing for isolation; it now only picks
+  where a run's pid-scoped tree lives, e.g. `mix test.regression` sets it to
+  `tmp/regression` so the ratchet's directories are easy to find by eye rather
+  than to keep them out of another process's way.
+
+  Directories accumulate: every OS process leaves its own `tmp/<root>/<pid>/`
+  subtree behind (like ExUnit, so a failure can be inspected), and OS pids get
+  reused, but not while this repo has any `mix test` process alive - a stale
+  subtree from a finished process and a live one from a current process cannot
+  collide within a single run. Nothing here sweeps old subtrees automatically:
+  distinguishing "stale" from "a concurrent run that just hasn't reached this
+  test yet" is not safely decidable from inside a `setup` callback, and
+  deleting a live run's directory is exactly the bug this module exists to
+  prevent. Run `rm -rf tmp/` by hand between sessions if the accumulation
+  bothers you; `.gitignore` already excludes all of `tmp/`.
 
   Like ExUnit, the directory is emptied at setup and left in place afterwards
   so a failure can be inspected.
@@ -21,17 +42,34 @@ defmodule Statifier.TmpDir do
   @env_var "STATIFIER_TMP_ROOT"
   @escape Enum.map(~c" [~#%&*{}\\:<>?/+|\"]", &<<&1::utf8>>)
 
-  @doc "Scratch root for this OS process."
-  @spec root() :: String.t()
-  def root, do: System.get_env(@env_var) || @default_root
+  @doc """
+  Scratch root for this OS process.
 
-  @doc "Name of the environment variable that overrides the root."
+  Always ends in a `System.pid()` segment (`process_id/0`), so no two
+  concurrent OS processes ever resolve to the same root regardless of what
+  `STATIFIER_TMP_ROOT` is set to in either.
+  """
+  @spec root() :: String.t()
+  def root, do: Path.join(configured_root(), process_id())
+
+  @doc "Name of the environment variable that overrides the configured root."
   @spec env_var() :: String.t()
   def env_var, do: @env_var
 
-  @doc "Default root used when the environment variable is unset."
+  @doc "Default configured root used when the environment variable is unset."
   @spec default_root() :: String.t()
   def default_root, do: @default_root
+
+  @doc """
+  This OS process's discriminator, appended to `root/0` unconditionally.
+
+  `System.pid/0` as a string. No two concurrent OS processes ever share one,
+  which is what makes `root/0` collision-proof by construction (st-iao).
+  """
+  @spec process_id() :: String.t()
+  def process_id, do: to_string(System.pid())
+
+  defp configured_root, do: System.get_env(@env_var) || @default_root
 
   @doc """
   Absolute scratch path for `module` and `test_name` under `root/0`.

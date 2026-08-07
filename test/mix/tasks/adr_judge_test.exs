@@ -54,19 +54,21 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # Deliberately not `Statifier.TmpDir.path_for/2` (the usual
   # `@tag :isolated_tmp_dir` path): that name is deterministic per
   # module+test, so the Tests stage's and Regression ratchet's `mix test`
-  # processes - which both run this file - resolve it identically whenever
-  # they happen to share a `STATIFIER_TMP_ROOT` (they normally do not, but
-  # `Statifier.TmpDirTest` mutates that variable process-globally mid-run by
-  # design, see its own `async: false` comment, and a mutation landing at the
-  # wrong moment can make two concurrent `mix test` processes agree on it
-  # transiently). `TmpDir.setup_tmp_dir/1`'s `rm_rf!` on that shared path then
-  # races the git repo this test is actively using in the other process -
-  # reproduced while writing this test, once as directory corruption, once as
-  # "unable to read current working directory" mid-`git init`. Suffixing with
-  # `System.pid()`, which no two concurrent OS processes ever share, keeps
-  # this path unique regardless of what either process's root resolves to.
+  # processes - which both run this file - would resolve it identically. That
+  # used to matter here: `TmpDir.root()` did not carry a per-process
+  # discriminator, so `Statifier.TmpDirTest`'s process-global
+  # `STATIFIER_TMP_ROOT` mutations (see its own `async: false` comment) could
+  # briefly make two concurrent `mix test` processes agree on the same root,
+  # and `TmpDir.setup_tmp_dir/1`'s `rm_rf!` on that shared path then raced the
+  # git repo this test was actively using in the other process - reproduced
+  # while writing this test, once as directory corruption, once as "unable to
+  # read current working directory" mid-`git init`. `TmpDir.root/0` now ends
+  # in a `System.pid()` segment unconditionally (st-iao), so this directory is
+  # unique to this OS process without an extra suffix - kept anyway, spelled
+  # via `TmpDir.process_id/0`, as a second discriminator that costs nothing
+  # and needs no reasoning about `TmpDir.root/0`'s internals to trust.
   defp scratch_repo_dir do
-    Path.join([TmpDir.root(), "adr-judge-test-git-repo", System.pid()])
+    Path.join([TmpDir.root(), "adr-judge-test-git-repo", TmpDir.process_id()])
   end
 
   # A minimal real git repo for "execute/1 falls back to the real
