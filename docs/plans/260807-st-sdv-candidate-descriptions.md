@@ -504,11 +504,11 @@ ruby .claude/scripts/bead.rb note st-sdv "$(date +%F): live /next-issues table v
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/select_batch.rb --n 3` exits 0 and every candidate
+- [x] `ruby .claude/scripts/select_batch.rb --n 3` exits 0 and every candidate
       row has a `summary` key
-- [ ] Ruby suite still green after any Phase 4 fixes:
+- [x] Ruby suite still green after any Phase 4 fixes:
       `ruby .claude/scripts/test/run.rb`
-- [ ] Full gate green before the final commit: `mix quality`
+- [x] Full gate green before the final commit: `mix quality`
 
 #### Manual Verification:
 - [ ] The rendered table answers "what is this bead about?" for every row
@@ -646,5 +646,24 @@ proceeding to the next phase. In looped (`--loop`) execution, this phase's
 Automated Verification gates advancement automatically (via `/commit --auto`);
 Manual Verification items are deferred and surfaced once at the end instead of
 blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The rendered table answers "what is this bead about?" for every row
+      without running `bd show`
+- [ ] `st-trm` and `st-tgv` are distinguishable from each other in the table
+- [ ] An AskUserQuestion-shaped option string built from the recommended batch
+      names the subjects and fits the option text budget
+- [ ] The verification note is on the bead
+
+**Implementation Note**: In interactive execution, pause here for manual
+confirmation from the human that the manual testing was successful. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end - and for this phase in particular, the manual
+items *are* the acceptance criterion, so they must be surfaced explicitly and
+not merely listed.
 
 ---
