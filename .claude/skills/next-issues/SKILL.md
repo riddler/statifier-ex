@@ -134,9 +134,12 @@ not discovered afterward in a report.
    Read `data`:
 
    - **`data.mode`** - `"auto"` or `"manual"`, echoing which mode was parsed.
-   - **`data.candidates`** - one row per candidate: `id`, `title`, `priority`,
-     `issue_type`, `areas`, `verdict`, `reason`. This is the candidate table -
-     show it in full before asking anything (step 2). Verdicts:
+   - **`data.candidates`** - one row per candidate: `id`, `title`, `summary`,
+     `priority`, `issue_type`, `areas`, `verdict`, `reason`. `summary` is the
+     bead's first sentence, truncated - deterministic, produced by
+     `lib/summary.rb`, not model-written (docs/skill-automation.md explains
+     why). This is the candidate table - show it in full before asking
+     anything (step 2). Verdicts:
 
      | Verdict | Meaning |
      |---|---|
@@ -183,11 +186,26 @@ not discovered afterward in a report.
    `data.skipped` alongside their reasons (a collision, an epic, unlabeled,
    ...). Present that the same way as any other run.
 
-2. **Present the picker (manual mode).** Show the full candidate table first
-   - id, title, priority, verdict - so every constraint is on screen before
-   any question is asked. "Why did it only take two" is the question this
-   skill will be asked most often, and the answer has to be visible before
-   anyone asks it. Then offer the choice:
+2. **Present the picker (manual mode).** Show the full candidate table first,
+   with these columns, so every constraint - and every subject - is on screen
+   before any question is asked:
+
+   | Column | Source | Required |
+   |---|---|---|
+   | Bead | `id` | always |
+   | Title | `title` | always |
+   | What it is | `summary` (`-` when null) | always |
+   | Pri / Type | `priority`, `issue_type` | always |
+   | Areas | `areas` | always |
+   | Verdict | `verdict` + `reason` | always |
+
+   **Title and summary are not optional columns and are not dropped for
+   width.** The constraint columns (priority, areas, verdict) are what a
+   reader can reconstruct from `bd ready`; the subject matter (title,
+   summary) is what they cannot. If the table is too wide, wrap the summary,
+   do not drop it. "Why did it only take two" is the question this skill will
+   be asked most often, and the answer has to be visible before anyone asks
+   it. Then offer the choice:
 
    - Where the **AskUserQuestion** tool is available, use it. Options:
      1. **The recommended batch** (marked as such).
@@ -197,6 +215,12 @@ not discovered afterward in a report.
         collision. The option text names the specific risk it accepts (e.g.
         "take st-qww.7 despite area:skills collision with worktree
         st-abc-slug").
+
+     Every option's text must name what its beads are about, not just their
+     ids and areas: one clause per bead, `<id>: <short summary>`, trimmed to
+     fit the option's text budget. The override example above names the risk
+     but not the subject; state both - "take st-qww.7 (branch-naming
+     decision) despite area:skills collision with worktree st-abc-slug".
    - Where it is not available, present the same options as a plain-text list
      and ask for a reply.
 
@@ -292,6 +316,10 @@ not discovered afterward in a report.
   point of this skill; a run that claims before the user has seen the
   candidate table and chosen among the legal options has skipped the part
   that matters.
+- **The candidate table is a menu of work, not a constraint report.** A run
+  that presents constraints (priority, areas, verdict) without subjects
+  (title, summary) has failed the same way a run that claims before
+  presenting has.
 - **Claim the whole batch before creating any worktree.** Not per-bead
   claim-then-worktree - that leaves worktrees for beads whose claim later fails.
 - Sync steps (0, 4's publish) and cleanup (0.5) are best-effort and must never

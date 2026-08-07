@@ -75,8 +75,8 @@ Everything else in `$ARGUMENTS` maps to `bd ready`'s native filter flags
    it lists ready candidates (`bd ready --json [FILTERS]`), surveys live
    worktrees for area collisions, annotates each with a verdict, and runs the
    greedy walk. Read `data.candidates` for the full ranked list (id, title,
-   priority, issue_type, verdict, reason) and `data.recommended` for the top
-   pick - at most one id, since `n=1`.
+   summary, priority, issue_type, verdict, reason) and `data.recommended` for
+   the top pick - at most one id, since `n=1`.
 
    **`data.recommended` empty** (and `data.candidates` all skipped, or empty
    outright) -> nothing ready and unclaimed. Do not auto-file. Report it, show
@@ -85,9 +85,13 @@ Everything else in `$ARGUMENTS` maps to `bd ready`'s native filter flags
    something new.
 
    **Manual mode:** present the top few rows of `data.candidates` (id, title,
-   type, priority, verdict) and let the user pick or confirm the recommended
-   one - **never auto-select, even when only one candidate is ready.** Then
-   claim it:
+   summary, type, priority, verdict) and let the user pick or confirm the
+   recommended one. **Title and summary are not optional columns and are not
+   dropped for width** - the constraint columns (priority, type, verdict) are
+   what a reader can reconstruct from `bd ready`; the subject matter (title,
+   summary) is what they cannot. See `/next-issues`' step 2 for the full
+   column table this skill's rows follow. **Never auto-select, even when only
+   one candidate is ready.** Then claim it:
    ```bash
    ruby .claude/scripts/bead.rb claim <id>
    ```
