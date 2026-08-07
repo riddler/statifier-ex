@@ -34,7 +34,6 @@ defmodule Statifier.Document.RaiseTest do
 
   describe "attribute_locations" do
     # sabotage: drop attribute_locations from Raise's defstruct fields -> red
-    # (struct literal below fails to compile, unknown key :attribute_locations)
     test "distinguishes a written attribute from an absent one" do
       raise_ = %Raise{event: "go", location: loc(), attribute_locations: %{event: loc()}}
 

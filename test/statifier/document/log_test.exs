@@ -33,7 +33,6 @@ defmodule Statifier.Document.LogTest do
 
   describe "attribute_locations" do
     # sabotage: drop :expr from Log's defstruct fields entirely -> red
-    # (struct literal below fails to compile, unknown key :expr)
     test "a populated attribute_locations distinguishes a written key from an absent one" do
       log = %Log{
         expr: "x > 1",

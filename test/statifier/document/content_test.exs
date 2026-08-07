@@ -33,7 +33,6 @@ defmodule Statifier.Document.ContentTest do
 
   describe "expr and text together" do
     # sabotage: drop :expr from Content's defstruct fields entirely -> red
-    # (struct literal below fails to compile, unknown key :expr)
     test "both expr and text are representable on the same node" do
       content = %Content{expr: "x", text: "hello", location: loc()}
 
@@ -43,7 +42,6 @@ defmodule Statifier.Document.ContentTest do
 
   describe "attribute_locations" do
     # sabotage: drop :attribute_locations from Content's defstruct -> red
-    # (struct literal below fails to compile, unknown key :attribute_locations)
     test "a populated attribute_locations distinguishes a written key from an absent one" do
       content = %Content{expr: "x", location: loc(), attribute_locations: %{expr: loc()}}
 
