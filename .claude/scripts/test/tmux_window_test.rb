@@ -36,6 +36,19 @@ class TmuxWindowClassifyTest < Minitest::Test
     assert_equal "idle", TmuxWindow.classify(fixture("empty_box.txt"))
   end
 
+  # empty_box.txt was hand-authored with an ASCII space; the real thing pads
+  # the box with U+00A0, which String#strip does not remove - every idle
+  # window read as busy until classify stopped using strip.
+  # sabotage: only_styling? back to .strip.empty? -> red
+  def test_empty_box_padded_with_a_non_breaking_space_is_idle
+    assert_equal "idle", TmuxWindow.classify(fixture("empty_box_nbsp.txt"))
+  end
+
+  def test_the_nbsp_fixture_really_carries_the_u00a0_byte_pair
+    line = fixture("empty_box_nbsp.txt").lines.find { |l| l.include?("\xE2\x9D\xAF".b) }
+    assert_includes line, "\xC2\xA0".b, "fixture lost the NBSP pad that makes this case distinct from empty_box.txt"
+  end
+
   def test_spinner_frame_is_busy
     assert_equal "busy", TmuxWindow.classify(fixture("spinner_frame.txt"))
   end
