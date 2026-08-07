@@ -17,9 +17,9 @@ That staleness is the failure mode this skill exists to prevent: a worktree that
 was green when created goes red for reasons that have nothing to do with the
 work inside it, and the agent working there starts debugging its own change.
 
-Pairs with the merge-time cleanup in st-qww.5 - same moment, opposite
-direction: that one removes the worktree of the branch that just landed, this
-one refreshes the survivors.
+Pairs with the merge-time cleanup in `/cleanup-worktrees` - same moment,
+opposite direction: that one removes the worktree of the branch that just
+landed, this one refreshes the survivors.
 
 ## Input
 
@@ -28,132 +28,94 @@ worktree. No argument sweeps every live worktree under
 `../statifier-ex-worktrees/`. The main checkout is never a target - it is not a
 feature branch and is not rebased.
 
-## Steps
+## What to run
 
-1. **Enumerate targets.**
-   ```bash
-   git worktree list --porcelain
-   ```
-   Parse into `(path, branch)` pairs and drop the main checkout
-   (`/Users/johnnyt/repos/github/statifier-ex`). With an argument, keep only the
-   matching one; if it matches nothing, STOP and report what is live.
+```bash
+.claude/scripts/worktree_refresh.rb [name]
+```
 
-   No live worktrees is a normal outcome, not an error - say so and stop.
+This is the whole sweep: enumerate live worktrees (dropping the main
+checkout), fetch `origin` once, then per worktree - skip if `origin/main` is
+already an ancestor, refuse if dirty, rebase onto `origin/main` (capturing
+conflicting files before aborting), repair the build only if `mix.lock` moved,
+and confirm green with `mix quality --profile loop`. Run it for real; do not
+`--dry-run` a refresh you intend to act on, since the report needs the actual
+rebase and gate outcome, not a preview.
 
-2. **Fetch once.**
-   ```bash
-   git fetch origin
-   ```
-   One fetch for the whole sweep. If it fails (offline), STOP - refreshing
-   against a stale `origin/main` would rebase worktrees onto the very commit
-   they are already on and report success for nothing.
+## How to read the result
 
-   Record the target: `git rev-parse origin/main`.
+- `blocked` `no_matching_worktree` - the given name/branch matched nothing
+  live. STOP and report what is live instead.
+- `blocked` `offline` (`git fetch origin` failed) - STOP entirely. Refreshing
+  against a stale `origin/main` would rebase worktrees onto the commit they
+  are already on and report success for nothing. This is a hard stop, not a
+  per-worktree skip.
+- `data.results` is empty and `ok: true` - no live worktrees. That is a normal
+  outcome, not an error; say so and stop.
+- Otherwise `data.results` is one entry per worktree, each already carrying the
+  skill's own result vocabulary in `result`:
+  - `"current, skipped"` - nothing to do, build untouched.
+  - `"dirty, skipped"` - uncommitted work; the script never stashed, committed,
+    or discarded it.
+  - `"conflict in <files>, aborted, unchanged"` - the rebase was captured and
+    aborted; the worktree is exactly as it was.
+  - `"red"` - rebase and any lock repair succeeded, but `mix quality --profile
+    loop` came back red.
+  - `"rebased onto <sha>, lock unchanged, loop green"` or `"..., lock
+    repaired, loop green"` - the success case.
+- `data.origin_main` is what `origin/main` moved to; include it in the report
+  header.
 
-3. **Per worktree, in order.** Each is independent; one failing does not stop
-   the sweep. Report per worktree and continue.
+## Report
 
-   a. **Skip if already current.**
-      ```bash
-      git -C <path> merge-base --is-ancestor origin/main HEAD
-      ```
-      Exit 0 means `origin/main` is already in this branch's history - nothing
-      to do. Record as `current` and move on without touching the build.
+One line per worktree, using `data.results[].result` verbatim, plus what
+`origin/main` moved to:
 
-   b. **Refuse if dirty.**
-      ```bash
-      git -C <path> status --porcelain
-      ```
-      Any output means uncommitted work. STOP for this worktree and report it
-      as `dirty, skipped`. **Never stash, commit, or discard on the author's
-      behalf** - uncommitted work belongs to whoever is in that worktree, and a
-      surprise stash during an unattended sweep is how it gets lost.
+| Worktree | Result |
+|---|---|
+| `st-00p.3-regression-ratchet` | rebased onto 146c69f, lock unchanged, loop green |
+| `st-00p.4-corpus-layout` | current, skipped |
+| `st-qww.1-team-maintainer` | **conflict** in `docs/workflow.md`, aborted, unchanged |
+| `st-vbu-strict-credo` | dirty, skipped |
 
-   c. **Record the pre-rebase tip** so the lockfile comparison in (e) has a
-      base: `before=$(git -C <path> rev-parse HEAD)`.
+End with the ones needing a human: conflicts, dirty worktrees, red gates.
+**Silence about a skipped worktree reads as success** - name every one.
 
-   d. **Rebase onto origin/main.**
-      ```bash
-      git -C <path> rebase origin/main
-      ```
-      On conflict: **capture the conflicting files first, then abort.** The
-      abort clears the conflict state, so a report assembled afterwards has
-      nothing left to name:
-      ```bash
-      git -C <path> diff --name-only --diff-filter=U   # capture, then
-      git -C <path> rebase --abort                     # abort
-      ```
-      A rebase conflict means two branches touched the same files, which means
-      the `area:` labels were wrong or the batch was picked badly (st-92f).
-      That is signal for a human, not something to paper over mid-sweep;
-      aborting leaves the worktree exactly as it was. Name the conflicting
-      files in the report and mark it `conflict`. `bd merge-slot` is the
-      coordination primitive for resolving it deliberately, one agent at a
-      time.
+## Judgment
 
-   e. **Repair the build only if `mix.lock` moved.**
-      ```bash
-      git -C <path> diff --quiet $before HEAD -- mix.lock
-      ```
-      Exit 0 (unchanged) is the fast path: no `deps.get`, no PLT work, straight
-      to (f). This is the common case and should stay cheap.
-
-      Changed:
-      ```bash
-      cd <path> && mix deps.get
-      ```
-      Then the PLT. Dialyxir keys it on OTP/Elixir versions plus the dep set,
-      so a lockfile change invalidates it. If the main checkout has already
-      rebuilt its PLT for the new dep set, clone it rather than rebuilding
-      here - the clone is a copy-on-write file operation against a multi-minute
-      build:
-      ```bash
-      cp -c /Users/johnnyt/repos/github/statifier-ex/_build/dev/dialyxir_*.plt* \
-            <path>/_build/dev/ 2>/dev/null || true
-      ```
-      If it is absent or also stale, note that the next full `mix quality` in
-      that worktree will rebuild it, and move on. This step is an optimization;
-      never fail a refresh on it.
-
-      **Do not re-clone `deps/` and `_build/` wholesale.** That clone is a
-      cold-start optimization for a worktree with no build state. A live
-      worktree has its own incremental state, and clobbering it forces a full
-      recompile - slower, not faster.
-
-   f. **Confirm green.**
-      ```bash
-      cd <path> && mix quality --profile loop
-      ```
-      Never truncate the output. A failure here is a real result: the rebase
-      was clean but the combination is not, which is exactly what the refresh
-      is meant to surface early. Mark it `red` and keep the worktree as-is -
-      the agent working there needs to see it.
-
-4. **Report** one line per worktree, plus what `origin/main` moved to:
-
-   | Worktree | Result |
-   |---|---|
-   | `st-00p.3-regression-ratchet` | rebased onto 146c69f, lock unchanged, loop green |
-   | `st-00p.4-corpus-layout` | current, skipped |
-   | `st-qww.1-team-maintainer` | **conflict** in `docs/workflow.md`, aborted, unchanged |
-   | `st-vbu-strict-credo` | dirty, skipped |
-
-   End with the ones needing a human: conflicts, dirty worktrees, red gates.
-   Silence about a skipped worktree reads as success.
-
-## Guidelines
-
-- **Rebase, never merge.** The repo allows rebase merging only (st-qww.5), so
-  keeping branches linear against `main` matches how they will land and avoids
-  a merge commit the PR cannot use.
+- **The staleness failure mode is why this skill exists**: a worktree that was
+  green when created going red for reasons that have nothing to do with the
+  work inside it, sending the agent there down a debugging path that is not
+  theirs to walk.
+- **The main checkout is never a target.** It is not a feature branch and is
+  not rebased.
+- **Offline is a hard stop**, not a per-worktree skip - see above.
+- **Never stash, commit, or discard on the author's behalf.** Uncommitted work
+  belongs to whoever is in that worktree, and a surprise stash during an
+  unattended sweep is how it gets lost.
+- **A rebase conflict is signal for a human, not something to paper over
+  mid-sweep.** It means two branches touched the same files, which means the
+  `area:` labels were wrong or the batch was picked badly. Aborting leaves the
+  worktree exactly as it was; `bd merge-slot` is the coordination primitive for
+  resolving it deliberately, one agent at a time. Name the conflicting files in
+  the report.
+- **A red gate is a real result, not a failure of the refresh.** The rebase
+  was clean but the combination is not, which is exactly what the refresh is
+  meant to surface early. Keep the worktree as-is - the agent working there
+  needs to see it.
+- **Silence about a skipped worktree reads as success.** Every worktree gets a
+  reported line, always.
+- **Rebase, never merge.** The repo allows rebase merging only, so keeping
+  branches linear against `main` matches how they will land and avoids a merge
+  commit the PR cannot use.
 - **Nothing here is pushed.** Rebasing a branch rewrites its commits; if it has
   already been pushed, its remote counterpart now diverges and the eventual
-  push needs `--force-with-lease`. That is `/merge-request`'s decision to make
-  (st-qww.3), not this skill's.
+  push needs `--force-with-lease`. That is `/merge-request`'s decision to make,
+  not this skill's.
 - **When to run:** after any branch merges into `origin/main`, and always after
   a change that moved `mix.lock`, `.quality.exs`, or `.credo.exs` - those move
-  the gate every other worktree is measured against. Once the merge path is
-  automated (st-qww.4), whatever closes the loop on a merge should invoke this
-  so "a branch landed" and "everyone else is current" are one event.
+  the gate every other worktree is measured against. Whatever closes the loop
+  on a merge should invoke this so "a branch landed" and "everyone else is
+  current" are one event.
 - A sweep is safe to re-run: current worktrees are skipped, and the fast path
   costs a `merge-base` check.

@@ -31,7 +31,7 @@ ask for the slug - it matters and should not be guessed.
 The name is fixed at creation and never renamed afterwards, even if the branch
 grows to carry more beads (ADR-0010).
 
-**Seed command** (optional) is what the tmux session in step 5 runs, e.g.:
+**Seed command** (optional) is what the tmux session runs, e.g.:
 
 ```
 /new-worktree st-00p.3-regression-ratchet -- /work st-00p.3 --auto
@@ -44,191 +44,125 @@ bead to the session that will act on it - all they pass is the id. Omitted -
 someone invoking this skill directly - falls back to the same `/work` seed, so
 a hand-made worktree behaves exactly like a routed one.
 
-## Steps
+## What to run
 
-1. **Guard.** From the main checkout (`/Users/johnnyt/repos/github/statifier-ex`):
-   - `git branch --list <name>` - if the branch already exists, STOP and report.
-     Offer a different name or let the user delete the old one. Never force.
-   - `ls ../statifier-ex-worktrees/<name>` - same rule if the folder exists.
-   - `git fetch origin` so the branch is cut from the latest `origin/main`
-     (github.com/riddler/statifier-ex), not a stale local copy. If the fetch
-     fails (offline) or `origin/main` does not exist yet, fall back to local
-     `main` and say so in the report.
-
-2. **Create the worktree + branch.**
+1. Create and warm the worktree:
    ```bash
-   mkdir -p ../statifier-ex-worktrees
-   git worktree add ../statifier-ex-worktrees/<name> -b <name> --no-track origin/main
+   .claude/scripts/worktree_create.rb <name>
    ```
-   (`--no-track` keeps the new branch push-safe; drop to `main` only in the
-   offline/fallback case above.)
+   This covers the guard (existing branch or worktree directory), cutting the
+   branch from `origin/main` (or local `main` if `git fetch` fails), trusting
+   the new path with `mise` before any mise-managed command runs there, cloning
+   `deps/` and `_build/`, and a final `mix quality --profile loop` to confirm
+   green. Run it for real - do not `--dry-run` this one, since the point of
+   the step is the worktree existing and warm. Never truncate its output if
+   you surface `data.quality_output`.
 
-   Then trust the new worktree path:
+2. Open the tmux window, only after step 1 reports `ok: true`:
    ```bash
-   mise trust ../statifier-ex-worktrees/<name>
+   .claude/scripts/tmux_window.rb ensure-session
+   .claude/scripts/tmux_window.rb open <name> <path> <id> <seed>
    ```
-   mise trusts `mise.toml` per directory path, not per repo, so the freshly
-   created worktree path is untrusted even though it's the same repo content -
-   without this, the first mise-managed command run there (step 4) prompts to
-   trust the config and hangs a non-interactive agent session the same way an
-   unaliased `-i` flag does (see CLAUDE.md's "Non-interactive shell commands"
-   section).
+   `<path>` and `<id>` come from step 1's `data`; `<id>` is the bead id at the
+   front of the branch name (`st-lzn` from `st-lzn-tmux-window-per-worktree`,
+   `st-00p.3` from `st-00p.3-regression-ratchet`). `<seed>` is the seed command
+   from the input when one was given, passed through verbatim including the
+   leading slash (e.g. `/work st-00p.3 --auto`); with no seed command, fall
+   back to `/work <id> --auto`. Pass only the bead id, never a paraphrase of
+   the work: the beads DB is shared across worktrees, so the new session reads
+   the bead directly with `bd show`, while a restated description goes stale
+   the moment the bead is updated.
 
-3. **Warm the caches.** Clone `deps/` and `_build/` from this checkout into the
-   worktree. On APFS `cp -Rc` uses copy-on-write clonefiles, so this is nearly
-   instant and costs almost no disk:
-   ```bash
-   cp -Rc deps _build ../statifier-ex-worktrees/<name>/ 2>/dev/null \
-     || cp -R deps _build ../statifier-ex-worktrees/<name>/
-   ```
-   This carries:
-   - compiled dep and app beams (incremental recompile only for changed files)
-   - the dialyzer PLT: `_build/dev/dialyxir_erlang-*_elixir-*_deps-dev.plt` and
-     its `.hash` - dialyxir keys the PLT on OTP/Elixir versions and the dep set,
-     so a cloned PLT is picked up as-is and full `mix quality` skips the
-     multi-minute PLT build.
+## How to read the result
 
-   If `_build` here has no PLT yet (fresh clone), note it and suggest running
-   `mix quality.plt` once - in either checkout, then re-clone or let the
-   worktree build it.
+`worktree_create.rb`:
+- `blocked` (`branch_exists`, `worktree_dir_exists`) - STOP and report. Offer a
+  different name or let the user delete the old one. **Never force** - this
+  script has no path that deletes a branch or directory to make room for a
+  new one, and neither should you.
+- `warnings` worth surfacing in the report: `fetch_failed` (cut from local
+  `main` instead of `origin/main` - say so), `mise_trust_failed`,
+  `cache_clone_failed`, `plt_missing` (suggest `mix quality.plt` once, in
+  either checkout).
+- `data.quality_green` false (`ok: false`) means the warm worktree came up red;
+  report `data.quality_output` in full, never truncated.
+- `data.path`, `data.base_ref`, `data.name` feed the report and the tmux step.
 
-4. **Verify the worktree is green.** In the worktree:
-   ```bash
-   cd ../statifier-ex-worktrees/<name>
-   mix deps.get        # no-op unless mix.lock changed since the clone
-   mix quality --profile loop
-   ```
-   A warm worktree should pass this in seconds. Never truncate the output.
+`tmux_window.rb open`:
+- **This step is optional and never fatal.** If `tmux` genuinely is not
+  reachable (both calls error, not merely `blocked`), skip it with a note and
+  go to the report. The worktree is the deliverable; the window is
+  convenience. Never fail worktree creation because the window could not be
+  made.
+- `data.skipped: true` - a window with this name already exists. Report it and
+  do not create a second one; the guard exists so two windows never claim the
+  same name.
+- `blocked` `window_id_empty` - the same empty-target hazard `/cleanup-worktrees`
+  guards against; report it as the window step failing, not as worktree
+  creation failing.
+- On success, `data.window_id`, `data.name`, `data.path`, `data.model` feed the
+  report directly.
 
-5. **Open a tmux window for the worktree.** Reporting a path and leaving the
-   user to `cd` there by hand is the step that makes fan-out feel expensive,
-   and the step most likely to be done wrong: a session started in the main
-   checkout instead of the worktree silently edits the wrong tree.
+## Judgment
 
-   **This step is optional and never fatal.** If `tmux` is not installed, or
-   `$TMUX` is unset and no server is running, skip it with a note and go to the
-   report. The worktree is the deliverable; the window is convenience. Never
-   fail worktree creation because the window could not be made.
+- **`--model` is passed explicitly** by `tmux_window.rb`, never left to
+  whatever default the launched session would otherwise inherit
+  (`~/.claude/settings.json`'s global default, which may not be Opus or Sonnet
+  at all). It is a *constant* because every seeded session runs `/work`, which
+  orchestrates on Opus and assigns the implementation tier to its own
+  subagents. The tier split did not disappear - it moved inside the session,
+  where `docs/workflow.md`'s model roles are applied per stage instead of per
+  launch. A skill's own `model:` frontmatter (e.g. `work`'s) governs that
+  skill's invocation once the session is already running; it does not govern
+  the CLI session itself, which is why this constant exists at all and must
+  not be "simplified" away.
 
-   Windows live in the existing per-project session (`statifier-ex`), matching
-   the convention already in use - one session per project, windows within it.
-   Do not create a session per worktree.
+- **The finishing clause is appended unconditionally** by `tmux_window.rb`, to
+  a given seed and to the fallback, because the tmux-open step is the one
+  place every caller (`/next-issue`, `/next-issues`, and a direct
+  `/new-worktree` invocation) converges - editing that one template reaches
+  every seeded session without touching the calling skills themselves. It
+  specifies `/commit --auto` rather than bare `/commit` because the tmux
+  session runs unattended under `--permission-mode auto`: `/commit`'s
+  interactive approval step would stall with nobody watching the window to
+  answer it. This does not grant commit authority beyond what CLAUDE.md's
+  authority table already grants (issue complete and full `mix quality`
+  green) - it only routes that authority through the skill that performs the
+  Refs-trailer and unrelated-changes checks, instead of a bare `git commit`
+  that skips them.
 
-   ```bash
-   # exact-match target (=): a sibling session named statifier exists for v1.
-   # ALWAYS quote a '=' target - fish and zsh expand a leading = as a command
-   # path (equals-expansion), so bare -t =statifier-ex: dies with
-   # "statifier-ex: not found" before tmux ever sees it. Verified 2026-08-02.
-   tmux has-session -t '=statifier-ex' 2>/dev/null \
-     || tmux new-session -d -s statifier-ex -c /Users/johnnyt/repos/github/statifier-ex
-   ```
+- `--permission-mode auto` starts the seeded session in auto mode, so it makes
+  routine calls without stopping to confirm each one - the point of fanning
+  worktrees out is not to then babysit four sessions. It is `auto`, not
+  `bypassPermissions`: the permission system still applies, and this repo's
+  authority table (CLAUDE.md) still gates push, PR, and `bd close` on an
+  explicit human ask.
 
-   **Guard on the window name** before creating anything, the same way steps 1
-   and 2 refuse an existing branch or worktree directory. Two windows with the
-   same name in one session is exactly the state where the wrong one gets typed
-   into:
-   ```bash
-   tmux list-windows -t '=statifier-ex' -F '#{window_name}' | grep -Fxq '<name>'
-   ```
-   A hit means the window already exists - report it and skip the rest of this
-   step. Do not create a second one.
+- **A seeded session cannot spawn a nested `claude` session of its own.**
+  `--permission-mode auto` blocks `tmux send-keys ... 'claude' Enter` via the
+  auto-mode classifier - observed live 2026-08-03 in the st-5bk worktree,
+  needed as a fixture for a bead whose acceptance criteria required observing
+  a live session's terminal rendering. This is not model-specific; the
+  classifier decision is the same regardless of which model is driving. If a
+  bead needs a live Claude session to observe (spinner frames, dialog layout,
+  the input box's suggested-prompt placeholder, or similar), do not try to
+  launch one - use a **sibling worktree session** instead. `/next-issues`
+  routinely stands up two or three seeded sessions in the same tmux server, so
+  a batch run always has live sessions available to capture a pane against,
+  with nothing new to launch and nothing to clean up afterward. They are also
+  more representative than a bare `claude` started in a scratch directory,
+  since they are real sessions in real worktrees.
 
-   ```bash
-   FINISH=" When the work is complete, finish with /commit --auto - it writes the Refs trailer and refuses if the tree carries changes unrelated to <id>. Do not run git commit directly."
+## Report
 
-   win=$(tmux new-window -d -P -F '#{window_id}' \
-     -t '=statifier-ex:' \
-     -n '<name>' \
-     -c "/Users/johnnyt/repos/github/statifier-ex-worktrees/<name>")
-   [ -n "$win" ] || { echo 'tmux window not created, skipping'; exit 0; }
-   tmux send-keys -t "$win" \
-     "claude --permission-mode auto --model opus '<seed>.$FINISH'" Enter
-   ```
-
-   `--model` is still passed explicitly, never left to whatever default the
-   launched session would otherwise inherit (`~/.claude/settings.json`'s global
-   default, which may not be Opus or Sonnet at all). It is now a *constant*
-   because every seeded session runs `/work`, which orchestrates on Opus and
-   assigns the implementation tier to its own subagents. The tier split did not
-   disappear - it moved inside the session, where `docs/workflow.md`'s model
-   roles are applied per stage instead of per launch. A skill's own `model:`
-   frontmatter (e.g. `work`'s) governs that skill's invocation once the session
-   is already running; it does not govern the CLI session itself, which is why
-   this line exists at all and must not be "simplified" away.
-
-   `<seed>` is the seed command from the input when one was given - pass it
-   through verbatim, including the leading slash:
-
-   ```
-   claude --permission-mode auto --model opus '/work st-00p.3 --auto.$FINISH'
-   ```
-
-   With no seed command, fall back to the same orchestrator:
-
-   ```
-   claude --permission-mode auto --model opus '/work <id> --auto.$FINISH'
-   ```
-
-   The finishing clause is appended unconditionally, to a given seed and to the
-   fallback, because this step is the one place every caller
-   (`/next-issue`, `/next-issues`, and a direct `/new-worktree` invocation)
-   converges - editing it here reaches every seeded session without touching
-   the calling skills themselves. It specifies `/commit --auto`
-   rather than bare `/commit` because the tmux session runs unattended under
-   `--permission-mode auto`: `/commit`'s interactive approval step would stall
-   with nobody watching the window to answer it. This does not grant commit
-   authority beyond what CLAUDE.md's authority table already grants (issue
-   complete and full `mix quality` green) - it only routes that authority
-   through the skill that performs the Refs-trailer and unrelated-changes
-   checks, instead of a bare `git commit` that skips them.
-
-   **Check `$win` is non-empty before any command that targets it, and never
-   chain a follow-up with `;`.** An empty `-t ""` does not error - tmux resolves
-   it to the *current* window, so `kill-window` or `send-keys` lands on whatever
-   the user is sitting in. A `;` after a failed `new-window` is enough to do it:
-   this cost a live window during development of this step (2026-08-02).
-
-   `<id>` is the bead id at the front of the branch name (`st-lzn` from
-   `st-lzn-tmux-window-per-worktree`, `st-00p.3` from
-   `st-00p.3-regression-ratchet`).
-
-   Two details are load-bearing:
-
-   - **Capture the window id (`-P -F '#{window_id}'`, giving `@42`) and target
-     that for every follow-up command.** It is stable under
-     `renumber-windows on` (which renumbers every window whenever one is
-     closed), unambiguous against a session or window whose name shares a
-     prefix, and it sidesteps `session:window.pane` parsing entirely for the
-     dotted bead ids this repo uses (`st-00p.3-...`).
-
-     Note: tmux 3.6b does in fact resolve
-     `statifier-ex:st-00p.3-regression-ratchet` to the right window - the
-     dotted name is not ambiguous in practice, tested 2026-08-02. Window id is
-     still what to use, but for renumbering stability, not because name
-     targeting is broken.
-   - **`-d` on `new-window`** so creating three worktrees in a row does not yank
-     focus three times. The user jumps to the one they want when they are ready.
-
-   Both forms pass only the bead id, never a paraphrase of the work: the beads
-   DB is shared across worktrees, so the new session reads the bead directly
-   with `bd show`, while a restated description goes stale the moment the bead
-   is updated.
-
-   `--permission-mode auto` starts the seeded session in auto mode, so it makes
-   routine calls without stopping to confirm each one - the point of fanning
-   worktrees out is not to then babysit four sessions. It is `auto`, not
-   `bypassPermissions`: the permission system still applies, and this repo's
-   authority table (CLAUDE.md) still gates push, PR, and `bd close` on an
-   explicit human ask.
-
-6. **Report.** State the worktree path, the branch and what it was cut from,
-   that caches were cloned (and whether the PLT came along), the quality
-   result, **the tmux window** (its name and id, or why it was skipped), and
-   **the model it launched with** (`opus`, per step 5)
-   so the user can jump to it with the prefix key and knows which model is
-   running there without switching to the window. Remind that subsequent work
-   on this issue happens **inside the worktree**, and the worktree is removed
-   at merge (`git worktree remove ../statifier-ex-worktrees/<name>`).
+State the worktree path, the branch and what it was cut from, that caches
+were cloned (and whether the PLT came along), the quality result, **the tmux
+window** (its name and id, or why it was skipped), and **the model it launched
+with** (`opus`) so the user can jump to it with the prefix key and knows which
+model is running there without switching to the window. Remind that subsequent
+work on this issue happens **inside the worktree**, and the worktree is
+removed at merge (`/cleanup-worktrees`, or by hand:
+`git worktree remove ../statifier-ex-worktrees/<name>`).
 
 ## Notes
 
@@ -246,17 +180,3 @@ a hand-made worktree behaves exactly like a routed one.
 - A **busy** session blocks its own worktree's cleanup and is reported, so a
   sweep run while an agent is mid-turn is safe and re-running it later finishes
   the job.
-- **A seeded session cannot spawn a nested `claude` session of its own.**
-  `--permission-mode auto` (step 5) blocks `tmux send-keys ... 'claude' Enter`
-  via the auto-mode classifier - observed live 2026-08-03 in the st-5bk
-  worktree, needed as a fixture for a bead whose acceptance criteria required
-  observing a live session's terminal rendering. This is not model-specific;
-  the classifier decision is the same regardless of which model is driving.
-  If a bead needs a live Claude session to observe (spinner frames, dialog
-  layout, the input box's suggested-prompt placeholder, or similar), do not
-  try to launch one - use a **sibling worktree session** instead. `/next-issues`
-  routinely stands up two or three seeded sessions in the same tmux server, so
-  a batch run always has live sessions available to `tmux capture-pane`
-  against, with nothing new to launch and nothing to clean up afterward. They
-  are also more representative than a bare `claude` started in a scratch
-  directory, since they are real sessions in real worktrees.

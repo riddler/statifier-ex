@@ -1030,12 +1030,12 @@ means skip.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Every script the three skills name exists and is executable
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] No stale command text: `grep -n 'tmux capture-pane\|rebase --abort\|git worktree add'
+- [x] Every script the three skills name exists and is executable
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] No stale command text: `grep -n 'tmux capture-pane\|rebase --abort\|git worktree add'
       .claude/skills/{new-worktree,refresh-worktree,cleanup-worktrees}/SKILL.md`
       returns nothing outside an illustrative block
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] Read `git diff` for each skill against the surviving-prose list above -
@@ -1602,6 +1602,15 @@ before considering the plan fully landed.
       without `sections_missing` false positives
 - [ ] `permalinks.rb --dry-run` over an existing research doc proposes only
       correct rewrites
+
+### Phase 9
+
+- [ ] Read `git diff` for each skill against the surviving-prose list above -
+      every listed paragraph is present
+- [ ] `/cleanup-worktrees` still specifies, somewhere reachable, every one of
+      the eleven behaviors its Guidelines section lists
+- [ ] Running `/refresh-worktree` live produces the same report vocabulary as
+      before
 
 ## Open Questions
 
