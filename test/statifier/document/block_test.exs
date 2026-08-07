@@ -35,7 +35,6 @@ defmodule Statifier.Document.BlockTest do
 
   describe "content order" do
     # sabotage: drop :content from Block's defstruct fields entirely -> red
-    # (struct literal below fails to compile, unknown key :content)
     test "a Raise and a Log round-trip source order" do
       raise_ = %Raise{event: "go", location: loc(1)}
       log = %Log{expr: "1 > 0", location: loc(2)}

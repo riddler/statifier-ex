@@ -34,7 +34,6 @@ defmodule Statifier.Document.DonedataTest do
 
   describe "content" do
     # sabotage: drop :content from Donedata's defstruct fields entirely -> red
-    # (struct literal below fails to compile, unknown key :content)
     test "holds a Content node when the element has one" do
       content = %Content{text: "done", location: loc()}
       donedata = %Donedata{content: content, location: loc()}
