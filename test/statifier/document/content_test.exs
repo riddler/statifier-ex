@@ -16,16 +16,14 @@ defmodule Statifier.Document.ContentTest do
   end
 
   describe "@enforce_keys" do
-    # sabotage: drop :location from Content's @enforce_keys ->
-    # struct!(Content, []) stops raising for :location, reddening this match
+    # sabotage: drop :location from Content's @enforce_keys -> red
     test "struct!/2 with no fields raises ArgumentError naming :location" do
       assert_raise ArgumentError, ~r/:location/, fn -> struct!(Content, []) end
     end
   end
 
   describe "defaults" do
-    # sabotage: change Content's text default from nil to "" -> the pattern
-    # match on text: nil goes red
+    # sabotage: change Content's text default from nil to "" -> red
     test "expr and text default to nil, never the empty string" do
       content = struct!(Content, location: loc())
 
@@ -34,9 +32,8 @@ defmodule Statifier.Document.ContentTest do
   end
 
   describe "expr and text together" do
-    # sabotage: drop :expr from Content's defstruct fields entirely -> the
-    # struct literal below fails to compile (unknown key :expr), reddening
-    # this test
+    # sabotage: drop :expr from Content's defstruct fields entirely -> red
+    # (struct literal below fails to compile, unknown key :expr)
     test "both expr and text are representable on the same node" do
       content = %Content{expr: "x", text: "hello", location: loc()}
 
@@ -45,9 +42,8 @@ defmodule Statifier.Document.ContentTest do
   end
 
   describe "attribute_locations" do
-    # sabotage: drop :attribute_locations from Content's defstruct fields
-    # entirely -> the struct literal below fails to compile (unknown key
-    # :attribute_locations), reddening this test
+    # sabotage: drop :attribute_locations from Content's defstruct -> red
+    # (struct literal below fails to compile, unknown key :attribute_locations)
     test "a populated attribute_locations distinguishes a written key from an absent one" do
       content = %Content{expr: "x", location: loc(), attribute_locations: %{expr: loc()}}
 

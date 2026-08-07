@@ -16,8 +16,7 @@ defmodule Statifier.Document.RaiseTest do
   end
 
   describe "@enforce_keys" do
-    # sabotage: drop :event from Raise's @enforce_keys -> struct!(Raise, [])
-    # no longer raises for :event, reddening this match
+    # sabotage: drop :event from Raise's @enforce_keys -> red
     test "struct!/2 with no fields raises ArgumentError naming :event and :location" do
       assert_raise ArgumentError, ~r/:event/, fn -> struct!(Raise, []) end
       assert_raise ArgumentError, ~r/:location/, fn -> struct!(Raise, []) end
@@ -25,8 +24,7 @@ defmodule Statifier.Document.RaiseTest do
   end
 
   describe "defaults" do
-    # sabotage: change Raise's attribute_locations default from %{} to nil
-    # -> the pattern match on attribute_locations: %{} goes red
+    # sabotage: change Raise's attribute_locations default from %{} to nil -> red
     test "attribute_locations defaults to an empty map" do
       raise_ = struct!(Raise, event: "go", location: loc())
 
@@ -35,9 +33,8 @@ defmodule Statifier.Document.RaiseTest do
   end
 
   describe "attribute_locations" do
-    # sabotage: drop attribute_locations from Raise's defstruct fields
-    # entirely -> the struct literal below fails to compile (unknown key
-    # :attribute_locations), reddening this test
+    # sabotage: drop attribute_locations from Raise's defstruct fields -> red
+    # (struct literal below fails to compile, unknown key :attribute_locations)
     test "distinguishes a written attribute from an absent one" do
       raise_ = %Raise{event: "go", location: loc(), attribute_locations: %{event: loc()}}
 
