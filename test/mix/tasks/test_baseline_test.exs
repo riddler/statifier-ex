@@ -2,9 +2,12 @@ defmodule Mix.Tasks.Test.BaselineTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
+  import Statifier.TmpDir, only: [setup_tmp_dir: 1]
 
   alias Mix.Statifier.RegressionRegistry
   alias Mix.Tasks.Test.Baseline
+
+  setup :setup_tmp_dir
 
   @today ~D[2026-08-02]
 
@@ -43,7 +46,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
   end
 
   describe "scan" do
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "reports newly passing candidates without writing", %{tmp_dir: tmp_dir} do
       passing = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       failing = corpus(tmp_dir, "scion_tests/basic1_test.exs")
@@ -65,7 +68,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert reload(path) == %{}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "--add ratchets the passing candidates in", %{tmp_dir: tmp_dir} do
       passing = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       failing = corpus(tmp_dir, "scxml_tests/test144_test.exs")
@@ -82,7 +85,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert reload(path) == %{"scion_tests" => [passing], "last_updated" => "2026-08-02"}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "skips tests the registry already tracks", %{tmp_dir: tmp_dir} do
       tracked = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       path = registry(tmp_dir, %{"scion_tests" => [tracked]})
@@ -94,7 +97,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       refute_received {:ran, _file}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "--only restricts the scan to one suite", %{tmp_dir: tmp_dir} do
       scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       corpus(tmp_dir, "scxml_tests/test144_test.exs")
@@ -110,7 +113,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
 
     # sabotage: have categories("w3c") return {:ok, [:scion]} instead of
     #           {:ok, [:w3c]} -> red
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "--only w3c restricts the scan to the w3c suite", %{tmp_dir: tmp_dir} do
       w3c = corpus(tmp_dir, "scxml_tests/test144_test.exs")
       corpus(tmp_dir, "scion_tests/basic0_test.exs")
@@ -124,7 +127,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       refute_received {:ran, _other}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "rejects an unknown suite", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir)
 
@@ -134,7 +137,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert message =~ "unknown suite"
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "reports when nothing passes", %{tmp_dir: tmp_dir} do
       failing = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       path = registry(tmp_dir)
@@ -155,7 +158,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
   end
 
   describe "add" do
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "verifies each file, then ratchets it in", %{tmp_dir: tmp_dir} do
       scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       w3c = corpus(tmp_dir, "scxml_tests/test144_test.exs")
@@ -175,7 +178,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert registry["last_updated"] == "2026-08-02"
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "a failing file leaves the registry untouched", %{tmp_dir: tmp_dir} do
       good = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       bad = corpus(tmp_dir, "scion_tests/basic1_test.exs")
@@ -195,7 +198,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert reload(path) == %{}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "an internal test is skipped, not added", %{tmp_dir: tmp_dir} do
       internal = corpus(tmp_dir, "statifier/document_test.exs")
       path = registry(tmp_dir)
@@ -210,7 +213,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert reload(path) == %{}
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "add with no files explains itself", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir)
 
@@ -218,7 +221,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert message =~ "usage: mix test.baseline add"
     end
 
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "an unknown command is not silently a scan", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir)
 
@@ -228,7 +231,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
   end
 
   describe "run/1" do
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "returns :ok when there is nothing to check", %{tmp_dir: tmp_dir} do
       path = registry(tmp_dir, %{"scion_tests" => []})
 
@@ -256,7 +259,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
     # sabotage: have mix_test/1 return a hardcoded 1 instead of the real
     #           status -> red (the always-passing dummy file would then be
     #           reported as not passing)
-    @tag :tmp_dir
+    @tag :isolated_tmp_dir
     test "run/1 returns :ok for a real passing add", %{tmp_dir: tmp_dir} do
       dummy = Path.join(tmp_dir, "baseline_dummy_test.exs")
 
@@ -278,7 +281,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
     end
   end
 
-  @tag :tmp_dir
+  @tag :isolated_tmp_dir
   test "a broken registry is reported before anything runs", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "passing_tests.json")
     File.write!(path, "{oops")
