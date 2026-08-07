@@ -42,9 +42,39 @@ defmodule Statifier.Document do
   entity-expanded while the span covers raw source, so an offset *inside* a
   value containing an entity or character reference does not map 1:1 onto
   the source.
+
+  ## Why `<scxml>` is its own struct, not a `State` with `kind: :scxml`
+
+  `%Statifier.Document{}` is the root, and there is no `kind: :scxml` on
+  `Statifier.Document.State`. The alternative -
+  `%Document{root: %State{kind: :scxml}}` - was considered because st-wju.1's
+  compiler recommends interning the root as state index 0 with `kind: :scxml`,
+  so that LCCA and `get_transition_domain` fall out without a special case. It
+  is rejected here for three reasons.
+
+  First, the compiler's root state is a **synthesis**, not a copy: it needs an
+  index, a range, and resolved initial indexes, none of which the Document
+  has. Building it from `%Document{}`'s fields is one function either way, so
+  the `:scxml` kind costs the compiler nothing to create and buys the
+  Document layer nothing to carry.
+
+  Second, the split would put `<scxml>`'s attributes in two places: `initial`
+  and `location` on the root state, `name`/`version`/`binding`/`datamodel` on
+  the wrapper, because those four are not state fields on any other kind. One
+  struct holding all of `<scxml>`'s attributes is the honest shape.
+
+  Third, the generic-walk argument that favored the single `State` struct
+  (`Statifier.Document.State`'s moduledoc) does not transfer here. A walk over
+  every state is `document.states |> Enum.flat_map(&walk/1)` - one entry
+  clause, not a per-kind dispatch - and `Document.states` has the same
+  `[State.t()]` type as `State.states`, so the recursion below the entry
+  point is uniform either way.
+
+  st-wju.1 synthesizes its index-0 root state from these fields directly
+  rather than copying a `%State{}` that never existed at this layer.
   """
 
-  alias Statifier.Document.{Log, Raise}
+  alias Statifier.Document.{Log, Raise, State}
   alias Statifier.Parser.Location
 
   @typedoc """
@@ -64,4 +94,29 @@ defmodule Statifier.Document do
   and neither are the compiler-only widenings `:atomic` / `:compound`.
   """
   @type state_kind :: :state | :parallel | :final | :history
+
+  @enforce_keys [:location]
+  defstruct [
+    :location,
+    name: nil,
+    version: nil,
+    xmlns: nil,
+    datamodel: nil,
+    binding: :early,
+    initial: [],
+    states: [],
+    attribute_locations: %{}
+  ]
+
+  @type t :: %__MODULE__{
+          name: String.t() | nil,
+          version: String.t() | nil,
+          xmlns: String.t() | nil,
+          datamodel: String.t() | nil,
+          binding: :early | :late,
+          initial: [String.t()],
+          states: [State.t()],
+          location: Location.t(),
+          attribute_locations: attribute_locations()
+        }
 end
