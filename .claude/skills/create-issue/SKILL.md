@@ -26,33 +26,37 @@ what is genuinely ambiguous. Do not interrogate the user field by field.
 
 ## Create the issue
 
-Full form:
-
 ```bash
-bd create "Title here" --type task --priority 2 --description "Longer context..."
+ruby .claude/scripts/bead.rb create "Title here" \
+  --type task --priority 2 --description "Longer context..."
 ```
 
-Quick capture (when the user just wants it recorded fast, e.g. mid-task discovered
-work):
+`--type`, `--priority`, `--labels` (comma-separated), `--description`,
+`--parent`, and `--notes` are all optional flags; omit whatever was not
+gathered above. For quick capture (the user just wants it recorded fast, e.g.
+mid-task discovered work), omit everything but the title:
 
 ```bash
-bd q "Title here"
+ruby .claude/scripts/bead.rb create "Title here"
 ```
 
-Check `bd create --help` if unsure of exact flag names in the installed version.
+Read the result from `data.id` (the new issue's id) and `data.created`. Check
+`bd create --help` if unsure of exact flag names in the installed version -
+`bead.rb create` passes them straight through.
 
 ## Link dependencies
 
 When the user names related work, link it:
 
 ```bash
-bd link <new-id> --depends-on <other-id>
-bd link <new-id> --discovered-from <other-id>
+ruby .claude/scripts/bead.rb link <new-id> <other-id> --type depends-on
+ruby .claude/scripts/bead.rb link <new-id> <other-id> --type discovered-from
 ```
 
 Use `discovered-from` for work found mid-task; use dependency links so `bd ready`
 reflects the real build order (parser before interpreter features, etc.). Epics
-mirror the roadmap phases - if the new issue belongs to an epic, link it as a child.
+mirror the roadmap phases - if the new issue belongs to an epic, link it as a child
+(`--parent` at create time, or `--type parent-child` here).
 
 ## Apply labels
 
@@ -62,18 +66,22 @@ mirror the roadmap phases - if the new issue belongs to an epic, link it as a ch
   and the paths each covers are in
   [docs/workflow.md](../../../docs/workflow.md#area-labels). This is not a
   topical tag: it is what lets a batch picker tell whether two issues collide,
-  so label by the paths in the acceptance criteria, not by subject matter, and
-  use `area:build` for anything touching `mix.exs`, `mix.lock`, `.quality.exs`,
-  or `.credo.exs` - those beads batch with nothing.
+  so **label by the paths in the acceptance criteria, not by subject matter**,
+  and use `area:build` for anything touching `mix.exs`, `mix.lock`,
+  `.quality.exs`, or `.credo.exs` - **those beads batch with nothing.**
 - Add topical labels the user mentions (e.g. `tooling`, `workflow`, `quality`).
 - Add the **`upstream`** label when the issue is an upstream candidate for
   predicator, uxid, or ex_quality (a seam or fix that belongs in those repos), so
-  it can be swept into their trackers later. An `upstream` issue changes no files
-  here, so it takes no `area:` label.
+  it can be swept into their trackers later. **An `upstream` issue changes no
+  files here, so it takes no `area:` label.**
 
 ```bash
-bd update <id> --add-label area:parser --add-label upstream
+ruby .claude/scripts/bead.rb label add <id> area:parser
+ruby .claude/scripts/bead.rb label add <id> upstream
 ```
+
+(labels can also be passed at creation time via `bead.rb create`'s
+`--labels a,b,c`.)
 
 ## Report back
 

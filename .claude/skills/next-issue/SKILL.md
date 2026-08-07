@@ -14,6 +14,11 @@ issue system to promote to or reconcile against. Issue state syncs across
 machines through `refs/dolt/data` on git origin (`bd dolt pull` / `bd dolt
 push`); `.beads/issues.jsonl` is a passive export, never the sync channel.
 
+This is `/next-issues` at `n=1` with no picker needed for a single item, plus
+the worktree-and-handoff steps `/next-issues` also uses. Both skills call
+`.claude/scripts/select_batch.rb` for the mechanics; this one adds no judgment
+step of its own beyond "never auto-select in manual mode."
+
 ## Modes
 
 Parse `$ARGUMENTS`:
@@ -21,13 +26,13 @@ Parse `$ARGUMENTS`:
 - **`--auto` present** -> **agent-auto mode**: atomically claim the top ready
   item and proceed without confirmations. For unattended agents.
 - **Otherwise** -> **manual mode** (the default): always present choices and let
-  the user pick. Never auto-select in manual mode, even if only one item is
-  ready - show it and confirm.
+  the user pick. **Never auto-select in manual mode, even if only one item is
+  ready** - show it and confirm.
 
 Everything else in `$ARGUMENTS` maps to `bd ready`'s native filter flags
 (`-p/--priority`, `-l/--label`/`--label-any`/`--exclude-label`,
 `-t/--type`/`--exclude-type`, `--parent`, ...) and is passed through to
-whichever call runs, so both modes scope identically. Re-verify against
+`select_batch.rb`, so both modes scope identically. Re-verify against
 `bd ready --help` if these drift.
 
 ## Steps
@@ -36,11 +41,12 @@ whichever call runs, so both modes scope identically. Re-verify against
    git origin (github.com/riddler/statifier-ex), so pull the latest issue state
    before picking - another machine or agent may have claimed or closed work:
    ```bash
-   bd dolt pull 2>/dev/null || true
+   ruby .claude/scripts/bead.rb sync pull
    ```
-   Non-fatal if offline; the local DB is then the best available view. On a
-   fresh clone with no `.beads/embeddeddolt/`, run `bd bootstrap` instead - it
-   clones the issue history from origin and wires the Dolt remote.
+   Non-fatal if offline (`warnings` only); the local DB is then the best
+   available view. On a fresh clone with no `.beads/embeddeddolt/`, run
+   `bd bootstrap` instead - it clones the issue history from origin and wires
+   the Dolt remote.
 
 0.5. **Clean up merged worktrees (best-effort).** Invoke
    **`/cleanup-worktrees`**. Picking up new work is the natural moment for it:
@@ -57,39 +63,48 @@ whichever call runs, so both modes scope identically. Re-verify against
    in the session.** "Already ran this session" is not the same claim as "ran
    immediately before this pickup" - a branch can land on `origin/main` in
    between. This skill has no live-worktree survey downstream to go stale from
-   a skipped 0.5 (`/next-issues` does; see its step 0.5/2 for that hardening),
-   but re-running here is still cheap and keeps a dead worktree from sitting
+   a skipped 0.5 (`/next-issues` does; see its step 1 for that hardening), but
+   re-running here is still cheap and keeps a dead worktree from sitting
    alongside the one this step is about to create.
 
-1. **Pick and claim.**
-
-   **Manual mode:**
+1. **Pick.**
    ```bash
-   bd ready --json [FILTERS]
+   ruby .claude/scripts/select_batch.rb --n 1 [FILTERS]
    ```
-   Present the top few candidates (id, title, type, priority, one-line why-now
-   drawn from its epic/dependencies if obvious) and let the user pick or confirm
-   the top one. Then claim:
+   This is the same selection mechanics `/next-issues` uses, capped at one bead:
+   it lists ready candidates (`bd ready --json [FILTERS]`), surveys live
+   worktrees for area collisions, annotates each with a verdict, and runs the
+   greedy walk. Read `data.candidates` for the full ranked list (id, title,
+   priority, issue_type, verdict, reason) and `data.recommended` for the top
+   pick - at most one id, since `n=1`.
+
+   **`data.recommended` empty** (and `data.candidates` all skipped, or empty
+   outright) -> nothing ready and unclaimed. Do not auto-file. Report it, show
+   `bd blocked` so it is clear what is waiting on what, and stop (skip every
+   step below). In manual mode, offer `/create-issue` as the way to file
+   something new.
+
+   **Manual mode:** present the top few rows of `data.candidates` (id, title,
+   type, priority, verdict) and let the user pick or confirm the recommended
+   one - **never auto-select, even when only one candidate is ready.** Then
+   claim it:
    ```bash
-   bd update <id> --claim
+   ruby .claude/scripts/bead.rb claim <id>
    ```
 
-   **Agent-auto mode** - one atomic call, no read-then-claim race:
+   **Agent-auto mode:** claim `data.recommended`'s id directly, no
+   confirmation:
    ```bash
-   bd ready --claim --json [FILTERS]
+   ruby .claude/scripts/bead.rb claim <id>
    ```
-   Non-empty -> `[0]` is the claimed bead (status already `in_progress`); read
-   `.id` from it.
-
-   **Empty (`[]`)** in either mode -> nothing ready and unclaimed. Do not
-   auto-file. Report it, show `bd blocked` so it is clear what is waiting on
-   what, and stop (skip every step below). In manual mode, offer
-   `/create-issue` as the way to file something new.
+   If the claim fails (`blocked` code `bd_claim_failed` - someone else got
+   there between the select and the claim), report it and stop; do not retry
+   silently against a different candidate.
 
 1.5. **Publish the claim (best-effort).** The claim is the lock, but it only
    locks what other machines can see - push it right after claiming:
    ```bash
-   bd dolt push 2>/dev/null || true
+   ruby .claude/scripts/bead.rb sync push
    ```
    Non-fatal if offline (agents in the same checkout's worktrees share the DB
    directly and see the claim regardless); it publishes on the next push.
@@ -102,12 +117,16 @@ whichever call runs, so both modes scope identically. Re-verify against
    The name is fixed at creation and never renamed afterwards, even if the
    branch grows to carry more beads (ADR-0010).
 
-3. **Read the bead.** `bd show <id>` - description, acceptance, dependencies,
-   notes. This still has to happen before the worktree is stood up: the branch
-   slug in step 2 comes from the title, and an epic or a malformed bead is
-   something to catch while the only cost is a claim to reverse, not after a
-   worktree and a tmux window exist for it. Sizing the work is **not** what this
-   read is for - that happens in the worktree, in `/work`.
+3. **Read the bead.**
+   ```bash
+   ruby .claude/scripts/bead.rb show <id>
+   ```
+   Description, acceptance, dependencies, notes. This still has to happen
+   before the worktree is stood up: the branch slug in step 2 comes from the
+   title, and an epic or a malformed bead is something to catch while the only
+   cost is a claim to reverse, not after a worktree and a tmux window exist for
+   it. **Sizing the work is not what this read is for** - that happens in the
+   worktree, in `/work`.
 
 4. **Stand up the worktree, seeded with `/work`.** Invoke
    **`/new-worktree <id>-<slug> -- /work <id> --auto`** - it cuts the branch off
@@ -136,13 +155,13 @@ whichever call runs, so both modes scope identically. Re-verify against
 - Claim before worktree, always - the claim is the lock (ADR-0010). Never
   create the worktree for an unclaimed bead.
 - Sync and cleanup steps (0, 0.5 and 1.5) are best-effort and must never gate
-  the claim: if
-  `bd dolt pull`/`push` is slow, errors, or the machine is offline, proceed -
-  they retry on the next run. Never abort pickup on a sync failure.
+  the claim: if `bead.rb sync pull`/`push` is slow, errors, or the machine is
+  offline, proceed - they retry on the next run. **Never abort pickup on a
+  sync failure.**
 - Manual mode confirms the pick and the branch name before anything mutates the
   repo; the claim itself is cheap to reverse (`bd update <id> --status open`).
-- Discovered work found while picking is filed with `bd q` and linked
-  `discovered-from`, not chased now.
+- Discovered work found while picking is filed with `bd q` (or
+  `bead.rb create`) and linked `discovered-from`, not chased now.
 - Compose with `/create-issue`, `/new-worktree` and `/work` rather than
   duplicating their logic.
 - **This skill picks and claims; it neither sizes nor implements.** Selection
@@ -150,6 +169,6 @@ whichever call runs, so both modes scope identically. Re-verify against
   it - research, plan, or straight to implementation - because that session is
   the one that can read the code. Doing any of that here as well is how one
   issue gets worked twice.
-- Re-verify exact `bd` flags against `bd ready --help` if this drifts -
-  `bd ready --claim --json` and `bd update --claim` are confirmed current as of
-  the bd version in use (2026-08).
+- Re-verify exact `bd` flags against `bd ready --help` if this drifts. See
+  `.claude/scripts/README.md` for the envelope contract shared by every
+  script this skill calls.

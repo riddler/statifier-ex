@@ -1127,12 +1127,12 @@ Frontmatter stays as-is - `/create-issue` remains the only skill with no
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `ruby .claude/scripts/test/run.rb` is green
-- [ ] `ruby .claude/scripts/select_batch.rb --n 1 --auto` emits a valid envelope
-- [ ] Frontmatter blocks unchanged:
+- [x] `ruby .claude/scripts/test/run.rb` is green
+- [x] `ruby .claude/scripts/select_batch.rb --n 1 --auto` emits a valid envelope
+- [x] Frontmatter blocks unchanged:
       `git diff -U0 .claude/skills/*/SKILL.md | grep '^[-+]model:'` returns
       nothing
-- [ ] Full quality gate passes: `mix quality`
+- [x] Full quality gate passes: `mix quality`
 
 #### Manual Verification:
 - [ ] `/next-issues`'s picker section reads identically to before - the
@@ -1611,6 +1611,14 @@ before considering the plan fully landed.
       the eleven behaviors its Guidelines section lists
 - [ ] Running `/refresh-worktree` live produces the same report vocabulary as
       before
+
+### Phase 10
+
+- [ ] `/next-issues`'s picker section reads identically to before - the
+      AskUserQuestion option structure and the override wording are unchanged
+- [ ] A dry read of `/next-issue` still ends in the same
+      `/new-worktree <id>-<slug> -- /work <id> --auto` invocation
+- [ ] The `--label-any` workaround note survived the rewrite
 
 ## Open Questions
 

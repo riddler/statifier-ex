@@ -26,65 +26,72 @@ deliberately, through the override path; an unattended agent (`--auto`) never
 can.
 
 This skill **composes**, it does not fork. Selection is the only thing it adds;
-everything downstream is `/new-worktree`, exactly as `/next-issue` uses it.
+everything downstream is `/new-worktree`, exactly as `/next-issue` uses it. The
+mechanics - listing candidates, surveying live worktrees, annotating verdicts,
+running the greedy walk - live in `.claude/scripts/select_batch.rb`; this skill
+supplies the judgment that script deliberately leaves out: the picker.
 
 ## Input
 
-Parse `$ARGUMENTS`:
+`$ARGUMENTS` is passed straight through to `select_batch.rb`, which parses it
+itself:
 
 - **A bare integer** -> `n`, the ceiling on batch size. Default `3`.
-  **Refuse `n > 4`**: say so, and say why - beyond four the merge queue is the
-  constraint, not the picking, and every extra worktree is another branch that
-  has to rebase past the ones that land first. Offer to run with 4.
+  **The script refuses `n > 4`** (`blocked` code `n_too_large`): relay its
+  message as-is - beyond four the merge queue is the constraint, not the
+  picking, and every extra worktree is another branch that has to rebase past
+  the ones that land first. Offer to run with 4. This is a refusal, not a
+  clamp: someone asking for 8 has a wrong model of where the constraint is,
+  and silently giving them 4 would hide that.
 - **`--auto` present** -> **agent-auto mode**: select and claim without
   confirmation. For unattended agents.
 - **One or more bead IDs** (tokens matching the `st-` id shape) ->
   **explicit-selection mode**: "consider exactly these", not a `bd ready`
-  filter. Validate each with `bd show <id>`; an unknown id is reported, not
-  silently dropped. Explicit selection skips the `bd ready` listing as the
-  candidate source but still checks readiness - a blocked or already-claimed
-  bead is a constraint to surface in the picker, not to silently obey or
-  silently drop. `n` defaults to the count of listed ids in this mode (still
-  capped at 4; refuse and offer to run with 4 if more than four ids are
-  given). Mixing bead IDs with `bd ready` filter flags is refused as
-  ambiguous - the user gets one input form per invocation.
+  filter. The script validates each with `bd show <id>`; an unknown id comes
+  back as a `warnings` entry (`unknown_id`), not silently dropped from the
+  report. `n` defaults to the count of listed ids in this mode (still capped
+  at 4). **Mixing bead IDs with `bd ready` filter flags is refused**
+  (`blocked` code `ambiguous_input`) - the user gets one input form per
+  invocation.
 - **Otherwise** -> **manual mode** (the default): present the candidates,
   their constraints, and the legal batch options; let the user pick before
   claiming anything.
 
 Everything else maps to `bd ready`'s native filter flags (`-p/--priority`,
 `-l/--label`/`--label-any`/`--exclude-label`, `-t/--type`/`--exclude-type`,
-`--parent`, ...) and is passed straight through. Re-verify against
-`bd ready --help` if these drift.
+`--parent`, ...) and is passed straight through by the script. Re-verify
+against `bd ready --help` if these drift.
 
-**Exception: `--label-any` is broken upstream as of bd 1.1.2 (filed
+**`--label-any` is broken upstream as of bd 1.1.2** (filed
 [beads#5358](https://github.com/gastownhall/beads/issues/5358)) - it is
-silently ignored in embedded-Dolt workspaces (`bd ready`'s WHERE builder never
-emits an OR-set clause for it), so passing it straight through returns the
-*unfiltered* ready set with no error. `bd ready --help` still advertises it
-and always will until the upstream fix lands, so do not quietly drop it from
-this list on a future re-verification pass without checking whether #5358 has
-closed. Until it does: translate `--label-any l1,l2,...` into the OR form
-yourself - run `bd ready --json -l <label>` once per label (each single-label
-`-l` call is trivially both AND and OR for one label) and union the results by
-id before step 3. `-l`/`--label` (AND) is unaffected and passes through
-normally.
+silently ignored in embedded-Dolt workspaces, so passing it straight through
+to `bd ready` returns the *unfiltered* ready set with no error.
+`bead.rb ready` (which `select_batch.rb` calls internally) already carries the
+workaround: it splits `--label-any l1,l2,...` into one `bd ready --json -l
+<label>` call per label and unions the results by id before anything else
+runs. `-l`/`--label` (AND) passes straight through, unaffected. **Do not
+quietly drop this note on a future re-verification pass without checking
+whether beads#5358 has closed** - if it has, the workaround (and this
+paragraph) can go.
 
 `n` is a **ceiling, not a target.** Returning two when three were asked for is
-the right outcome when the third collides. The report must say so explicitly - a
-silently short batch reads as "there was no more work", which is a different and
-much more alarming fact. In manual mode this is what the picker exists to
-prevent: the ceiling being hit is shown as a constraint before the batch is
-finalized, not discovered afterward in a report.
+the right outcome when the third collides. `select_batch.rb`'s `data.skipped`
+and `data.ceiling_hit` make this explicit - relay it in the report; a silently
+short batch reads as "there was no more work", which is a different and much
+more alarming fact. In manual mode this is what the picker exists to prevent:
+the ceiling being hit is shown as a constraint before the batch is finalized,
+not discovered afterward in a report.
 
 ## Steps
 
 0. **Refresh beads (best-effort).**
    ```bash
-   bd dolt pull 2>/dev/null || true
+   ruby .claude/scripts/bead.rb sync pull
    ```
-   Non-fatal if offline; the local DB is then the best available view. On a fresh
-   clone with no `.beads/embeddeddolt/`, run `bd bootstrap` instead.
+   `data.succeeded` may be `false`; that only produces a `warnings` entry, never
+   a `blocked` one - non-fatal if offline, the local DB is then the best
+   available view. On a fresh clone with no `.beads/embeddeddolt/`, run
+   `bd bootstrap` instead (outside this script's scope).
 
 0.5. **Clean up merged worktrees (best-effort).** Invoke
    **`/cleanup-worktrees`**. This matters more here than in `/next-issue`: about
@@ -93,116 +100,90 @@ finalized, not discovered afterward in a report.
    unauthenticated or offline it stops on its own and reports; carry on.
 
    **Run this every invocation, even if `/cleanup-worktrees` already ran earlier
-   in the session.** Step 2's live-worktree survey is only sound for the window
+   in the session.** Step 1's live-worktree survey is only sound for the window
    "since the last sweep", and a fanned-out session can land on `origin/main`
    in the minutes between an earlier cleanup and this run - "cleanup already ran
    this session" is not the same claim as "cleanup ran immediately before this
    survey". Re-running is never wasted: the cost is one `gh` call per worktree,
    against a survey that reports a collision that has already resolved.
 
-1. **List candidates.**
-
-   **Default and filtered forms:**
+1. **Select the batch.**
    ```bash
-   bd ready --json [FILTERS]
+   ruby .claude/scripts/select_batch.rb $ARGUMENTS
    ```
-   Results come back priority-sorted already. **Empty (`[]`)** -> nothing ready
-   and unclaimed. Do not auto-file. Report it, show `bd blocked` so it is clear
-   what is waiting on what, and stop. In manual mode, offer `/create-issue`.
+   One call replaces what used to be three separate steps: it lists candidates
+   (`bd ready --json`, or `bd show <id>` per id in explicit-selection mode),
+   surveys live worktrees for the areas they already hold, annotates every
+   candidate with a verdict, and runs the greedy priority-ordered walk. Select
+   nothing is claimed by this call - it only reports.
 
-   **Do not trust a label filter you cannot verify.** Whenever `FILTERS`
-   includes any label flag (`-l`/`--label`, or the `--label-any` translation
-   above), also fetch the unfiltered count (`bd ready --json | jq 'length'`)
-   and compare it to the filtered count. Equal counts with a nonempty
-   unfiltered set is suspicious enough to say so rather than proceed
-   silently - it is exactly the symptom a `bd` flag being silently ignored
-   produces (see the `--label-any` exception above). Report the mismatch,
-   show both counts, and stop rather than building a candidate table from a
-   set that was never actually filtered.
+   The live-worktree survey (`worktree_survey.rb`, reused here) does not
+   simply trust that step 0.5 ran and succeeded: for every live worktree it
+   also checks whether its branch already merged
+   (`gh pr list --state merged --head <branch> ...`), and if so treats it as
+   holding no areas regardless of *why* it survived cleanup - 0.5 skipped, `gh`
+   briefly down, or the session inside it busy. This is the fix for the
+   failure mode observed live 2026-08-05, where a merged-but-not-removed
+   worktree for st-o9a caused st-d9g to be reported as colliding with work
+   that had already landed on `main` minutes earlier. If `gh` itself is
+   unavailable, the survey degrades and the script emits `warnings` code
+   `survey_degraded` - relay that as "possibly stale, `gh` was unavailable to
+   confirm" next to any `collides-with-live-worktree` verdict it produced, not
+   as a hard fact.
 
-   **Explicit-selection mode:** `bd show <id> --json` for each listed id
-   instead. An id that does not resolve is reported and dropped from the
-   candidate set (not the whole run). For each that resolves, note its
-   readiness (blocked / already claimed / open) - this becomes a constraint on
-   the candidate table in step 3, not a reason to drop it silently.
+   Read `data`:
 
-2. **Survey live worktrees.** Enumerate other worktrees and the areas they
-   already hold, so a candidate that would collide with work in progress
-   elsewhere is a known constraint, not a surprise discovered by
-   `/refresh-worktree` later:
-   ```bash
-   git worktree list --porcelain
-   ```
-   For each worktree other than the main checkout, parse the leading bead id
-   from its directory/branch name (`<id>-<slug>`, per ADR-0010 naming), then
-   `bd show <id> --json` to collect its `area:` labels. The result is a map of
-   area -> holding worktree/bead. A worktree whose name does not parse to a
-   bead id, or whose bead cannot be fetched, is reported and treated as
-   holding no areas - best-effort, never fatal, never blocks the survey.
-   `upstream`-labeled beads hold no areas, same as in batching.
+   - **`data.mode`** - `"auto"` or `"manual"`, echoing which mode was parsed.
+   - **`data.candidates`** - one row per candidate: `id`, `title`, `priority`,
+     `issue_type`, `areas`, `verdict`, `reason`. This is the candidate table -
+     show it in full before asking anything (step 2). Verdicts:
 
-   **This survey must not simply trust that step 0.5 ran and succeeded.** For
-   each live worktree found here, also check whether its branch already
-   merged - the same query `/cleanup-worktrees` uses:
-   ```bash
-   gh pr list --state merged --head <branch> --json number,mergedAt --jq '.[0]'
-   ```
-   A merged result means the worktree is stale regardless of *why* it survived
-   cleanup (0.5 was treated as already satisfied by an earlier run, `gh` was
-   briefly down, the session inside it was busy) - treat it as holding no
-   areas, same as a worktree whose bead cannot be fetched. This is what turns
-   a skipped or failed 0.5 into a correct-but-untidy survey instead of a wrong
-   one; it is the fix for the failure mode observed live 2026-08-05, where a
-   merged-but-not-removed worktree for st-o9a caused st-d9g to be reported
-   as colliding with work that had already landed on `main` minutes earlier.
+     | Verdict | Meaning |
+     |---|---|
+     | `epic` | work its children instead |
+     | `unlabeled` | no `area:` label and no `upstream` label - blast radius undecided. Nobody has decided this bead's blast radius; skipping it is not a failure of this skill, it is the label being missing. Say which beads were skipped for this so they can be labeled and re-run. The one exception is `upstream` beads, which change no files in this repo by definition (docs/workflow.md) - they need no area label and are always batchable. |
+     | `lands-alone` | `area:build` - takes the batch alone |
+     | `collides-with-live-worktree` | its areas intersect a live worktree's held areas - names the area(s) and the worktree/bead holding them |
+     | `free` | none of the above |
 
-   If `gh` itself is unavailable for this check, say so once (not once per
-   worktree) and fall back to trusting the raw worktree list, the same
-   best-effort stance as step 0.5. A survey degraded this way can still
-   overstate held areas, so name that limitation next to any **collides with
-   live worktree** verdict step 3 produces from it - a suppressed candidate
-   should read as "possibly stale, `gh` was unavailable to confirm" rather
-   than presented as a hard fact.
+     `bd ready` already serializes `blocks`/`depends-on`, but a parent epic and
+     its child can both be ready - that is what the `epic` verdict is for; do
+     not batch across that dependency edge.
+   - **`data.recommended`** - the greedy pick (highest priority first, skip
+     epic/unlabeled/live-collision, `area:build` takes the batch alone,
+     otherwise take and union in areas, skip on in-batch collision, stop at
+     `n` or end of list). Label this the **recommended batch**: an option to
+     present, not the outcome to report.
+   - **`data.skipped`** - id + reason for everything not recommended,
+     including explicit ceiling-hit reasoning ("asked for 4, took 2" belongs
+     here).
+   - **`data.ceiling_hit`** - `true` when more legal candidates existed than
+     `n` allowed. Surface this explicitly in the report.
+   - **`data.alternatives`** - override options (manual mode only; always `[]`
+     under `--auto` - an unattended agent cannot knowingly accept a risk on
+     someone's behalf). Each names the specific collision it would accept.
+   - **`data.requires_user_choice`** - `true` in manual mode; your signal to
+     run the picker (step 2) rather than proceeding straight to claiming.
 
-3. **Annotate every candidate with its verdict - select nothing yet.** Walk
-   the candidate list (from step 1) and give each one a verdict:
+   `blocked` codes to handle:
+   - `n_too_large`, `ambiguous_input` - covered under Input above; report and
+     stop.
+   - `bd_ready_failed` - report and stop.
+   - `unverified_filter` - **do not trust a label filter you cannot verify.**
+     The script already compares the filtered and unfiltered `bd ready` counts
+     whenever a label flag is present; equal counts with a nonempty unfiltered
+     set is exactly the symptom of a `bd` flag being silently ignored
+     (the `--label-any` exception above). Report the mismatch and stop rather
+     than building a candidate table from a set that was never actually
+     filtered.
 
-   | Test | Verdict |
-   |---|---|
-   | `issue_type == "epic"` | **epic** - work its children |
-   | no `area:` label and no `upstream` label | **unlabeled** - blast radius undecided |
-   | `area:build` | **lands-alone** |
-   | its areas intersect a live worktree's held areas (step 2) | **collides with live worktree** - name the area(s) and the worktree/bead holding them |
-   | otherwise | **free** |
+   **Explicit-selection mode** runs through the same candidate table and
+   greedy walk as the default form, over exactly the requested ids - the
+   largest legal subset ends up in `data.recommended`, with the rest in
+   `data.skipped` alongside their reasons (a collision, an epic, unlabeled,
+   ...). Present that the same way as any other run.
 
-   These four are order-independent - they hold regardless of what else ends
-   up in the batch. Then run the same greedy walk `/next-issues` has always
-   run - highest priority first, skip epic/unlabeled/live-worktree-collision,
-   `area:build` takes the batch alone, otherwise take and union in areas,
-   skip on **collides in-batch** (name the overlapping area(s) and the
-   candidate already holding them) - stopping at `n` beads or the end of the
-   list. Label its result the **recommended batch**: an option to present, not
-   the outcome to report.
-
-   Two rules that are not obvious from the table:
-
-   - **An unlabeled bead is a bead nobody has decided the blast radius of.**
-     Skipping it is not a failure of this skill; it is the label being missing.
-     Say which beads were skipped for this so they can be labeled and re-run.
-     The one exception is `upstream` beads, which change no files in this repo by
-     definition and so collide with nothing (docs/workflow.md) - they need no
-     area label and are always batchable.
-   - **Do not batch across a dependency edge.** `bd ready` already serializes
-     `blocks`/`depends-on`, but a parent epic and its child can both be ready.
-     That is what the epic row is for.
-
-   **Explicit-selection mode:** build the legal options around the requested
-   set instead of one greedy walk - the largest legal subset of exactly the
-   requested ids, plus sequencing suggestions for the rest (e.g. "st-meo
-   alone now, st-qww.7 after it lands" when they collide, or "st-qww.7
-   after the live worktree holding `area:skills` merges").
-
-4. **Present the picker (manual mode).** Show the full candidate table first
+2. **Present the picker (manual mode).** Show the full candidate table first
    - id, title, priority, verdict - so every constraint is on screen before
    any question is asked. "Why did it only take two" is the question this
    skill will be asked most often, and the answer has to be visible before
@@ -219,56 +200,57 @@ finalized, not discovered afterward in a report.
    - Where it is not available, present the same options as a plain-text list
      and ask for a reply.
 
-   Nothing is claimed until the user picks. Branch-name confirmation (step 5)
+   Nothing is claimed until the user picks. Branch-name confirmation (step 3)
    folds into the same presentation.
 
-   **Agent-auto mode:** skip the picker. Take the recommended batch, with
-   **collides with live worktree** added as a hard skip alongside epic /
-   unlabeled / in-batch-collision - an unattended agent cannot knowingly
-   accept a risk on someone's behalf, so the override option does not exist
-   here. Explicit-selection input combined with `--auto` takes the largest
-   legal subset of the requested ids and reports the rest as skipped, same as
-   manual mode's alternatives but without stopping to ask. Print the picked
-   and skipped lists and proceed without confirming.
+   **Agent-auto mode:** skip the picker. Take `data.recommended` as-is -
+   `collides-with-live-worktree` is already a hard skip alongside
+   epic/unlabeled/in-batch-collision inside the script's walk, and
+   `data.alternatives` is always empty, so there is no override to consider.
+   Explicit-selection input combined with `--auto` takes the largest legal
+   subset of the requested ids the same way, and reports the rest as skipped
+   without stopping to ask. Print the picked and skipped lists and proceed
+   without confirming.
 
-5. **Compute a branch name per bead**: `<id>-<slug>`, the slug 2-4 distinctive
+3. **Compute a branch name per bead**: `<id>-<slug>`, the slug 2-4 distinctive
    kebab-case words from the title, not a full transcription. `/new-worktree`
    refuses to guess one, so this skill produces the full name. Manual mode:
-   the names ride along in the step 4 presentation, confirmed at the same
+   the names ride along in the step 2 presentation, confirmed at the same
    time as the batch choice.
 
    Each name is fixed at creation and never renamed afterwards, even if the
    branch grows to carry more beads (ADR-0010).
 
-6. **Claim every bead in the chosen batch - all of them, before any worktree
+4. **Claim every bead in the chosen batch - all of them, before any worktree
    exists.**
    ```bash
-   bd update <id> --claim   # once per bead in the batch
+   ruby .claude/scripts/bead.rb claim <id>   # once per bead in the batch
    ```
    The claim is the lock (ADR-0010), and the ordering here is deliberate:
    claimed-with-no-worktree is a cheap, recoverable state
    (`bd update <id> --status open`), while a worktree for an unclaimed bead is
-   another agent's collision waiting to happen. If a claim fails - someone else
-   got there between step 1 and now - drop that bead from the batch, keep the
-   rest, and say so.
+   another agent's collision waiting to happen. If a claim fails
+   (`blocked` code `bd_claim_failed` - someone else got there between step 1
+   and now), drop that bead from the batch, keep the rest, and say so.
 
    **If the chosen batch includes an override** (manual mode only - `--auto`
    never takes one), record it on each affected bead at claim time:
    ```bash
-   bd update <id> --notes "$(date +%F): claimed over area:<x> collision with <worktree/bead> - deliberate override via /next-issues"
+   ruby .claude/scripts/bead.rb note <id> "$(date +%F): claimed over area:<x> collision with <worktree/bead> - deliberate override via /next-issues"
    ```
-   (append semantics; never `bd edit`.) This is the record that lets
+   (`bead.rb note` is append semantics over `bd note`/`bd update
+   --append-notes`; never `bd edit`.) This is the record that lets
    `/refresh-worktree` and future selection runs see that the collision was
    accepted on purpose, not missed.
 
-6.5. **Publish the claims (best-effort), once for the batch.**
+   Then publish the claims (best-effort), once for the batch:
    ```bash
-   bd dolt push 2>/dev/null || true
+   ruby .claude/scripts/bead.rb sync push
    ```
-   Non-fatal if offline; agents in this checkout's worktrees share the DB
-   directly and see the claims regardless.
+   Non-fatal if offline (`warnings` only); agents in this checkout's worktrees
+   share the DB directly and see the claims regardless.
 
-7. **Stand up a worktree per bead.** For each bead in the batch, invoke:
+5. **Stand up a worktree per bead.** For each bead in the batch, invoke:
 
    **`/new-worktree <id>-<slug> -- /work <id> --auto`**
 
@@ -283,7 +265,7 @@ finalized, not discovered afterward in a report.
    it, leave its bead claimed, and continue with the rest - a failed worktree is
    not a reason to abandon the ones that worked.
 
-8. **Report the batch.** One row per bead:
+6. **Report the batch.** One row per bead:
 
    | Bead | Branch | Worktree | tmux window |
    |---|---|---|---|
@@ -300,20 +282,20 @@ finalized, not discovered afterward in a report.
    - a reminder that each issue is worked **inside its own worktree**, in its own
      tmux window - not here
 
-9. **Hand off - do not do any of the work here.** Each seeded session owns its
+7. **Hand off - do not do any of the work here.** Each seeded session owns its
    issue from this point. This session picked and dispatched; that is the whole
    job.
 
 ## Guidelines
 
-- **Manual mode presents, it does not impose.** The picker in step 4 is the
+- **Manual mode presents, it does not impose.** The picker in step 2 is the
   point of this skill; a run that claims before the user has seen the
   candidate table and chosen among the legal options has skipped the part
   that matters.
 - **Claim the whole batch before creating any worktree.** Not per-bead
   claim-then-worktree - that leaves worktrees for beads whose claim later fails.
-- Sync steps (0, 0.5, 6.5) are best-effort and must never gate a claim. Offline
-  is not a reason to abort a pickup.
+- Sync steps (0, 4's publish) and cleanup (0.5) are best-effort and must never
+  gate a claim. Offline is not a reason to abort a pickup.
 - **Areas are about file collision, not subject matter** (docs/workflow.md). Two
   beads both "about the corpus" touching disjoint files are batchable; two beads
   in different subsystems that both edit `mix.exs` are not.
@@ -328,11 +310,12 @@ finalized, not discovered afterward in a report.
 - `n > 4` is refused, not silently clamped. Someone asking for 8 has a wrong
   model of where the constraint is, and clamping hides that. The same applies
   to more than four explicit bead ids.
-- Discovered work found while picking is filed with `bd q` and linked
-  `discovered-from`, not chased now.
+- Discovered work found while picking is filed with `bd q` (or
+  `bead.rb create`) and linked `discovered-from`, not chased now.
 - Compose with `/new-worktree`, `/cleanup-worktrees` and `/work` rather than
-  duplicating their logic. The only thing that lives here is selection.
-- Re-verify exact `bd` flags against `bd ready --help` if this drifts -
-  `bd ready --json`, `bd show --json`, `bd update --claim`, `bd update --notes`
-  and `git worktree list --porcelain` are confirmed current as of the bd
-  version in use (2026-08).
+  duplicating their logic. The only thing that lives here is selection - and
+  even selection's mechanics live in `select_batch.rb`; this skill supplies
+  the picker.
+- Re-verify exact `bd` flags against `bd ready --help` if this drifts. See
+  `.claude/scripts/README.md` for the envelope contract shared by every
+  script this skill calls.
