@@ -98,15 +98,34 @@ the thing that changed.
 
 Enforcement is layered, and deliberately not all in one place:
 
-- Constraint 1 is mechanical today: `.claude/scripts/test/contract_test.rb`
-  greps every script for the banned operations and fails the `Script tests`
-  stage. It is a test rather than an `adr.check` rule because the existing ADR
-  guard (`lib/mix/statifier/adr_guard.ex`) scans Elixir under `lib/statifier/`
-  and would have to grow a second language to cover Ruby.
+- Constraint 1 is mechanical, and `.claude/scripts/test/contract_test.rb` is
+  its permanent, authoritative enforcement site (decided under st-biu,
+  2026-08-07). The split from the ADR guard
+  (`lib/mix/statifier/adr_guard.ex`) is not just the second-language cost.
+  The guard is the wrong shape for this constraint: it checks only the lines
+  a diff adds, honors an inline ADR-citation escape hatch, and skips when no
+  base ref resolves - all correct for heuristics whose findings have
+  compliant exceptions, all wrong for an absolute whole-tree ban. The test
+  scans the full current content of every script on every gate run, has no
+  escape hatch, and the `Script tests` stage deliberately has no skip path.
+  Growing the guard a Ruby scope would re-enforce the same rule through a
+  weaker mechanism, so the guard stays out of `.claude/scripts/`; a future
+  constraint-1 rule is added to `contract_test.rb` only. The test also
+  checks its own coverage against this ADR: every backticked operation this
+  constraint names must have a matching Contract rule, so the two cannot
+  drift apart silently again (they had - the write checks originally covered
+  `.quality.exs` but not `.credo.exs`, `coveralls.json`, or `.sobelow-conf`).
 - Constraints 2, 3 and 5 are covered by the suite and by review.
 - Constraint 4 is a judgment call by construction and is enforced by review.
-  It is the natural candidate for the ADR judge (ADR-0012's mechanism), which
-  is scoped to `lib/statifier/` today.
+  It is judge-shaped - deciding whether a SKILL.md rewrite quietly delegated
+  a policy call is exactly what ADR-0012's propose/refute design handles -
+  but the ADR judge stays scoped to `lib/statifier/` for now. Extending it
+  means a second path scope (`.claude/skills/**/SKILL.md` diffs) and a
+  second ADR text in its prompts, and that pays for itself only once skill
+  prose churns enough for review to plausibly miss a dropped judgment step.
+  When that happens, the extension goes in the judge, not in a regex: a
+  script that claimed to detect swallowed judgment would itself violate this
+  constraint's premise.
 
 Costs accepted: the scripts are a second language in the repo (Ruby 2.6,
 stdlib only, no gems - the only Ruby guaranteed present), a second test harness,

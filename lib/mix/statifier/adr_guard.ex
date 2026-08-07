@@ -10,6 +10,12 @@ defmodule Mix.Statifier.AdrGuard do
   inline comment on or above the flagged line naming an ADR or the word
   "deviation".
 
+  Deliberately not covered: ADR-0015's banned-operation list for
+  `.claude/scripts/`. That rule is an absolute whole-tree ban, and this
+  guard's shape (added diff lines only, a citation escape hatch, a skip when
+  no base ref resolves) is wrong for it; `.claude/scripts/test/contract_test.rb`
+  is its permanent enforcement site - see ADR-0015's Consequences.
+
   The naming check is the one with judgment in it. An exactly-spelled Appendix D
   name is compliant and an unrelated helper is none of this check's business;
   what it looks for is the shape ADR-0002's context describes, a spec function
