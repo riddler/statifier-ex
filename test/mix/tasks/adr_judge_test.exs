@@ -1,7 +1,16 @@
 defmodule Mix.Tasks.Adr.JudgeTest do
-  use ExUnit.Case, async: true
+  # async: false - "execute/1 falls back to the real cli_available and git
+  # checks" below chdirs the whole OS process into a scratch git repo so the
+  # default `opts \\ []` clause's real `git` shell-out (its `git/1` runner
+  # takes no `:cd`, so there is no way to point it elsewhere) sees that repo
+  # instead of this checkout. `File.cd!/2` changes the OS process's working
+  # directory for every process in the VM, not just the test's own, so no
+  # other test anywhere may run concurrently while it is in effect - the same
+  # reason Statifier.TmpDirTest gives for its own async: false.
+  use ExUnit.Case, async: false
 
   alias Mix.Tasks.Adr.Judge
+  alias Statifier.TmpDir
 
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
@@ -40,6 +49,48 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     @@ -1,0 +1,1 @@
     +Some prose.
     """
+  end
+
+  # Deliberately not `Statifier.TmpDir.path_for/2` (the usual
+  # `@tag :isolated_tmp_dir` path): that name is deterministic per
+  # module+test, so the Tests stage's and Regression ratchet's `mix test`
+  # processes - which both run this file - resolve it identically whenever
+  # they happen to share a `STATIFIER_TMP_ROOT` (they normally do not, but
+  # `Statifier.TmpDirTest` mutates that variable process-globally mid-run by
+  # design, see its own `async: false` comment, and a mutation landing at the
+  # wrong moment can make two concurrent `mix test` processes agree on it
+  # transiently). `TmpDir.setup_tmp_dir/1`'s `rm_rf!` on that shared path then
+  # races the git repo this test is actively using in the other process -
+  # reproduced while writing this test, once as directory corruption, once as
+  # "unable to read current working directory" mid-`git init`. Suffixing with
+  # `System.pid()`, which no two concurrent OS processes ever share, keeps
+  # this path unique regardless of what either process's root resolves to.
+  defp scratch_repo_dir do
+    Path.join([TmpDir.root(), "adr-judge-test-git-repo", System.pid()])
+  end
+
+  # A minimal real git repo for "execute/1 falls back to the real
+  # cli_available and git checks": one committed file outside lib/statifier/,
+  # nothing else, so HEAD's own diff is structurally guaranteed empty.
+  # `commit.gpgsign false` keeps a developer's global signing config from
+  # hanging this on a passphrase prompt for a throwaway commit.
+  defp seed_git_repo(dir) do
+    git!(dir, ["init", "--quiet"])
+    git!(dir, ["config", "user.email", "adr-judge-test@example.invalid"])
+    git!(dir, ["config", "user.name", "ADR Judge Test"])
+    git!(dir, ["config", "commit.gpgsign", "false"])
+
+    File.write!(Path.join(dir, "README.md"), "scratch repo for adr_judge_test.exs\n")
+
+    git!(dir, ["add", "README.md"])
+    git!(dir, ["commit", "--quiet", "--message", "seed commit"])
+  end
+
+  defp git!(dir, args) do
+    case System.cmd("git", args, cd: dir, stderr_to_stdout: true) do
+      {output, 0} -> output
+      {output, status} -> flunk("git #{Enum.join(args, " ")} exited #{status}: #{output}")
+    end
   end
 
   defp stub_caller(propose_response, refute_response) do
@@ -200,27 +251,47 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # Exercises the real `git` shell-out and real `System.find_executable/1`
   # rather than injected stubs, so the default `opts \\ []` clause of
   # execute/2 is asserted too - every other test in this file injects both
-  # explicitly, which never reaches that default. `--base HEAD` is used
-  # because it always resolves and this checkout's own working tree never
-  # touches lib/statifier/ (only test/ files), so `collect/1` always returns
-  # before ever calling a `caller` - this can never shell out to the real
-  # `claude` CLI, regardless of whether it happens to be on this machine's
-  # PATH.
+  # explicitly, which never reaches that default. Asserting that with this
+  # checkout's own working tree used to be safe on the premise that it never
+  # touches lib/statifier/ (only test/ files) - st-l5k.3 made that premise
+  # permanently false, and once any lib/statifier/ file is dirty the real
+  # `git diff` finds a real core change and this test shells out to the real
+  # `claude` CLI (st-c8c). So instead this builds a throwaway git repo under
+  # a scratch dir - one committed file outside lib/statifier/, nothing else -
+  # and chdirs the OS process into it for the call: `--base HEAD`
+  # always resolves there, and `git diff` against HEAD is structurally empty
+  # (nothing has changed since the seed commit, and nothing is untracked), so
+  # `collect/1` always reaches the "no lib/statifier/ files in this diff"
+  # skip before ever calling a `caller` - this can never shell out to the
+  # real `claude` CLI, regardless of what this worktree's own lib/statifier/
+  # looks like.
   #
-  # This asserts the specific "no core changes" skip reason, which assumes
-  # the `claude` CLI is on PATH in the environment running this suite (true
-  # of every developer/CI environment this task is built for - it is the
-  # tool `mix adr.judge` itself shells out to). If that assumption ever stops
-  # holding here, this test needs `cli_available: true` added back like
-  # every other test in the file.
+  # This still assumes the `claude` CLI is on PATH in the environment running
+  # this suite (true of every developer/CI environment this task is built
+  # for - it is the tool `mix adr.judge` itself shells out to). If that
+  # assumption ever stops holding here, this test needs `cli_available: true`
+  # added back like every other test in the file - at the cost of no longer
+  # covering the default clause.
+  #
+  # See `scratch_repo_dir/0` for why the repo's path is not the usual
+  # `@tag :isolated_tmp_dir` one.
   # sabotage: change execute/2's default opts from `[]` to
   #           `[cli_available: false]` -> red: the unsabotaged default reaches
-  #           git and finds no lib/statifier/ diff against HEAD, while the
-  #           sabotaged default never gets past the CLI check, so the skip
-  #           reason changes from "no lib/statifier/ files in this diff" to
-  #           "claude CLI not on PATH"
+  #           git and finds no lib/statifier/ diff against the scratch repo's
+  #           HEAD, while the sabotaged default never gets past the CLI
+  #           check, so the skip reason changes from "no lib/statifier/ files
+  #           in this diff" to "claude CLI not on PATH"
   test "execute/1 falls back to the real cli_available and git checks" do
-    assert {:skip, json} = Judge.execute(["--base", "HEAD", "--format", "json"])
+    repo_dir = scratch_repo_dir()
+    File.rm_rf!(repo_dir)
+    File.mkdir_p!(repo_dir)
+    on_exit(fn -> File.rm_rf!(repo_dir) end)
+
+    seed_git_repo(repo_dir)
+
+    assert {:skip, json} =
+             File.cd!(repo_dir, fn -> Judge.execute(["--base", "HEAD", "--format", "json"]) end)
+
     assert {:ok, %{"summary" => "no lib/statifier/ files in this diff"}} = JSON.decode(json)
   end
 
