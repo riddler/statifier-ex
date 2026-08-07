@@ -108,6 +108,25 @@ line to delete.
 v2 starts from zero because it has no engine yet. v1's final baseline - **90/127
 SCION, 27/59 W3C** - is the reference target to beat, not a seed to copy in.
 
+### Scratch directories in tests
+
+`mix quality` runs the `Regression ratchet` (`mix test.regression`) and the
+built-in `Tests` stage concurrently, in the same working directory, and
+`test/passing_tests.json`'s globs mean both stages execute largely the same
+modules. ExUnit's `@tag :tmp_dir` hardcodes its scratch root to `tmp/`
+relative to the process's cwd with no way to configure it, so two concurrent
+runs of the same test compute byte-identical paths and race on
+`rm_rf!`/`mkdir_p!` (st-0vz).
+
+Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead - same `tmp_dir`
+context key, same directory shape, but the root is settable per OS process via
+`STATIFIER_TMP_ROOT` (default `"tmp"`). `mix test.regression` sets it to
+`tmp/regression` for its spawned `mix test`, so the ratchet's scratch tree
+never overlaps the Tests stage's. ExUnit's own `@tag :tmp_dir` /
+`@describetag :tmp_dir` is banned repo-wide; `test/statifier/tmp_dir_test.exs`
+enforces it by scanning `test/**/*.exs` and failing with the offending file
+names.
+
 ## Corpus generation
 
 v1's corpus was a frozen artifact - machine-converted test files with no committed

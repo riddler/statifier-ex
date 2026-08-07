@@ -120,6 +120,8 @@ rules the gate expects you to follow.
 - Functions taking a state/session put it as the first argument (pipeline
   threading).
 - XML in tests: triple-quoted heredocs, 4-space base indentation.
+- Scratch directories in tests: `@tag :isolated_tmp_dir` (`Statifier.TmpDir`), never
+  ExUnit's `@tag :tmp_dir`.
 - Sabotage every new test that asserts `lib/` behavior: break the code it covers,
   confirm it goes red, revert, and note the mutation in one line above the test -
   `# sabotage: enter_states/2 skips the initial child -> red`. Generated corpus
