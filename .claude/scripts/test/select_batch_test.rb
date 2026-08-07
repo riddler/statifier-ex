@@ -60,8 +60,9 @@ class SelectBatchTest < Minitest::Test
     @fake.expect(["bd", "ready", "--json"] + filters, out: JSON.generate(issues))
   end
 
-  def issue(id, priority:, labels:, issue_type: "chore")
-    { "id" => id, "title" => "title for #{id}", "priority" => priority, "issue_type" => issue_type, "labels" => labels }
+  def issue(id, priority:, labels:, issue_type: "chore", description: "Description for #{id}.")
+    { "id" => id, "title" => "title for #{id}", "priority" => priority, "issue_type" => issue_type, "labels" => labels,
+      "description" => description }
   end
 
   # --- verdict table cases -------------------------------------------------
@@ -261,5 +262,87 @@ class SelectBatchTest < Minitest::Test
 
     assert_equal false, env["ok"]
     assert_equal "ambiguous_input", env["blocked"].first["code"]
+  end
+
+  # --- summary field (st-sdv) ---------------------------------------------
+
+  # sabotage: dropped `summary: Summary.of(issue["description"])` from
+  # annotate/2's returned hash -> red, candidate carries no "summary" key
+  def test_every_candidate_carries_a_summary_derived_from_the_description_in_default_mode
+    expect_ready([
+                   issue("st-a", priority: 1, labels: ["area:interpreter"],
+                                 description: "Fixes the interpreter's idle path. More detail follows."),
+                   issue("st-b", priority: 2, labels: ["area:parser"],
+                                 description: "Extends the parser's guard clause. More detail follows.")
+                 ])
+    expect_empty_survey
+
+    _code, env = run_select(["--auto"])
+
+    env["data"]["candidates"].each { |c| assert c.key?("summary") }
+    a = env["data"]["candidates"].find { |c| c["id"] == "st-a" }
+    b = env["data"]["candidates"].find { |c| c["id"] == "st-b" }
+    assert_equal "Fixes the interpreter's idle path.", a["summary"]
+    assert_equal "Extends the parser's guard clause.", b["summary"]
+  end
+
+  # Explicit-selection mode reads the description from `bd show` (a
+  # different code path than `bd ready`, in explicit_candidates/2) - this
+  # is the only test exercising that path for the summary field.
+  # sabotage: `"summary" => c[:summary]` dropped from public_candidate/1
+  # -> red, candidate carries no "summary" key even though annotate/2 set it
+  def test_summary_present_in_explicit_selection_mode_too
+    @fake.expect(
+      %w[bd show st-trm --json],
+      out: JSON.generate([{
+        "id" => "st-trm", "title" => "title for st-trm",
+        "description" => "Extends the ADR guard to cover ADR-0015 in Ruby. More detail follows.",
+        "labels" => ["area:skills"], "priority" => 2, "issue_type" => "chore"
+      }])
+    )
+    expect_empty_survey
+
+    _code, env = run_select(["st-trm", "--auto"])
+
+    candidate = env["data"]["candidates"].find { |c| c["id"] == "st-trm" }
+    assert_equal "Extends the ADR guard to cover ADR-0015 in Ruby.", candidate["summary"]
+  end
+
+  # sabotage: `Summary.of` body changed to always `return description`
+  # (skip the blank check) -> red, expects nil but gets ""
+  def test_candidate_with_empty_description_carries_summary_key_with_nil_value
+    expect_ready([issue("st-nod", priority: 1, labels: ["area:interpreter"], description: "")])
+    expect_empty_survey
+
+    _code, env = run_select(["--auto"])
+
+    candidate = env["data"]["candidates"].find { |c| c["id"] == "st-nod" }
+    assert candidate.key?("summary")
+    assert_nil candidate["summary"]
+  end
+
+  # The st-trm/st-tgv motivating case from st-sdv's own description: two
+  # ready beads sharing an identical title, distinguishable only by
+  # description.
+  # sabotage: `issue["description"]` changed to `issue["title"]` in
+  # annotate/2 -> red, both summaries collapse to the shared title's summary
+  def test_identical_titles_with_different_descriptions_produce_different_summaries
+    shared_title = "Extends the ADR guard"
+    expect_ready([
+                   { "id" => "st-trm", "title" => shared_title, "priority" => 1, "issue_type" => "chore",
+                     "labels" => ["area:interpreter"],
+                     "description" => "Extends the ADR guard to cover ADR-0015 in Ruby." },
+                   { "id" => "st-tgv", "title" => shared_title, "priority" => 2, "issue_type" => "chore",
+                     "labels" => ["area:parser"],
+                     "description" => "plan_state_test.rb's real-plan fixture assumes an always-incomplete phase." }
+                 ])
+    expect_empty_survey
+
+    _code, env = run_select(["--auto"])
+
+    trm = env["data"]["candidates"].find { |c| c["id"] == "st-trm" }
+    tgv = env["data"]["candidates"].find { |c| c["id"] == "st-tgv" }
+    assert_equal trm["title"], tgv["title"]
+    refute_equal trm["summary"], tgv["summary"]
   end
 end
