@@ -27,7 +27,8 @@ have their own triggers in CLAUDE.md's authority table.
 **Auto mode refuses, reports, and stops** rather than committing when:
 - the quality gate is red (Step 0)
 - the gate was narrowed - a `--quick` or `--test-scope changed` run is not a
-  green gate for commit purposes, and `mix gate.verify` exits non-zero on one
+  green gate for commit purposes, and `gate.rb` (wrapping `mix gate.verify`)
+  reports `data.attested: false` for one
 - the `Gate guard` stage is red (Step 0): the diff changes what the gate checks
   and no entry in `docs/quality-gate-changes.md` names it. Auto mode never
   writes that entry - ADR-0011 makes it a human's call
@@ -37,8 +38,8 @@ have their own triggers in CLAUDE.md's authority table.
 - the working tree carries changes unrelated to the claimed issue
 - Step 1.5 found no beads issue (interactive mode asks the user; auto mode has
   nobody to ask, so it stops and says so)
-- the only bead signal was the branch prefix and `bd show` says that bead is
-  already closed - the name outlived its bead (ADR-0010), and auto mode has
+- the only bead signal was the branch prefix and `bead.rb resolve` reports that
+  candidate `closed` - the name outlived its bead (ADR-0010), and auto mode has
   nobody to ask which bead this commit is for
 
 A refusal is a report, not a fallback to interactive. Say which condition fired
@@ -56,6 +57,8 @@ and what would clear it.
 - User-facing changes need a changelog fragment in `changelog.d/` (Step 1.6).
   `CHANGELOG.md` itself is never edited outside a release. Follow CLAUDE.md
   conventions rather than any changelog workflow from other projects.
+- See `.claude/scripts/README.md` for the envelope contract shared by every
+  script this skill calls.
 
 ## Repo Convention: First Commit is .gitignore Only
 
@@ -79,109 +82,139 @@ stage nothing but `.gitignore`.
 
 ### Step 0: Pre-commit Checks
 
-1. Run the full quality gate: `mix gate.verify`. It runs `mix quality` (format,
-   compile, credo, dialyzer, deps audit, gate guard, full suite with coverage)
-   and exits non-zero unless the run it performed was a full one - no profile,
-   scope `all`, nothing skipped by `--quick` or `--skip`. While fixing issues,
-   iterate with `mix quality --profile loop`; use
-   `mix quality --format json --report -` if you need machine-readable results.
-2. Fix ALL issues reported before proceeding
-3. DO NOT proceed to commit until `mix gate.verify` prints its attestation line
-
-The attestation replaces judging the gate's breadth by eye: a narrowed run is no
-longer something to remember not to report as a full one, it is a non-zero exit.
-A `Gate guard` failure is its own case - see "If Quality Checks Fail" below.
-
-**Carve-out: a change touching no Elixir code has no gate to run.** If
-`git diff main...HEAD --name-only` (plus unstaged files) touches nothing under
-`lib/`, `test/`, `config/`, and neither `mix.exs` nor `mix.lock`, the gate has
-nothing to measure - skills, docs, ADRs, and beads exports cannot break a
-build. Skip `mix quality` and review the diff instead.
-
-This carve-out is narrow and it is not a judgment call: one Elixir file in the
-diff and the full gate runs. When it applies, say so in the Step 4 report
-("docs only, no quality gate applicable") rather than letting a reader assume
-a green gate that never ran.
-
-**Sabotage notes on new tests.** A green gate says the tests pass, not that they
-can fail. If the diff adds or changes tests, check that each one carries its
-sabotage note (docs/testing.md):
+Run the gate wrapper:
 
 ```bash
-git diff main...HEAD -U0 -- test/ ':!test/scion_tests' ':!test/scxml_tests' | grep -n '^+.*\btest \"'
+ruby .claude/scripts/gate.rb
 ```
 
-For each added `test "..."` line, read its surrounding context and confirm a
-`# sabotage:` comment sits directly above it - either a real mutation
+This wraps `mix gate.verify` (format, compile, credo, dialyzer, deps audit, gate
+guard, full suite with coverage, and exits non-zero unless the run was a full
+one - no profile, scope `all`, nothing skipped by `--quick` or `--skip`) and
+`mix quality --format json --report -`. **Fix ALL issues reported before
+proceeding.** While fixing, iterate with `mix quality --profile loop` directly
+(`gate.rb --profile loop` also works and sets `data.attested: false` so you
+cannot mistake the iteration run for the pre-commit bar). Do not proceed to
+commit until `data.attested` is `true` (or `data.applicable` is `false` - see
+the carve-out below).
+
+Read the result:
+- `data.applicable` false means the diff touches nothing under `lib/`, `test/`,
+  `config/`, and neither `mix.exs` nor `mix.lock` - there is no gate to run,
+  and `data.carve_out_reason` says so. **This carve-out is narrow and it is not
+  a judgment call**: one Elixir file in the diff and `data.applicable` is true,
+  full stop. When it applies, say so in the Step 4 report ("docs only, no
+  quality gate applicable") rather than letting a reader assume a green gate
+  that never ran.
+- `ok: false` with `data.applicable: true` is a real gate failure - see "If
+  Quality Checks Fail" below, including the `Gate guard` case.
+- `data.skipped_stages` non-empty means `ok` is already false for you (the
+  script enforces this), but read the list anyway when reporting - "a skipped
+  stage is not a passing one" (CLAUDE.md) applies to what you tell the user
+  too, not just to what gates the commit.
+
+**Sabotage notes on new tests.** `data.sabotage.missing` lists any new
+`test "..."` line in the diff with no `# sabotage:` comment directly above it.
+**This is a report, not a gate** - `gate.rb` never fails or blocks on it, and a
+present note is not evidence the mutation was run against broken code, only
+that a comment with the right shape exists. A green gate says the tests pass,
+not that they can fail.
+
+For each test `data.sabotage.missing` names, read its surrounding context and
+confirm a `# sabotage:` comment sits directly above it - either a real mutation
 (`# sabotage: <what was broken> -> red`) or a stated exemption
 (`# sabotage: n/a - <why>`).
 
 A missing note is not a formatting nit to fix in passing. It means the test was
 never run against broken code, so nobody knows whether it can fail. **Stop and
 sabotage it now** - break the `lib/` code it covers, watch it go red, revert,
-write the note - then re-run the gate. In auto mode, refuse and report which
+write the note - then re-run `gate.rb`. In auto mode, refuse and report which
 tests are unverified; do not invent a note for a sabotage that was never run,
 which is the one failure mode this check cannot detect afterwards.
 
-Generated corpus files are excluded by the pathspec above and need no notes.
+Generated corpus files (`test/scion_tests/`, `test/scxml_tests/`) are excluded
+from the scan and need no notes.
 
 ### Step 1: Analyze Changes
 
-1. Run `git status` to see all modified/added files
-2. Run `git diff main...HEAD --stat` (or `git diff --stat` on a fresh branch) to see scope of changes
-3. Run `git log main...HEAD --oneline` to see any local commits
-4. Analyze the changes to understand:
-   - What features were added (parser elements, interpreter functions, effects)
-   - What bugs were fixed
-   - What was refactored or improved internally
-   - Whether conformance tests were ratcheted (`test/passing_tests.json`)
+```bash
+ruby .claude/scripts/repo_state.rb
+```
+
+Read `data.dirty_files` / `data.changed_files` (scope of the change),
+`data.unpushed` (local commits with their already-detected `Refs:` ids, if
+any), and `data.touches_elixir` (feeds Step 0's carve-out read and Step 1.6's
+changelog check). This replaces hand-running `git status`, `git diff --stat`,
+and `git log --oneline`.
+
+Then analyze the changes to understand what a reader of the commit message
+needs to know: what features were added (parser elements, interpreter
+functions, effects), what bugs were fixed, what was refactored or improved
+internally, and whether conformance tests were ratcheted
+(`test/passing_tests.json`). This classification is a judgment call over the
+diff's content, not something `repo_state.rb` reports - see
+`docs/skill-automation.md`'s Model routing for why it is Haiku-eligible in
+principle and still runs on this skill's own model today.
 
 ### Step 1.5: Detect Related Beads Issue
 
-Attempt to detect a related beads issue using these strategies in order.
+```bash
+ruby .claude/scripts/bead.rb resolve --seeded-bead <id-from-seed>
+```
 
-**IMPORTANT**: Run these as separate bash commands to avoid shell parsing errors:
+Pass `--seeded-bead` with the id this session was seeded with, if any (see
+strategy 2 below); omit it if this session was not seeded (e.g. started
+directly by a human in an existing worktree).
 
-1. **An explicit ID** - `$ARGUMENTS`, if one was given. Validate with `bd show`
-   and use it; the other strategies do not run.
+The script encodes strategies 2-4 of the ladder below as ranked `data`,
+already validated against `bd show` and annotated with a `warning` when a
+candidate is closed or not found. Strategy 1 (an explicit `$ARGUMENTS` id) and
+strategy 5 (asking the user) are not scriptable and stay here:
 
-2. **The bead this session was seeded with.** `/new-worktree` names the bead
-   twice in every seeded prompt - in the seed command (`/create-plan st-abc`)
-   and in the fixed finishing clause ("unrelated to st-abc"). That is one bead,
-   in this session, stated by whoever started it. It is a stronger signal than
-   anything derived from the branch, and on a branch carrying several beads it
-   is the only signal that names the bead *this commit* is for.
+1. **An explicit ID** - `$ARGUMENTS`, if one was given. Validate with
+   `ruby .claude/scripts/bead.rb show <id>` and use it; the other strategies do
+   not run, and `bead.rb resolve` is not needed at all in this case.
+
+2. **The bead this session was seeded with**, surfaced as `data.resolved` with
+   `strategy: "seeded_prompt"` when `--seeded-bead` was passed and that bead is
+   open. `/new-worktree` names the bead twice in every seeded prompt - in the
+   seed command (`/create-plan st-abc`) and in the fixed finishing clause
+   ("unrelated to st-abc"). That is one bead, in this session, stated by
+   whoever started it. It is a stronger signal than anything derived from the
+   branch, and on a branch carrying several beads it is the only signal that
+   names the bead *this commit* is for.
 
    This is not the same as inferring from claimed `in_progress` beads, which is
    ambiguous across parallel worktrees (st-qww.7) and is not a strategy here.
 
-3. **A plan document in the diff.**
-   ```bash
-   git diff main...HEAD --name-only | grep 'docs/plans/'
-   ```
-   Plan filenames carry the issue ID: `YYMMDD-<issue-id>-*.md`. Commit-specific,
-   so it outranks the branch name.
+3. **A plan document in the diff**, surfaced as a `data.candidates` entry with
+   `strategy: "plan_doc"` when `data.changed_files` (from `repo_state.rb`, which
+   `bead.rb resolve` reads internally) includes a `docs/plans/` file. Plan
+   filenames carry the issue ID: `YYMMDD-<issue-id>-*.md`. Commit-specific, so
+   it outranks the branch name.
 
-4. **The branch prefix** - last, and a hint rather than an authority.
-   ```bash
-   git branch --show-current
-   ```
-   Worktree branches are named `<beads-id>-<slug>`, but ADR-0010 fixes that name
-   at creation: it names the bead the worktree was cut for, not necessarily the
-   bead this commit is for. On a branch carrying several beads the prefix names
-   the first one and is wrong for every later commit.
+4. **The branch prefix** - last, and a hint rather than an authority, surfaced
+   as `strategy: "branch_prefix"` with `confidence: "weak"`. Worktree branches
+   are named `<beads-id>-<slug>`, but ADR-0010 fixes that name at creation: it
+   names the bead the worktree was cut for, not necessarily the bead this
+   commit is for. On a branch carrying several beads the prefix names the
+   first one and is wrong for every later commit.
 
-   **Validate the status, not just the existence.** `bd show <id>` on a prefix-
-   derived ID that comes back `closed` means the name outlived its bead - the
-   stale-name case ADR-0010 says to expect. Interactive mode asks which bead
-   this commit is for; **auto mode refuses and reports**, naming the branch and
-   the closed bead. Writing a `Refs:` line pointing at a closed bead would have
-   `/cleanup-worktrees` close nothing and leave the real bead open.
+   **Validate the status, not just the existence.** A prefix-derived candidate
+   whose `status` comes back `closed` (in `data.candidates`, with a `warning`)
+   means the name outlived its bead - the stale-name case ADR-0010 says to
+   expect. Interactive mode asks which bead this commit is for; **auto mode
+   refuses and reports**, naming the branch and the closed bead. Writing a
+   `Refs:` line pointing at a closed bead would have `/cleanup-worktrees` close
+   nothing and leave the real bead open.
 
-   Every ID from strategies 2-4 is validated with `bd show <id>` before use.
+   Every id in `data.candidates` has already been validated with `bd show`
+   before you see it.
 
 5. **Fallback to user prompt**:
-   - If no valid issue detected, ask: "Is this commit related to a beads issue? (Enter issue ID or press Enter to skip)"
+   - If `data.resolved` is `null` and nothing usable is in `data.candidates`,
+     ask: "Is this commit related to a beads issue? (Enter issue ID or press
+     Enter to skip)"
    - If the user provides an ID, validate with `bd show` before proceeding
    - If the user skips (Enter), continue without issue reference
    - **In auto mode there is nobody to ask.** Stop and report that no issue was
@@ -243,23 +276,30 @@ Refs: st-xxx
 - Body: active voice, same tense as the title ("Adds", not "Added"),
   functional changes highlighted
 
-**HARD limits** - verify each before presenting the message, and rewrite until
-all three hold. These are requirements, not guidelines:
-- **Subject line: under 50 characters.** Count it. If over, cut words, not
-  clarity.
-- **Body lines: 72 characters maximum.** Wrap anything longer.
-- **Total message: 40 lines maximum** (subject + blank lines + body + Refs),
-  and aim for well under that - most commits need fewer than 15. A message
-  approaching the cap should summarize at a higher level, not enumerate every
-  file or hunk. The diff itself carries the detail.
-- No need to mention code quality improvements - they are expected (unless the
-  functional change is about code quality)
-- **Issue Reference Rules**:
-  - If an issue was detected/provided, add `Refs: st-xxx` on its own
-    line at the end, preceded by a blank line
-  - Only add if the issue was validated via `bd show`
-  - If no issue, omit this line entirely
-- **NO attribution lines** (see override instructions at top)
+**HARD limits.** Draft the message, then validate it before presenting:
+
+```bash
+ruby .claude/scripts/commit_message.rb check --refs <id> <<'MSG'
+<drafted message>
+MSG
+```
+
+Omit `--refs <id>` when Step 1.5 found no issue. The script checks, per rule:
+subject under 50 characters, body lines at most 72 characters, whole message at
+most 40 lines, and (only when `--refs` was given) a `Refs: <id>` line present
+and last. **These are requirements, not guidelines** - `data.checks` names
+which rule failed and why; rewrite until every one holds. Most commits need far
+fewer than the 40-line cap; a message approaching it should summarize at a
+higher level, not enumerate every file or hunk - the diff itself carries the
+detail. No need to mention code quality improvements - they are expected
+(unless the functional change is about code quality). Only include `Refs:` when
+Step 1.5 resolved an issue - if none, omit the line entirely rather than
+passing `--refs`.
+
+`commit_message.rb` also checks for forbidden attribution text (same rule as
+Step 4.4) but that check only matters here as an early warning - Step 4.4 is
+the check that actually gates the commit, since only a real `git log -1` can
+prove what was actually written.
 
 ### Step 3: Present for Approval (interactive mode only)
 
@@ -334,12 +374,17 @@ COMMIT_MSG
 
 4. **IMMEDIATE VERIFICATION** (critical - do this right after commit):
    ```bash
-   # Display the full commit message
-   git log -1 --pretty=format:"%B"
+   git log -1 --pretty=format:"%B" | ruby .claude/scripts/commit_message.rb check --refs <id>
    ```
 
-   - **CHECK**: Message must NOT contain "Co-Authored-By", "Generated with", or "Claude"
-   - **CHECK**: If issue reference expected, verify "Refs: st-xxx" appears
+   Omit `--refs <id>` when Step 1.5 found no issue, same as Step 2. This is the
+   same validator Step 2 ran over the draft, run again over what `git commit`
+   actually wrote - Step 2 checked intent, this checks the artifact.
+
+   - **CHECK**: `data.checks` for `no_attribution` is `ok: true` - the message
+     must NOT contain "Co-Authored-By", "Generated with", or "Claude"
+   - **CHECK**: if `--refs` was given, `data.checks` for `refs_present_and_last`
+     is `ok: true`
    - **If attribution lines present**: STOP and see "Failure Recovery" section below
 
 5. **Show commit result**:
@@ -382,7 +427,7 @@ COMMIT_MSG
 )"
 
 # Verify
-git log -1 --pretty=format:"%B"
+git log -1 --pretty=format:"%B" | ruby .claude/scripts/commit_message.rb check
 ```
 
 **Option 2: Report to user**
@@ -404,18 +449,22 @@ that is worth knowing.
 ### If Quality Checks Fail
 
 If Step 0 fails:
-1. Show the full error output to the user
+1. Show the full error output to the user (`data.stages` from `gate.rb`, never
+   truncated)
 2. Ask if they want you to fix the issues or if they'll handle it
-3. DO NOT proceed to commit until the full gate passes
+3. DO NOT proceed to commit until `gate.rb` reports `data.attested: true` (or
+   `data.applicable: false`)
 
 A red `Gate guard` stage is not a failure to fix. It says the diff changes what
 the gate checks, which ADR-0011 makes a human's call: report the finding, name
 the file it points at, and stop. Writing the `docs/quality-gate-changes.md`
 entry yourself is granting yourself the permission the check exists to withhold.
+`gate.rb` has no code path that writes that file, on purpose - do not work
+around that by writing it by hand either.
 
-`Not a full gate:` from `mix gate.verify` is a different thing again - the gate
-was not red, it was narrow. Re-run it unnarrowed rather than reporting the
-green.
+A run where `data.attested` is `false` for reasons other than `--profile loop`
+is a different thing again - the gate was not red, it was narrow. Re-run
+`gate.rb` with no `--profile` rather than reporting the green.
 
 In auto mode, do not fix the failures unasked. A red gate on unattended work
 means the change is not finished, and quietly repairing it turns one reviewable
@@ -438,8 +487,9 @@ If verification shows files weren't committed:
 
 ### Commit Message Style:
 - Present tense, s-form ("Adds", "Fixes", "Implements", "Ports")
-- HARD limits (verify before presenting): subject under 50 characters, body
-  lines at most 72 characters, whole message at most 40 lines
+- HARD limits (verify before presenting, via `commit_message.rb check`): subject
+  under 50 characters, body lines at most 72 characters, whole message at most
+  40 lines
 - Body: same tense as the title
 - Highlight functional changes; skip routine quality-only notes
 - Write as if the user wrote them (no AI attribution - see override instructions)
@@ -458,3 +508,10 @@ If verification shows files weren't committed:
   changes need none, and `CHANGELOG.md` is never edited outside a release
 - First commit of a fresh repo: `.gitignore` only
 - The user trusts your judgment - they asked you to commit
+
+## Model routing
+
+Step 1's diff classification (added/fixed/refactored) is Haiku-eligible; the
+bead resolution ladder, the sabotage judgment, and the unrelated-changes gate
+are not. See `docs/skill-automation.md`'s Model routing section for the full
+record and why.

@@ -15,12 +15,15 @@ For an unattended, phase-by-phase run with no human confirmation between
 phases, pass `--loop` - see `## Looped Execution Mode` below. Everything else
 in this document describes the default, interactive mode.
 
+See `.claude/scripts/README.md` for the envelope contract shared by every
+script this skill calls.
+
 ## Before You Start: Claim the Issue and Pick a Worktree
 
 - The plan references a beads issue ID. Claim it before touching code:
 
   ```bash
-  bd update <id> --claim
+  ruby .claude/scripts/bead.rb claim <id>
   ```
 
 - **When working in parallel with other agents**, do the work in a git worktree
@@ -32,7 +35,8 @@ in this document describes the default, interactive mode.
 
   One issue = one branch = one worktree. Run the same quality gates inside the
   worktree (`mix quality --profile loop` while iterating, full `mix quality`
-  before the branch is pushed or merged). Use `bd note` for progress other agents
+  before the branch is pushed or merged). Use
+  `ruby .claude/scripts/bead.rb note <id> "..."` for progress other agents
   might need.
 
 - Working solo directly in the repo is fine; the claim still happens first.
@@ -42,15 +46,28 @@ in this document describes the default, interactive mode.
 **Trigger**: `/implement-plan <path> --loop` or `/implement-plan <path> --loop --from-phase N`.
 
 **Preconditions**: the beads issue is claimed (same as above); the tree is
-clean (`git status --porcelain` is empty) before the loop starts. If it isn't,
-stop and report rather than looping over an already-dirty tree.
+clean. Check both with:
+
+```bash
+ruby .claude/scripts/repo_state.rb
+```
+
+`data.branch_bead` (or the id you already claimed) covers the claim check;
+`data.dirty` covers the tree check. If `data.dirty` is true, stop and report
+rather than looping over an already-dirty tree.
 
 **Per-phase procedure**, repeated for each phase from the first with an
 unchecked Automated Verification box (or from `--from-phase N`) through the
 last phase in the plan:
 
-1. Identify the phase's full text (heading through its Success Criteria) from
-   the plan file.
+1. Identify the phase's full text:
+   ```bash
+   ruby .claude/scripts/plan_state.rb validate <path>
+   ```
+   `data.next_phase` is the phase to run (or use `--from-phase N`'s N
+   directly). `data.phases` names each phase's `line_start`/`line_end` - read
+   those lines from the plan file yourself to get the phase's complete text,
+   heading through its Success Criteria.
 2. Dispatch one `Agent` call (`subagent_type: general-purpose`,
    `run_in_background: false`) with a **fully self-contained prompt**: the
    plan file path, the phase number and its complete text, the beads issue
@@ -61,11 +78,21 @@ last phase in the plan:
      project's conventions (Appendix D naming, errors-as-events, sabotage
      every new/changed `lib/`-asserting test),
    - keep `mix quality --profile loop` green while iterating,
-   - check off this phase's Automated Verification boxes in the plan file
-     (Edit) once satisfied - never check off Manual Verification boxes,
+   - check off this phase's Automated Verification boxes in the plan file:
+     ```bash
+     ruby .claude/scripts/plan_state.rb check <path> <phase-n>
+     ```
+     once satisfied - never check off Manual Verification boxes (the script
+     itself refuses a `--line` targeting a Manual box; the bulk form used here
+     only ever touches Automated boxes to begin with),
    - append any Manual Verification items from this phase, verbatim, to a
      running `## Deferred Manual Verification` section at the bottom of the
-     plan file (create it on first use) instead of blocking on them,
+     plan file:
+     ```bash
+     ruby .claude/scripts/plan_state.rb defer <path> <phase-n>
+     ```
+     (creates the section, with its standard intro paragraph, on first use)
+     instead of blocking on them,
    - **not** commit, **not** run the full `mix quality` as a final gate (the
      orchestrator does both), **not** close the beads issue,
    - **implement this phase itself**: this loop is already the per-phase
@@ -95,38 +122,46 @@ last phase in the plan:
    - **Refused** (red gate, narrowed gate, missing sabotage note, unrelated
      changes, no issue detected): stop the loop immediately - no retry.
      **Uncheck this phase's Automated Verification boxes in the plan file**
-     (Edit) if the subagent checked any before the gate ran - the resume scan
-     below keys off those boxes, and a refusal means this phase's work never
-     actually landed, whatever the subagent's own checklist says. Leave every
-     other file exactly as the subagent left it - the refusal is diagnostic
-     information for the human or the next resume, not something to clean up.
-     Run `bd note <id> "loop stopped at Phase N: <refusal reason>"`. Report
-     the refusal reason and which phase it happened in, then end the turn.
-   - **Committed**: run `bd note <id> "loop: Phase N complete, commit <sha>"` -
+     if the subagent checked any before the gate ran:
+     ```bash
+     ruby .claude/scripts/plan_state.rb uncheck <path> <phase-n>
+     ```
+     the resume scan below keys off those boxes, and a refusal means this
+     phase's work never actually landed, whatever the subagent's own
+     checklist says. Leave every other file exactly as the subagent left it -
+     the refusal is diagnostic information for the human or the next resume,
+     not something to clean up. Run
+     `ruby .claude/scripts/bead.rb note <id> "loop stopped at Phase N: <refusal reason>"`.
+     Report the refusal reason and which phase it happened in, then end the
+     turn.
+   - **Committed**: run
+     `ruby .claude/scripts/bead.rb note <id> "loop: Phase N complete, commit <sha>"` -
      this is the state handoff a later invocation (or a human) reads to see
      what happened in a session that no longer exists. Advance to the next
      phase.
 4. After the last phase commits successfully, print the accumulated
    `## Deferred Manual Verification` section (if non-empty) as the final
    report, the same way non-loop mode reports Manual Verification items -
-   just batched instead of per-phase. Do not remove the section from the
-   plan file; a human confirming it later can check items off the same way
-   non-loop mode does today.
+   just batched instead of per-phase. `plan_state.rb validate <path>`'s
+   `data.deferred_manual_section` confirms it is present. Do not remove the
+   section from the plan file; a human confirming it later can check items
+   off the same way non-loop mode does today.
 
 **Resuming after a stop**: re-running `/implement-plan <path> --loop`
-re-scans the plan for the first phase with an unchecked Automated
-Verification box and continues from there, same as `## Resuming Work` below
-already describes for interactive mode. Pass `--from-phase N` to force
-starting at a specific phase (e.g. after a human fixes the failure by hand
-and wants to skip re-dispatching a phase that's actually done but whose boxes
-weren't checked).
+re-runs `plan_state.rb validate <path>` and reads `data.next_phase` - the
+first phase with an unchecked Automated Verification box - same as
+`## Resuming Work` below already describes for interactive mode. Pass
+`--from-phase N` to force starting at a specific phase (e.g. after a human
+fixes the failure by hand and wants to skip re-dispatching a phase that's
+actually done but whose boxes weren't checked).
 
 ## Getting Started
 
 When given a plan path:
 
 - Read the plan completely and check for any existing checkmarks (- [x])
-- Read the beads issue (`bd show <id>`) and all files mentioned in the plan
+- Read the beads issue (`ruby .claude/scripts/bead.rb show <id>`) and all files
+  mentioned in the plan
 - **Read files fully** - never use limit/offset parameters, you need complete context
 - Think deeply about how the pieces fit together
 - Create a todo list to track your progress
@@ -202,12 +237,14 @@ After implementing a phase:
 
   See `docs/testing.md` for the full rationale.
 - Run the success criteria checks: `mix quality --profile loop` while iterating,
-  then the full `mix quality` gate for the phase (this is also the pre-commit
-  bar). Use `mix quality --format json --report -` if you need to route on the
-  results programmatically.
+  then the full quality gate for the phase (this is also the pre-commit bar) -
+  `ruby .claude/scripts/gate.rb` wraps `mix gate.verify` and
+  `mix quality --format json --report -` if you need to route on the results
+  programmatically.
 - Fix any issues before proceeding
 - Update your progress in both the plan and your todos
-- Check off completed items in the plan file itself using Edit
+- Check off completed items in the plan file itself using
+  `ruby .claude/scripts/plan_state.rb check <path> <phase-n>`
 - **In interactive (non-`--loop`) mode: pause for human verification**. After
   completing all automated verification for a phase, pause and inform the
   human that the phase is ready for manual testing. Use this format:
@@ -246,8 +283,10 @@ Use sub-tasks sparingly - mainly for targeted debugging or exploring unfamiliar 
 ## Wrapping Up
 
 - When all phases are complete and the full `mix quality` gate is green, report
-  status; close the issue (`bd close <id>`) per the active agent profile in
-  CLAUDE.md
+  status. **Do not close the issue here** - `bd close` fires only on a verified
+  merge into `origin/main` (CLAUDE.md's authority table), and this skill never
+  pushes or merges anything, so that trigger has not fired yet. The bead stays
+  `in_progress`; see below.
 - Capture discovered work immediately with `bd q` and link it with
   `discovered-from` rather than chasing it mid-task
 - If working in a worktree, leave commit/push/merge decisions to the user unless
@@ -266,3 +305,9 @@ If the plan has existing checkmarks:
 - Verify previous work only if something seems off
 
 Remember: You're implementing a solution, not just checking boxes. Keep the end goal in mind and maintain forward momentum.
+
+## Model routing
+
+The refusal-reason classification the loop reports on a stopped `/commit --auto`
+is Haiku-eligible; phase sizing and the sabotage judgment are not. See
+`docs/skill-automation.md`'s Model routing section for the full record and why.

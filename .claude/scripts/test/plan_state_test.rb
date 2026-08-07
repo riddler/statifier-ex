@@ -27,20 +27,26 @@ class PlanStateLibTest < Minitest::Test
     assert_equal (1..12).to_a, result[:phases].map { |p| p[:n] }
   end
 
-  # Phases 1-8 have landed by the time this test runs (st-hzf's own
+  # Phases 1-12 have landed by the time this test runs (st-hzf's own
   # /implement-plan --loop checks off each phase's Automated Verification
   # boxes as it completes them - this plan document is a live fixture, see
   # the Phase 8 plan text's own note about that). This test asserts the
-  # invariant rather than a specific phase number, so it keeps passing as
-  # later phases land too.
+  # invariant rather than a specific phase number, so it keeps passing
+  # whether the plan is still in progress (next_phase present, every prior
+  # phase complete, next_phase itself not yet complete) or fully landed
+  # (next_phase nil, every phase complete) - the last phase this plan has
+  # is exactly the case where nil is correct, not a bug to work around.
   def test_real_plan_document_every_phase_up_to_next_phase_is_complete
     result = PlanState.parse(File.read(REAL_PLAN))
     by_n = result[:phases].each_with_object({}) { |p, h| h[p[:n]] = p }
 
     next_phase = result[:next_phase]
-    refute_nil next_phase, "expected at least one incomplete phase in an in-progress plan"
-    (1...next_phase).each { |n| assert by_n[n][:complete], "Phase #{n} should be complete" }
-    refute by_n[next_phase][:complete], "Phase #{next_phase} (next_phase) should not be complete yet"
+    if next_phase.nil?
+      by_n.each_value { |p| assert p[:complete], "Phase #{p[:n]} should be complete" }
+    else
+      (1...next_phase).each { |n| assert by_n[n][:complete], "Phase #{n} should be complete" }
+      refute by_n[next_phase][:complete], "Phase #{next_phase} (next_phase) should not be complete yet"
+    end
   end
 
   def test_real_plan_document_has_a_deferred_manual_verification_section
