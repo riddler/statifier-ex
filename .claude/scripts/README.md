@@ -150,6 +150,29 @@ mix quality
 A green `mix quality` says nothing about whether the Ruby suite passed, and
 vice versa.
 
+## `gate.rb`: the quality-gate wrapper
+
+Wraps `mix gate.verify` and `mix quality --format json --report -`. The most
+constrained script here - see
+`docs/plans/260806-st-hzf-skill-mechanics-scripts.md` Phase 7.
+
+- `data.skipped_stages` always stays in the payload, and `ok` is false
+  whenever the gate applied and any stage came back skipped - a skipped
+  stage is never a passing one, whatever the reason.
+- Only one profile argument is accepted: `--profile loop`. It always sets
+  `data.attested` to `false`. No `--skip`, `--quick`, or other `--profile`
+  value is defined by this script's parser, so passing one is a usage error
+  (exit 2), not a narrower run.
+- **`data.sabotage.missing` is a report, not a gate.** It never blocks and
+  never flips `ok`. A present `# sabotage:` note (either a real mutation or
+  a stated `n/a` exemption) is not evidence the mutation described was
+  actually run against broken code - only reading the diff by hand and
+  confirming the test failed for the right reason is. `/commit`'s own
+  Step 0 carries that judgment call; this script only reports absence.
+- **`data.gate_guard` reports; it never writes.** There is no code path in
+  `gate.rb` that writes `docs/quality-gate-changes.md` - `test/contract_test.rb`
+  asserts that mechanically over every file under `.claude/scripts/`.
+
 ## Writing a new script
 
 1. Require `lib/envelope`, `lib/sh`, and `lib/cli`.
