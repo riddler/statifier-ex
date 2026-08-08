@@ -33,8 +33,11 @@ continuity with v1's converted W3C tests).
 Every evaluation goes through one module with one context type:
 
 - Expressions are compiled once at Machine-build time into
-  `{:compiled, instructions, source}`; static attribute values are `{:static, value}`.
-  One evaluator function handles both.
+  `{:compiled, %Predicator.Compiled{}, source}`; static attribute values are
+  `{:static, value}`. One evaluator function handles both. The
+  `%Predicator.Compiled{}` envelope is upstream's (predicator ADR-0009), not a
+  statifier-side wrapper; we keep owning `source` because only statifier
+  knows where the expression sat in the document (see ADR-0014 item 2).
 - The evaluation context is built once per macrostep, not per expression.
 - Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
   errors to `error.execution` internal events per spec. Leaves never swallow errors.

@@ -50,13 +50,37 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
    `compile_with_positions/1` / `:positions` as a stopgap, storing the table in
    the same field, so the st-2pj bump widens it mechanically - the seam is the
    commitment, the width follows the pin.
-2. **The table travels with the instructions.** The compiled-expression value
-   (`{:compiled, instructions, source}` per `docs/datamodel.md`) widens to also
-   carry the span table, so it cannot be dropped separately from the
-   instructions. Its exact shape is settled at implementation; if px-35i.5
-   lands an upstream envelope first, adopt that instead of a statifier-side
-   wrapper. px-35i.5 is not a blocker - check how it settled before writing
-   the plumbing.
+2. **The table travels with the instructions.** *(Amended 2026-08-08: px-35i.5
+   settled.)* px-35i.5 landed the envelope - predicator ADR-0009, merged
+   upstream, unreleased, part of 4.0 - so the conditional in this item
+   resolves in favor of the upstream shape: there is no statifier-side
+   wrapper to build. `%Predicator.Compiled{instructions:, positions:}` is
+   returned by both `compile_with_positions/1` and `compile_with_spans/1`;
+   the one `positions` field holds a position table or a span table
+   depending on which compiled it, since nothing below the facade
+   distinguishes them. `Predicator.evaluate/3` accepts the struct directly
+   and threads the table itself - no `:positions` keyword; passing a
+   `%Compiled{}` and an explicit `:positions` option together raises
+   `ArgumentError` rather than silently picking a winner.
+   `Predicator.Compiled.new/2` reattaches a table to a bare instruction list.
+   The envelope deliberately does not carry the source string (predicator
+   ADR-0009 open question 1: it changes the value's size class and privacy
+   profile) or an ISA version (that stays computable from the instruction
+   list via `Instructions.required_isa/1`). The compiled-expression value
+   (`{:compiled, instructions, source}` per `docs/datamodel.md`) therefore
+   widens to `{:compiled, %Predicator.Compiled{}, source}` rather than
+   growing a fourth element: we keep owning `source` because we are the ones
+   who know where the expression sat in the document, while predicator only
+   knows offsets within the expression string. When cond wiring lands it
+   calls `compile_with_spans/1` and passes the returned struct straight to
+   `evaluate/3`, with no `:positions` keyword - that wiring still waits on
+   the predicator `~> 4.0` pin (st-2pj), which this amendment does not lift.
+   predicator's storage advice (persist `compiled.instructions`, never the
+   struct, because a stored span table has no integrity check against a
+   different source's instructions) does not apply here: we compile conds
+   in-process at Machine-build time and store no instruction lists (st-2pj
+   says so explicitly), so the round trip that hazard describes does not
+   exist for us.
 3. **Spans are always on.** The table is compile-time-immutable Machine data,
    the same as SCXML locations under ADR-0012 item 3: no gate, no option, no
    runtime cost beyond memory and a per-error lookup.
@@ -94,6 +118,6 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
 - The Machine carries a span table per compiled expression - the same modest
   permanent weight ADR-0012 already accepts for locations and indexes.
 - Open question recorded, not blocking: the concrete compiled-expression
-  shape (statifier-side wrapper vs. an upstream px-35i.5 envelope) and the
-  exact `error.execution` payload shape are implementation-time decisions
-  bounded by items 2 and 4.
+  shape settled per item 2's 2026-08-08 amendment (the upstream px-35i.5
+  envelope, not a statifier-side wrapper). The exact `error.execution`
+  payload shape remains an implementation-time decision bounded by item 4.
