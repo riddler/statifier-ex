@@ -5,11 +5,12 @@ require "json"
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
 
 # DocMeta is the metadata/filename/frontmatter shell around /research-codebase
-# and /create-plan: the metadata triple, the one filename rule shared by
-# docs/plans/ and docs/research/, research-doc frontmatter emission, and the
-# follow-up-research mutation. See
+# and /create-plan: the metadata triple, the one filename rule shared by both
+# document directories (`artifacts.plans` and `artifacts.research`),
+# research-doc frontmatter emission, and the follow-up-research mutation. See
 # docs/plans/260806-st-hzf-skill-mechanics-scripts.md Phase 8.
 #
 # It emits frontmatter and filenames; it never writes section headings or
@@ -17,8 +18,6 @@ require_relative "lib/cli"
 # headings would invite filling them, and nothing in a skeleton stops a
 # model writing recommendations into /research-codebase's output.
 module DocMeta
-  VALID_DIRS = %w[docs/plans docs/research].freeze
-
   # Field order for a research-doc frontmatter block, per
   # .claude/skills/research-codebase/SKILL.md's "Generate research document"
   # step. beads_issue and last_updated_note are optional - omitted from the
@@ -29,11 +28,19 @@ module DocMeta
   ].freeze
 
   class << self
+    # The document directories this script will write into: the manifest's
+    # `artifacts.plans` and `artifacts.research`. A project that keeps them
+    # somewhere else entirely (thoughts/shared/plans, say) needs no change
+    # here, and a --dir naming anything outside the pair is still refused.
+    def valid_dirs(manifest)
+      manifest.artifact_dirs
+    end
+
     # Builds "YYMMDD-[issue-id-]kebab-description.md" - one rule for both
-    # docs/plans/ and docs/research/ (the st2- -> st- rename in 36c4b9d
-    # rippled through every one of these filenames, which is the argument
-    # for a single builder). issue is used as-is - it may itself contain a
-    # dot (e.g. "st-00p.3") - only description is kebab-cased.
+    # document directories (a bead-prefix rename once rippled through every
+    # one of these filenames, which is the argument for a single builder).
+    # issue is used as-is - it may itself contain a dot (e.g. "st-00p.3") -
+    # only description is kebab-cased.
     def build_filename(date_stamp:, description:, issue: nil)
       parts = [date_stamp]
       parts << issue if issue && !issue.to_s.strip.empty?
@@ -184,7 +191,7 @@ module DocMetaCli
     def run_filename(argv, io)
       options = {}
       parser, options = Cli.build("doc_meta.rb filename --dir <dir> --description <text> [--issue <id>] [--date YYMMDD]", options) do |opts|
-        opts.on("--dir DIR", "docs/plans or docs/research") { |v| options[:dir] = v }
+        opts.on("--dir DIR", "artifacts.plans or artifacts.research") { |v| options[:dir] = v }
         opts.on("--description TEXT") { |v| options[:description] = v }
         opts.on("--issue ID") { |v| options[:issue] = v }
         opts.on("--date DATE", "YYMMDD; defaults to date +%y%m%d") { |v| options[:date] = v }
@@ -193,8 +200,12 @@ module DocMetaCli
 
       env = Envelope.new(script: "doc_meta_filename")
 
-      unless DocMeta::VALID_DIRS.include?(options[:dir])
-        env.block!(code: "invalid_dir", message: "--dir must be one of #{DocMeta::VALID_DIRS.join(', ')}")
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+
+      valid_dirs = DocMeta.valid_dirs(manifest)
+      unless valid_dirs.include?(options[:dir])
+        env.block!(code: "invalid_dir", message: "--dir must be one of #{valid_dirs.join(', ')}")
         return env.emit(io)
       end
       if options[:description].to_s.strip.empty?
@@ -229,7 +240,7 @@ module DocMetaCli
         opts.on("--beads-issue ID") { |v| options[:beads_issue] = v }
         opts.on("--tags TAGS", "comma-separated") { |v| options[:tags] = v }
         opts.on("--status STATUS", "default: complete") { |v| options[:status] = v }
-        opts.on("--repository NAME", "default: statifier-ex") { |v| options[:repository] = v }
+        opts.on("--repository NAME", "default: artifacts.repository, else the git remote's repo name") { |v| options[:repository] = v }
         opts.on("--researcher NAME", "default: Claude") { |v| options[:researcher] = v }
         opts.on("--date DATE", "ISO date/time; defaults to date +%Y-%m-%dT%H:%M:%S%z") { |v| options[:date] = v }
         opts.on("--git-commit SHA", "defaults to git rev-parse HEAD") { |v| options[:git_commit] = v }
@@ -238,6 +249,9 @@ module DocMetaCli
       Cli.parse!(parser, argv)
 
       env = Envelope.new(script: "doc_meta_frontmatter")
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
 
       if options[:topic].to_s.strip.empty?
         env.block!(code: "missing_topic", message: "--topic is required")
@@ -263,7 +277,7 @@ module DocMetaCli
         "researcher" => researcher,
         "git_commit" => git_commit,
         "branch" => branch,
-        "repository" => options[:repository] || "statifier-ex",
+        "repository" => options[:repository] || manifest.repository_override || repository_from_remote(env),
         "beads_issue" => options[:beads_issue],
         "topic" => options[:topic],
         "tags" => (options[:tags] || "").split(",").map(&:strip).reject(&:empty?),
@@ -329,6 +343,24 @@ module DocMetaCli
     end
 
     # --- shared -------------------------------------------------------
+
+    # The repository name for research frontmatter, when the manifest does
+    # not override it: the last path segment of origin's URL, minus any
+    # ".git". Derived rather than configured so a fresh consumer repo needs
+    # no manifest entry to get this right, and never a hardcoded project
+    # name - that was the machine-and-project-bound half of this script.
+    # nil when there is no origin to ask; the field is optional and an
+    # absent one is better than a wrong one.
+    def repository_from_remote(env)
+      res = Sh.run(%w[git remote get-url origin], envelope: env)
+      return nil unless res.success?
+
+      url = res.out.to_s.strip
+      return nil if url.empty?
+
+      name = File.basename(url).sub(/\.git\z/, "")
+      name.empty? ? nil : name
+    end
 
     def err_or(result, fallback)
       msg = result.err.to_s.strip

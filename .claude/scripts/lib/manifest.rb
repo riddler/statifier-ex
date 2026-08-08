@@ -137,6 +137,23 @@ class Manifest
       File.file?(candidate) ? candidate : nil
     end
 
+    # The main working tree, whatever checkout we are standing in:
+    # --git-common-dir is the main repo's .git for every worktree, so its
+    # parent is the main checkout. Never an absolute path baked into a
+    # constant - that was the machine-bound half of the old tmux_window.rb,
+    # which is the other caller (a tmux session's working directory has to
+    # be the main checkout, and it cannot be `/Users/<someone>/...`).
+    # Returns nil when git cannot answer.
+    def main_checkout
+      res = Sh.run(%w[git rev-parse --git-common-dir])
+      return nil unless res.success?
+
+      common = res.out.to_s.strip
+      return nil if common.empty?
+
+      File.dirname(File.expand_path(common))
+    end
+
     private
 
     def walk_up(dir)
@@ -149,20 +166,6 @@ class Manifest
 
         dir = parent
       end
-    end
-
-    # The main working tree, whatever checkout we are standing in:
-    # --git-common-dir is the main repo's .git for every worktree, so its
-    # parent is the main checkout. Never an absolute path baked into a
-    # constant - that was the machine-bound half of the old tmux_window.rb.
-    def main_checkout
-      res = Sh.run(%w[git rev-parse --git-common-dir])
-      return nil unless res.success?
-
-      common = res.out.to_s.strip
-      return nil if common.empty?
-
-      File.dirname(File.expand_path(common))
     end
 
     def parse(path)

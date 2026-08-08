@@ -6,6 +6,7 @@ require "stringio"
 require "tmpdir"
 require "fileutils"
 require_relative "../doc_meta"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 # DocMeta (pure filename/frontmatter logic).
@@ -19,21 +20,21 @@ class DocMetaLibTest < Minitest::Test
   end
 
   def test_build_filename_with_an_issue_id
-    filename = DocMeta.build_filename(date_stamp: "260802", description: "parallel exit sets", issue: "st-a42")
+    filename = DocMeta.build_filename(date_stamp: "260802", description: "parallel exit sets", issue: "zz-a42")
 
-    assert_equal "260802-st-a42-parallel-exit-sets.md", filename
+    assert_equal "260802-zz-a42-parallel-exit-sets.md", filename
   end
 
   def test_build_filename_with_a_dotted_issue_id
-    filename = DocMeta.build_filename(date_stamp: "260802", description: "w3c xsl predicator datamodel", issue: "st-00p.5")
+    filename = DocMeta.build_filename(date_stamp: "260802", description: "w3c xsl predicator datamodel", issue: "zz-00p.5")
 
-    assert_equal "260802-st-00p.5-w3c-xsl-predicator-datamodel.md", filename
+    assert_equal "260802-zz-00p.5-w3c-xsl-predicator-datamodel.md", filename
   end
 
   def test_build_filename_reproduces_this_bead_s_real_plan_filename
-    filename = DocMeta.build_filename(date_stamp: "260806", description: "skill-mechanics-scripts", issue: "st-hzf")
+    filename = DocMeta.build_filename(date_stamp: "260806", description: "skill-mechanics-scripts", issue: "zz-hzf")
 
-    assert_equal "260806-st-hzf-skill-mechanics-scripts.md", filename
+    assert_equal "260806-zz-hzf-skill-mechanics-scripts.md", filename
   end
 
   def test_kebab_collapses_punctuation_and_repeated_hyphens
@@ -49,9 +50,9 @@ class DocMetaLibTest < Minitest::Test
       "date" => "2026-08-06T17:16:38-0600",
       "researcher" => "Claude",
       "git_commit" => "af543224c7a803b3ac07fae3bec0a505c6387f6",
-      "branch" => "st-hzf-skill-mechanics-scripts",
+      "branch" => "zz-hzf-skill-mechanics-scripts",
       "repository" => "statifier-ex",
-      "beads_issue" => "st-hzf",
+      "beads_issue" => "zz-hzf",
       "topic" => "Extracting deterministic skill mechanics into shared scripts",
       "tags" => %w[research skills tooling],
       "status" => "complete",
@@ -176,6 +177,8 @@ end
 # `frontmatter` when no --date/--git-commit/--branch is supplied) and tmpdir
 # copies of documents (for `follow-up`).
 class DocMetaCliTest < Minitest::Test
+  include ManifestHelper
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -183,32 +186,77 @@ class DocMetaCliTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
   end
 
-  def run_cli(argv)
+  # thoughts_layout puts the document directories at thoughts/shared/*, so
+  # every --dir assertion below proves the value came from the manifest -
+  # docs/plans would have passed either way in this repo.
+  def run_cli(argv, fixture: "thoughts_layout")
     io = StringIO.new
-    code = DocMetaCli.run(argv, io: io)
+    code = nil
+    with_manifest(fixture) { code = DocMetaCli.run(argv, io: io) }
     [code, JSON.parse(io.string)]
+  end
+
+  # sabotage: restore VALID_DIRS = %w[docs/plans docs/research] -> the
+  # manifest's own plans directory is refused and this goes red
+  def test_filename_accepts_the_manifest_s_document_directories
+    code, env = run_cli(%w[filename --dir thoughts/shared/plans --description a-thing --date 260806])
+
+    assert_equal 0, code
+    assert_equal "thoughts/shared/plans/260806-a-thing.md", env["data"]["path"]
+  end
+
+  # sabotage: same - with VALID_DIRS hardcoded, docs/plans is accepted here
+  def test_filename_refuses_a_directory_this_project_does_not_use
+    _code, env = run_cli(%w[filename --dir docs/plans --description x --date 260806])
+
+    assert_equal "invalid_dir", env["blocked"].first["code"]
+    assert_match(%r{thoughts/shared/plans}, env["blocked"].first["message"])
+  end
+
+  # sabotage: restore the "statifier-ex" default -> red. The name is derived
+  # from the remote so a fresh consumer repo needs no manifest entry.
+  def test_frontmatter_derives_the_repository_name_from_the_git_remote
+    @fake.expect(%w[git remote get-url origin], out: "git@github.com:someone/other-repo.git\n")
+
+    _code, env = run_cli(%w[frontmatter --topic Foo --date d --git-commit c --branch b])
+
+    assert_equal "other-repo", env["data"]["fields"]["repository"]
+  end
+
+  # sabotage: read the override after the remote instead of before -> the
+  # remote wins and this goes red
+  def test_frontmatter_prefers_the_manifest_repository_override
+    manifest = manifest_with("thoughts_layout", "artifacts" => { "repository" => "named-in-manifest" })
+
+    io = StringIO.new
+    with_manifest(manifest) { DocMetaCli.run(%w[frontmatter --topic Foo --date d --git-commit c --branch b], io: io) }
+    env = JSON.parse(io.string)
+
+    assert_equal "named-in-manifest", env["data"]["fields"]["repository"]
+    assert_empty @fake.calls
   end
 
   def test_metadata_shells_the_triple
     @fake.expect(["date", "+%Y-%m-%dT%H:%M:%S%z"], out: "2026-08-06T17:16:38-0600\n")
     @fake.expect(%w[git rev-parse HEAD], out: "af543224c7a8\n")
-    @fake.expect(%w[git branch --show-current], out: "st-hzf-skill-mechanics-scripts\n")
+    @fake.expect(%w[git branch --show-current], out: "zz-hzf-skill-mechanics-scripts\n")
 
     code, env = run_cli(["metadata"])
 
     assert_equal 0, code
     assert_equal "2026-08-06T17:16:38-0600", env["data"]["date"]
     assert_equal "af543224c7a8", env["data"]["git_commit"]
-    assert_equal "st-hzf-skill-mechanics-scripts", env["data"]["branch"]
+    assert_equal "zz-hzf-skill-mechanics-scripts", env["data"]["branch"]
   end
 
   def test_filename_with_explicit_date_shells_nothing
-    code, env = run_cli(%w[filename --dir docs/plans --issue st-hzf --description skill-mechanics-scripts --date 260806])
+    code, env = run_cli(%w[filename --dir thoughts/shared/plans --issue zz-hzf --description skill-mechanics-scripts --date 260806])
 
     assert_equal 0, code
-    assert_equal "260806-st-hzf-skill-mechanics-scripts.md", env["data"]["filename"]
+    assert_equal "260806-zz-hzf-skill-mechanics-scripts.md", env["data"]["filename"]
     assert_equal [], env["commands"]
   end
 
@@ -221,16 +269,17 @@ class DocMetaCliTest < Minitest::Test
   def test_filename_shells_date_when_not_given
     @fake.expect(%w[date +%y%m%d], out: "260806\n")
 
-    _code, env = run_cli(%w[filename --dir docs/research --description something])
+    _code, env = run_cli(%w[filename --dir thoughts/shared/research --description something])
 
     assert_equal "260806-something.md", env["data"]["filename"]
   end
 
-  def test_frontmatter_with_explicit_fields_shells_nothing
+  def test_frontmatter_with_explicit_fields_shells_only_the_remote_lookup
+    @fake.expect(%w[git remote get-url origin], out: "https://github.com/someone/other-repo\n")
+
     code, env = run_cli(%w[frontmatter --topic Foo --date d --git-commit c --branch b --tags a,b])
 
     assert_equal 0, code
-    assert_equal [], env["commands"]
     assert_match(/^topic: "Foo"$/, env["data"]["frontmatter"])
     assert_equal %w[a b], env["data"]["fields"]["tags"]
   end

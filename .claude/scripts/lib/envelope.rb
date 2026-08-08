@@ -8,10 +8,10 @@ require "json"
 # Usage:
 #
 #   env = Envelope.new(script: "worktree_create")
-#   env.data[:path] = "../statifier-ex-worktrees/st-abc-foo"
+#   env.data[:path] = "../worktrees/abc-foo"
 #   env.commands << "git worktree add ..."
-#   env.warn(code: "plt_missing", message: "no PLT found, dialyzer will be slow")
-#   env.block!(code: "branch_exists", message: "branch st-abc-foo already exists", needs: "human")
+#   env.warn(code: "warm_cache_missing", message: "no build cache found, the first gate run will be slow")
+#   env.block!(code: "branch_exists", message: "branch abc-foo already exists", needs: "human")
 #   exit env.emit
 #
 # ok is computed, never set directly: it is true only when nothing was

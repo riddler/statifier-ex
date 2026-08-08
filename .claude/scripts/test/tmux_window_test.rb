@@ -4,6 +4,7 @@ require "minitest/autorun"
 require "json"
 require "stringio"
 require_relative "../tmux_window"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 # TmuxWindow::classify against captured fixtures, verbatim from
@@ -100,6 +101,15 @@ class TmuxWindowClassifyTest < Minitest::Test
 end
 
 class TmuxWindowTest < Minitest::Test
+  include ManifestHelper
+
+  # Session name and model are manifest data (`zz-session` / `fakemodel`),
+  # and the main checkout is asked of git at runtime. Asserting on
+  # "statifier-ex" or "opus" here would have gone green whether or not
+  # either value was ever read.
+  FIXTURE = "tmux"
+  MAIN = "/repos/myrepo"
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -109,18 +119,65 @@ class TmuxWindowTest < Minitest::Test
   def teardown
     Sh.runner = nil
     TmuxWindow.sleep_fn = nil
+    Manifest.reset!
   end
 
-  def run_tmux(argv)
+  def run_tmux(argv, fixture: FIXTURE)
     io = StringIO.new
-    code = TmuxWindow.run(argv, io: io)
+    code = nil
+    with_manifest(fixture) { code = TmuxWindow.run(argv, io: io) }
     [code, JSON.parse(io.string)]
+  end
+
+  # The main checkout is derived, not configured: every path that names a
+  # session working directory asks git for it first.
+  def expect_main_checkout
+    @fake.expect(%w[git rev-parse --git-common-dir], out: "#{MAIN}/.git\n")
+  end
+
+  # sabotage: default a missing tmux section to some session name instead of
+  # blocking -> red. A guessed name creates a second, parallel session
+  # nothing else in the kit can find.
+  def test_a_project_without_a_tmux_section_blocks_rather_than_guessing
+    code, env = run_tmux(["ensure-session"], fixture: "worktree")
+
+    assert_equal 1, code
+    assert_equal "tmux_not_configured", env["blocked"].first["code"]
+    assert_empty @fake.calls
+  end
+
+  # sabotage: restore a MAIN_REPO constant and use it instead of
+  # Manifest.main_checkout -> the git call never happens, the expectation
+  # goes unused and the new-session argv no longer matches -> red
+  def test_ensure_session_derives_the_main_checkout_from_git_not_a_constant
+    expect_main_checkout
+    @fake.expect(["tmux", "has-session", "-t", "=zz-session"], exitstatus: 1)
+    @fake.expect(["tmux", "new-session", "-d", "-s", "zz-session", "-c", MAIN], exitstatus: 0)
+
+    code, env = run_tmux(["ensure-session"])
+
+    assert_equal 0, code
+    assert_equal MAIN, env["data"]["main_repo"]
+    refute_match(%r{/Users/}, File.read(File.expand_path("../tmux_window.rb", __dir__)))
+  end
+
+  # sabotage: block instead of reporting when git cannot answer -> this is
+  # already the behavior; invert it (fall back to Dir.pwd) and the block
+  # disappears -> red
+  def test_ensure_session_blocks_when_git_cannot_name_the_main_checkout
+    @fake.expect(%w[git rev-parse --git-common-dir], exitstatus: 1, err: "not a git repository\n")
+
+    code, env = run_tmux(["ensure-session"])
+
+    assert_equal 1, code
+    assert_equal "main_checkout_unknown", env["blocked"].first["code"]
   end
 
   # --- ensure-session ------------------------------------------------------
 
   def test_ensure_session_reuses_an_existing_session
-    @fake.expect(["tmux", "has-session", "-t", "=statifier-ex"], exitstatus: 0)
+    expect_main_checkout
+    @fake.expect(["tmux", "has-session", "-t", "=zz-session"], exitstatus: 0)
 
     code, env = run_tmux(["ensure-session"])
 
@@ -129,11 +186,9 @@ class TmuxWindowTest < Minitest::Test
   end
 
   def test_ensure_session_creates_when_missing
-    @fake.expect(["tmux", "has-session", "-t", "=statifier-ex"], exitstatus: 1)
-    @fake.expect(
-      ["tmux", "new-session", "-d", "-s", "statifier-ex", "-c", "/Users/johnnyt/repos/github/statifier-ex"],
-      exitstatus: 0
-    )
+    expect_main_checkout
+    @fake.expect(["tmux", "has-session", "-t", "=zz-session"], exitstatus: 1)
+    @fake.expect(["tmux", "new-session", "-d", "-s", "zz-session", "-c", MAIN], exitstatus: 0)
 
     code, env = run_tmux(["ensure-session"])
 
@@ -142,6 +197,8 @@ class TmuxWindowTest < Minitest::Test
   end
 
   def test_ensure_session_dry_run_issues_no_commands
+    expect_main_checkout
+
     code, env = run_tmux(["ensure-session", "--dry-run"])
 
     assert_equal 0, code
@@ -152,74 +209,74 @@ class TmuxWindowTest < Minitest::Test
   # --- open ------------------------------------------------------------------
 
   def test_open_creates_a_window_and_seeds_it
-    @fake.expect(["tmux", "list-windows", "-t", "=statifier-ex", "-F", '#{window_name}'], out: "other-window\n")
+    @fake.expect(["tmux", "list-windows", "-t", "=zz-session", "-F", '#{window_name}'], out: "other-window\n")
     @fake.expect(
-      ["tmux", "new-window", "-d", "-P", "-F", '#{window_id}', "-t", "=statifier-ex:", "-n", "st-abc-thing",
-       "-c", "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing"],
+      ["tmux", "new-window", "-d", "-P", "-F", '#{window_id}', "-t", "=zz-session:", "-n", "zz-abc-thing",
+       "-c", "/repos/zz-worktrees/zz-abc-thing"],
       out: "@42\n"
     )
     @fake.expect(["tmux", "send-keys", "-t", "@42"], out: "")
 
     code, env = run_tmux([
-                            "open", "st-abc-thing", "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing",
-                            "st-abc", "/work st-abc --auto"
+                            "open", "zz-abc-thing", "/repos/zz-worktrees/zz-abc-thing",
+                            "zz-abc", "/work zz-abc --auto"
                           ])
 
     assert_equal 0, code
     assert_equal "@42", env["data"]["window_id"]
-    assert_equal "opus", env["data"]["model"]
+    assert_equal "fakemodel", env["data"]["model"]
     assert_equal false, env["data"]["skipped"]
 
     send_call = @fake.calls.find { |c| c.argv[0, 2] == %w[tmux send-keys] }
     assert_equal "@42", send_call.argv[3]
     keys = send_call.argv[4]
-    assert_includes keys, "claude --permission-mode auto --model opus"
-    assert_includes keys, "/work st-abc --auto"
+    assert_includes keys, "claude --permission-mode auto --model fakemodel"
+    assert_includes keys, "/work zz-abc --auto"
     assert_includes keys, "/commit --auto"
-    assert_includes keys, "unrelated to st-abc"
+    assert_includes keys, "unrelated to zz-abc"
     assert_equal "Enter", send_call.argv[5]
   end
 
   def test_open_skips_when_window_name_already_exists
-    @fake.expect(["tmux", "list-windows", "-t", "=statifier-ex", "-F", '#{window_name}'], out: "st-abc-thing\n")
+    @fake.expect(["tmux", "list-windows", "-t", "=zz-session", "-F", '#{window_name}'], out: "zz-abc-thing\n")
     # No new-window or send-keys expectation - a name hit must not create a
     # second window.
 
-    code, env = run_tmux(["open", "st-abc-thing", "/some/path", "st-abc", "/work st-abc --auto"])
+    code, env = run_tmux(["open", "zz-abc-thing", "/some/path", "zz-abc", "/work zz-abc --auto"])
 
     assert_equal 0, code
     assert_equal true, env["data"]["skipped"]
   end
 
   def test_open_never_sends_keys_when_the_captured_window_id_is_empty
-    @fake.expect(["tmux", "list-windows", "-t", "=statifier-ex", "-F", '#{window_name}'], out: "")
+    @fake.expect(["tmux", "list-windows", "-t", "=zz-session", "-F", '#{window_name}'], out: "")
     @fake.expect(["tmux", "new-window"], out: "") # empty id despite success
     # No send-keys expectation registered at all - FakeSh raises if the code
     # tries. An empty -t "" resolves to the *current* window in real tmux,
     # which cost a live window on 2026-08-02.
 
-    code, env = run_tmux(["open", "st-abc-thing", "/some/path", "st-abc", "/work st-abc --auto"])
+    code, env = run_tmux(["open", "zz-abc-thing", "/some/path", "zz-abc", "/work zz-abc --auto"])
 
     assert_equal 1, code
     assert_equal "window_id_empty", env["blocked"].first["code"]
   end
 
   def test_open_dry_run_renders_a_pasteable_command_line
-    @fake.expect(["tmux", "list-windows", "-t", "=statifier-ex", "-F", '#{window_name}'], out: "")
+    @fake.expect(["tmux", "list-windows", "-t", "=zz-session", "-F", '#{window_name}'], out: "")
 
     code, env = run_tmux([
-                            "open", "--dry-run", "st-abc-thing",
-                            "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing",
-                            "st-abc", "/work st-abc --auto"
+                            "open", "--dry-run", "zz-abc-thing",
+                            "/repos/zz-worktrees/zz-abc-thing",
+                            "zz-abc", "/work zz-abc --auto"
                           ])
 
     assert_equal 0, code
     send_line = env["commands"].find { |c| c.include?("send-keys") }
     refute_nil send_line
-    assert_includes send_line, "claude --permission-mode auto --model opus"
+    assert_includes send_line, "claude --permission-mode auto --model fakemodel"
     # Sh.render single-quotes the seeded-command argument, exactly what a
     # human would type at a fish prompt.
-    assert_match(/'.*claude --permission-mode auto --model opus.*'/, send_line)
+    assert_match(/'.*claude --permission-mode auto --model fakemodel.*'/, send_line)
   end
 
   # --- find --------------------------------------------------------------
@@ -227,10 +284,10 @@ class TmuxWindowTest < Minitest::Test
   def test_find_matches_on_name_and_path_together
     @fake.expect(
       ["tmux", "list-panes", "-a", "-F", '#{window_id} #{window_name} #{pane_current_path}'],
-      out: "@1 other-name /some/other/path\n@2 st-abc-thing /Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing\n"
+      out: "@1 other-name /some/other/path\n@2 zz-abc-thing /repos/zz-worktrees/zz-abc-thing\n"
     )
 
-    code, env = run_tmux(["find", "st-abc-thing", "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing"])
+    code, env = run_tmux(["find", "zz-abc-thing", "/repos/zz-worktrees/zz-abc-thing"])
 
     assert_equal 0, code
     assert_equal true, env["data"]["found"]
@@ -243,7 +300,7 @@ class TmuxWindowTest < Minitest::Test
       out: "@1 other-name /some/other/path\n"
     )
 
-    code, env = run_tmux(["find", "st-abc-thing", "/nowhere"])
+    code, env = run_tmux(["find", "zz-abc-thing", "/nowhere"])
 
     assert_equal 0, code
     assert_equal false, env["data"]["found"]
@@ -251,11 +308,11 @@ class TmuxWindowTest < Minitest::Test
   end
 
   def test_find_two_matching_windows_blocks
-    out = "@1 st-abc-thing /Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing\n" \
-          "@2 st-abc-thing /Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing\n"
+    out = "@1 zz-abc-thing /repos/zz-worktrees/zz-abc-thing\n" \
+          "@2 zz-abc-thing /repos/zz-worktrees/zz-abc-thing\n"
     @fake.expect(["tmux", "list-panes", "-a", "-F", '#{window_id} #{window_name} #{pane_current_path}'], out: out)
 
-    code, env = run_tmux(["find", "st-abc-thing", "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-thing"])
+    code, env = run_tmux(["find", "zz-abc-thing", "/repos/zz-worktrees/zz-abc-thing"])
 
     assert_equal 1, code
     assert_equal "ambiguous_window_match", env["blocked"].first["code"]

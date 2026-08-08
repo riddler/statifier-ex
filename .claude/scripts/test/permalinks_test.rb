@@ -62,7 +62,7 @@ class PermalinksLibTest < Minitest::Test
 
   def test_rewrite_leaves_non_file_line_text_alone
     text = "Plain prose with no backtick references, and a `bare code span`, " \
-           "and a version number 2.1.220, and a `st-a42` bead id."
+           "and a version number 2.1.220, and a `zz-a42` bead id."
 
     rewritten, subs = Permalinks.rewrite(text, owner: "o", repo: "r", commit: "c")
 

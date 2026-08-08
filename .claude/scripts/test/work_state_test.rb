@@ -13,40 +13,40 @@ require_relative "support/manifest_helper"
 class WorkStateLibTest < Minitest::Test
   def test_finds_a_doc_naming_the_bead_with_a_description_after_it
     in_tmp_dir do |dir|
-      write(dir, "260806-st-hzf-skill-mechanics-scripts.md")
+      write(dir, "260806-zz-hzf-skill-mechanics-scripts.md")
 
-      assert_equal ["#{dir}/260806-st-hzf-skill-mechanics-scripts.md"], WorkState.find_docs(dir, "st-hzf")
+      assert_equal ["#{dir}/260806-zz-hzf-skill-mechanics-scripts.md"], WorkState.find_docs(dir, "zz-hzf")
     end
   end
 
   def test_finds_a_doc_with_a_dotted_issue_id
     in_tmp_dir do |dir|
-      write(dir, "260806-st-00p.3-regression-ratchet.md")
+      write(dir, "260806-zz-00p.3-regression-ratchet.md")
 
-      assert_equal ["#{dir}/260806-st-00p.3-regression-ratchet.md"], WorkState.find_docs(dir, "st-00p.3")
+      assert_equal ["#{dir}/260806-zz-00p.3-regression-ratchet.md"], WorkState.find_docs(dir, "zz-00p.3")
     end
   end
 
   def test_does_not_match_a_bead_id_that_is_only_a_prefix_of_another
     in_tmp_dir do |dir|
-      write(dir, "260806-st-hzfoo-unrelated.md")
+      write(dir, "260806-zz-hzfoo-unrelated.md")
 
-      assert_empty WorkState.find_docs(dir, "st-hzf")
+      assert_empty WorkState.find_docs(dir, "zz-hzf")
     end
   end
 
   def test_returns_empty_when_the_directory_does_not_exist
-    assert_empty WorkState.find_docs("/no/such/dir/at/all", "st-hzf")
+    assert_empty WorkState.find_docs("/no/such/dir/at/all", "zz-hzf")
   end
 
   def test_sorts_multiple_matches_by_filename_oldest_date_first
     in_tmp_dir do |dir|
-      write(dir, "260810-st-hzf-later.md")
-      write(dir, "260801-st-hzf-earlier.md")
+      write(dir, "260810-zz-hzf-later.md")
+      write(dir, "260801-zz-hzf-earlier.md")
 
       assert_equal(
-        ["#{dir}/260801-st-hzf-earlier.md", "#{dir}/260810-st-hzf-later.md"],
-        WorkState.find_docs(dir, "st-hzf")
+        ["#{dir}/260801-zz-hzf-earlier.md", "#{dir}/260810-zz-hzf-later.md"],
+        WorkState.find_docs(dir, "zz-hzf")
       )
     end
   end
@@ -100,9 +100,9 @@ class WorkStateCliTest < Minitest::Test
   end
 
   def test_bead_not_found_blocks_with_the_bd_failure_reason
-    @fake.expect(["bd", "show", "st-nope", "--json"], out: "", err: "not found", exitstatus: 1)
+    @fake.expect(["bd", "show", "zz-nope", "--json"], out: "", err: "not found", exitstatus: 1)
 
-    code, result = run_work_state(["st-nope"])
+    code, result = run_work_state(["zz-nope"])
 
     assert_equal 1, code
     assert_equal ["bead_not_found"], result["blocked"].map { |b| b["code"] }
@@ -110,12 +110,12 @@ class WorkStateCliTest < Minitest::Test
 
   def test_reports_bead_and_loop_notes_with_no_docs_present
     in_tmp_repo do
-      expect_bd_show("st-abc", notes: "loop: Phase 1 complete, commit deadbee\nloop: Phase 2 complete, commit c0ffee1")
+      expect_bd_show("zz-abc", notes: "loop: Phase 1 complete, commit deadbee\nloop: Phase 2 complete, commit c0ffee1")
 
-      code, result = run_work_state(["st-abc"])
+      code, result = run_work_state(["zz-abc"])
 
       assert_equal 0, code
-      assert_equal "st-abc", result["data"]["bead"]["id"]
+      assert_equal "zz-abc", result["data"]["bead"]["id"]
       assert_equal "in_progress", result["data"]["bead"]["status"]
       assert_empty result["data"]["research_docs"]
       assert_empty result["data"]["plan_docs"]
@@ -127,9 +127,9 @@ class WorkStateCliTest < Minitest::Test
 
   def test_non_loop_notes_are_excluded_from_loop_notes
     in_tmp_repo do
-      expect_bd_show("st-abc", notes: "Motivation: some free text with no loop grammar at all")
+      expect_bd_show("zz-abc", notes: "Motivation: some free text with no loop grammar at all")
 
-      _code, result = run_work_state(["st-abc"])
+      _code, result = run_work_state(["zz-abc"])
 
       assert_empty result["data"]["loop_notes"]
       assert_nil result["data"]["last_loop_note"]
@@ -140,17 +140,17 @@ class WorkStateCliTest < Minitest::Test
     in_tmp_repo do
       FileUtils.mkdir_p("docs/research")
       FileUtils.mkdir_p("docs/plans")
-      File.write("docs/research/260801-st-abc-some-topic.md", "# Research\n")
-      File.write("docs/plans/260802-st-abc-a-plan.md", sample_plan)
+      File.write("docs/research/260801-zz-abc-some-topic.md", "# Research\n")
+      File.write("docs/plans/260802-zz-abc-a-plan.md", sample_plan)
 
-      expect_bd_show("st-abc", notes: "")
+      expect_bd_show("zz-abc", notes: "")
 
-      _code, result = run_work_state(["st-abc"])
+      _code, result = run_work_state(["zz-abc"])
 
-      assert_equal ["docs/research/260801-st-abc-some-topic.md"], result["data"]["research_docs"]
-      assert_equal ["docs/plans/260802-st-abc-a-plan.md"], result["data"]["plan_docs"]
+      assert_equal ["docs/research/260801-zz-abc-some-topic.md"], result["data"]["research_docs"]
+      assert_equal ["docs/plans/260802-zz-abc-a-plan.md"], result["data"]["plan_docs"]
       refute_nil result["data"]["plan"]
-      assert_equal "docs/plans/260802-st-abc-a-plan.md", result["data"]["plan"]["path"]
+      assert_equal "docs/plans/260802-zz-abc-a-plan.md", result["data"]["plan"]["path"]
       assert_equal 1, result["data"]["plan"]["next_phase"]
     end
   end
@@ -158,15 +158,15 @@ class WorkStateCliTest < Minitest::Test
   def test_warns_on_multiple_plan_docs_but_still_reports_the_first
     in_tmp_repo do
       FileUtils.mkdir_p("docs/plans")
-      File.write("docs/plans/260801-st-abc-first.md", sample_plan)
-      File.write("docs/plans/260805-st-abc-second.md", sample_plan)
+      File.write("docs/plans/260801-zz-abc-first.md", sample_plan)
+      File.write("docs/plans/260805-zz-abc-second.md", sample_plan)
 
-      expect_bd_show("st-abc", notes: "")
+      expect_bd_show("zz-abc", notes: "")
 
-      _code, result = run_work_state(["st-abc"])
+      _code, result = run_work_state(["zz-abc"])
 
       assert_equal 2, result["data"]["plan_docs"].length
-      assert_equal "docs/plans/260801-st-abc-first.md", result["data"]["plan"]["path"]
+      assert_equal "docs/plans/260801-zz-abc-first.md", result["data"]["plan"]["path"]
       assert_includes result["warnings"].map { |w| w["code"] }, "multiple_plan_docs"
     end
   end
@@ -182,15 +182,15 @@ class WorkStateCliTest < Minitest::Test
     in_tmp_repo("thoughts_layout") do
       FileUtils.mkdir_p("thoughts/shared/plans")
       FileUtils.mkdir_p("thoughts/shared/research")
-      File.write("thoughts/shared/plans/260801-st-abc-a-plan.md", sample_plan)
-      File.write("thoughts/shared/research/260801-st-abc-a-question.md", "# Research\n")
+      File.write("thoughts/shared/plans/260801-zz-abc-a-plan.md", sample_plan)
+      File.write("thoughts/shared/research/260801-zz-abc-a-question.md", "# Research\n")
 
-      expect_bd_show("st-abc", notes: "")
+      expect_bd_show("zz-abc", notes: "")
 
-      _code, result = run_work_state(["st-abc"])
+      _code, result = run_work_state(["zz-abc"])
 
-      assert_equal ["thoughts/shared/plans/260801-st-abc-a-plan.md"], result["data"]["plan_docs"]
-      assert_equal ["thoughts/shared/research/260801-st-abc-a-question.md"], result["data"]["research_docs"]
+      assert_equal ["thoughts/shared/plans/260801-zz-abc-a-plan.md"], result["data"]["plan_docs"]
+      assert_equal ["thoughts/shared/research/260801-zz-abc-a-question.md"], result["data"]["research_docs"]
     end
   end
 
@@ -199,11 +199,11 @@ class WorkStateCliTest < Minitest::Test
   # the one bd show call, nothing more.
   def test_commands_carries_only_the_bd_show_call
     in_tmp_repo do
-      expect_bd_show("st-abc", notes: "")
+      expect_bd_show("zz-abc", notes: "")
 
-      _code, result = run_work_state(["st-abc"])
+      _code, result = run_work_state(["zz-abc"])
 
-      assert_equal ["bd show st-abc --json"], result["commands"]
+      assert_equal ["bd show zz-abc --json"], result["commands"]
     end
   end
 

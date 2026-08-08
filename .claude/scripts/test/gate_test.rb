@@ -485,8 +485,8 @@ class GateTest < Minitest::Test
       mix.lock
     ]
     non_matching = %w[
-      docs/plans/260806-st-hzf-x.md
-      changelog.d/st-hzf.md
+      docs/plans/260806-zz-hzf-x.md
+      changelog.d/zz-hzf.md
       .claude/scripts/gate.rb
       docs/adr/0011.md
       README.md

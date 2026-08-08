@@ -8,6 +8,53 @@ phased plan that builds it out.
 
 This file is the contract for anyone writing or calling a script here.
 
+## The manifest is an input to the contract
+
+Every project-specific constant these scripts once carried inline - the bead
+prefix, the worktrees directory, the gate commands, the tmux session name,
+the commit-message limits - now comes from **`.claude/wurk.json`**, a
+manifest read by `lib/manifest.rb`. The schema lives in
+`~/repos/github/wurk/docs/manifest.md`; that document and `lib/manifest.rb`
+change in the same commit, and the loader is the authority.
+
+Why: the set was uncopyable to a sibling repo while each script hardcoded
+`st-`, `statifier-ex-worktrees`, `mix quality`, and an absolute
+home-directory path. Parameterizing them in place is the prerequisite for
+lifting the kit out of this repo entirely.
+
+Resolution, in order: walk **up** from the working directory looking for
+`.claude/wurk.json` (so a worktree finds its own copy, which is what makes a
+schema change testable on the branch that makes it), then fall back to the
+main checkout via `git rev-parse --git-common-dir`.
+
+Validation is deliberately asymmetric: an unknown key **warns** (a consumer
+repo may be pinned to a newer schema than the installed kit), a missing
+required key **blocks** naming the field, an enum with an unrecognized value
+**blocks** rather than defaulting (every enum selects a structural behavior),
+and a command field that is not an argv array of strings is a schema error,
+never something to split on whitespace.
+
+Lint it standalone:
+
+```sh
+ruby .claude/scripts/lib/manifest.rb check [--file PATH]
+```
+
+Scripts read it through one entry point:
+
+```ruby
+manifest = Manifest.require!(env)
+return env.emit(io) unless manifest
+```
+
+`require!` turns a missing or invalid manifest into an envelope block rather
+than an exception mid-run. A capability the manifest does not configure is
+reported, never guessed: no `tmux` section blocks `tmux_window.rb`'s
+session-addressing subcommands rather than inventing a session name, no
+`gate.report` means tier 0, `forge.kind: gitlab` blocks the gh-based and
+permalink-writing scripts with `unsupported_forge` (see `lib/forge.rb`)
+instead of half-working.
+
 ## Ruby version and syntax
 
 **System Ruby 2.6.10 only** (`/usr/bin/ruby` on macOS - this repo's `mise.toml`
@@ -41,7 +88,7 @@ Every script prints **exactly one JSON object on stdout**:
   "ok": true,
   "script": "worktree_create",
   "data": {},
-  "warnings": [{"code": "plt_missing", "message": "..."}],
+  "warnings": [{"code": "warm_cache_missing", "message": "..."}],
   "blocked": [{"code": "branch_exists", "message": "...", "needs": "human"}],
   "commands": ["git worktree add ...", "..."]
 }
@@ -147,11 +194,38 @@ reported green having measured none of it. st-hzf's own Phase 12 left a test
 red and reported the phase done; only a hand-run caught it.
 
 Registering the stage also widened the carve-out predicate - see
-`lib/touches_elixir.rb`, where `any?` still means "touches the Elixir build"
-and `gate_applicable?` adds `.claude/scripts/` on top. A gate stage that
-measures something outside the Elixir build has to be reflected in the
-predicate that decides whether the gate runs at all, or it never fires on the
-branches it exists for.
+`lib/gate_paths.rb`, where `touches_build?` means "touches the project's
+build" (`gate.build_paths`) and `gate_applicable?` unions in
+`gate.also_gated_paths` on top. A gate stage that measures something outside
+the build has to be reflected in the predicate that decides whether the gate
+runs at all, or it never fires on the branches it exists for. The two lists
+are separate manifest fields precisely because conflating them once let this
+repo report "no gate applicable" for a branch of ~8k lines of Ruby.
+
+### Fixture manifests
+
+**A test never reads the repo's real `.claude/wurk.json`.** Asserting that a
+bead id starts with `st-` passes here for the wrong reason - this repo
+happens to be statifier - and proves nothing about the value having been read
+from the manifest at all.
+
+Tests drive every manifest-derived value from `test/fixtures/manifests/*.json`
+via `test/support/manifest_helper.rb`. The fixtures deliberately use a `zz`
+bead prefix, `make` gate commands, and names like `faketool` so nothing in
+them can be confused with a real value.
+
+```ruby
+include ManifestHelper
+
+with_manifest("valid") { assert_equal "zz", Manifest.current.bead_prefix }
+manifest_with("worktree", "forge" => {"kind" => "gitlab"})  # one field different
+in_tmp_repo("valid") { ... }   # a scratch dir that carries .claude/wurk.json,
+                               # for scripts that locate their own manifest
+```
+
+`in_tmp_repo` rather than a bare `mktmpdir` for anything that walks up to
+find its manifest: inside a bare one the walk-up finds nothing and falls
+through to `git rev-parse`, which `FakeSh` correctly refuses.
 
 ## `gate.rb`: the quality-gate wrapper
 
@@ -190,19 +264,24 @@ constrained script here - see
 
 ## Writing a new script
 
-1. Require `lib/envelope`, `lib/sh`, and `lib/cli`.
+1. Require `lib/envelope`, `lib/sh`, and `lib/cli` - plus `lib/manifest` if
+   the script needs any project-specific value. **Never hardcode one.** If
+   the value it needs is not in the schema, add it to the schema and to
+   `wurk/docs/manifest.md` in the same commit; do not fork a script.
 2. Build the option parser with `Cli.build`, add script-specific flags in the
    block, parse with `Cli.parse!`.
-3. Build an `Envelope.new(script: "<name>")`, do the work, route conditions
-   the script cannot resolve itself into `env.block!`, informational notes
-   into `env.warn`, and exit with `env.emit`.
+3. Build an `Envelope.new(script: "<name>")`, call `Manifest.require!(env)`
+   and return the envelope if it comes back nil, do the work, route
+   conditions the script cannot resolve itself into `env.block!`,
+   informational notes into `env.warn`, and exit with `env.emit`.
 4. Every `Sh.run` call that mutates anything must be skippable under
    `--dry-run` - populate `commands` regardless, but only actually invoke
    `Sh.run` when `options[:dry_run]` is false.
 5. Add `test/<name>_test.rb` using `test/support/fake_sh.rb` to fake every
    shelled-out command; a script that shells out to something the test did
    not register a fixture for fails loudly (`FakeSh::UnexpectedCommand`),
-   not silently.
+   not silently. Drive every manifest-derived value from a fixture manifest
+   (`test/support/manifest_helper.rb`), never from the real one.
 6. `chmod +x` the script (top-level scripts are the ones directly invoked;
    files under `lib/` and `test/` are not and do not need the executable
    bit). `test/contract_test.rb` checks every direct child of
