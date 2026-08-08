@@ -32,7 +32,7 @@ orchestrator overrides every row here.
 | `mix quality` in any profile | any time | never - running the gate costs nothing but time |
 | `git commit` on the issue's worktree branch | the claimed issue's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on `main`, on a red gate, on a `--quick` or `--test-scope changed` run, or with unrelated changes in the tree |
 | `git rebase` onto `origin/main` in a worktree (`/refresh-worktree`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
-| `git push`, `gh pr create` (`/merge-request`) | the user asks for it in their own words | inferred from "the work is done"; finishing an issue is not a request to publish it |
+| `git push`, `gh pr create` (`/merge-request`) | the user asks for it in their own words - invoking `/merge-request` itself satisfies this, so the skill does not stop to ask again | inferred from "the work is done"; finishing an issue is not a request to publish it |
 | `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
