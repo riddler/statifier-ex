@@ -32,6 +32,7 @@ defmodule Statifier.Validator.Error do
 
   @type reason ::
           {:duplicate_id, id :: binary()}
+          | {:empty_id}
           | {:unresolved_target, id :: binary()}
           | {:unresolved_initial, id :: binary()}
           | {:initial_not_descendant, id :: binary(), parent_id :: binary()}
@@ -49,6 +50,7 @@ defmodule Statifier.Validator.Error do
           | {:final_has_transitions, id :: binary() | nil}
           | {:default_entry_not_enterable, id :: binary(), child_kind :: atom()}
           | {:donedata_not_on_final, id :: binary()}
+          | {:content_expr_and_text, expr :: binary()}
           | {:bad_namespace, uri :: binary() | nil}
           | {:bad_version, version :: binary() | nil}
 
@@ -77,6 +79,27 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:duplicate_id, id},
       message: "duplicate state id #{inspect(id)}",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 1 (spec 3.14, st-2jp): a state was written with `id=""`. `id` is
+  typed as an XML Schema ID, whose lexical space is an XML `Name` and
+  therefore excludes the empty string, so an empty id is not a name a
+  transition could ever target.
+
+  This is a different case from an absent `id`, which is legal and reported
+  by nothing (`lib/statifier/document/state.ex`): the two are told apart by
+  the `attribute_locations[:id]` key, never by the value alone. The reason
+  carries no payload - the offending value is the empty string, and the
+  location is the span the author wrote it at.
+  """
+  @spec empty_id(location :: Location.t()) :: t()
+  def empty_id(%Location{} = location) do
+    %__MODULE__{
+      reason: {:empty_id},
+      message: "state id must not be empty - an absent id is legal, an empty one is not",
       location: location
     }
   end
@@ -352,6 +375,26 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:donedata_not_on_final, id},
       message: "state #{inspect(id)} carries <donedata>, which is only legal on <final>",
+      location: location
+    }
+  end
+
+  @doc """
+  st-f6k (spec 5.6): a `<content>` element carries both an `expr` attribute
+  and inline text - the spec's "MUST NOT specify both" that
+  `lib/statifier/document/content.ex` deliberately leaves representable so
+  this check can report it. `expr` is the attribute's value as lowered, so
+  the message quotes the expression rather than the text, which has no span
+  of its own (`Statifier.Document.Content`'s moduledoc). Reported at the
+  `<content>` element's own `location`, the only span covering both halves
+  of the conflict.
+  """
+  @spec content_expr_and_text(expr :: binary(), location :: Location.t()) :: t()
+  def content_expr_and_text(expr, %Location{} = location) when is_binary(expr) do
+    %__MODULE__{
+      reason: {:content_expr_and_text, expr},
+      message:
+        "<content> must not specify both an expr attribute (#{inspect(expr)}) and inline text",
       location: location
     }
   end

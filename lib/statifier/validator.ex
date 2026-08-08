@@ -31,6 +31,7 @@ defmodule Statifier.Validator do
 
   alias Statifier.Document
   alias Statifier.Validator.Checks.Boilerplate
+  alias Statifier.Validator.Checks.Content
   alias Statifier.Validator.Checks.DefaultEntry
   alias Statifier.Validator.Checks.Donedata
   alias Statifier.Validator.Checks.Enums
@@ -52,6 +53,7 @@ defmodule Statifier.Validator do
     &Final.check/2,
     &DefaultEntry.check/2,
     &Donedata.check/2,
+    &Content.check/2,
     &Boilerplate.check/2,
     &Enums.check/2
   ]
