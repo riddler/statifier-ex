@@ -33,6 +33,14 @@ defmodule Statifier.Lowering do
   parent's own element name is known only to itself, and is used solely to
   word a `{:misplaced_element, name, parent_name}` error about one of *its
   own* children - it is never handed down to a child builder.
+
+  ## Relaxed input
+
+  Both dispatch sites (`lower/1`, `walk_child/4`) accept an element with no
+  namespace as SCXML's own vocabulary, not only one resolved to the SCXML
+  namespace. `Statifier.Lowering.Namespace.scxml_vocabulary?/1` is the
+  mechanism and its moduledoc states the commitment (st-700); this is a
+  pointer for the reader who starts here instead.
   """
 
   alias Statifier.Document
@@ -63,7 +71,7 @@ defmodule Statifier.Lowering do
     scope = Namespace.push(%{}, root)
     {uri, local_name} = Namespace.resolve(name, scope)
 
-    if uri in [nil, Namespace.scxml_namespace()] do
+    if Namespace.scxml_vocabulary?(uri) do
       case Map.fetch(@dispatch, local_name) do
         {:ok, builder} ->
           {document, errors} = builder.(root, %{ns_scope: scope})
@@ -110,7 +118,7 @@ defmodule Statifier.Lowering do
     scope = Namespace.push(Map.get(ctx, :ns_scope, %{}), element)
     {uri, local_name} = Namespace.resolve(name, scope)
 
-    if uri in [nil, Namespace.scxml_namespace()] do
+    if Namespace.scxml_vocabulary?(uri) do
       child_ctx = Map.put(ctx, :ns_scope, scope)
 
       case Map.fetch(@dispatch, local_name) do
