@@ -38,6 +38,7 @@ defmodule Statifier.Lowering do
   alias Statifier.Document
   alias Statifier.Lowering.Builders
   alias Statifier.Lowering.Error
+  alias Statifier.Lowering.Namespace
   alias Statifier.Parser.DOM.Element
   alias Statifier.Parser.DOM.Text
 
@@ -58,14 +59,21 @@ defmodule Statifier.Lowering do
   }
 
   @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
-  def lower(%Element{name: name} = root) do
-    case Map.fetch(@dispatch, name) do
-      {:ok, builder} ->
-        {document, errors} = builder.(root, %{})
-        finalize(document, errors)
+  def lower(%Element{name: name, location: location} = root) do
+    scope = Namespace.push(%{}, root)
+    {uri, local_name} = Namespace.resolve(name, scope)
 
-      :error ->
-        {:error, [Error.unexpected_root(name, root.location)]}
+    if uri in [nil, Namespace.scxml_namespace()] do
+      case Map.fetch(@dispatch, local_name) do
+        {:ok, builder} ->
+          {document, errors} = builder.(root, %{ns_scope: scope})
+          finalize(document, errors)
+
+        :error ->
+          {:error, [Error.unexpected_root(local_name, location)]}
+      end
+    else
+      {:error, [Error.foreign_element(name, uri, location)]}
     end
   end
 
@@ -99,13 +107,22 @@ defmodule Statifier.Lowering do
   end
 
   defp walk_child(%Element{name: name, location: location} = element, ctx, results, errors) do
-    case Map.fetch(@dispatch, name) do
-      {:ok, builder} ->
-        {result, child_errors} = builder.(element, ctx)
-        {[result | results], Enum.reverse(child_errors) ++ errors}
+    scope = Namespace.push(Map.get(ctx, :ns_scope, %{}), element)
+    {uri, local_name} = Namespace.resolve(name, scope)
 
-      :error ->
-        {results, [Error.unsupported(name, location) | errors]}
+    if uri in [nil, Namespace.scxml_namespace()] do
+      child_ctx = Map.put(ctx, :ns_scope, scope)
+
+      case Map.fetch(@dispatch, local_name) do
+        {:ok, builder} ->
+          {result, child_errors} = builder.(element, child_ctx)
+          {[result | results], Enum.reverse(child_errors) ++ errors}
+
+        :error ->
+          {results, [Error.unsupported(name, location) | errors]}
+      end
+    else
+      {results, [Error.foreign_element(name, uri, location) | errors]}
     end
   end
 

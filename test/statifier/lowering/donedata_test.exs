@@ -62,6 +62,9 @@ defmodule Statifier.Lowering.DonedataTest do
       assert %Donedata{content: %Content{text: " foo ", expr: nil}} = state.donedata
     end
 
+    # sabotage: `build_content/2` skips `Attributes.put_location/4` for
+    # `:expr` and returns an empty `attribute_locations` map instead -> the
+    # `Map.has_key?/2` assertion below reddens
     test "<donedata> with <content expr=\"...\"/> lowers expr with its value span" do
       xml = """
       <scxml>
@@ -79,6 +82,9 @@ defmodule Statifier.Lowering.DonedataTest do
       assert Map.has_key?(content.attribute_locations, :expr)
     end
 
+    # sabotage: `build_content/2` blanks `text` to `""` whenever `expr` is
+    # present instead of always using `DOM.text/1`'s result -> the `text:
+    # "bar"` assertion below reddens
     test "<donedata> with <content> carrying both text and expr is representable" do
       xml = """
       <scxml>

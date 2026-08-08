@@ -9,11 +9,11 @@ defmodule Statifier.Lowering.Error do
   Decision 2).
 
   The `reason` union below is the finished set for the whole bead, declared
-  once here even though this phase only produces `:unsupported_element`,
-  `:stray_text`, and `:unexpected_root`. Later phases add a constructor
-  rather than reopen the type: `missing_attribute/3` arrives in Phase 3,
-  `foreign_element/3` in Phase 5. `misplaced/3` is written now (Phase 2 is
-  its first caller) so all four Phase 1 constructors land together.
+  once here even though Phase 1 only produced `:unsupported_element`,
+  `:stray_text`, and `:unexpected_root`. Later phases added a constructor
+  rather than reopening the type: `missing_attribute/3` in Phase 3,
+  `foreign_element/3` in Phase 5. `misplaced/3` was written in Phase 1 (Phase
+  2 is its first caller) so all four Phase 1 constructors landed together.
   """
 
   alias Statifier.Parser.Location
@@ -111,6 +111,23 @@ defmodule Statifier.Lowering.Error do
     %__MODULE__{
       reason: {:missing_attribute, element, attribute},
       message: "element #{inspect(element)} is missing required attribute #{inspect(attribute)}",
+      location: location
+    }
+  end
+
+  @doc """
+  An element resolves to a namespace URI that is neither absent nor the SCXML
+  namespace - a genuinely foreign element (Decision 8). `name` is the
+  qualified name exactly as written, prefix included, so the message points
+  at what the source actually said.
+  """
+  @spec foreign_element(name :: binary(), uri :: binary(), location :: Location.t()) :: t()
+  def foreign_element(name, uri, %Location{} = location)
+      when is_binary(name) and is_binary(uri) do
+    %__MODULE__{
+      reason: {:foreign_element, name, uri},
+      message:
+        "element #{inspect(name)} is bound to foreign namespace #{inspect(uri)}, not SCXML",
       location: location
     }
   end
