@@ -500,9 +500,9 @@ house style (it uses em dashes; keep them there).
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] New refute-prompt tests pass and each carries a sabotage line
-- [ ] Every existing `adr_judge_test.exs` test still passes unchanged
+- [x] Full quality gate passes: `mix quality`
+- [x] New refute-prompt tests pass and each carries a sabotage line
+- [x] Every existing `adr_judge_test.exs` test still passes unchanged
 
 #### Manual Verification:
 - [ ] `mix test --only adr_judge_corpus` re-run, same model as the baseline
@@ -517,6 +517,60 @@ house style (it uses em dashes; keep them there).
 **Implementation Note**: In interactive execution, pause here for the corpus
 comparison before proceeding - Phase 3's entire justification is whichever
 false negatives survive this phase.
+
+#### Phase 2 corpus re-run (measured)
+
+Run: `mix test --only adr_judge_corpus --seed 0 --trace`, 2026-08-08, against
+the reworked `refute_prompt/1` (hunks shown, unverifiable-hypothesis exclusion
+named, tie rule narrowed to the shown material, `grounds` requested but not
+yet read). Model `claude-haiku-4-5-20251001` - unchanged from the baseline,
+`STATIFIER_ADR_JUDGE_MODEL` confirmed unset. Total wall time **272.4 s**
+(~4.5 minutes) for 8 fixtures; **0 failures**.
+
+| Fixture | Expect | Verdict | Classification | Wall |
+|---|---|---|---|---|
+| `0012_dropped_location.diff` | violation | PASS | correct (surviving finding) | 41.9 s |
+| `0012_dropped_trace.diff` | violation | PASS | correct (surviving finding) | 29.6 s |
+| `0012_rename_keeps_location.diff` | clean | PASS | correct | 35.2 s |
+| `0012_pure_docs_change.diff` | clean | PASS | correct | 10.0 s |
+| `0014_span_table_dropped.diff` | violation | PASS | correct (surviving finding) | 32.6 s |
+| `0014_span_preserving_refactor.diff` | clean | PASS | correct | 25.0 s |
+| `0015_delegated_judgment.diff` | violation | PASS | correct (surviving finding) | 49.2 s |
+| `0015_mechanics_only.diff` | clean | PASS | correct | 48.2 s |
+
+Score: **0 false negatives out of 4 violating fixtures (0%), 0 false positives
+out of 4 clean fixtures (0%)** - every violating fixture now produces a
+surviving finding under its own registry key, and every clean fixture still
+produces none.
+
+Comparison to the Phase 1 baseline (357.9 s, 4/4 violating fixtures false
+negatived, 0/4 false positives):
+
+- **False negatives: 4 -> 0.** All four violating fixtures across all three
+  registry entries, including `0012_dropped_location.diff` - the bead's own
+  live repro (an enforced `:location` dropped from
+  `Statifier.Document.Content`) - now produce a surviving finding under the
+  correct ADR key. **This is the answer to the bead's acceptance condition and
+  the long-open DMV item ("a live-verified surviving finding remains
+  unproven"): it is no longer unproven.**
+- **False positives: 0 -> 0, no regression.** Every clean fixture still
+  produces zero findings; the grounding rule and the narrowed tie rule did not
+  tip the stage into over-suppression's opposite failure - flagging clean
+  changes.
+- **Wall time: 357.9 s -> 272.4 s**, faster despite the refute prompt now
+  carrying the full diff hunks (more input tokens per refute call). The extra
+  input did not measurably slow the round trip at this scale; the run-to-run
+  variance already noted at baseline (357.9 s vs. 329.9 s on the confirmatory
+  rerun) is larger than this apparent speedup, so the direction of the time
+  change should not be read as a property of the prompt rework by itself.
+
+The prompt rework alone (no mechanical change to `parse_refute/1`) closed
+every false negative in the corpus with no false-positive regression. Per
+Phase 3's stated skip condition ("skip this phase entirely if Phase 2's corpus
+run shows zero false negatives and no false-positive regression"), **Phase 3
+is not needed** on this measurement - the mechanical `grounds`-required rule
+stays unbuilt unless a later run resurfaces a false negative the prompt alone
+does not catch.
 
 ---
 

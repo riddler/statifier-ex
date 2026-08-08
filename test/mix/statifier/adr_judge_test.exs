@@ -193,6 +193,143 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert refute_prompt =~ "unique-adr-marker-xyz"
   end
 
+  # st-6f7: the refute pass never saw the diff, so "the change does not show
+  # X" was an assumption it could not check even in principle. It now carries
+  # the same rendered hunks the propose pass saw, keyed off the candidate's
+  # own judged ADR.
+  # sabotage: drop :hunks from judged_identity/1 -> red (the refute prompt
+  #           would render the atom `nil` where the hunks belong)
+  test "the refute prompt carries the candidate's own diff hunks" do
+    parent = self()
+
+    spy = fn prompt ->
+      if String.contains?(prompt, "PROPOSE PASS") do
+        {:ok, candidate_json()}
+      else
+        send(parent, {:refute_prompt, prompt})
+        {:ok, ~s({"violation": false})}
+      end
+    end
+
+    AdrJudge.analyze(source(core_diff()), caller: spy)
+
+    assert_received {:refute_prompt, refute_prompt}
+    assert refute_prompt =~ "trace(:exit_set, state)"
+  end
+
+  # st-6f7: the old wording ("argue against it if a good-faith argument
+  # exists ... only conclude it survives if you cannot construct that
+  # argument") let any unverifiable exculpatory hypothesis overturn a claim.
+  # The prompt now names that failure mode explicitly and excludes it.
+  # sabotage: restore the old "argue against it being a real violation if a
+  #           good-faith argument exists" wording -> red
+  test "the refute prompt names the unverifiable-hypothesis exclusion" do
+    caller = stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
+    parent = self()
+
+    spy = fn prompt ->
+      unless String.contains?(prompt, "PROPOSE PASS"), do: send(parent, {:refute_prompt, prompt})
+      caller.(prompt)
+    end
+
+    AdrJudge.analyze(source(core_diff()), caller: spy)
+
+    assert_received {:refute_prompt, refute_prompt}
+
+    assert refute_prompt =~ "might exist elsewhere in the codebase"
+    assert refute_prompt =~ "side table,"
+    assert refute_prompt =~ "an index, a helper"
+    assert refute_prompt =~ "hypothesis, not a"
+  end
+
+  # sabotage: have render_hunks/1 memoize its result in the process
+  #           dictionary keyed only by :hunks (not by which chunks it
+  #           rendered) -> red (the ADR-0014 candidate's refute prompt would
+  #           carry ADR-0012's hunks, rendered first, instead of its own)
+  test "a candidate proposed under one ADR gets that ADR's own hunks, not another's" do
+    diff = core_diff()
+
+    other_diff = """
+    diff --git a/lib/statifier/other.ex b/lib/statifier/other.ex
+    --- a/lib/statifier/other.ex
+    +++ b/lib/statifier/other.ex
+    @@ -5,1 +5,0 @@
+    -    unique_0014_hunk_marker()
+    """
+
+    source = %{
+      diff: diff <> other_diff,
+      adrs: [
+        %{
+          key: @adr_0012.key,
+          label: @adr_0012.label,
+          focus: @adr_0012.focus,
+          adr_text: "ADR-0012 placeholder text for tests.",
+          chunks: AdrJudge.scoped_chunks(diff, @adr_0012.scope)
+        },
+        %{
+          key: @adr_0014.key,
+          label: @adr_0014.label,
+          focus: @adr_0014.focus,
+          adr_text: "ADR-0014 placeholder text for tests.",
+          chunks: AdrJudge.scoped_chunks(other_diff, @adr_0014.scope)
+        }
+      ]
+    }
+
+    parent = self()
+
+    propose = fn judged_label ->
+      fn prompt ->
+        if String.contains?(prompt, judged_label) and String.contains?(prompt, "PROPOSE PASS") do
+          {:ok, candidate_json()}
+        else
+          {:ok, "[]"}
+        end
+      end
+    end
+
+    spy = fn prompt ->
+      cond do
+        String.contains?(prompt, "PROPOSE PASS") and String.contains?(prompt, "ADR-0014") ->
+          propose.("ADR-0014").(prompt)
+
+        String.contains?(prompt, "PROPOSE PASS") ->
+          {:ok, "[]"}
+
+        true ->
+          send(parent, {:refute_prompt, prompt})
+          {:ok, ~s({"violation": false})}
+      end
+    end
+
+    AdrJudge.analyze(source, caller: spy)
+
+    assert_received {:refute_prompt, refute_prompt}
+    assert refute_prompt =~ "unique_0014_hunk_marker"
+    refute refute_prompt =~ "trace(:exit_set, state)"
+  end
+
+  # st-6f7: the prompt rework touched the response-JSON instruction (adding
+  # "grounds") but not parse_refute/1 - a well-formed {"violation": true/false}
+  # and an unparseable response still resolve exactly as before.
+  # sabotage: have parse_refute/1 also require a non-empty "grounds" field for
+  #           a true verdict to survive -> red on the first assertion below
+  test "existing refute-outcome behavior is unchanged: survives, overturns, unparseable overturns" do
+    survives =
+      stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true, "grounds": "x"})})
+
+    assert [_finding] = AdrJudge.analyze(source(core_diff()), caller: survives)
+
+    overturned =
+      stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false, "grounds": "y"})})
+
+    assert AdrJudge.analyze(source(core_diff()), caller: overturned) == []
+
+    unparseable = stub_caller({:ok, candidate_json()}, {:ok, "not json"})
+    assert AdrJudge.analyze(source(core_diff()), caller: unparseable) == []
+  end
+
   # Two registry entries (ADR-0012 and ADR-0014) sharing the exact same
   # lib/statifier/ scope means a single in-scope diff fans out into one
   # propose call per judged ADR, each carrying that ADR's own text - not one
