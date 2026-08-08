@@ -1,23 +1,25 @@
 defmodule Mix.Statifier.AdrJudge do
   @moduledoc """
-  Judges the current branch's diff against ADR-0012 (debuggability designed
-  into the core) using two independent model calls: one proposes violations,
-  a second is prompted to refute each one. Only a proposed violation the
-  refute pass fails to overturn becomes a finding - a single pass reporting
-  whatever it first notices is exactly what the adversarial-verification
-  requirement on this check rules out, because a false positive here blocks
-  a commit (CLAUDE.md: "never go green by weakening the check" means the fix
-  for a bad finding has to be "the check was wrong," not "disable the
-  check" - so the bar to reach gate-failure status is higher than an FYI).
+  Judges the current branch's diff against a registry of judged ADRs, each
+  carrying its own path scope, ADR text, and failure vocabulary, using two
+  independent model calls per ADR: one proposes violations, a second is
+  prompted to refute each one. Only a proposed violation the refute pass
+  fails to overturn becomes a finding - a single pass reporting whatever it
+  first notices is exactly what the adversarial-verification requirement on
+  this check rules out, because a false positive here blocks a commit
+  (CLAUDE.md: "never go green by weakening the check" means the fix for a
+  bad finding has to be "the check was wrong," not "disable the check" - so
+  the bar to reach gate-failure status is higher than an FYI).
 
-  `analyze/2` is pure given a diff plus ADR text and an `opts[:caller]` (a
-  function from a prompt string to a `{:ok, response} | {:error, reason}`
-  tuple; real calls shell out to the `claude` CLI in production via
-  `call_claude_cli/1`, a stub in tests). `collect/1` gathers that source the
-  same way `Mix.Statifier.GateGuard` and `Mix.Statifier.AdrGuard` do, plus two
-  checks those guards do not need: whether the `claude` CLI is on `PATH`,
-  checked before any git call runs (there is no point diffing if the stage
-  cannot call out), and whether the diff touches `lib/statifier/` at all.
+  `analyze/2` is pure given a `source()` (a diff already split into one
+  in-scope slice per judged ADR) and an `opts[:caller]` (a function from a
+  prompt string to a `{:ok, response} | {:error, reason}` tuple; real calls
+  shell out to the `claude` CLI in production via `call_claude_cli/1`, a stub
+  in tests). `collect/1` gathers that source the same way
+  `Mix.Statifier.GateGuard` and `Mix.Statifier.AdrGuard` do, plus two checks
+  those guards do not need: whether the `claude` CLI is on `PATH`, checked
+  before any git call runs (there is no point diffing if the stage cannot
+  call out), and whether the diff touches any judged ADR's scope at all.
 
   Local-only by design, and now purely so: `call_claude_cli/1` shells out to
   the developer's own `claude` CLI (`System.cmd/3`) rather than calling the
@@ -42,12 +44,45 @@ defmodule Mix.Statifier.AdrJudge do
           message: String.t()
         }
 
-  @type source :: %{diff: String.t(), adr_text: String.t()}
-  @type caller :: (String.t() -> {:ok, String.t()} | {:error, term()})
-  @type candidate :: %{file: String.t(), line: pos_integer() | nil, claim: String.t()}
+  @type scope :: %{prefix: String.t(), suffix: String.t() | nil, describe: String.t()}
 
-  @core_prefix "lib/statifier/"
-  @adr_path "docs/adr/0012-debuggability-designed-into-the-core.md"
+  @type judged_source :: %{
+          key: String.t(),
+          label: String.t(),
+          focus: String.t(),
+          adr_text: String.t(),
+          chunks: [{String.t(), String.t()}]
+        }
+
+  @type source :: %{diff: String.t(), adrs: [judged_source()]}
+  @type caller :: (String.t() -> {:ok, String.t()} | {:error, term()})
+  @type candidate :: %{
+          file: String.t(),
+          line: pos_integer() | nil,
+          claim: String.t(),
+          key: String.t(),
+          label: String.t(),
+          adr_text: String.t()
+        }
+
+  # One entry per ADR whose rule needs a model's judgment rather than a
+  # mechanical grep - see docs/plans/260807-st-laz-adr-judge-multi-adr.md for
+  # which ADRs qualify and why. Scopes are data, not functions: a module
+  # attribute cannot hold an anonymous function, and keeping scope.describe
+  # here means the skip reason (scope_descriptions/0) has one definition
+  # site instead of being written again in the task.
+  @judged [
+    %{
+      key: "adr-0012-debuggability",
+      label: "ADR-0012 (debuggability designed into the core)",
+      adr_path: "docs/adr/0012-debuggability-designed-into-the-core.md",
+      scope: %{prefix: "lib/statifier/", suffix: nil, describe: "lib/statifier/"},
+      focus:
+        "a microstep-resumability regression, a dropped trace effect at a " <>
+          "phase boundary, a lost source location, or an uncounted or unstamped step"
+    }
+  ]
+
   @cli_name "claude"
   @default_model "claude-haiku-4-5-20251001"
   @model_env "STATIFIER_ADR_JUDGE_MODEL"
@@ -67,7 +102,8 @@ defmodule Mix.Statifier.AdrJudge do
   @diff_flags ["--unified=0", "--src-prefix=a/", "--dst-prefix=b/"]
 
   @doc """
-  Turns a diff plus ADR-0012's text into adversarially-verified findings.
+  Turns a source's in-scope diff slices, one per judged ADR, into
+  adversarially-verified findings.
 
   `opts[:caller]` defaults to `call_claude_cli/1`, a real shell-out to the
   `claude` CLI, in every build except `:test` - there it defaults to
@@ -78,30 +114,29 @@ defmodule Mix.Statifier.AdrJudge do
   @spec analyze(source :: source(), opts :: keyword()) :: [finding()]
   def analyze(source, opts \\ []) do
     caller = Keyword.get(opts, :caller, @default_caller)
-    chunks = core_chunks(source.diff)
 
-    source.adr_text
-    |> propose(chunks, caller)
-    |> Enum.filter(&survives_refute?(&1, source.adr_text, caller))
+    source.adrs
+    |> Enum.flat_map(&propose(&1, caller))
+    |> Enum.filter(&survives_refute?(&1, caller))
     |> Enum.map(&to_finding/1)
   end
 
   @doc """
-  Reads the diff, and ADR-0012's text, the judge needs.
+  Reads the diff and every judged ADR's text the judge needs.
 
   Checked in order: `opts[:cli_available]` (falling back to
   `System.find_executable/1`) first, since there is nothing to gain from
   touching git when the stage has no way to call out; then base-ref
   resolution (`opts[:base]`, then `origin/main`, then `main`), mirroring
-  `Mix.Statifier.AdrGuard`; then whether the diff touches `lib/statifier/` at
-  all. Each unmet condition returns its own atom so the task can report a
-  distinct skip reason instead of a single opaque one.
+  `Mix.Statifier.AdrGuard`; then whether the diff touches any registered
+  scope at all. Each unmet condition returns its own atom so the task can
+  report a distinct skip reason instead of a single opaque one.
 
   `opts[:runner]` replaces the `git` shell-out with a function of an argument
   list returning `{output, status}`, mirroring `Mix.Statifier.AdrGuard`.
   """
   @spec collect(opts :: keyword()) ::
-          {:ok, source()} | {:error, String.t()} | :no_base_ref | :no_cli | :no_core_changes
+          {:ok, source()} | {:error, String.t()} | :no_base_ref | :no_cli | :no_scoped_changes
   def collect(opts) do
     case cli_available?(opts) do
       false -> :no_cli
@@ -128,23 +163,72 @@ defmodule Mix.Statifier.AdrJudge do
          base = String.trim(base),
          {:ok, diff} <- run(runner, ["diff", base | @diff_flags]) do
       full_diff = diff <> untracked_diff(runner)
+      adrs = judged_sources(full_diff, opts)
 
-      if core_chunks(full_diff) == [] do
-        :no_core_changes
+      if adrs == [] do
+        :no_scoped_changes
       else
-        {:ok, %{diff: full_diff, adr_text: adr_text(opts)}}
+        {:ok, %{diff: full_diff, adrs: adrs}}
       end
     end
   end
 
-  defp adr_text(opts) do
-    Keyword.get_lazy(opts, :adr_text, fn ->
-      case File.read(@adr_path) do
-        {:ok, content} -> content
-        {:error, reason} -> "(unable to read #{@adr_path}: #{inspect(reason)})"
-      end
-    end)
+  # One judged_source() per registry entry with at least one in-scope chunk;
+  # entries whose scope the diff never touches are dropped rather than
+  # carried through with an empty chunk list and no work to do.
+  defp judged_sources(diff, opts) do
+    adr_texts = Keyword.get(opts, :adr_texts, %{})
+
+    @judged
+    |> Enum.map(&judged_source(&1, diff, adr_texts))
+    |> Enum.filter(&(&1.chunks != []))
   end
+
+  defp judged_source(entry, diff, adr_texts) do
+    %{
+      key: entry.key,
+      label: entry.label,
+      focus: entry.focus,
+      adr_text: adr_text_for(entry, adr_texts),
+      chunks: scoped_chunks(diff, entry.scope)
+    }
+  end
+
+  defp adr_text_for(entry, adr_texts) do
+    case Map.fetch(adr_texts, entry.key) do
+      {:ok, text} -> text
+      :error -> read_adr_file(entry)
+    end
+  end
+
+  defp read_adr_file(entry) do
+    case read_adr_source(entry.key) do
+      {:ok, content} -> content
+      {:error, reason} -> "(unable to read #{entry.adr_path}: #{inspect(reason)})"
+    end
+  end
+
+  # Sobelow's Traversal.FileModule check only treats a `File.read/1` call as
+  # safe when its path argument is a source-level string literal, not a
+  # value read out of a runtime map - even one built from module-attribute
+  # data the registry itself owns (see the `.sobelow-conf` comment for how
+  # `gate_guard.ex`/`regression_registry.ex` carry the same shape today,
+  # exempted there instead). One literal clause per registry entry keeps
+  # every path Sobelow-legible; a new judged ADR needs a matching clause
+  # added here alongside its `@judged` entry.
+  defp read_adr_source("adr-0012-debuggability") do
+    File.read("docs/adr/0012-debuggability-designed-into-the-core.md")
+  end
+
+  @doc """
+  The human-readable scope of every judged ADR, in registry order.
+
+  `mix adr.judge`'s skip reason joins these so the reason for "nothing to
+  judge" names every scope the registry actually checks, with one definition
+  site instead of the string being written again in the task.
+  """
+  @spec scope_descriptions() :: [String.t()]
+  def scope_descriptions, do: Enum.map(@judged, & &1.scope.describe)
 
   # A file git has never seen is absent from `git diff` entirely, so a
   # brand-new interpreter module would be invisible to this check.
@@ -153,13 +237,15 @@ defmodule Mix.Statifier.AdrJudge do
       {:ok, output} ->
         output
         |> String.split("\n", trim: true)
-        |> Enum.filter(&String.starts_with?(&1, @core_prefix))
+        |> Enum.filter(&any_scope_match?/1)
         |> Enum.map_join(&added_file_diff(runner, &1))
 
       {:error, _reason} ->
         ""
     end
   end
+
+  defp any_scope_match?(path), do: Enum.any?(@judged, &in_scope?(path, &1.scope))
 
   # `git diff --no-index` exits 1 when the files differ, which is every call here.
   defp added_file_diff(runner, path) do
@@ -184,15 +270,37 @@ defmodule Mix.Statifier.AdrJudge do
 
   # -- diff scoping -----------------------------------------------------------
 
-  # `{path, chunk}` per file the diff touches, `chunk` being that file's raw
-  # unified-diff text (context, removals and additions alike) - unlike the
-  # mechanical guards, an ADR-0012 violation is as likely to be a *removed*
-  # trace call as an added one, so an added-lines-only view would miss it.
-  @spec core_chunks(diff :: String.t()) :: [{String.t(), String.t()}]
-  def core_chunks(diff) do
+  @doc """
+  The judged-ADR registry, in the order findings are proposed.
+
+  Public so tests can assert scoping (`scoped_chunks/2`) and prompt content
+  against a real registry entry's `scope`/`adr_path` rather than a path
+  string re-typed at the call site.
+  """
+  @spec judged() :: [map()]
+  def judged, do: @judged
+
+  @doc """
+  Whether `path` falls inside `scope`: a `prefix` match, and an `ends_with?`
+  match on `scope.suffix` too when it is non-nil (a `nil` suffix matches any
+  path with the prefix, which is every scope registered today).
+  """
+  @spec in_scope?(path :: String.t(), scope :: scope()) :: boolean()
+  def in_scope?(path, scope) do
+    String.starts_with?(path, scope.prefix) and
+      (is_nil(scope.suffix) or String.ends_with?(path, scope.suffix))
+  end
+
+  # `{path, chunk}` per file the diff touches that falls in `scope`, `chunk`
+  # being that file's raw unified-diff text (context, removals and additions
+  # alike) - unlike the mechanical guards, a judge-shaped ADR violation is as
+  # likely to be a *removed* line (a dropped trace call, say) as an added
+  # one, so an added-lines-only view would miss it.
+  @spec scoped_chunks(diff :: String.t(), scope :: scope()) :: [{String.t(), String.t()}]
+  def scoped_chunks(diff, scope) do
     diff
     |> file_chunks()
-    |> Enum.filter(fn {path, _chunk} -> String.starts_with?(path, @core_prefix) end)
+    |> Enum.filter(fn {path, _chunk} -> in_scope?(path, scope) end)
   end
 
   defp file_chunks(diff) do
@@ -224,24 +332,29 @@ defmodule Mix.Statifier.AdrJudge do
 
   # -- propose / refute --------------------------------------------------------
 
-  defp propose(adr_text, chunks, caller) do
-    case caller.(propose_prompt(adr_text, chunks)) do
-      {:ok, text} -> parse_propose(text)
+  defp propose(judged, caller) do
+    case caller.(propose_prompt(judged)) do
+      {:ok, text} -> text |> parse_propose() |> Enum.map(&Map.merge(&1, judged_identity(judged)))
       {:error, _reason} -> []
       _other -> []
     end
   end
 
-  defp survives_refute?(candidate, adr_text, caller) do
-    case caller.(refute_prompt(adr_text, candidate)) do
+  defp judged_identity(judged) do
+    %{key: judged.key, label: judged.label, adr_text: judged.adr_text}
+  end
+
+  defp survives_refute?(candidate, caller) do
+    case caller.(refute_prompt(candidate)) do
       {:ok, text} -> parse_refute(text)
       {:error, _reason} -> false
       _other -> false
     end
   end
 
-  defp propose_prompt(adr_text, chunks) do
-    hunks_text = Enum.map_join(chunks, "\n\n", fn {path, chunk} -> "### #{path}\n#{chunk}" end)
+  defp propose_prompt(judged) do
+    hunks_text =
+      Enum.map_join(judged.chunks, "\n\n", fn {path, chunk} -> "### #{path}\n#{chunk}" end)
 
     """
     PROPOSE PASS
@@ -250,16 +363,14 @@ defmodule Mix.Statifier.AdrJudge do
     list any file. Judge only from the ADR text and diff hunks given below -
     they are everything you get.
 
-    You are reviewing a code change against ADR-0012 (debuggability designed
-    into the core). Read the full ADR text and the diff hunks below, and list
-    any changes that likely violate it: a microstep-resumability regression, a
-    dropped trace effect at a phase boundary, a lost source location, or an
-    uncounted or unstamped step.
+    You are reviewing a code change against #{judged.label}. Read the full
+    ADR text and the diff hunks below, and list any changes that likely
+    violate it: #{judged.focus}.
 
-    ADR-0012 full text:
-    #{adr_text}
+    #{judged.label} full text:
+    #{judged.adr_text}
 
-    Diff hunks touching lib/statifier/:
+    Diff hunks:
     #{hunks_text}
 
     Respond with JSON only, no other text: a list of candidate violations,
@@ -268,7 +379,7 @@ defmodule Mix.Statifier.AdrJudge do
     """
   end
 
-  defp refute_prompt(adr_text, candidate) do
+  defp refute_prompt(candidate) do
     """
     REFUTE PASS
 
@@ -276,12 +387,12 @@ defmodule Mix.Statifier.AdrJudge do
     list any file. Judge only from the ADR text and the candidate claim given
     below - they are everything you get.
 
-    You are adversarially reviewing a claimed ADR-0012 violation. Argue
-    against it being a real violation if a good-faith argument exists. Only
-    conclude it survives if you cannot construct that argument.
+    You are adversarially reviewing a claimed #{candidate.label} violation.
+    Argue against it being a real violation if a good-faith argument exists.
+    Only conclude it survives if you cannot construct that argument.
 
-    ADR-0012 full text:
-    #{adr_text}
+    #{candidate.label} full text:
+    #{candidate.adr_text}
 
     Candidate claim:
     file: #{candidate.file}
@@ -289,7 +400,7 @@ defmodule Mix.Statifier.AdrJudge do
     claim: #{candidate.claim}
 
     Respond with JSON only, no other text: {"violation": true} if the claim
-    survives your challenge as a genuine ADR-0012 violation, or
+    survives your challenge as a genuine #{candidate.label} violation, or
     {"violation": false} if you have overturned it. If you are genuinely
     uncertain, respond {"violation": false} - ties go to "not a violation".
     """
@@ -352,7 +463,7 @@ defmodule Mix.Statifier.AdrJudge do
       file: candidate.file,
       line: candidate.line,
       severity: "error",
-      check: "adr-0012-debuggability",
+      check: candidate.key,
       message: candidate.claim
     }
   end

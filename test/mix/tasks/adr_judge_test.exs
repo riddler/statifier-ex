@@ -9,8 +9,11 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # reason Statifier.TmpDirTest gives for its own async: false.
   use ExUnit.Case, async: false
 
+  alias Mix.Statifier.AdrJudge
   alias Mix.Tasks.Adr.Judge
   alias Statifier.TmpDir
+
+  @no_scoped_changes_summary "no files in this diff are in a judged ADR scope (lib/statifier/)"
 
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
@@ -152,8 +155,9 @@ defmodule Mix.Tasks.Adr.JudgeTest do
              JSON.decode(json)
   end
 
-  # sabotage: scope AdrJudge.collect/1's core-changes check to `lib/` instead
-  #           of `lib/statifier/`, so a docs/-only diff no longer skips -> red
+  # sabotage: scope AdrJudge.collect/1's registered scope check to `lib/`
+  #           instead of `lib/statifier/`, so a docs/-only diff no longer
+  #           skips -> red
   test "a diff touching no lib/statifier/ files is a skip that says so" do
     assert {:skip, json} =
              Judge.execute(["--format", "json"],
@@ -161,7 +165,24 @@ defmodule Mix.Tasks.Adr.JudgeTest do
                runner: resolving(docs_only_diff())
              )
 
-    assert {:ok, %{"summary" => "no lib/statifier/ files in this diff"}} = JSON.decode(json)
+    assert {:ok, %{"summary" => @no_scoped_changes_summary}} = JSON.decode(json)
+  end
+
+  # sabotage: have scope_descriptions/0 (AdrJudge) return [] instead of
+  #           mapping the registry, so the skip reason names no scope at
+  #           all -> red
+  test "the no-scoped-changes skip reason names every registered scope" do
+    assert {:skip, json} =
+             Judge.execute(["--format", "json"],
+               cli_available: true,
+               runner: resolving(docs_only_diff())
+             )
+
+    assert {:ok, %{"summary" => summary}} = JSON.decode(json)
+
+    for description <- AdrJudge.scope_descriptions() do
+      assert summary =~ description
+    end
   end
 
   # sabotage: have respond/2 report a non-empty findings list as {:ok, _}
@@ -177,7 +198,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     assert {:ok, document} = JSON.decode(json)
 
     assert %{
-             "summary" => "1 likely ADR-0012 violation",
+             "summary" => "1 likely ADR violation",
              "stats" => %{"finding_count" => 1},
              "findings" => [finding]
            } = document
@@ -202,7 +223,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
                caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false})})
              )
 
-    assert {:ok, %{"summary" => "No likely ADR-0012 violations", "findings" => []}} =
+    assert {:ok, %{"summary" => "No likely ADR violations", "findings" => []}} =
              JSON.decode(json)
   end
 
@@ -215,7 +236,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
                caller: stub_caller({:ok, two_candidates_json()}, {:ok, ~s({"violation": true})})
              )
 
-    assert {:ok, %{"summary" => "2 likely ADR-0012 violations"}} = JSON.decode(json)
+    assert {:ok, %{"summary" => "2 likely ADR violations"}} = JSON.decode(json)
   end
 
   # sabotage: report a failing git command as {:skip, _} instead of
@@ -263,10 +284,9 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # and chdirs the OS process into it for the call: `--base HEAD`
   # always resolves there, and `git diff` against HEAD is structurally empty
   # (nothing has changed since the seed commit, and nothing is untracked), so
-  # `collect/1` always reaches the "no lib/statifier/ files in this diff"
-  # skip before ever calling a `caller` - this can never shell out to the
-  # real `claude` CLI, regardless of what this worktree's own lib/statifier/
-  # looks like.
+  # `collect/1` always reaches the no-scoped-changes skip before ever calling
+  # a `caller` - this can never shell out to the real `claude` CLI,
+  # regardless of what this worktree's own lib/statifier/ looks like.
   #
   # This still assumes the `claude` CLI is on PATH in the environment running
   # this suite (true of every developer/CI environment this task is built
@@ -281,8 +301,9 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   #           `[cli_available: false]` -> red: the unsabotaged default reaches
   #           git and finds no lib/statifier/ diff against the scratch repo's
   #           HEAD, while the sabotaged default never gets past the CLI
-  #           check, so the skip reason changes from "no lib/statifier/ files
-  #           in this diff" to "claude CLI not on PATH"
+  #           check, so the skip reason changes from "no files in this diff
+  #           are in a judged ADR scope (lib/statifier/)" to "claude CLI not
+  #           on PATH"
   test "execute/1 falls back to the real cli_available and git checks" do
     repo_dir = scratch_repo_dir()
     File.rm_rf!(repo_dir)
@@ -294,7 +315,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     assert {:skip, json} =
              File.cd!(repo_dir, fn -> Judge.execute(["--base", "HEAD", "--format", "json"]) end)
 
-    assert {:ok, %{"summary" => "no lib/statifier/ files in this diff"}} = JSON.decode(json)
+    assert {:ok, %{"summary" => @no_scoped_changes_summary}} = JSON.decode(json)
   end
 
   describe "without --format json" do
@@ -309,10 +330,10 @@ defmodule Mix.Tasks.Adr.JudgeTest do
 
       text = IO.iodata_to_binary(output)
 
-      assert text =~ "1 likely ADR-0012 violation"
+      assert text =~ "1 likely ADR violation"
       assert text =~ "lib/statifier/interpreter.ex:10"
       assert text =~ "(adr-0012-debuggability)"
-      assert text =~ "ADR-0012"
+      assert text =~ "docs/adr/"
       refute text =~ "\"findings\""
     end
 
@@ -325,7 +346,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
                  caller: stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": false})})
                )
 
-      assert IO.iodata_to_binary(output) == "No likely ADR-0012 violations"
+      assert IO.iodata_to_binary(output) == "No likely ADR violations"
     end
 
     # sabotage: have skipped/2 return the JSON document in prose mode -> red
