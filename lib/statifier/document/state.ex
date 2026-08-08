@@ -47,19 +47,21 @@ defmodule Statifier.Document.State do
   | `initial` / `initial_element` | `:state` | both forms on one state | st-l5k.5 check 4 |
   | `initial` / `initial_element` | `:state` | an initial on an atomic state | st-l5k.5 check 3 (target resolution and descendancy) |
   | `history_type` | `:history` | `history_type` on a non-history kind | **nothing** - unbuildable from lowering, see below |
-  | `transitions` | `:state`, `:parallel`, `:history`, `:initial` slot | transitions on a `:final` | **nothing** - see Residual Note 1 below |
+  | `transitions` | `:state`, `:parallel`, `:history`, `:initial` slot | transitions on a `:final` | st-l5k.5 check 6, widened by st-dje |
   | `id` | any | `nil` id | not an error; the spec makes `id` optional |
 
-  The two "nothing" rows are stated here rather than hidden. `history_type`
-  on a non-history kind is unreachable from lowering, which only ever sets
-  it from a `<history type="...">` attribute; it is a shape a *hand-built*
-  Document (a test fixture, or a future programmatic builder) could produce,
-  and this moduledoc says so rather than implying a check exists for it. A
-  `:final` carrying `transitions` **is** reachable from lowering (spec 3.7
+  The remaining "nothing" row is stated here rather than hidden.
+  `history_type` on a non-history kind is unreachable from lowering, which
+  only ever sets it from a `<history type="...">` attribute; it is a shape a
+  *hand-built* Document (a test fixture, or a future programmatic builder)
+  could produce, and this moduledoc says so rather than implying a check
+  exists for it.
+
+  A `:final` carrying `transitions` **is** reachable from lowering (spec 3.7
   gives `<final>` no `<transition>` children, but nothing here refuses to
-  build one) and is recorded as the plan's Residual Note 1 for st-l5k.5 to
-  pick up - either check 6 widens its scope or a ninth check appears; this
-  struct is unaffected either way.
+  build one). That was the plan's Residual Note 1, left for st-l5k.5 to pick
+  up; st-dje resolved it the first way the note offered, by widening check 6
+  rather than adding a ninth check. This struct was unaffected either way.
 
   `id: String.t() | nil` no longer overloads `nil` the way it might if
   `<initial>` were a kind: with `<initial>` off the kind set entirely,

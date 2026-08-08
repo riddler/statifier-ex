@@ -44,6 +44,7 @@ defmodule Statifier.Validator.Error do
           | {:history_bad_parent, id :: binary(), parent_kind :: atom()}
           | {:history_bad_type, raw :: binary()}
           | {:final_has_states, id :: binary()}
+          | {:final_has_transitions, id :: binary() | nil}
           | {:default_entry_not_enterable, id :: binary(), child_kind :: atom()}
           | {:donedata_not_on_final, id :: binary()}
           | {:bad_namespace, uri :: binary() | nil}
@@ -263,6 +264,25 @@ defmodule Statifier.Validator.Error do
       message:
         "state #{inspect(id)} must not be a child of <final> - only onentry, " <>
           "onexit, and donedata are legal there",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 6 (spec 3.7, st-dje): `id` names a `:final` carrying a
+  `<transition>`. A `<final>` is where a region stops, so it has no
+  outgoing transitions to take - spec 3.7's content model is `onentry`,
+  `onexit`, and `donedata` only. Reported once per offending transition, at
+  the **transition's own** `location` rather than the `<final>`'s, matching
+  `final_has_states/2`.
+  """
+  @spec final_has_transitions(id :: binary() | nil, location :: Location.t()) :: t()
+  def final_has_transitions(id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:final_has_transitions, id},
+      message:
+        "state #{inspect(id)} is a <final> and must not carry a <transition> - " <>
+          "only onentry, onexit, and donedata are legal there",
       location: location
     }
   end

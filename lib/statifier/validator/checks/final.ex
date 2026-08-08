@@ -1,14 +1,21 @@
 defmodule Statifier.Validator.Checks.Final do
   @moduledoc """
-  Check 6 (spec 3.7): a `:final` state's content model excludes state
-  children entirely - only `onentry`, `onexit`, and `donedata` are legal.
-  Reports `{:final_has_states, id}` once per state child of a `:final`, at
-  the **child's own** `location` rather than the `<final>`'s, so the caret
-  lands on the element that should not be there.
+  Check 6 (spec 3.7): a `:final` state's content model is `onentry`,
+  `onexit`, and `donedata` - nothing else. Two reasons, each reported once
+  per offending child and at the **child's own** `location` rather than the
+  `<final>`'s, so the caret lands on the element that should not be there:
 
-  Scope stops exactly at the bead's wording: transitions and `initial` on a
-  `:final` are a separate representable-but-invalid shape (st-dje, Decision
-  7) this check does not report.
+  - `{:final_has_states, id}` for a state child, `id` being the child's.
+  - `{:final_has_transitions, id}` for a `<transition>` child, `id` being
+    the `<final>`'s - a `<final>` is where a region stops, so it has no
+    outgoing transition to take (st-dje, which st-l5k.5's Decision 7 first
+    deferred and this module then absorbed rather than growing a ninth
+    check for one more child type).
+
+  An `initial` attribute or `<initial>` element on a `:final` is *not*
+  reported here: check 3 already refuses it as `:initial_on_atomic_state`
+  (`Checks.InitialTargets`'s `atomic_for_initial?/1` counts `:final`), and
+  reporting it twice would be two errors for one mistake.
   """
 
   alias Statifier.Document
@@ -28,7 +35,10 @@ defmodule Statifier.Validator.Checks.Final do
     Enum.flat_map(states, fn state -> [state | flatten(state.states)] end)
   end
 
-  defp check_final(%State{states: children}) do
-    Enum.map(children, fn child -> Error.final_has_states(child.id, child.location) end)
+  defp check_final(%State{states: children, transitions: transitions} = state) do
+    Enum.map(children, fn child -> Error.final_has_states(child.id, child.location) end) ++
+      Enum.map(transitions, fn transition ->
+        Error.final_has_transitions(state.id, transition.location)
+      end)
   end
 end
