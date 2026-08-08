@@ -99,23 +99,26 @@ commit until `data.attested` is `true` (or `data.applicable` is `false` - see
 the carve-out below).
 
 Read the result:
-- `data.applicable` false means the diff touches nothing under `lib/`, `test/`,
-  `config/`, `.claude/scripts/`, `.claude/skills/`, and neither `mix.exs` nor
-  `mix.lock` - there is no gate to run, and `data.carve_out_reason` says so.
-  **This carve-out is narrow and it is not a judgment call**: one file from
-  that list in the diff and `data.applicable` is true, full stop. When it
-  applies, say so in the Step 4 report ("docs only, no quality gate
-  applicable") rather than letting a reader assume a green gate that never ran.
+- `data.applicable` false means the diff touches none of the paths this
+  project gates on - there is no gate to run, and `data.carve_out_reason`
+  names the lists it checked. **This carve-out is narrow and it is not a
+  judgment call**: one file from those lists in the diff and
+  `data.applicable` is true, full stop. When it applies, say so in the Step 4
+  report ("docs only, no quality gate applicable") rather than letting a
+  reader assume a green gate that never ran.
 
-  `.claude/scripts/` is on that list because the gate's `Script tests` stage
-  runs the Ruby suite covering it (ADR-0011 ledger entry st-hzf). `.claude/
-  skills/` is on it because the `ADR judge` stage's ADR-0015 scope
-  (`.claude/skills/**/SKILL.md`) judges those files for constraint 4. The
-  carve-out tracks **what the gate measures**, not what the Elixir build
-  compiles - if a future stage measures something else outside `lib/`, it
-  belongs here and in `lib/touches_elixir.rb`'s `gate_applicable?` too. A
-  stage the carve-out does not know about is a stage that never runs on the
-  branches it exists for.
+  The lists live in `.claude/wurk.json` as `gate.build_paths` (`lib/`,
+  `test/`, `config/`, `mix.exs`, `mix.lock`) and `gate.also_gated_paths`
+  (`.claude/scripts/`, `.claude/skills/`), and `lib/gate_paths.rb` reads
+  them. `.claude/scripts/` is on the second list because the gate's
+  `Script tests` stage runs the Ruby suite covering it (ADR-0011 ledger
+  entry st-hzf); `.claude/skills/` is on it because the `ADR judge` stage's
+  ADR-0015 scope (`.claude/skills/**/SKILL.md`) judges those files for
+  constraint 4. The carve-out tracks **what the gate measures**, not what
+  the Elixir build compiles - a new stage measuring something outside `lib/`
+  adds its path to `gate.also_gated_paths` in the same change. A stage the
+  carve-out does not know about is a stage that never runs on the branches
+  it exists for.
 - `ok: false` with `data.applicable: true` is a real gate failure - see "If
   Quality Checks Fail" below, including the `Gate guard` case.
 - `data.skipped_stages` lists every skipped stage, and each entry says which
@@ -161,7 +164,7 @@ ruby .claude/scripts/repo_state.rb
 
 Read `data.dirty_files` / `data.changed_files` (scope of the change),
 `data.unpushed` (local commits with their already-detected `Refs:` ids, if
-any), and `data.touches_elixir` (feeds Step 0's carve-out read and Step 1.6's
+any), and `data.touches_build` (feeds Step 0's carve-out read and Step 1.6's
 changelog check). This replaces hand-running `git status`, `git diff --stat`,
 and `git log --oneline`.
 

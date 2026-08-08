@@ -5,7 +5,8 @@ require "json"
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
-require_relative "lib/touches_elixir"
+require_relative "lib/gate_paths"
+require_relative "lib/manifest"
 
 # Gate wraps `mix gate.verify` and `mix quality --format json --report -`,
 # serving /commit, /merge-request, /implement-plan, and /work. See
@@ -50,8 +51,6 @@ require_relative "lib/touches_elixir"
 #    flips `ok`, and there is no code path anywhere in this file that writes
 #    docs/quality-gate-changes.md - see test/contract_test.rb.
 module Gate
-  LEDGER_PATH = "docs/quality-gate-changes.md"
-
   # Skip reasons that describe the project's standing configuration rather
   # than a failure of this run. Matched against a stage's `summary` from the
   # `mix quality` JSON report. See rule 1 in the module doc for why this is
@@ -101,12 +100,12 @@ module Gate
       end.compact
     end
 
-    # The carve-out predicate (see lib/touches_elixir.rb) so /commit's Step 0
-    # and this script cannot drift apart the way the `^Refs:` extraction once
-    # did. Note this is `gate_applicable?`, not `any?`: it is wider than
-    # repo_state.rb's `touches_elixir` because the gate's `Script tests` stage
-    # measures `.claude/scripts/`, which touches no Elixir.
-    def gate_applicable?(env)
+    # The carve-out predicate (see lib/gate_paths.rb) so /commit's Step 0
+    # and this script cannot drift apart the way the trailer extraction once
+    # did. Note this is `gate_applicable?`, not `touches_build?`: it is wider
+    # than repo_state.rb's `touches_build` because a gate stage may measure
+    # paths that touch no build at all.
+    def gate_applicable?(env, manifest)
       diff_res = Sh.run(%w[git diff --name-only main...HEAD], envelope: env)
       diff_files =
         if diff_res.success?
@@ -119,7 +118,7 @@ module Gate
       status_res = Sh.run(%w[git status --porcelain], envelope: env)
       dirty_files = parse_status_porcelain(status_res.out)
 
-      TouchesElixir.gate_applicable?((diff_files + dirty_files).uniq)
+      GatePaths.gate_applicable?((diff_files + dirty_files).uniq, manifest: manifest)
     end
 
     # Parses a -U0 unified diff for added `test "..."` lines with no
@@ -204,18 +203,42 @@ module Gate
     # (if any) come straight from the "Gate guard" stage `mix quality`
     # itself already ran - this method adds no write path of its own. See
     # test/contract_test.rb, which asserts that mechanically.
-    def gate_guard_from(stages)
+    # Names the paths the project actually gates on, from the manifest, so
+    # the reason a commit skipped the gate is checkable against the same
+    # lists the predicate used - not against a sentence that drifted.
+    def carve_out_reason(manifest)
+      paths = (manifest.gate_build_paths + manifest.gate_also_gated_paths).join(", ")
+      "no changes under #{paths} - nothing for the gate to measure"
+    end
+
+    def gate_guard_from(stages, ledger_path)
       stage = Array(stages).find { |s| s["name"] == "Gate guard" }
 
       {
-        ledger_path: LEDGER_PATH,
-        ledger_exists: File.exist?(LEDGER_PATH),
+        ledger_path: ledger_path,
+        ledger_exists: !ledger_path.nil? && File.exist?(ledger_path),
         stage: stage && { status: stage["status"], summary: stage["summary"], findings: stage["findings"] }
       }
     end
 
-    def run_quality(env, extra_args)
-      res = Sh.run(["mix", "quality", "--report", "-"] + extra_args, envelope: env, timeout: 600)
+    # Tier 1 (docs/gate-contract.md): `gate.report` / `gate.report_loop`
+    # emit the machine-readable report. Where the manifest has no reporting
+    # command for the mode being run, this degrades to tier 0 - the plain
+    # gate command's exit code and nothing else. `report` comes back nil
+    # there, and every judgment needing stage detail simply does not fire
+    # rather than being faked from an empty stage list.
+    #
+    # The two reporting commands are separate manifest entries rather than a
+    # base command this script appends a profile flag to. Composing argv
+    # here would mean this script knowing one gate tool's flag surface,
+    # which is exactly the coupling docs/gate-contract.md exists to avoid.
+    def run_quality(env, manifest, loop_mode)
+      reporting = loop_mode ? manifest.gate_report_loop : manifest.gate_report
+      argv = reporting || (loop_mode ? manifest.gate_loop : manifest.gate_full)
+
+      res = Sh.run(argv, envelope: env, timeout: 600)
+      return [res, nil] unless reporting
+
       report = begin
         JSON.parse(res.out)
       rescue JSON::ParserError
@@ -253,7 +276,11 @@ module Gate
       env = Envelope.new(script: "gate")
       loop_mode = options[:profile] == "loop"
 
-      applicable = gate_applicable?(env)
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+
+      ledger_path = manifest.gate_guard_ledger
+      applicable = gate_applicable?(env, manifest)
 
       missing = sabotage_missing(env)
       env.data[:sabotage] = { missing: missing }
@@ -266,11 +293,7 @@ module Gate
       end
 
       env.data[:applicable] = applicable
-      env.data[:carve_out_reason] =
-        applicable ? nil : (
-          "no changes under lib/, test/, config/, mix.exs, mix.lock, or .claude/scripts/ - " \
-          "nothing for the quality gate to measure"
-        )
+      env.data[:carve_out_reason] = applicable ? nil : carve_out_reason(manifest)
 
       # The carve-out ("skip mix quality and review the diff instead") is a
       # pre-commit decision about the full gate - see /commit's Step 0. It
@@ -286,35 +309,51 @@ module Gate
         env.data[:profile] = nil
         env.data[:stages] = []
         env.data[:skipped_stages] = []
-        env.data[:gate_guard] = { ledger_path: LEDGER_PATH, ledger_exists: File.exist?(LEDGER_PATH), stage: nil }
+        env.data[:gate_guard] = gate_guard_from([], ledger_path)
         return env.emit(io)
       end
 
-      quality_args = loop_mode ? ["--profile", "loop"] : []
-      _res, report = run_quality(env, quality_args)
+      res, report = run_quality(env, manifest, loop_mode)
+      tier = report.nil? ? 0 : 1
       report ||= {}
       stages = report["stages"] || []
       skipped = skipped_from(stages)
 
       env.data[:ran] = loop_mode ? "loop" : "all"
+      env.data[:tier] = tier
       env.data[:status] = report["status"]
       env.data[:scope] = report["scope"]
       env.data[:profile] = report["profile"]
       env.data[:stages] = stages
       env.data[:skipped_stages] = skipped
-      env.data[:gate_guard] = gate_guard_from(stages)
+      env.data[:gate_guard] = gate_guard_from(stages, ledger_path)
 
       if loop_mode
         env.data[:attested] = false
         env.data[:attestation_message] = nil
-      else
-        verify_res = Sh.run(%w[mix gate.verify], envelope: env, timeout: 600)
+      elsif manifest.gate_attest
+        verify_res = Sh.run(manifest.gate_attest, envelope: env, timeout: 600)
         env.data[:attested] = verify_res.success?
         env.data[:attestation_message] =
           (verify_res.success? || verify_res.err.to_s.strip.empty? ? verify_res.out : verify_res.err).to_s.strip
+      else
+        # Tier 0/1 without attestation (docs/gate-contract.md): "prove it was
+        # a full gate" degrades to "this run of gate.full exited zero". Say
+        # so rather than reporting an attestation that never happened.
+        env.data[:attested] = false
+        env.data[:attestation_message] =
+          "this project has no gate.attest command; attestation degrades to the exit code of the run above"
       end
 
-      env.fail! if report["status"] && report["status"] != "ok"
+      # Tier 1 judges on the report's status; tier 0 has only the exit code,
+      # which is the whole of the contract's floor. Neither substitutes for
+      # the other: a tier-0 green is "the gate command passed", never "a full
+      # attested gate is green".
+      if tier.zero?
+        env.fail! unless res.success?
+      elsif report["status"] && report["status"] != "ok"
+        env.fail!
+      end
 
       skipped.each do |s|
         if s[:project_level]

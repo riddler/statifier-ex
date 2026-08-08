@@ -67,7 +67,7 @@ class Manifest
     "beads" => %w[prefix topology areas],
     "beads.areas" => %w[labels lands_alone always_batchable],
     "forge" => %w[kind labels],
-    "gate" => %w[full loop report attest guard_ledger build_paths also_gated_paths moving_files],
+    "gate" => %w[full loop report report_loop attest guard_ledger build_paths also_gated_paths moving_files],
     "parallelism" => %w[model worktrees_dir trust warm_clone warm_globs warm repair_when repair post_branch],
     "tmux" => %w[session model],
     "artifacts" => %w[plans research filename repository],
@@ -82,6 +82,7 @@ class Manifest
     "commits.subject_under" => 50,
     "commits.body_line_max" => 72,
     "commits.total_lines_max" => 40,
+    "commits.trailer.key" => "Refs",
     "artifacts.filename" => "YYMMDD-[id-]kebab"
   }.freeze
 
@@ -223,6 +224,14 @@ class Manifest
 
   def gate_report
     value = fetch("gate.report")
+    value && argv(value)
+  end
+
+  # The tier-1 reporting command for a loop run. Separate from `gate.report`
+  # because composing it (base command + profile flag) would mean the kit
+  # knowing one gate tool's flag surface.
+  def gate_report_loop
+    value = fetch("gate.report_loop")
     value && argv(value)
   end
 
@@ -378,7 +387,7 @@ class Manifest
   # Command fields carry argv arrays. Checked here as well as at the
   # accessor so `check` reports a shell-string command as a validation
   # error rather than exploding mid-run in whichever script reads it first.
-  COMMAND_FIELDS = %w[gate.full gate.loop gate.report gate.attest parallelism.trust].freeze
+  COMMAND_FIELDS = %w[gate.full gate.loop gate.report gate.report_loop gate.attest parallelism.trust].freeze
   COMMAND_LIST_FIELDS = %w[parallelism.warm parallelism.repair parallelism.post_branch].freeze
 
   def validate!

@@ -105,7 +105,7 @@ module SelectBatch
         when "--help"
           puts usage
           exit 0
-        when /\A#{Refs::BEAD_ID}\z/
+        when /\A#{Refs.bead_id}\z/
           options[:explicit_ids] << arg
           i += 1
         else

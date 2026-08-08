@@ -49,7 +49,7 @@ module WorktreeSurvey
     def decompose_bead(branch)
       return nil unless branch
 
-      m = branch.match(/\A(#{Refs::BEAD_ID})-/)
+      m = branch.match(/\A(#{Refs.bead_id})-/)
       m && m[1]
     end
 
