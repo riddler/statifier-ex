@@ -29,6 +29,24 @@ defmodule Statifier.Parser do
   - Anything outside the root element - the prolog, the XML declaration,
     trailing whitespace - is discarded.
 
+  ## Relaxed input
+
+  `parse/1` takes the caller's binary and parses *that binary*. It never
+  normalizes, and in particular never inserts `xmlns` or `version` into the
+  start tag and never prepends an XML declaration. Every span therefore
+  slices out of the caller's own source with `Location.slice/2`, and
+  ADR-0014's attribute-relative arithmetic needs no translation.
+
+  Boilerplate-free fragments are supported, unconditionally and with no
+  option. v1's `:relaxed` (default `true`) and `:xml_declaration` (default
+  `false`) have no v2 equivalents: relaxation is not a mode here, it is what
+  this layer is, and the prolog is discarded anyway so an inserted
+  declaration would buy nothing but v1's documented line shift.
+
+  Rejecting a fragment for missing boilerplate is the validator's job
+  (st-l5k.5), because a `%Document{}` with `xmlns: nil` is representable and
+  this layer reports only what it cannot represent.
+
   ## Locations
 
   Saxy 1.6.1 passes handlers no position data of any kind and has no option
