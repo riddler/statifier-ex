@@ -103,6 +103,32 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
 
       assert {:ok, _document} = validate!(xml)
     end
+
+    # sabotage: candidate?/1 drops its `kind: :state` conjunct (matching any
+    # kind, the way it did before this check learned that <parallel> has no
+    # positional default entry) -> the <parallel> below is wrongly treated
+    # as a default-entry candidate, its leading <history> reports
+    # :default_entry_not_enterable, and this "reports nothing" assertion
+    # goes red
+    test "a <parallel> whose first child is a <history> reports nothing" do
+      # SCION's history3, history4, history4b, and history5 all open a
+      # <parallel> with a <history> child; a parallel enters every region on
+      # entry (spec 3.4), so which child comes first is not a default-entry
+      # question at all.
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <parallel id="p">
+              <history id="h" type="deep">
+                  <transition target="a"/>
+              </history>
+              <state id="a"/>
+              <state id="b"/>
+          </parallel>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
   end
 
   defp find(errors, id) do

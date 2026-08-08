@@ -18,7 +18,9 @@ defmodule Statifier.ValidatorTest do
 
   # Corpus-shaped: compound states with both `initial` forms (on different
   # states, per Phase 3's mutual-exclusion rule - Decision 10), a <parallel>
-  # with two regions, both shallow and deep <history> each with a legal
+  # with two regions *led by a <history>* (SCION's history3/4/4b/5 all open a
+  # <parallel> that way, and check 7 must not read that child order as a
+  # default-entry mistake), both shallow and deep <history> each with a legal
   # default transition, a <final> with <donedata><content>, onentry/onexit
   # blocks, and full xmlns/version boilerplate.
   @valid_document """
@@ -43,6 +45,9 @@ defmodule Statifier.ValidatorTest do
           <state id="child_d"/>
       </state>
       <parallel id="par">
+          <history id="par_hist" type="deep">
+              <transition target="region_a_1"/>
+          </history>
           <state id="region_a">
               <state id="region_a_1"/>
           </state>
@@ -95,6 +100,9 @@ defmodule Statifier.ValidatorTest do
           <s:state id="child_d"/>
       </s:state>
       <s:parallel id="par">
+          <s:history id="par_hist" type="deep">
+              <s:transition target="region_a_1"/>
+          </s:history>
           <s:state id="region_a">
               <s:state id="region_a_1"/>
           </s:state>
