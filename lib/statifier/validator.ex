@@ -30,6 +30,9 @@ defmodule Statifier.Validator do
   """
 
   alias Statifier.Document
+  alias Statifier.Validator.Checks.DefaultEntry
+  alias Statifier.Validator.Checks.Donedata
+  alias Statifier.Validator.Checks.Final
   alias Statifier.Validator.Checks.History
   alias Statifier.Validator.Checks.Ids
   alias Statifier.Validator.Checks.InitialElement
@@ -43,7 +46,10 @@ defmodule Statifier.Validator do
     &Targets.check/2,
     &InitialTargets.check/2,
     &InitialElement.check/2,
-    &History.check/2
+    &History.check/2,
+    &Final.check/2,
+    &DefaultEntry.check/2,
+    &Donedata.check/2
   ]
 
   @spec validate(document :: Document.t(), source :: binary()) ::
