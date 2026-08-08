@@ -19,12 +19,12 @@ defmodule Mix.Statifier.AdrJudgeCorpusTest do
   # other clause provably unreachable and the compiler says so on every
   # `mix test` run. One branch per test also means a failure message can
   # only be the one its fixture's row asked for.
-  # sabotage: n/a - scores real model output against known fixtures; the
-  #           implementation under test is the prompt, not a pure function
   for entry <- AdrJudgeCorpus.manifest() do
     @entry entry
 
     if entry.expect == :violation do
+      # sabotage: n/a - scores real model output against known fixtures; the
+      #           implementation under test is the prompt, not a pure function
       test "#{entry.file} (violation)" do
         findings = judge(@entry)
 
@@ -36,6 +36,8 @@ defmodule Mix.Statifier.AdrJudgeCorpusTest do
                "WRONG ADR: #{@entry.file} survived under #{inspect(Enum.map(findings, & &1.check))}"
       end
     else
+      # sabotage: n/a - scores real model output against known fixtures; the
+      #           implementation under test is the prompt, not a pure function
       test "#{entry.file} (clean)" do
         findings = judge(@entry)
 
