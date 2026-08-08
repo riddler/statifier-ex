@@ -13,7 +13,8 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   alias Mix.Tasks.Adr.Judge
   alias Statifier.TmpDir
 
-  @no_scoped_changes_summary "no files in this diff are in a judged ADR scope (lib/statifier/)"
+  @no_scoped_changes_summary "no files in this diff are in a judged ADR scope " <>
+                               "(lib/statifier/, .claude/skills/**/SKILL.md)"
 
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
@@ -313,6 +314,12 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # a `caller` - this can never shell out to the real `claude` CLI,
   # regardless of what this worktree's own lib/statifier/ looks like.
   #
+  # The registry now also carries ADR-0015's `.claude/skills/**/SKILL.md`
+  # scope (st-laz), so the premise widens to cover it too: the seeded repo has
+  # one `README.md` and no `.claude/` tree at all, so it is out of scope for
+  # every registered ADR, not just the lib/statifier/ ones - the skip still
+  # fires the same way.
+  #
   # This still assumes the `claude` CLI is on PATH in the environment running
   # this suite (true of every developer/CI environment this task is built
   # for - it is the tool `mix adr.judge` itself shells out to). If that
@@ -324,11 +331,11 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # `@tag :isolated_tmp_dir` one.
   # sabotage: change execute/2's default opts from `[]` to
   #           `[cli_available: false]` -> red: the unsabotaged default reaches
-  #           git and finds no lib/statifier/ diff against the scratch repo's
-  #           HEAD, while the sabotaged default never gets past the CLI
-  #           check, so the skip reason changes from "no files in this diff
-  #           are in a judged ADR scope (lib/statifier/)" to "claude CLI not
-  #           on PATH"
+  #           git and finds no in-scope diff against the scratch repo's HEAD
+  #           for either registered scope, while the sabotaged default never
+  #           gets past the CLI check, so the skip reason changes from "no
+  #           files in this diff are in a judged ADR scope (lib/statifier/,
+  #           .claude/skills/**/SKILL.md)" to "claude CLI not on PATH"
   test "execute/1 falls back to the real cli_available and git checks" do
     repo_dir = scratch_repo_dir()
     File.rm_rf!(repo_dir)

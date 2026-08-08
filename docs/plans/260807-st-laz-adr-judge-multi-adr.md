@@ -560,12 +560,12 @@ to say the premise now covers both scopes.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality` (which now includes the
+- [x] Full quality gate passes: `mix quality` (which now includes the
       `Script tests` stage over the edited Ruby)
-- [ ] `ruby .claude/scripts/test/run.rb` passes on its own
-- [ ] `mix adr.judge --format json` on a diff matching neither scope skips
+- [x] `ruby .claude/scripts/test/run.rb` passes on its own
+- [x] `mix adr.judge --format json` on a diff matching neither scope skips
       with a reason naming both
-- [ ] Coverage does not drop
+- [x] Coverage does not drop
 
 #### Manual Verification:
 - [ ] `mix quality --profile merge` on this very branch runs the `ADR judge`
@@ -816,6 +816,23 @@ execution defers the Manual items.
 - [ ] `mix quality --profile merge` on an in-scope branch shows the stage
       making two propose calls' worth of work and completing in acceptable
       time (the cost note in "Performance Considerations")
+
+**Implementation Note**: `mix quality --profile loop` between edits, full
+`mix quality` as the phase gate. Interactive execution pauses here; `--loop`
+execution defers the Manual items.
+
+---
+
+### Phase 4
+
+- [ ] `mix quality --profile merge` on this very branch runs the `ADR judge`
+      stage (rather than skipping) because the branch edits SKILL.md files -
+      the end-to-end proof the new scope and the carve-out widening agree
+- [ ] The propose pass, run live, returns a parseable verdict for a SKILL.md
+      hunk (the same live check the st2-meo plan ran for ADR-0012; a genuine
+      surviving finding is not required, matching that plan's still-open item)
+- [ ] `ruby .claude/scripts/repo_state.rb` still reports `touches_elixir`
+      false for a skills-only change - `any?` must not have moved
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
 `mix quality` as the phase gate. Interactive execution pauses here; `--loop`

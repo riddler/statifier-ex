@@ -100,19 +100,22 @@ the carve-out below).
 
 Read the result:
 - `data.applicable` false means the diff touches nothing under `lib/`, `test/`,
-  `config/`, `.claude/scripts/`, and neither `mix.exs` nor `mix.lock` - there is
-  no gate to run, and `data.carve_out_reason` says so. **This carve-out is
-  narrow and it is not a judgment call**: one file from that list in the diff
-  and `data.applicable` is true, full stop. When it applies, say so in the
-  Step 4 report ("docs only, no quality gate applicable") rather than letting a
-  reader assume a green gate that never ran.
+  `config/`, `.claude/scripts/`, `.claude/skills/`, and neither `mix.exs` nor
+  `mix.lock` - there is no gate to run, and `data.carve_out_reason` says so.
+  **This carve-out is narrow and it is not a judgment call**: one file from
+  that list in the diff and `data.applicable` is true, full stop. When it
+  applies, say so in the Step 4 report ("docs only, no quality gate
+  applicable") rather than letting a reader assume a green gate that never ran.
 
   `.claude/scripts/` is on that list because the gate's `Script tests` stage
-  runs the Ruby suite covering it (ADR-0011 ledger entry st-hzf). The carve-out
-  tracks **what the gate measures**, not what the Elixir build compiles - if a
-  future stage measures something else outside `lib/`, it belongs here and in
-  `lib/touches_elixir.rb`'s `gate_applicable?` too. A stage the carve-out does
-  not know about is a stage that never runs on the branches it exists for.
+  runs the Ruby suite covering it (ADR-0011 ledger entry st-hzf). `.claude/
+  skills/` is on it because the `ADR judge` stage's ADR-0015 scope
+  (`.claude/skills/**/SKILL.md`) judges those files for constraint 4. The
+  carve-out tracks **what the gate measures**, not what the Elixir build
+  compiles - if a future stage measures something else outside `lib/`, it
+  belongs here and in `lib/touches_elixir.rb`'s `gate_applicable?` too. A
+  stage the carve-out does not know about is a stage that never runs on the
+  branches it exists for.
 - `ok: false` with `data.applicable: true` is a real gate failure - see "If
   Quality Checks Fail" below, including the `Gate guard` case.
 - `data.skipped_stages` lists every skipped stage, and each entry says which

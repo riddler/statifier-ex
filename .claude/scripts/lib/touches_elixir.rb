@@ -35,7 +35,12 @@ module TouchesElixir
   # Paths that no longer carve out, even though they touch no Elixir,
   # because a gate stage now measures them.
   GATED_NON_ELIXIR_PATTERNS = [
-    %r{\A\.claude/scripts/}
+    %r{\A\.claude/scripts/},
+    # The `ADR judge` stage's ADR-0015 scope (the `adr-0015-swallowed-
+    # judgment` registry entry in `lib/mix/statifier/adr_judge.ex`,
+    # `.claude/skills/**/SKILL.md`) reads these files, so a branch touching
+    # only a SKILL.md does have a gate to run.
+    %r{\A\.claude/skills/}
   ].freeze
 
   GATE_PATTERNS = (PATTERNS + GATED_NON_ELIXIR_PATTERNS).freeze
