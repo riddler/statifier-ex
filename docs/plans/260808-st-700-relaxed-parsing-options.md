@@ -448,11 +448,11 @@ are the content.)
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `changelog.d/st-700.md` exists and uses only standard Keep a Changelog
+- [x] `changelog.d/st-700.md` exists and uses only standard Keep a Changelog
       headings
-- [ ] **Full gate, unscoped and unprofiled**: `mix quality`
-- [ ] Full-gate provenance proven, not remembered: `mix gate.verify`
-- [ ] No gate-config file was touched, so `mix gate.check` (the Gate guard
+- [x] **Full gate, unscoped and unprofiled**: `mix quality`
+- [x] Full-gate provenance proven, not remembered: `mix gate.verify`
+- [x] No gate-config file was touched, so `mix gate.check` (the Gate guard
       stage) needs no `docs/quality-gate-changes.md` entry - confirm it reports
       clean rather than assuming it
 
@@ -606,6 +606,23 @@ and surfaced once at the end instead of blocking here.
       that direction (a) is what is being tested.
 - [ ] Each sabotage comment names one specific mutation, in present tense, and
       the test it sits above is the test that reddens
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for manual confirmation from the human that the manual
+testing was successful before proceeding to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The fragment reads as a migration note for a 1.x user, not as a
+      transcript of this bead
+- [ ] The deferred st-l5k.5 checks have been raised with the human (see Open
+      Questions) - the plan recommends the bead edit; it does not make it
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive
