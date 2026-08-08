@@ -23,7 +23,10 @@ defmodule Statifier.Document.Content do
   `expr` and `text` are both nilable and both representable at the same
   time, even though spec 5.6 says a document MUST NOT specify both. That
   mutual exclusion is a validator concern, not this layer's - holding both
-  is exactly what lets a future check report a document that violates it.
+  is exactly what lets `Statifier.Validator.Checks.Content` report a
+  document that violates it (st-f6k), as `{:content_expr_and_text, expr}`
+  at this node's own `location`. Whitespace-only `text` is source
+  formatting rather than a payload and is not reported.
   """
 
   alias Statifier.Document
