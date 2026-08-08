@@ -710,8 +710,8 @@ locked into the default.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] If `@default_model` changed, the existing suite still passes (no test
+- [x] Full quality gate passes: `mix quality`
+- [x] If `@default_model` changed, the existing suite still passes (no test
       asserts the model id today; if one is added, it reads the attribute
       rather than re-typing the string)
 
@@ -723,6 +723,64 @@ locked into the default.
       recorded next to the bead's 176.1s baseline
 - [ ] A reader of the moduledoc can tell how to re-run the corpus and what the
       last recorded score was
+
+#### Phase 4 measurement (recorded)
+
+**Corpus run**, `mix test --only adr_judge_corpus --seed 0 --trace`,
+2026-08-08, `STATIFIER_ADR_JUDGE_MODEL=claude-sonnet-5`, same reworked
+`refute_prompt/1` as the Phase 2 re-run (unchanged in Phase 4 - this phase
+touches no prompt code). Total wall time **91.4 s** for 8 fixtures; **0
+failures**.
+
+| Fixture | Expect | Verdict | Classification | Wall |
+|---|---|---|---|---|
+| `0012_dropped_location.diff` | violation | PASS | correct (surviving finding) | 13.6 s |
+| `0012_dropped_trace.diff` | violation | PASS | correct (surviving finding) | 12.1 s |
+| `0012_rename_keeps_location.diff` | clean | PASS | correct | 14.6 s |
+| `0012_pure_docs_change.diff` | clean | PASS | correct | 5.6 s |
+| `0014_span_table_dropped.diff` | violation | PASS | correct (surviving finding) | 12.1 s |
+| `0014_span_preserving_refactor.diff` | clean | PASS | correct | 5.4 s |
+| `0015_delegated_judgment.diff` | violation | PASS | correct (surviving finding) | 12.2 s |
+| `0015_mechanics_only.diff` | clean | PASS | correct | 15.1 s |
+
+Score: **0 false negatives out of 4 violating fixtures (0%), 0 false
+positives out of 4 clean fixtures (0%)** on `claude-sonnet-5` - identical to
+Phase 2's haiku score (0/4, 0/4). Sonnet's per-call latency in this run was
+markedly lower than haiku's (91.4 s total versus haiku's 272.4 s for the same
+8 fixtures), but that is not what the decision rule below turns on.
+
+**Three-entry `mix adr.judge` timing**, both against the same real,
+uncommitted scratch diff (a comment-only addition to
+`lib/statifier/document/content.ex`, landing in both the ADR-0012 and
+ADR-0014 `lib/statifier/` scope, plus a comment-only addition to
+`.claude/skills/commit/SKILL.md`, landing in the ADR-0015 scope - three
+registry entries judged in one invocation, matching the bead's "three-entry"
+shape). Reverted immediately after each measurement; neither appears in the
+final diff.
+
+| Model | Wall time | vs. bead's 176.1s baseline |
+|---|---|---|
+| `claude-haiku-4-5-20251001` (`STATIFIER_ADR_JUDGE_MODEL` unset) | 54.4 s | faster |
+| `claude-sonnet-5` | 19.6 s | faster |
+
+Both land well inside the 360s (6-minute) bound Open Question 3 sets, and
+both are considerably faster than the bead's original 176.1s figure - the
+scratch diff here is a same-shape but comment-only edit rather than the
+bead's real violation-shaped diff, and a "no violation" propose verdict
+appears to resolve faster than one that has to reason through a genuine
+finding, so these two numbers are not read as contradicting the bead's
+figure, only as bounding this measurement's own run.
+
+**Decision**: **keep `claude-haiku-4-5-20251001` as `@default_model`.** The
+decision rule requires the corpus score to *strictly improve* (fewer false
+negatives than haiku's 0/4) before a raise is considered, and sonnet's score
+is unchanged at 0/4 false negatives, 0/4 false positives - there was no
+headroom left for sonnet to improve on, since Phase 2's prompt fix alone
+already reached a perfect score on haiku. This is exactly the plan's stated
+expected outcome ("If the score is unchanged and the prompt fix alone closed
+the bug, keep haiku and record the sonnet numbers as the evidence for that
+choice"). No code changes in this phase; `STATIFIER_ADR_JUDGE_MODEL` remains
+available for anyone who wants to opt into sonnet anyway.
 
 ---
 
