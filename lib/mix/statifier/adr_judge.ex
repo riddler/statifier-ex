@@ -12,16 +12,29 @@ defmodule Mix.Statifier.AdrJudge do
   the bar to reach gate-failure status is higher than an FYI).
 
   The refute pass now sees the same diff hunks the propose pass saw, not
-  just the ADR text and the one-sentence claim, and its prompt requires the
-  refuting argument to be grounded in that material - the ADR text, the
-  claim, or the hunks. A defence of the shape "the change does not show X,
-  but X might exist elsewhere" is unverifiable with no tool access to check
-  it, so it does not overturn a claim (st-6f7: the refute pass had
-  overturned a real ADR-0012 violation on exactly that hypothesis, a
+  just the ADR text and the one-sentence claim - the same material the
+  propose pass reasoned from, so "the change does not show X" is checkable
+  by the refute pass rather than an assumption it cannot verify - and its
+  prompt requires the refuting argument to be grounded in that material - the
+  ADR text, the claim, or the hunks. A defence of the shape "the change does
+  not show X, but X might exist elsewhere" is unverifiable with no tool
+  access to check it, so it does not overturn a claim (st-6f7: the refute
+  pass had overturned a real ADR-0012 violation on exactly that hypothesis, a
   mechanism the diff never showed and the pass had no way to confirm). The
   tie rule survives narrowed to match: ambiguity *within the shown material*
   still breaks toward "not a violation," but uncertainty about material
   never shown is not a tie.
+
+  `@default_model` is measured, not assumed: st-6f7 Phase 4 ran the fixture
+  corpus (`test/mix/statifier/adr_judge_corpus_test.exs`,
+  `mix test --only adr_judge_corpus`) against both `claude-haiku-4-5-20251001`
+  (today's default) and `claude-sonnet-5`. Both scored 0 false negatives and 0
+  false positives out of 8 fixtures - haiku already reached a perfect score
+  once the refute prompt was grounded (Phase 2), so sonnet had no headroom
+  left to improve on and the default stays haiku. Re-run the corpus with
+  `STATIFIER_ADR_JUDGE_MODEL` set to compare a candidate model before raising
+  `@default_model`; see `docs/testing.md`'s corpus subsection for the recorded
+  scores and how to read a failure.
 
   `analyze/2` is pure given a `source()` (a diff already split into one
   in-scope slice per judged ADR) and an `opts[:caller]` (a function from a

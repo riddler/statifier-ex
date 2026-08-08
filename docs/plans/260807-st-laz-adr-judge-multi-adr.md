@@ -744,12 +744,20 @@ Recorded rather than blocking - no human was available during planning.
    propose prompt. No cap exists today for `lib/statifier/` either. If a live
    run ever truncates or errors on size, that is a follow-up bead, not a
    silent failure - `parse_cli_response/1` fails closed.
-6. **Live-verified surviving finding remains unproven**, exactly as the
-   st2-meo plan's last Deferred Manual Verification item records for
-   ADR-0012. This plan does not resolve it; a SKILL.md scope may make it
-   easier to reach live, since skill prose diffs carry more self-contained
-   context than a single interpreter function, but that is a hope, not a
-   criterion.
+6. **Live-verified surviving finding remains unproven** - **answered by
+   st-6f7.** *Was: exactly as the st2-meo plan's last Deferred Manual
+   Verification item records for ADR-0012. This plan does not resolve it; a
+   SKILL.md scope may make it easier to reach live, since skill prose diffs
+   carry more self-contained context than a single interpreter function, but
+   that is a hope, not a criterion.* st-6f7's corpus fixture
+   `test/fixtures/adr_judge/0012_dropped_location.diff` - the same enforced
+   `:location` field dropped from `Statifier.Document.Content` this item
+   names - produced a false negative at baseline and a surviving finding
+   after the refute-prompt grounding fix, confirmed across both the Phase 2
+   and Phase 4 corpus runs. See
+   `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 1
+   baseline, Phase 2 corpus re-run, and Phase 4 measurement sections for the
+   recorded scores.
 
 ## References
 

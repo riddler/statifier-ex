@@ -56,6 +56,21 @@ from the three above in kind, not just in tag:
   produced no surviving finding), a **false positive** (a known-clean fixture
   produced one anyway), or a **wrong-ADR attribution** (a violation survived
   under the wrong registry key).
+- **Recorded scores**, `claude-haiku-4-5-20251001` unless noted, 8 fixtures
+  (4 violating, 4 clean) each run:
+
+  | Run | False negatives | False positives | Wall time |
+  |---|---|---|---|
+  | Baseline (2026-08-08, unmodified `refute_prompt/1`) | 4/4 | 0/4 | 357.9s |
+  | Phase 2 (grounded `refute_prompt/1`, hunks shown) | 0/4 | 0/4 | 272.4s |
+  | Phase 4, `claude-sonnet-5` (same grounded prompt) | 0/4 | 0/4 | 91.4s |
+
+  The prompt rework (st-6f7 Phase 2) closed every false negative; Phase 4
+  measured `claude-sonnet-5` against the same corpus and found no further
+  headroom (haiku was already perfect), so `@default_model` stays haiku - see
+  `Mix.Statifier.AdrJudge`'s moduledoc and
+  `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
+  measurement section for the full per-fixture numbers and the decision.
 
 ## Sabotage testing
 
