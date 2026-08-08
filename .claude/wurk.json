@@ -1,0 +1,78 @@
+{
+  "wurk": 1,
+
+  "beads": {
+    "prefix": "st",
+    "topology": "beads",
+    "areas": {
+      "labels": [
+        "area:interpreter",
+        "area:parser",
+        "area:datamodel",
+        "area:corpus",
+        "area:test-harness",
+        "area:skills",
+        "area:docs",
+        "area:build"
+      ],
+      "lands_alone": ["area:build"],
+      "always_batchable": ["upstream"]
+    }
+  },
+
+  "forge": {
+    "kind": "github",
+    "labels": {}
+  },
+
+  "gate": {
+    "full": ["mix", "quality"],
+    "loop": ["mix", "quality", "--profile", "loop"],
+    "report": ["mix", "quality", "--report", "-"],
+    "attest": ["mix", "gate.verify"],
+    "guard_ledger": "docs/quality-gate-changes.md",
+    "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
+    "also_gated_paths": [".claude/scripts/", ".claude/skills/"],
+    "moving_files": [".quality.exs", ".credo.exs", "coveralls.json"]
+  },
+
+  "parallelism": {
+    "model": "worktree-per-issue",
+    "worktrees_dir": "../statifier-ex-worktrees",
+    "trust": ["mise", "trust", "{path}"],
+    "warm_clone": ["deps", "_build"],
+    "warm_globs": ["_build/dev/dialyxir_erlang-*_elixir-*_deps-dev.plt*"],
+    "warm": [["mix", "deps.get"]],
+    "repair_when": "mix.lock",
+    "repair": [["mix", "deps.get"]],
+    "post_branch": []
+  },
+
+  "tmux": {
+    "session": "statifier-ex",
+    "model": "opus"
+  },
+
+  "artifacts": {
+    "plans": "docs/plans",
+    "research": "docs/research",
+    "filename": "YYMMDD-[id-]kebab"
+  },
+
+  "commits": {
+    "style": "s-form",
+    "subject_under": 50,
+    "body_line_max": 72,
+    "total_lines_max": 40,
+    "trailer": {
+      "key": "Refs"
+    }
+  },
+
+  "changelog": {
+    "mode": "fragments",
+    "dir": "changelog.d"
+  },
+
+  "release": null
+}
