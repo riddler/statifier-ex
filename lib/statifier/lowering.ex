@@ -26,13 +26,13 @@ defmodule Statifier.Lowering do
   ## Dispatch is context-free
 
   The dispatch map's keys are exactly the supported element names
-  (Decision 4); nothing here or in `Builders` takes a parent element name as
-  an argument. A builder does not know or care what its parent was - the
-  parent, when it exists, is what decides whether the child's tagged result
-  has anywhere to go (`Builders.place/2`, from Phase 2 on). This phase's map
-  holds only `"scxml"`, so every element child of `<scxml>` misses it and
-  becomes an `{:unsupported_element, name}` error; that is expected, not a
-  gap to work around.
+  (Decision 4); no `build_*` function in `Builders` takes a parent element
+  name as an argument. A builder does not know or care what its parent was -
+  the parent, when it exists, is what decides whether the child's tagged
+  result has anywhere to go (`Builders.place/3`, from Phase 2 on). The
+  parent's own element name is known only to itself, and is used solely to
+  word a `{:misplaced_element, name, parent_name}` error about one of *its
+  own* children - it is never handed down to a child builder.
   """
 
   alias Statifier.Document
@@ -41,7 +41,15 @@ defmodule Statifier.Lowering do
   alias Statifier.Parser.DOM.Element
   alias Statifier.Parser.DOM.Text
 
-  @dispatch %{"scxml" => &Builders.build_scxml/2}
+  @dispatch %{
+    "scxml" => &Builders.build_scxml/2,
+    "state" => &Builders.build_state/2,
+    "parallel" => &Builders.build_parallel/2,
+    "final" => &Builders.build_final/2,
+    "history" => &Builders.build_history/2,
+    "initial" => &Builders.build_initial/2,
+    "transition" => &Builders.build_transition/2
+  }
 
   @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
   def lower(%Element{name: name} = root) do
