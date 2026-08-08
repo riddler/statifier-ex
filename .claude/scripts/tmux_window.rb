@@ -4,6 +4,7 @@
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
 
 # TmuxWindow is the tmux mechanics shared by /new-worktree (open a seeded
 # window) and /cleanup-worktrees (find, classify, quiesce, close one), per
@@ -19,25 +20,7 @@ require_relative "lib/cli"
 # window every one of whose panes is already a bare shell, in `close`, is not
 # this rule - it targets nothing alive.)
 module TmuxWindow
-  SESSION = "statifier-ex"
-  # Exact-match target. Fish and zsh expand a leading `=` as a command path
-  # (equals-expansion), so a bare `-t =statifier-ex:` typed at a shell dies
-  # with "statifier-ex: not found" before tmux ever sees it (verified
-  # 2026-08-02). Sh.run always uses argv with no shell in between, so that
-  # quoting hazard cannot occur here - this comment stays anyway, because
-  # anyone reading a rendered `commands` line will copy it into a shell.
-  SESSION_TARGET = "=#{SESSION}"
-  MAIN_REPO = "/Users/johnnyt/repos/github/statifier-ex"
-
   SHELL_COMMANDS = %w[fish zsh bash sh].freeze
-
-  # --model is an explicit constant, never left to whatever
-  # ~/.claude/settings.json's global default happens to be. A skill's own
-  # `model:` frontmatter governs that skill's invocation once a session is
-  # already running; it does not govern the CLI session itself being
-  # launched here, which is why this flag exists and must not be
-  # "simplified" away.
-  MODEL = "opus"
 
   # The convergence point every caller relies on: editing this one template
   # reaches every seeded session without touching the calling skills. `%s`
@@ -66,6 +49,17 @@ module TmuxWindow
 
     def sleep_fn
       @sleep_fn ||= ->(seconds) { Kernel.sleep(seconds) }
+    end
+
+    # Exact-match target for a session name. Fish and zsh expand a leading
+    # `=` as a command path (equals-expansion), so a bare `-t =my-session:`
+    # typed at a shell dies with "my-session: not found" before tmux ever
+    # sees it (verified 2026-08-02). Sh.run always uses argv with no shell in
+    # between, so that quoting hazard cannot occur here - this stays anyway,
+    # because anyone reading a rendered `commands` line will copy it into a
+    # shell.
+    def session_target(session)
+      "=#{session}"
     end
 
     def run(argv, io: $stdout)
@@ -121,6 +115,38 @@ module TmuxWindow
       "usage: tmux_window.rb <ensure-session|open|find|classify|quiesce|close> [options]"
     end
 
+    # The manifest's `tmux` section is optional: absent means the project
+    # opted out of tmux integration entirely, which is a block rather than a
+    # default. Guessing a session name would create a second, parallel
+    # session nothing else in the kit knows how to find. Only the two
+    # subcommands that address a session by name (`ensure-session`, `open`)
+    # need this; `find`, `classify`, `quiesce` and `close` all work from a
+    # window id and stay session-agnostic.
+    def tmux_manifest(env)
+      manifest = Manifest.require!(env)
+      return nil unless manifest
+
+      unless manifest.tmux?
+        env.block!(
+          code: "tmux_not_configured",
+          message: "no tmux section in #{manifest.path}; this project has not opted into tmux integration"
+        )
+        return nil
+      end
+
+      manifest
+    end
+
+    # The seeded session's command line. `--model` is always passed
+    # explicitly, never left to whatever ~/.claude/settings.json's global
+    # default happens to be: a skill's own `model:` frontmatter governs that
+    # skill's invocation once a session is already running, and does not
+    # govern the CLI session itself being launched here. The value is
+    # `tmux.model` from the manifest; the flag must not be "simplified" away.
+    def claude_command(model, seed, id)
+      "claude --permission-mode auto --model #{model} '#{seed}.#{FINISH_TEMPLATE % id}'"
+    end
+
     # --- classify helpers ------------------------------------------------
 
     # The transcript echoes every user message with the same ❯ marker, so an
@@ -162,19 +188,39 @@ module TmuxWindow
       env = Envelope.new(script: "tmux_window_ensure_session")
       dry_run = options[:dry_run]
 
-      has_argv = ["tmux", "has-session", "-t", SESSION_TARGET]
-      new_argv = ["tmux", "new-session", "-d", "-s", SESSION, "-c", MAIN_REPO]
+      manifest = tmux_manifest(env)
+      return env.emit(io) unless manifest
+
+      session = manifest.tmux_session
+
+      # The session's working directory is the main checkout, asked of git
+      # at runtime rather than read from a constant - a hardcoded absolute
+      # path is correct on exactly one machine, and wrong silently
+      # everywhere else (the session opens in a directory that is not a
+      # checkout of anything).
+      main_repo = Manifest.main_checkout
+      unless main_repo
+        env.block!(
+          code: "main_checkout_unknown",
+          message: "git rev-parse --git-common-dir gave no main checkout to open the session in"
+        )
+        return env.emit(io)
+      end
+
+      has_argv = ["tmux", "has-session", "-t", session_target(session)]
+      new_argv = ["tmux", "new-session", "-d", "-s", session, "-c", main_repo]
 
       if dry_run
         env.commands << Sh.render(has_argv)
         env.commands << "(only if has-session fails) " + Sh.render(new_argv)
-        env.data["session"] = SESSION
+        env.data["session"] = session
+        env.data["main_repo"] = main_repo
         return env.emit(io)
       end
 
       has_res = Sh.run(has_argv, envelope: env)
       if has_res.success?
-        env.data["session"] = SESSION
+        env.data["session"] = session
         env.data["created"] = false
         return env.emit(io)
       end
@@ -185,7 +231,8 @@ module TmuxWindow
         return env.emit(io)
       end
 
-      env.data["session"] = SESSION
+      env.data["session"] = session
+      env.data["main_repo"] = main_repo
       env.data["created"] = true
       env.emit(io)
     end
@@ -203,11 +250,17 @@ module TmuxWindow
       env = Envelope.new(script: "tmux_window_open")
       dry_run = options[:dry_run]
 
+      manifest = tmux_manifest(env)
+      return env.emit(io) unless manifest
+
+      session = manifest.tmux_session
+      model = manifest.tmux_model
+
       # Guard on the window name, the same way worktree_create.rb refuses an
       # existing branch or directory - a hit here is a normal outcome
       # (report and skip), never a reason to create a second window with the
       # same name.
-      list_argv = ["tmux", "list-windows", "-t", SESSION_TARGET, "-F", '#{window_name}']
+      list_argv = ["tmux", "list-windows", "-t", session_target(session), "-F", '#{window_name}']
       list_res = Sh.run(list_argv, envelope: env)
       if list_res.success? && list_res.out.to_s.each_line.map(&:chomp).include?(name)
         env.data["name"] = name
@@ -217,15 +270,15 @@ module TmuxWindow
         return env.emit(io)
       end
 
-      keys = "claude --permission-mode auto --model #{MODEL} '#{seed}.#{FINISH_TEMPLATE % id}'"
-      new_argv = ["tmux", "new-window", "-d", "-P", "-F", '#{window_id}', "-t", "#{SESSION_TARGET}:", "-n", name, "-c", path]
+      keys = claude_command(model, seed, id)
+      new_argv = ["tmux", "new-window", "-d", "-P", "-F", '#{window_id}', "-t", "#{session_target(session)}:", "-n", name, "-c", path]
 
       if dry_run
         env.commands << Sh.render(new_argv)
         env.commands << Sh.render(["tmux", "send-keys", "-t", "$win", keys, "Enter"])
         env.data["name"] = name
         env.data["path"] = path
-        env.data["model"] = MODEL
+        env.data["model"] = model
         env.data["skipped"] = false
         return env.emit(io)
       end
@@ -251,7 +304,7 @@ module TmuxWindow
       env.data["window_id"] = window_id
       env.data["name"] = name
       env.data["path"] = path
-      env.data["model"] = MODEL
+      env.data["model"] = model
       env.data["skipped"] = false
       env.emit(io)
     end

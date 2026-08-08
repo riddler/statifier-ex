@@ -52,11 +52,14 @@ a hand-made worktree behaves exactly like a routed one.
    ```
    This covers the guard (existing branch or worktree directory), cutting the
    branch from `origin/main` (or local `main` if `git fetch` fails), trusting
-   the new path with `mise` before any mise-managed command runs there, cloning
-   `deps/` and `_build/`, and a final `mix quality --profile loop` to confirm
-   green. Run it for real - do not `--dry-run` this one, since the point of
-   the step is the worktree existing and warm. Never truncate its output if
-   you surface `data.quality_output`.
+   the new path with the toolchain manager before any managed command runs
+   there, cloning the warm caches, and a final loop-profile gate run to
+   confirm green. Every one of those - where the worktree goes, what trusts
+   it, what gets cloned, which gate command runs - is read from
+   `.claude/wurk.json`, so this prose deliberately does not restate the
+   commands. Run it for real - do not `--dry-run` this one, since the point
+   of the step is the worktree existing and warm. Never truncate its output
+   if you surface `data.quality_output`.
 
 2. Open the tmux window, only after step 1 reports `ok: true`:
    ```bash
@@ -81,9 +84,13 @@ a hand-made worktree behaves exactly like a routed one.
   script has no path that deletes a branch or directory to make room for a
   new one, and neither should you.
 - `warnings` worth surfacing in the report: `fetch_failed` (cut from local
-  `main` instead of `origin/main` - say so), `mise_trust_failed`,
-  `cache_clone_failed`, `plt_missing` (suggest `mix quality.plt` once, in
-  either checkout).
+  `main` instead of `origin/main` - say so), `trust_failed`,
+  `cache_clone_failed`, `warm_failed`, `warm_cache_missing` (in this repo
+  that is the dialyzer PLT - suggest `mix quality.plt` once, in either
+  checkout).
+- `blocked` `wrong_parallelism_model` or `missing_worktrees_dir` means the
+  project's `.claude/wurk.json` does not describe a worktree-per-issue
+  layout. Report it; do not work around it by creating a directory yourself.
 - `data.quality_green` false (`ok: false`) means the warm worktree came up red;
   report `data.quality_output` in full, never truncated.
 - `data.path`, `data.base_ref`, `data.name` feed the report and the tmux step.
@@ -156,10 +163,11 @@ a hand-made worktree behaves exactly like a routed one.
 ## Report
 
 State the worktree path, the branch and what it was cut from, that caches
-were cloned (and whether the PLT came along), the quality result, **the tmux
-window** (its name and id, or why it was skipped), and **the model it launched
-with** (`opus`) so the user can jump to it with the prefix key and knows which
-model is running there without switching to the window. Remind that subsequent
+were cloned (and whether the warm caches came along - `data.warm_caches_present`),
+the quality result, **the tmux window** (its name and id, or why it was
+skipped), and **the model it launched with** (`data.model`, from the
+manifest's `tmux.model`) so the user can jump to it with the prefix key and
+knows which model is running there without switching to the window. Remind that subsequent
 work on this issue happens **inside the worktree**, and the worktree is
 removed at merge (`/cleanup-worktrees`, or by hand:
 `git worktree remove ../statifier-ex-worktrees/<name>`).

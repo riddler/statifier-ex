@@ -37,8 +37,9 @@ feature branch and is not rebased.
 This is the whole sweep: enumerate live worktrees (dropping the main
 checkout), fetch `origin` once, then per worktree - skip if `origin/main` is
 already an ancestor, refuse if dirty, rebase onto `origin/main` (capturing
-conflicting files before aborting), repair the build only if `mix.lock` moved,
-and confirm green with `mix quality --profile loop`. Run it for real; do not
+conflicting files before aborting), repair the build only if the lockfile
+named by `parallelism.repair_when` moved, and confirm green with the
+manifest's `gate.loop` command. Run it for real; do not
 `--dry-run` a refresh you intend to act on, since the report needs the actual
 rebase and gate outcome, not a preview.
 

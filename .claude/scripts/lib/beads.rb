@@ -71,6 +71,12 @@ module Beads
     # results itself here. Keep this comment (and the workaround) until
     # #5358 is confirmed closed - do not drop it on a re-verification pass
     # without checking upstream first.
+    #
+    # Re-verified 2026-08-08 against bd 1.1.2 (the version it was written
+    # for): still broken. `bd ready --json --label-any area:skills` returned
+    # all 14 ready beads while `bd ready --json -l area:skills` returned 0,
+    # which is the silent-ignore symptom exactly. The workaround stays, and
+    # so does select_batch.rb's `unverified_filter` guard.
     def union_by_id(result_arrays)
       seen = {}
       Array(result_arrays).each do |arr|

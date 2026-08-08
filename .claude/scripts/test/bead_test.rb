@@ -5,6 +5,7 @@ require "json"
 require "stringio"
 require_relative "../lib/beads"
 require_relative "../bead"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 # Beads (lib/beads.rb): the pure logic - notes-blob splitting, the --loop
@@ -13,7 +14,7 @@ class BeadsLibTest < Minitest::Test
   # --- unwrap_show ------------------------------------------------------
 
   def test_unwrap_show_takes_first_element_of_one_element_array
-    assert_equal({ "id" => "st-abc" }, Beads.unwrap_show([{ "id" => "st-abc" }]))
+    assert_equal({ "id" => "zz-abc" }, Beads.unwrap_show([{ "id" => "zz-abc" }]))
   end
 
   def test_unwrap_show_nil_for_empty_array
@@ -21,7 +22,7 @@ class BeadsLibTest < Minitest::Test
   end
 
   def test_unwrap_show_nil_for_non_array
-    assert_nil Beads.unwrap_show({ "id" => "st-abc" })
+    assert_nil Beads.unwrap_show({ "id" => "zz-abc" })
   end
 
   # --- parse_notes / the --loop grammar ----------------------------------
@@ -105,14 +106,14 @@ class BeadsLibTest < Minitest::Test
   # --- union_by_id (--label-any workaround) -------------------------------
 
   def test_union_by_id_dedupes_across_arrays_and_sorts
-    a = [{ "id" => "st-b", "title" => "B" }, { "id" => "st-a", "title" => "A" }]
-    b = [{ "id" => "st-a", "title" => "A (dup)" }, { "id" => "st-c", "title" => "C" }]
+    a = [{ "id" => "zz-b", "title" => "B" }, { "id" => "zz-a", "title" => "A" }]
+    b = [{ "id" => "zz-a", "title" => "A (dup)" }, { "id" => "zz-c", "title" => "C" }]
 
     result = Beads.union_by_id([a, b])
 
-    assert_equal %w[st-a st-b st-c], result.map { |i| i["id"] }
+    assert_equal %w[zz-a zz-b zz-c], result.map { |i| i["id"] }
     # first occurrence wins
-    assert_equal "A", result.find { |i| i["id"] == "st-a" }["title"]
+    assert_equal "A", result.find { |i| i["id"] == "zz-a" }["title"]
   end
 
   def test_union_by_id_empty_input_is_empty
@@ -124,33 +125,33 @@ class BeadsLibTest < Minitest::Test
 
   def test_rank_candidates_picks_first_eligible_in_priority_order
     candidates = [
-      { id: "st-seed", strategy: "seeded_prompt", confidence: "strong", status: "open" },
-      { id: "st-plan", strategy: "plan_doc", confidence: "strong", status: "open" }
+      { id: "zz-seed", strategy: "seeded_prompt", confidence: "strong", status: "open" },
+      { id: "zz-plan", strategy: "plan_doc", confidence: "strong", status: "open" }
     ]
 
     ranked = Beads.rank_candidates(candidates)
 
-    assert_equal({ id: "st-seed", strategy: "seeded_prompt", confidence: "strong" }, ranked[:resolved])
+    assert_equal({ id: "zz-seed", strategy: "seeded_prompt", confidence: "strong" }, ranked[:resolved])
     assert_equal 1, ranked[:candidates].length
-    assert_equal "st-plan", ranked[:candidates].first[:id]
+    assert_equal "zz-plan", ranked[:candidates].first[:id]
     assert_nil ranked[:candidates].first[:warning]
   end
 
   def test_rank_candidates_without_seeded_bead_prefers_plan_doc_over_branch_prefix
     candidates = [
-      { id: "st-plan", strategy: "plan_doc", confidence: "strong", status: "open" },
-      { id: "st-branch", strategy: "branch_prefix", confidence: "weak", status: "open" }
+      { id: "zz-plan", strategy: "plan_doc", confidence: "strong", status: "open" },
+      { id: "zz-branch", strategy: "branch_prefix", confidence: "weak", status: "open" }
     ]
 
     ranked = Beads.rank_candidates(candidates)
 
     assert_equal "plan_doc", ranked[:resolved][:strategy]
-    assert_equal "st-branch", ranked[:candidates].first[:id]
+    assert_equal "zz-branch", ranked[:candidates].first[:id]
   end
 
   def test_rank_candidates_closed_bead_is_never_resolved_and_carries_a_warning
     candidates = [
-      { id: "st-xyz", strategy: "branch_prefix", confidence: "weak", status: "closed" }
+      { id: "zz-xyz", strategy: "branch_prefix", confidence: "weak", status: "closed" }
     ]
 
     ranked = Beads.rank_candidates(candidates)
@@ -162,25 +163,25 @@ class BeadsLibTest < Minitest::Test
 
   def test_rank_candidates_skips_closed_candidate_and_resolves_the_next_eligible_one
     candidates = [
-      { id: "st-plan", strategy: "plan_doc", confidence: "strong", status: "closed" },
-      { id: "st-branch", strategy: "branch_prefix", confidence: "weak", status: "open" }
+      { id: "zz-plan", strategy: "plan_doc", confidence: "strong", status: "closed" },
+      { id: "zz-branch", strategy: "branch_prefix", confidence: "weak", status: "open" }
     ]
 
     ranked = Beads.rank_candidates(candidates)
 
-    assert_equal "st-branch", ranked[:resolved][:id]
+    assert_equal "zz-branch", ranked[:resolved][:id]
     assert_equal 1, ranked[:candidates].length
-    assert_equal "st-plan", ranked[:candidates].first[:id]
+    assert_equal "zz-plan", ranked[:candidates].first[:id]
     refute_nil ranked[:candidates].first[:warning]
   end
 
   def test_rank_candidates_not_found_candidate_carries_a_warning_not_a_crash
-    candidates = [{ id: "st-ghost", strategy: "branch_prefix", confidence: "weak", status: nil }]
+    candidates = [{ id: "zz-ghost", strategy: "branch_prefix", confidence: "weak", status: nil }]
 
     ranked = Beads.rank_candidates(candidates)
 
     assert_nil ranked[:resolved]
-    assert_equal "bead st-ghost not found", ranked[:candidates].first[:warning]
+    assert_equal "bead zz-ghost not found", ranked[:candidates].first[:warning]
   end
 
   def test_rank_candidates_empty_input_resolves_nothing
@@ -193,6 +194,13 @@ end
 
 # Bead (bead.rb): the CLI subcommands, driven end to end through FakeSh.
 class BeadCliTest < Minitest::Test
+  include ManifestHelper
+
+  # Bead id resolution (the plan-doc filename scan and the branch-prefix
+  # scan) is built from the manifest's `beads.prefix`, so the fixture's "zz"
+  # drives every id below.
+  FIXTURE = "valid"
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -200,11 +208,13 @@ class BeadCliTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
   end
 
   def run_bead(argv)
     io = StringIO.new
-    code = Bead.run(argv, io: io)
+    code = nil
+    with_manifest(FIXTURE) { code = Bead.run(argv, io: io) }
     [code, JSON.parse(io.string)]
   end
 
@@ -212,9 +222,9 @@ class BeadCliTest < Minitest::Test
 
   def test_show_unwraps_array_and_splits_notes_into_a_list
     @fake.expect(
-      %w[bd show st-hzf --json],
+      %w[bd show zz-hzf --json],
       out: JSON.generate([{
-        "id" => "st-hzf", "title" => "T", "description" => "D",
+        "id" => "zz-hzf", "title" => "T", "description" => "D",
         "acceptance_criteria" => "AC", "notes" => "loop: Phase 1 complete, commit abc1234",
         "status" => "in_progress", "priority" => 2, "issue_type" => "chore",
         "assignee" => "JohnnyT", "labels" => ["area:skills"],
@@ -222,7 +232,7 @@ class BeadCliTest < Minitest::Test
       }])
     )
 
-    code, env = run_bead(%w[show st-hzf])
+    code, env = run_bead(%w[show zz-hzf])
 
     assert_equal 0, code
     assert env["ok"]
@@ -234,11 +244,11 @@ class BeadCliTest < Minitest::Test
 
   def test_show_missing_field_degrades_to_null_with_a_warning_not_a_crash
     @fake.expect(
-      %w[bd show st-hzf --json],
-      out: JSON.generate([{ "id" => "st-hzf", "notes" => "" }])
+      %w[bd show zz-hzf --json],
+      out: JSON.generate([{ "id" => "zz-hzf", "notes" => "" }])
     )
 
-    code, env = run_bead(%w[show st-hzf])
+    code, env = run_bead(%w[show zz-hzf])
 
     assert_equal 0, code
     assert_nil env["data"]["title"]
@@ -246,9 +256,9 @@ class BeadCliTest < Minitest::Test
   end
 
   def test_show_not_found_blocks
-    @fake.expect(%w[bd show st-zzz --json], out: "[]\n")
+    @fake.expect(%w[bd show zz-zzz --json], out: "[]\n")
 
-    code, env = run_bead(%w[show st-zzz])
+    code, env = run_bead(%w[show zz-zzz])
 
     assert_equal 1, code
     refute env["ok"]
@@ -269,17 +279,17 @@ class BeadCliTest < Minitest::Test
   def test_ready_label_any_unions_per_label_results_beads_5358_workaround
     @fake.expect(
       %w[bd ready --json --label area:skills],
-      out: JSON.generate([{ "id" => "st-qww" }])
+      out: JSON.generate([{ "id" => "zz-qww" }])
     )
     @fake.expect(
       %w[bd ready --json --label area:build],
-      out: JSON.generate([{ "id" => "st-yea" }, { "id" => "st-qww" }])
+      out: JSON.generate([{ "id" => "zz-yea" }, { "id" => "zz-qww" }])
     )
 
     code, env = run_bead(%w[ready --label-any area:skills,area:build])
 
     assert_equal 0, code
-    assert_equal %w[st-qww st-yea], env["data"]["issues"].map { |i| i["id"] }.sort
+    assert_equal %w[zz-qww zz-yea], env["data"]["issues"].map { |i| i["id"] }.sort
     assert_equal 2, env["data"]["count"]
   end
 
@@ -304,16 +314,16 @@ class BeadCliTest < Minitest::Test
   # --- claim ---------------------------------------------------------------
 
   def test_claim_runs_bd_update_claim
-    @fake.expect(%w[bd update st-abc --claim --json], out: JSON.generate([{ "id" => "st-abc" }]))
+    @fake.expect(%w[bd update zz-abc --claim --json], out: JSON.generate([{ "id" => "zz-abc" }]))
 
-    code, env = run_bead(%w[claim st-abc])
+    code, env = run_bead(%w[claim zz-abc])
 
     assert_equal 0, code
     assert_equal true, env["data"]["claimed"]
   end
 
   def test_claim_dry_run_does_not_shell_out
-    code, env = run_bead(%w[claim st-abc --dry-run])
+    code, env = run_bead(%w[claim zz-abc --dry-run])
 
     assert_equal 0, code
     assert_nil env["data"]["claimed"]
@@ -323,9 +333,9 @@ class BeadCliTest < Minitest::Test
   # --- note -----------------------------------------------------------------
 
   def test_note_uses_bd_note_append_semantics_never_bd_edit
-    @fake.expect(["bd", "note", "st-abc", "hello world"], out: "ok\n")
+    @fake.expect(["bd", "note", "zz-abc", "hello world"], out: "ok\n")
 
-    code, env = run_bead(["note", "st-abc", "hello", "world"])
+    code, env = run_bead(["note", "zz-abc", "hello", "world"])
 
     assert_equal 0, code
     assert_equal true, env["data"]["noted"]
@@ -334,18 +344,18 @@ class BeadCliTest < Minitest::Test
   # --- link ------------------------------------------------------------------
 
   def test_link_defaults_to_blocks_type
-    @fake.expect(%w[bd link st-a st-b --type blocks], out: "ok\n")
+    @fake.expect(%w[bd link zz-a zz-b --type blocks], out: "ok\n")
 
-    code, env = run_bead(%w[link st-a st-b])
+    code, env = run_bead(%w[link zz-a zz-b])
 
     assert_equal 0, code
     assert_equal "blocks", env["data"]["type"]
   end
 
   def test_link_accepts_explicit_type
-    @fake.expect(%w[bd link st-a st-b --type related], out: "ok\n")
+    @fake.expect(%w[bd link zz-a zz-b --type related], out: "ok\n")
 
-    code, env = run_bead(%w[link st-a st-b --type related])
+    code, env = run_bead(%w[link zz-a zz-b --type related])
 
     assert_equal 0, code
     assert_equal "related", env["data"]["type"]
@@ -354,9 +364,9 @@ class BeadCliTest < Minitest::Test
   # --- label -----------------------------------------------------------------
 
   def test_label_add
-    @fake.expect(%w[bd label add st-abc area:skills], out: "ok\n")
+    @fake.expect(%w[bd label add zz-abc area:skills], out: "ok\n")
 
-    code, env = run_bead(%w[label add st-abc area:skills])
+    code, env = run_bead(%w[label add zz-abc area:skills])
 
     assert_equal 0, code
     assert_equal true, env["data"]["applied"]
@@ -367,13 +377,13 @@ class BeadCliTest < Minitest::Test
   def test_create_forwards_flags_and_returns_the_new_id
     @fake.expect(
       ["bd", "create", "New thing", "--json", "--type", "chore", "--priority", "2"],
-      out: JSON.generate([{ "id" => "st-new" }])
+      out: JSON.generate([{ "id" => "zz-new" }])
     )
 
     code, env = run_bead(["create", "New thing", "--type", "chore", "--priority", "2"])
 
     assert_equal 0, code
-    assert_equal "st-new", env["data"]["id"]
+    assert_equal "zz-new", env["data"]["id"]
   end
 
   # --- sync ------------------------------------------------------------------
@@ -403,39 +413,39 @@ class BeadCliTest < Minitest::Test
   # --- resolve ----------------------------------------------------------------
 
   def test_resolve_without_seeded_bead_prefers_plan_doc_over_branch_prefix
-    @fake.expect(%w[git diff main...HEAD --name-only], out: "docs/plans/260806-st-hzf-skill-mechanics-scripts.md\n")
-    @fake.expect(%w[git branch --show-current], out: "st-oth-some-other-branch\n")
-    @fake.expect(%w[bd show st-hzf --json], out: JSON.generate([{ "id" => "st-hzf", "status" => "in_progress" }]))
-    @fake.expect(%w[bd show st-oth --json], out: JSON.generate([{ "id" => "st-oth", "status" => "open" }]))
+    @fake.expect(%w[git diff main...HEAD --name-only], out: "docs/plans/260806-zz-hzf-skill-mechanics-scripts.md\n")
+    @fake.expect(%w[git branch --show-current], out: "zz-oth-some-other-branch\n")
+    @fake.expect(%w[bd show zz-hzf --json], out: JSON.generate([{ "id" => "zz-hzf", "status" => "in_progress" }]))
+    @fake.expect(%w[bd show zz-oth --json], out: JSON.generate([{ "id" => "zz-oth", "status" => "open" }]))
 
     code, env = run_bead(%w[resolve])
 
     assert_equal 0, code
-    assert_equal "st-hzf", env["data"]["resolved"]["id"]
+    assert_equal "zz-hzf", env["data"]["resolved"]["id"]
     assert_equal "plan_doc", env["data"]["resolved"]["strategy"]
-    assert(env["data"]["candidates"].any? { |c| c["id"] == "st-oth" && c["strategy"] == "branch_prefix" })
+    assert(env["data"]["candidates"].any? { |c| c["id"] == "zz-oth" && c["strategy"] == "branch_prefix" })
   end
 
   def test_resolve_ranks_seeded_bead_first_when_given
-    @fake.expect(%w[git diff main...HEAD --name-only], out: "docs/plans/260806-st-hzf-skill-mechanics-scripts.md\n")
-    @fake.expect(%w[git branch --show-current], out: "st-oth-some-other-branch\n")
-    @fake.expect(%w[bd show st-seed --json], out: JSON.generate([{ "id" => "st-seed", "status" => "open" }]))
-    @fake.expect(%w[bd show st-hzf --json], out: JSON.generate([{ "id" => "st-hzf", "status" => "in_progress" }]))
-    @fake.expect(%w[bd show st-oth --json], out: JSON.generate([{ "id" => "st-oth", "status" => "open" }]))
+    @fake.expect(%w[git diff main...HEAD --name-only], out: "docs/plans/260806-zz-hzf-skill-mechanics-scripts.md\n")
+    @fake.expect(%w[git branch --show-current], out: "zz-oth-some-other-branch\n")
+    @fake.expect(%w[bd show zz-seed --json], out: JSON.generate([{ "id" => "zz-seed", "status" => "open" }]))
+    @fake.expect(%w[bd show zz-hzf --json], out: JSON.generate([{ "id" => "zz-hzf", "status" => "in_progress" }]))
+    @fake.expect(%w[bd show zz-oth --json], out: JSON.generate([{ "id" => "zz-oth", "status" => "open" }]))
 
-    code, env = run_bead(%w[resolve --seeded-bead st-seed])
+    code, env = run_bead(%w[resolve --seeded-bead zz-seed])
 
     assert_equal 0, code
-    assert_equal "st-seed", env["data"]["resolved"]["id"]
+    assert_equal "zz-seed", env["data"]["resolved"]["id"]
     assert_equal "seeded_prompt", env["data"]["resolved"]["strategy"]
-    assert(env["data"]["candidates"].any? { |c| c["id"] == "st-hzf" && c["strategy"] == "plan_doc" })
-    assert(env["data"]["candidates"].any? { |c| c["id"] == "st-oth" && c["strategy"] == "branch_prefix" })
+    assert(env["data"]["candidates"].any? { |c| c["id"] == "zz-hzf" && c["strategy"] == "plan_doc" })
+    assert(env["data"]["candidates"].any? { |c| c["id"] == "zz-oth" && c["strategy"] == "branch_prefix" })
   end
 
   def test_resolve_surfaces_closed_bead_as_a_warning_never_silently
     @fake.expect(%w[git diff main...HEAD --name-only], out: "\n")
-    @fake.expect(%w[git branch --show-current], out: "st-xyz-something\n")
-    @fake.expect(%w[bd show st-xyz --json], out: JSON.generate([{ "id" => "st-xyz", "status" => "closed" }]))
+    @fake.expect(%w[git branch --show-current], out: "zz-xyz-something\n")
+    @fake.expect(%w[bd show zz-xyz --json], out: JSON.generate([{ "id" => "zz-xyz", "status" => "closed" }]))
 
     code, env = run_bead(%w[resolve])
 
@@ -451,7 +461,7 @@ class BeadCliTest < Minitest::Test
   def test_close_is_not_a_reachable_subcommand
     io = StringIO.new
     err = capture_stderr do
-      exc = assert_raises(SystemExit) { Bead.run(%w[close st-abc], io: io) }
+      exc = assert_raises(SystemExit) { Bead.run(%w[close zz-abc], io: io) }
       assert_equal 2, exc.status
     end
 

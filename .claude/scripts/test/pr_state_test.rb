@@ -97,7 +97,7 @@ class PrStateTest < Minitest::Test
     @fake.expect(
       ["gh", "pr", "view", "41", "--json", "commits", "--jq", ".commits[].messageBody"],
       out: "Adds thing.\n\nRefs: zz-abc\n" \
-           "Fixes other thing, related to st-zzz but no trailer here.\n"
+           "Fixes other thing, related to zz-zzz but no trailer here.\n"
     )
 
     code, env = run_pr_state(%w[beads 41])

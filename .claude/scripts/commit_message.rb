@@ -3,23 +3,27 @@
 
 require_relative "lib/envelope"
 require_relative "lib/cli"
+require_relative "lib/manifest"
 
 # CommitMessage is pure validation over an already-drafted commit message -
 # it never drafts or fixes one. Encodes /commit Step 2's three hard limits
-# (subject under 50 characters, body lines at most 72, whole message at
-# most 40 lines), the Refs: trailer shape, and the Step 4.4 attribution
-# check, so the same rules run both pre-commit (over the drafted message)
-# and post-commit (over `git log -1 --pretty=format:%B`). See
+# (a maximum subject length, a maximum body line length, a maximum total
+# line count), the trailer shape, and the Step 4.4 attribution check, so the
+# same rules run both pre-commit (over the drafted message) and post-commit
+# (over `git log -1 --pretty=format:%B`). See
 # docs/plans/260806-st-hzf-skill-mechanics-scripts.md Phase 12.
+#
+# All three limits and the trailer KEY are manifest data (`commits.*`): the
+# numbers differ per project, and the key models a scheme rather than a
+# number - a project projecting its beads onto forge issues writes
+# `Closes #12`, not `Refs: st-abc`. The attribution ban below is the one
+# thing here that stays hardcoded: it is a universal rule about what must
+# never appear in a commit message, not a project's preference.
 #
 # There is no --fix flag and none will be added - drafting the message is a
 # session-model (or Haiku-delegated, per docs/skill-automation.md's Model
 # routing) job; this script only reports pass/fail per rule.
 module CommitMessage
-  SUBJECT_MAX = 49 # "under 50 characters"
-  BODY_LINE_MAX = 72
-  TOTAL_LINES_MAX = 40
-  REFS_LINE_RE = /\ARefs: (\S+)\z/.freeze
   # Same substrings /commit Step 4.4 checks for - kept in exact sync so the
   # pre-commit draft check and the post-commit verification cannot drift.
   ATTRIBUTION_PATTERNS = ["Co-Authored-By", "Generated with", "Claude"].freeze
@@ -27,56 +31,72 @@ module CommitMessage
   class << self
     # Returns an array of {rule:, ok:, message:}, always in the same order.
     # `refs`, when given, is the bead id /commit Step 1.5 resolved - the
-    # Refs: rule is only checked when a caller passes one, since /commit
+    # trailer rule is only checked when a caller passes one, since /commit
     # only requires the trailer when a bead was actually resolved ("If no
     # issue, omit this line entirely" - Step 2). Callers with no bead (the
     # rare interactive fallback where the user skips the prompt) omit
-    # `refs` and get no Refs check at all, rather than a forced failure.
-    def check(text, refs: nil)
+    # `refs` and get no trailer check at all, rather than a forced failure.
+    def check(text, refs: nil, manifest: Manifest.current)
       lines = text.to_s.each_line.map { |l| l.chomp }
       checks = [
-        subject_check(lines),
-        body_line_check(lines),
-        total_lines_check(lines)
+        subject_check(lines, manifest),
+        body_line_check(lines, manifest),
+        total_lines_check(lines, manifest)
       ]
-      checks << refs_check(lines, refs) if refs
+      checks << refs_check(lines, refs, manifest) if refs
       checks << attribution_check(text)
       checks
     end
 
-    private
-
-    def subject_check(lines)
-      subject = lines.first.to_s
-      ok = !subject.empty? && subject.length <= SUBJECT_MAX
-      { rule: "subject_length", ok: ok,
-        message: "subject line is #{subject.length} characters (limit #{SUBJECT_MAX})" }
+    # `commits.subject_under` is an exclusive bound ("under 50"), so the
+    # inclusive limit the check compares against is one less. Spelled once,
+    # here, rather than at each call site.
+    def subject_max(manifest)
+      manifest.subject_under - 1
     end
 
-    def body_line_check(lines)
+    def trailer_line_re(manifest)
+      /\A#{Regexp.escape(manifest.trailer_key)}: (\S+)\z/
+    end
+
+    private
+
+    def subject_check(lines, manifest)
+      limit = subject_max(manifest)
+      subject = lines.first.to_s
+      ok = !subject.empty? && subject.length <= limit
+      { rule: "subject_length", ok: ok,
+        message: "subject line is #{subject.length} characters (limit #{limit})" }
+    end
+
+    def body_line_check(lines, manifest)
+      limit = manifest.body_line_max
       body = lines[1..-1] || []
-      offenders = body.each_with_index.select { |line, _i| line.length > BODY_LINE_MAX }
+      offenders = body.each_with_index.select { |line, _i| line.length > limit }
       ok = offenders.empty?
       message =
         if ok
-          "every body line is #{BODY_LINE_MAX} characters or fewer"
+          "every body line is #{limit} characters or fewer"
         else
-          "line(s) over #{BODY_LINE_MAX} characters: #{offenders.map { |_line, i| i + 2 }.join(', ')}"
+          "line(s) over #{limit} characters: #{offenders.map { |_line, i| i + 2 }.join(', ')}"
         end
       { rule: "body_line_length", ok: ok, message: message }
     end
 
-    def total_lines_check(lines)
-      ok = lines.length <= TOTAL_LINES_MAX
-      { rule: "total_lines", ok: ok, message: "message is #{lines.length} lines (limit #{TOTAL_LINES_MAX})" }
+    def total_lines_check(lines, manifest)
+      limit = manifest.total_lines_max
+      ok = lines.length <= limit
+      { rule: "total_lines", ok: ok, message: "message is #{lines.length} lines (limit #{limit})" }
     end
 
-    def refs_check(lines, refs)
+    def refs_check(lines, refs, manifest)
+      key = manifest.trailer_key
       non_blank = lines.reject { |l| l.strip.empty? }
       last = non_blank.last.to_s
-      m = last.match(REFS_LINE_RE)
+      m = last.match(trailer_line_re(manifest))
       ok = !m.nil? && m[1] == refs
-      message = ok ? "\"Refs: #{refs}\" present and last" : "expected \"Refs: #{refs}\" as the last non-blank line, found #{last.inspect}"
+      expected = "#{key}: #{refs}"
+      message = ok ? "\"#{expected}\" present and last" : "expected \"#{expected}\" as the last non-blank line, found #{last.inspect}"
       { rule: "refs_present_and_last", ok: ok, message: message }
     end
 
@@ -103,14 +123,18 @@ module CommitMessageCli
 
       options = { dry_run: false }
       parser, options = Cli.build("commit_message.rb [check] [--refs ID] < message", options) do |opts|
-        opts.on("--refs ID", "require \"Refs: ID\" present and last") { |v| options[:refs] = v }
+        opts.on("--refs ID", "require the bead trailer for ID present and last") { |v| options[:refs] = v }
       end
       Cli.parse!(parser, argv)
 
       text = stdin.read
 
       env = Envelope.new(script: "commit_message")
-      results = CommitMessage.check(text, refs: options[:refs])
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+
+      results = CommitMessage.check(text, refs: options[:refs], manifest: manifest)
 
       env.data[:refs_required] = !options[:refs].nil?
       env.data[:checks] = results

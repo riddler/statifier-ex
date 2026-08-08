@@ -6,10 +6,16 @@ require "stringio"
 require "tmpdir"
 require "fileutils"
 require_relative "../plan_state"
+require_relative "support/manifest_helper"
 
 # PlanState (pure parsing/mutation logic over an array of lines).
 class PlanStateLibTest < Minitest::Test
   FIXTURES = File.expand_path(File.join(__dir__, "fixtures", "plans"))
+  # The one deliberately project-bound fixture in the suite: this repo's
+  # own plan document, named exactly as it exists on disk. Phase 8 of that
+  # plan specified parsing it rather than a synthetic copy, because a
+  # synthetic copy cannot go stale against the real grammar. Everything else
+  # here runs off test/fixtures/plans/ and a fixture manifest.
   REAL_PLAN = File.expand_path(File.join(__dir__, "..", "..", "..", "docs", "plans",
                                           "260806-st-hzf-skill-mechanics-scripts.md"))
 
@@ -100,7 +106,7 @@ class PlanStateLibTest < Minitest::Test
 
       ## Overview
 
-      Beads issue: `st-abc`
+      Beads issue: `zz-abc`
 
       ## Current State Analysis
 
