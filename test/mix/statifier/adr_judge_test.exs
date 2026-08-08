@@ -258,6 +258,20 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert finding.file == "lib/statifier/interpreter.ex"
   end
 
+  # st-c8c: in a :test build, analyze/2's default caller is
+  # AdrJudge.refuse_real_call/1, not the real `call_claude_cli/1` - so a test
+  # that forgets to inject opts[:caller] fails loudly and instantly instead of
+  # quietly shelling out to the real `claude` CLI and spending real money.
+  # sabotage: make @default_caller unconditionally &call_claude_cli/1 -> red
+  #           (the test would shell out instead of raising). Must be reverted
+  #           before any gate run - the sabotaged build is exactly the one
+  #           that spends real money.
+  test "analyze/2 with no opts[:caller] raises rather than calling the real CLI" do
+    assert_raise RuntimeError, ~r/opts\[:caller\]/, fn ->
+      AdrJudge.analyze(source(core_diff()))
+    end
+  end
+
   describe "core_chunks/1" do
     # sabotage: match "+++ b/" only, so a deleted core file (which has no
     #           "+++ b/" line) is dropped from scope -> red
