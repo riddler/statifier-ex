@@ -76,4 +76,79 @@ defmodule Statifier.Validator.Error do
       location: location
     }
   end
+
+  @doc """
+  Check 2 (spec 3.5): a `<transition>`'s `target` names `id`, and no state
+  in the document carries that id. Reported once per unresolved id, at the
+  transition's own `target` span (or the transition's, when unwritten).
+  """
+  @spec unresolved_target(id :: binary(), location :: Location.t()) :: t()
+  def unresolved_target(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:unresolved_target, id},
+      message: "transition target #{inspect(id)} does not resolve to a state in the document",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 3 (spec 3.3, 3.6): an `initial` attribute or `Document.initial`
+  names `id`, and no state in the document carries that id. An `<initial>`
+  element's own transition targets are never reported by this constructor -
+  check 2 already owns their existence (Decision 5).
+  """
+  @spec unresolved_initial(id :: binary(), location :: Location.t()) :: t()
+  def unresolved_initial(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:unresolved_initial, id},
+      message: "initial state #{inspect(id)} does not resolve to a state in the document",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 3 (spec 3.3, 3.6): a resolved initial target `id` is not a
+  descendant of the state it initializes, `parent_id` - ancestry, not
+  direct-child membership (v1's bug).
+  """
+  @spec initial_not_descendant(id :: binary(), parent_id :: binary(), location :: Location.t()) ::
+          t()
+  def initial_not_descendant(id, parent_id, %Location{} = location)
+      when is_binary(id) and is_binary(parent_id) do
+    %__MODULE__{
+      reason: {:initial_not_descendant, id, parent_id},
+      message: "initial state #{inspect(id)} is not a descendant of #{inspect(parent_id)}",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 3 (spec 3.3): a resolved `Document.initial` id names a state that
+  exists but is not itself a top-level state - the root's own substitute
+  for the descendancy check a named state gets.
+  """
+  @spec initial_not_top_level(id :: binary(), location :: Location.t()) :: t()
+  def initial_not_top_level(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:initial_not_top_level, id},
+      message: "document initial #{inspect(id)} does not resolve to a top-level state",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 3 (spec 3.3, Decision 8): `id` names a state carrying an `initial`
+  attribute or `<initial>` element, and the spec MUST NOT: an atomic state
+  (no `states` children, or a `:parallel`, `:final`, or `:history` kind) has
+  nothing to default into. Fires ahead of, and suppresses, the descendancy
+  check for the same state.
+  """
+  @spec initial_on_atomic_state(id :: binary(), location :: Location.t()) :: t()
+  def initial_on_atomic_state(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:initial_on_atomic_state, id},
+      message: "state #{inspect(id)} has no child states to default into",
+      location: location
+    }
+  end
 end

@@ -31,10 +31,12 @@ defmodule Statifier.Validator do
 
   alias Statifier.Document
   alias Statifier.Validator.Checks.Ids
+  alias Statifier.Validator.Checks.InitialTargets
+  alias Statifier.Validator.Checks.Targets
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
-  @checks [&Ids.check/2]
+  @checks [&Ids.check/2, &Targets.check/2, &InitialTargets.check/2]
 
   @spec validate(document :: Document.t(), source :: binary()) ::
           {:ok, Document.t()} | {:error, [Error.t()]}
