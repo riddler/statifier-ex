@@ -256,9 +256,9 @@ this rather than assume it.
 - [x] Coverage for `lib/mix/statifier/adr_judge.ex` does not drop
 
 #### Manual Verification:
-- [ ] `mix quality` in a worktree with a dirty `lib/statifier/` file still
+- [x] `mix quality` in a worktree with a dirty `lib/statifier/` file still
       completes in seconds, not minutes (the st-c8c symptom cannot recur)
-- [ ] `mix adr.judge --format json` still works in `:dev` (the real caller is
+- [x] `mix adr.judge --format json` still works in `:dev` (the real caller is
       only replaced in `:test`)
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; full
@@ -381,10 +381,10 @@ behavior gets its sabotage line per CLAUDE.md.
 - [x] Coverage for both files does not drop
 
 #### Manual Verification:
-- [ ] `mix quality --profile merge` on a branch with an in-scope
+- [x] `mix quality --profile merge` on a branch with an in-scope
       `lib/statifier/` change behaves as before the refactor (same stage
       outcome, same one propose call per in-scope ADR)
-- [ ] The refactor changed no verdict: an ADR-0012 finding still reports
+- [x] The refactor changed no verdict: an ADR-0012 finding still reports
       `check: "adr-0012-debuggability"`
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
@@ -447,8 +447,8 @@ proposed under ADR-0014 becomes a finding with
 - [x] Coverage does not drop
 
 #### Manual Verification:
-- [ ] The skip reason still names `lib/statifier/` once, not twice
-- [ ] `mix quality --profile merge` on an in-scope branch shows the stage
+- [x] The skip reason still names `lib/statifier/` once, not twice
+- [x] `mix quality --profile merge` on an in-scope branch shows the stage
       making two propose calls' worth of work and completing in acceptable
       time (the cost note in "Performance Considerations")
 
@@ -568,13 +568,13 @@ to say the premise now covers both scopes.
 - [x] Coverage does not drop
 
 #### Manual Verification:
-- [ ] `mix quality --profile merge` on this very branch runs the `ADR judge`
+- [x] `mix quality --profile merge` on this very branch runs the `ADR judge`
       stage (rather than skipping) because the branch edits SKILL.md files -
       the end-to-end proof the new scope and the carve-out widening agree
-- [ ] The propose pass, run live, returns a parseable verdict for a SKILL.md
+- [x] The propose pass, run live, returns a parseable verdict for a SKILL.md
       hunk (the same live check the st2-meo plan ran for ADR-0012; a genuine
       surviving finding is not required, matching that plan's still-open item)
-- [ ] `ruby .claude/scripts/repo_state.rb` still reports `touches_elixir`
+- [x] `ruby .claude/scripts/repo_state.rb` still reports `touches_elixir`
       false for a skills-only change - `any?` must not have moved
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
@@ -644,9 +644,9 @@ agent tooling changes" explicitly.
 - [x] `mix gate.verify` confirms the reported green was a full, unscoped run
 
 #### Manual Verification:
-- [ ] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
+- [x] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
       in `docs/adr/README.md` without needing this plan
-- [ ] The ADR-0015 annotation reads as a dated record, not as a rewritten
+- [x] The ADR-0015 annotation reads as a dated record, not as a rewritten
       decision
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
@@ -781,11 +781,46 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**All items were walked through and confirmed on 2026-08-07**, including the
+live-call ones. Measurements worth keeping:
+
+- Full `mix quality` with a dirty `lib/statifier/` file: **4.4s**, all green,
+  651 tests. The st-c8c symptom (~2 minutes of real CLI calls per gate run)
+  cannot recur.
+- `mix quality --profile merge` with all three registry entries in scope:
+  **176.1s** for the `ADR judge` stage, one propose call per in-scope ADR
+  (~59s each). ADR-0012 and ADR-0014 each cost a call over the same
+  `lib/statifier/` chunk, as the Performance Considerations section predicts.
+- The propose pass returns fenced JSON (` ```json ... ``` `) in practice, not
+  bare JSON. `extract_json/1` strips the fence correctly - worth stating
+  because `parse_propose/1` returns `[]` for both a clean verdict and an
+  unparseable one, so a green stage alone does not prove the response parsed.
+
+**One item did not survive contact, and is now st-6f7 (P2, discovered-from
+st-laz).** Deleting the enforced `:location` field from
+`Statifier.Document.Content` - a textbook ADR-0012 constraint 3 violation,
+caught instantly by `layer_test.exs`'s layer guard - produced no finding.
+Spying on both passes showed propose was correct (right file, right line,
+constraint 3 cited by name) and refute overturned it, reasoning that
+locations "might be" retained in a side table it has no tool access to check
+for. `refute_prompt/1` asks the refuter to overturn whenever "a good-faith
+argument exists" and to break ties toward "not a violation"; with no tools,
+an argument of the form "this is fine if some unseen mechanism compensates"
+is always available, so refute approaches an unconditional veto.
+
+This is the concrete answer to the item inherited from the st2-meo plan that
+"a live-verified surviving finding remains unproven": it is not merely
+unproven, it is close to unreachable until the refute prompt requires its
+argument to be grounded in the material actually shown. Everything below is
+confirmed working as designed; st-6f7 is about whether the design's refute
+half is calibrated, which is a separate question from whether this plan
+landed.
+
 ### Phase 1
 
-- [ ] `mix quality` in a worktree with a dirty `lib/statifier/` file still
+- [x] `mix quality` in a worktree with a dirty `lib/statifier/` file still
       completes in seconds, not minutes (the st-c8c symptom cannot recur)
-- [ ] `mix adr.judge --format json` still works in `:dev` (the real caller is
+- [x] `mix adr.judge --format json` still works in `:dev` (the real caller is
       only replaced in `:test`)
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; full
@@ -798,10 +833,10 @@ end.
 
 ### Phase 2
 
-- [ ] `mix quality --profile merge` on a branch with an in-scope
+- [x] `mix quality --profile merge` on a branch with an in-scope
       `lib/statifier/` change behaves as before the refactor (same stage
       outcome, same one propose call per in-scope ADR)
-- [ ] The refactor changed no verdict: an ADR-0012 finding still reports
+- [x] The refactor changed no verdict: an ADR-0012 finding still reports
       `check: "adr-0012-debuggability"`
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
@@ -812,8 +847,8 @@ execution defers the Manual items.
 
 ### Phase 3
 
-- [ ] The skip reason still names `lib/statifier/` once, not twice
-- [ ] `mix quality --profile merge` on an in-scope branch shows the stage
+- [x] The skip reason still names `lib/statifier/` once, not twice
+- [x] `mix quality --profile merge` on an in-scope branch shows the stage
       making two propose calls' worth of work and completing in acceptable
       time (the cost note in "Performance Considerations")
 
@@ -825,13 +860,13 @@ execution defers the Manual items.
 
 ### Phase 4
 
-- [ ] `mix quality --profile merge` on this very branch runs the `ADR judge`
+- [x] `mix quality --profile merge` on this very branch runs the `ADR judge`
       stage (rather than skipping) because the branch edits SKILL.md files -
       the end-to-end proof the new scope and the carve-out widening agree
-- [ ] The propose pass, run live, returns a parseable verdict for a SKILL.md
+- [x] The propose pass, run live, returns a parseable verdict for a SKILL.md
       hunk (the same live check the st2-meo plan ran for ADR-0012; a genuine
       surviving finding is not required, matching that plan's still-open item)
-- [ ] `ruby .claude/scripts/repo_state.rb` still reports `touches_elixir`
+- [x] `ruby .claude/scripts/repo_state.rb` still reports `touches_elixir`
       false for a skills-only change - `any?` must not have moved
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
@@ -842,9 +877,9 @@ execution defers the Manual items.
 
 ### Phase 5
 
-- [ ] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
+- [x] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
       in `docs/adr/README.md` without needing this plan
-- [ ] The ADR-0015 annotation reads as a dated record, not as a rewritten
+- [x] The ADR-0015 annotation reads as a dated record, not as a rewritten
       decision
 
 **Implementation Note**: `mix quality --profile loop` between edits, full

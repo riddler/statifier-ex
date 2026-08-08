@@ -76,9 +76,12 @@ defmodule Mix.Statifier.AdrJudge do
     and 5 are covered by the script suite), and ADR-0015 says plainly that
     re-enforcing constraint 1 elsewhere weakens it - the same reasoning rules
     out judging it here too.
-  - ADR-0001, 0006, 0007, 0009, 0010, 0013 - process decisions (ADR format,
-    the regression ratchet, beads, the gate itself, worktrees, repo
-    archival) with no code shape a diff could violate.
+  - ADR-0001, ADR-0006, ADR-0007, ADR-0009, ADR-0010, ADR-0013 - process
+    decisions (ADR format, the regression ratchet, beads, the gate itself,
+    worktrees, repo archival) with no code shape a diff could violate. The
+    prefix is repeated on each rather than elided after the first, so that
+    searching this survey for "ADR-0006" finds the answer to "why is that
+    one not judged?" - which is how the survey is meant to be read.
 
   See `docs/plans/260807-st-laz-adr-judge-multi-adr.md` for the full survey
   this passage summarizes. `AdrGuard`'s moduledoc records the mirror-image

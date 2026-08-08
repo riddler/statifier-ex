@@ -127,7 +127,12 @@ Enforcement is layered, and deliberately not all in one place:
   script that claimed to detect swallowed judgment would itself violate this
   constraint's premise. (The extension landed: `Mix.Statifier.AdrJudge` gained
   a `.claude/skills/**/SKILL.md` scope judging this constraint - decided
-  under st-laz, 2026-08-07.)
+  under st-laz, 2026-08-07. st-laz elected to land it early rather than wait
+  for the churn trigger above to fire: the same change generalized the judge
+  to a multi-ADR registry, which made a second scope nearly free, and a
+  scope that exists before the churn arrives is one review does not have to
+  remember to add under pressure. The trigger stands as written for any
+  future constraint; it was not met here, it was overtaken.)
 
 Costs accepted: the scripts are a second language in the repo (Ruby 2.6,
 stdlib only, no gems - the only Ruby guaranteed present), a second test harness,
