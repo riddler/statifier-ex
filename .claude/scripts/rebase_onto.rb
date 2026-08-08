@@ -4,6 +4,7 @@
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
 
 # RebaseOnto is the shared rebase-with-repair block that /merge-request
 # deferred to /refresh-worktree by prose cross-reference - defined once here
@@ -20,16 +21,19 @@ require_relative "lib/cli"
 # run does no fetch of its own (see #run), and worktree_refresh.rb fetches
 # once for the whole sweep rather than once per worktree.
 module RebaseOnto
-  PLT_GLOB = "dialyxir_erlang-*_elixir-*_deps-dev.plt*"
-
   class << self
     # Runs the block against the worktree at `path`, recording every command
     # into `env`. Returns a result hash:
     #   {status: "rebased", target: <sha>, lock_changed: bool, repaired: bool|nil}
     #   {status: "conflict", files: [...]}
     #   {status: "dry_run"} when dry_run: true - nothing was executed.
-    def perform(path, env, dry_run: false)
-      return dry_run_steps(path, env) if dry_run
+    #
+    # `manifest` supplies the repair recipe (which lockfile moving means the
+    # build is stale, and what to run about it) and the warm-cache globs.
+    # worktree_refresh.rb passes the one it already loaded; a standalone run
+    # loads its own in #run.
+    def perform(path, env, manifest, dry_run: false)
+      return dry_run_steps(path, env, manifest) if dry_run
 
       before_res = Sh.run(%w[git rev-parse HEAD], chdir: path, envelope: env)
       before = before_res.out.to_s.strip
@@ -52,15 +56,26 @@ module RebaseOnto
       target = target_res.out.to_s.strip
 
       # git diff --quiet exits 0 when there is no difference (the fast path:
-      # no deps.get, no PLT work) and non-zero when mix.lock moved.
-      lock_res = Sh.run(["git", "diff", "--quiet", before, "HEAD", "--", "mix.lock"], chdir: path, envelope: env)
-      lock_changed = !lock_res.success?
+      # no repair commands, no cache work) and non-zero when the lockfile
+      # named by parallelism.repair_when moved. A repo that configures no
+      # repair_when has no such fast/slow split to make.
+      lock_changed = false
+      if manifest.repair_when
+        lock_res = Sh.run(
+          ["git", "diff", "--quiet", before, "HEAD", "--", manifest.repair_when],
+          chdir: path, envelope: env
+        )
+        lock_changed = !lock_res.success?
+      end
 
       repaired = nil
       if lock_changed
-        deps_res = Sh.run(%w[mix deps.get], chdir: path, envelope: env)
-        repaired = deps_res.success?
-        copy_plt(path, env)
+        # Stops at the first failure rather than pressing on: the commands
+        # are a recipe, and step two of a repair is meaningless once step
+        # one did not happen. `repaired` stays nil when none are configured
+        # ("not attempted"), which is not the same claim as false.
+        repaired = manifest.repair.all? { |cmd| Sh.run(cmd, chdir: path, envelope: env).success? } unless manifest.repair.empty?
+        copy_warm_caches(path, env, manifest)
       end
 
       { status: "rebased", target: target, lock_changed: lock_changed, repaired: repaired }
@@ -73,7 +88,11 @@ module RebaseOnto
       usage_error!("rebase_onto.rb [options] <path>", parser) if path.to_s.strip.empty?
 
       env = Envelope.new(script: "rebase_onto")
-      result = perform(path, env, dry_run: options[:dry_run])
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+
+      result = perform(path, env, manifest, dry_run: options[:dry_run])
 
       env.data[:path] = path
       result.each { |k, v| env.data[k.to_s] = v }
@@ -83,39 +102,52 @@ module RebaseOnto
 
     private
 
-    def dry_run_steps(path, env)
+    def dry_run_steps(path, env, manifest)
       env.commands << Sh.render(%w[git rev-parse HEAD], chdir: path)
       env.commands << Sh.render(%w[git rebase origin/main], chdir: path)
       env.commands << "(on conflict) " + Sh.render(%w[git diff --name-only --diff-filter=U], chdir: path)
       env.commands << "(on conflict) " + Sh.render(%w[git rebase --abort], chdir: path)
-      env.commands << "(if mix.lock moved) " + Sh.render(%w[mix deps.get], chdir: path)
+      prefix = manifest.repair_when ? "(if #{manifest.repair_when} moved) " : "(on repair) "
+      manifest.repair.each { |cmd| env.commands << prefix + Sh.render(cmd, chdir: path) }
       { status: "dry_run" }
     end
 
-    # Targeted PLT copy, never a wholesale re-clone of deps/ or _build/ - that
-    # would clobber a worktree's own incremental build state and force a full
-    # recompile. Best-effort: a missing or stale PLT is a warning, never a
-    # block, because the next full `mix quality` in the worktree rebuilds it.
-    def copy_plt(path, env)
+    # Targeted copy of the caches named by parallelism.warm_globs, never a
+    # wholesale re-clone of the warm_clone directories - that would clobber
+    # a worktree's own incremental build state and force a full rebuild.
+    # Best-effort: a missing or stale cache is a warning, never a block,
+    # because the next full gate run in the worktree rebuilds it.
+    #
+    # Each glob is repo-root-relative and the match keeps its relative path
+    # on the way across, so a cache nested three directories deep lands
+    # where the worktree's own build expects it.
+    def copy_warm_caches(path, env, manifest)
+      return if manifest.warm_globs.empty?
+
       main = main_checkout_for(path, env)
       unless main
-        env.warn(code: "plt_source_unknown", message: "could not determine the main checkout to copy the PLT from")
+        env.warn(code: "warm_cache_source_unknown", message: "could not determine the main checkout to copy warm caches from")
         return
       end
 
-      matches = Dir.glob(File.join(main, "_build", "dev", PLT_GLOB))
+      manifest.warm_globs.each { |glob| copy_one_glob(glob, main, path, env) }
+    end
+
+    def copy_one_glob(glob, main, path, env)
+      matches = Dir.glob(File.join(main, glob))
       if matches.empty?
         env.warn(
-          code: "plt_missing",
-          message: "no PLT found in #{main}/_build/dev to copy; the next full gate run in #{path} will rebuild it"
+          code: "warm_cache_missing",
+          message: "nothing matches #{glob} in #{main} to copy; the next full gate run in #{path} will rebuild it"
         )
         return
       end
 
-      dest_dir = File.join(path, "_build", "dev")
       matches.each do |src|
-        result = Sh.run(["cp", "-f", src, File.join(dest_dir, File.basename(src))], envelope: env)
-        env.warn(code: "plt_copy_failed", message: "cp #{src} -> #{dest_dir} failed") unless result.success?
+        relative = src.sub(/\A#{Regexp.escape(main)}\/?/, "")
+        dest = File.join(path, relative)
+        result = Sh.run(["cp", "-f", src, dest], envelope: env)
+        env.warn(code: "warm_cache_copy_failed", message: "cp #{src} -> #{dest} failed") unless result.success?
       end
     end
 

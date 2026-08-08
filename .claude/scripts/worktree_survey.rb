@@ -6,6 +6,8 @@ require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
 require_relative "lib/refs"
+require_relative "lib/manifest"
+require_relative "lib/forge"
 require_relative "pr_state"
 
 # WorktreeSurvey is one survey standing in for three near-identical ones:
@@ -73,6 +75,10 @@ module WorktreeSurvey
       Cli.parse!(parser, argv)
 
       env = Envelope.new(script: "worktree_survey")
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+      return env.emit(io) unless Forge.guard!(env, manifest, doing: "the per-worktree PR lookup")
 
       list_res = Sh.run(%w[git worktree list --porcelain], envelope: env)
       unless list_res.success?

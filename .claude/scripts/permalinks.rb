@@ -5,11 +5,13 @@ require "json"
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
+require_relative "lib/forge"
 
 # Permalinks rewrites backtick-quoted `file:line` (and `file:line-line`)
-# references in an already-written document into GitHub permalinks -
-# https://github.com/{owner}/{repo}/blob/{commit}/{file}#L{line} - a pure
-# text transform over the document. See
+# references in an already-written document into forge permalinks - a pure
+# text transform over the document. The URL shape itself belongs to
+# lib/forge.rb, which is where a second forge would be taught one. See
 # docs/plans/260806-st-hzf-skill-mechanics-scripts.md Phase 8.
 module Permalinks
   # A backtick-quoted file:line reference not already turned into a markdown
@@ -22,21 +24,20 @@ module Permalinks
   REFERENCE_RE = /\x60([\w][\w\-.\/]*\.\w+):(\d+)(?:-(\d+))?\x60(?!\]\()/.freeze
 
   class << self
-    def build_url(owner:, repo:, commit:, file:, line:, end_line: nil)
-      anchor = end_line ? "L#{line}-L#{end_line}" : "L#{line}"
-      "https://github.com/#{owner}/#{repo}/blob/#{commit}/#{file}##{anchor}"
+    def build_url(owner:, repo:, commit:, file:, line:, end_line: nil, kind: "github")
+      Forge.blob_url(kind: kind, owner: owner, repo: repo, commit: commit, file: file, line: line, end_line: end_line)
     end
 
     # Returns [rewritten_text, substitutions], substitutions being an
     # ordered array of {original:, url:}. Text with no file:line reference
     # at all is returned unchanged, with an empty substitutions array.
-    def rewrite(text, owner:, repo:, commit:)
+    def rewrite(text, owner:, repo:, commit:, kind: "github")
       substitutions = []
       rewritten = text.gsub(REFERENCE_RE) do |match|
         file = ::Regexp.last_match(1)
         line = ::Regexp.last_match(2)
         end_line = ::Regexp.last_match(3)
-        url = build_url(owner: owner, repo: repo, commit: commit, file: file, line: line, end_line: end_line)
+        url = build_url(owner: owner, repo: repo, commit: commit, file: file, line: line, end_line: end_line, kind: kind)
         substitutions << { original: match, url: url }
         "[#{match}](#{url})"
       end
@@ -59,6 +60,10 @@ module PermalinksCli
       usage_error!("permalinks.rb <path>", parser) if path.to_s.strip.empty?
 
       env = Envelope.new(script: "permalinks")
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+      return env.emit(io) unless Forge.guard!(env, manifest, doing: "permalink rewriting")
 
       unless File.exist?(path)
         env.block!(code: "file_not_found", message: "no such file: #{path}")
@@ -90,7 +95,9 @@ module PermalinksCli
       end
 
       original = File.read(path)
-      rewritten, substitutions = Permalinks.rewrite(original, owner: owner, repo: repo, commit: commit)
+      rewritten, substitutions = Permalinks.rewrite(
+        original, owner: owner, repo: repo, commit: commit, kind: manifest.forge_kind
+      )
 
       env.data[:path] = path
       env.data[:owner] = owner
