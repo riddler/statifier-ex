@@ -38,6 +38,11 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       assert error.location.start_line == 3
     end
 
+    # sabotage: check/2's filter widens from `initial_element != nil` to
+    # also include `initial != []` -> a state with only the attribute is
+    # now scanned, and both_forms_errors/1 crashes on its nil
+    # initial_element (reddens for the right reason: the check should
+    # never look at this state at all)
     test "a state carrying only an initial attribute reports nothing from this check" do
       xml = """
       <scxml>
@@ -50,6 +55,9 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       assert {:ok, _document} = validate!(xml)
     end
 
+    # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
+    # -> a state carrying only the <initial> element is now unconditionally
+    # reported as carrying both forms, reddening this assertion
     test "a state carrying only an <initial> element reports nothing from this check" do
       xml = """
       <scxml>
@@ -86,6 +94,11 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       assert error.location.start_line == 3
     end
 
+    # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
+    # -> the fixture's own state now also wrongly reports
+    # :initial_attribute_and_element alongside :transition_count,
+    # reddening the single-error match below (same underlying mutation as
+    # the "only <initial> element" test)
     test "an <initial> element with two transitions is reported" do
       xml = """
       <scxml>
@@ -106,6 +119,10 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       assert error.location.start_line == 3
     end
 
+    # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
+    # -> the fixture's state wrongly reports :initial_attribute_and_element,
+    # reddening this {:ok, _} assertion (same underlying mutation as the
+    # "only <initial> element" test)
     test "an <initial> element with exactly one transition reports nothing from this check" do
       xml = """
       <scxml>
@@ -200,6 +217,10 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       assert error.location.start_line == 4
     end
 
+    # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
+    # -> the fixture's state wrongly reports :initial_attribute_and_element,
+    # reddening this {:ok, _} assertion (same underlying mutation as the
+    # "only <initial> element" test)
     test "an <initial> element's transition with neither event nor cond reports nothing" do
       xml = """
       <scxml>
@@ -217,6 +238,10 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
   end
 
   describe "check/2 - message naming" do
+    # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
+    # -> the fixture's state wrongly reports a second error alongside
+    # :transition_count, reddening the single-error match below (same
+    # underlying mutation as the "only <initial> element" test)
     test "the shared sub-check's message names <initial>, not <history>" do
       xml = """
       <scxml>

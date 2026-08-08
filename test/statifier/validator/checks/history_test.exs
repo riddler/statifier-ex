@@ -38,6 +38,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       refute Context.compound?(%State{kind: :parallel, location: location, states: []})
     end
 
+    # sabotage: compound?/1 drops :state from its kind list (keeping only
+    # :parallel) -> a childful :state is wrongly treated as not compound,
+    # reddening the :state assertion below
     test "a :state or :parallel with children is compound" do
       location = Location.at_offset("", 0)
       child = %State{kind: :state, location: location, id: "child"}
@@ -46,6 +49,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert Context.compound?(%State{kind: :parallel, location: location, states: [child]})
     end
 
+    # sabotage: compound?/1 adds :final to its kind list -> a childful
+    # :final is wrongly treated as compound, reddening the :final refute
     test "a :final or :history is never compound, regardless of children" do
       location = Location.at_offset("", 0)
       child = %State{kind: :state, location: location, id: "child"}
@@ -56,6 +61,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
   end
 
   describe "check/2 - history_bad_parent" do
+    # sabotage: compound_parent?/1's %Document{} clause flips false to
+    # true -> the document root is wrongly treated as a compound parent,
+    # reddening this assertion
     test "a history at the document root is reported" do
       xml = """
       <scxml>
@@ -72,6 +80,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert error.location.start_line == 2
     end
 
+    # sabotage: compound?/1 adds :final to its kind list -> a <final> with
+    # a history child is wrongly treated as a compound parent, reddening
+    # this assertion (same mutation as the Context.compound?/1 :final test)
     test "a history under a <final> is reported" do
       xml = """
       <scxml>
@@ -90,6 +101,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert error.location.start_line == 4
     end
 
+    # sabotage: compound_parent?/1 gains a %State{kind: :history} clause
+    # returning true -> a history-under-history is wrongly treated as a
+    # compound parent, reddening this assertion
     test "a history under another history is reported" do
       xml = """
       <scxml>
@@ -109,6 +123,10 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert %Error{reason: {:history_bad_parent, "inner", :history}} = find(errors, "inner")
     end
 
+    # sabotage: compound?/1 drops :state from its kind list -> a compound
+    # <state> parent is wrongly treated as not compound, and the history
+    # gets an unwanted :history_bad_parent, reddening this assertion (same
+    # mutation as the "a :state ... is compound" test above)
     test "a history under a compound <state> reports nothing from this check" do
       xml = """
       <scxml>
@@ -124,6 +142,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:ok, _document} = validate!(xml)
     end
 
+    # sabotage: compound_parent?/1 gains a %State{kind: :parallel} clause
+    # returning false -> a <parallel> parent is wrongly treated as not
+    # compound, reddening this assertion
     test "a history under a <parallel> reports nothing from this check" do
       xml = """
       <scxml>
@@ -163,6 +184,10 @@ defmodule Statifier.Validator.Checks.HistoryTest do
   end
 
   describe "check/2 - message naming" do
+    # sabotage: compound?/1 drops :state from its kind list -> the fixture's
+    # compound-<state> parent is wrongly treated as not compound, adding
+    # an unwanted second error and reddening the single-error match below
+    # (same underlying mutation as the "a :state ... is compound" test)
     test "the shared sub-check's message names <history>, not <initial>" do
       xml = """
       <scxml>
@@ -222,6 +247,11 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert error.location.start_line == 5
     end
 
+    # sabotage: compound?/1 drops :state from its kind list -> the
+    # fixture's compound-<state> parent is wrongly treated as not
+    # compound, adding an unwanted :history_bad_parent alongside
+    # :unresolved_target and reddening the single-error match below (same
+    # underlying mutation as the "a :state ... is compound" test)
     test "an unresolved default target is reported only by check 2, not descendancy" do
       xml = """
       <scxml>
@@ -259,6 +289,11 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert error.location.start_line == 4
     end
 
+    # sabotage: compound?/1 drops :state from its kind list -> the
+    # fixture's compound-<state> parent is wrongly treated as not
+    # compound, adding an unwanted :history_bad_parent and reddening this
+    # {:ok, _} assertion (same underlying mutation as the "a :state ...
+    # is compound" test)
     test "type=\"deep\" reports nothing" do
       xml = """
       <scxml>
@@ -274,6 +309,11 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:ok, _document} = validate!(xml)
     end
 
+    # sabotage: compound?/1 drops :state from its kind list -> the
+    # fixture's compound-<state> parent is wrongly treated as not
+    # compound, adding an unwanted :history_bad_parent and reddening this
+    # {:ok, _} assertion (same underlying mutation as the "a :state ...
+    # is compound" test)
     test "type=\"shallow\" reports nothing" do
       xml = """
       <scxml>
@@ -289,6 +329,11 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:ok, _document} = validate!(xml)
     end
 
+    # sabotage: compound?/1 drops :state from its kind list -> the
+    # fixture's compound-<state> parent is wrongly treated as not
+    # compound, adding an unwanted :history_bad_parent and reddening this
+    # {:ok, _} assertion (same underlying mutation as the "a :state ...
+    # is compound" test)
     test "an absent type attribute reports nothing" do
       xml = """
       <scxml>
