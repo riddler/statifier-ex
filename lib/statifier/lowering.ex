@@ -52,7 +52,9 @@ defmodule Statifier.Lowering do
     "onentry" => &Builders.build_onentry/2,
     "onexit" => &Builders.build_onexit/2,
     "raise" => &Builders.build_raise/2,
-    "log" => &Builders.build_log/2
+    "log" => &Builders.build_log/2,
+    "donedata" => &Builders.build_donedata/2,
+    "content" => &Builders.build_content/2
   }
 
   @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}

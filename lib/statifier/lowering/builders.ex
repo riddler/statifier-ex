@@ -16,6 +16,8 @@ defmodule Statifier.Lowering.Builders do
 
   alias Statifier.Document
   alias Statifier.Document.Block
+  alias Statifier.Document.Content
+  alias Statifier.Document.Donedata
   alias Statifier.Document.Initial
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
@@ -24,6 +26,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Lowering
   alias Statifier.Lowering.Attributes
   alias Statifier.Lowering.Error
+  alias Statifier.Parser.DOM
   alias Statifier.Parser.DOM.Element
 
   @binding_values %{"early" => :early, "late" => :late}
@@ -256,6 +259,67 @@ defmodule Statifier.Lowering.Builders do
     {{:content_node, log}, errors ++ place_errors}
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Donedata{}` from a `<donedata>` element,
+  tagged `{:donedata, donedata}`.
+
+  `content` stays `nil` when `<donedata>` has no `<content>` child and
+  becomes a `%Statifier.Document.Content{}` when it does - the only Phase 1
+  shape (`Statifier.Document.Donedata`'s moduledoc). A `<param>` child
+  misses the dispatch map entirely and comes back from
+  `Statifier.Lowering.walk_children/2` as `{:unsupported_element, "param"}`
+  at `<param>`'s own location, the same Phase 3 rejection every other
+  unsupported element gets - no special-case code is needed here for it.
+  """
+  @spec build_donedata(element :: Element.t(), ctx :: map()) ::
+          {{:donedata, Donedata.t()}, [Error.t()]}
+  def build_donedata(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    donedata = %Donedata{location: element.location}
+    {donedata, place_errors} = place_children(results, donedata, element.name)
+
+    {{:donedata, donedata}, errors ++ place_errors}
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Content{}` from a `<content>` element,
+  tagged `{:content, content}`.
+
+  Reads `expr` (Decision 5) and sets `text` to `Statifier.Parser.DOM.text/1`'s
+  concatenation of `<content>`'s own direct text children, **verbatim and
+  untrimmed** - the struct's own moduledoc defines `text` as exactly that
+  concatenation. `<content>` is the one element exempt from the stray-text
+  rule (its text *is* its payload), so this builder reads `element.children`
+  directly rather than calling `Statifier.Lowering.walk_children/2`, which
+  would otherwise flag that same text as a stray-text error. An element
+  child is not silently dropped, though: each one produces
+  `{:misplaced_element, name, "content"}`
+  (`lib/statifier/document/content.ex:12-15`), not a build attempt of its
+  own - `<content>` does not hold a markup subtree.
+  """
+  @spec build_content(element :: Element.t(), ctx :: map()) ::
+          {{:content, Content.t()}, [Error.t()]}
+  def build_content(%Element{} = element, _ctx) do
+    errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "content", location)
+      end)
+
+    attribute_locations = Attributes.put_location(%{}, :expr, element, "expr")
+
+    content = %Content{
+      location: element.location,
+      expr: Attributes.value(element, "expr"),
+      text: DOM.text(element),
+      attribute_locations: attribute_locations
+    }
+
+    {{:content, content}, errors}
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name, per
   # Decision 3). `Block` has no slot for anything but `Document.content_node`
@@ -348,6 +412,14 @@ defmodule Statifier.Lowering.Builders do
 
   defp place({:onexit, block}, %State{} = parent, _parent_name) do
     {%{parent | onexit: [block | parent.onexit]}, nil}
+  end
+
+  defp place({:donedata, donedata}, %State{} = parent, _parent_name) do
+    {%{parent | donedata: donedata}, nil}
+  end
+
+  defp place({:content, content}, %Donedata{} = parent, _parent_name) do
+    {%{parent | content: content}, nil}
   end
 
   defp place({:transition, transition}, %Initial{} = parent, _parent_name) do
