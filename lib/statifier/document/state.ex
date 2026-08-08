@@ -49,6 +49,7 @@ defmodule Statifier.Document.State do
   | `history_type` | `:history` | `history_type` on a non-history kind | **nothing** - unbuildable from lowering, see below |
   | `transitions` | `:state`, `:parallel`, `:history`, `:initial` slot | transitions on a `:final` | st-l5k.5 check 6, widened by st-dje |
   | `id` | any | `nil` id | not an error; the spec makes `id` optional |
+  | `id` | any | `id=""` written explicitly | st-l5k.5 check 1, widened by st-2jp |
 
   The remaining "nothing" row is stated here rather than hidden.
   `history_type` on a non-history kind is unreachable from lowering, which
@@ -66,6 +67,11 @@ defmodule Statifier.Document.State do
   `id: String.t() | nil` no longer overloads `nil` the way it might if
   `<initial>` were a kind: with `<initial>` off the kind set entirely,
   `nil` means exactly one thing here - the author omitted an optional `id`.
+  An `id` written as `""` is a different thing and lowering keeps it that
+  way: st-2jp resolved it as an error (spec 3.14 types `id` as an XML
+  Schema ID, whose lexical space excludes the empty string), reported by
+  check 1 as `{:empty_id}` and, like a `nil` id, excluded from that check's
+  uniqueness set.
 
   ## What this module is not
 
