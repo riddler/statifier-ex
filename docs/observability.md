@@ -78,7 +78,9 @@ Rules:
 ## Constraint 3: the Machine retains locations and identities
 
 The Document layer carries source locations and compiled expressions keep their
-source string (`{:compiled, instructions, source}`). The place this is lost by
+source string alongside predicator's compiled envelope, which carries the span
+table with the instructions (`{:compiled, %Predicator.Compiled{}, source}`, per
+ADR-0014 item 2). The place this is lost by
 default is the compiler pass, because the runtime does not need locations. Keep
 them anyway:
 

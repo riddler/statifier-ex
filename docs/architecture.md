@@ -75,7 +75,7 @@ precomputed cache module, no four separate ways to fetch ancestors.
 
 Expressions are compiled once, here, into a single sum type:
 
-    @type expr :: {:static, term()} | {:compiled, Predicator.instructions(), source :: String.t()}
+    @type expr :: {:static, term()} | {:compiled, Predicator.Compiled.t(), source :: String.t()}
 
 Every attribute that accepts `foo` / `fooexpr` pairs stores one `expr` value,
 evaluated by one function. (v1 carried `x` / `x_expr` / `compiled_x_expr` triples on
