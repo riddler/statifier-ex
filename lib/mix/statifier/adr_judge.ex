@@ -52,6 +52,16 @@ defmodule Mix.Statifier.AdrJudge do
   @default_model "claude-haiku-4-5-20251001"
   @model_env "STATIFIER_ADR_JUDGE_MODEL"
 
+  # st-c8c: with `claude` on PATH and an in-scope dirty tree, a test that
+  # forgets to inject `opts[:caller]` makes real CLI calls - measured at ~2
+  # minutes of gate time per run (the Tests stage and the Regression ratchet
+  # each run the suite) plus real spend. Every judged scope added since makes
+  # that easier to trip into, so the test build has no reachable real caller
+  # at all: the failure is a raise naming the omission, not a bill.
+  @default_caller if Mix.env() == :test,
+                    do: &__MODULE__.refuse_real_call/1,
+                    else: &__MODULE__.call_claude_cli/1
+
   # Pinned because `diff.mnemonicPrefix` in a developer's git config would
   # otherwise rename the prefixes out from under the parser.
   @diff_flags ["--unified=0", "--src-prefix=a/", "--dst-prefix=b/"]
@@ -60,12 +70,14 @@ defmodule Mix.Statifier.AdrJudge do
   Turns a diff plus ADR-0012's text into adversarially-verified findings.
 
   `opts[:caller]` defaults to `call_claude_cli/1`, a real shell-out to the
-  `claude` CLI - tests always inject a stub, since this is the one seam the
-  whole module exists to keep pure.
+  `claude` CLI, in every build except `:test` - there it defaults to
+  `refuse_real_call/1`, which raises. Tests always inject a stub caller
+  anyway, since this is the one seam the whole module exists to keep pure;
+  the `:test` default exists as a backstop for a test that forgets to.
   """
   @spec analyze(source :: source(), opts :: keyword()) :: [finding()]
   def analyze(source, opts \\ []) do
-    caller = Keyword.get(opts, :caller, &call_claude_cli/1)
+    caller = Keyword.get(opts, :caller, @default_caller)
     chunks = core_chunks(source.diff)
 
     source.adr_text
@@ -346,6 +358,24 @@ defmodule Mix.Statifier.AdrJudge do
   end
 
   # -- production caller --------------------------------------------------------
+
+  @doc """
+  The `:test`-build default `opts[:caller]`: raises instead of shelling out.
+
+  Every test in this suite injects its own `opts[:caller]` stub; a test that
+  forgets to is a bug, and the fix is to inject one, not to make a real
+  `claude` CLI call and a real charge on that test's behalf. See the
+  `@default_caller` moduledoc comment (st-c8c) for the incident this guards
+  against.
+  """
+  @spec refuse_real_call(prompt :: String.t()) :: no_return()
+  def refuse_real_call(_prompt) do
+    raise """
+    Mix.Statifier.AdrJudge.analyze/2 was called with no opts[:caller] in a \
+    :test build. The default caller in :test refuses to shell out to the \
+    real `claude` CLI - inject a stub via opts[:caller] instead.\
+    """
+  end
 
   @doc """
   The default `opts[:caller]`: one non-agentic `claude` CLI completion.
