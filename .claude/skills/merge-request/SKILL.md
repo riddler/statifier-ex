@@ -9,12 +9,16 @@ argument-hint: ["optional: beads issue ID; omit to detect from the commits' Refs
 
 Take a finished worktree branch from local commits to an open pull request.
 
-This is where the confirmation removed from `/commit --auto` (st-qww.2) went.
 A commit on a per-issue branch is private and undone with
 `git reset --soft HEAD~1`; a push and a PR are visible to other people and
 other machines, enter review queues, and send notifications. CLAUDE.md's
-authority table puts the human gate here for exactly that reason, so this skill
-confirms before pushing even when everything else it checks is green.
+authority table puts the human gate on the push and PR itself - and invoking
+this skill **is** that gate firing (st-jeq): typing `/merge-request` is the
+user asking for the push in their own words, so this skill does not stop
+again to ask. That makes the checks in steps 1-5 load-bearing in a way they
+were not when a human still read the summary before answering: a red gate, an
+unresolved rebase conflict, or a missing changelog fragment now has to catch a
+problem before step 6, because nothing catches it after.
 
 The bead is **not** closed here. It stays `in_progress` until the branch merges
 into `origin/main` (st-qww.4). A PR is a request, not an outcome.
@@ -159,8 +163,10 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    to users about observable behavior, and guessing at one produces a release
    note describing something the code may not do.
 
-6. **Confirm before pushing.** Show the user what is about to become public,
-   including what step 3 found on `origin/main`:
+6. **Record what is about to become public.** Print the summary, including
+   what step 3 found on `origin/main`, then proceed straight to step 7 -
+   invoking `/merge-request` was the request to publish, so there is nothing
+   left to ask:
 
    ```
    Ready to open a PR for st-xxx - "<issue title>"
@@ -173,12 +179,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    Changelog: changelog.d/st-xxx.md   (or: not needed - internal tooling)
 
    <proposed PR title>
-
-   Push and open the PR?
    ```
-
-   Wait for an answer. This is the one confirmation this skill does not skip,
-   and there is no `--auto` for it.
 
 7. **Push, then open the PR.** No script touches these - `.claude/scripts/`'s
    own contract bans a `git push` or `gh pr create` code path anywhere under
@@ -258,9 +259,11 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
 - **Never close the bead here.** `bd close` fires on merge into `origin/main`,
   verified against the remote. Closing at PR-open time asserts to every other
   machine that the work landed when it has not.
-- **Confirmation is not a formality.** If the user declines, the branch stays
-  local and nothing is lost. That asymmetry is the whole argument for putting
-  the gate at this step rather than at commit.
+- **The gate is the command invocation, not a prompt in step 6.** Typing
+  `/merge-request` is the user asking for the push in their own words
+  (st-jeq); the skill does not stop to ask again once it starts. That is why
+  steps 1-5 stay strict rather than advisory - once step 6 prints the summary,
+  nothing downstream stops to give a human a second look before the push.
 - **One bead per branch is the default, not a law.** Several small beads that
   touch the same files belong on one branch as separate commits; splitting them
   across parallel worktrees manufactures exactly the rebase conflicts the module
