@@ -73,6 +73,57 @@ defmodule Statifier.Validator.Checks.IdsTest do
     end
   end
 
+  describe "check/2 - empty ids" do
+    # sabotage: empty_id_errors/1 filters on `state.id == nil` instead of
+    # `""` (the pre-st-2jp reading, where an empty id was just another
+    # absent one) -> the state below reports nothing and this reddens
+    test "a state written id=\"\" is reported at the attribute's own span" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id=""/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert error.location.start_line == 2
+      assert error.message =~ "empty"
+    end
+
+    # sabotage: duplicate_id_errors/1's filter drops `""` from its
+    # exclusion list (`state.id != nil`) -> the two empty ids group together
+    # as a duplicate pair, adding a third error for one collision that is
+    # not one, and the two-element list match reddens
+    test "two empty ids are two empty ids, not a duplicate pair" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id=""/>
+          <state id=""/>
+      </scxml>
+      """
+
+      assert {:error, [first, second]} = validate!(xml)
+      assert %Error{reason: {:empty_id}} = first
+      assert %Error{reason: {:empty_id}} = second
+      assert first.location.start_line == 2
+      assert second.location.start_line == 3
+    end
+
+    # sabotage: empty_id_errors/1 widens its filter to `state.id in [nil,
+    # ""]` -> the anonymous state below is reported as an empty id, and the
+    # {:ok, _} assertion reddens on the distinction st-2jp exists to draw
+    test "an absent id is still not an empty one" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state/>
+          <state id=""/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert error.location.start_line == 3
+    end
+  end
+
   describe "validate/2 - document-order sort" do
     # sabotage: validate/2 concatenates check results without
     # `Enum.sort_by(&1.location.start_offset)` -> reddens when a nested
