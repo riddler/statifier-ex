@@ -48,7 +48,11 @@ defmodule Statifier.Lowering do
     "final" => &Builders.build_final/2,
     "history" => &Builders.build_history/2,
     "initial" => &Builders.build_initial/2,
-    "transition" => &Builders.build_transition/2
+    "transition" => &Builders.build_transition/2,
+    "onentry" => &Builders.build_onentry/2,
+    "onexit" => &Builders.build_onexit/2,
+    "raise" => &Builders.build_raise/2,
+    "log" => &Builders.build_log/2
   }
 
   @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
