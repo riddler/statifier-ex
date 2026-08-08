@@ -1,0 +1,10 @@
+diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+--- a/lib/statifier/interpreter.ex
++++ b/lib/statifier/interpreter.ex
+@@ -142,3 +142,1 @@
+-  defp compute_exit_set(state, transitions) do
+-    trace(:exit_set, state, transitions)
+-    do_compute_exit_set(state, transitions)
++  defp compute_exit_set(state, transitions) do
++    do_compute_exit_set(state, transitions)
+   end

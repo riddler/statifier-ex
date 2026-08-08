@@ -1,0 +1,7 @@
+diff --git a/lib/statifier/lowering.ex b/lib/statifier/lowering.ex
+--- a/lib/statifier/lowering.ex
++++ b/lib/statifier/lowering.ex
+@@ -3,1 +3,2 @@
+-  Lowers the parsed DOM tree into a Document struct.
++  Lowers the parsed DOM tree into a Document struct, resolving initial
++  states and validating cross-references along the way.
