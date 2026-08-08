@@ -33,7 +33,52 @@ defmodule Statifier.Parser.LocationAccuracyTest do
       end
     end
 
+    for text <- text_nodes(elements) do
+      assert_text_accurate(text, source)
+      assert_line_column_agrees_with_offset(text.location, source)
+    end
+
     elements
+  end
+
+  # Every `DOM.Text{}` child of every element in the tree, in the order the
+  # elements themselves were visited. `location` is the raw span (entities
+  # unexpanded, CDATA delimiters intact); `value` is what Saxy decoded, so
+  # the two only need to agree byte-for-byte when the run contains neither -
+  # `assert_text_accurate/2` is where that split is handled.
+  defp text_nodes(elements) do
+    Enum.flat_map(elements, fn element ->
+      Enum.filter(element.children, &match?(%DOM.Text{}, &1))
+    end)
+  end
+
+  # A literal "&" cannot occur in well-formed XML character data outside an
+  # entity reference, so its presence in the raw slice is exactly the signal
+  # that `value` decoded something the slice did not spell out the same way.
+  # Likewise a raw "<![CDATA[" only ever opens a CDATA section, which `value`
+  # reports unwrapped. Runs with neither decode to themselves.
+  defp assert_text_accurate(%DOM.Text{} = text, source) do
+    slice = Location.slice(text.location, source)
+
+    if entity_or_cdata_free?(slice) do
+      assert slice == text.value,
+             "text run's span does not match its value: #{inspect(slice)} / #{inspect(text.value)}"
+    else
+      # Decoding only ever shortens or holds steady (an entity reference
+      # collapses to one character, CDATA delimiters disappear), so the raw
+      # slice can never be shorter than the value it decoded to, and a
+      # non-empty value cannot come from an empty raw span.
+      assert byte_size(slice) >= byte_size(text.value),
+             "text run's raw span is shorter than its decoded value: " <>
+               "#{inspect(slice)} / #{inspect(text.value)}"
+
+      refute slice == "",
+             "text run has an empty raw span despite a decoded value #{inspect(text.value)}"
+    end
+  end
+
+  defp entity_or_cdata_free?(slice) do
+    not (String.contains?(slice, "&") or String.contains?(slice, "<![CDATA["))
   end
 
   # `location` covers `name="value"` and `value_location` covers the text
@@ -152,6 +197,29 @@ defmodule Statifier.Parser.LocationAccuracyTest do
 
       assert [_chart, edge | _rest] = assert_locations_accurate(source)
       assert %DOM.Attribute{value: "a > b && c < d"} = DOM.attribute(edge, "cond")
+    end
+
+    # A self-closing sibling shares one span between its start and end
+    # records, so the cursor Handler.add_text/2 reads from is already
+    # correct even without advancing it - see the "mixed content" fixture
+    # above, whose "after" run follows the self-closing <em/>. Only a
+    # sibling with a real end tag, like <edge>...</edge> here, moves the
+    # cursor past content the stale-cursor bug would otherwise re-swallow
+    # into the following text run.
+    #
+    # sabotage: Handler.handle_event/3's :end_element clause sets
+    # `cursor: state.cursor` instead of `cursor: cursor_after(record)` ->
+    # the cursor never advances past a real end tag, so the "after" run's
+    # span grows backward to swallow "before</edge>" instead of starting
+    # after "</edge>", reddening the text sweep
+    test "a text run following an element with a real end tag" do
+      source = """
+      <chart>
+          <node id="alpha"><edge event="go">before</edge>after</node>
+      </chart>
+      """
+
+      assert_locations_accurate(source)
     end
   end
 end
