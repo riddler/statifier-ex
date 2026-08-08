@@ -1,0 +1,116 @@
+defmodule Statifier.Validator.Checks.IdsTest do
+  use ExUnit.Case, async: true
+
+  alias Statifier.Document
+  alias Statifier.Lowering
+  alias Statifier.Parser
+  alias Statifier.Validator
+  alias Statifier.Validator.Error
+
+  defp lower!(xml) do
+    {:ok, root} = Parser.parse(xml)
+    {:ok, document} = Lowering.lower(root)
+    document
+  end
+
+  defp validate!(xml) do
+    Validator.validate(lower!(xml), xml)
+  end
+
+  describe "check/2 - duplicate ids" do
+    # sabotage: check_ids/2 groups states by the state struct itself instead
+    # of by `state.id` -> two distinct state structs sharing one id are
+    # never grouped together, so the duplicate goes unreported and this
+    # reddens
+    test "the second occurrence of a repeated id is reported at its own line" do
+      xml = """
+      <scxml>
+          <state id="a"/>
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error]} = validate!(xml)
+      assert error.location.start_line == 3
+    end
+
+    # sabotage: check_ids/2's `duplicate_errors/2` reports the first
+    # occurrence (`[first | _rest]` mapped instead of dropped) rather than
+    # each later one -> the assertion that exactly two errors are reported,
+    # both distinct from the first line, reddens
+    test "three occurrences of one id report two errors, not the first" do
+      xml = """
+      <scxml>
+          <state id="a"/>
+          <state id="a"/>
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, errors} = validate!(xml)
+      assert length(errors) == 2
+
+      lines = Enum.map(errors, & &1.location.start_line)
+      assert lines == [3, 4]
+
+      assert Enum.all?(errors, fn error ->
+               match?(%Error{reason: {:duplicate_id, "a"}}, error)
+             end)
+    end
+
+    # sabotage: check_ids/2 drops the `state.id != nil` filter before
+    # grouping -> both anonymous states group under the key `nil` and are
+    # reported as duplicates of each other, so this reddens
+    test "nil ids never collide with each other" do
+      xml = """
+      <scxml>
+          <state/>
+          <state/>
+      </scxml>
+      """
+
+      assert {:ok, %Document{}} = validate!(xml)
+    end
+  end
+
+  describe "validate/2 - document-order sort" do
+    # sabotage: validate/2 concatenates check results without
+    # `Enum.sort_by(&1.location.start_offset)` -> reddens when a nested
+    # duplicate is accumulated after a top-level one but sorts earlier
+    test "duplicate-id errors across nesting depths come back sorted by offset" do
+      xml = """
+      <scxml>
+          <state id="a">
+              <state id="b"/>
+          </state>
+          <state id="b"/>
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, errors} = validate!(xml)
+      assert length(errors) == 2
+
+      offsets = Enum.map(errors, & &1.location.start_offset)
+      assert offsets == Enum.sort(offsets)
+    end
+  end
+
+  describe "validate/2 - a valid document" do
+    # sabotage: validate/2's empty-error branch returns
+    # `{:ok, %{document | states: []}}` instead of the caller's own
+    # `document` -> the identity assertion below reddens
+    test "unique ids return {:ok, document}, identical to the input" do
+      xml = """
+      <scxml>
+          <state id="a"/>
+          <state id="b"/>
+      </scxml>
+      """
+
+      document = lower!(xml)
+
+      assert {:ok, ^document} = Validator.validate(document, xml)
+    end
+  end
+end
