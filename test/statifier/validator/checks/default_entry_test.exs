@@ -23,7 +23,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
     # this assertion
     test "a compound state whose only child is a <history> is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <history id="h">
                   <transition target="b"/>
@@ -50,7 +50,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
     # assertion
     test "an explicit <initial> element pointing past a first-child history reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="b"/>
@@ -74,7 +74,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
     # instead of quietly reporting nothing, reddening this assertion
     test "an atomic state (empty states, no initial) reports nothing from check 7" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a"/>
       </scxml>
       """
@@ -91,7 +91,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
     # assertion
     test "a compound state whose first child is a <state> and second a <history> reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">

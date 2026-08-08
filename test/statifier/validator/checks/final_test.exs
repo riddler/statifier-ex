@@ -23,7 +23,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
     # the start_line assertion below redden
     test "a <final> with a <state> child is reported at the child's location" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final id="f">
               <state id="s"/>
           </final>
@@ -42,7 +42,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
     # reddening this "reports nothing" assertion by adding an unwanted one
     test "a <parallel> with state children reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <parallel id="p">
               <state id="a"/>
               <state id="b"/>
@@ -60,7 +60,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
     # above, exercised against two children instead of one)
     test "a <final> with multiple state children is reported once per child" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final id="f">
               <state id="a"/>
               <state id="b"/>
@@ -80,7 +80,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
     # above, exercised against a <final>-kind child instead of a <state>)
     test "a <final> with a <final> child is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final id="f">
               <final id="inner"/>
           </final>
@@ -97,7 +97,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
     # above, exercised against a nil-id <final>)
     test "a <final> with no id and a state child is still reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final>
               <state id="s"/>
           </final>

@@ -24,7 +24,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
     # reddens
     test "the second occurrence of a repeated id is reported at its own line" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a"/>
           <state id="a"/>
       </scxml>
@@ -40,7 +40,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
     # both distinct from the first line, reddens
     test "three occurrences of one id report two errors, not the first" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a"/>
           <state id="a"/>
           <state id="a"/>
@@ -63,7 +63,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
     # reported as duplicates of each other, so this reddens
     test "nil ids never collide with each other" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state/>
           <state/>
       </scxml>
@@ -79,7 +79,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
     # duplicate is accumulated after a top-level one but sorts earlier
     test "duplicate-id errors across nesting depths come back sorted by offset" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
           </state>
@@ -102,7 +102,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
     # `document` -> the identity assertion below reddens
     test "unique ids return {:ok, document}, identical to the input" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a"/>
           <state id="b"/>
       </scxml>

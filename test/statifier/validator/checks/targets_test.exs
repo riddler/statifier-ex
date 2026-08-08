@@ -23,7 +23,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
     # this assertion
     test "a plain transition's unresolved target is reported at its own line" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <transition target="missing"/>
           </state>
@@ -39,7 +39,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
     # too (one mutation, two doors)
     test "a resolved plain transition target reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <transition target="b"/>
           </state>
@@ -55,7 +55,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
     # never includes the <initial> transition below, so this reddens
     test "an <initial> element's unresolved target is reported at its own line" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="missing"/>
@@ -74,7 +74,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
     # unreported, reddening this assertion
     test "a history state's unresolved default target is reported at its own line" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">
@@ -94,7 +94,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
     # two-error assertion
     test "reports one error per unresolved id when target lists several" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <transition target="missing1 missing2"/>
           </state>

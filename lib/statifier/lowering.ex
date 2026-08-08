@@ -75,7 +75,7 @@ defmodule Statifier.Lowering do
       case Map.fetch(@dispatch, local_name) do
         {:ok, builder} ->
           {document, errors} = builder.(root, %{ns_scope: scope})
-          finalize(document, errors)
+          finalize(%{document | namespace: uri}, errors)
 
         :error ->
           {:error, [Error.unexpected_root(local_name, location)]}

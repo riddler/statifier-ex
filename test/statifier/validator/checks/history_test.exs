@@ -66,7 +66,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # reddening this assertion
     test "a history at the document root is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <history id="h">
               <transition target="a"/>
           </history>
@@ -88,7 +88,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # two errors; `find/2` isolates the one this describe block is about.
     test "a history under a <final> is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a"/>
           <final id="f">
               <history id="h">
@@ -108,7 +108,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # compound parent, reddening this assertion
     test "a history under another history is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="outer">
@@ -131,7 +131,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # mutation as the "a :state ... is compound" test above)
     test "a history under a compound <state> reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">
@@ -149,7 +149,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # compound, reddening this assertion
     test "a history under a <parallel> reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <parallel id="p">
               <state id="a"/>
               <state id="b"/>
@@ -170,7 +170,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # as fine, reddening this assertion (Decision 8's spec-over-bead call)
     test "a history with zero transitions is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h"/>
@@ -192,7 +192,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # (same underlying mutation as the "a :state ... is compound" test)
     test "the shared sub-check's message names <history>, not <initial>" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h"/>
@@ -214,7 +214,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # "reports nothing" assertion below
     test "a default target that is a sibling of the history under its parent reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">
@@ -232,7 +232,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # the non-descendant target below is silently dropped, reddening this
     test "a default target outside the history's parent is reported against the parent" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">
@@ -256,7 +256,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # underlying mutation as the "a :state ... is compound" test)
     test "an unresolved default target is reported only by check 2, not descendancy" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">
@@ -277,7 +277,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # longer trips the check, reddening this assertion
     test "type=\"sideways\" is reported with the raw source text" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h" type="sideways">
@@ -298,7 +298,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # is compound" test)
     test "type=\"deep\" reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h" type="deep">
@@ -318,7 +318,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # is compound" test)
     test "type=\"shallow\" reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h" type="shallow">
@@ -338,7 +338,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     # is compound" test)
     test "an absent type attribute reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <state id="b"/>
               <history id="h">

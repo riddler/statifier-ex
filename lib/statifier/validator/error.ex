@@ -19,6 +19,7 @@ defmodule Statifier.Validator.Error do
   the offending ids as data, the way the rest of the repo does.
   """
 
+  alias Statifier.Lowering.Namespace
   alias Statifier.Parser.Location
 
   @typedoc """
@@ -301,6 +302,52 @@ defmodule Statifier.Validator.Error do
       message: "state #{inspect(id)} carries <donedata>, which is only legal on <final>",
       location: location
     }
+  end
+
+  @doc """
+  Check 9 (spec 3.2.1, Decision 2): the root element's resolved namespace,
+  `document.namespace`, is not the SCXML namespace. `uri` is
+  `document.namespace` itself - `nil` for a fragment that declares no
+  namespace at all, the boilerplate-free case st-700 left representable.
+  """
+  @spec bad_namespace(uri :: binary() | nil, location :: Location.t()) :: t()
+  def bad_namespace(uri, %Location{} = location) do
+    %__MODULE__{
+      reason: {:bad_namespace, uri},
+      message: bad_namespace_message(uri),
+      location: location
+    }
+  end
+
+  @spec bad_namespace_message(uri :: binary() | nil) :: binary()
+  defp bad_namespace_message(nil) do
+    "the root element declares no namespace - expected xmlns=" <>
+      inspect(Namespace.scxml_namespace())
+  end
+
+  defp bad_namespace_message(uri) do
+    "the root element's namespace #{inspect(uri)} is not the SCXML namespace " <>
+      inspect(Namespace.scxml_namespace())
+  end
+
+  @doc """
+  Check 10 (spec 3.2.1): the root element's `version` is not `"1.0"`.
+  `version` is `nil` when the attribute is absent.
+  """
+  @spec bad_version(version :: binary() | nil, location :: Location.t()) :: t()
+  def bad_version(version, %Location{} = location) do
+    %__MODULE__{
+      reason: {:bad_version, version},
+      message: bad_version_message(version),
+      location: location
+    }
+  end
+
+  @spec bad_version_message(version :: binary() | nil) :: binary()
+  defp bad_version_message(nil), do: "the root element has no version attribute, expected \"1.0\""
+
+  defp bad_version_message(version) do
+    "the root element's version #{inspect(version)} must be \"1.0\""
   end
 
   @spec owner_description(owner :: owner()) :: binary()
