@@ -441,10 +441,10 @@ proposed under ADR-0014 becomes a finding with
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The two-entry propose fan-out is asserted by a stubbed-caller test - no
+- [x] Full quality gate passes: `mix quality`
+- [x] The two-entry propose fan-out is asserted by a stubbed-caller test - no
       real CLI call anywhere in the suite
-- [ ] Coverage does not drop
+- [x] Coverage does not drop
 
 #### Manual Verification:
 - [ ] The skip reason still names `lib/statifier/` once, not twice
@@ -803,6 +803,19 @@ end.
       outcome, same one propose call per in-scope ADR)
 - [ ] The refactor changed no verdict: an ADR-0012 finding still reports
       `check: "adr-0012-debuggability"`
+
+**Implementation Note**: `mix quality --profile loop` between edits, full
+`mix quality` as the phase gate. Interactive execution pauses here; `--loop`
+execution defers the Manual items.
+
+---
+
+### Phase 3
+
+- [ ] The skip reason still names `lib/statifier/` once, not twice
+- [ ] `mix quality --profile merge` on an in-scope branch shows the stage
+      making two propose calls' worth of work and completing in acceptable
+      time (the cost note in "Performance Considerations")
 
 **Implementation Note**: `mix quality --profile loop` between edits, full
 `mix quality` as the phase gate. Interactive execution pauses here; `--loop`

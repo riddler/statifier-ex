@@ -98,9 +98,34 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     end
   end
 
+  # The registry now has two entries sharing lib/statifier/ (ADR-0012 and
+  # ADR-0014, added in the same phase that added this filter) - `core_diff/0`
+  # is in scope for both, so an unfiltered stub would answer the propose
+  # prompt for each one identically and double every finding count this file
+  # asserts. Scoping the propose response to ADR-0012's own prompt (and
+  # answering every other judged ADR's propose pass with "no candidates")
+  # keeps this file's single-ADR assertions accurate without needing every
+  # test rewritten to expect two ADRs' worth of candidates. Matching on the
+  # full "reviewing a code change against <label>" line rather than just the
+  # bare "ADR-0012" substring matters here: ADR-0014's own real file text
+  # (read from disk, since these tests pass no `opts[:adr_texts]`) mentions
+  # "ADR-0012" repeatedly while explaining how it extends it, so a bare
+  # substring check would also match ADR-0014's propose prompt.
+  @adr_0012_propose_marker "reviewing a code change against ADR-0012 (debuggability"
+
   defp stub_caller(propose_response, refute_response) do
     fn prompt ->
-      if String.contains?(prompt, "PROPOSE PASS"), do: propose_response, else: refute_response
+      cond do
+        String.contains?(prompt, "PROPOSE PASS") and
+            String.contains?(prompt, @adr_0012_propose_marker) ->
+          propose_response
+
+        String.contains?(prompt, "PROPOSE PASS") ->
+          {:ok, "[]"}
+
+        true ->
+          refute_response
+      end
     end
   end
 

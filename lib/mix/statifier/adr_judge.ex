@@ -80,6 +80,17 @@ defmodule Mix.Statifier.AdrJudge do
       focus:
         "a microstep-resumability regression, a dropped trace effect at a " <>
           "phase boundary, a lost source location, or an uncounted or unstamped step"
+    },
+    %{
+      key: "adr-0014-expression-spans",
+      label: "ADR-0014 (expression-level spans are part of the retained-location constraint)",
+      adr_path: "docs/adr/0014-expression-spans-in-cond-diagnostics.md",
+      scope: %{prefix: "lib/statifier/", suffix: nil, describe: "lib/statifier/"},
+      focus:
+        "cond or expression wiring that compiles without spans, drops the span " <>
+          "table from the compiled-expression value, gates spans behind an option, " <>
+          "or raises error.execution for a failed expression without the owning " <>
+          "node's identity, the expression source, the predicator error and its span"
     }
   ]
 
@@ -220,15 +231,21 @@ defmodule Mix.Statifier.AdrJudge do
     File.read("docs/adr/0012-debuggability-designed-into-the-core.md")
   end
 
+  defp read_adr_source("adr-0014-expression-spans") do
+    File.read("docs/adr/0014-expression-spans-in-cond-diagnostics.md")
+  end
+
   @doc """
   The human-readable scope of every judged ADR, in registry order.
 
   `mix adr.judge`'s skip reason joins these so the reason for "nothing to
   judge" names every scope the registry actually checks, with one definition
-  site instead of the string being written again in the task.
+  site instead of the string being written again in the task. Deduped, so two
+  registry entries sharing one scope (as ADR-0012 and ADR-0014 do today) name
+  it once rather than repeating it.
   """
   @spec scope_descriptions() :: [String.t()]
-  def scope_descriptions, do: Enum.map(@judged, & &1.scope.describe)
+  def scope_descriptions, do: @judged |> Enum.map(& &1.scope.describe) |> Enum.uniq()
 
   # A file git has never seen is absent from `git diff` entirely, so a
   # brand-new interpreter module would be invisible to this check.

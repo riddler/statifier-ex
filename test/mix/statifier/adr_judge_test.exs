@@ -3,11 +3,13 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
   alias Mix.Statifier.AdrJudge
 
-  # The registry's one entry today - ADR-0012 (debuggability). Fetched once
-  # so tests reference its real scope/adr_path instead of a path string
-  # re-typed at each call site (and so a second registry entry, when one
-  # lands, cannot silently make `hd/1` here pick the wrong ADR).
+  # The registry's two entries today - ADR-0012 (debuggability) and ADR-0014
+  # (expression spans), both scoped to lib/statifier/. Fetched once so tests
+  # reference their real scope/adr_path instead of a path string re-typed at
+  # each call site (and so a growing registry cannot silently make `hd/1`
+  # here pick the wrong ADR).
   @adr_0012 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0012-debuggability"))
+  @adr_0014 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0014-expression-spans"))
 
   # Every test drives analyze/2 with a hand-written diff and a stub caller, so
   # nothing here needs a fixture repository, the real `claude` CLI, or a real
@@ -188,6 +190,77 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
     assert_received {:refute_prompt, refute_prompt}
     assert refute_prompt =~ "unique-adr-marker-xyz"
+  end
+
+  # Two registry entries (ADR-0012 and ADR-0014) sharing the exact same
+  # lib/statifier/ scope means a single in-scope diff fans out into one
+  # propose call per judged ADR, each carrying that ADR's own text - not one
+  # call sharing/merging the two, and not just the first entry answered.
+  # sabotage: have analyze/2 take only the first entry of source.adrs -> red
+  #           (only one propose prompt would be sent, not two)
+  test "a lib/statifier/ diff produces one propose prompt per judged ADR, each with its own ADR text" do
+    parent = self()
+
+    diff = core_diff()
+
+    source = %{
+      diff: diff,
+      adrs: [
+        %{
+          key: @adr_0012.key,
+          label: @adr_0012.label,
+          focus: @adr_0012.focus,
+          adr_text: "unique-0012-marker",
+          chunks: AdrJudge.scoped_chunks(diff, @adr_0012.scope)
+        },
+        %{
+          key: @adr_0014.key,
+          label: @adr_0014.label,
+          focus: @adr_0014.focus,
+          adr_text: "unique-0014-marker",
+          chunks: AdrJudge.scoped_chunks(diff, @adr_0014.scope)
+        }
+      ]
+    }
+
+    spy = fn prompt ->
+      if String.contains?(prompt, "PROPOSE PASS"), do: send(parent, {:propose_prompt, prompt})
+      {:ok, "[]"}
+    end
+
+    AdrJudge.analyze(source, caller: spy)
+
+    assert_received {:propose_prompt, prompt_a}
+    assert_received {:propose_prompt, prompt_b}
+    refute_received {:propose_prompt, _third}
+
+    prompts = [prompt_a, prompt_b]
+    assert Enum.any?(prompts, &(&1 =~ "unique-0012-marker"))
+    assert Enum.any?(prompts, &(&1 =~ "unique-0014-marker"))
+  end
+
+  # sabotage: have to_finding/1 hardcode check: "adr-0012-debuggability"
+  #           instead of reading candidate.key -> red
+  test "a candidate proposed under ADR-0014 becomes a finding with check: adr-0014-expression-spans" do
+    diff = core_diff()
+
+    source = %{
+      diff: diff,
+      adrs: [
+        %{
+          key: @adr_0014.key,
+          label: @adr_0014.label,
+          focus: @adr_0014.focus,
+          adr_text: "ADR-0014 placeholder text for tests.",
+          chunks: AdrJudge.scoped_chunks(diff, @adr_0014.scope)
+        }
+      ]
+    }
+
+    caller = stub_caller({:ok, candidate_json()}, {:ok, ~s({"violation": true})})
+
+    assert [finding] = AdrJudge.analyze(source, caller: caller)
+    assert finding.check == "adr-0014-expression-spans"
   end
 
   # sabotage: have normalize_candidate/1 accept any map, dropping the
@@ -381,14 +454,18 @@ defmodule Mix.Statifier.AdrJudgeTest do
   # The task's skip reason for "nothing to judge" is built by joining these,
   # so every registered scope has to actually show up here - a registry
   # entry a maintainer adds without a scope.describe would otherwise vanish
-  # from that message silently instead of failing loudly.
+  # from that message silently instead of failing loudly. ADR-0012 and
+  # ADR-0014 share the exact same scope today, so this also pins the dedupe:
+  # the skip reason must still name `lib/statifier/` once, not twice.
   # sabotage: have scope_descriptions/0 return [] unconditionally instead of
-  #           mapping @judged -> red
-  test "scope_descriptions/0 names every registered scope, not just the first" do
+  #           mapping @judged -> red (both assertions fail)
+  # sabotage: drop Enum.uniq() from scope_descriptions/0 -> red (the shared
+  #           lib/statifier/ scope would be listed twice)
+  test "scope_descriptions/0 names every registered scope once, even when two entries share it" do
     descriptions = AdrJudge.scope_descriptions()
 
-    assert length(descriptions) == length(AdrJudge.judged())
-    assert "lib/statifier/" in descriptions
+    assert descriptions == Enum.uniq(descriptions)
+    assert Enum.count(descriptions, &(&1 == "lib/statifier/")) == 1
   end
 
   describe "parse_cli_response/1 (the pure half of call_claude_cli/1)" do
@@ -491,6 +568,10 @@ defmodule Mix.Statifier.AdrJudgeTest do
     # sabotage: have read_adr_source/1 return {:error, :sabotage} for
     #           "adr-0012-debuggability" -> red on the adr_text assertion
     #           below (falls back to the "(unable to read ...)" placeholder)
+    # sabotage: have read_adr_source/1 return {:error, :sabotage} for
+    #           "adr-0014-expression-spans" -> red on the adr_0014.adr_text
+    #           assertion below (falls back to the "(unable to read ...)"
+    #           placeholder instead of the real ADR-0014 file content)
     test "prefers an explicit base over origin/main" do
       responses = [
         {"upstream/trunk", {"upstream/trunk\n", 0}},
@@ -506,9 +587,15 @@ defmodule Mix.Statifier.AdrJudgeTest do
                )
 
       assert sourced.diff =~ "lib/statifier/interpreter.ex"
-      assert [adr_0012] = sourced.adrs
+      assert [adr_0012, adr_0014] = sourced.adrs
       assert adr_0012.key == "adr-0012-debuggability"
       assert adr_0012.adr_text =~ "Debuggability"
+      assert adr_0014.key == "adr-0014-expression-spans"
+      # Matches the real file's own heading rather than a bare "span"
+      # substring, which the file's *path* already contains
+      # ("...spans-in-cond-diagnostics.md") and would pass even against the
+      # "(unable to read ...)" fallback placeholder.
+      assert adr_0014.adr_text =~ "Expression-level spans are part of the retained-location"
     end
 
     # sabotage: raise instead of returning {:error, _} when git fails -> red
@@ -549,8 +636,9 @@ defmodule Mix.Statifier.AdrJudgeTest do
       end
 
       assert {:ok, sourced} = AdrJudge.collect(cli_available: true, runner: untracked)
-      assert [adr_0012] = sourced.adrs
+      assert [adr_0012, adr_0014] = sourced.adrs
       assert [{"lib/statifier/new.ex", _chunk}] = adr_0012.chunks
+      assert [{"lib/statifier/new.ex", _chunk}] = adr_0014.chunks
 
       assert_received {:diffed, "lib/statifier/new.ex"}
       refute_received {:diffed, "scratch.exs"}
