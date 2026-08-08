@@ -69,6 +69,9 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       assert error.location.start_line == 4
     end
 
+    # sabotage: check/2 skips the {:history, _} owner arm of the transition
+    # walk entirely -> the history state's unresolved target goes
+    # unreported, reddening this assertion
     test "a history state's unresolved default target is reported at its own line" do
       xml = """
       <scxml>

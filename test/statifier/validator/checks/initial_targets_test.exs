@@ -57,6 +57,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # manual verification: one mistake produces one error - an unresolved
     # initial reports :unresolved_initial and never :initial_not_descendant
     # for the same id
+    # sabotage: check_initial_attribute/2 tests descendancy before
+    # resolution -> an unresolved id reports :initial_not_descendant instead
+    # of :unresolved_initial, reddening this assertion
     test "an unresolved initial reports only unresolved_initial, not descendancy" do
       xml = """
       <scxml>
@@ -221,6 +224,10 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # manual verification: an initial on an atomic state reports
     # initial_on_atomic_state only - not unresolved_initial, even though
     # "missing" does not resolve either
+    # sabotage: check_state/2's atomic_for_initial? clause appends the
+    # normal initial-attribute/element checks instead of suppressing them
+    # -> a second error (unresolved_initial or initial_not_descendant)
+    # appears alongside initial_on_atomic_state, reddening this assertion
     test "an atomic state's initial reports only initial_on_atomic_state" do
       xml = """
       <scxml>

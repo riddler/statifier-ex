@@ -151,4 +151,107 @@ defmodule Statifier.Validator.Error do
       location: location
     }
   end
+
+  @doc """
+  Check 4 (spec 3.3, 3.6): a state carries both an `initial` attribute and
+  an `<initial>` element - at most one is legal. Reported at the
+  `<initial>` element's own span.
+  """
+  @spec initial_attribute_and_element(id :: binary() | nil, location :: Location.t()) :: t()
+  def initial_attribute_and_element(id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:initial_attribute_and_element, id},
+      message:
+        "state #{inspect(id)} has both an initial attribute and an <initial> element - at most one is legal",
+      location: location
+    }
+  end
+
+  @doc """
+  Checks 4 and 5 (spec 3.6, 3.10, Decision 8): `owner`'s content model is
+  exactly one `<transition>`, and it holds `count` instead. Fires for both
+  zero (nothing to default into) and two-or-more (which one wins is
+  undefined).
+  """
+  @spec transition_count(owner :: owner(), count :: non_neg_integer(), location :: Location.t()) ::
+          t()
+  def transition_count(owner, count, %Location{} = location)
+      when is_tuple(owner) and is_integer(count) and count >= 0 do
+    %__MODULE__{
+      reason: {:transition_count, owner, count},
+      message: "#{owner_description(owner)} must have exactly one transition, found #{count}",
+      location: location
+    }
+  end
+
+  @doc """
+  Checks 4 and 5 (spec 3.6, 3.10, Decision 8): `owner`'s one transition
+  carries no usable `target` - `target=""` and an absent `target` are the
+  same failure here.
+  """
+  @spec transition_missing_target(owner :: owner(), location :: Location.t()) :: t()
+  def transition_missing_target(owner, %Location{} = location) when is_tuple(owner) do
+    %__MODULE__{
+      reason: {:transition_missing_target, owner},
+      message: "#{owner_description(owner)} transition must specify a target",
+      location: location
+    }
+  end
+
+  @doc """
+  Checks 4 and 5 (spec 3.6, 3.10): `owner`'s one transition carries `attr`
+  (`:event` or `:cond`), which neither an `<initial>` nor a `<history>`
+  default transition may specify.
+  """
+  @spec transition_forbidden_attribute(
+          owner :: owner(),
+          attr :: :event | :cond,
+          location :: Location.t()
+        ) :: t()
+  def transition_forbidden_attribute(owner, attr, %Location{} = location)
+      when is_tuple(owner) and attr in [:event, :cond] do
+    %__MODULE__{
+      reason: {:transition_forbidden_attribute, owner, attr},
+      message: "#{owner_description(owner)} transition must not specify #{attr}",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 5 (spec 3.10): a `:history` state `id` is a child of `parent_kind`,
+  which is not a compound `<state>` or `<parallel>` - the only two legal
+  parents for a history pseudo-state. `parent_kind` is `:scxml` for the
+  document root itself.
+  """
+  @spec history_bad_parent(id :: binary() | nil, parent_kind :: atom(), location :: Location.t()) ::
+          t()
+  def history_bad_parent(id, parent_kind, %Location{} = location) when is_atom(parent_kind) do
+    %__MODULE__{
+      reason: {:history_bad_parent, id, parent_kind},
+      message:
+        "history #{inspect(id)} must be a child of a compound <state> or <parallel>, not #{parent_kind}",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 5 (spec 3.10): a `<history type="...">` value that is neither
+  `"shallow"` nor `"deep"`. `raw` is the source text as written
+  (`Location.slice/2`, Decision 1), so the message quotes what the author
+  actually typed rather than the default it silently lowered to.
+  """
+  @spec history_bad_type(raw :: binary(), location :: Location.t()) :: t()
+  def history_bad_type(raw, %Location{} = location) when is_binary(raw) do
+    %__MODULE__{
+      reason: {:history_bad_type, raw},
+      message: "history type #{inspect(raw)} must be \"shallow\" or \"deep\"",
+      location: location
+    }
+  end
+
+  @spec owner_description(owner :: owner()) :: binary()
+  defp owner_description({:initial, nil}), do: "<initial>"
+  defp owner_description({:initial, id}), do: "<initial> on #{inspect(id)}"
+  defp owner_description({:history, nil}), do: "<history>"
+  defp owner_description({:history, id}), do: "<history> #{inspect(id)}"
 end
