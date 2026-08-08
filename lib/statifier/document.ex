@@ -15,7 +15,7 @@ defmodule Statifier.Document do
 
   `cond`, `log`'s `expr`, and `content`'s `expr` are `String.t() | nil` -
   the exact predicator source the author wrote, uncompiled. Compilation into
-  the `{:static, term()} | {:compiled, instructions, source}` sum type
+  the `{:static, term()} | {:compiled, %Predicator.Compiled{}, source}` sum type
   happens once at Machine-build time (`docs/datamodel.md`), so nothing in
   `lib/statifier/document/` may reference `Predicator`.
 
