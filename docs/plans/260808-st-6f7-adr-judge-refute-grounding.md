@@ -905,3 +905,50 @@ the implementation proceeds on. Each is a place a human may want to overrule.
 - Tag-exclusion precedent: `test/test_helper.exs`, `docs/testing.md`
 - Guard interaction: `lib/mix/statifier/gate_guard.ex:197-204` (`@tag :skip` scan
   over added lines under `test/`)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] `mix test --only adr_judge_corpus` runs end to end against the real CLI
+- [ ] Baseline recorded: per-fixture verdict, wall time, and model id, pasted
+      into the plan's record section (or `docs/plans/` follow-up note)
+- [ ] The baseline reproduces the bead's bug - `0012_dropped_location.diff`
+      fails as a false negative. If it does *not*, stop and report: the
+      premise of Phase 2 is unconfirmed and the fixture or the failure mode
+      needs re-examination before any prompt change
+- [ ] The clean fixtures pass at baseline, establishing that today's false-positive
+      rate is the number to not regress
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full `mix quality` as the phase gate. The corpus run is manual and costs real
+money - run it once, deliberately, and record the output.
+
+### Phase 2
+
+- [ ] `mix test --only adr_judge_corpus` re-run, same model as the baseline
+- [ ] Scorecard compared to baseline and recorded: false negatives before/after,
+      false positives before/after, wall time
+- [ ] `0012_dropped_location.diff` now produces a surviving finding - this is
+      the bead's acceptance condition and the answer to the DMV item
+- [ ] Clean fixtures still produce zero findings; any new false positive is
+      reported to the user rather than absorbed, since a false positive here
+      blocks a commit
+
+**Implementation Note**: In interactive execution, pause here for the corpus
+comparison before proceeding - Phase 3's entire justification is whichever
+false negatives survive this phase.
+
+### Phase 4
+
+- [ ] Both model runs completed and their numbers recorded
+- [ ] The decision rule was applied and the outcome written down, including
+      "kept haiku because X"
+- [ ] The three-entry `mix adr.judge` wall time under the chosen model is
+      recorded next to the bead's 176.1s baseline
+- [ ] A reader of the moduledoc can tell how to re-run the corpus and what the
+      last recorded score was
