@@ -5,11 +5,12 @@ require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
 require_relative "lib/refs"
-require_relative "lib/touches_elixir"
+require_relative "lib/gate_paths"
+require_relative "lib/manifest"
 
 # RepoState answers "where am I, and what's uncommitted or unpushed here" -
 # replacing /work Step 0 (locate-self), /merge-request Step 1 (establish
-# where you are), and half of /commit Step 0 (the touches_elixir carve-out).
+# where you are), and half of /commit Step 0 (the gate-applicability carve-out).
 # See docs/plans/260806-st-hzf-skill-mechanics-scripts.md Phase 2.
 module RepoState
   UNPUSHED_FIELD_SEP = "\x1f"
@@ -32,7 +33,7 @@ module RepoState
     def decompose_branch(branch)
       return nil unless branch
 
-      m = branch.match(/\A(#{Refs::BEAD_ID})-/)
+      m = branch.match(/\A(#{Refs.bead_id})-/)
       m && { id: m[1], strategy: "branch_prefix", confidence: "weak" }
     end
 
@@ -47,11 +48,25 @@ module RepoState
       end.compact
     end
 
+    # Markdown files directly under `dir`. `dir` is manifest data
+    # (artifacts.plans, changelog.dir) and may be absent - a project with
+    # `changelog.mode: none` has no fragment directory at all, and reporting
+    # [] is the honest answer rather than guessing a conventional path.
+    def under_dir(files, dir)
+      return [] if dir.to_s.empty?
+
+      prefix = dir.to_s.chomp("/")
+      files.select { |f| f.start_with?("#{prefix}/") && f.end_with?(".md") }
+    end
+
     def run(argv, io: $stdout)
       parser, _options = Cli.build("repo_state.rb [options]")
       Cli.parse!(parser, argv)
 
       env = Envelope.new(script: "repo_state")
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
 
       git_dir = Sh.run(%w[git rev-parse --git-dir], envelope: env)
       common_dir = Sh.run(%w[git rev-parse --git-common-dir], envelope: env)
@@ -98,7 +113,7 @@ module RepoState
 
       # Three-dot diff against the merge base with local `main`, matching
       # /commit Step 0 and /merge-request's gate step exactly - see
-      # lib/touches_elixir.rb.
+      # lib/gate_paths.rb.
       diff_res = Sh.run(%w[git diff --name-only main...HEAD], envelope: env)
       diff_files =
         if diff_res.success?
@@ -109,9 +124,9 @@ module RepoState
         end
 
       changed_files = (diff_files + dirty_files).uniq.sort
-      touches_elixir = TouchesElixir.any?(changed_files)
-      plan_docs = changed_files.select { |f| f =~ %r{\Adocs/plans/.*\.md\z} }
-      changelog_fragments = changed_files.select { |f| f =~ %r{\Achangelog\.d/.*\.md\z} }
+      touches_build = GatePaths.touches_build?(changed_files, manifest: manifest)
+      plan_docs = under_dir(changed_files, manifest.plans_dir)
+      changelog_fragments = under_dir(changed_files, manifest.changelog_dir)
       refs_beads = unpushed.flat_map { |c| c[:refs] }.uniq.sort
 
       env.data[:checkout] = checkout
@@ -126,7 +141,7 @@ module RepoState
       env.data[:commits_behind] = commits_behind
       env.data[:unpushed] = unpushed
       env.data[:refs_beads] = refs_beads
-      env.data[:touches_elixir] = touches_elixir
+      env.data[:touches_build] = touches_build
       env.data[:changed_files] = changed_files
       env.data[:plan_docs] = plan_docs
       env.data[:changelog_fragments] = changelog_fragments

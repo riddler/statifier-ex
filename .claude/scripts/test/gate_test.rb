@@ -6,10 +6,13 @@ require "stringio"
 require "tmpdir"
 require "fileutils"
 require_relative "../gate"
-require_relative "../lib/touches_elixir"
+require_relative "../lib/gate_paths"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 class GateTest < Minitest::Test
+  include ManifestHelper
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -18,6 +21,7 @@ class GateTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
     Dir.chdir(@orig_pwd)
   end
 
@@ -27,14 +31,18 @@ class GateTest < Minitest::Test
     [code, JSON.parse(io.string)]
   end
 
-  # Runs the block inside a fresh tmp dir so File.exist?(LEDGER_PATH) checks
-  # (a relative path) resolve predictably regardless of where the ledger
-  # happens to exist in this real checkout.
-  def in_tmp_cwd(ledger_present: false)
-    Dir.mktmpdir do |dir|
-      FileUtils.mkdir_p(File.join(dir, "docs")) if ledger_present
-      File.write(File.join(dir, "docs", "quality-gate-changes.md"), "# ledger\n") if ledger_present
-      Dir.chdir(dir) { yield }
+  # Runs the block inside a fresh tmp dir carrying a fixture manifest, so
+  # the ledger-existence check (a relative path) resolves predictably
+  # regardless of where the ledger happens to exist in this real checkout,
+  # and the gate commands under test are `make report`/`make attest` rather
+  # than this repo's own - see support/manifest_helper.rb.
+  def in_tmp_cwd(ledger_present: false, fixture: "gate_tier1")
+    in_tmp_repo(fixture) do |dir|
+      if ledger_present
+        FileUtils.mkdir_p(File.join(dir, "docs"))
+        File.write(File.join(dir, "docs", "quality-gate-changes.md"), "# ledger\n")
+      end
+      yield
     end
   end
 
@@ -88,7 +96,7 @@ class GateTest < Minitest::Test
       assert_nil env["data"]["ran"]
       assert_nil env["data"]["attested"]
       assert_equal [], env["data"]["skipped_stages"]
-      # No `mix quality` or `mix gate.verify` call was ever registered above,
+      # No `make report` or `make attest` call was ever registered above,
       # so if the script tried to shell out to either, FakeSh would raise
       # FakeSh::UnexpectedCommand and this test would fail loudly.
     end
@@ -98,8 +106,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(GREEN_REPORT))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
+      @fake.expect(%w[make report], out: JSON.generate(GREEN_REPORT))
+      @fake.expect(%w[make attest], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
 
       code, env = run_gate
 
@@ -129,8 +137,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green...\n")
+      @fake.expect(%w[make report], out: JSON.generate(report))
+      @fake.expect(%w[make attest], out: "Full gate green...\n")
 
       code, env = run_gate
 
@@ -168,8 +176,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green...\n")
+      @fake.expect(%w[make report], out: JSON.generate(report))
+      @fake.expect(%w[make attest], out: "Full gate green...\n")
 
       code, env = run_gate
 
@@ -200,8 +208,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green...\n")
+      @fake.expect(%w[make report], out: JSON.generate(report))
+      @fake.expect(%w[make attest], out: "Full gate green...\n")
 
       code, env = run_gate
 
@@ -233,8 +241,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
-      @fake.expect(%w[mix gate.verify], exitstatus: 1, err: "** (Mix) Not a full gate: the gate is red (Credo).\n")
+      @fake.expect(%w[make report], out: JSON.generate(report))
+      @fake.expect(%w[make attest], exitstatus: 1, err: "** (Mix) Not a full gate: the gate is red (Credo).\n")
 
       code, env = run_gate
 
@@ -256,8 +264,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report - --profile loop], out: JSON.generate(report))
-      # No `mix gate.verify` expectation registered: a loop run must never
+      @fake.expect(%w[make report-loop], out: JSON.generate(report))
+      # No `make attest` expectation registered: a loop run must never
       # call it, since attested is already forced to false.
 
       code, env = run_gate(["--profile", "loop"])
@@ -279,7 +287,7 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_no_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report - --profile loop], out: JSON.generate(report))
+      @fake.expect(%w[make report-loop], out: JSON.generate(report))
 
       code, env = run_gate(["--profile", "loop"])
 
@@ -287,6 +295,117 @@ class GateTest < Minitest::Test
       assert_equal false, env["data"]["applicable"]
       assert_equal "loop", env["data"]["ran"]
       assert_equal false, env["data"]["attested"]
+    end
+  end
+
+  # --- gate contract tiers (wurk docs/gate-contract.md) -------------------
+  #
+  # Tier 0 is the floor every consumer repo meets: gate.full/gate.loop and an
+  # exit code, nothing else. Everything the tier-1 tests above assert about
+  # stage detail simply does not fire here - and must not be faked from an
+  # empty stage list, which would report "no skipped stages" for a run that
+  # measured nothing of the sort.
+
+  # sabotage: judge tier 0 on report["status"] (always nil) instead of the
+  # exit code -> red
+  def test_tier_0_green_comes_from_the_exit_code_of_gate_full
+    in_tmp_cwd(fixture: "gate_tier0") do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[make check], out: "everything is fine\n")
+
+      code, env = run_gate
+
+      assert_equal 0, code
+      assert_equal true, env["ok"]
+      assert_equal 0, env["data"]["tier"]
+      assert_equal [], env["data"]["stages"]
+      assert_equal [], env["data"]["skipped_stages"]
+    end
+  end
+
+  # sabotage: drop the `env.fail! unless res.success?` tier-0 branch -> red
+  def test_tier_0_red_exit_code_makes_the_envelope_not_ok
+    in_tmp_cwd(fixture: "gate_tier0") do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[make check], out: "boom\n", exitstatus: 1)
+
+      code, env = run_gate
+
+      assert_equal 1, code
+      assert_equal false, env["ok"]
+      assert_equal 0, env["data"]["tier"]
+    end
+  end
+
+  # No gate.attest command means "prove it was a full gate" degrades to the
+  # exit code of the run - and says so, rather than reporting an attestation
+  # that never happened (docs/gate-contract.md, degradation summary).
+  #
+  # sabotage: report attested: true when gate.attest is absent -> red
+  def test_absent_attest_command_reports_attested_false_and_explains_why
+    in_tmp_cwd(fixture: "gate_tier0") do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[make check], out: "fine\n")
+
+      _code, env = run_gate
+
+      assert_equal false, env["data"]["attested"]
+      assert_match(/no gate\.attest command/, env["data"]["attestation_message"])
+    end
+  end
+
+  def test_tier_0_loop_run_uses_gate_loop
+    in_tmp_cwd(fixture: "gate_tier0") do
+      expect_elixir_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[make quick], out: "fine\n")
+
+      code, env = run_gate(["--profile", "loop"])
+
+      assert_equal 0, code
+      assert_equal "loop", env["data"]["ran"]
+      assert_equal 0, env["data"]["tier"]
+      assert_equal false, env["data"]["attested"]
+    end
+  end
+
+  # The carve-out reason names the project's own path lists, so the sentence
+  # a skipped commit is justified by is checkable against the same data the
+  # predicate used.
+  #
+  # sabotage: hardcode the lib/, test/, config/ sentence back -> red
+  def test_carve_out_reason_names_the_manifests_own_paths
+    in_tmp_cwd do
+      expect_no_elixir_diff
+      expect_no_sabotage_diff
+
+      _code, env = run_gate
+
+      reason = env["data"]["carve_out_reason"]
+      assert_match(/mix\.exs/, reason)
+      assert_match(%r{\.claude/scripts/}, reason)
+    end
+  end
+
+  # sabotage: hardcode "docs/quality-gate-changes.md" back into gate.rb -> red
+  def test_ledger_path_comes_from_the_manifest
+    other = manifest_with("gate_tier1", "gate" => { "guard_ledger" => "docs/gate-ledger.md" })
+
+    Manifest.reset!
+    with_manifest(other) do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          expect_no_elixir_diff
+          expect_no_sabotage_diff
+
+          _code, env = run_gate
+
+          assert_equal "docs/gate-ledger.md", env["data"]["gate_guard"]["ledger_path"]
+        end
+      end
     end
   end
 
@@ -314,14 +433,14 @@ class GateTest < Minitest::Test
     $stderr = original
   end
 
-  # sabotage: TouchesElixir.gate_applicable? delegating to PATTERNS instead of
+  # sabotage: GatePaths.gate_applicable? delegating to PATTERNS instead of
   # GATE_PATTERNS -> red (the branch carves out and the gate never runs)
   def test_scripts_only_change_is_gate_applicable_and_runs_the_gate
     in_tmp_cwd do
       expect_scripts_only_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(GREEN_REPORT))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
+      @fake.expect(%w[make report], out: JSON.generate(GREEN_REPORT))
+      @fake.expect(%w[make attest], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
 
       code, env = run_gate
 
@@ -339,8 +458,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd do
       expect_skills_only_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(GREEN_REPORT))
-      @fake.expect(%w[mix gate.verify], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
+      @fake.expect(%w[make report], out: JSON.generate(GREEN_REPORT))
+      @fake.expect(%w[make attest], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
 
       code, env = run_gate
 
@@ -373,22 +492,22 @@ class GateTest < Minitest::Test
       README.md
     ]
 
-    matching.each { |path| assert TouchesElixir.any?([path]), "expected #{path} to touch elixir" }
-    non_matching.each { |path| refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir" }
+    matching.each { |path| assert GatePaths.touches_build?([path]), "expected #{path} to touch elixir" }
+    non_matching.each { |path| refute GatePaths.touches_build?([path]), "expected #{path} not to touch elixir" }
   end
 
   # sabotage: drop GATED_NON_ELIXIR_PATTERNS from GATE_PATTERNS -> red
   def test_gate_applicable_is_strictly_wider_than_touches_elixir
     # Everything that touches the build still applies.
     %w[lib/statifier/interpreter.ex mix.exs].each do |path|
-      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+      assert GatePaths.gate_applicable?([path]), "expected #{path} to be gate-applicable"
     end
 
     # The Script tests stage measures these, so they no longer carve out -
     # even though they touch no Elixir at all.
     %w[.claude/scripts/gate.rb .claude/scripts/lib/refs.rb .claude/scripts/test/run.rb].each do |path|
-      refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir"
-      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+      refute GatePaths.touches_build?([path]), "expected #{path} not to touch elixir"
+      assert GatePaths.gate_applicable?([path]), "expected #{path} to be gate-applicable"
     end
 
     # sabotage: drop %r{\A\.claude/skills/} from GATED_NON_ELIXIR_PATTERNS ->
@@ -406,14 +525,14 @@ class GateTest < Minitest::Test
       .claude/skills/merge-request/SKILL.md
       .claude/skills/commit/reference.md
     ].each do |path|
-      refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir"
-      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+      refute GatePaths.touches_build?([path]), "expected #{path} not to touch elixir"
+      assert GatePaths.gate_applicable?([path]), "expected #{path} to be gate-applicable"
     end
 
     # A plain doc change outside `.claude/` still carves out - no stage
     # measures it.
     %w[docs/adr/0011.md README.md].each do |path|
-      refute TouchesElixir.gate_applicable?([path]), "expected #{path} to carve out"
+      refute GatePaths.gate_applicable?([path]), "expected #{path} to carve out"
     end
   end
 
@@ -618,8 +737,8 @@ class GateTest < Minitest::Test
     in_tmp_cwd(ledger_present: true) do
       expect_elixir_diff
       expect_no_sabotage_diff
-      @fake.expect(%w[mix quality --report -], out: JSON.generate(report))
-      @fake.expect(%w[mix gate.verify], exitstatus: 1, err: "not a full gate\n")
+      @fake.expect(%w[make report], out: JSON.generate(report))
+      @fake.expect(%w[make attest], exitstatus: 1, err: "not a full gate\n")
 
       _code, env = run_gate
 

@@ -146,7 +146,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
    finding is not - refuse on one exactly as on a red gate, report it, and
    stop.
 
-5. **Check for a changelog fragment.** Only when `data.touches_elixir` (from
+5. **Check for a changelog fragment.** Only when `data.touches_build` (from
    step 1's `repo_state.rb`) is true and the diff touches public API under
    `lib/`:
    ```bash

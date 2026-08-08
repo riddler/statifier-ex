@@ -7,6 +7,7 @@ require "tmpdir"
 require "fileutils"
 require_relative "../work_state"
 require_relative "support/fake_sh"
+require_relative "support/manifest_helper"
 
 # WorkState.find_docs / doc_id_pattern (pure functions).
 class WorkStateLibTest < Minitest::Test
@@ -63,6 +64,8 @@ end
 
 # WorkStateCli (composes Bead.run and plan_state.rb's parser).
 class WorkStateCliTest < Minitest::Test
+  include ManifestHelper
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -168,6 +171,29 @@ class WorkStateCliTest < Minitest::Test
     end
   end
 
+  # The artifact roots are manifest data, not constants - a repo laying its
+  # documents out under thoughts/shared/ gets found without a code change.
+  # This is the same pair of values the skills pass to their research
+  # subagents, so a drift here would mean the script and the agents look in
+  # different places for the same document.
+  #
+  # sabotage: hardcode "docs/research"/"docs/plans" back into WorkState -> red
+  def test_artifact_roots_come_from_the_manifest
+    in_tmp_repo("thoughts_layout") do
+      FileUtils.mkdir_p("thoughts/shared/plans")
+      FileUtils.mkdir_p("thoughts/shared/research")
+      File.write("thoughts/shared/plans/260801-st-abc-a-plan.md", sample_plan)
+      File.write("thoughts/shared/research/260801-st-abc-a-question.md", "# Research\n")
+
+      expect_bd_show("st-abc", notes: "")
+
+      _code, result = run_work_state(["st-abc"])
+
+      assert_equal ["thoughts/shared/plans/260801-st-abc-a-plan.md"], result["data"]["plan_docs"]
+      assert_equal ["thoughts/shared/research/260801-st-abc-a-question.md"], result["data"]["research_docs"]
+    end
+  end
+
   # This script never itself pushes, opens a PR, closes a bead, or chooses
   # a bucket - it only reports. Confirm the recorded commands are exactly
   # the one bd show call, nothing more.
@@ -182,10 +208,6 @@ class WorkStateCliTest < Minitest::Test
   end
 
   private
-
-  def in_tmp_repo
-    Dir.mktmpdir { |dir| Dir.chdir(dir) { yield } }
-  end
 
   def sample_plan
     <<~PLAN

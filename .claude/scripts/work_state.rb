@@ -6,6 +6,7 @@ require "stringio"
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
 require_relative "bead"
 require_relative "plan_state"
 
@@ -16,9 +17,6 @@ require_relative "plan_state"
 # happens here, with the codebase in reach" - work/SKILL.md Step 2). See
 # docs/plans/260806-st-hzf-skill-mechanics-scripts.md Phase 12.
 module WorkState
-  RESEARCH_DIR = "docs/research"
-  PLAN_DIR = "docs/plans"
-
   class << self
     # Matches doc_meta.rb's "YYMMDD-[issue-id-]kebab-description.md" grammar:
     # a doc "names" a bead when the id sits right after the date stamp,
@@ -57,6 +55,9 @@ module WorkStateCli
       env = Envelope.new(script: "work_state")
       return usage_block!(env, io) if id.to_s.strip.empty?
 
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+
       show = fetch_bead(id, env)
       return env.emit(io) unless env.blocked.empty?
 
@@ -65,8 +66,12 @@ module WorkStateCli
       # do not re-parse, just filter to the entries that carry loop state.
       loop_notes = Array(show["notes"]).select { |n| n["loop"] }
 
-      research_docs = WorkState.find_docs(WorkState::RESEARCH_DIR, id)
-      plan_docs = WorkState.find_docs(WorkState::PLAN_DIR, id)
+      # The artifact roots come from the manifest, the same values the
+      # skills hand to their research subagents - one source, so a repo
+      # keeping plans under thoughts/shared/ is a manifest edit rather than
+      # a fork of this script.
+      research_docs = WorkState.find_docs(manifest.research_dir, id)
+      plan_docs = WorkState.find_docs(manifest.plans_dir, id)
 
       env.warn(code: "multiple_research_docs", message: "more than one research doc names #{id}: #{research_docs.join(', ')}") if research_docs.length > 1
       env.warn(code: "multiple_plan_docs", message: "more than one plan doc names #{id}: #{plan_docs.join(', ')}") if plan_docs.length > 1

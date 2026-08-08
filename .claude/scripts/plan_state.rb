@@ -27,7 +27,6 @@ module PlanState
   MANUAL_HEADING_RE = /\A#### Manual Verification:/.freeze
   CHECKBOX_RE = /\A- \[( |x)\] (.+)\z/.freeze
   DEFERRED_HEADING_RE = /\A## Deferred Manual Verification\s*\z/.freeze
-  BEADS_ISSUE_RE = /Beads [Ii]ssue:\s*`?(#{Refs::BEAD_ID})`?/.freeze
 
   # /create-plan's mandatory nine sections, in the order the template
   # specifies them (create-plan/SKILL.md's "Template Structure" list).
@@ -66,8 +65,14 @@ module PlanState
       text.to_s.each_line.map(&:chomp)
     end
 
+    # Built per call rather than as a constant: the bead id shape comes from
+    # the manifest (lib/refs.rb), which is not loaded at require time.
+    def beads_issue_re
+      /Beads [Ii]ssue:\s*`?(#{Refs.bead_id})`?/
+    end
+
     def extract_bead_id(text)
-      m = text.to_s.match(BEADS_ISSUE_RE)
+      m = text.to_s.match(beads_issue_re)
       m && m[1]
     end
 

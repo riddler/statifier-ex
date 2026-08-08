@@ -421,7 +421,7 @@ module Bead
 
       files = diff_res.out.to_s.each_line.map(&:strip).reject(&:empty?)
       files.each do |f|
-        m = File.basename(f).match(/\A\d{6}-(#{Refs::BEAD_ID})-/)
+        m = File.basename(f).match(/\A\d{6}-(#{Refs.bead_id})-/)
         return m[1] if m
       end
       nil
@@ -431,7 +431,7 @@ module Bead
       branch_res = Sh.run(%w[git branch --show-current], envelope: env)
       return nil unless branch_res.success?
 
-      m = branch_res.out.to_s.strip.match(/\A(#{Refs::BEAD_ID})-/)
+      m = branch_res.out.to_s.strip.match(/\A(#{Refs.bead_id})-/)
       m && m[1]
     end
 
