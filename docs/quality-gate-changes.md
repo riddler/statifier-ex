@@ -13,6 +13,36 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-08 - st-6f7
+
+Approved-by: JohnnyT (in session)
+
+- test/test_helper.exs: adds `:adr_judge_corpus` to `ExUnit.start`'s
+  `exclude:` list, alongside `:scion` and `:scxml_w3`
+
+Reason: st-6f7 added a fixture corpus that runs the ADR judge's propose and
+refute passes against the real `claude` CLI, so the ordinary suite must not
+reach it - st-c8c is the incident where a test that forgot to inject
+`opts[:caller]` made real CLI calls and real spend, and the corpus is eight
+fixtures whose measured runs take 90-360 seconds and cost money every time.
+Excluding it by tag is the same treatment the two conformance suites already
+get, and `mix test --only adr_judge_corpus` is how it runs.
+
+**This entry is voluntary.** `mix gate.check` does not guard
+`test/test_helper.exs`, so the Gate guard stage was green with or without it,
+and no agent was blocked waiting on it. It is recorded because the spirit of
+ADR-0011 is that narrowing what the suite runs is a human's call, and a tag
+exclusion is exactly that shape even though the mechanical check does not
+reach it. Nothing that ran before this change stops running: the corpus is new
+in the same diff, so the exclusion removes no existing coverage. Its
+cheap, caller-free companion (`adr_judge_corpus_shape_test.exs`) does stay in
+the ordinary suite, so the corpus cannot rot unnoticed between hand-runs.
+
+Worth a maintainer's eye at some point: whether `test/test_helper.exs` should
+become a guarded path. Any future tag exclusion added there narrows the
+default suite silently, and this entry only exists because someone chose to
+write it.
+
 ## 2026-08-06 - st-hzf
 
 Approved-by: JohnnyT (in session)
