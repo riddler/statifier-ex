@@ -1,0 +1,103 @@
+defmodule Statifier.Lowering do
+  @moduledoc """
+  The second arrow of the parser pipeline: a generic
+  `%Statifier.Parser.DOM.Element{}` tree in, a typed `%Statifier.Document{}`
+  tree out (`docs/architecture.md`, "Parser: DOM first, then lowering").
+
+  ## The accumulator contract
+
+  `lower/1` performs one traversal. Every builder in
+  `Statifier.Lowering.Builders` lowers its children first via
+  `walk_children/2`, appending each child's errors to its own in document
+  order; `lower/1` sorts the whole accumulated list by
+  `location.start_offset` before returning, so the report reads in document
+  order regardless of the order a parent happened to emit its own error
+  relative to its children's.
+
+  A builder that cannot place or build something still returns the best
+  partial result it can (or nothing, when it cannot build one at all) so the
+  walk keeps going and later errors are still found - but that partial tree
+  is never handed back to the caller. `lower/1` returns `{:ok, document}`
+  only when the accumulated error list is empty; any non-empty list means
+  `{:error, errors}`, full stop, regardless of how much of the tree built
+  successfully. Handing back a document that lowering itself does not trust
+  would just move the "is this actually usable" question onto every caller.
+
+  ## Dispatch is context-free
+
+  The dispatch map's keys are exactly the supported element names
+  (Decision 4); nothing here or in `Builders` takes a parent element name as
+  an argument. A builder does not know or care what its parent was - the
+  parent, when it exists, is what decides whether the child's tagged result
+  has anywhere to go (`Builders.place/2`, from Phase 2 on). This phase's map
+  holds only `"scxml"`, so every element child of `<scxml>` misses it and
+  becomes an `{:unsupported_element, name}` error; that is expected, not a
+  gap to work around.
+  """
+
+  alias Statifier.Document
+  alias Statifier.Lowering.Builders
+  alias Statifier.Lowering.Error
+  alias Statifier.Parser.DOM.Element
+  alias Statifier.Parser.DOM.Text
+
+  @dispatch %{"scxml" => &Builders.build_scxml/2}
+
+  @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
+  def lower(%Element{name: name} = root) do
+    case Map.fetch(@dispatch, name) do
+      {:ok, builder} ->
+        {document, errors} = builder.(root, %{})
+        finalize(document, errors)
+
+      :error ->
+        {:error, [Error.unexpected_root(name, root.location)]}
+    end
+  end
+
+  @doc false
+  # Lowers `element`'s direct children: dispatches each child element through
+  # the shared map, or reports it as `{:unsupported_element, name}` when it
+  # misses; errors on any non-whitespace `%Text{}` run. Reads the
+  # **unfiltered** `children` list rather than `DOM.elements/1`, which
+  # filters text out and would silently drop the stray-text rule with it.
+  #
+  # Returns tagged child results in document order (each builder's own
+  # `{slot, struct}` tag, per Decision 3) alongside the accumulated errors,
+  # so a container builder can fold the results into its own struct via its
+  # own `place/2` without this function knowing anything about slots.
+  @spec walk_children(element :: Element.t(), ctx :: map()) :: {[term()], [Error.t()]}
+  def walk_children(%Element{children: children}, ctx) do
+    {results, errors} =
+      Enum.reduce(children, {[], []}, fn child, {results, errors} ->
+        walk_child(child, ctx, results, errors)
+      end)
+
+    {Enum.reverse(results), errors}
+  end
+
+  defp walk_child(%Text{value: value, location: location}, _ctx, results, errors) do
+    if String.trim(value) == "" do
+      {results, errors}
+    else
+      {results, [Error.stray_text(value, location) | errors]}
+    end
+  end
+
+  defp walk_child(%Element{name: name, location: location} = element, ctx, results, errors) do
+    case Map.fetch(@dispatch, name) do
+      {:ok, builder} ->
+        {result, child_errors} = builder.(element, ctx)
+        {[result | results], Enum.reverse(child_errors) ++ errors}
+
+      :error ->
+        {results, [Error.unsupported(name, location) | errors]}
+    end
+  end
+
+  defp finalize(document, []), do: {:ok, document}
+
+  defp finalize(_document, errors) do
+    {:error, Enum.sort_by(errors, fn error -> error.location.start_offset end)}
+  end
+end
