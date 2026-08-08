@@ -109,6 +109,97 @@ defmodule Statifier.Validator.Checks.FinalTest do
     end
   end
 
+  describe "check/2 - final_has_transitions" do
+    # sabotage: check_final/1 drops its `transitions` arm, reporting only
+    # state children the way it did before st-dje -> the <final> below
+    # produces no error at all and validate!/1 returns {:ok, _}, reddening
+    # this assertion
+    test "a <transition> on a <final> is reported at the transition's own span" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+          <final id="done">
+              <transition event="e" target="a"/>
+          </final>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:final_has_transitions, "done"}} = error]} = validate!(xml)
+      assert error.location.start_line == 4
+    end
+
+    # sabotage: check_final/1's transitions arm reports `transition.location`
+    # once for the whole state (`Enum.map` replaced with a single
+    # `List.first` lookup) -> only one error comes back instead of two,
+    # reddening the two-element list match
+    test "each transition on a <final> is reported separately" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+          <final id="done">
+              <transition event="e" target="a"/>
+              <transition event="f" target="a"/>
+          </final>
+      </scxml>
+      """
+
+      assert {:error, [first, second]} = validate!(xml)
+      assert %Error{reason: {:final_has_transitions, "done"}} = first
+      assert %Error{reason: {:final_has_transitions, "done"}} = second
+      assert first.location.start_line == 4
+      assert second.location.start_line == 5
+    end
+
+    # sabotage: check_final/1's transitions arm passes a literal `nil`
+    # instead of `state.id` -> the reason no longer names the <final> the
+    # transition sits on, reddening this assertion
+    test "the reported id names the <final>, not the transition" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+          <final id="the_end">
+              <transition target="a"/>
+          </final>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:final_has_transitions, "the_end"}}]} = validate!(xml)
+    end
+
+    # sabotage: check_final/1 grows an `initial` arm of its own (reporting
+    # whenever `state.initial != []`), the duplication this module's
+    # moduledoc says it deliberately avoids -> the <final> below reports
+    # both check 3's error and this module's, so the single-element list
+    # match goes red on two errors for one mistake
+    test "an initial attribute on a <final> stays check 3's error, not this one" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="done" initial="a"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, "done"}}]} = validate!(xml)
+    end
+
+    # sabotage: check_final/1's transitions arm drops its `Enum.map` guard on
+    # the empty list and reports one error unconditionally (`[Error.
+    # final_has_transitions(state.id, state.location)]`) -> this legal
+    # <final> gains a spurious error, reddening the {:ok, _} assertion
+    test "a <final> with only onentry, onexit, and donedata reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="done">
+              <onentry><log label="x"/></onentry>
+              <onexit><log label="y"/></onexit>
+              <donedata><content>bye</content></donedata>
+          </final>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+  end
+
   defp find(errors, id) do
     Enum.find(errors, fn %Error{reason: reason} -> elem(reason, 1) == id end)
   end
