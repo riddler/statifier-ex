@@ -6,6 +6,7 @@ require "stringio"
 require "tmpdir"
 require "fileutils"
 require_relative "../permalinks"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 # Permalinks (pure text transform).
@@ -17,6 +18,16 @@ class PermalinksLibTest < Minitest::Test
                                 file: "lib/statifier/interpreter.ex", line: "123")
 
     assert_equal "https://github.com/riddler/statifier-ex/blob/abc1234/lib/statifier/interpreter.ex#L123", url
+  end
+
+  # sabotage: let Forge.blob_url fall through to the GitHub format for any
+  # kind instead of raising -> red. A guessed URL 404s silently inside a
+  # document nobody re-reads, which is worse than not writing one.
+  def test_build_url_refuses_a_forge_it_has_no_format_for
+    assert_raises(ArgumentError) do
+      Permalinks.build_url(owner: "o", repo: "r", commit: "abc1234",
+                           file: "lib/foo.rb", line: "1", kind: "gitlab")
+    end
   end
 
   def test_build_url_line_range
@@ -81,6 +92,10 @@ end
 
 # PermalinksCli, driven through FakeSh (gh/git) and tmpdir documents.
 class PermalinksCliTest < Minitest::Test
+  include ManifestHelper
+
+  FIXTURE = "worktree"
+
   def setup
     @fake = FakeSh.new
     Sh.runner = @fake
@@ -88,12 +103,31 @@ class PermalinksCliTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
   end
 
-  def run_cli(argv)
+  def run_cli(argv, fixture: FIXTURE)
     io = StringIO.new
-    code = PermalinksCli.run(argv, io: io)
+    code = nil
+    with_manifest(fixture) { code = PermalinksCli.run(argv, io: io) }
     [code, JSON.parse(io.string)]
+  end
+
+  # sabotage: drop the Forge.guard! call from permalinks.rb -> the CLI
+  # shells out to `gh repo view` and FakeSh raises UnexpectedCommand -> red
+  def test_a_gitlab_repo_blocks_before_touching_the_document
+    Dir.mktmpdir do |tmp|
+      path = File.join(tmp, "doc.md")
+      original = "see `lib/foo.rb:12`\n"
+      File.write(path, original)
+
+      code, env = run_cli([path], fixture: "forge_gitlab")
+
+      assert_equal 1, code
+      assert_equal "unsupported_forge", env["blocked"].first["code"]
+      assert_equal original, File.read(path)
+      assert_empty @fake.calls
+    end
   end
 
   def gh_repo_view_json

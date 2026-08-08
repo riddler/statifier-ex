@@ -6,6 +6,8 @@ require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
 require_relative "lib/refs"
+require_relative "lib/manifest"
+require_relative "lib/forge"
 
 # PrState is the one place that knows PR-merge detection is gh-based, and
 # that git ancestry is *wrong* here under this repo's rebase-merge-only
@@ -76,6 +78,10 @@ module PrState
       args = Cli.parse!(parser, argv)
 
       env = Envelope.new(script: "pr_state")
+
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+      return env.emit(io) unless Forge.guard!(env, manifest, doing: "PR state")
 
       if args.first == "beads"
         return run_beads(args[1], env, io, parser)

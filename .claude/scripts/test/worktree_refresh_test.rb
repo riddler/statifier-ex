@@ -4,12 +4,20 @@ require "minitest/autorun"
 require "json"
 require "stringio"
 require_relative "../worktree_refresh"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 class WorktreeRefreshTest < Minitest::Test
-  MAIN = "/Users/johnnyt/repos/github/statifier-ex"
-  WT1 = "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-current-thing"
-  WT2 = "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-def-needs-rebase"
+  include ManifestHelper
+
+  # Bead prefix, gate command and repair lockfile all come from the
+  # `worktree` fixture (zz / `make quick` / lock.json), so nothing here goes
+  # green merely because the suite happens to run inside statifier.
+  FIXTURE = "worktree"
+
+  MAIN = "/repos/myrepo"
+  WT1 = "/repos/zz-worktrees/zz-abc-current-thing"
+  WT2 = "/repos/zz-worktrees/zz-def-needs-rebase"
 
   def setup
     @fake = FakeSh.new
@@ -18,11 +26,13 @@ class WorktreeRefreshTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
   end
 
   def run_refresh(argv = [])
     io = StringIO.new
-    code = WorktreeRefresh.run(argv, io: io)
+    code = nil
+    with_manifest(FIXTURE) { code = WorktreeRefresh.run(argv, io: io) }
     [code, JSON.parse(io.string)]
   end
 
@@ -34,11 +44,11 @@ class WorktreeRefreshTest < Minitest::Test
 
       worktree #{WT1}
       HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-      branch refs/heads/st-abc-current-thing
+      branch refs/heads/zz-abc-current-thing
 
       worktree #{WT2}
       HEAD cccccccccccccccccccccccccccccccccccccccc
-      branch refs/heads/st-def-needs-rebase
+      branch refs/heads/zz-def-needs-rebase
     TXT
   end
 
@@ -49,18 +59,18 @@ class WorktreeRefreshTest < Minitest::Test
 
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
-    @fake.expect(%w[bd show st-abc --json], out: '[{"id":"st-abc","labels":[]}]')
+    @fake.expect(%w[bd show zz-abc --json], out: '[{"id":"zz-abc","labels":[]}]')
     @fake.expect(
-      ["gh", "pr", "list", "--state", "merged", "--head", "st-abc-current-thing",
+      ["gh", "pr", "list", "--state", "merged", "--head", "zz-abc-current-thing",
        "--json", "number,mergedAt,headRefOid", "--jq", ".[0]"],
       out: "null\n"
     )
 
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
-    @fake.expect(%w[bd show st-def --json], out: '[{"id":"st-def","labels":[]}]')
+    @fake.expect(%w[bd show zz-def --json], out: '[{"id":"zz-def","labels":[]}]')
     @fake.expect(
-      ["gh", "pr", "list", "--state", "merged", "--head", "st-def-needs-rebase",
+      ["gh", "pr", "list", "--state", "merged", "--head", "zz-def-needs-rebase",
        "--json", "number,mergedAt,headRefOid", "--jq", ".[0]"],
       out: "null\n"
     )
@@ -73,14 +83,14 @@ class WorktreeRefreshTest < Minitest::Test
 
     # wt1: current.
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
-    # wt2: needs rebase, mix.lock unchanged, loop green.
+    # wt2: needs rebase, lock.json unchanged, loop green.
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git rev-parse HEAD], out: "aaaaaaa\n")
     @fake.expect(%w[git rebase origin/main], out: "")
     @fake.expect(%w[git rev-parse origin/main], out: "deadbeef\n")
-    @fake.expect(["git", "diff", "--quiet", "aaaaaaa", "HEAD", "--", "mix.lock"], exitstatus: 0)
-    @fake.expect(%w[mix quality --profile loop], out: "green\n")
+    @fake.expect(["git", "diff", "--quiet", "aaaaaaa", "HEAD", "--", "lock.json"], exitstatus: 0)
+    @fake.expect(%w[make quick], out: "green\n")
 
     code, env = run_refresh
 
@@ -103,7 +113,7 @@ class WorktreeRefreshTest < Minitest::Test
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
     @fake.expect(%w[git status --porcelain], out: " M lib/foo.ex\n")
-    # No rebase/mix expectations - a dirty worktree must not be touched.
+    # No rebase/gate expectations - a dirty worktree must not be touched.
 
     code, env = run_refresh
 
@@ -157,7 +167,7 @@ class WorktreeRefreshTest < Minitest::Test
     assert_equal [], env["data"]["results"]
   end
 
-  def test_dry_run_never_executes_rebase_or_quality
+  def test_dry_run_never_executes_rebase_or_the_gate
     expect_survey
     @fake.expect(%w[git fetch origin], out: "")
     @fake.expect(%w[git rev-parse origin/main], out: "deadbeef\n")
@@ -165,7 +175,7 @@ class WorktreeRefreshTest < Minitest::Test
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
     @fake.expect(%w[git status --porcelain], out: "")
-    # No git rebase / mix quality expectations - dry-run must not execute them.
+    # No git rebase / gate expectations - dry-run must not execute them.
 
     code, env = run_refresh(["--dry-run"])
 
@@ -174,6 +184,10 @@ class WorktreeRefreshTest < Minitest::Test
     wt2 = env["data"]["results"].find { |r| r["path"] == WT2 }
     assert_equal "dry run", wt2["result"]
     assert env["commands"].any? { |c| c.include?("git rebase origin/main") }
+    # sabotage: hardcode `mix quality --profile loop` back into the dry-run
+    # render -> red. The gate command is manifest data on both the executed
+    # and the rendered path.
+    assert env["commands"].any? { |c| c.include?("make quick") }
     refute env["commands"].any? { |c| c.include?("--force") }
   end
 

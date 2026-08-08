@@ -6,6 +6,8 @@ require "stringio"
 require_relative "lib/envelope"
 require_relative "lib/sh"
 require_relative "lib/cli"
+require_relative "lib/manifest"
+require_relative "lib/forge"
 require_relative "worktree_survey"
 require_relative "pr_state"
 
@@ -38,6 +40,14 @@ module WorktreeCleanup
       dry_run = options[:dry_run]
 
       env = Envelope.new(script: "worktree_cleanup")
+
+      # Guarded here as well as inside worktree_survey.rb: this is the script
+      # that deletes branches on the strength of a merge signal, so it says
+      # in its own voice which forge that signal has to come from rather
+      # than relaying a nested "survey_failed".
+      manifest = Manifest.require!(env)
+      return env.emit(io) unless manifest
+      return env.emit(io) unless Forge.guard!(env, manifest, doing: "merge detection")
 
       worktrees, error = enumerate(env, target)
       if error

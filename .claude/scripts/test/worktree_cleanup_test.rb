@@ -4,12 +4,19 @@ require "minitest/autorun"
 require "json"
 require "stringio"
 require_relative "../worktree_cleanup"
+require_relative "support/manifest_helper"
 require_relative "support/fake_sh"
 
 class WorktreeCleanupTest < Minitest::Test
-  MAIN = "/Users/johnnyt/repos/github/statifier-ex"
-  WT1 = "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-abc-merged-thing"
-  WT2 = "/Users/johnnyt/repos/github/statifier-ex-worktrees/st-def-open-pr"
+  include ManifestHelper
+
+  # Bead prefix and trailer key are manifest values (zz / Refs), so the
+  # fixture drives both the branch decomposition and the trailer scan.
+  FIXTURE = "worktree"
+
+  MAIN = "/repos/myrepo"
+  WT1 = "/repos/zz-worktrees/zz-abc-merged-thing"
+  WT2 = "/repos/zz-worktrees/zz-def-open-pr"
 
   def setup
     @fake = FakeSh.new
@@ -18,12 +25,26 @@ class WorktreeCleanupTest < Minitest::Test
 
   def teardown
     Sh.runner = nil
+    Manifest.reset!
   end
 
-  def run_cleanup(argv = [])
+  def run_cleanup(argv = [], fixture: FIXTURE)
     io = StringIO.new
-    code = WorktreeCleanup.run(argv, io: io)
+    code = nil
+    with_manifest(fixture) { code = WorktreeCleanup.run(argv, io: io) }
     [code, JSON.parse(io.string)]
+  end
+
+  # sabotage: drop the Forge.guard! call from worktree_cleanup.rb -> the
+  # sweep proceeds to gh and FakeSh raises UnexpectedCommand -> red. This is
+  # the script that deletes branches, so it must refuse in its own voice.
+  def test_a_gitlab_repo_blocks_before_any_branch_is_touched
+    code, env = run_cleanup([], fixture: "forge_gitlab")
+
+    assert_equal 1, code
+    assert_equal "unsupported_forge", env["blocked"].first["code"]
+    assert_equal "human", env["blocked"].first["needs"]
+    assert_empty @fake.calls
   end
 
   def porcelain
@@ -34,11 +55,11 @@ class WorktreeCleanupTest < Minitest::Test
 
       worktree #{WT1}
       HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-      branch refs/heads/st-abc-merged-thing
+      branch refs/heads/zz-abc-merged-thing
 
       worktree #{WT2}
       HEAD cccccccccccccccccccccccccccccccccccccccc
-      branch refs/heads/st-def-open-pr
+      branch refs/heads/zz-def-open-pr
     TXT
   end
 
@@ -47,10 +68,10 @@ class WorktreeCleanupTest < Minitest::Test
 
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
-    @fake.expect(%w[bd show st-abc --json], out: '[{"id":"st-abc","labels":[]}]')
+    @fake.expect(%w[bd show zz-abc --json], out: '[{"id":"zz-abc","labels":[]}]')
     if wt1_pr == :merged
       @fake.expect(
-        ["gh", "pr", "list", "--state", "merged", "--head", "st-abc-merged-thing",
+        ["gh", "pr", "list", "--state", "merged", "--head", "zz-abc-merged-thing",
          "--json", "number,mergedAt,headRefOid", "--jq", ".[0]"],
         out: %({"number":42,"mergedAt":"2026-08-06T00:00:00Z","headRefOid":"deadbeef"}\n)
       )
@@ -58,9 +79,9 @@ class WorktreeCleanupTest < Minitest::Test
 
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
-    @fake.expect(%w[bd show st-def --json], out: '[{"id":"st-def","labels":[]}]')
+    @fake.expect(%w[bd show zz-def --json], out: '[{"id":"zz-def","labels":[]}]')
     @fake.expect(
-      ["gh", "pr", "list", "--state", "merged", "--head", "st-def-open-pr",
+      ["gh", "pr", "list", "--state", "merged", "--head", "zz-def-open-pr",
        "--json", "number,mergedAt,headRefOid", "--jq", ".[0]"],
       out: "null\n"
     )
@@ -72,11 +93,11 @@ class WorktreeCleanupTest < Minitest::Test
     @fake.expect(%w[git rev-parse HEAD], out: "deadbeef\n")
     @fake.expect(
       ["gh", "pr", "view", "42", "--json", "commits", "--jq", ".commits[].messageBody"],
-      out: "Fixes a thing.\n\nRefs: st-abc\n"
+      out: "Fixes a thing.\n\nRefs: zz-abc\n"
     )
     @fake.expect(["git", "worktree", "remove", WT1], out: "")
     @fake.expect(%w[git worktree prune], out: "")
-    @fake.expect(["git", "branch", "-D", "st-abc-merged-thing"], out: "")
+    @fake.expect(["git", "branch", "-D", "zz-abc-merged-thing"], out: "")
     @fake.expect(%w[git fetch --prune], out: "")
 
     code, env = run_cleanup
@@ -90,7 +111,7 @@ class WorktreeCleanupTest < Minitest::Test
     wt2 = results.find { |r| r["path"] == WT2 }
     assert_equal "not merged (no PR, open, or closed unmerged), kept", wt2["result"]
 
-    assert_equal ["st-abc"], env["data"]["beads_to_close"]
+    assert_equal ["zz-abc"], env["data"]["beads_to_close"]
   end
 
   def test_dirty_worktree_is_never_force_removed
@@ -126,9 +147,9 @@ class WorktreeCleanupTest < Minitest::Test
     @fake.expect(%w[git worktree list --porcelain], out: porcelain)
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 0)
-    @fake.expect(%w[bd show st-abc --json], out: '[{"id":"st-abc","labels":[]}]')
+    @fake.expect(%w[bd show zz-abc --json], out: '[{"id":"zz-abc","labels":[]}]')
     @fake.expect(
-      ["gh", "pr", "list", "--state", "merged", "--head", "st-abc-merged-thing",
+      ["gh", "pr", "list", "--state", "merged", "--head", "zz-abc-merged-thing",
        "--json", "number,mergedAt,headRefOid", "--jq", ".[0]"],
       exitstatus: 1, err: "gh: authentication required\n"
     )
@@ -136,7 +157,7 @@ class WorktreeCleanupTest < Minitest::Test
     # but never queries gh again once it went unavailable.
     @fake.expect(%w[git status --porcelain], out: "")
     @fake.expect(%w[git merge-base --is-ancestor origin/main HEAD], exitstatus: 1)
-    @fake.expect(%w[bd show st-def --json], out: '[{"id":"st-def","labels":[]}]')
+    @fake.expect(%w[bd show zz-def --json], out: '[{"id":"zz-def","labels":[]}]')
 
     code, env = run_cleanup
 
@@ -151,7 +172,7 @@ class WorktreeCleanupTest < Minitest::Test
     @fake.expect(%w[git rev-parse HEAD], out: "deadbeef\n")
     @fake.expect(
       ["gh", "pr", "view", "42", "--json", "commits", "--jq", ".commits[].messageBody"],
-      out: "Refs: st-abc\n"
+      out: "Refs: zz-abc\n"
     )
     # No "git worktree remove", "git worktree prune", "git branch -D" or
     # "git fetch --prune" expectations - dry-run must not execute any of
