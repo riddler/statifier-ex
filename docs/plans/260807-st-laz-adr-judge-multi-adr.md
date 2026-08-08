@@ -375,10 +375,10 @@ behavior gets its sabotage line per CLAUDE.md.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix adr.judge --format json` on a docs-only diff reports the
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix adr.judge --format json` on a docs-only diff reports the
       generalized skip reason
-- [ ] Coverage for both files does not drop
+- [x] Coverage for both files does not drop
 
 #### Manual Verification:
 - [ ] `mix quality --profile merge` on a branch with an in-scope
@@ -793,5 +793,19 @@ before considering the plan fully landed.
 manual confirmation before proceeding. In looped (`--loop`) execution, the
 Automated Verification gates advancement and Manual items are surfaced at the
 end.
+
+---
+
+### Phase 2
+
+- [ ] `mix quality --profile merge` on a branch with an in-scope
+      `lib/statifier/` change behaves as before the refactor (same stage
+      outcome, same one propose call per in-scope ADR)
+- [ ] The refactor changed no verdict: an ADR-0012 finding still reports
+      `check: "adr-0012-debuggability"`
+
+**Implementation Note**: `mix quality --profile loop` between edits, full
+`mix quality` as the phase gate. Interactive execution pauses here; `--loop`
+execution defers the Manual items.
 
 ---

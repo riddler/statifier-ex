@@ -3,11 +3,28 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
   alias Mix.Statifier.AdrJudge
 
+  # The registry's one entry today - ADR-0012 (debuggability). Fetched once
+  # so tests reference its real scope/adr_path instead of a path string
+  # re-typed at each call site (and so a second registry entry, when one
+  # lands, cannot silently make `hd/1` here pick the wrong ADR).
+  @adr_0012 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0012-debuggability"))
+
   # Every test drives analyze/2 with a hand-written diff and a stub caller, so
   # nothing here needs a fixture repository, the real `claude` CLI, or a real
   # network call - the one seam this module exists to keep pure.
   defp source(diff, adr_text \\ "ADR-0012 placeholder text for tests.") do
-    %{diff: diff, adr_text: adr_text}
+    %{
+      diff: diff,
+      adrs: [
+        %{
+          key: @adr_0012.key,
+          label: @adr_0012.label,
+          focus: @adr_0012.focus,
+          adr_text: adr_text,
+          chunks: AdrJudge.scoped_chunks(diff, @adr_0012.scope)
+        }
+      ]
+    }
   end
 
   defp core_diff(path \\ "lib/statifier/interpreter.ex") do
@@ -106,9 +123,8 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert AdrJudge.analyze(source(core_diff()), caller: caller) == []
   end
 
-  # sabotage: scope core_chunks/1 to @lib_prefix ("lib/") instead of
-  #           @core_prefix ("lib/statifier/"), so a docs/-only hunk reaches
-  #           the propose prompt too -> red
+  # sabotage: have in_scope?/2 ignore scope.prefix (match any path), so a
+  #           docs/-only hunk reaches the propose prompt too -> red
   test "only diff hunks under lib/statifier/ reach the propose prompt" do
     parent = self()
 
@@ -133,7 +149,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     refute propose_prompt =~ "0013-something"
   end
 
-  # sabotage: have propose_prompt/2 omit the ADR text argument -> red
+  # sabotage: have propose_prompt/1 omit the ADR text argument -> red
   test "the full ADR-0012 text reaches the propose prompt" do
     parent = self()
 
@@ -146,6 +162,32 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
     assert_received {:prompt, propose_prompt}
     assert propose_prompt =~ "unique-adr-marker-xyz"
+  end
+
+  # A candidate is proposed and refuted by two separate model calls, so its
+  # own ADR text has to travel with it from the propose pass through to the
+  # refute pass rather than the refute prompt re-deriving it some other way -
+  # the only per-candidate handle available to refute_prompt/1 is the
+  # candidate itself.
+  # sabotage: have judged_identity/1 drop :adr_text from the map merged onto
+  #           each candidate, so the refute prompt renders the atom `nil`
+  #           where the ADR text belongs -> red
+  test "a candidate's refute prompt carries that candidate's own ADR text" do
+    parent = self()
+
+    spy = fn prompt ->
+      if String.contains?(prompt, "PROPOSE PASS") do
+        {:ok, candidate_json()}
+      else
+        send(parent, {:refute_prompt, prompt})
+        {:ok, ~s({"violation": false})}
+      end
+    end
+
+    AdrJudge.analyze(source(core_diff(), "unique-adr-marker-xyz"), caller: spy)
+
+    assert_received {:refute_prompt, refute_prompt}
+    assert refute_prompt =~ "unique-adr-marker-xyz"
   end
 
   # sabotage: have normalize_candidate/1 accept any map, dropping the
@@ -272,7 +314,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     end
   end
 
-  describe "core_chunks/1" do
+  describe "scoped_chunks/2" do
     # sabotage: match "+++ b/" only, so a deleted core file (which has no
     #           "+++ b/" line) is dropped from scope -> red
     test "a deleted core file is attributed by its old path" do
@@ -285,7 +327,8 @@ defmodule Mix.Statifier.AdrJudgeTest do
       -defmodule Statifier.Interpreter do
       """
 
-      assert [{"lib/statifier/interpreter.ex", _chunk}] = AdrJudge.core_chunks(diff)
+      assert [{"lib/statifier/interpreter.ex", _chunk}] =
+               AdrJudge.scoped_chunks(diff, @adr_0012.scope)
     end
 
     # sabotage: drop the String.starts_with?/2 filter, so every file in the
@@ -299,7 +342,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
       +  # unrelated
       """
 
-      assert AdrJudge.core_chunks(diff) == []
+      assert AdrJudge.scoped_chunks(diff, @adr_0012.scope) == []
     end
 
     # sabotage: have chunk_path/1 return the empty string instead of nil when
@@ -311,8 +354,41 @@ defmodule Mix.Statifier.AdrJudgeTest do
       Binary files a/lib/statifier/blob.dat and b/lib/statifier/blob.dat differ
       """
 
-      assert AdrJudge.core_chunks(diff) == []
+      assert AdrJudge.scoped_chunks(diff, @adr_0012.scope) == []
     end
+
+    # sabotage: have in_scope?/2 ignore scope.suffix entirely (prefix match
+    #           only) -> red (a path with the prefix but the wrong suffix
+    #           would wrongly stay in scope)
+    test "a non-nil suffix narrows the prefix match" do
+      scope = %{prefix: "lib/statifier/", suffix: ".ex", describe: "lib/statifier/*.ex"}
+
+      diff = """
+      diff --git a/lib/statifier/notes.txt b/lib/statifier/notes.txt
+      --- a/lib/statifier/notes.txt
+      +++ b/lib/statifier/notes.txt
+      @@ -1,0 +1,1 @@
+      +not an .ex file
+      """
+
+      assert AdrJudge.scoped_chunks(diff, scope) == []
+
+      assert [{"lib/statifier/interpreter.ex", _chunk}] =
+               AdrJudge.scoped_chunks(core_diff(), scope)
+    end
+  end
+
+  # The task's skip reason for "nothing to judge" is built by joining these,
+  # so every registered scope has to actually show up here - a registry
+  # entry a maintainer adds without a scope.describe would otherwise vanish
+  # from that message silently instead of failing loudly.
+  # sabotage: have scope_descriptions/0 return [] unconditionally instead of
+  #           mapping @judged -> red
+  test "scope_descriptions/0 names every registered scope, not just the first" do
+    descriptions = AdrJudge.scope_descriptions()
+
+    assert length(descriptions) == length(AdrJudge.judged())
+    assert "lib/statifier/" in descriptions
   end
 
   describe "parse_cli_response/1 (the pure half of call_claude_cli/1)" do
@@ -390,10 +466,10 @@ defmodule Mix.Statifier.AdrJudgeTest do
       assert AdrJudge.collect(cli_available: true, runner: runner([])) == :no_base_ref
     end
 
-    # sabotage: scope the core-changes check to @lib_prefix instead of
-    #           @core_prefix, so a docs/-only diff still reads as a core
-    #           change -> red
-    test "a diff touching no lib/statifier/ files is reported, not silently passed" do
+    # sabotage: scope the registry's one entry to "lib/" instead of
+    #           "lib/statifier/", so a docs/-only diff still reads as a
+    #           scoped change -> red
+    test "a diff touching no registered scope is reported, not silently passed" do
       responses = [
         {"origin/main", {"origin/main\n", 0}},
         {"merge-base", {"abc123\n", 0}},
@@ -407,10 +483,14 @@ defmodule Mix.Statifier.AdrJudgeTest do
           """, 0}}
       ]
 
-      assert AdrJudge.collect(cli_available: true, runner: runner(responses)) == :no_core_changes
+      assert AdrJudge.collect(cli_available: true, runner: runner(responses)) ==
+               :no_scoped_changes
     end
 
     # sabotage: drop `opts[:base]` from the candidate list -> red
+    # sabotage: have read_adr_source/1 return {:error, :sabotage} for
+    #           "adr-0012-debuggability" -> red on the adr_text assertion
+    #           below (falls back to the "(unable to read ...)" placeholder)
     test "prefers an explicit base over origin/main" do
       responses = [
         {"upstream/trunk", {"upstream/trunk\n", 0}},
@@ -426,7 +506,9 @@ defmodule Mix.Statifier.AdrJudgeTest do
                )
 
       assert sourced.diff =~ "lib/statifier/interpreter.ex"
-      assert sourced.adr_text =~ "Debuggability"
+      assert [adr_0012] = sourced.adrs
+      assert adr_0012.key == "adr-0012-debuggability"
+      assert adr_0012.adr_text =~ "Debuggability"
     end
 
     # sabotage: raise instead of returning {:error, _} when git fails -> red
@@ -440,7 +522,8 @@ defmodule Mix.Statifier.AdrJudgeTest do
     # A file git has never seen is absent from `git diff` entirely, so a
     # brand-new interpreter module would be invisible to this check.
     # sabotage: drop untracked_diff/1 from collect_from/3 -> red
-    # sabotage: drop the @core_prefix filter, so scratch.exs is diffed too -> red
+    # sabotage: drop the any_scope_match?/1 filter, so scratch.exs is diffed
+    #           too -> red
     test "an untracked file under lib/statifier/ is diffed" do
       parent = self()
 
@@ -466,7 +549,8 @@ defmodule Mix.Statifier.AdrJudgeTest do
       end
 
       assert {:ok, sourced} = AdrJudge.collect(cli_available: true, runner: untracked)
-      assert [{"lib/statifier/new.ex", _chunk}] = AdrJudge.core_chunks(sourced.diff)
+      assert [adr_0012] = sourced.adrs
+      assert [{"lib/statifier/new.ex", _chunk}] = adr_0012.chunks
 
       assert_received {:diffed, "lib/statifier/new.ex"}
       refute_received {:diffed, "scratch.exs"}
@@ -498,7 +582,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
           {"", 1}
       end
 
-      assert AdrJudge.collect(cli_available: true, runner: untracked) == :no_core_changes
+      assert AdrJudge.collect(cli_available: true, runner: untracked) == :no_scoped_changes
     end
 
     # Exercises the real `git` shell-out rather than an injected runner, so
@@ -511,7 +595,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     test "the default runner talks to the repository's real git" do
       result = AdrJudge.collect(cli_available: true)
 
-      assert result in [:no_base_ref, :no_core_changes] or
+      assert result in [:no_base_ref, :no_scoped_changes] or
                match?({:ok, _sourced}, result) or
                match?({:error, _reason}, result)
     end

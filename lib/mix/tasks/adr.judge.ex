@@ -1,17 +1,17 @@
 defmodule Mix.Tasks.Adr.Judge do
-  @shortdoc "LLM-judge likely ADR-0012 violations, verified by an adversarial refute pass"
+  @shortdoc "LLM-judge likely ADR violations, verified by an adversarial refute pass"
 
   @moduledoc """
-  Reports likely violations of ADR-0012 (debuggability designed into the
-  core) in the current branch's diff against its base, each one proposed by
-  one model call and required to survive an independent second call prompted
-  to refute it.
+  Reports likely violations of any judged ADR (`Mix.Statifier.AdrJudge`'s
+  registry) in the current branch's diff against its base, each one proposed
+  by one model call and required to survive an independent second call
+  prompted to refute it.
 
-  It runs as the `ADR judge` custom stage of `mix quality`, scoped to the one
-  ADR in scope whose rule is a judgment call rather than a name or call-site
-  pattern. It is local-only by design: it makes real model calls, so it never
-  runs in CI or `--profile loop`, and it skips cleanly rather than failing
-  when it has nothing it can check.
+  It runs as the `ADR judge` custom stage of `mix quality`, scoped to the
+  ADRs whose rule is a judgment call rather than a name or call-site pattern
+  the mechanical `mix adr.check` guard can match. It is local-only by design:
+  it makes real model calls, so it never runs in CI or `--profile loop`, and
+  it skips cleanly rather than failing when it has nothing it can check.
 
   ## Usage
 
@@ -26,9 +26,9 @@ defmodule Mix.Tasks.Adr.Judge do
 
   Exit status is 0 when nothing looks off, 1 when a finding survived the
   refute pass, and 2 for any of three skip conditions, each with its own
-  reason: the `claude` CLI not on `PATH`, the diff touching no
-  `lib/statifier/` files, or no base ref resolving. `skip_exit_code: 2` turns
-  each into a skip rather than a failure or a silent pass.
+  reason: the `claude` CLI not on `PATH`, the diff touching none of the
+  registered judged-ADR scopes, or no base ref resolving. `skip_exit_code: 2`
+  turns each into a skip rather than a failure or a silent pass.
   """
 
   use Mix.Task
@@ -38,13 +38,14 @@ defmodule Mix.Tasks.Adr.Judge do
   @switches [base: :string, format: :string]
 
   @no_cli_reason "claude CLI not on PATH"
-  @no_core_changes_reason "no lib/statifier/ files in this diff"
+  @no_scoped_changes_reason "no files in this diff are in a judged ADR scope " <>
+                              "(#{Enum.join(AdrJudge.scope_descriptions(), ", ")})"
   @no_base_ref_reason "no base ref: neither origin/main nor main resolves"
 
   @advice """
   Each finding here survived an independent refute pass, so it is not a
-  single model's first guess at a violation. ADR-0012's reasoning is in
-  docs/adr/0012-debuggability-designed-into-the-core.md.\
+  single model's first guess at a violation. Each finding's check names
+  which ADR it concerns; the reasoning for all of them is in docs/adr/.\
   """
 
   @impl Mix.Task
@@ -74,7 +75,7 @@ defmodule Mix.Tasks.Adr.Judge do
     case AdrJudge.collect(opts) do
       {:ok, source} -> source |> AdrJudge.analyze(opts) |> respond(json?)
       :no_cli -> {:skip, skipped(@no_cli_reason, json?)}
-      :no_core_changes -> {:skip, skipped(@no_core_changes_reason, json?)}
+      :no_scoped_changes -> {:skip, skipped(@no_scoped_changes_reason, json?)}
       :no_base_ref -> {:skip, skipped(@no_base_ref_reason, json?)}
       {:error, reason} -> {:error, failed(reason, json?)}
     end
@@ -84,11 +85,11 @@ defmodule Mix.Tasks.Adr.Judge do
     if parsed[:base], do: Keyword.put(opts, :base, parsed[:base]), else: opts
   end
 
-  defp respond([], json?), do: {:ok, document("No likely ADR-0012 violations", [], json?)}
+  defp respond([], json?), do: {:ok, document("No likely ADR violations", [], json?)}
 
   defp respond(findings, json?), do: {:error, document(summary(findings), findings, json?)}
 
-  defp summary(findings), do: "#{length(findings)} likely ADR-0012 #{violations(findings)}"
+  defp summary(findings), do: "#{length(findings)} likely ADR #{violations(findings)}"
 
   defp violations([_one]), do: "violation"
   defp violations(_many), do: "violations"
