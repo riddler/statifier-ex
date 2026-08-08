@@ -34,6 +34,56 @@ defmodule Mix.Statifier.AdrJudge do
   unparseable or ambiguous refute response is read as "not a violation" -
   the same tie-break the refute pass uses on a clear verdict. A candidate
   survives only when the refute pass explicitly says it does.
+
+  ## What is judged, and what is not
+
+  The `@judged` registry above covers three ADRs. Each is judge-shaped
+  because its rule needs a model reading a change in context, not a name or
+  call-site pattern a mechanical grep can match:
+
+  - ADR-0012 (debuggability designed into the core) - whether a change drops
+    a trace effect, a source location, or step counting/stamping is a
+    question about what the change does, not what it is named.
+  - ADR-0014 (expression-level spans) - extends ADR-0012 item 3 to
+    expression granularity; whether a span table or an error's owning-node
+    identity survives a refactor is the same kind of question, at finer
+    grain.
+  - ADR-0015 constraint 4 (judgment is not scriptable) - whether a SKILL.md
+    rewrite quietly delegated a policy call to a script is exactly the
+    propose/refute shape; ADR-0015's Enforcement section defers it here by
+    name.
+
+  Deliberately not covered:
+
+  - ADR-0002 (literal Appendix D port) - the rubric is the Appendix D
+    pseudocode itself, which is not in this repository; judging it would
+    mean either pasting the spec into every prompt or letting the model
+    judge from memory of it, the unverifiable verdict this design exists to
+    avoid.
+  - ADR-0003 (pure core with effects), ADR-0004 (predicator as the
+    datamodel), ADR-0008 (UXIDs for identifiers) - `AdrGuard` already covers
+    each mechanically with a citation escape hatch; a model verdict over the
+    same lines buys a second opinion on cases the guard already decides.
+  - ADR-0005 (full configuration, interned state indexes) - the rule is a
+    storage-shape choice visible in struct definitions, not in the hunks a
+    `--unified=0` diff shows; a judge reading hunks would be guessing at
+    whole-module structure.
+  - ADR-0011 (quality gate config is not agent-editable) - `gate_guard`'s
+    job mechanically; a probabilistic verdict does not belong in the path of
+    the gate's own tamper check.
+  - ADR-0015 constraints 1, 2, 3, and 5 - each has its own named enforcement
+    site (constraint 1's is `.claude/scripts/test/contract_test.rb`; 2, 3,
+    and 5 are covered by the script suite), and ADR-0015 says plainly that
+    re-enforcing constraint 1 elsewhere weakens it - the same reasoning rules
+    out judging it here too.
+  - ADR-0001, 0006, 0007, 0009, 0010, 0013 - process decisions (ADR format,
+    the regression ratchet, beads, the gate itself, worktrees, repo
+    archival) with no code shape a diff could violate.
+
+  See `docs/plans/260807-st-laz-adr-judge-multi-adr.md` for the full survey
+  this passage summarizes. `AdrGuard`'s moduledoc records the mirror-image
+  reasoning for the mechanically-checkable ADRs - the two modules are meant
+  to be read as a pair.
   """
 
   @type finding :: %{

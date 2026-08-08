@@ -637,11 +637,11 @@ agent tooling changes" explicitly.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] No `.quality.exs`, `.credo.exs`, `coveralls.json`, `.sobelow-conf`,
+- [x] Full quality gate passes: `mix quality`
+- [x] No `.quality.exs`, `.credo.exs`, `coveralls.json`, `.sobelow-conf`,
       `test/passing_tests.json` or gate-relevant `mix.exs` change on the
       branch: `mix gate.check --format json` reports zero findings
-- [ ] `mix gate.verify` confirms the reported green was a full, unscoped run
+- [x] `mix gate.verify` confirms the reported green was a full, unscoped run
 
 #### Manual Verification:
 - [ ] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
@@ -837,5 +837,18 @@ execution defers the Manual items.
 **Implementation Note**: `mix quality --profile loop` between edits, full
 `mix quality` as the phase gate. Interactive execution pauses here; `--loop`
 execution defers the Manual items.
+
+---
+
+### Phase 5
+
+- [ ] The moduledoc survey answers "why is ADR-NNNN not judged?" for every ADR
+      in `docs/adr/README.md` without needing this plan
+- [ ] The ADR-0015 annotation reads as a dated record, not as a rewritten
+      decision
+
+**Implementation Note**: `mix quality --profile loop` between edits, full
+`mix quality` as the phase gate. Interactive execution pauses here; `--loop`
+execution defers the Manual items and surfaces them at the end.
 
 ---

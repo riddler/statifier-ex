@@ -125,7 +125,9 @@ Enforcement is layered, and deliberately not all in one place:
   prose churns enough for review to plausibly miss a dropped judgment step.
   When that happens, the extension goes in the judge, not in a regex: a
   script that claimed to detect swallowed judgment would itself violate this
-  constraint's premise.
+  constraint's premise. (The extension landed: `Mix.Statifier.AdrJudge` gained
+  a `.claude/skills/**/SKILL.md` scope judging this constraint - decided
+  under st-laz, 2026-08-07.)
 
 Costs accepted: the scripts are a second language in the repo (Ruby 2.6,
 stdlib only, no gems - the only Ruby guaranteed present), a second test harness,
