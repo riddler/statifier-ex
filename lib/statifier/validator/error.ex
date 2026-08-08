@@ -43,6 +43,8 @@ defmodule Statifier.Validator.Error do
           | {:transition_forbidden_attribute, owner :: owner(), attr :: :event | :cond}
           | {:history_bad_parent, id :: binary(), parent_kind :: atom()}
           | {:history_bad_type, raw :: binary()}
+          | {:transition_bad_type, raw :: binary()}
+          | {:scxml_bad_binding, raw :: binary()}
           | {:final_has_states, id :: binary()}
           | {:final_has_transitions, id :: binary() | nil}
           | {:default_entry_not_enterable, id :: binary(), child_kind :: atom()}
@@ -247,6 +249,36 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:history_bad_type, raw},
       message: "history type #{inspect(raw)} must be \"shallow\" or \"deep\"",
+      location: location
+    }
+  end
+
+  @doc """
+  st-i0x (spec 3.5): a `<transition type="...">` value that is neither
+  `"internal"` nor `"external"`. `raw` is the source text as written
+  (`Location.slice/2`, Decision 1) - lowering maps any out-of-range value
+  onto the `:external` default, so the atom alone cannot tell
+  `type="external"` from `type="sideways"`.
+  """
+  @spec transition_bad_type(raw :: binary(), location :: Location.t()) :: t()
+  def transition_bad_type(raw, %Location{} = location) when is_binary(raw) do
+    %__MODULE__{
+      reason: {:transition_bad_type, raw},
+      message: "transition type #{inspect(raw)} must be \"internal\" or \"external\"",
+      location: location
+    }
+  end
+
+  @doc """
+  st-i0x (spec 3.2.1): an `<scxml binding="...">` value that is neither
+  `"early"` nor `"late"`. Same slice-back substrate as
+  `transition_bad_type/2`, against the `:early` default.
+  """
+  @spec scxml_bad_binding(raw :: binary(), location :: Location.t()) :: t()
+  def scxml_bad_binding(raw, %Location{} = location) when is_binary(raw) do
+    %__MODULE__{
+      reason: {:scxml_bad_binding, raw},
+      message: "binding #{inspect(raw)} must be \"early\" or \"late\"",
       location: location
     }
   end
