@@ -10,6 +10,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
   # here pick the wrong ADR).
   @adr_0012 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0012-debuggability"))
   @adr_0014 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0014-expression-spans"))
+  @adr_0015 Enum.find(AdrJudge.judged(), &(&1.key == "adr-0015-swallowed-judgment"))
 
   # Every test drives analyze/2 with a hand-written diff and a stub caller, so
   # nothing here needs a fixture repository, the real `claude` CLI, or a real
@@ -451,6 +452,18 @@ defmodule Mix.Statifier.AdrJudgeTest do
     end
   end
 
+  # ADR-0015's registry entry is the first with both a non-nil prefix and a
+  # non-nil suffix live at once (ADR-0012/0014 pin suffix in isolation via a
+  # hand-built scope above; this pins the real registry entry's combination).
+  # sabotage: have in_scope?/2 ignore scope.prefix (match any path) -> red
+  #           (both `refute` assertions below would incorrectly pass)
+  test "adr-0015's scope matches only SKILL.md files under .claude/skills/" do
+    assert AdrJudge.in_scope?(".claude/skills/commit/SKILL.md", @adr_0015.scope)
+    refute AdrJudge.in_scope?(".claude/skills/commit/reference.md", @adr_0015.scope)
+    refute AdrJudge.in_scope?("SKILL.md", @adr_0015.scope)
+    refute AdrJudge.in_scope?(".claude/scripts/gate.rb", @adr_0015.scope)
+  end
+
   # The task's skip reason for "nothing to judge" is built by joining these,
   # so every registered scope has to actually show up here - a registry
   # entry a maintainer adds without a scope.describe would otherwise vanish
@@ -686,6 +699,50 @@ defmodule Mix.Statifier.AdrJudgeTest do
       assert result in [:no_base_ref, :no_scoped_changes] or
                match?({:ok, _sourced}, result) or
                match?({:error, _reason}, result)
+    end
+
+    # A diff touching only a SKILL.md is in ADR-0015's scope and nobody
+    # else's - it must fan out into exactly one propose prompt (ADR-0015's),
+    # not also one for ADR-0012/ADR-0014's lib/statifier/ scope, which this
+    # diff never touches.
+    # sabotage: have judged_sources/2 return every @judged entry regardless
+    #           of whether scoped_chunks/2 found anything -> red (a second,
+    #           empty-chunks propose prompt would be sent for ADR-0012 and
+    #           ADR-0014 too)
+    test "a skills-only diff produces exactly the ADR-0015 propose prompt, not a lib/statifier/ one" do
+      diff = """
+      diff --git a/.claude/skills/commit/SKILL.md b/.claude/skills/commit/SKILL.md
+      --- a/.claude/skills/commit/SKILL.md
+      +++ b/.claude/skills/commit/SKILL.md
+      @@ -1,1 +1,1 @@
+      -Old step stating the policy directly.
+      +New step: run script.rb and follow what it says.
+      """
+
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff", {diff, 0}}
+      ]
+
+      assert {:ok, sourced} = AdrJudge.collect(cli_available: true, runner: runner(responses))
+      assert [adr_0015] = sourced.adrs
+      assert adr_0015.key == "adr-0015-swallowed-judgment"
+
+      parent = self()
+
+      spy = fn prompt ->
+        if String.contains?(prompt, "PROPOSE PASS"), do: send(parent, {:propose_prompt, prompt})
+        {:ok, "[]"}
+      end
+
+      AdrJudge.analyze(sourced, caller: spy)
+
+      assert_received {:propose_prompt, prompt}
+      assert prompt =~ "reviewing a code change against ADR-0015"
+      refute prompt =~ "reviewing a code change against ADR-0012"
+      refute prompt =~ "reviewing a code change against ADR-0014"
+      refute_received {:propose_prompt, _second}
     end
   end
 end

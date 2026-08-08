@@ -53,6 +53,11 @@ class GateTest < Minitest::Test
     @fake.expect(%w[git status --porcelain], out: "")
   end
 
+  def expect_skills_only_diff
+    @fake.expect(%w[git diff --name-only main...HEAD], out: ".claude/skills/commit/SKILL.md\n")
+    @fake.expect(%w[git status --porcelain], out: "")
+  end
+
   def expect_no_sabotage_diff(out: "")
     @fake.expect(
       %w[git diff main...HEAD -U0 -- test/ :!test/scion_tests :!test/scxml_tests],
@@ -327,6 +332,25 @@ class GateTest < Minitest::Test
     end
   end
 
+  # sabotage: drop %r{\A\.claude/skills/} from GATED_NON_ELIXIR_PATTERNS ->
+  # red (the branch carves out and the gate never runs, even though the ADR
+  # judge's ADR-0015 scope reads exactly this file)
+  def test_skills_only_change_is_gate_applicable_and_runs_the_gate
+    in_tmp_cwd do
+      expect_skills_only_diff
+      expect_no_sabotage_diff
+      @fake.expect(%w[mix quality --report -], out: JSON.generate(GREEN_REPORT))
+      @fake.expect(%w[mix gate.verify], out: "Full gate green: scope all, no profile, 2 stages considered.\n")
+
+      code, env = run_gate
+
+      assert_equal 0, code
+      assert_equal true, env["data"]["applicable"]
+      assert_nil env["data"]["carve_out_reason"]
+      assert_equal "all", env["data"]["ran"]
+    end
+  end
+
   # --- Carve-out predicate: matches /commit's Step 0 (L97-98) exactly ---
 
   # `any?` answers a question about the Elixir build and must NOT widen when
@@ -367,8 +391,28 @@ class GateTest < Minitest::Test
       assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
     end
 
-    # A skill or doc change still carves out - no stage measures it.
-    %w[.claude/skills/commit/SKILL.md docs/adr/0011.md README.md].each do |path|
+    # sabotage: drop %r{\A\.claude/skills/} from GATED_NON_ELIXIR_PATTERNS ->
+    # red (a SKILL.md would carve out instead of being gate-applicable, even
+    # though the ADR judge's ADR-0015 scope reads exactly these files)
+    #
+    # The widening is on the whole `.claude/skills/` prefix, not narrowed to
+    # SKILL.md the way the ADR-0015 registry scope is (adr_judge.ex's
+    # `in_scope?/2` is the one that matches the suffix too) - a whole-prefix
+    # regex here is strictly wider, which is the direction this carve-out is
+    # allowed to move. So a non-SKILL.md file under `.claude/skills/` is
+    # gate-applicable too, even though no stage judges it specifically.
+    %w[
+      .claude/skills/commit/SKILL.md
+      .claude/skills/merge-request/SKILL.md
+      .claude/skills/commit/reference.md
+    ].each do |path|
+      refute TouchesElixir.any?([path]), "expected #{path} not to touch elixir"
+      assert TouchesElixir.gate_applicable?([path]), "expected #{path} to be gate-applicable"
+    end
+
+    # A plain doc change outside `.claude/` still carves out - no stage
+    # measures it.
+    %w[docs/adr/0011.md README.md].each do |path|
       refute TouchesElixir.gate_applicable?([path]), "expected #{path} to carve out"
     end
   end

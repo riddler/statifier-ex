@@ -125,7 +125,7 @@ trailers on the branch's own commits, falling back to the branch prefix (step 2)
 
    **Carve-out**, matching `/commit` Step 0: `data.applicable` false means the
    diff touches nothing under `lib/`, `test/`, `config/`, `.claude/scripts/`,
-   `mix.exs`, or `mix.lock` - there is no gate to run.
+   `.claude/skills/`, `mix.exs`, or `mix.lock` - there is no gate to run.
    `data.carve_out_reason` explains why.
    Skip it and say so in the PR body and the final report, so a skipped gate
    is never mistaken for a green one.
