@@ -249,6 +249,60 @@ defmodule Statifier.Validator.Error do
     }
   end
 
+  @doc """
+  Check 6 (spec 3.7): `id` names a state child of a `:final` - only
+  `onentry`, `onexit`, and `donedata` are legal there. Reported once per
+  offending child, at the **child's own** `location` (not the `<final>`'s),
+  so the caret lands on the element that should not be there.
+  """
+  @spec final_has_states(id :: binary() | nil, location :: Location.t()) :: t()
+  def final_has_states(id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:final_has_states, id},
+      message:
+        "state #{inspect(id)} must not be a child of <final> - only onentry, " <>
+          "onexit, and donedata are legal there",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 7 (spec 3.3, Decision 6): `id` names a compound state with no
+  `initial` attribute and no `<initial>` element, whose first child in
+  document order has `child_kind` - a `:history` pseudo-state cannot be
+  entered by the spec 3.3 default-entry fallback. Reported at the first
+  child's own `location`.
+  """
+  @spec default_entry_not_enterable(
+          id :: binary() | nil,
+          child_kind :: atom(),
+          location :: Location.t()
+        ) :: t()
+  def default_entry_not_enterable(id, child_kind, %Location{} = location)
+      when is_atom(child_kind) do
+    %__MODULE__{
+      reason: {:default_entry_not_enterable, id, child_kind},
+      message:
+        "state #{inspect(id)} has no initial attribute or <initial> element, and its " <>
+          "first child is a #{child_kind} pseudo-state, which cannot be entered by default",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 8 (spec 3.7, 5.7): `id` names a non-`:final` state carrying a
+  non-nil `donedata` - `<donedata>` is only legal on `:final`. Reported at
+  the `donedata`'s own `location`.
+  """
+  @spec donedata_not_on_final(id :: binary() | nil, location :: Location.t()) :: t()
+  def donedata_not_on_final(id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:donedata_not_on_final, id},
+      message: "state #{inspect(id)} carries <donedata>, which is only legal on <final>",
+      location: location
+    }
+  end
+
   @spec owner_description(owner :: owner()) :: binary()
   defp owner_description({:initial, nil}), do: "<initial>"
   defp owner_description({:initial, id}), do: "<initial> on #{inspect(id)}"

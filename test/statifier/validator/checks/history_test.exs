@@ -82,7 +82,10 @@ defmodule Statifier.Validator.Checks.HistoryTest do
 
     # sabotage: compound?/1 adds :final to its kind list -> a <final> with
     # a history child is wrongly treated as a compound parent, reddening
-    # this assertion (same mutation as the Context.compound?/1 :final test)
+    # this assertion (same mutation as the Context.compound?/1 :final test).
+    # A <final> with any state child - including a <history> - also trips
+    # check 6 (Statifier.Validator.Checks.Final), so this fixture reports
+    # two errors; `find/2` isolates the one this describe block is about.
     test "a history under a <final> is reported" do
       xml = """
       <scxml>
@@ -95,9 +98,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:history_bad_parent, "h", :final}} = error]} =
-               validate!(xml)
-
+      assert {:error, errors} = validate!(xml)
+      assert %Error{reason: {:history_bad_parent, "h", :final}} = error = find(errors, "h")
       assert error.location.start_line == 4
     end
 
