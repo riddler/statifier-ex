@@ -13,6 +13,10 @@ defmodule Mix.Tasks.Adr.Judge do
   it makes real model calls, so it never runs in CI or `--profile loop`, and
   it skips cleanly rather than failing when it has nothing it can check.
 
+  See `Mix.Statifier.AdrJudge`'s moduledoc for which ADRs are in the judged
+  registry and why - including the ADRs deliberately left out - rather than
+  restating that survey here.
+
   ## Usage
 
       mix adr.judge
