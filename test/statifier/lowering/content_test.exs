@@ -1,0 +1,184 @@
+defmodule Statifier.Lowering.ContentTest do
+  use ExUnit.Case, async: true
+
+  alias Statifier.Document.Block
+  alias Statifier.Document.Log
+  alias Statifier.Document.Raise
+  alias Statifier.Document.State
+  alias Statifier.Document.Transition
+  alias Statifier.Lowering
+  alias Statifier.Lowering.Error
+
+  defp parse!(xml) do
+    {:ok, root} = Statifier.Parser.parse(xml)
+    root
+  end
+
+  defp lower!(xml) do
+    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    document
+  end
+
+  defp only_state(document) do
+    assert [%State{} = state] = document.states
+    state
+  end
+
+  describe "lower/1 - <onentry> and <onexit>, happy path" do
+    # sabotage: `build_block/3` hardcodes the tag `:onentry` instead of using
+    # its own `tag` argument -> the onexit assertion below reddens since the
+    # block would land in `state.onentry` instead of `state.onexit`
+    test "each produces one Block, placed into the matching State slot" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry><raise event="a"/></onentry>
+              <onexit><raise event="b"/></onexit>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{content: [%Raise{event: "a"}]}] = state.onentry
+      assert [%Block{content: [%Raise{event: "b"}]}] = state.onexit
+    end
+
+    # sabotage: `state_like/3`'s `place/3` clause for `{:onentry, block}`
+    # appends instead of prepending, or `place_children/3`'s fold order is
+    # reversed for a container that already accumulates children in reverse
+    # -> flatten the three onentry blocks into one by merging their content
+    # into a single Block in `build_block/3` -> this test reddens because
+    # `state.onentry` would have length 1, not 3
+    test "three <onentry> elements stay three Block structs, never flattened" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry><raise event="one"/></onentry>
+              <onentry><raise event="two"/></onentry>
+              <onentry><raise event="three"/></onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{content: [%Raise{event: "one"}]},
+               %Block{content: [%Raise{event: "two"}]},
+               %Block{content: [%Raise{event: "three"}]}
+             ] = state.onentry
+    end
+
+    # sabotage: `build_block/3` sets `location: nil` instead of
+    # `element.location` -> this test reddens since each Block would carry
+    # no distinct span
+    test "each Block carries its own <onentry>/<onexit> element's location" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry/>
+              <onexit/>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{location: onentry_location}] = state.onentry
+      assert [%Block{location: onexit_location}] = state.onexit
+      assert onentry_location != onexit_location
+    end
+  end
+
+  describe "lower/1 - <raise>, happy path" do
+    # sabotage: `build_raise/2` splits `event` with `Attributes.list/2`
+    # instead of reading it raw with `Attributes.value/2` -> this test
+    # reddens because `event` would become `["a", "b"]`, not the raw string
+    test "event is stored as a single unsplit string, even with a space in it" do
+      xml = ~s(<scxml><state id="s"><onentry><raise event="a b"/></onentry></state></scxml>)
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{content: [%Raise{event: "a b"}]}] = state.onentry
+    end
+  end
+
+  describe "lower/1 - <raise>, missing event" do
+    # sabotage: `build_raise/2`'s `nil` branch is dropped in favor of always
+    # building a `%Raise{event: nil}` (bypassing `@enforce_keys`'s guarantee
+    # some other way) -> this test reddens because no
+    # `{:missing_attribute, ...}` error would be produced
+    test "a <raise> with no event attribute produces a missing_attribute error" do
+      xml = ~s(<scxml><state id="s"><onentry><raise/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "raise", "event"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+  end
+
+  describe "lower/1 - <log>, happy path" do
+    # sabotage: `build_log/2` swaps the `label` and `expr` reads -> this test
+    # reddens since the values would land on the wrong fields
+    test "label and expr both lower as raw strings" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><log label="hi" expr="x + 1"/></onentry></state></scxml>)
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{content: [%Log{label: "hi", expr: "x + 1"}]}] = state.onentry
+    end
+
+    # sabotage: `build_log/2`'s `attribute_locations` pipeline replaces
+    # `Attributes.put_location(:label, element, "label")` with an
+    # unconditional `Map.put(:label, element.location)` -> the absent-label
+    # `refute Map.has_key?/2` assertion below reddens, since the key would
+    # be added even though `label` was never written
+    test ~s(label="" lowers to "" with the key present; an absent label lowers to nil with no key) do
+      xml_empty =
+        ~s(<scxml><state id="s"><onentry><log label=""/></onentry></state></scxml>)
+
+      xml_absent = ~s(<scxml><state id="s"><onentry><log/></onentry></state></scxml>)
+
+      empty_state = lower!(xml_empty) |> only_state()
+      absent_state = lower!(xml_absent) |> only_state()
+
+      assert [%Block{content: [%Log{label: "", attribute_locations: empty_locations}]}] =
+               empty_state.onentry
+
+      assert [%Block{content: [%Log{label: nil, attribute_locations: absent_locations}]}] =
+               absent_state.onentry
+
+      assert Map.has_key?(empty_locations, :label)
+      refute Map.has_key?(absent_locations, :label)
+    end
+  end
+
+  describe "lower/1 - a transition's own content" do
+    # sabotage: `build_transition/2` reverts to discarding `walk_children/2`'s
+    # results (`{_results, errors} = ...`) instead of placing them via
+    # `place_children/3` -> this test reddens because `transition.content`
+    # would stay `[]`
+    test "a <log> inside a <transition> lands in Transition.content, unwrapped" do
+      xml = ~s(<scxml><state id="s"><transition><log label="hi"/></transition></state></scxml>)
+
+      assert [%State{transitions: [%Transition{content: [%Log{label: "hi"}]}]}] =
+               lower!(xml).states
+    end
+  end
+
+  describe "lower/1 - misplaced content" do
+    # sabotage: `place/3` gains a `{:state, _state}` clause for `%Block{}`
+    # that silently drops the child (returning the parent unchanged, no
+    # error) -> this test reddens because no `{:misplaced_element, ...}`
+    # error would be produced; `lower/1` would return `{:ok, _}` instead
+    test ~s(a <state> inside an <onentry> produces {:misplaced_element, "state", "onentry"}) do
+      xml = ~s(<scxml><state id="s"><onentry><state id="nope"/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "state", "onentry"}}]} =
+               xml |> parse!() |> Lowering.lower()
+    end
+  end
+end

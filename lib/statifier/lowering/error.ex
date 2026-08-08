@@ -98,4 +98,20 @@ defmodule Statifier.Lowering.Error do
       location: location
     }
   end
+
+  @doc """
+  A required attribute is absent, so the element's struct cannot be built at
+  all - `<raise>` with no `event` is the first case (`:event` is
+  `@enforce_keys`'d on `Statifier.Document.Raise`).
+  """
+  @spec missing_attribute(element :: binary(), attribute :: binary(), location :: Location.t()) ::
+          t()
+  def missing_attribute(element, attribute, %Location{} = location)
+      when is_binary(element) and is_binary(attribute) do
+    %__MODULE__{
+      reason: {:missing_attribute, element, attribute},
+      message: "element #{inspect(element)} is missing required attribute #{inspect(attribute)}",
+      location: location
+    }
+  end
 end

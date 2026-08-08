@@ -15,7 +15,10 @@ defmodule Statifier.Lowering.Builders do
   """
 
   alias Statifier.Document
+  alias Statifier.Document.Block
   alias Statifier.Document.Initial
+  alias Statifier.Document.Log
+  alias Statifier.Document.Raise
   alias Statifier.Document.State
   alias Statifier.Document.Transition
   alias Statifier.Lowering
@@ -136,11 +139,16 @@ defmodule Statifier.Lowering.Builders do
   string), and `type` (atom, default `:external`). An out-of-range `type`
   value lowers to `:external` and still keeps its `attribute_locations`
   entry (Residual Note 2), the same rule `<history>`'s `type` follows.
+
+  A `<transition>`'s executable content children (`<raise>`, `<log>`) are
+  placed directly into `Transition.content`, unwrapped - a transition has no
+  `<onentry>`-like element in the source to give a block its own location
+  (`Statifier.Document.Block`'s moduledoc).
   """
   @spec build_transition(element :: Element.t(), ctx :: map()) ::
           {{:transition, Transition.t()}, [Error.t()]}
   def build_transition(%Element{} = element, ctx) do
-    {_results, errors} = Lowering.walk_children(element, ctx)
+    {results, errors} = Lowering.walk_children(element, ctx)
 
     attribute_locations =
       %{}
@@ -158,7 +166,111 @@ defmodule Statifier.Lowering.Builders do
       attribute_locations: attribute_locations
     }
 
-    {{:transition, transition}, errors}
+    {transition, place_errors} = place_children(results, transition, element.name)
+    transition = reverse_lists(transition)
+
+    {{:transition, transition}, errors ++ place_errors}
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Block{}` from an `<onentry>` element, tagged
+  `{:onentry, block}`.
+
+  Each `<onentry>` element becomes **one** `Block` with its own `location` -
+  three `<onentry>` elements under one `<state>` become three entries in
+  `State.onentry`, never one flattened list (spec 3.8/3.9, section 4's
+  error-isolation rule).
+  """
+  @spec build_onentry(element :: Element.t(), ctx :: map()) ::
+          {{:onentry, Block.t()}, [Error.t()]}
+  def build_onentry(%Element{} = element, ctx), do: build_block(element, ctx, :onentry)
+
+  @doc """
+  Builds a `%Statifier.Document.Block{}` from an `<onexit>` element, tagged
+  `{:onexit, block}`. See `build_onentry/2` - same shared `build_block/3`,
+  same one-block-per-element rule.
+  """
+  @spec build_onexit(element :: Element.t(), ctx :: map()) ::
+          {{:onexit, Block.t()}, [Error.t()]}
+  def build_onexit(%Element{} = element, ctx), do: build_block(element, ctx, :onexit)
+
+  @doc """
+  Builds a `%Statifier.Document.Raise{}` from a `<raise>` element, tagged
+  `{:content_node, raise}`.
+
+  `event` is read as a **single unsplit string**
+  (`Statifier.Document.Raise`'s moduledoc) - deliberately not tokenized the
+  way `<transition>`'s `event` is. `event` is required (`:event` is
+  `@enforce_keys`'d on `Raise`); when absent, no struct can be built and this
+  returns `{nil, [%Error{reason: {:missing_attribute, "raise", "event"}}]}`.
+  """
+  @spec build_raise(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Raise.t()} | nil, [Error.t()]}
+  def build_raise(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    case Attributes.value(element, "event") do
+      nil ->
+        {nil, errors ++ [Error.missing_attribute("raise", "event", element.location)]}
+
+      event ->
+        attribute_locations = Attributes.put_location(%{}, :event, element, "event")
+
+        raise_node = %Raise{
+          location: element.location,
+          event: event,
+          attribute_locations: attribute_locations
+        }
+
+        {raise_node, place_errors} = place_children(results, raise_node, element.name)
+
+        {{:content_node, raise_node}, errors ++ place_errors}
+    end
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Log{}` from a `<log>` element, tagged
+  `{:content_node, log}`.
+
+  Reads `label` and `expr`, both nilable, both raw strings - neither is
+  tokenized or compiled here.
+  """
+  @spec build_log(element :: Element.t(), ctx :: map()) :: {{:content_node, Log.t()}, [Error.t()]}
+  def build_log(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    attribute_locations =
+      %{}
+      |> Attributes.put_location(:label, element, "label")
+      |> Attributes.put_location(:expr, element, "expr")
+
+    log = %Log{
+      location: element.location,
+      label: Attributes.value(element, "label"),
+      expr: Attributes.value(element, "expr"),
+      attribute_locations: attribute_locations
+    }
+
+    {log, place_errors} = place_children(results, log, element.name)
+
+    {{:content_node, log}, errors ++ place_errors}
+  end
+
+  # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
+  # `tag` atom, its own contribution - never a parent element name, per
+  # Decision 3). `Block` has no slot for anything but `Document.content_node`
+  # children; any other child (a `<state>`, say) misses that slot and comes
+  # back from `place/3` as `{:misplaced_element, name, "onentry"|"onexit"}`.
+  @spec build_block(element :: Element.t(), ctx :: map(), tag :: :onentry | :onexit) ::
+          {{:onentry | :onexit, Block.t()}, [Error.t()]}
+  defp build_block(%Element{} = element, ctx, tag) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    block = %Block{location: element.location}
+    {block, place_errors} = place_children(results, block, element.name)
+    block = reverse_lists(block)
+
+    {{tag, block}, errors ++ place_errors}
   end
 
   # Shared by `build_state/2`, `build_parallel/2`, `build_final/2`, and
@@ -216,6 +328,8 @@ defmodule Statifier.Lowering.Builders do
   # children own the `states` slot.
   @spec place(child :: term(), container :: struct(), parent_name :: binary()) ::
           {struct(), Error.t() | nil}
+  defp place(nil, parent, _parent_name), do: {parent, nil}
+
   defp place({:state, state}, %State{} = parent, _parent_name) do
     {%{parent | states: [state | parent.states]}, nil}
   end
@@ -228,6 +342,14 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | initial_element: initial}, nil}
   end
 
+  defp place({:onentry, block}, %State{} = parent, _parent_name) do
+    {%{parent | onentry: [block | parent.onentry]}, nil}
+  end
+
+  defp place({:onexit, block}, %State{} = parent, _parent_name) do
+    {%{parent | onexit: [block | parent.onexit]}, nil}
+  end
+
   defp place({:transition, transition}, %Initial{} = parent, _parent_name) do
     {%{parent | transitions: [transition | parent.transitions]}, nil}
   end
@@ -236,13 +358,38 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | states: [state | parent.states]}, nil}
   end
 
+  defp place({:content_node, node}, %Block{} = parent, _parent_name) do
+    {%{parent | content: [node | parent.content]}, nil}
+  end
+
+  defp place({:content_node, node}, %Transition{} = parent, _parent_name) do
+    {%{parent | content: [node | parent.content]}, nil}
+  end
+
+  # `:content_node` covers two elements (`<raise>`, `<log>`), unlike every
+  # other tag which names exactly one - so its misplaced-element name comes
+  # from the struct itself, not the tag, ahead of the generic catch-all.
+  defp place({:content_node, node}, parent, parent_name) do
+    {parent, Error.misplaced(content_node_name(node), parent_name, node.location)}
+  end
+
   defp place({tag, value}, parent, parent_name) do
     {parent, Error.misplaced(Atom.to_string(tag), parent_name, Map.fetch!(value, :location))}
   end
 
+  @spec content_node_name(node :: Raise.t() | Log.t()) :: binary()
+  defp content_node_name(%Raise{}), do: "raise"
+  defp content_node_name(%Log{}), do: "log"
+
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
-    %{state | states: Enum.reverse(state.states), transitions: Enum.reverse(state.transitions)}
+    %{
+      state
+      | states: Enum.reverse(state.states),
+        transitions: Enum.reverse(state.transitions),
+        onentry: Enum.reverse(state.onentry),
+        onexit: Enum.reverse(state.onexit)
+    }
   end
 
   defp reverse_lists(%Initial{} = initial) do
@@ -251,5 +398,13 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Document{} = document) do
     %{document | states: Enum.reverse(document.states)}
+  end
+
+  defp reverse_lists(%Block{} = block) do
+    %{block | content: Enum.reverse(block.content)}
+  end
+
+  defp reverse_lists(%Transition{} = transition) do
+    %{transition | content: Enum.reverse(transition.content)}
   end
 end
