@@ -387,9 +387,9 @@ mutation, per `docs/testing.md:106-115` - never "delete the function body"):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] New file runs green: `mix test test/statifier/lowering/relaxed_input_test.exs`
-- [ ] Coverage does not regress (the Tests stage in a bare `mix quality`
+- [x] Full quality gate passes: `mix quality`
+- [x] New file runs green: `mix test test/statifier/lowering/relaxed_input_test.exs`
+- [x] Coverage does not regress (the Tests stage in a bare `mix quality`
       measures it; a scoped or `--quick` run does not)
 
 #### Manual Verification:
@@ -587,6 +587,25 @@ before considering the plan fully landed.
 - [ ] Wording matches the surrounding house style in these files (hyphens, not
       em dashes; the existing moduledocs' "here is the rejected alternative and
       why" voice)
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for manual confirmation from the human that the manual
+testing was successful before proceeding to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/commit --auto`); Manual Verification items are deferred
+and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] **Every** sabotage was actually performed, went red, and was reverted -
+      not written from imagination. `docs/testing.md`'s protocol is the point of
+      this phase, and test 2's rewrite sabotage in particular is the evidence
+      that direction (a) is what is being tested.
+- [ ] Each sabotage comment names one specific mutation, in present tense, and
+      the test it sits above is the test that reddens
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive
