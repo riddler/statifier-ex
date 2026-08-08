@@ -23,7 +23,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
     # assertion
     test "<donedata> on a <final> reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final id="f">
               <donedata/>
           </final>
@@ -39,7 +39,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
     # assertion, which expects it to be reported, reddens
     test "<donedata> on a <state> is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="s">
               <donedata/>
           </state>
@@ -57,7 +57,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
     # this assertion
     test "<donedata> on a <parallel> is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <parallel id="p">
               <state id="a"/>
               <state id="b"/>
@@ -77,7 +77,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
     # (line 2), reddening this assertion
     test "the reported location is the <donedata> element's own span, not the state's" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <parallel id="p">
               <state id="a"/>
               <state id="b"/>

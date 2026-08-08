@@ -22,7 +22,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # matches, reddening this assertion
     test "a state carrying both an initial attribute and an <initial> element is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="b">
               <initial>
                   <transition target="b"/>
@@ -45,7 +45,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # never look at this state at all)
     test "a state carrying only an initial attribute reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="b">
               <state id="b"/>
           </state>
@@ -60,7 +60,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # reported as carrying both forms, reddening this assertion
     test "a state carrying only an <initial> element reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="b"/>
@@ -80,7 +80,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # fine, reddening this assertion
     test "an <initial> element with no transition is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial/>
               <state id="b"/>
@@ -101,7 +101,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # the "only <initial> element" test)
     test "an <initial> element with two transitions is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="b"/>
@@ -125,7 +125,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # "only <initial> element" test)
     test "an <initial> element with exactly one transition reports nothing from this check" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="b"/>
@@ -147,7 +147,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # the valid-document tests above)
     test "an <initial> element's transition with no target is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition/>
@@ -172,7 +172,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # this assertion
     test "an <initial> element's transition with event=\"\" is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition event="" target="b"/>
@@ -197,7 +197,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # reddening this assertion
     test "an <initial> element's transition with a cond is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition cond="true" target="b"/>
@@ -223,7 +223,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # "only <initial> element" test)
     test "an <initial> element's transition with neither event nor cond reports nothing" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="b"/>
@@ -244,7 +244,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
     # underlying mutation as the "only <initial> element" test)
     test "the shared sub-check's message names <initial>, not <history>" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial/>
               <state id="b"/>

@@ -43,6 +43,18 @@ defmodule Statifier.Document do
   value containing an entity or character reference does not map 1:1 onto
   the source.
 
+  ## `xmlns` versus `namespace`
+
+  `xmlns` is the literal attribute as the author wrote it (or `nil` when
+  absent) - it never resolves prefixes. `namespace` is the URI the root
+  element's name actually resolves to after prefix scoping
+  (`Statifier.Lowering.Namespace.resolve/2`), stamped on by
+  `Statifier.Lowering.lower/1`. The two differ exactly for a prefix-declared
+  root such as `<s:scxml xmlns:s="...">`, where `xmlns` is `nil` but
+  `namespace` is the resolved URI; check 9 (st-l5k.5) reads `namespace`, not
+  `xmlns`, so a spec-conformant prefixed document is not misreported as
+  missing its namespace.
+
   ## Why `<scxml>` is its own struct, not a `State` with `kind: :scxml`
 
   `%Statifier.Document{}` is the root, and there is no `kind: :scxml` on
@@ -101,6 +113,7 @@ defmodule Statifier.Document do
     name: nil,
     version: nil,
     xmlns: nil,
+    namespace: nil,
     datamodel: nil,
     binding: :early,
     initial: [],
@@ -112,6 +125,7 @@ defmodule Statifier.Document do
           name: String.t() | nil,
           version: String.t() | nil,
           xmlns: String.t() | nil,
+          namespace: String.t() | nil,
           datamodel: String.t() | nil,
           binding: :early | :late,
           initial: [String.t()],

@@ -25,7 +25,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # reported..." further down (one mutation, three doors)
     test "a state's initial attribute naming a nonexistent state is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="missing">
               <state id="b"/>
           </state>
@@ -43,7 +43,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # :initial_not_top_level instead, reddening this
     test "the document's own initial naming a nonexistent state is reported" do
       xml = """
-      <scxml initial="missing">
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="missing">
           <state id="a"/>
       </scxml>
       """
@@ -62,7 +62,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # of :unresolved_initial, reddening this assertion
     test "an unresolved initial reports only unresolved_initial, not descendancy" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="missing">
               <state id="b"/>
           </state>
@@ -80,7 +80,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # non-descendant, reddening the grandchild assertion below
     test "a sibling initial target is reported, a grandchild target is not" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="sibling">
               <state id="child">
                   <state id="grandchild"/>
@@ -96,7 +96,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       assert error.location.start_line == 2
 
       xml_grandchild = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="grandchild">
               <state id="child">
                   <state id="grandchild"/>
@@ -113,7 +113,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # the non-descendant target is silently dropped, reddening this
     test "an <initial> element's non-descendant transition target is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a">
               <initial>
                   <transition target="sibling"/>
@@ -137,7 +137,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # reddening this assertion (one mutation, two doors)
     test "a document initial resolving to a nested state is reported" do
       xml = """
-      <scxml initial="nested">
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="nested">
           <state id="a">
               <state id="nested"/>
           </state>
@@ -155,7 +155,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # reported not-top-level, reddening this
     test "a document initial resolving to a top-level state reports nothing" do
       xml = """
-      <scxml initial="a">
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
           <state id="a"/>
       </scxml>
       """
@@ -175,7 +175,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # three doors)
     test "an initial attribute on a state with no children is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="b"/>
       </scxml>
       """
@@ -190,7 +190,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # atomic, reddening this assertion
     test "an initial attribute on a non-empty :parallel is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <parallel id="a" initial="b">
               <state id="b"/>
               <state id="c"/>
@@ -208,7 +208,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # reddening this single-error assertion too (one mutation, three doors)
     test "an <initial> element on a :final state is reported" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <final id="a">
               <initial>
                   <transition target="a"/>
@@ -230,7 +230,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # appears alongside initial_on_atomic_state, reddening this assertion
     test "an atomic state's initial reports only initial_on_atomic_state" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
           <state id="a" initial="missing"/>
       </scxml>
       """
@@ -247,7 +247,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     # reported non-descendant, reddening this too (one mutation, two doors)
     test "resolved, descendant initial references report nothing" do
       xml = """
-      <scxml initial="a">
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
           <state id="a" initial="b">
               <state id="b"/>
               <state id="c">
