@@ -20,6 +20,43 @@ touch no library internals - everything goes through one `Statifier.Case` module
 build/initialize, synchronous send-event, and the active leaf-state set. That is the
 whole coupling surface; keep it that way.
 
+### A fourth, hand-run suite: the ADR judge corpus
+
+`Mix.Statifier.AdrJudge` (`lib/mix/statifier/adr_judge.ex`) judges a branch's diff
+against a registry of ADRs using two real `claude` CLI calls per candidate
+(propose, then an adversarial refute). Nothing in the ordinary suite can tell
+whether a prompt change to that module helped or hurt, so
+`test/mix/statifier/adr_judge_corpus_test.exs` exists as a fourth suite, separate
+from the three above in kind, not just in tag:
+
+- **What it is.** A manifest (`test/fixtures/adr_judge/manifest.exs`) binds each
+  hand-written unified-diff fixture (`test/fixtures/adr_judge/*.diff`) to the
+  judged-ADR key it targets and the verdict it should produce - `:violation` or
+  `:clean` - with at least one of each per registry entry. One generated ExUnit
+  test per manifest row calls `AdrJudge.analyze/2` with
+  `caller: &AdrJudge.call_claude_cli/1` passed explicitly, so it is the one place
+  in the suite that deliberately reaches the real CLI.
+- **Why it is excluded.** Real CLI calls, real spend, and ~15-20 minutes for the
+  full corpus (roughly two model round trips per fixture). Tagged
+  `:adr_judge_corpus` and excluded in `test/test_helper.exs` the same way `:scion`
+  and `:scxml_w3` are, plus st-c8c's reason on top: `:test`'s
+  `@default_caller` still raises on a forgotten `opts[:caller]` everywhere else,
+  and this module's own tests keep injecting stubs - only the corpus test module
+  opts into the real caller, visibly, at its own call site.
+- **How to run it.** `mix test --only adr_judge_corpus`. A cheap, caller-free
+  companion, `test/mix/statifier/adr_judge_corpus_shape_test.exs`, runs in the
+  ordinary suite and keeps the corpus from rotting between hand-runs: every
+  manifest file exists, every key is real, every registry entry has both a
+  violating and a clean fixture, every fixture's diff lands in its own scope and
+  not a differing one, and no fixture contains the literal `@tag :skip` (which
+  would trip `Mix.Statifier.GateGuard`'s skip-tag scan, since fixtures live under
+  `test/`).
+- **How to read a failure.** Each corpus test's failure message names which of
+  three things went wrong: a **false negative** (a known-violating fixture
+  produced no surviving finding), a **false positive** (a known-clean fixture
+  produced one anyway), or a **wrong-ADR attribution** (a violation survived
+  under the wrong registry key).
+
 ## Sabotage testing
 
 A test that passes on its first run has proven nothing yet. It might be asserting

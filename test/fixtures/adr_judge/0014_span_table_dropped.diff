@@ -1,0 +1,10 @@
+diff --git a/lib/statifier/compiler/expression.ex b/lib/statifier/compiler/expression.ex
+--- a/lib/statifier/compiler/expression.ex
++++ b/lib/statifier/compiler/expression.ex
+@@ -12,3 +12,3 @@
+   def compile(source) do
+-    {instructions, spans} = Predicator.compile_with_spans(source)
+-    {:compiled, instructions, source, spans}
++    {instructions, _spans} = Predicator.compile_with_spans(source)
++    {:compiled, instructions, source}
+   end

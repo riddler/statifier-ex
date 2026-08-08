@@ -1,0 +1,14 @@
+diff --git a/lib/statifier/document/content.ex b/lib/statifier/document/content.ex
+--- a/lib/statifier/document/content.ex
++++ b/lib/statifier/document/content.ex
+@@ -29,2 +29,1 @@
+-  @enforce_keys [:location]
+-  defstruct [:location, expr: nil, text: nil, attribute_locations: %{}]
++  defstruct [expr: nil, text: nil, attribute_locations: %{}]
+@@ -35,3 +34,2 @@
+   @type t :: %__MODULE__{
+           expr: String.t() | nil,
+           text: String.t() | nil,
+-          location: Location.t(),
+           attribute_locations: Document.attribute_locations()
+         }

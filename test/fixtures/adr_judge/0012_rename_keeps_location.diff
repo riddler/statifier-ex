@@ -1,0 +1,13 @@
+diff --git a/lib/statifier/document/transition.ex b/lib/statifier/document/transition.ex
+--- a/lib/statifier/document/transition.ex
++++ b/lib/statifier/document/transition.ex
+@@ -18,2 +18,2 @@
+-  defstruct [:location, :target, :cond, event: nil]
++  defstruct [:location, :targets, :cond, event: nil]
+@@ -24,3 +24,3 @@
+   @type t :: %__MODULE__{
+           location: Location.t(),
+-          target: String.t() | nil,
++          targets: [String.t()],
+           cond: String.t() | nil
+         }

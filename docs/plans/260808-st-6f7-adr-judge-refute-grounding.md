@@ -313,12 +313,12 @@ negative versus a false positive.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The corpus does not run in the ordinary suite: `mix test` reports no
+- [x] Full quality gate passes: `mix quality`
+- [x] The corpus does not run in the ordinary suite: `mix test` reports no
       `adr_judge_corpus` tests executed
-- [ ] The corpus does not run in the ratchet: `mix test.regression` likewise
-- [ ] The shape test runs and passes in the ordinary suite
-- [ ] `mix test --only adr_judge_corpus --dry-run`-equivalent: the module
+- [x] The corpus does not run in the ratchet: `mix test.regression` likewise
+- [x] The shape test runs and passes in the ordinary suite
+- [x] `mix test --only adr_judge_corpus --dry-run`-equivalent: the module
       compiles and generates one test per manifest row
 
 #### Manual Verification:
@@ -336,7 +336,63 @@ negative versus a false positive.
 full `mix quality` as the phase gate. The corpus run is manual and costs real
 money - run it once, deliberately, and record the output.
 
----
+#### Baseline (measured)
+
+Run: `mix test --only adr_judge_corpus --seed 0 --trace`, 2026-08-08, against
+the *current* (unmodified) prompts. Model `claude-haiku-4-5-20251001` - today's
+`@default_model`, with `STATIFIER_ADR_JUDGE_MODEL` confirmed unset. Total wall
+time **357.9 s** (~6 minutes) for 8 fixtures; 4 failures.
+
+| Fixture | Expect | Verdict | Classification | Wall |
+|---|---|---|---|---|
+| `0012_dropped_location.diff` | violation | FAIL | **false negative** | 54.4 s |
+| `0012_dropped_trace.diff` | violation | FAIL | **false negative** | 40.8 s |
+| `0012_rename_keeps_location.diff` | clean | PASS | correct | 25.5 s |
+| `0012_pure_docs_change.diff` | clean | PASS | correct | 11.2 s |
+| `0014_span_table_dropped.diff` | violation | FAIL | **false negative** | 70.6 s |
+| `0014_span_preserving_refactor.diff` | clean | PASS | correct | 14.5 s |
+| `0015_delegated_judgment.diff` | violation | FAIL | **false negative** | 78.1 s |
+| `0015_mechanics_only.diff` | clean | PASS | correct | 62.1 s |
+
+Score: **4 false negatives out of 4 violating fixtures (100%), 0 false
+positives out of 4 clean fixtures (0%)**. No wrong-ADR attributions - no
+violating fixture produced a surviving finding under any key at all.
+
+Two things this settles, both of which Phase 2 is built on:
+
+- **The bead's bug reproduces.** `0012_dropped_location.diff` - the st-laz live
+  repro, an enforced `:location` dropped from `Statifier.Document.Content` -
+  fails as a false negative, exactly as the bead describes. Phase 2's premise is
+  confirmed against a fixture rather than an anecdote.
+- **The false-positive rate today is zero**, and that is the number Phase 2 and
+  Phase 3 must not regress. Every clean fixture passed, so any new finding on a
+  clean fixture after a prompt change is a real regression and not noise in a
+  pre-existing count.
+
+Read together, the two columns say something sharper than "the refute pass is
+too lenient": at baseline the stage is not a weak check, it is very nearly a
+*no-op in the violating direction*. Every violating fixture across all three
+registry entries was suppressed - the failure is not specific to ADR-0012 or to
+the one hunk shape the bead happened to hit, so a fix aimed only at the
+side-table hypothesis would be aimed too narrowly.
+
+**Confirmatory rerun** (same day, same unmodified prompts, `--seed 675107`):
+329.9 s, 3 of 4 violating fixtures false-negatived (`0012_dropped_location.diff`,
+`0012_dropped_trace.diff`, `0014_span_table_dropped.diff`) and 0 false
+positives; `0015_delegated_judgment.diff` survived correctly on this run where
+it had false-negatived on the first. The live-CLI judge is not perfectly
+deterministic run to run, so a single fixture's pass on one run is not proof a
+prompt change fixed it - the bead's own fixture
+(`0012_dropped_location.diff`) false-negatived on both runs, and that is the
+number Phase 2 is judged against. Phase 2/3/4 comparisons should read a single
+clean fixture failure as noise-worthy only if it recurs.
+
+The corpus is also not too easy to be a fair test (Open Question 6): each of the
+four violating fixtures is a deletion or an omission that the deterministic
+guards would catch instantly, and the judge suppressed all four. If anything the
+fixtures are on the blatant end, which makes a 0/4 detection rate the strongest
+possible form of the finding. Harder cases can wait until the stage detects the
+easy ones.
 
 ## Phase 2: Ground the Refute Pass in the Material Shown
 
@@ -557,7 +613,8 @@ No code change. Run the corpus twice more with `STATIFIER_ADR_JUDGE_MODEL` set,
 and time a real three-entry `mix adr.judge` run for each:
 
 - `claude-haiku-4-5-20251001` (today's default) - already measured in Phase 2/3
-- `claude-sonnet-4-6`
+- `claude-sonnet-5` (correction: `claude-sonnet-4-6`, named in the original
+  Open Question 4, is not a current model id)
 
 Record for each: per-fixture verdict, corpus score, per-call wall time, and the
 three-entry `mix adr.judge` wall time (the bead's 176.1s haiku figure is the
@@ -655,7 +712,7 @@ None. This change touches no interpreter behavior and no SCION/W3C test moves.
 1. `mix test` - confirm no `adr_judge_corpus` tests ran.
 2. `mix test --only adr_judge_corpus` - full corpus, real CLI, ~15-20 minutes.
    Record the scorecard.
-3. `STATIFIER_ADR_JUDGE_MODEL=claude-sonnet-4-6 mix test --only adr_judge_corpus`
+3. `STATIFIER_ADR_JUDGE_MODEL=claude-sonnet-5 mix test --only adr_judge_corpus`
    - same, on the raised model.
 4. Apply the `Statifier.Document.Content` sabotage by hand, run
    `mix quality --profile merge`, confirm a surviving finding reaches the gate
@@ -699,12 +756,13 @@ the implementation proceeds on. Each is a place a human may want to overrule.
    176.1s. The bead says the observed cost "is the thing the ADR-0011 cost model
    is judged against" but does not name a bound. If the measurement lands near
    the boundary, the number should be a human's.
-4. **Which sonnet?** *Assumed `claude-sonnet-4-6`* as the conservative step up
-   the same family the repo already pins. `claude-sonnet-5` is the newer
-   alternative and is worth a third sweep if the second one is inconclusive.
-   Note the existing `@default_model` uses a dated id
-   (`claude-haiku-4-5-20251001`); new entries should use the undated alias
-   unless the pin is deliberate.
+4. **Which sonnet?** *Correction (recorded during implementation, no human
+   available to ask): `claude-sonnet-4-6` is not a current model id.* The
+   current model ids are `claude-opus-5`, `claude-sonnet-5`,
+   `claude-haiku-4-5-20251001`, and `claude-fable-5`. Phase 4 uses
+   `claude-sonnet-5` as the sonnet-tier candidate. Note the existing
+   `@default_model` uses a dated id (`claude-haiku-4-5-20251001`); new entries
+   should use the undated alias unless the pin is deliberate.
 5. **Does the new default-excluded tag want a `docs/quality-gate-changes.md`
    entry?** *Assumed no.* `mix gate.check` does not flag `test_helper.exs`, and
    the tag adds a suite rather than narrowing an existing one - nothing that ran
