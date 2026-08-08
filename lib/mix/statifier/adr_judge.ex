@@ -28,11 +28,16 @@ defmodule Mix.Statifier.AdrJudge do
   `@default_model` is measured, not assumed: st-6f7 Phase 4 ran the fixture
   corpus (`test/mix/statifier/adr_judge_corpus_test.exs`,
   `mix test --only adr_judge_corpus`) against both `claude-haiku-4-5-20251001`
-  (today's default) and `claude-sonnet-5`. Both scored 0 false negatives and 0
-  false positives out of 8 fixtures - haiku already reached a perfect score
-  once the refute prompt was grounded (Phase 2), so sonnet had no headroom
-  left to improve on and the default stays haiku. Re-run the corpus with
-  `STATIFIER_ADR_JUDGE_MODEL` set to compare a candidate model before raising
+  and `claude-sonnet-5`. Both scored 0 false negatives and 0 false positives
+  out of 8 fixtures - grounding the refute prompt (Phase 2) was what fixed the
+  bug, and neither model has an accuracy edge over the other on this corpus.
+  Accuracy therefore does not pick the default, and latency does: sonnet ran
+  the corpus in 91.4s against haiku's 272.4s, and a real three-entry
+  `mix adr.judge` in 19.6s against haiku's 54.4s. The default is
+  `claude-sonnet-5` for that wall-clock margin, a deliberate trade of token
+  cost for gate time on a stage that is `:merge`-profile-only and opt-in, so
+  the spend lands on a path already chosen. Re-run the corpus with
+  `STATIFIER_ADR_JUDGE_MODEL` set to compare a candidate model before changing
   `@default_model`; see `docs/testing.md`'s corpus subsection for the recorded
   scores and how to read a failure.
 
@@ -196,7 +201,7 @@ defmodule Mix.Statifier.AdrJudge do
   ]
 
   @cli_name "claude"
-  @default_model "claude-haiku-4-5-20251001"
+  @default_model "claude-sonnet-5"
   @model_env "STATIFIER_ADR_JUDGE_MODEL"
 
   # st-c8c: with `claude` on PATH and an in-scope dirty tree, a test that
@@ -651,7 +656,7 @@ defmodule Mix.Statifier.AdrJudge do
   call can see - no reading the repository, no reaching out on its own.
   `--output-format json` makes the reply parseable instead of scraping
   terminal prose, and `--model` carries `STATIFIER_ADR_JUDGE_MODEL` (falling
-  back to the haiku default) the same way the direct-API version did.
+  back to `@default_model`) the same way the direct-API version did.
 
   Only its shell-out half is unexercised by the test suite; every test
   injects its own `caller`, so this is the only place in the module that

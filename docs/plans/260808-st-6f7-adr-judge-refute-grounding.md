@@ -771,16 +771,29 @@ appears to resolve faster than one that has to reason through a genuine
 finding, so these two numbers are not read as contradicting the bead's
 figure, only as bounding this measurement's own run.
 
-**Decision**: **keep `claude-haiku-4-5-20251001` as `@default_model`.** The
-decision rule requires the corpus score to *strictly improve* (fewer false
-negatives than haiku's 0/4) before a raise is considered, and sonnet's score
-is unchanged at 0/4 false negatives, 0/4 false positives - there was no
-headroom left for sonnet to improve on, since Phase 2's prompt fix alone
-already reached a perfect score on haiku. This is exactly the plan's stated
-expected outcome ("If the score is unchanged and the prompt fix alone closed
-the bug, keep haiku and record the sonnet numbers as the evidence for that
-choice"). No code changes in this phase; `STATIFIER_ADR_JUDGE_MODEL` remains
-available for anyone who wants to opt into sonnet anyway.
+**Decision**: **`claude-sonnet-5` is `@default_model`.**
+
+The plan's own decision rule pointed the other way, and it is worth recording
+why it did not settle this. That rule asked for a *strict accuracy
+improvement* (fewer false negatives than haiku's 0/4) before a raise, which is
+a bar nothing can clear once Phase 2's prompt fix has already reached a
+perfect score. Written for a world where accuracy was still the open question,
+it turns into an unconditional "keep haiku" the moment accuracy is settled -
+so it decides nothing here, rather than deciding for haiku.
+
+With accuracy tied, the remaining axis is wall time, and sonnet wins it by a
+wide margin on both measurements above: 91.4s against haiku's 272.4s over the
+corpus, and 19.6s against 54.4s on a real three-entry `mix adr.judge`. The
+cost of that is tokens, and it lands on a stage that is `:merge`-profile-only
+and opt-in - a path a developer has already deliberately chosen - so the
+spend does not fall on the ordinary inner loop. The user made this call
+directly (2026-08-08), preferring the faster gate and accepting the higher
+per-run cost.
+
+`STATIFIER_ADR_JUDGE_MODEL` remains available in the other direction now:
+anyone who wants the cheaper run can set it back to
+`claude-haiku-4-5-20251001`, whose numbers above show it costs accuracy
+nothing to do so.
 
 ---
 

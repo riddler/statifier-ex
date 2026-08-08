@@ -66,8 +66,11 @@ from the three above in kind, not just in tag:
   | Phase 4, `claude-sonnet-5` (same grounded prompt) | 0/4 | 0/4 | 91.4s |
 
   The prompt rework (st-6f7 Phase 2) closed every false negative; Phase 4
-  measured `claude-sonnet-5` against the same corpus and found no further
-  headroom (haiku was already perfect), so `@default_model` stays haiku - see
+  measured `claude-sonnet-5` against the same corpus and found it equally
+  accurate. With no accuracy difference to decide it, `@default_model` is
+  `claude-sonnet-5` on wall time - 91.4s against haiku's 272.4s here, and 19.6s
+  against 54.4s on a real three-entry `mix adr.judge`. That trades token cost
+  for gate time on a `:merge`-profile-only, opt-in stage. See
   `Mix.Statifier.AdrJudge`'s moduledoc and
   `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
   measurement section for the full per-fixture numbers and the decision.
