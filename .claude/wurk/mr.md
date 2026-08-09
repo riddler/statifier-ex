@@ -24,7 +24,7 @@ and lives in its own profile instead.
 
 ## Rebase-merge-only
 
-This repo merges by rebase only; `docs/workflow.md:193-215` states the policy
+This repo merges by rebase only; `docs/workflow.md:201-223` states the policy
 at length. The consequence for this skill: do not offer or perform a squash
 merge, and do not restructure the branch's commits on the assumption they will
 be squashed. Several separate commits produced by `/wurk:commit --auto` are
