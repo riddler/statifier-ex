@@ -83,6 +83,9 @@ every action struct.)
 
 ### Interpreter: the Appendix D core
 
+`Statifier.MachineState` is the `state` in the `{state, [effect]}` pipeline
+above, and `Statifier.Effect` is the `effect`.
+
 - The full active configuration (ancestors included) is stored, as the spec's
   algorithm assumes ([ADR-0005](adr/0005-full-configuration-and-interned-state-indexes.md)).
   "Leaf states" is a view derived on demand, not the storage model.
