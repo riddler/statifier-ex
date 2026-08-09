@@ -152,10 +152,13 @@ For the Phase 1 interpreter work and its reviews:
       that is not reconstructible from the struct
 - [ ] `microstep` step function exists; macrostep folds over it
 - [ ] trace effect types defined with the vocabulary above; emission gated
-- [ ] compiler retains locations on states, transitions, executable content
-- [ ] compiled expressions carry their span table with the instructions
-      (ADR-0014)
-- [ ] compiler assigns document-order indexes to transitions and
-      executable-content nodes
+- [x] compiler retains locations on states, transitions, executable content
+      (`Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`,
+      st-wju.1)
+- [x] compiled expressions carry their span table with the instructions
+      (ADR-0014) (`Statifier.Compiler.Expressions.compile/3` stores
+      `%Predicator.Compiled{}` whole, st-wju.1)
+- [x] compiler assigns document-order indexes to transitions and
+      executable-content nodes (`t_index`/`c_index`, dense from 0, st-wju.1)
 - [ ] internally raised events carry cause metadata (identity + step)
 - [ ] Appendix D query functions take/return plain values, unfused
