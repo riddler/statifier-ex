@@ -1,27 +1,54 @@
 defmodule Statifier.Event.Cause do
   @moduledoc """
   Why an internally raised event exists - `docs/observability.md` constraint
-  4. `origin` is a constraint-3 identity (a `t_index` or a `c_index`, never
-  a struct); `macrostep`/`microstep` are the counters as they stood when the
-  event was raised, per `Statifier.MachineState`'s counter contract.
+  4. `origin` is a constraint-3 identity, never a struct; `macrostep`/
+  `microstep` are the counters as they stood when the event was raised, per
+  `Statifier.MachineState`'s counter contract.
 
   Cause travels *with* the event so a consumer - the first of which is
   st-af3's `error.execution` message - resolves it through
-  `Statifier.Machine.transition/2` or `content/2` and the retained
-  `Location`, with no global lookup and no ambient step context.
+  `Statifier.Machine.content/2` and the retained `Location`, with no global
+  lookup and no ambient step context.
+
+  ## `origin` names both the node and its owning block (post-review correction)
+
+  The original shape (`{:transition, t_index} | {:content, c_index}`) could
+  not actually produce the `error.execution` message constraint 4's own
+  exemplar promises - "raised by the `<assign>` at line 42, transition 7,
+  microstep 3" - because a bare `c_index` resolves to the content node's own
+  `Location` but names nothing about *which* onentry/onexit block or
+  transition it lives in. `Statifier.Effect.Trace.ContentExecuted` already
+  carries exactly that owning-block identity as its `owner` field
+  (`Statifier.Machine.Content.owner/0`), proven known at emission time; this
+  cause now carries the same identity instead of leaving it unrecorded. See
+  `docs/plans/260809-st-wju.2-machine-state-event-effects-vocabulary.md`'s
+  "Post-review corrections" section.
   """
+
+  alias Statifier.Machine.Content
 
   @enforce_keys [:origin, :macrostep, :microstep]
   defstruct [:origin, :macrostep, :microstep]
 
   @typedoc """
-  Which compiled node raised the event: a transition's `t_index` (an
-  `<transition>` executing its content raised it) or a content node's
-  `c_index` (an `<onentry>`/`<onexit>` block, or a bare `<raise>`/`<send>`,
-  raised it). Never a struct - the index resolves through
-  `Statifier.Machine.transition/2` or `Statifier.Machine.content/2`.
+  Which node raised the event, and where it lives:
+
+  - `{:content, c_index, owner}` - a content node (`<raise>`, or any other
+    executable-content node once one can fail) raised it; `c_index` resolves
+    through `Statifier.Machine.content/2`, `owner` (`Statifier.Machine.Content.owner/0`)
+    names the `<onentry>`/`<onexit>` block or transition the node lives in,
+    exactly as `Statifier.Effect.Trace.ContentExecuted` already names it for
+    the same block.
+  - `{:state, state_index}` - the platform itself raised the event with no
+    content node behind it (st-wju.4's `done.state.*` on entering a final
+    state names the state whose entry triggered it, not a content node -
+    there is no `<raise>` or block to point to).
+
+  Never a struct - both indexes resolve through `Statifier.Machine`.
   """
-  @type origin :: {:transition, non_neg_integer()} | {:content, non_neg_integer()}
+  @type origin ::
+          {:content, non_neg_integer(), Content.owner()}
+          | {:state, non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),

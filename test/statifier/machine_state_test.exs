@@ -227,7 +227,7 @@ defmodule Statifier.MachineStateTest do
         |> MachineState.begin_macrostep()
         |> MachineState.begin_microstep()
 
-      origin = {:transition, 7}
+      origin = {:content, 4, {:transition, 7}}
       ms = MachineState.raise_internal(ms, "done.state.a", origin)
 
       assert [%Event{type: :internal, name: "done.state.a", cause: cause}] =

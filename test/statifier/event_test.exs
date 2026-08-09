@@ -4,7 +4,7 @@ defmodule Statifier.EventTest do
   alias Statifier.Event
   alias Statifier.Event.Cause
 
-  @cause Cause.new({:transition, 7}, 2, 3)
+  @cause Cause.new({:content, 4, {:transition, 7}}, 2, 3)
 
   describe "external/2" do
     # sabotage: `Event.external/2` stamps `type: :internal` instead of
