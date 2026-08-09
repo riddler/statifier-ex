@@ -1,6 +1,20 @@
 # ADR-0015: Skill mechanics live in scripts, judgment lives in prose
 
-Status: accepted (2026-08-06) - amended by ADR-0016 (2026-08-09)
+Status: superseded by ADR-0017 (2026-08-09) - previously amended by ADR-0016
+(2026-08-09)
+
+**Supersession note.**
+[ADR-0017](0017-judgment-not-scriptable-in-wurk-extensions.md) supersedes this
+record. Nothing below is current policy for this repository. Constraint 4
+(judgment is not scriptable) is restated there, scoped to `.claude/wurk/**`,
+and that is the text `Mix.Statifier.AdrJudge` ships to the model; constraints
+1, 2, 3 and 5 moved to the `wurk` repo with the code they govern and are
+enforced there, not here. The amendment note below is kept as written except
+that its claim that constraints 1-4 are enforced here is corrected by ADR-0017:
+`Mix.Statifier.AdrGuard` never covered constraint 1, and `AdrJudge` reads
+constraint 4 only. Read this file for why the split exists and what the st-hzf
+audit found; read ADR-0016 for where the code went, and ADR-0017 for what is
+judged here today.
 
 **Amendment note.** [ADR-0016](0016-wurk-skills-out-of-repo-extensions-gated.md)
 amends this record in two places: the location clause below (`.claude/scripts/`,

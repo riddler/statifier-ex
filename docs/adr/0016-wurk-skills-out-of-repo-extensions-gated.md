@@ -1,6 +1,17 @@
 # ADR-0016: The wurk skills live in their own repo; this repo gates its extensions
 
-Status: accepted (2026-08-09) - amends ADR-0015 in part
+Status: accepted (2026-08-09) - amends ADR-0015 in part; amended by ADR-0017
+(2026-08-09)
+
+**Amendment note.**
+[ADR-0017](0017-judgment-not-scriptable-in-wurk-extensions.md) amends point 2
+and point 5 below. Point 2's implication that ADR-0015's constraints 1-4 remain
+live policy here is corrected to constraint 4 alone: constraints 1, 2 and 3
+govern the kit's scripts, envelope and definition sites, all of which left with
+the kit, and no enforcement site in this repo ever read them. Point 5's
+decision not to supersede ADR-0015 is reversed on its own stated criterion -
+the count of still-live constraints is one, not three. Everything else in this
+record stands, including both resolved open questions.
 
 ## Context
 

@@ -4,10 +4,10 @@ This document used to carry the full model-routing audit for the bespoke
 per-task skills that lived in this repository and the scripts tree they were
 extracted into. Both moved to the separate `wurk` repo and are installed here
 as the generic `wurk:*` skills and `wurk:kit` scripts (ADR-0015, amended by
-ADR-0016). The generic skills carry their own `model:` frontmatter and make
-their own internal delegation-to-a-cheaper-model choices now; no generic
-skill cites this document for that, and it no longer needs to restate their
-contracts.
+ADR-0016, superseded by ADR-0017). The generic skills carry their own
+`model:` frontmatter and make their own internal delegation-to-a-cheaper-model
+choices now; no generic skill cites this document for that, and it no longer
+needs to restate their contracts.
 
 What is still specific to this project - which lifecycle stage runs on which
 model, and why - is documented once, in `docs/workflow.md`'s Model roles
