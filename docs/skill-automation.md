@@ -1,24 +1,24 @@
 # Skill automation
 
-The living, repo-side record of `st-hzf`'s audit of `.claude/skills/`: which
-steps are deterministic mechanics extracted into `.claude/scripts/`, which
-need a model but only a Haiku-sized one, and which need the session model.
-The research document that produced the first snapshot of this table is
-`docs/research/260806-st-hzf-skill-mechanics-scripts.md` - that document is
-dated and stays as-is; this one is what future work reads and updates as
-scripts land and skills get rewritten.
+**Historical record (as of 2026-08-08, `st-cex`).** This document was
+`st-hzf`'s audit of the thirteen skills that lived under `.claude/skills/`
+until `st-cex` retired that tree. Those skills, and the `.claude/scripts/`
+tree they were extracted into, now live in the separate `wurk` repo and are
+installed here as the generic `wurk:*` skills and `wurk:kit` scripts; the
+statifier-specific judgment they carried was preserved in `.claude/wurk/*.md`.
+The classification below is the record of that audit as it stood at the time,
+and every line reference into `.claude/skills/*/SKILL.md` and
+`.claude/scripts/` is to the tree as it stood then, not as it stands once
+`st-cex` finishes removing it.
 
 **The decision this record implements is ADR-0015** (skill mechanics live in
 scripts, judgment lives in prose), which states the five constraints - step
 scoping and the banned-operation list, one definition site for shared
 mechanics, the JSON envelope, judgment stays in prose, and the gate must
-measure the scripts. Cite ADR-0015 rather than re-arguing any of them here;
-this document records *what was classified how*, not *why the split exists*.
-
-See `.claude/scripts/README.md` for the script contract itself (envelope
-shape, Ruby version, test harness) and
-`docs/plans/260806-st-hzf-skill-mechanics-scripts.md` for the phased
-implementation plan.
+measure the scripts. ADR-0015 is itself pending its own supersession record
+now that the tree it describes has moved; consult it, and whatever
+supersedes it, rather than re-arguing any of its constraints here. This
+document records *what was classified how*, not *why the split exists*.
 
 ## Classification summary
 

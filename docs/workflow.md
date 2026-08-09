@@ -11,9 +11,9 @@ the tracking side):
 - **Fable - direction.** Architecture, ADRs, spec interpretation questions, corpus
   strategy, review of plans and of finished phases. When a decision would create or
   amend an ADR, it goes through Fable.
-- **Opus - planning.** `/create-plan` and `/iterate-plan` run on Opus: turning a
+- **Opus - planning.** `/wurk:plan` and `/wurk:iterate` run on Opus: turning a
   beads epic into a phased implementation plan with verification steps.
-- **Sonnet - implementation.** `/implement-plan` runs on Sonnet: executing an
+- **Sonnet - implementation.** `/wurk:implement` runs on Sonnet: executing an
   approved plan, keeping `mix quality --profile loop` green while iterating, full
   `mix quality` before commit.
 
@@ -21,14 +21,14 @@ The skills encode these defaults in their frontmatter; an explicit user request
 overrides them.
 
 The tiers govern two things, not one: **which model a skill runs on**, and
-**which model an orchestrator assigns to a stage it delegates**. `/work` is the
+**which model an orchestrator assigns to a stage it delegates**. `/wurk:work` is the
 orchestrator. It runs on Opus and drives the sequence as subagents, assigning
-Opus to the research (`/research-codebase`) and planning (`/create-plan`) stages
-and Sonnet to implementation (`/implement-plan --loop`) - the same split the
+Opus to the research (`/wurk:research`) and planning (`/wurk:plan`) stages
+and Sonnet to implementation (`/wurk:implement --loop`) - the same split the
 frontmatter already encodes, applied per stage inside one session.
 
 **Frontmatter beats the Agent-call override.** A skill's `model:` applies for
-the turn the skill is active, so a Sonnet subagent that invokes `/create-plan`
+the turn the skill is active, so a Sonnet subagent that invokes `/wurk:plan`
 (frontmatter `opus`) runs that skill on Opus regardless of what model the
 spawning call passed. The override governs only the subagent's turns *before*
 the skill fires - the `bd show`, the file reads, the setup. An orchestrator's
@@ -38,14 +38,22 @@ orchestrator's table is simply wrong.
 
 A CLI session is the exception that proves the rule: `model:` does not govern a
 session launched with the skill as a prompt argument, which is why
-`/new-worktree` passes `--model opus` explicitly on the `claude` command line.
+`/wurk:branch` passes `--model opus` explicitly on the `claude` command line.
+Whether it stands up a worktree at all is itself a manifest setting -
+`parallelism.model` in `.claude/wurk.json` is `worktree-per-issue` here,
+distinct from the `branch-in-place` model the generic skill also supports.
 
-`/work`'s sizing step carries a Direction bucket for ADR-shaped work, spec
+`/wurk:work`'s sizing step carries a Direction bucket for ADR-shaped work, spec
 interpretation, and corpus strategy, routed to a Fable subagent that has no
-stage skill of its own - its prompt is composed directly in `/work` rather than
+stage skill of its own - its prompt is composed directly in `/wurk:work` rather than
 dispatched through the Skill tool, since none of the existing skills produce a
-decision rather than a plan or an implementation. See
-`.claude/skills/work/SKILL.md`'s Step 3 for the prompt.
+decision rather than a plan or an implementation. See the installed
+`wurk:work` skill's step 3 for the prompt shape. That prompt genericizes the
+project's own convention for one point: statifier ADRs carry no `proposed`
+state. They are written directly as `Status: accepted (<date>)`, because a
+second status would need something to sweep for drafts that were never
+promoted, and the human gate here is the review of the branch the ADR lands
+on - not a separate promotion step.
 
 ## Issue tracking: beads
 
@@ -71,30 +79,30 @@ Parallel implementation happens in git worktrees under the sibling folder
 
     git worktree add ../statifier-ex-worktrees/<issue-id>-<slug> -b <issue-id>-<slug>
 
-Two skills automate the pickup-to-worktree path: `/next-issue` picks and claims
-the next ready bead (presents choices by default; `--auto` lets an unattended
-agent take the top item), then invokes `/new-worktree`, which creates the
-worktree and warms its `deps/`, `_build/`, and dialyzer PLT from the main
-checkout so the first quality run is fast.
+One skill automates the pickup-to-worktree path: `/wurk:next` picks and claims
+the next ready bead (`n` defaults to 1; presents choices by default; `--auto`
+lets an unattended agent take the top item), then invokes `/wurk:branch`,
+which creates the worktree and warms its `deps/`, `_build/`, and dialyzer PLT
+from the main checkout so the first quality run is fast.
 
-The pickers only pick and claim; they do not size the job. Every seeded session
-launches `--model opus` running `/work <id> --auto`, uniformly, whichever bead
-was picked. `/work` then sizes the job **in the worktree**, where the codebase
+The picker only picks and claims; it does not size the job. Every seeded session
+launches `--model opus` running `/wurk:work <id> --auto`, uniformly, whichever bead
+was picked. `/wurk:work` then sizes the job **in the worktree**, where the codebase
 is readable rather than merely described, and drives the research / plan /
 implement stages as subagents on the tiers above. That is why the seed is a
 constant: the decision it used to carry needed a checkout to make.
 
-`/new-worktree` appends a fixed instruction to every seeded prompt telling the
-session to finish with `/commit --auto` rather than a raw `git commit`, so the
-Refs-trailer and unrelated-changes checks in `/commit` fire even for unattended
+`/wurk:branch` appends a fixed instruction to every seeded prompt telling the
+session to finish with `/wurk:commit --auto` rather than a raw `git commit`, so the
+Refs-trailer and unrelated-changes checks in `/wurk:commit` fire even for unattended
 sessions.
 
-`/next-issues` is the batch form: it takes up to `n` ready beads (default 3,
-refused above 4) whose [area label](#area-labels) sets are pairwise disjoint,
-highest priority first, claims all of them, and then runs `/new-worktree` once
-per bead. `n` is a ceiling, not a target - a short batch means the rest of the
-ready queue collided, and the skill reports what it skipped and why rather than
-leaving that looking like an empty queue.
+Passing `n > 1` is the batch form: `/wurk:next` then takes up to `n` ready beads
+(default 3, refused above 4) whose [area label](#area-labels) sets are pairwise
+disjoint, highest priority first, claims all of them, and then runs
+`/wurk:branch` once per bead. `n` is a ceiling, not a target - a short batch
+means the rest of the ready queue collided, and the skill reports what it
+skipped and why rather than leaving that looking like an empty queue.
 
 Rules that make parallelism safe:
 
@@ -105,7 +113,7 @@ Rules that make parallelism safe:
   Several small issues touching the same files may share a branch as separate
   commits, one issue per commit. That is often the better split: forcing them
   into parallel worktrees manufactures the rebase conflicts the module
-  boundaries exist to prevent. `/cleanup-worktrees` closes beads from the
+  boundaries exist to prevent. `/wurk:cleanup` closes beads from the
   `Refs:` trailers in the merged PR's commits rather than from the branch name,
   so a branch carrying several closes all of them.
 
@@ -130,18 +138,18 @@ Rules that make parallelism safe:
   is how a run proves it was full rather than profiled or scoped.
 - **Refresh the survivors when a branch lands.** A worktree is cut from
   `origin/main` and warmed from the main checkout at one moment in time; every
-  merge after that leaves it behind. `/refresh-worktree` rebases the live
+  merge after that leaves it behind. `/wurk:refresh` rebases the live
   worktrees onto the new `origin/main`, repairs `deps/` and the dialyzer PLT if
   `mix.lock` moved, and re-runs the loop profile. Run it after any merge, and
   without fail after one that touched `mix.lock`, `.quality.exs`, or
   `.credo.exs` - those move the gate itself, so an unrefreshed worktree goes red
   for reasons that have nothing to do with the work in it.
 - **A rebase conflict is a process signal, not a chore.** It means two branches
-  touched the same files, so the split was wrong. `/refresh-worktree` aborts and
+  touched the same files, so the split was wrong. `/wurk:refresh` aborts and
   reports rather than resolving; resolve deliberately, one agent at a time,
   behind `bd merge-slot`.
 - Merged worktrees are removed promptly; the branch dies with the merge.
-  `/cleanup-worktrees` automates it, and `/next-issue` runs it at pickup, which
+  `/wurk:cleanup` automates it, and `/wurk:next` runs it at pickup, which
   is when the previous branch has usually landed.
 
 ### Area labels
@@ -156,13 +164,13 @@ of the tree it touches. A bead may carry several.
 | `area:datamodel` | `lib/statifier/datamodel/**` |
 | `area:corpus` | `tools/corpus/**`, `test/scion_tests/**`, `test/scxml_tests/**` |
 | `area:test-harness` | `test/support/**`, `lib/mix/tasks/test.*.ex`, `test/passing_tests.json` |
-| `area:skills` | `.claude/skills/**`, `.claude/scripts/**` |
+| `area:skills` | `.claude/wurk.json`, `.claude/wurk/**`, `.claude/settings.json` |
 | `area:docs` | `docs/**`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `changelog.d/**` |
 | `area:build` | `mix.exs`, `mix.lock`, `.quality.exs`, `.credo.exs`, `.gitignore` |
 
 **Two beads are batchable iff their area sets are disjoint.** That is the whole
-rule, and it is what lets `/next-issues` claim several beads at once without a
-human adjudicating each pair: `bd ready` already filters natively on `-l/--label`,
+rule, and it is what lets `/wurk:next` claim several beads at once (`n > 1`)
+without a human adjudicating each pair: `bd ready` already filters natively on `-l/--label`,
 `--label-any` and `--exclude-label`, so asking for a disjoint set is a flag, not
 an analysis.
 
@@ -170,7 +178,7 @@ an analysis.
 on `main` alone. It moves `mix.lock` and the credo config that every other
 worktree's warmed `_build` and quality gate depend on, so a parallel branch does
 not merely conflict with it - it goes red for reasons that have nothing to do
-with the work in it (the same failure mode `/refresh-worktree` exists to repair).
+with the work in it (the same failure mode `/wurk:refresh` exists to repair).
 
 Two clarifications that come up:
 
@@ -208,10 +216,10 @@ therefore **never becomes an ancestor of `main`**, and two things follow:
 
 So merge detection asks GitHub, never git: `gh pr list --state merged --head
 <branch>`. That check is load-bearing for safety, not just for detection, and it
-is shared by `/cleanup-worktrees` and by the bead close-on-merge trigger.
+is shared by `/wurk:cleanup` and by the bead close-on-merge trigger.
 
 The upside: rebase preserves every commit and its message, so a branch may carry
-as many commits as the work needed. `/commit --auto` composes cleanly with this
+as many commits as the work needed. `/wurk:commit --auto` composes cleanly with this
 and no squash or cleanup pass is required before opening a PR.
 
 ## Change flow
@@ -222,10 +230,10 @@ and no squash or cleanup pass is required before opening a PR.
 3. Implement (Sonnet) in a worktree; ratchet additions (`mix test.baseline add`)
    ride in the same PR as the feature.
 
-   Steps 2 and 3 are usually reached through `/work`, the single entry point for
-   working a bead: it sizes the job in the worktree and spawns `/create-plan`
-   and `/implement-plan --loop` as subagents on the tiers in
-   [Model roles](#model-roles), preceded by `/research-codebase` when the blast
+   Steps 2 and 3 are usually reached through `/wurk:work`, the single entry point for
+   working a bead: it sizes the job in the worktree and spawns `/wurk:plan`
+   and `/wurk:implement --loop` as subagents on the tiers in
+   [Model roles](#model-roles), preceded by `/wurk:research` when the blast
    radius is unclear. Invoking either skill directly is still fine for work
    already sized.
 4. Sabotage the new tests: break the `lib/` code each one covers, confirm it goes
@@ -238,20 +246,20 @@ and no squash or cleanup pass is required before opening a PR.
    (`changelog.d/<issue-id>.md`); see `changelog.d/README.md` for when one is
    needed. Most changes need none.
 6. Full `mix quality` green (a change touching no Elixir code has no gate to run),
-   then commit on the worktree branch (`/commit`, or `/commit --auto` to skip the
+   then commit on the worktree branch (`/wurk:commit`, or `/wurk:commit --auto` to skip the
    approval prompt). An agent may take this step on its own - see the authority
-   table in `CLAUDE.md`. (`/implement-plan --loop` performs this step once per
-   phase rather than once at the end - see
-   `.claude/skills/implement-plan/SKILL.md`'s `## Looped Execution Mode`.)
-7. Push and open a PR against `main` when asked for it (`/merge-request`).
+   table in `CLAUDE.md`. (`/wurk:implement --loop` performs this step once per
+   phase rather than once at the end - see the installed `wurk:implement`
+   skill's `## Looped execution mode`.)
+7. Push and open a PR against `main` when asked for it (`/wurk:mr`).
    Finishing the work is not itself a request to publish it, so this step and the
    merge keep a human gate.
 8. `bd close` once the branch is merged into `origin/main`, not at commit or at
    PR-open time; `bd dolt push` follows, after the git side has reached `origin`.
-   `/cleanup-worktrees` does both, keyed on the `Refs:` trailers in the merged
+   `/wurk:cleanup` does both, keyed on the `Refs:` trailers in the merged
    PR's commits, so every bead the branch carried is closed.
 9. Remove the merged worktree and let the branch die with the merge (same skill,
-   same detection); refresh the surviving worktrees (`/refresh-worktree`).
+   same detection); refresh the surviving worktrees (`/wurk:refresh`).
 10. Decisions that surfaced during the work become ADR amendments (Fable).
 
 ## Versioning and the changelog
