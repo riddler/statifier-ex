@@ -147,11 +147,13 @@ preserve when it does:
 
 For the Phase 1 interpreter work and its reviews:
 
-- [ ] machine_state struct holds configuration, internal queue, history,
+- [x] machine_state struct holds configuration, internal queue, history,
       datamodel, `running`, and step counters - no interpreter loop variable
-      that is not reconstructible from the struct
+      that is not reconstructible from the struct (`Statifier.MachineState`,
+      st-wju.2)
 - [ ] `microstep` step function exists; macrostep folds over it
-- [ ] trace effect types defined with the vocabulary above; emission gated
+- [x] trace effect types defined with the vocabulary above; emission gated
+      (`Statifier.Effect`, `Statifier.Effect.Trace.*`, st-wju.2)
 - [x] compiler retains locations on states, transitions, executable content
       (`Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`,
       st-wju.1)
@@ -160,5 +162,6 @@ For the Phase 1 interpreter work and its reviews:
       `%Predicator.Compiled{}` whole, st-wju.1)
 - [x] compiler assigns document-order indexes to transitions and
       executable-content nodes (`t_index`/`c_index`, dense from 0, st-wju.1)
-- [ ] internally raised events carry cause metadata (identity + step)
+- [x] internally raised events carry cause metadata (identity + step)
+      (`Statifier.Event.Cause`, `MachineState.raise_internal/4`, st-wju.2)
 - [ ] Appendix D query functions take/return plain values, unfused
