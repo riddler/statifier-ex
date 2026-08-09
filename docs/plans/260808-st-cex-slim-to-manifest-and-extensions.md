@@ -435,14 +435,14 @@ the fullest statements and are deleted in Phase 3.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All six files exist: `ls .claude/wurk` lists exactly `commit.md`,
+- [x] All six files exist: `ls .claude/wurk` lists exactly `commit.md`,
       `implement.md`, `iterate.md`, `mr.md`, `plan.md`, `research.md`
-- [ ] No extension file names a script path that no longer resolves:
+- [x] No extension file names a script path that no longer resolves:
       `git grep -n '\.claude/scripts' -- .claude/wurk` returns nothing
-- [ ] No extension file names an old slash-command or agent:
+- [x] No extension file names an old slash-command or agent:
       `git grep -nE '/(commit|create-plan|iterate-plan|implement-plan|research-codebase|merge-request|work|next-issues?|new-worktree|refresh-worktree|cleanup-worktrees|create-issue)\b|thoughts-(locator|analyzer)' -- .claude/wurk`
       returns nothing
-- [ ] Full `mix quality` is green (the diff touches no gated path, so the
+- [x] Full `mix quality` is green (the diff touches no gated path, so the
       kit reports the carve-out; say "docs only, no quality gate applicable"
       rather than implying a green run that never happened - and run the full
       gate anyway to confirm the tree was already green)
@@ -860,3 +860,30 @@ test.
 - Installed generic skills: `~/.claude/skills/wurk:commit/SKILL.md`,
   `wurk:mr`, `wurk:plan`, `wurk:iterate`, `wurk:implement`, `wurk:research`,
   `wurk:work`, and `~/.claude/skills/wurk:kit/REFERENCE.md`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Each file reads as an **addition** to its generic skill: nothing in it
+      restates or contradicts `~/.claude/skills/wurk:<name>/SKILL.md`
+- [ ] `implement.md` is self-contained enough to be handed by path to a
+      subagent with no other context - the sabotage protocol in particular
+      needs no external read to follow
+- [ ] `iterate.md` does not duplicate `plan.md`; it points at it
+- [ ] Nothing from the extraction table is missing: sabotage protocol, ADR
+      judge, corpus/ratchet criteria, Appendix D rule, pipeline vocabulary
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
