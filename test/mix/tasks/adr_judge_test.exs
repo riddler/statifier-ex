@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   alias Statifier.TmpDir
 
   @no_scoped_changes_summary "no files in this diff are in a judged ADR scope " <>
-                               "(lib/statifier/, .claude/wurk/**)"
+                               "(lib/statifier/, .claude/wurk/** and .claude/wurk.json)"
 
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
@@ -336,7 +336,8 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   #           for either registered scope, while the sabotaged default never
   #           gets past the CLI check, so the skip reason changes from "no
   #           files in this diff are in a judged ADR scope (lib/statifier/,
-  #           .claude/wurk/**)" to "claude CLI not on PATH"
+  #           .claude/wurk/** and .claude/wurk.json)" to "claude CLI not on
+  #           PATH"
   test "execute/1 falls back to the real cli_available and git checks" do
     repo_dir = scratch_repo_dir()
     File.rm_rf!(repo_dir)
