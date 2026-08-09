@@ -8,7 +8,12 @@ defmodule Statifier.Effect.Trace.ContentExecuted do
   `owner` names which block ran, since a state may write several `<onentry>`
   or `<onexit>` elements and `Statifier.Machine.State.onentry`/`onexit` are
   lists of `Statifier.Machine.Block.t()` with no index of their own - the
-  `ordinal` is the block's position in that list:
+  `ordinal` is the block's position in that list. The type itself lives on
+  `Statifier.Machine.Content.owner/0` (it describes where a content node
+  lives, so that module is its natural home); this module aliases it rather
+  than redefining it, and `Statifier.Event.Cause.origin/0` embeds the same
+  type for its `:content` case (post-review correction, plan
+  `docs/plans/260809-st-wju.2-machine-state-event-effects-vocabulary.md`):
 
   - `{:onentry, state_index, ordinal}` - an `<onentry>` block
   - `{:onexit, state_index, ordinal}` - an `<onexit>` block
@@ -18,13 +23,11 @@ defmodule Statifier.Effect.Trace.ContentExecuted do
   are always stamped from the `Statifier.MachineState` at hand (Decision 4).
   """
 
+  alias Statifier.Machine.Content
   alias Statifier.MachineState
 
-  @typedoc "Which block of executable content produced `c_indexes`."
-  @type owner ::
-          {:onentry, non_neg_integer(), non_neg_integer()}
-          | {:onexit, non_neg_integer(), non_neg_integer()}
-          | {:transition, non_neg_integer()}
+  @typedoc "Which block of executable content produced `c_indexes` - `Statifier.Machine.Content.owner/0`."
+  @type owner :: Content.owner()
 
   @enforce_keys [:owner, :c_indexes, :macrostep, :microstep]
   defstruct [:owner, :c_indexes, :macrostep, :microstep]

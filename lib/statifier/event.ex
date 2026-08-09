@@ -61,10 +61,12 @@ defmodule Statifier.Event do
   end
 
   @doc """
-  An event raised by executable content in the document (`<raise>`,
-  `<send>` with no delay, and similar) - `cause` travels through unchanged
-  from the caller, which built it from the raising node's identity and the
-  current counters.
+  An event raised by executable content in the document - spec 5.10.1
+  restricts `type: :internal` to `<raise>` and `<send>` with
+  `target="#_internal"`; a `<send>` with no `target` goes to the sending
+  session's *external* queue and is `type: :external` instead, not this
+  constructor. `cause` travels through unchanged from the caller, which
+  built it from the raising node's identity and the current counters.
   """
   @spec internal(name :: String.t(), cause :: Cause.t(), opts :: keyword()) :: t()
   def internal(name, %Cause{} = cause, opts \\ []) do

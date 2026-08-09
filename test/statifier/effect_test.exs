@@ -23,7 +23,7 @@ defmodule Statifier.EffectTest do
       {:send, %Send{event: "e", macrostep: 1, microstep: 1}},
       {:send_delayed, %SendDelayed{event: "e", delay_ms: 100, macrostep: 1, microstep: 1}},
       {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}},
-      {:invoke, %Invoke{invoke_id: "i1", source: 0, macrostep: 1, microstep: 1}},
+      {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
       {:done, %Done{macrostep: 1, microstep: 1}},
       {:log, %Log{macrostep: 1, microstep: 1}}
     ]

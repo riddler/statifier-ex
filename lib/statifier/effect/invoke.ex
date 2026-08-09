@@ -7,20 +7,25 @@ defmodule Statifier.Effect.Invoke do
   attribute).
 
   `<invoke>` is attached to a state, not to a block of executable content,
-  so this payload carries `source` - the invoking state's index (constraint
-  3) - rather than a `c_index`; there is no content node to identify.
+  so this payload carries `state_index` - the invoking state's index
+  (constraint 3) - rather than a `c_index`; there is no content node to
+  identify. `state_index` is named apart from `src` (spec 6.4's URI
+  attribute) on purpose - the two fields are two letters apart with
+  unrelated meanings, and the original `source` name invited confusing them
+  (post-review correction, plan
+  `docs/plans/260809-st-wju.2-machine-state-event-effects-vocabulary.md`).
   `macrostep`/`microstep` are the counters as they stood when the invoke was
   produced (Decision 5). st-cmq owns invoke semantics and may add fields.
   """
 
-  @enforce_keys [:invoke_id, :source, :macrostep, :microstep]
+  @enforce_keys [:invoke_id, :state_index, :macrostep, :microstep]
   defstruct [
     :invoke_id,
     :type,
     :src,
     :params,
     :autoforward,
-    :source,
+    :state_index,
     :macrostep,
     :microstep
   ]
@@ -31,7 +36,7 @@ defmodule Statifier.Effect.Invoke do
           src: String.t() | nil,
           params: term(),
           autoforward: boolean() | nil,
-          source: non_neg_integer(),
+          state_index: non_neg_integer(),
           macrostep: non_neg_integer(),
           microstep: non_neg_integer()
         }

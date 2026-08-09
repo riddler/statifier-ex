@@ -36,6 +36,25 @@ defmodule Statifier.Machine.Content do
     expr_location: nil
   ]
 
+  @typedoc """
+  Which block of executable content a node lives in - the block identity a
+  `c_index` alone does not carry, since a state may write several
+  `<onentry>`/`<onexit>` elements and a block has no index of its own (the
+  `ordinal` is the block's position in its state's `onentry`/`onexit` list):
+
+  - `{:onentry, state_index, ordinal}` - an `<onentry>` block
+  - `{:onexit, state_index, ordinal}` - an `<onexit>` block
+  - `{:transition, t_index}` - a transition's own executable content
+
+  The shared home for this concept: `Statifier.Effect.Trace.ContentExecuted`
+  aliases it for its own `owner` field, and `Statifier.Event.Cause.origin`
+  embeds it for a `:content` cause, rather than either redefining it.
+  """
+  @type owner ::
+          {:onentry, non_neg_integer(), non_neg_integer()}
+          | {:onexit, non_neg_integer(), non_neg_integer()}
+          | {:transition, non_neg_integer()}
+
   @type t :: %__MODULE__{
           c_index: non_neg_integer(),
           kind: :raise | :log,

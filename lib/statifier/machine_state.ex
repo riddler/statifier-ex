@@ -225,6 +225,11 @@ defmodule Statifier.MachineState do
   (`done.state.*`) and st-wju.5 (`<raise>`) call; there is no
   `raise_platform/4` sibling here (st-af3 decides whether `error.execution`
   needs one).
+
+  `origin` is `Cause.origin/0`: st-wju.5's `<raise>` passes
+  `{:content, c_index, owner}` (the raising node and its owning
+  onentry/onexit/transition block); st-wju.4's `done.state.*` on entering a
+  final state passes `{:state, state_index}` (no content node backs it).
   """
   @spec raise_internal(
           machine_state :: t(),
