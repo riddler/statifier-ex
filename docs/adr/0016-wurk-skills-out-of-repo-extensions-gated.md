@@ -109,21 +109,51 @@ Concretely:
   is worth naming, because "the judge is green" now means less than it did on
   2026-08-06.
 
-Two open questions are recorded here rather than guessed at, both for a
-maintainer:
+Two open questions were recorded here rather than guessed at. Both were put to a
+maintainer on 2026-08-09 and both are now answered; the questions are kept
+because the second answer is a standing instruction to watch rather than a
+change made.
 
 - **Should `.claude/wurk/` be listed in `gate.also_gated_paths`?** It is not
   today, so a branch that edits only extension prose reports "no gate
   applicable" and carves out - while `AdrJudge` holds a scope over exactly those
-  paths. The mismatch is currently harmless: the judge runs only under
-  `--profile merge` and skips cleanly, so nothing is silently unmeasured on a
-  path anyone runs. But it is the same conflation ADR-0015's Consequences
-  describe learning the expensive way under st-hzf, and it will stop being
-  harmless the moment an extension-only branch is expected to be judged before
-  merge. Left unchanged here because listing the path is a gate-config change
-  and ADR-0011 makes that a human's call.
+  paths. The mismatch looked like the conflation ADR-0015's Consequences
+  describe learning the expensive way under st-hzf.
+
+  **Resolved: no, and the question had the defect backwards.**
+  `gate.also_gated_paths` means *paths with no build impact that a gate stage
+  still measures*, and no stage in the ordinary gate measures `.claude/wurk/`:
+  `.quality.exs` sets `adr_judge: [enabled: false]` and only the `:merge`
+  profile re-enables it. Listing the path would make an extension-only branch
+  run format, credo, dialyzer and the full suite with coverage over Elixir code
+  it never touched, and *still* not run the judge - cost with nothing measured,
+  which is the st-hzf conflation pointing the other way. The judge already has
+  the correct seam: `.claude/wurk/mr.md` invokes `mix quality --profile merge`
+  directly, outside the carve-out, because a check that costs money and a
+  network round trip belongs at merge time rather than at commit time.
+
+  The real defect the question surfaced is prose, not gate config, so it is
+  ordinary work rather than an ADR-0011 human call: `mr.md` still lists the
+  judge's clean-skip conditions as "no `lib/statifier/` changes", which stopped
+  being true when st-6yb registered the `.claude/wurk/` scope. A reader
+  following it today would believe an extension-only branch skips the judge when
+  in fact it is judged - the opposite of the hazard this question named. Tracked
+  as st-fvx, together with the step's ambiguous "after step 4's gate passes"
+  framing.
 - **Does the ADR-0015 constraint-4 judge still have material to read?** Its
   scope was thirteen SKILL.md files; it is now six extension files that are
   mostly additive domain prose. If the judge's findings go to zero because the
   judgment-bearing prose moved upstream, the honest response is to retire the
   scope or move the check to wurk, not to leave a scope that cannot fire.
+
+  **Resolved: keep it, and watch rather than decide.** The scope shrank in file
+  count but not in relevance. Constraint 4 catches prose that hands a policy
+  call or a human gate to a script; the generic skills' judgment now lives
+  upstream and is not this repo's to police, while the six extension files are
+  the whole of this project's judgment surface - the commit-time sabotage
+  refusal, the ADR-0011 ledger rule, this ADR's own merge-time judge step. That
+  is denser in exactly the prose constraint 4 exists to protect than a skill set
+  where the judge read past a great deal of mechanical text to reach it.
+  Watching is cheap because the stage is opt-in and merge-time: it costs nothing
+  until an extension-touching branch opens a request. Revisit on evidence -
+  several such branches judged with no finding - not on the file count.
