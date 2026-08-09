@@ -569,16 +569,16 @@ record), all 13 `docs/plans/` and 3 `docs/research/` documents (dated),
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] No old slash-command name survives in living prose:
+- [x] No old slash-command name survives in living prose:
       `git grep -nE '/(commit|create-plan|iterate-plan|implement-plan|research-codebase|merge-request|work|next-issues?|new-worktree|refresh-worktree|cleanup-worktrees|create-issue)\b' -- CLAUDE.md docs/workflow.md`
       returns nothing
-- [ ] No pointer into a deleted tree survives in living prose:
+- [x] No pointer into a deleted tree survives in living prose:
       `git grep -nE '\.claude/(skills|scripts|agents)' -- CLAUDE.md docs/workflow.md`
       returns nothing
-- [ ] `docs/skill-automation.md` still contains its classification tables
+- [x] `docs/skill-automation.md` still contains its classification tables
       (`git grep -c 'implement-plan' docs/skill-automation.md` is unchanged
       from before the edit) and its new header names `st-cex` and ADR-0015
-- [ ] Full `mix quality` is green (docs-only diff; the kit reports the
+- [x] Full `mix quality` is green (docs-only diff; the kit reports the
       carve-out - report it as such, not as a green run)
 
 #### Manual Verification:
@@ -877,6 +877,28 @@ before considering the plan fully landed.
 - [ ] `iterate.md` does not duplicate `plan.md`; it points at it
 - [ ] Nothing from the extraction table is missing: sabotage protocol, ADR
       judge, corpus/ratchet criteria, Appendix D rule, pipeline vocabulary
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] `CLAUDE.md`'s authority table still reads correctly with the new names:
+      each trigger and each "still unauthorized when" clause still describes
+      the skill it now points at
+- [ ] `docs/workflow.md`'s `/wurk:next` paragraphs read as one skill with an
+      `n`, not as two skills awkwardly merged
+- [ ] The `area:skills` row's new `Covers` value matches what an `area:skills`
+      bead would now actually touch
+- [ ] `docs/skill-automation.md` reads unambiguously as a dated record; no
+      reader would take its line numbers as current
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

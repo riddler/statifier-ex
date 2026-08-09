@@ -31,8 +31,8 @@ orchestrator overrides every row here.
 | `bd` task tracking (`create`, `claim`, `update`, `note`) | any time | never - this is the default profile too |
 | `mix quality` in any profile | any time | never - running the gate costs nothing but time |
 | `git commit` on the issue's worktree branch | the claimed issue's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on `main`, on a red gate, on a `--quick` or `--test-scope changed` run, or with unrelated changes in the tree |
-| `git rebase` onto `origin/main` in a worktree (`/refresh-worktree`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
-| `git push`, `gh pr create` (`/merge-request`) | the user asks for it in their own words - invoking `/merge-request` itself satisfies this, so the skill does not stop to ask again | inferred from "the work is done"; finishing an issue is not a request to publish it |
+| `git rebase` onto `origin/main` in a worktree (`/wurk:refresh`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
+| `git push`, `gh pr create` (`/wurk:mr`) | the user asks for it in their own words - invoking `/wurk:mr` itself satisfies this, so the skill does not stop to ask again | inferred from "the work is done"; finishing an issue is not a request to publish it |
 | `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
@@ -42,19 +42,19 @@ being reversible. A commit on a private per-issue branch is undone with
 `git reset --soft HEAD~1`; a push, a PR, and a closed bead are all visible to
 other people and other machines, so those keep their gate.
 
-In `/implement-plan --loop` mode, each phase's own green automated gate counts
+In `/wurk:implement --loop` mode, each phase's own green automated gate counts
 as "the claimed issue's work is complete" for that increment's commit - the
 table's existing conditions (worktree branch, green gate, no unrelated
 changes) apply identically per phase; this only changes the granularity at
-which completeness is judged. See
-`.claude/skills/implement-plan/SKILL.md`'s `## Looped Execution Mode`.
+which completeness is judged. See the installed `wurk:implement` skill's
+`## Looped execution mode`.
 
 Where the `--loop` paragraph constrains *when* a trigger has fired, this one
 constrains *who* may act on it. Authority in this table always
 belongs to the session that owns the work, not to a subagent it delegates to. A
 subagent spawned to implement a phase or a chore does not commit, does not run
 the full gate as its own bar, and does not close a bead - the orchestrator that
-spawned it runs `/commit --auto` afterwards, so the gate is independent of the
+spawned it runs `/wurk:commit --auto` afterwards, so the gate is independent of the
 subagent's self-report. A subagent that believes it has satisfied a trigger
 reports that; it does not act on it. This narrows the table rather than widening
 it: an edit that widened it would be a human's call, not an agent's.
@@ -76,6 +76,14 @@ Statifier-ex: a ground-up rewrite of the SCXML statecharts engine at
 `../statifier` (the original, read-only reference). The rewrite is a literal
 port of the W3C SCXML Appendix D algorithm over a pure functional core. Always
 refer to state machines as **state charts**.
+
+This repo's workflow runs on the generic `wurk:*` skills. `.claude/wurk.json`
+is the project manifest they read for every project-specific value (beads
+areas, worktree layout, gate commands); `.claude/wurk/*.md` are the extension
+files - `commit.md`, `mr.md`, `plan.md`, `iterate.md`, `implement.md`,
+`research.md` - that each matching `wurk:*` skill reads for the judgment
+calls only this project needs, additive to and never overriding the generic
+skill.
 
 Read before making design decisions:
 
