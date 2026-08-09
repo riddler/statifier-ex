@@ -177,4 +177,6 @@ could be delegated to a cheaper model and why. (As of ADR-0016: the scripts and
 their maintenance surface moved to the `wurk` repo with everything else this
 paragraph describes, and `docs/skill-automation.md` no longer carries that
 classification - see ADR-0016 and `docs/workflow.md`'s Model roles section for
-where model routing is decided today.)
+where model routing is decided today. st-ct0 later deleted the file itself,
+once it said nothing beyond what those two already say; the audit's content
+survives as the `docs/research/` snapshot cited above.)
