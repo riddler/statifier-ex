@@ -33,7 +33,14 @@
     "guard_ledger": "docs/quality-gate-changes.md",
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
     "also_gated_paths": [],
-    "moving_files": [".quality.exs", ".credo.exs", "coveralls.json"]
+    "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"],
+    "project_level_skips": [
+      "^:doctor not installed$",
+      "^:gettext not installed$",
+      "^no \\.po files found$",
+      "^no \\.po files outside the source locale$",
+      "^disabled in \\.quality\\.exs$"
+    ]
   },
 
   "parallelism": {
