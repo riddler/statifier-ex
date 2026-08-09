@@ -26,17 +26,18 @@ defmodule Statifier.Machine.State do
   | `history_type` | `:history` | Phase 2 |
   | `history_children` | any compound/parallel state - its own direct `:history` children, so exit-time recording finds them without scanning | Phase 2 |
   | `transitions` | `:state`, `:parallel`, `:history` - the state's own selectable transitions' `t_index` list | Phase 4 |
-  | `onentry` / `onexit` | any | Phase 5 |
+  | `onentry` / `onexit` | any - `[Machine.Block.t()]`, one entry per `<onentry>`/`<onexit>` element the state wrote | Phase 5 |
   | `initial_transition` | `:state`, `:scxml` - the `<initial>` element's transition `t_index`, or `nil` | Phase 4 |
   | `history_default` | `:history` - its default transition's `t_index` | Phase 4 |
-  | `donedata` | `:final` | Phase 5 |
+  | `donedata` | `:final` - the compiled `Machine.Donedata.t()`, or `nil` | Phase 5 |
 
-  `transitions`, `onentry`, `onexit`, `initial_transition`, `history_default`,
-  and `donedata` are declared here but left at their empty defaults until
-  Phases 4 and 5 populate them, so the struct shape does not change under a
-  later phase.
+  `transitions`, `initial_transition`, and `history_default` are declared
+  here but left at their empty defaults until Phase 4 populates them, so the
+  struct shape does not change under a later phase.
   """
 
+  alias Statifier.Machine.Block
+  alias Statifier.Machine.Donedata
   alias Statifier.Parser.Location
 
   @enforce_keys [:index, :kind, :last, :location]
@@ -70,11 +71,11 @@ defmodule Statifier.Machine.State do
           history_type: :shallow | :deep | nil,
           history_children: [non_neg_integer()],
           transitions: [non_neg_integer()],
-          onentry: [term()],
-          onexit: [term()],
+          onentry: [Block.t()],
+          onexit: [Block.t()],
           initial_transition: non_neg_integer() | nil,
           history_default: non_neg_integer() | nil,
-          donedata: term() | nil,
+          donedata: Donedata.t() | nil,
           location: Location.t()
         }
 end
