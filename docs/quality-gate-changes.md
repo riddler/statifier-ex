@@ -13,6 +13,24 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-09 - st-6yb
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: removes the script_tests custom stage (`ruby
+  .claude/scripts/test/run.rb`) and its explanatory comment block
+
+Reason: st-6yb deletes the whole `.claude/scripts/` tree - the kit it tested
+now lives at `~/.claude/skills/wurk:kit/scripts/` and every skill already
+calls it there. st-cex left the tree in place specifically so this bead could
+move the deletion and the gate config together. The stage ran a directory
+that no longer exists and carried no `skip_exit_code`, so leaving it
+registered would make every future `mix quality` hard red rather than
+reporting a meaningful failure. Retargeting is not available - the suite it
+ran now lives in another repo, with its own gate - so removal is the only
+shape. This removes a stage measuring code that is gone; it loosens no
+remaining check, skips no test that still runs, and lowers no threshold.
+
 ## 2026-08-08 - st-6f7
 
 Approved-by: JohnnyT (in session)

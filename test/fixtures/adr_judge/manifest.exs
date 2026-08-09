@@ -39,12 +39,12 @@
     key: "adr-0015-swallowed-judgment",
     file: "0015_delegated_judgment.diff",
     expect: :violation,
-    note: "a SKILL.md step that stated a policy now delegates it to a script"
+    note: "a wurk extension step that stated a policy now delegates it to a script"
   },
   %{
     key: "adr-0015-swallowed-judgment",
     file: "0015_mechanics_only.diff",
     expect: :clean,
-    note: "SKILL.md step names a script for mechanics, restates the policy in prose"
+    note: "wurk extension step names a script for mechanics, restates the policy in prose"
   }
 ]

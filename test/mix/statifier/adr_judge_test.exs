@@ -589,16 +589,13 @@ defmodule Mix.Statifier.AdrJudgeTest do
     end
   end
 
-  # ADR-0015's registry entry is the first with both a non-nil prefix and a
-  # non-nil suffix live at once (ADR-0012/0014 pin suffix in isolation via a
-  # hand-built scope above; this pins the real registry entry's combination).
   # sabotage: have in_scope?/2 ignore scope.prefix (match any path) -> red
-  #           (both `refute` assertions below would incorrectly pass)
-  test "adr-0015's scope matches only SKILL.md files under .claude/skills/" do
-    assert AdrJudge.in_scope?(".claude/skills/commit/SKILL.md", @adr_0015.scope)
-    refute AdrJudge.in_scope?(".claude/skills/commit/reference.md", @adr_0015.scope)
-    refute AdrJudge.in_scope?("SKILL.md", @adr_0015.scope)
-    refute AdrJudge.in_scope?(".claude/scripts/gate.rb", @adr_0015.scope)
+  #           (the `refute` assertions below would incorrectly pass)
+  test "adr-0015's scope matches only files under .claude/wurk/" do
+    assert AdrJudge.in_scope?(".claude/wurk/commit.md", @adr_0015.scope)
+    assert AdrJudge.in_scope?(".claude/wurk/plan.md", @adr_0015.scope)
+    refute AdrJudge.in_scope?("commit.md", @adr_0015.scope)
+    refute AdrJudge.in_scope?(".claude/skills/commit/SKILL.md", @adr_0015.scope)
   end
 
   # The task's skip reason for "nothing to judge" is built by joining these,
@@ -838,19 +835,19 @@ defmodule Mix.Statifier.AdrJudgeTest do
                match?({:error, _reason}, result)
     end
 
-    # A diff touching only a SKILL.md is in ADR-0015's scope and nobody
-    # else's - it must fan out into exactly one propose prompt (ADR-0015's),
-    # not also one for ADR-0012/ADR-0014's lib/statifier/ scope, which this
-    # diff never touches.
+    # A diff touching only a wurk extension file is in ADR-0015's scope and
+    # nobody else's - it must fan out into exactly one propose prompt
+    # (ADR-0015's), not also one for ADR-0012/ADR-0014's lib/statifier/
+    # scope, which this diff never touches.
     # sabotage: have judged_sources/2 return every @judged entry regardless
     #           of whether scoped_chunks/2 found anything -> red (a second,
     #           empty-chunks propose prompt would be sent for ADR-0012 and
     #           ADR-0014 too)
-    test "a skills-only diff produces exactly the ADR-0015 propose prompt, not a lib/statifier/ one" do
+    test "a wurk-extension-only diff produces exactly the ADR-0015 propose prompt, not a lib/statifier/ one" do
       diff = """
-      diff --git a/.claude/skills/commit/SKILL.md b/.claude/skills/commit/SKILL.md
-      --- a/.claude/skills/commit/SKILL.md
-      +++ b/.claude/skills/commit/SKILL.md
+      diff --git a/.claude/wurk/commit.md b/.claude/wurk/commit.md
+      --- a/.claude/wurk/commit.md
+      +++ b/.claude/wurk/commit.md
       @@ -1,1 +1,1 @@
       -Old step stating the policy directly.
       +New step: run script.rb and follow what it says.

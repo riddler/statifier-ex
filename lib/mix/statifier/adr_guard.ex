@@ -11,10 +11,12 @@ defmodule Mix.Statifier.AdrGuard do
   "deviation".
 
   Deliberately not covered: ADR-0015's banned-operation list for
-  `.claude/scripts/`. That rule is an absolute whole-tree ban, and this
+  `.claude/scripts/`. That rule was an absolute whole-tree ban, and this
   guard's shape (added diff lines only, a citation escape hatch, a skip when
-  no base ref resolves) is wrong for it; `.claude/scripts/test/contract_test.rb`
-  is its permanent enforcement site - see ADR-0015's Consequences.
+  no base ref resolves) was wrong for it; `.claude/scripts/test/contract_test.rb`
+  was its permanent enforcement site until both the tree and that test were
+  removed once the kit's mechanics moved to another repo (st-6yb) - see
+  ADR-0015's Consequences for the historical detail.
 
   The naming check is the one with judgment in it. An exactly-spelled Appendix D
   name is compliant and an unrelated helper is none of this check's business;

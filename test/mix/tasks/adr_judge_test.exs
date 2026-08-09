@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   alias Statifier.TmpDir
 
   @no_scoped_changes_summary "no files in this diff are in a judged ADR scope " <>
-                               "(lib/statifier/, .claude/skills/**/SKILL.md)"
+                               "(lib/statifier/, .claude/wurk/**)"
 
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
@@ -314,8 +314,9 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # a `caller` - this can never shell out to the real `claude` CLI,
   # regardless of what this worktree's own lib/statifier/ looks like.
   #
-  # The registry now also carries ADR-0015's `.claude/skills/**/SKILL.md`
-  # scope (st-laz), so the premise widens to cover it too: the seeded repo has
+  # The registry now also carries ADR-0015's `.claude/wurk/**` scope
+  # (st-laz, rescoped from `.claude/skills/**/SKILL.md` under st-6yb), so the
+  # premise widens to cover it too: the seeded repo has
   # one `README.md` and no `.claude/` tree at all, so it is out of scope for
   # every registered ADR, not just the lib/statifier/ ones - the skip still
   # fires the same way.
@@ -335,7 +336,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   #           for either registered scope, while the sabotaged default never
   #           gets past the CLI check, so the skip reason changes from "no
   #           files in this diff are in a judged ADR scope (lib/statifier/,
-  #           .claude/skills/**/SKILL.md)" to "claude CLI not on PATH"
+  #           .claude/wurk/**)" to "claude CLI not on PATH"
   test "execute/1 falls back to the real cli_available and git checks" do
     repo_dir = scratch_repo_dir()
     File.rm_rf!(repo_dir)

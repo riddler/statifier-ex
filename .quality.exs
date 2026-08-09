@@ -91,34 +91,6 @@
     # 0008 UXIDs), so architectural drift is a named failure rather than
     # something review has to catch. Reader, and absent from the loop profile,
     # for the same reasons as the gate guard above.
-    # The Ruby suite covering .claude/scripts/ (minitest, stdlib only, no
-    # gems - see .claude/scripts/README.md). It is a stage rather than a
-    # hand-run command because the alternative was strictly worse: the
-    # scripts under .claude/scripts/ drive commit, push, PR and worktree
-    # mechanics, and a bare `mix quality` carved out of them entirely (no
-    # lib/, test/, config/ or mix.exs change), so nothing mechanical stood
-    # between a red Ruby suite and a push. st-hzf's own Phase 12 proved the
-    # gap was real: a subagent left a test red, reported the phase done, and
-    # only a hand-run caught it.
-    #
-    # A reader - it shells out to a test harness that reads the scripts and
-    # writes nothing. Absent from the loop profile's `stages:` allow-list, so
-    # `--profile loop` does not run it. `parse: :none` because minitest
-    # prints prose, not the JSON finding contract; the output falls through
-    # verbatim.
-    #
-    # Deliberately no `skip_exit_code`: if Ruby is missing, this stage goes
-    # red rather than reporting itself skipped. A skipped stage is not a
-    # passing one, and the whole point of registering it is that a
-    # `.claude/scripts/` change can no longer reach a push unmeasured.
-    [
-      key: :script_tests,
-      name: "Script tests",
-      command: "ruby",
-      args: [".claude/scripts/test/run.rb"],
-      kind: :reader,
-      parse: :none
-    ],
     [
       key: :adr_guard,
       name: "ADR guard",
