@@ -151,6 +151,12 @@ plan deliberately leaves alone.
 The full `mix quality` gate is green through Phase 3 and red on exactly one
 stage after Phase 4, by design.
 
+> **As landed (2026-08-08):** Phase 4 was handed to `st-6yb`, so `st-cex`
+> stops one step short of the end state above - `.claude/scripts/` is still
+> present and the `test ! -d .claude/scripts` assertion does not yet hold. In
+> exchange every commit on this branch has a genuinely green gate. `st-6yb`
+> reaches the end state as written. See "Open question for the human".
+
 ## What We're NOT Doing
 
 - **No `.quality.exs` edits.** The `Script tests` stage stays registered and
@@ -679,6 +685,14 @@ of blocking here.
 
 ## Phase 4: Delete the scripts tree (gate goes red by design)
 
+> **Not done here. Handed to `st-6yb` on 2026-08-08.** The human resolved the
+> open question below in favor of option 2: the scripts deletion travels with
+> the `.quality.exs` fix and its ADR-0011 ledger entry rather than landing on
+> this branch under a red gate. `.claude/scripts/` therefore survives `st-cex`
+> and is deleted by `st-6yb` (statifier's counterpart to upstream `wu-s36`),
+> which is blocked on this bead. The phase is kept below as the specification
+> `st-6yb` inherits, not as work still owed here.
+
 ### Overview
 
 Remove `.claude/scripts/`. This phase is isolated and last because it is the
@@ -771,6 +785,15 @@ human is needed at its end regardless.
 
 **Should Phase 4 be committed on this branch, or left uncommitted for the
 human to sequence against `wu-s36`?**
+
+> **Resolved 2026-08-08: option 2.** Phase 4 is handed to `st-6yb`, the
+> statifier-side bead for the gate rewiring (upstream `wu-s36`), which is
+> blocked on `st-cex`. The staged deletion was reset, so `.claude/scripts/`
+> stands restored at HEAD and every commit on this branch has an honest green
+> gate. `st-6yb` deletes the tree, removes the `Script tests` stage, drops the
+> dead `gate.also_gated_paths` entries, and carries the human-written ledger
+> entry - one gate change in one commit instead of two halves on either side
+> of a red run. The record below is kept as the reasoning, unedited.
 
 The plan deliberately does not answer this, and no agent should answer it by
 editing gate config.
@@ -869,13 +892,13 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Each file reads as an **addition** to its generic skill: nothing in it
+- [x] Each file reads as an **addition** to its generic skill: nothing in it
       restates or contradicts `~/.claude/skills/wurk:<name>/SKILL.md`
-- [ ] `implement.md` is self-contained enough to be handed by path to a
+- [x] `implement.md` is self-contained enough to be handed by path to a
       subagent with no other context - the sabotage protocol in particular
       needs no external read to follow
-- [ ] `iterate.md` does not duplicate `plan.md`; it points at it
-- [ ] Nothing from the extraction table is missing: sabotage protocol, ADR
+- [x] `iterate.md` does not duplicate `plan.md`; it points at it
+- [x] Nothing from the extraction table is missing: sabotage protocol, ADR
       judge, corpus/ratchet criteria, Appendix D rule, pipeline vocabulary
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
@@ -890,14 +913,14 @@ of blocking here.
 
 ### Phase 2
 
-- [ ] `CLAUDE.md`'s authority table still reads correctly with the new names:
+- [x] `CLAUDE.md`'s authority table still reads correctly with the new names:
       each trigger and each "still unauthorized when" clause still describes
       the skill it now points at
-- [ ] `docs/workflow.md`'s `/wurk:next` paragraphs read as one skill with an
+- [x] `docs/workflow.md`'s `/wurk:next` paragraphs read as one skill with an
       `n`, not as two skills awkwardly merged
-- [ ] The `area:skills` row's new `Covers` value matches what an `area:skills`
+- [x] The `area:skills` row's new `Covers` value matches what an `area:skills`
       bead would now actually touch
-- [ ] `docs/skill-automation.md` reads unambiguously as a dated record; no
+- [x] `docs/skill-automation.md` reads unambiguously as a dated record; no
       reader would take its line numbers as current
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
@@ -912,12 +935,12 @@ of blocking here.
 
 ### Phase 3
 
-- [ ] A fresh Claude session in this checkout still resolves `/wurk:commit`,
+- [x] A fresh Claude session in this checkout still resolves `/wurk:commit`,
       `/wurk:plan`, and the rest from `~/.claude/skills/`
-- [ ] The `wurk-codebase-locator` and `wurk-docs-locator` agents are
+- [x] The `wurk-codebase-locator` and `wurk-docs-locator` agents are
       spawnable and the removed local agent names no longer appear in the
       agent list
-- [ ] Nothing in `.claude/wurk/*.md` written in Phase 1 turns out to have
+- [x] Nothing in `.claude/wurk/*.md` written in Phase 1 turns out to have
       depended on a file just deleted
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
