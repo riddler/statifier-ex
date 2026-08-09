@@ -1,6 +1,18 @@
 # ADR-0015: Skill mechanics live in scripts, judgment lives in prose
 
-Status: accepted (2026-08-06)
+Status: accepted (2026-08-06) - amended by ADR-0016 (2026-08-09)
+
+**Amendment note.** [ADR-0016](0016-wurk-skills-out-of-repo-extensions-gated.md)
+amends this record in two places: the location clause below (`.claude/scripts/`,
+`.claude/skills/**/SKILL.md`) is superseded by wurk ADR-0002 and ADR-0004 now
+that the skills and scripts live in the separate `wurk` repo, and constraint 5
+("anything the scripts do must be measured by the gate") is honored by wurk's
+own gate rather than by `mix quality`. The decision's principle and constraints
+1-4 remain live and are still what `Mix.Statifier.AdrGuard` and
+`Mix.Statifier.AdrJudge` enforce, now scoped to `.claude/wurk/`. What follows
+below is the record as it stood on 2026-08-06 and is otherwise left unedited;
+read it as history for the location and enforcement-site claims, and consult
+ADR-0016 for how each is handled today.
 
 ## Context
 
@@ -86,7 +98,9 @@ what the Elixir compiler builds. `lib/touches_elixir.rb` keeps `any?` (does this
 touch the Elixir build?) and adds `gate_applicable?` (does the gate have anything
 to measure?), which includes `.claude/scripts/`. A future stage measuring
 something else outside `lib/` must be added to `gate_applicable?` in the same
-change, or it will never fire on the branches it exists for.
+change, or it will never fire on the branches it exists for. (As of ADR-0016:
+`.claude/scripts/` and `touches_elixir.rb` both left with the kit; the carve-out
+this paragraph describes is wurk's to make now, not this gate's.)
 
 This consequence was learned the expensive way and is worth recording plainly.
 st-hzf added ~8k lines of Ruby while touching no Elixir, so the carve-out fired
@@ -115,6 +129,11 @@ Enforcement is layered, and deliberately not all in one place:
   constraint names must have a matching Contract rule, so the two cannot
   drift apart silently again (they had - the write checks originally covered
   `.quality.exs` but not `.credo.exs`, `coveralls.json`, or `.sobelow-conf`).
+  (As of ADR-0016: `contract_test.rb` left with the `.claude/scripts/` tree it
+  guarded once the kit's mechanics moved to the `wurk` repo under st-6yb; the
+  ban is enforced there now, by the ported test wurk ADR-0006 describes, and
+  nothing in this repo re-enforces it - see `Mix.Statifier.AdrGuard`'s
+  moduledoc for why a local substitute was deliberately not created.)
 - Constraints 2, 3 and 5 are covered by the suite and by review.
 - Constraint 4 is a judgment call by construction and is enforced by review.
   It is judge-shaped - deciding whether a SKILL.md rewrite quietly delegated
@@ -139,5 +158,9 @@ stdlib only, no gems - the only Ruby guaranteed present), a second test harness,
 and a maintenance surface that drifts if the tools underneath it change - the
 tmux idle classifier in particular is tested against captured ANSI fixtures that
 a Claude Code CLI upgrade can invalidate. The audit's classification is a dated
-snapshot in `docs/research/`; the living version is `docs/skill-automation.md`,
-which also records which steps could be delegated to a cheaper model and why.
+snapshot in `docs/research/`; `docs/skill-automation.md` recorded which steps
+could be delegated to a cheaper model and why. (As of ADR-0016: the scripts and
+their maintenance surface moved to the `wurk` repo with everything else this
+paragraph describes, and `docs/skill-automation.md` no longer carries that
+classification - see ADR-0016 and `docs/workflow.md`'s Model roles section for
+where model routing is decided today.)
