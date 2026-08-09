@@ -3,9 +3,11 @@
 One extra step and two project facts. Adds only - see
 `~/.claude/skills/wurk:mr/SKILL.md` for everything this does not repeat.
 
-## Extra step: the ADR judge (runs after step 4's gate, before step 7's push)
+## Extra step: the ADR judge (unconditional, before step 7's push)
 
-After the full gate passes, run the ADR judge separately:
+Run the ADR judge regardless of whether step 4's gate applied - a
+docs/extension-only diff can carve `gate.rb` out with `applicable: false`, and
+this step does not depend on that:
 
 ```bash
 mix quality --profile merge
@@ -16,8 +18,9 @@ and a network round trip, which is why it is disabled in the ordinary gate run
 and lives in its own profile instead.
 
 - It **skips cleanly** when there is nothing to check (no `claude` CLI on
-  `PATH`, no `lib/statifier/` changes, no base ref) - a skip is fine to push
-  through.
+  `PATH`, no base ref, or the diff touches none of the judged ADR scopes -
+  see `Mix.Statifier.AdrJudge.scope_descriptions/0` for the current list,
+  which includes `.claude/wurk/`) - a skip is fine to push through.
 - **A finding is a hard refuse.** Treat it exactly as a red gate: report it
   and stop. Do not push past an ADR judge finding in the hope it is a false
   positive.
