@@ -129,7 +129,11 @@ and are not enforced here, by anything, on purpose.**
   own supersession record now that the tree it describes has moved" - is
   already gone; st-gh9 trimmed that file to a pointer at `docs/workflow.md`'s
   Model roles section and a pointer at the dated st-hzf research snapshot.
-  Nothing is re-added there.
+  Nothing is re-added there. (st-ct0 later deleted the file outright, on the
+  finding that a pointer document nothing links to and that says nothing
+  beyond `docs/workflow.md`, the ADRs, and the dated research snapshot is a
+  maintenance cost with no reader; the citation bullet above is moot as a
+  result, and this bullet's history stands as written.)
 - Three ADRs now have to be read in order for the full story of the move:
   0015 for why the split exists, 0016 for where the code went and what the
   gate measures, 0017 for what is judged here today. That is one more hop than
