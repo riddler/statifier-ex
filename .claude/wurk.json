@@ -32,7 +32,7 @@
     "attest": ["mix", "gate.verify"],
     "guard_ledger": "docs/quality-gate-changes.md",
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
-    "also_gated_paths": [".claude/scripts/", ".claude/skills/"],
+    "also_gated_paths": [],
     "moving_files": [".quality.exs", ".credo.exs", "coveralls.json"]
   },
 

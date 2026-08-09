@@ -1,8 +1,8 @@
-diff --git a/.claude/skills/commit/SKILL.md b/.claude/skills/commit/SKILL.md
---- a/.claude/skills/commit/SKILL.md
-+++ b/.claude/skills/commit/SKILL.md
+diff --git a/.claude/wurk/commit.md b/.claude/wurk/commit.md
+--- a/.claude/wurk/commit.md
++++ b/.claude/wurk/commit.md
 @@ -40,2 +40,3 @@
  Refuse to commit if the diff includes changes unrelated to the claimed issue -
  that judgment call belongs to the person reviewing the commit, not a heuristic.
-+Run `.claude/scripts/commit/diff_summary.rb` to see the changed-files list that
++Run `diff_summary.rb` to see the changed-files list that
 +judgment call is about.

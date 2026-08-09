@@ -78,10 +78,10 @@ defmodule Mix.Statifier.AdrJudge do
     expression granularity; whether a span table or an error's owning-node
     identity survives a refactor is the same kind of question, at finer
     grain.
-  - ADR-0015 constraint 4 (judgment is not scriptable) - whether a SKILL.md
-    rewrite quietly delegated a policy call to a script is exactly the
-    propose/refute shape; ADR-0015's Enforcement section defers it here by
-    name.
+  - ADR-0015 constraint 4 (judgment is not scriptable) - whether a wurk
+    extension file rewrite quietly delegated a policy call to a script is
+    exactly the propose/refute shape; ADR-0015's Enforcement section defers
+    it here by name.
 
   Deliberately not covered:
 
@@ -101,11 +101,13 @@ defmodule Mix.Statifier.AdrJudge do
   - ADR-0011 (quality gate config is not agent-editable) - `gate_guard`'s
     job mechanically; a probabilistic verdict does not belong in the path of
     the gate's own tamper check.
-  - ADR-0015 constraints 1, 2, 3, and 5 - each has its own named enforcement
-    site (constraint 1's is `.claude/scripts/test/contract_test.rb`; 2, 3,
-    and 5 are covered by the script suite), and ADR-0015 says plainly that
-    re-enforcing constraint 1 elsewhere weakens it - the same reasoning rules
-    out judging it here too.
+  - ADR-0015 constraints 1, 2, 3, and 5 - constraint 1's enforcement site
+    (`.claude/scripts/test/contract_test.rb`) was removed along with the
+    `.claude/scripts/` tree it guarded once the kit's mechanics moved to
+    another repo (st-6yb); 2, 3, and 5 were covered by the same script suite.
+    ADR-0015 says plainly that re-enforcing constraint 1 elsewhere weakens
+    it, so the same reasoning still rules out judging it here even though
+    nothing enforces it in this repo today.
   - ADR-0001, ADR-0006, ADR-0007, ADR-0009, ADR-0010, ADR-0013 - process
     decisions (ADR format, the regression ratchet, beads, the gate itself,
     worktrees, repo archival) with no code shape a diff could violate. The
@@ -157,12 +159,13 @@ defmodule Mix.Statifier.AdrJudge do
   # site instead of being written again in the task.
   #
   # The adr-0015-swallowed-judgment entry below judges ADR-0015's constraint
-  # 4 only. Constraints 1, 2, 3, and 5 already have their own enforcement
-  # sites (ADR-0015's Consequences section; constraint 1's is
-  # `.claude/scripts/test/contract_test.rb`) and must not be re-judged here:
-  # ADR-0015 states plainly that re-enforcing constraint 1 through a weaker
-  # mechanism is a regression, and the same reasoning applies to duplicating
-  # any of them through a probabilistic one instead.
+  # 4 only. Constraints 1, 2, 3, and 5 had their own enforcement sites
+  # (ADR-0015's Consequences section; constraint 1's was
+  # `.claude/scripts/test/contract_test.rb`, removed with the rest of
+  # `.claude/scripts/` under st-6yb) and must not be re-judged here: ADR-0015
+  # states plainly that re-enforcing constraint 1 through a weaker mechanism
+  # is a regression, and the same reasoning applies to duplicating any of
+  # them through a probabilistic one instead.
   @judged [
     %{
       key: "adr-0012-debuggability",
@@ -189,9 +192,9 @@ defmodule Mix.Statifier.AdrJudge do
       label: "ADR-0015 constraint 4 (judgment is not scriptable)",
       adr_path: "docs/adr/0015-skill-mechanics-in-scripts.md",
       scope: %{
-        prefix: ".claude/skills/",
-        suffix: "SKILL.md",
-        describe: ".claude/skills/**/SKILL.md"
+        prefix: ".claude/wurk/",
+        suffix: nil,
+        describe: ".claude/wurk/**"
       },
       focus:
         "prose that hands a policy call, a human gate, or a verification " <>
