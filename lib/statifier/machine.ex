@@ -25,8 +25,8 @@ defmodule Statifier.Machine do
 
   `transitions` and `contents` are dense tuples indexed by `t_index`/`c_index`
   (ADR-0012 item 3). Phase 4 populates `transitions` (`transition/2` below is
-  its `elem/2` reader, mirroring `at/2`); `contents` is still empty and
-  Phase 5 populates it without changing this struct's shape.
+  its `elem/2` reader, mirroring `at/2`); Phase 5 populates `contents`
+  (`content/2` below, the same `elem/2` reader shape).
 
   ## Expressions
 
@@ -44,6 +44,7 @@ defmodule Statifier.Machine do
   Decision 3 rejects for `first`. `initial/1` reads it off index 0.
   """
 
+  alias Statifier.Machine.Content
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.Parser.Location
@@ -96,6 +97,15 @@ defmodule Statifier.Machine do
   """
   @spec transition(machine :: t(), t_index :: non_neg_integer()) :: Transition.t()
   def transition(%__MODULE__{transitions: transitions}, t_index), do: elem(transitions, t_index)
+
+  @doc """
+  The executable-content node at `c_index`, raised if out of range - every
+  `c_index` this module hands back (via a block's `content` or a
+  transition's `content`) came from the Machine itself, so an out-of-range
+  index is always a caller bug (mirrors `at/2` and `transition/2`).
+  """
+  @spec content(machine :: t(), c_index :: non_neg_integer()) :: Content.t()
+  def content(%__MODULE__{contents: contents}, c_index), do: elem(contents, c_index)
 
   @doc """
   Whether `descendant` is `ancestor` or one of `ancestor`'s descendants.
