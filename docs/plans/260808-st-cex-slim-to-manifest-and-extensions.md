@@ -645,14 +645,14 @@ Six files: `codebase-analyzer.md`, `codebase-locator.md`,
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `test ! -d .claude/skills && test ! -d .claude/agents` succeeds
-- [ ] `.claude/scripts/` is untouched: `git diff --name-only` for this phase
+- [x] `test ! -d .claude/skills && test ! -d .claude/agents` succeeds
+- [x] `.claude/scripts/` is untouched: `git diff --name-only` for this phase
       shows no path under `.claude/scripts/`
-- [ ] **Full `mix quality` is green**, all stages, including `Script tests`
+- [x] **Full `mix quality` is green**, all stages, including `Script tests`
       (its harness is still present) and `Gate guard` (no guarded path is in
       the diff, so no ledger entry is needed or permitted)
-- [ ] `mix gate.verify` attests the run was full, not profiled or scoped
-- [ ] Elixir tests still pass, specifically
+- [x] `mix gate.verify` attests the run was full, not profiled or scoped
+- [x] Elixir tests still pass, specifically
       `test/mix/statifier/adr_judge_test.exs` and
       `test/mix/tasks/adr_judge_test.exs` - they assert against synthetic
       diff strings and never read the filesystem, so the deletion must not
@@ -899,6 +899,26 @@ of blocking here.
       bead would now actually touch
 - [ ] `docs/skill-automation.md` reads unambiguously as a dated record; no
       reader would take its line numbers as current
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] A fresh Claude session in this checkout still resolves `/wurk:commit`,
+      `/wurk:plan`, and the rest from `~/.claude/skills/`
+- [ ] The `wurk-codebase-locator` and `wurk-docs-locator` agents are
+      spawnable and the removed local agent names no longer appear in the
+      agent list
+- [ ] Nothing in `.claude/wurk/*.md` written in Phase 1 turns out to have
+      depended on a file just deleted
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
