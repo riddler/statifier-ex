@@ -1,0 +1,123 @@
+defmodule Statifier.Effect.TraceTest do
+  use ExUnit.Case, async: true
+
+  alias Statifier.Effect.Trace.ContentExecuted
+  alias Statifier.Effect.Trace.Done
+  alias Statifier.Effect.Trace.EntrySet
+  alias Statifier.Effect.Trace.EventDequeued
+  alias Statifier.Effect.Trace.ExitSet
+  alias Statifier.Effect.Trace.MacrostepStable
+  alias Statifier.Effect.Trace.TransitionsSelected
+  alias Statifier.Event
+  alias Statifier.MachineState
+
+  # `new/2` never inspects `:machine` - a placeholder is enough for every
+  # payload module under test here, which only reads the counters.
+  defp ms(macrostep, microstep) do
+    %MachineState{machine: :placeholder, macrostep: macrostep, microstep: microstep}
+  end
+
+  describe "EventDequeued.new/2" do
+    # sabotage: `EventDequeued.new/2` hardcodes `macrostep: 0, microstep: 0`
+    # instead of reading them off `machine_state` -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      event = Event.external("go")
+
+      payload = EventDequeued.new(ms(3, 2), event: event, from: :external)
+
+      assert %EventDequeued{event: ^event, from: :external, macrostep: 3, microstep: 2} = payload
+    end
+  end
+
+  describe "TransitionsSelected.new/2" do
+    # sabotage: `TransitionsSelected.new/2` hardcodes `macrostep: 0,
+    # microstep: 0` instead of reading them off `machine_state` -> this
+    # assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      event = Event.external("go")
+
+      payload = TransitionsSelected.new(ms(5, 1), t_indexes: [1, 2], event: event)
+
+      assert %TransitionsSelected{t_indexes: [1, 2], event: ^event, macrostep: 5, microstep: 1} =
+               payload
+    end
+
+    # sabotage: `TransitionsSelected.new/2` requires `:event` to be present
+    # (removing its default `nil` from the struct) -> this eventless-round
+    # call raises instead of defaulting, reddening the test.
+    test "event defaults to nil for an eventless round" do
+      payload = TransitionsSelected.new(ms(1, 1), t_indexes: [])
+
+      assert payload.event == nil
+    end
+  end
+
+  describe "ExitSet.new/2" do
+    # sabotage: `ExitSet.new/2` hardcodes `macrostep: 0, microstep: 0`
+    # instead of reading them off `machine_state` -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      payload = ExitSet.new(ms(2, 4), indexes: [9, 3, 1])
+
+      assert %ExitSet{indexes: [9, 3, 1], macrostep: 2, microstep: 4} = payload
+    end
+  end
+
+  describe "ContentExecuted.new/2" do
+    # sabotage: `ContentExecuted.new/2` hardcodes `macrostep: 0, microstep: 0`
+    # instead of reading them off `machine_state` -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      payload = ContentExecuted.new(ms(4, 1), owner: {:onentry, 3, 0}, c_indexes: [7, 8])
+
+      assert %ContentExecuted{owner: {:onentry, 3, 0}, c_indexes: [7, 8], macrostep: 4} = payload
+      assert payload.microstep == 1
+    end
+  end
+
+  describe "EntrySet.new/2" do
+    # sabotage: `EntrySet.new/2` hardcodes `macrostep: 0, microstep: 0`
+    # instead of reading them off `machine_state` -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      payload = EntrySet.new(ms(6, 3), indexes: [1, 2, 5])
+
+      assert %EntrySet{indexes: [1, 2, 5], macrostep: 6, microstep: 3} = payload
+    end
+  end
+
+  describe "MacrostepStable.new/2" do
+    # sabotage: `MacrostepStable.new/2` hardcodes `macrostep: 0, microstep: 0`
+    # instead of reading them off `machine_state` -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      configuration = MapSet.new([1, 2, 3])
+
+      payload = MacrostepStable.new(ms(7, 2), configuration: configuration)
+
+      assert %MacrostepStable{configuration: ^configuration, macrostep: 7, microstep: 2} = payload
+    end
+  end
+
+  describe "Done.new/2" do
+    # sabotage: `Done.new/2` swaps `donedata` and `configuration` in the
+    # struct it returns -> this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      configuration = MapSet.new([1])
+
+      payload = Done.new(ms(9, 5), donedata: %{"x" => 1}, configuration: configuration)
+
+      assert %Done{
+               donedata: %{"x" => 1},
+               configuration: ^configuration,
+               macrostep: 9,
+               microstep: 5
+             } = payload
+    end
+
+    # sabotage: `Done.new/2` requires `:donedata` to be present (removing its
+    # default `nil` from the struct) -> a top-level final with no
+    # `<donedata>` raises instead of defaulting, reddening the test.
+    test "donedata defaults to nil" do
+      payload = Done.new(ms(1, 1), configuration: MapSet.new())
+
+      assert payload.donedata == nil
+    end
+  end
+end
