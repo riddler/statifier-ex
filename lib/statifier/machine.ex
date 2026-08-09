@@ -24,8 +24,9 @@ defmodule Statifier.Machine do
   with `nil`s, exposed here as `id/2`.
 
   `transitions` and `contents` are dense tuples indexed by `t_index`/`c_index`
-  (ADR-0012 item 3). Both are empty in this phase; Phases 4 and 5 populate
-  them without changing this struct's shape.
+  (ADR-0012 item 3). Phase 4 populates `transitions` (`transition/2` below is
+  its `elem/2` reader, mirroring `at/2`); `contents` is still empty and
+  Phase 5 populates it without changing this struct's shape.
 
   ## Expressions
 
@@ -44,6 +45,7 @@ defmodule Statifier.Machine do
   """
 
   alias Statifier.Machine.State
+  alias Statifier.Machine.Transition
   alias Statifier.Parser.Location
 
   @enforce_keys [:states, :id_to_index, :transitions, :contents, :location]
@@ -85,6 +87,15 @@ defmodule Statifier.Machine do
   """
   @spec at(machine :: t(), index :: non_neg_integer()) :: State.t()
   def at(%__MODULE__{states: states}, index), do: elem(states, index)
+
+  @doc """
+  The transition at `t_index`, raised if out of range - every `t_index` this
+  module hands back (via a state's `transitions`, `initial_transition`, or
+  `history_default`) came from the Machine itself, so an out-of-range index
+  is always a caller bug (mirrors `at/2`).
+  """
+  @spec transition(machine :: t(), t_index :: non_neg_integer()) :: Transition.t()
+  def transition(%__MODULE__{transitions: transitions}, t_index), do: elem(transitions, t_index)
 
   @doc """
   Whether `descendant` is `ancestor` or one of `ancestor`'s descendants.
