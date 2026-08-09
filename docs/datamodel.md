@@ -1,7 +1,7 @@
 # Datamodel
 
 Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
-`~> 3.5`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
+`~> 4.0`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
 we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
 a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
 continuity with v1's converted W3C tests).
