@@ -3,7 +3,7 @@
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | accepted |
-| [0002](0002-literal-w3c-appendix-d-port.md) | Port the W3C SCXML algorithm literally (Appendix D) | accepted |
+| [0002](0002-literal-w3c-appendix-d-port.md) | Port the W3C SCXML algorithm literally (Appendix D) | accepted (amended 2026-08-09: predicate naming) |
 | [0003](0003-pure-core-with-effects.md) | Pure functional core returning effects | accepted |
 | [0004](0004-predicator-as-the-datamodel.md) | Predicator is the datamodel; no ECMAScript, no Elixir eval | accepted |
 | [0005](0005-full-configuration-and-interned-state-indexes.md) | Full configuration; interned state indexes | accepted |

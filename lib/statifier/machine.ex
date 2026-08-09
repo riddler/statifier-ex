@@ -17,6 +17,13 @@ defmodule Statifier.Machine do
   integer/range comparisons ADR-0005 was adopted for - no precomputed cache,
   no ancestor-path table.
 
+  The stored range is self-inclusive, but `descendant?/3` is not: it is
+  Appendix D's `isDescendant`, which is a proper-descendant test, so it
+  compares `ancestor < descendant` against that range. The predicates here
+  carry Elixir's `?` form rather than the spec's `isFoo`, per ADR-0002's
+  2026-08-09 amendment, and each names its Appendix D counterpart in its own
+  `@doc`.
+
   `id_to_index` is partial: an entry only for a state with a non-nil,
   non-empty id (plan Decision 10, mirroring
   `Statifier.Validator.Checks.Ids`'s own uniqueness set). There is no
@@ -108,11 +115,15 @@ defmodule Statifier.Machine do
   def content(%__MODULE__{contents: contents}, c_index), do: elem(contents, c_index)
 
   @doc """
-  Whether `descendant` is `ancestor` or one of `ancestor`'s descendants.
+  Whether `descendant` is one of `ancestor`'s descendants - `isDescendant`
+  (Appendix D), under ADR-0002's predicate-naming amendment.
 
-  Self-inclusive: `descendant?(m, i, i)` is always true, since `first` is the
-  ancestor's own index by construction (plan Decision 3) - the shape
-  Appendix D's entry sets use.
+  **Proper**, exactly as the spec defines it ("a child, or a child of a child,
+  or a child of a child of a child, etc."): `descendant?(m, i, i)` is `false`.
+  The stored range `index..last` is self-inclusive by construction, so the
+  lower bound is strict here to exclude the ancestor itself. Appendix D relies
+  on that strictness - `compute_exit_set` must not exit the transition domain,
+  and `find_lcca` must reject a candidate that is itself in the list.
   """
   @spec descendant?(
           machine :: t(),
@@ -122,11 +133,11 @@ defmodule Statifier.Machine do
           boolean()
   def descendant?(%__MODULE__{} = machine, descendant, ancestor) do
     %State{last: last} = at(machine, ancestor)
-    ancestor <= descendant and descendant <= last
+    ancestor < descendant and descendant <= last
   end
 
   @doc """
-  Whether `ancestor` is `descendant` or one of `descendant`'s ancestors -
+  Whether `ancestor` is one of `descendant`'s proper ancestors -
   `descendant?/3` with its arguments swapped, spelled for the reader who
   wants "is X an ancestor of Y" rather than "is Y a descendant of X".
   """
@@ -194,11 +205,20 @@ defmodule Statifier.Machine do
   @doc """
   The least common compound ancestor of every index in `indexes` -
   `findLCCA` (Appendix D): the nearest proper ancestor of the first index
-  that is compound (`compound?/2`) and is an ancestor of every index in the
-  list. Walking up from the first index's parent and stopping at the first
+  that is compound (`compound?/2`) and is a proper ancestor of every index in
+  the list. Walking up from the first index's parent and stopping at the first
   ancestor whose range covers every index is O(depth) with no
   precomputation (ADR-0005) - the `:scxml` root always qualifies, so this is
   total over any non-empty list of indexes belonging to one machine.
+
+  Appendix D tests `stateList.tail()`; testing the whole list is equivalent
+  and is what the pipeline below does, because a candidate is drawn from the
+  head's *proper* ancestors and so always passes `descendant?/3` for the head.
+  The strictness matters for the rest of the list: when a later index is
+  itself an ancestor of the head - a transition targeting its own ancestor -
+  that index is not its own proper descendant, so the candidate equal to it is
+  rejected and the walk continues outward, which is the domain such a
+  transition must get.
   """
   @spec lcca(machine :: t(), indexes :: [non_neg_integer()]) :: non_neg_integer()
   def lcca(%__MODULE__{} = machine, [first | _rest] = indexes) do

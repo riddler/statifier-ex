@@ -71,16 +71,18 @@ defmodule Statifier.MachineTest do
   defp idx(name), do: Map.fetch!(@indexes, name)
 
   describe "descendant?/3" do
-    # sabotage: `Machine.descendant?/3` compares with `ancestor < descendant`
-    # instead of `ancestor <= descendant` -> a state is no longer its own
-    # descendant, reddening this assertion.
-    test "a state is its own descendant (self-inclusive, Decision 3)" do
+    # sabotage: `Machine.descendant?/3` compares with `ancestor <= descendant`
+    # instead of `ancestor < descendant` -> a state becomes its own
+    # descendant, reddening this refutation. This is the Appendix D
+    # `isDescendant` contract ("a child, or a child of a child, ..."), which
+    # `compute_exit_set` depends on to leave the transition domain unexited.
+    test "a state is not its own descendant (proper, per isDescendant)" do
       m = machine()
-      assert Machine.descendant?(m, idx(:a1), idx(:a1))
+      refute Machine.descendant?(m, idx(:a1), idx(:a1))
     end
 
     # sabotage: `Machine.descendant?/3`'s lower-bound comparison
-    # `ancestor <= descendant` becomes `descendant <= ancestor` (the
+    # `ancestor < descendant` becomes `descendant < ancestor` (the
     # ancestor/descendant roles are swapped in the comparison) -> a genuine
     # child no longer satisfies the range test, reddening this assertion.
     test "a direct child is a descendant of its parent" do
@@ -219,13 +221,16 @@ defmodule Statifier.MachineTest do
       assert Machine.lcca(m, [idx(:a1), idx(:a2)]) == idx(:a)
     end
 
-    # sabotage: the same `Enum.find` -> `Enum.filter |> List.last()` swap as
-    # above -> the root (also a qualifying ancestor of both `a1` and `a`,
-    # `a` being its own descendant per Decision 3) wins over the nearer,
-    # correct answer `a`, reddening this assertion.
-    test "a state and its own ancestor" do
+    # sabotage: `Machine.descendant?/3`'s lower bound is loosened back to
+    # `ancestor <= descendant` -> `a` becomes its own descendant, so `a`
+    # qualifies as the LCCA of a list containing `a` itself and this
+    # assertion reddens with `idx(:a)`. This is the shape a transition
+    # targeting its own ancestor produces, and `a` cannot be its own
+    # transition domain - Appendix D's `findLCCA` rejects it via the
+    # proper-descendant test and keeps walking to the root.
+    test "a state and its own ancestor - the ancestor cannot be the LCCA" do
       m = machine()
-      assert Machine.lcca(m, [idx(:a1), idx(:a)]) == idx(:a)
+      assert Machine.lcca(m, [idx(:a1), idx(:a)]) == 0
     end
 
     # sabotage: `Machine.compound?/2` is widened to admit `:parallel`
