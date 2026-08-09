@@ -194,14 +194,17 @@ defmodule Mix.Statifier.AdrJudge do
       label: "ADR-0017 (judgment is not scriptable in wurk extensions)",
       adr_path: "docs/adr/0017-judgment-not-scriptable-in-wurk-extensions.md",
       scope: %{
-        prefix: ".claude/wurk/",
+        prefix: ".claude/wurk",
         suffix: nil,
-        describe: ".claude/wurk/**"
+        describe: ".claude/wurk/** and .claude/wurk.json"
       },
       focus:
         "prose that hands a policy call, a human gate, or a verification " <>
-          "discipline to a script - a step that used to state a decision now " <>
-          "delegating it, or a judgment step deleted rather than restated"
+          "discipline to a script, or a wurk.json key that encodes one of " <>
+          "those without prose it points back to - a step or key that used " <>
+          "to state a decision now delegating it, or a judgment step deleted " <>
+          "rather than restated. An ordinary machine-consumed constant " <>
+          "(a command, a path, a name, a threshold) is not a violation"
     }
   ]
 

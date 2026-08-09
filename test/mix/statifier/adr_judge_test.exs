@@ -591,9 +591,10 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
   # sabotage: have in_scope?/2 ignore scope.prefix (match any path) -> red
   #           (the `refute` assertions below would incorrectly pass)
-  test "adr-0015's scope matches only files under .claude/wurk/" do
+  test "adr-0015's scope matches files under .claude/wurk/ and the manifest beside it" do
     assert AdrJudge.in_scope?(".claude/wurk/commit.md", @adr_0015.scope)
     assert AdrJudge.in_scope?(".claude/wurk/plan.md", @adr_0015.scope)
+    assert AdrJudge.in_scope?(".claude/wurk.json", @adr_0015.scope)
     refute AdrJudge.in_scope?("commit.md", @adr_0015.scope)
     refute AdrJudge.in_scope?(".claude/skills/commit/SKILL.md", @adr_0015.scope)
   end

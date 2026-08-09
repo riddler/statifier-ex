@@ -52,10 +52,11 @@ constraint 4 only by reference, so read cold it never says what the constraint
 
 ## Decision
 
-**ADR-0015's constraint 4 is restated here, scoped to `.claude/wurk/**`, and
-this record supersedes ADR-0015 as this repository's live policy. ADR-0015's
-constraints 1, 2, 3 and 5 moved to the `wurk` repo with the code they govern
-and are not enforced here, by anything, on purpose.**
+**ADR-0015's constraint 4 is restated here, scoped to `.claude/wurk/**` and
+`.claude/wurk.json` (point 6, added by st-8nj), and this record supersedes
+ADR-0015 as this repository's live policy. ADR-0015's constraints 1, 2, 3 and 5
+moved to the `wurk` repo with the code they govern and are not enforced here,
+by anything, on purpose.**
 
 1. **The constraint, stated for this surface.** A `.claude/wurk/*.md`
    extension may name a script, a `mix` task, or a generic skill step for
@@ -110,20 +111,87 @@ and are not enforced here, by anything, on purpose.**
    it governs this repository any longer, and no tool should read it as
    current.
 
+6. **The scope covers `.claude/wurk.json` as well as `.claude/wurk/**`.**
+   Added 2026-08-09 by st-8nj, settling this record's first open question.
+
+   Most of the manifest is exactly what wurk ADR-0004 says it is - machine-
+   consumed constants, loaded by the kit's `lib/manifest.rb`. Argv arrays, path
+   prefixes, a bead prefix, a tmux session name: those are facts, judging them
+   is noise, and the constraint does not reach them. What it does reach is the
+   subset of keys that encode a policy call rather than a fact.
+   `gate.project_level_skips` decides which skipped gate stages stop blocking.
+   `gate.sabotage.exempt_prefixes` decides which tests are exempt from the
+   sabotage discipline. `beads.areas.lands_alone` and `always_batchable` decide
+   how work batches. Each of those is a list of strings, and each is a decision
+   somebody made. The constants-versus-prose line ADR-0004 draws is about which
+   seam a value enters through and which consumer reads it - scripts or skills
+   - not about whether the value carries judgment, and it was never a claim
+   that a manifest key cannot.
+
+   Stated for this half of the surface, in the same shape as point 1: **a
+   manifest key that encodes a policy call, a human gate, or a verification
+   discipline must have the policy stated in prose it points back to - the
+   matching `.claude/wurk/<skill>.md` extension, an ADR, or `CLAUDE.md`. The
+   key is the mechanism; the prose is the record.** The violation is the
+   decision arriving as a key with nothing prose-side that states it: prose
+   deleted in the same move and replaced by the key, or a policy born as a key
+   that was never written down at all. Adding or changing a genuine constant -
+   a command, a path, a name, a threshold that is a project fact rather than a
+   choice about what blocks - is not a violation and must not be reported as
+   one.
+
+   **Why this is decided rather than watched.** ADR-0016's second open question
+   was correctly left to evidence, because the judge reads the surface in
+   question there and a run of findings-free extension branches is itself the
+   evidence. That reasoning does not transfer. A scope that excludes a file
+   produces the same silence whether the file is clean or not, so "revisit when
+   a concrete diff moves judgment into the manifest" names a trigger nobody is
+   positioned to observe - the check that would notice it is the one being
+   deferred. Waiting for evidence only works where absence of a finding is
+   informative.
+
+   The demonstration is already on the record, and it is not the shape the open
+   question predicted. st-5y5 added `gate.project_level_skips`, converting three
+   previously blocking skipped stages into non-blocking reports. No prose moved,
+   so nothing under `.claude/wurk/` appeared in the diff; the gate's own
+   carve-out predicate does not name the manifest either, so `gate.rb` reported
+   `applicable: false` and no gate ran (st-29g, which settles that second
+   mechanism separately). A change to what counts as a blocking failure landed
+   in the one file neither supervision reaches. That is the hole, whether or not
+   the specific move that opened it was a re-expression.
+
+   The cost is bounded and is not a per-run cost. The stage is opt-in at merge
+   time and the judge slices the diff per scope, so this buys one propose call
+   on a branch that touches the manifest and nothing at all on a branch that
+   does not. That is a smaller bill than the one-character widening was being
+   held against.
+
 ## Consequences
 
-- The judge's input is now a document a model can act on cold. Nothing else
-  about `AdrJudge` changes: one entry, constraint 4 only, scoped to
-  `.claude/wurk/`, opt-in at merge time via `mix quality --profile merge`.
-  ADR-0016's resolved second open question stands as written - keep the scope,
-  watch rather than decide, revisit on evidence rather than on file count.
+- The judge's input is now a document a model can act on cold. The shape of
+  `AdrJudge` is otherwise unchanged: one entry, constraint 4 only, opt-in at
+  merge time via `mix quality --profile merge`. Only the entry's scope widens,
+  per point 6. ADR-0016's resolved second open question stands as written -
+  keep the scope, watch rather than decide, revisit on evidence rather than on
+  file count - and point 6 is not an exception to it but a statement of where
+  that posture does not apply.
 - Mechanical follow-ups this record makes unambiguous, for the stage that does
   the code change: `adr_path` in
   `lib/mix/statifier/adr_judge.ex`'s `adr-0015-swallowed-judgment` entry points
-  at this file; the registry comment above `@judged` and the module's
-  ADR-0015 references should cite ADR-0017 for what is judged and ADR-0015 for
-  the history; `docs/skill-automation.md`'s "(ADR-0015, amended by ADR-0016)"
-  citation gains ADR-0017.
+  at this file; the entry's `scope.prefix` becomes `.claude/wurk` (no trailing
+  slash, so one prefix match covers the directory and the manifest beside it)
+  and its `scope.describe` becomes `.claude/wurk/** and .claude/wurk.json`, so
+  `mix adr.judge`'s skip reason reads "no changes under lib/statifier/,
+  .claude/wurk/** and .claude/wurk.json"; the registry comment above `@judged`
+  and the module's ADR-0015 references should cite ADR-0017 for what is judged
+  and ADR-0015 for the history; `docs/skill-automation.md`'s "(ADR-0015,
+  amended by ADR-0016)" citation gains ADR-0017.
+- The widened prefix is a prefix, not a glob: it matches any path beginning
+  `.claude/wurk`, which today is exactly the extension directory and the
+  manifest. A future `.claude/wurk-something` would be in scope without anyone
+  deciding it should be. That is the right default for this seam - a new file
+  in the wurk consumer surface is judged unless someone argues it out - but it
+  is a consequence of the mechanism rather than a decision this record made.
 - `docs/skill-automation.md` was checked as part of this decision. The sentence
   ADR-0015's supersession was once "pending" - "ADR-0015 is itself pending its
   own supersession record now that the tree it describes has moved" - is
@@ -140,24 +208,39 @@ and are not enforced here, by anything, on purpose.**
   a rewrite-in-place would have cost, and it is the cost ADR-0001 chose when it
   said an ADR is amended by a new ADR and not by rewriting history.
 - A future consolidation is available and deliberately not taken now: if
-  `.claude/wurk/` ever stops holding judgment-bearing prose, the honest move is
-  to retire this record and its judge scope together, not to keep a scope that
-  cannot fire.
+  `.claude/wurk/` and `.claude/wurk.json` ever stop holding judgment-bearing
+  policy, the honest move is to retire this record and its judge scope
+  together, not to keep a scope that cannot fire.
 
 ## Open questions
 
 Recorded rather than guessed at; no maintainer was available when this record
-was written.
+was written. The first is now answered, in point 6 of the Decision; the
+question is kept because the reasoning against it is real and a reader deserves
+to see what was weighed.
 
 - **Should the constraint-4 scope cover `.claude/wurk.json` as well as
-  `.claude/wurk/`?** The judge's scope prefix is `.claude/wurk/`, which
+  `.claude/wurk/`?** The judge's scope prefix was `.claude/wurk/`, which
   excludes the manifest file beside it. Wurk ADR-0004 draws the line at
   machine-consumed constants versus prose, and a constant is not a judgment
-  call, so the exclusion looks right. The hazard is the seam: a policy that
+  call, so the exclusion looked right. The hazard is the seam: a policy that
   today reads as a sentence in an extension could be re-expressed as a manifest
   key, and that move would be exactly the swallow constraint 4 exists to catch
-  while landing entirely outside the scope. Left as written until such a change
-  is actually proposed.
+  while landing entirely outside the scope.
+
+  **Resolved: yes, it covers the manifest.** Decision point 6 above states the
+  scope, what a manifest violation is, and what is explicitly not one. Two
+  things decided it. First, the manifest already carries policy calls -
+  `gate.project_level_skips`, `gate.sabotage.exempt_prefixes`,
+  `beads.areas.lands_alone` - so the exclusion was not merely a seam to watch,
+  it was already leaving live decisions unsupervised. Second, "leave it until
+  such a change is actually proposed" is a trigger no one can observe, because
+  the thing that would observe it is the scope being deferred; st-5y5 landed a
+  change to what counts as a blocking gate failure with neither this judge nor
+  the gate itself seeing it. The counter-argument the question rested on - that
+  widening is a one-character change available the day it is needed - is sound
+  about the cost and wrong about the day, which is not detectable from inside
+  the current arrangement.
 - **Should `wurk` carry a mirrored constraint-4 judge over its own generic
   SKILL.md prose?** ADR-0016 names the exposure - a policy call that migrates
   upward into a generic skill leaves this gate's reach - and correctly says
