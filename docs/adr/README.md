@@ -16,8 +16,9 @@
 | [0012](0012-debuggability-designed-into-the-core.md) | Debuggability is designed into the core | accepted |
 | [0013](0013-archive-v1-statifier-repo-in-place.md) | Archive the v1 statifier repo in place | accepted |
 | [0014](0014-expression-spans-in-cond-diagnostics.md) | Expression-level spans are part of the retained-location constraint | accepted |
-| [0015](0015-skill-mechanics-in-scripts.md) | Skill mechanics live in scripts, judgment lives in prose | accepted |
-| [0016](0016-wurk-skills-out-of-repo-extensions-gated.md) | The wurk skills live in their own repo; this repo gates its extensions | accepted (amends 0015 in part) |
+| [0015](0015-skill-mechanics-in-scripts.md) | Skill mechanics live in scripts, judgment lives in prose | superseded by 0017 (amended in part by 0016) |
+| [0016](0016-wurk-skills-out-of-repo-extensions-gated.md) | The wurk skills live in their own repo; this repo gates its extensions | accepted (amends 0015 in part; amended by 0017) |
+| [0017](0017-judgment-not-scriptable-in-wurk-extensions.md) | Judgment is not scriptable, scoped to the wurk extension surface | accepted (supersedes 0015; amends 0016 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

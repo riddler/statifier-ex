@@ -78,10 +78,11 @@ defmodule Mix.Statifier.AdrJudge do
     expression granularity; whether a span table or an error's owning-node
     identity survives a refactor is the same kind of question, at finer
     grain.
-  - ADR-0015 constraint 4 (judgment is not scriptable) - whether a wurk
+  - ADR-0017 (judgment is not scriptable in wurk extensions), restating
+    ADR-0015 constraint 4 for the surface that survives it - whether a wurk
     extension file rewrite quietly delegated a policy call to a script is
-    exactly the propose/refute shape; ADR-0015's Enforcement section defers
-    it here by name.
+    exactly the propose/refute shape; ADR-0017 names this judge as the
+    constraint's enforcement site.
 
   Deliberately not covered:
 
@@ -158,8 +159,9 @@ defmodule Mix.Statifier.AdrJudge do
   # here means the skip reason (scope_descriptions/0) has one definition
   # site instead of being written again in the task.
   #
-  # The adr-0015-swallowed-judgment entry below judges ADR-0015's constraint
-  # 4 only. Constraints 1, 2, 3, and 5 had their own enforcement sites
+  # The adr-0015-swallowed-judgment entry below judges ADR-0017 (the record
+  # restating ADR-0015's constraint 4 for the surface that survives it) only.
+  # ADR-0015's constraints 1, 2, 3, and 5 had their own enforcement sites
   # (ADR-0015's Consequences section; constraint 1's was
   # `.claude/scripts/test/contract_test.rb`, removed with the rest of
   # `.claude/scripts/` under st-6yb) and must not be re-judged here: ADR-0015
@@ -189,8 +191,8 @@ defmodule Mix.Statifier.AdrJudge do
     },
     %{
       key: "adr-0015-swallowed-judgment",
-      label: "ADR-0015 constraint 4 (judgment is not scriptable)",
-      adr_path: "docs/adr/0015-skill-mechanics-in-scripts.md",
+      label: "ADR-0017 (judgment is not scriptable in wurk extensions)",
+      adr_path: "docs/adr/0017-judgment-not-scriptable-in-wurk-extensions.md",
       scope: %{
         prefix: ".claude/wurk/",
         suffix: nil,
@@ -345,7 +347,7 @@ defmodule Mix.Statifier.AdrJudge do
   end
 
   defp read_adr_source("adr-0015-swallowed-judgment") do
-    File.read("docs/adr/0015-skill-mechanics-in-scripts.md")
+    File.read("docs/adr/0017-judgment-not-scriptable-in-wurk-extensions.md")
   end
 
   @doc """

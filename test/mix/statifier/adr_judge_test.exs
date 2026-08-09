@@ -835,15 +835,15 @@ defmodule Mix.Statifier.AdrJudgeTest do
                match?({:error, _reason}, result)
     end
 
-    # A diff touching only a wurk extension file is in ADR-0015's scope and
-    # nobody else's - it must fan out into exactly one propose prompt
-    # (ADR-0015's), not also one for ADR-0012/ADR-0014's lib/statifier/
-    # scope, which this diff never touches.
+    # A diff touching only a wurk extension file is in this entry's scope
+    # (adr-0015-swallowed-judgment, ADR-0017 text) and nobody else's - it must
+    # fan out into exactly one propose prompt, not also one for
+    # ADR-0012/ADR-0014's lib/statifier/ scope, which this diff never touches.
     # sabotage: have judged_sources/2 return every @judged entry regardless
     #           of whether scoped_chunks/2 found anything -> red (a second,
     #           empty-chunks propose prompt would be sent for ADR-0012 and
     #           ADR-0014 too)
-    test "a wurk-extension-only diff produces exactly the ADR-0015 propose prompt, not a lib/statifier/ one" do
+    test "a wurk-extension-only diff produces exactly the ADR-0017 propose prompt, not a lib/statifier/ one" do
       diff = """
       diff --git a/.claude/wurk/commit.md b/.claude/wurk/commit.md
       --- a/.claude/wurk/commit.md
@@ -873,7 +873,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
       AdrJudge.analyze(sourced, caller: spy)
 
       assert_received {:propose_prompt, prompt}
-      assert prompt =~ "reviewing a code change against ADR-0015"
+      assert prompt =~ "reviewing a code change against ADR-0017"
       refute prompt =~ "reviewing a code change against ADR-0012"
       refute prompt =~ "reviewing a code change against ADR-0014"
       refute_received {:propose_prompt, _second}
