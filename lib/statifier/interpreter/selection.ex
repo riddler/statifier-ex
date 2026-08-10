@@ -19,12 +19,12 @@ defmodule Statifier.Interpreter.Selection do
 
   Every function is a pure query - plain values in, plain values out, no
   hidden context, callable standalone in `iex` (`docs/observability.md`
-  constraint 5). Phase 2 landed the domain half of the block: `find_lcca/2`
+  constraint 5). The block divides in two. The domain half - `find_lcca/2`
   (delegated), `get_effective_target_states/2`, `get_transition_domain/2`,
-  and `compute_exit_set/2` - "which states does this transition leave".
-  Phase 3 adds the selection half - `condition_match/2`,
-  `select_transitions/2`, `select_eventless_transitions/1`, and
-  `remove_conflicting_transitions/2` - "which transitions fire".
+  and `compute_exit_set/2` - answers "which states does this transition
+  leave". The selection half - `condition_match/2`, `select_transitions/2`,
+  `select_eventless_transitions/1`, and `remove_conflicting_transitions/2` -
+  answers "which transitions fire", and calls into the domain half to do it.
 
   `select_transitions/2` and `select_eventless_transitions/1` are the two
   functions in this module that thread `machine_state` through their
@@ -78,6 +78,15 @@ defmodule Statifier.Interpreter.Selection do
   is itself ported as a call back into this function, since a history
   default's targets are ordinary transition targets that may (pathologically,
   but representably) include another history state.
+
+  Returns a plain list where the pseudocode accumulates into an `OrderedSet`,
+  so the result is **not** deduplicated: `target="hs b1a"`, where `hs`
+  resolves to `b1a`, yields that index twice. Every consumer is insensitive
+  to it - `get_transition_domain/2` feeds the list to `Enum.all?/2` and to
+  `find_lcca/2`, neither of which changes answer on a repeat, and st-wju.4's
+  entry set absorbs repeats into the set it is building - so the dedupe would
+  be dead work at every call site that exists. Deduplicate at the consumer
+  that needs it, if one ever does, rather than here.
   """
   @spec get_effective_target_states(
           machine_state :: MachineState.t(),
