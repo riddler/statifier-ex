@@ -11,7 +11,7 @@ defmodule Statifier.Document.Transition do
   `../statifier/lib/statifier/event.ex:64-79` does on every match attempt in
   v1: tokenizing once at lowering means no consumer downstream re-splits.
   The *second*-level split of a descriptor into its dot-separated tokens is
-  not done here - that is st-wju.1's job, once the descriptor is being
+  not done here - that is the compiler's job, once the descriptor is being
   matched against a compiled event name, not stored. An empty `event` list
   means an eventless transition; an empty `target` list means a targetless
   one - both spec-legal, and both distinguishable from "one descriptor" or
@@ -28,8 +28,8 @@ defmodule Statifier.Document.Transition do
   not left for every consumer to re-derive, but it is not by itself proof
   the author wrote `type="external"`: `attribute_locations` carries no
   `:type` key when the default applied, and does when the author wrote
-  either value explicitly (Decision 7 in the plan). The same rule holds for
-  every other field with a non-nil default in this layer.
+  either value explicitly. The same rule holds for every other field with a
+  non-nil default in this layer.
 
   `content` is the transition's executable content directly,
   `[Document.content_node()]`, not wrapped in a `Statifier.Document.Block`:

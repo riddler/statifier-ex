@@ -32,7 +32,7 @@ defmodule Statifier.Document.InitialTest do
     end
   end
 
-  describe "malformed transition counts (st-l5k.5 check 4)" do
+  describe "malformed transition counts (the validator's check 4)" do
     # sabotage: drop :transitions from Initial's defstruct fields entirely -> red
     test "zero transitions is representable" do
       initial = %Initial{transitions: [], location: loc()}

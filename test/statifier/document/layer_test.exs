@@ -1,10 +1,9 @@
 defmodule Statifier.Document.LayerTest do
   use ExUnit.Case, async: true
 
-  # The bead's three acceptance criteria (every node carries a location, no
-  # Predicator dependency, no document_order integer) made mechanical rather
-  # than reviewed. See docs/plans/260807-st-l5k.2-typed-document-structs.md
-  # Phase 3.
+  # Three structural properties of the Document layer - every node carries a
+  # location, no Predicator dependency, no document_order integer - enforced
+  # mechanically here rather than left to review.
   @document_sources ["lib/statifier/document.ex" | Path.wildcard("lib/statifier/document/*.ex")]
                     |> Enum.sort()
 

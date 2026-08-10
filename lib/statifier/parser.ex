@@ -43,9 +43,9 @@ defmodule Statifier.Parser do
   this layer is, and the prolog is discarded anyway so an inserted
   declaration would buy nothing but v1's documented line shift.
 
-  Rejecting a fragment for missing boilerplate is the validator's job
-  (st-l5k.5), because a `%Document{}` with `xmlns: nil` is representable and
-  this layer reports only what it cannot represent.
+  Rejecting a fragment for missing boilerplate is the validator's job,
+  because a `%Document{}` with `xmlns: nil` is representable and this layer
+  reports only what it cannot represent.
 
   ## Locations
 
@@ -59,8 +59,7 @@ defmodule Statifier.Parser do
   O(n^2); `Saxy.Partial` yields chunk brackets, not per-element positions;
   `:xmerl_sax_parser` reports a line but no column and turns names into
   atoms; and forking Saxy is a permanent maintenance liability for one field
-  upstream has never discussed. See
-  `docs/plans/260807-st-l5k.3-sax-dom-source-locations.md`, Decision 1.
+  upstream has never discussed.
 
   One consequence is worth stating where callers will read it: an attribute's
   `value` is entity-expanded while its `value_location` covers raw source, so

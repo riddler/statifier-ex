@@ -63,7 +63,7 @@ defmodule Statifier.Document.TransitionTest do
     end
   end
 
-  describe "defaults-vs-written (Decision 7)" do
+  describe "defaults-vs-written" do
     # sabotage: drop :attribute_locations from Transition's defstruct fields -> red
     test "a defaulted type is distinguishable from a written one" do
       defaulted = %Transition{type: :external, location: loc()}

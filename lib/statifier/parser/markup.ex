@@ -7,8 +7,7 @@ defmodule Statifier.Parser.Markup do
   to enable it (`deps/saxy/lib/saxy/handler.ex`), so positions are produced
   by this independent scan and zipped against the SAX event stream by index
   in `Statifier.Parser.Handler` - the Nth start-tag record this scanner
-  finds is the Nth `:start_element` Saxy emits. See
-  `docs/plans/260807-st-l5k.3-sax-dom-source-locations.md`, Decision 1.
+  finds is the Nth `:start_element` Saxy emits.
 
   The scan only ever answers "is this a markup construct, and where does it
   start and end". It classifies each `<` by the bytes that follow it -

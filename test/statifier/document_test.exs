@@ -41,7 +41,7 @@ defmodule Statifier.DocumentTest do
   end
 
   # sabotage: n/a - literal composition, already covered by each struct's own sabotage in Phases 1-2
-  test "the full Phase 1+2 element set composes into one document tree" do
+  test "the full supported element set composes into one document tree" do
     raise_ = %Raise{event: "go", location: loc(1)}
     log = %Log{expr: "1 > 0", location: loc(2)}
     onentry = %Block{content: [raise_, log], location: loc(3)}

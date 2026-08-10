@@ -1,14 +1,14 @@
 defmodule Statifier.Document do
   @moduledoc """
-  The typed parse target: what lowering (st-l5k.4) produces, and what the
-  validator (st-l5k.5) and the Machine compiler (st-wju.1) consume.
+  The typed parse target: what lowering produces, and what the validator and
+  the Machine compiler consume.
 
   This is the layer `docs/architecture.md:47` names directly: "Document
   (typed structs, source locations, uncompiled expressions)". Interning,
   indexing, and expression compilation are the compiler's job, not this
   layer's - a `%Statifier.Document{}` tree is walkable and unambiguous, not
   fast, and it deliberately stays the pre-validation type so it can hold the
-  malformed shapes st-l5k.5 exists to report (`docs/architecture.md:33-36`,
+  malformed shapes the validator exists to report (`docs/architecture.md:33-36`,
   principle 4).
 
   ## Raw expressions
@@ -51,18 +51,18 @@ defmodule Statifier.Document do
   (`Statifier.Lowering.Namespace.resolve/2`), stamped on by
   `Statifier.Lowering.lower/1`. The two differ exactly for a prefix-declared
   root such as `<s:scxml xmlns:s="...">`, where `xmlns` is `nil` but
-  `namespace` is the resolved URI; check 9 (st-l5k.5) reads `namespace`, not
-  `xmlns`, so a spec-conformant prefixed document is not misreported as
+  `namespace` is the resolved URI; the validator's check 9 reads `namespace`,
+  not `xmlns`, so a spec-conformant prefixed document is not misreported as
   missing its namespace.
 
   ## Why `<scxml>` is its own struct, not a `State` with `kind: :scxml`
 
   `%Statifier.Document{}` is the root, and there is no `kind: :scxml` on
   `Statifier.Document.State`. The alternative -
-  `%Document{root: %State{kind: :scxml}}` - was considered because st-wju.1's
-  compiler recommends interning the root as state index 0 with `kind: :scxml`,
-  so that LCCA and `get_transition_domain` fall out without a special case. It
-  is rejected here for three reasons.
+  `%Document{root: %State{kind: :scxml}}` - was considered because the
+  compiler interns the root as state index 0 with `kind: :scxml`, so that
+  LCCA and `get_transition_domain` fall out without a special case. It is
+  rejected here for three reasons.
 
   First, the compiler's root state is a **synthesis**, not a copy: it needs an
   index, a range, and resolved initial indexes, none of which the Document
@@ -82,7 +82,7 @@ defmodule Statifier.Document do
   `[State.t()]` type as `State.states`, so the recursion below the entry
   point is uniform either way.
 
-  st-wju.1 synthesizes its index-0 root state from these fields directly
+  The compiler synthesizes its index-0 root state from these fields directly
   rather than copying a `%State{}` that never existed at this layer.
   """
 
@@ -96,7 +96,7 @@ defmodule Statifier.Document do
   """
   @type attribute_locations :: %{optional(atom()) => Location.t()}
 
-  @typedoc "The executable-content node types Phase 1 defines."
+  @typedoc "The executable-content node types lowering currently supports."
   @type content_node :: Raise.t() | Log.t()
 
   @typedoc """
