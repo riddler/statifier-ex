@@ -46,6 +46,15 @@ defmodule Statifier.Interpreter.ExitEntry do
   later-exiting state's deep history see a configuration its own siblings
   have already been removed from.
 
+  One mechanical deviation in the recorded value itself: the pseudocode's
+  `configuration.toList().filter(f)` produces an ordered list, while
+  `machine_state.history_values` holds a `MapSet` (the shape st-wju.2 fixed
+  for the field). Order is dropped rather than preserved because nothing
+  reads it - `add_descendant_states_to_enter/3` re-enters a restored value
+  through the same descendant and ancestor walks any other target set goes
+  through, and `enter_states/2` sorts the whole entry set into document
+  order afterwards regardless.
+
   ## The entry set (Decision 3)
 
   `compute_entry_set/2`, `add_descendant_states_to_enter/3`, and
