@@ -1,6 +1,6 @@
 defmodule Statifier.Interpreter.Content do
   @moduledoc """
-  The block runner - spec 3.9's rule for a block of executable content,
+  The block runner - spec 4.9's rule for a block of executable content,
   ported once here rather than at each of `Statifier.Interpreter.ExitEntry`'s
   four call sites (plan Decision 5): a block runs its nodes in document
   order; if a node errors, the rest of the block does not run, and the error

@@ -1,6 +1,6 @@
 defmodule Statifier.Effect.Log do
   @moduledoc """
-  Payload for `{:log, %__MODULE__{}}` - spec 5.8's `<log>`. `label` is the
+  Payload for `{:log, %__MODULE__{}}` - spec 4.7's `<log>`. `label` is the
   `label` attribute (`nil` when the element omits it); `value` is the
   resolved `expr` (or `nil` for a label-only `<log>`).
 
