@@ -100,9 +100,15 @@ above, and `Statifier.Effect` is the `effect`.
 
 ### Executable content
 
-One `ExecutableContent` node protocol with `execute(node, context) -> {context, [effect]}`.
-No central dispatcher with per-struct clauses and a parallel summary function to keep
-in sync.
+One `Statifier.ExecutableContent` node protocol with
+`execute(node, context) -> {:ok, context, [effect]} | {:error, reason}`, where
+`context` is a `Statifier.ExecutableContent.Context`. No central dispatcher
+with per-struct clauses and a parallel summary function to keep in sync.
+`Statifier.Interpreter.Content` is the block runner: it walks a block's nodes
+in document order, stopping at the first error, and is the only place that
+converts a node's `{:error, _}` into `error.execution`. A new element is a new
+`Statifier.Machine.Content.*` struct plus a `defimpl` in the same file - never
+a change to the runner or the interpreter.
 
 ### Sessions and invoke
 
