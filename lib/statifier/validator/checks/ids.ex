@@ -3,15 +3,14 @@ defmodule Statifier.Validator.Checks.Ids do
   Check 1 (spec 3.14): a state's `id` is unique across the document. `nil`
   ids are excluded from the uniqueness set (`lib/statifier/document/state.ex`
   - a `nil` id means "the author omitted an optional attribute", not "no
-  id"), and document scope, not session scope, is what this layer can see
-  (`docs/plans/260808-st-l5k.5-document-validator.md` Decision 8).
+  id"), and document scope, not session scope, is what this layer can see.
 
   The **first** occurrence of a repeated id in document order is canonical
   and reports nothing; every later occurrence gets its own
   `{:duplicate_id, id}` error.
 
   A state written as `id=""` is a third case, resolved here rather than
-  left open (st-2jp): spec 3.14 types `id` as an XML Schema ID, whose
+  left open: spec 3.14 types `id` as an XML Schema ID, whose
   lexical space excludes the empty string, so an empty id is
   `{:empty_id}` - and, like a `nil` id, it stays out of the uniqueness set
   entirely. Two states both written `id=""` are two empty ids, not a

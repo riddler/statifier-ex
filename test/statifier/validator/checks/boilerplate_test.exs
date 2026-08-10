@@ -62,9 +62,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
     # the gate `lower/1` itself applies to the root's own resolved name, so
     # a root xmlns pointing anywhere but the SCXML namespace is rejected at
     # lowering with `{:foreign_element, "scxml", uri}` before a `%Document{}`
-    # ever exists (`docs/plans/260808-st-700-relaxed-parsing-options.md`
-    # line 45-46: "A root bound to a genuinely foreign namespace still
-    # errors with {:foreign_element, ...}"). check_namespace/1's non-nil
+    # ever exists. check_namespace/1's non-nil
     # branch and its span precedence are therefore only reachable by
     # constructing the `%Document{}` directly, which is what this test does:
     # it lowers a normal, fully-boilerplated document (so `attribute_locations[:xmlns]`

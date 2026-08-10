@@ -75,7 +75,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
 
   describe "check/2 - empty ids" do
     # sabotage: empty_id_errors/1 filters on `state.id == nil` instead of
-    # `""` (the pre-st-2jp reading, where an empty id was just another
+    # `""` (an earlier reading, where an empty id was just another
     # absent one) -> the state below reports nothing and this reddens
     test "a state written id=\"\" is reported at the attribute's own span" do
       xml = """
@@ -110,7 +110,8 @@ defmodule Statifier.Validator.Checks.IdsTest do
 
     # sabotage: empty_id_errors/1 widens its filter to `state.id in [nil,
     # ""]` -> the anonymous state below is reported as an empty id, and the
-    # {:ok, _} assertion reddens on the distinction st-2jp exists to draw
+    # {:ok, _} assertion reddens on the empty-vs-absent distinction this
+    # check draws
     test "an absent id is still not an empty one" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">

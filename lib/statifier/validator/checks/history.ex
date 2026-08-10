@@ -9,20 +9,21 @@ defmodule Statifier.Validator.Checks.History do
     illegal parents.
   - `Statifier.Validator.Checks.DefaultTransition`'s shared sub-check with
     `owner: {:history, id}` - required, exactly one, a non-null target, no
-    `event`, no `cond` (Decision 8, spec-over-bead).
+    `event`, no `cond` (spec 3.10 requires the default transition
+    unconditionally, stricter than a looser "when present" reading).
   - `{:initial_not_descendant, target, parent_id}` when a resolved default
     target is not a descendant of the history's own **parent** (spec 3.10)
     - not of the history state itself, which has no descendants of its
       own to test against. Reuses check 3's constructor: this is the same
       shape of mistake, just against a different parent. Skipped when the
       target does not resolve at all (`Statifier.Validator.Checks.Targets`
-      already reported that, Decision 5) or when the parent is not
+      already reported that) or when the parent is not
       compound - a non-compound parent has already been reported by
       `:history_bad_parent`, and testing descendancy against it (an id
       that may not even exist, for the document root) would be a second,
       meaningless error for the same mistake.
   - `{:history_bad_type, raw}` when `type` was written and, sliced back out
-    of `context.source` (Decision 1), is neither `"shallow"` nor `"deep"`.
+    of `context.source`, is neither `"shallow"` nor `"deep"`.
     Lowering silently maps any out-of-range value to the `:shallow`
     default (Residual Note 2), so the atom on `%State{}` alone cannot tell
     `type="shallow"` from `type="sideways"` - only the raw source text can.

@@ -1,13 +1,13 @@
 defmodule Statifier.Validator.Checks.Enums do
   @moduledoc """
-  Out-of-range enumerated attribute values (st-i0x, spec 3.2.1 and 3.5).
+  Out-of-range enumerated attribute values (spec 3.2.1 and 3.5).
 
   `Statifier.Lowering.Attributes.atom/4` maps an unrecognised value onto the
   attribute's default rather than erroring, so `type="sideways"` lowers to
   `:external` and `binding="whenever"` lowers to `:early` - indistinguishable
   on the struct from the valid spellings that produce the same atom. Only the
   source text can tell them apart, which is what `validate/2`'s `source`
-  argument (Decision 1) exists for: the written attribute's span is sliced
+  argument exists for: the written attribute's span is sliced
   back out and compared against the range.
 
   Two reasons, one per enumerated attribute this check owns:

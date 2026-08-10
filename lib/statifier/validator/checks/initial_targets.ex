@@ -5,7 +5,7 @@ defmodule Statifier.Validator.Checks.InitialTargets do
   `initial` attribute - resolves and lands on a legal target. Four reasons,
   in this precedence:
 
-  1. `{:initial_on_atomic_state, id}` (Decision 8): a state carrying
+  1. `{:initial_on_atomic_state, id}`: a state carrying
      `initial` or `initial_element` that has nothing to default into - an
      empty `states` list, or a `:parallel`, `:final`, or `:history` kind.
      Fires first and **suppresses every other reason for that state**: an
@@ -15,7 +15,7 @@ defmodule Statifier.Validator.Checks.InitialTargets do
   2. `{:unresolved_initial, id}`: an id in `State.initial` or
      `Document.initial` absent from `Context.states`. An `<initial>`
      element's own transition targets are **not** re-checked here for
-     existence - check 2 already owns that (Decision 5); this check only
+     existence - check 2 already owns that; this check only
      asks `Context.states` the same question check 2 already answered, so
      it can skip the descendancy test below rather than re-reporting.
   3. `{:initial_not_descendant, id, parent_id}`: a resolved target - from

@@ -11,7 +11,7 @@ defmodule Statifier.Validator.Checks.InitialElement do
 
   This check does not itself resolve or check the descendancy of the
   `<initial>` transition's target - `Statifier.Validator.Checks.Targets`
-  owns existence (Decision 5) and
+  owns existence and
   `Statifier.Validator.Checks.InitialTargets` owns descendancy (check 3).
   """
 

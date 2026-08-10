@@ -1,11 +1,11 @@
 defmodule Statifier.Validator.Checks.DefaultEntry do
   @moduledoc """
-  Check 7 (spec 3.3, Decision 6): a compound `<state>` with no `initial`
+  Check 7 (spec 3.3): a compound `<state>` with no `initial`
   attribute and no `<initial>` element falls back to entering its first
   child in document order (spec 3.3). That fallback is only legal when the
   first child is itself enterable - a `:history` pseudo-state is not, since
   spec 3.10 makes it entered only by a transition that targets it
-  explicitly (Decision 6's "enterable" == "not a history pseudo-state").
+  explicitly - "enterable" here means "not a history pseudo-state".
 
   Reports `{:default_entry_not_enterable, id, :history}` once per offending
   state, at the first child's own `location`. Fires only when all five

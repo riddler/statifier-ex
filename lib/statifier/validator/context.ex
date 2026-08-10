@@ -2,10 +2,9 @@ defmodule Statifier.Validator.Context do
   @moduledoc """
   The throwaway index the checks share, built once per `Statifier.Validator.validate/2`
   call and discarded afterward. It must never be returned, cached, or handed
-  to the compiler: st-wju.1 builds the real interned index, and sharing this
-  one would couple two layers the architecture keeps independent
-  (`docs/research/260807-st-l5k.2-typed-document-structs.md:460`).
-  Correctness over speed here, per the bead's own design note.
+  to the compiler: `Statifier.Compiler` builds the real interned index, and
+  sharing this one would couple two layers the architecture keeps
+  independent. Correctness over speed here, per the bead's own design note.
 
   `states` maps a named state's id to its struct. `ancestors` maps a named
   state's id to the list of its named ancestors' ids, root-first, itself
@@ -18,8 +17,8 @@ defmodule Statifier.Validator.Context do
   top-level state - which is why it is keyed by the struct itself rather
   than by id.
 
-  `transitions` is the flat `[{transition, owner}]` list Decision 5
-  describes: every `<transition>` in the document, tagged with the slot it
+  `transitions` is the flat `[{transition, owner}]` list: every
+  `<transition>` in the document, tagged with the slot it
   came from. `owner` is `{:plain, state}` for a state's or parallel's own
   transitions, `{:initial, state}` for the transitions inside that state's
   `<initial>` element, and `{:history, state}` for a `:history` state's own
@@ -48,7 +47,7 @@ defmodule Statifier.Validator.Context do
   Walks `document` once, threading ancestry as it descends and collecting
   the shared transition list. `source` is the binary `document` was parsed
   from; it is stored verbatim for checks that need `Location.slice/2`
-  (Decision 1) and is not otherwise read here.
+  and is not otherwise read here.
   """
   @spec build(document :: Document.t(), source :: binary()) :: t()
   def build(%Document{states: states} = document, source) when is_binary(source) do

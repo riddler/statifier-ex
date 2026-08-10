@@ -8,7 +8,7 @@ defmodule Statifier.Validator.Checks.Targets do
   unwritten).
 
   This check **owns target existence** for every transition in the
-  document (Decision 5, "one rule, one owner"): later checks that also
+  document ("one rule, one owner"): later checks that also
   walk transition targets (checks 3 and 5) must not re-report an id this
   check already reported unresolved. They do not need anything extra from
   `Context` to honor that - "unresolved" and "absent from `Context.states`"

@@ -1,8 +1,7 @@
 defmodule Statifier.Validator.Checks.Boilerplate do
   @moduledoc """
-  Checks 9 and 10 (spec 3.2.1), deferred here by st-700 (relaxed parsing) -
-  see `docs/plans/260808-st-l5k.5-document-validator.md` Decision 2 and the
-  bead's own notes. Lowering accepts a boilerplate-free `<scxml>` fragment
+  Checks 9 and 10 (spec 3.2.1), which close the boilerplate gap that
+  relaxed parsing left open. Lowering accepts a boilerplate-free `<scxml>` fragment
   unconditionally (`Statifier.Lowering.Namespace.scxml_vocabulary?/1`
   treats a `nil` namespace as SCXML's own vocabulary), so this is the only
   place in the pipeline that ever refuses one.
