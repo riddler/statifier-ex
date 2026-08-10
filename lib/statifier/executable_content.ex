@@ -6,9 +6,10 @@ defprotocol Statifier.ExecutableContent do
   behavior lives in exactly one place, this protocol's `defimpl` for that
   node's struct, in the same file as the struct itself
   (`Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`). A
-  future element - st-af3's `<assign>`, `<if>`/`<elseif>`/`<else>`,
-  `<foreach>`, `<script>`; st-cmq's `<send>`/`<cancel>`/`<invoke>` - adds a
-  struct and a `defimpl`, never a clause here or in the block runner.
+  future datamodel element (`<assign>`, `<if>`/`<elseif>`/`<else>`,
+  `<foreach>`, `<script>`) or session element (`<send>`/`<cancel>`/
+  `<invoke>`) adds a struct and a `defimpl`, never a clause here or in the
+  block runner.
 
   ## Contract
 

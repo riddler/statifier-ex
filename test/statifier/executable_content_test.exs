@@ -158,7 +158,7 @@ defmodule Statifier.ExecutableContentTest do
     # sabotage: the <log> impl's `value/1` returns the compiled struct
     # itself instead of `nil` for the `{:compiled, _, _}` clause -> this
     # assertion reddens.
-    test "compiled expr <log> carries nil (evaluation deferred to st-af3)" do
+    test "compiled expr <log> carries nil (evaluation not yet implemented)" do
       m = machine()
       [_raise0_c, _raise1_c, _log_x_c, log_compiled_c] = state_a_content(m)
       log_compiled = Machine.content(m, log_compiled_c)

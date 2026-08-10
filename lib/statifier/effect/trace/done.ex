@@ -8,7 +8,7 @@ defmodule Statifier.Effect.Trace.Done do
   the core `:done` effect does not carry.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.MachineState

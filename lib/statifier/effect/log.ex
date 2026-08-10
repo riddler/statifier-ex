@@ -11,9 +11,8 @@ defmodule Statifier.Effect.Log do
   (`lib/statifier/event/cause.ex:13-26`) - it resolves to the node's own
   `Location` but names nothing about which `<onentry>`/`<onexit>` block or
   transition emitted it - so `owner` rides alongside it. `macrostep`/
-  `microstep` are the counters as they stood when the log ran (Decision 5).
-  This is the effect the core-engine epic actually produces today, alongside
-  `:done` (plan Decision 14).
+  `microstep` are the counters as they stood when the log ran.
+  This is the only effect the interpreter produces today.
   """
 
   alias Statifier.Machine.Content

@@ -5,8 +5,8 @@ defmodule Statifier.Event.Cause do
   `microstep` are the counters as they stood when the event was raised, per
   `Statifier.MachineState`'s counter contract.
 
-  Cause travels *with* the event so a consumer - the first of which is
-  st-af3's `error.execution` message - resolves it through
+  Cause travels *with* the event so a consumer - `Statifier.Interpreter.Content`'s
+  `error.execution` message is the first one - resolves it through
   `Statifier.Machine.content/2` and the retained `Location`, with no global
   lookup and no ambient step context.
 
@@ -20,9 +20,7 @@ defmodule Statifier.Event.Cause do
   transition it lives in. `Statifier.Effect.Trace.ContentExecuted` already
   carries exactly that owning-block identity as its `owner` field
   (`Statifier.Machine.Content.owner/0`), proven known at emission time; this
-  cause now carries the same identity instead of leaving it unrecorded. See
-  `docs/plans/260809-st-wju.2-machine-state-event-effects-vocabulary.md`'s
-  "Post-review corrections" section.
+  cause now carries the same identity instead of leaving it unrecorded.
   """
 
   alias Statifier.Machine.Content
@@ -40,9 +38,9 @@ defmodule Statifier.Event.Cause do
     exactly as `Statifier.Effect.Trace.ContentExecuted` already names it for
     the same block.
   - `{:state, state_index}` - the platform itself raised the event with no
-    content node behind it (st-wju.4's `done.state.*` on entering a final
-    state names the state whose entry triggered it, not a content node -
-    there is no `<raise>` or block to point to).
+    content node behind it (`done.state.*` on entering a final state names
+    the state whose entry triggered it, not a content node - there is no
+    `<raise>` or block to point to).
 
   Never a struct - both indexes resolve through `Statifier.Machine`.
   """

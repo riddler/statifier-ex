@@ -6,7 +6,7 @@ defmodule Statifier.Effect.Trace.EntrySet do
   the states to be entered (constraint 3, integer indexes), in entry order.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.MachineState

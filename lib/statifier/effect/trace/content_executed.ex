@@ -12,15 +12,14 @@ defmodule Statifier.Effect.Trace.ContentExecuted do
   `Statifier.Machine.Content.owner/0` (it describes where a content node
   lives, so that module is its natural home); this module aliases it rather
   than redefining it, and `Statifier.Event.Cause.origin/0` embeds the same
-  type for its `:content` case (post-review correction, plan
-  `docs/plans/260809-st-wju.2-machine-state-event-effects-vocabulary.md`):
+  type for its `:content` case (post-review correction):
 
   - `{:onentry, state_index, ordinal}` - an `<onentry>` block
   - `{:onexit, state_index, ordinal}` - an `<onexit>` block
   - `{:transition, t_index}` - a transition's own executable content
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.Machine.Content

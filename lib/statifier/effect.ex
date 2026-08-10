@@ -2,44 +2,46 @@ defmodule Statifier.Effect do
   @moduledoc """
   The effect vocabulary (ADR-0003) plus the seven trace effects
   (`docs/observability.md` constraint 2) - one `@type t()` union, in this
-  one module, that every interpreter bead (st-wju.3 through st-wju.6) emits
-  from and every consumer (st-wju.7's API boundary, eventually st-cmq's
-  session) pattern-matches against. This module defines the vocabulary and
-  the trace gate; it never emits an effect itself (`## What We're NOT
-  Doing`, plan Phase 3).
+  one module, that every interpreter function emits from and every
+  consumer pattern-matches against, including the not-yet-built session
+  that will eventually drive `<send>`/`<cancel>`/`<invoke>`. This module
+  defines the vocabulary and the trace gate; it never emits an effect
+  itself.
 
-  ## Every effect is `{tag, payload_struct}` (Decision 3)
+  ## Every effect is `{tag, payload_struct}`
 
   An effect is always a two-element tuple: a vocabulary tag, and a struct
   carrying its named fields. The tag keeps `case effect do {:log, log} ->
   ...` reading the way ADR-0003 writes it and makes "is this a trace
   effect?" a single match (`trace?/1`); the struct payload gives named
-  fields, dialyzer coverage, and room for st-cmq to add fields without
-  changing any arity. There are no positional tuples with four or five
-  elements anywhere in this vocabulary.
+  fields, dialyzer coverage, and room to grow the `<send>`/`<send_delayed>`/
+  `<cancel>`/`<invoke>` payloads once they have a caller, without changing
+  any arity. There are no positional tuples with four or five elements
+  anywhere in this vocabulary.
 
   ## The vocabulary
 
-  | Tag | Payload | Produced by (today / eventually) |
+  | Tag | Payload | Produced by |
   |---|---|---|
-  | `:send` | `Statifier.Effect.Send` | st-cmq (`<send>`, immediate) |
-  | `:send_delayed` | `Statifier.Effect.SendDelayed` | st-cmq (`<send>` with `delay`) |
-  | `:cancel` | `Statifier.Effect.Cancel` | st-cmq (`<cancel>`) |
-  | `:invoke` | `Statifier.Effect.Invoke` | st-cmq (`<invoke>`) |
-  | `:done` | `Statifier.Effect.Done` | st-wju.6 (`exit_interpreter`) |
-  | `:log` | `Statifier.Effect.Log` | st-wju.5 (`<log>`) |
-  | `:trace` | `Statifier.Effect.Trace.EventDequeued` | st-wju.6 (event dequeued) |
-  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | st-wju.3 (`select_transitions` returns) |
-  | `:trace` | `Statifier.Effect.Trace.ExitSet` | st-wju.4 (`compute_exit_set` result) |
-  | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | st-wju.5 (a content block ran) |
-  | `:trace` | `Statifier.Effect.Trace.EntrySet` | st-wju.4 (`compute_entry_set` result) |
-  | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | st-wju.6 (configuration reached quiescence) |
-  | `:trace` | `Statifier.Effect.Trace.Done` | st-wju.6 (top-level final entry / `exit_interpreter`) |
+  | `:send` | `Statifier.Effect.Send` | not yet produced (`<send>`, immediate) |
+  | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
+  | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
+  | `:invoke` | `Statifier.Effect.Invoke` | not yet produced (`<invoke>`) |
+  | `:done` | `Statifier.Effect.Done` | not yet produced (`exit_interpreter` is not yet implemented) |
+  | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
+  | `:trace` | `Statifier.Effect.Trace.EventDequeued` | not yet produced (event dequeued) |
+  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | not yet produced (`select_transitions` returns) |
+  | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
+  | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | `execute_block/3` (a content block ran) |
+  | `:trace` | `Statifier.Effect.Trace.EntrySet` | `enter_states/2` (`compute_entry_set` result) |
+  | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | not yet produced (configuration reached quiescence) |
+  | `:trace` | `Statifier.Effect.Trace.Done` | not yet produced (top-level final entry / `exit_interpreter`) |
 
-  The core-engine epic (st-wju) only ever produces `:log` and `:done`
-  itself; `:send`/`:send_delayed`/`:cancel`/`:invoke` are defined and
-  unproduced until st-cmq gives them a caller - that is the point of this
-  bead (Decision 14).
+  Today the interpreter produces only `:log` and three of the seven trace
+  effects (`Trace.ExitSet`, `Trace.EntrySet`, `Trace.ContentExecuted`); the
+  remaining core effects (`:send`, `:send_delayed`, `:cancel`, `:invoke`,
+  `:done`) and the remaining trace effects are defined but unproduced,
+  because nothing constructs them yet.
 
   ## Trace effects carry indexes and counters, never structs
 
@@ -57,7 +59,7 @@ defmodule Statifier.Effect do
   microstep returns, in the same order, delivered the same way. There is no
   separate trace stream to keep in sync (`docs/observability.md:75-76`).
 
-  ## The gate: `trace/3` (Decision 4)
+  ## The gate: `trace/3`
 
       require Statifier.Effect, as: Effect
 
@@ -98,7 +100,7 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
 
-  @typedoc "The six core effects (Decision 14) - the ADR-0003 set, no more."
+  @typedoc "The six core effects - the ADR-0003 set, no more."
   @type core ::
           {:send, Send.t()}
           | {:send_delayed, SendDelayed.t()}
@@ -107,7 +109,7 @@ defmodule Statifier.Effect do
           | {:done, Done.t()}
           | {:log, Log.t()}
 
-  @typedoc "The seven trace effects (Decision 13), one per `docs/observability.md` constraint-2 row."
+  @typedoc "The seven trace effects, one per `docs/observability.md` constraint-2 row."
   @type trace ::
           {:trace, Trace.EventDequeued.t()}
           | {:trace, Trace.TransitionsSelected.t()}
@@ -121,8 +123,8 @@ defmodule Statifier.Effect do
   @type t :: core() | trace()
 
   @doc """
-  Whether `effect` is a trace effect - a single match on the `:trace` tag
-  (Decision 3). Table-driven over the whole vocabulary at the call site
+  Whether `effect` is a trace effect - a single match on the `:trace` tag.
+  Table-driven over the whole vocabulary at the call site
   (`test/statifier/effect_test.exs`), so a trace point added without a
   matching case here fails that test rather than silently miscounting.
   """
@@ -131,7 +133,7 @@ defmodule Statifier.Effect do
   def trace?(_effect), do: false
 
   @doc """
-  The trace emission gate (Decision 4). `payload_module` is one of the
+  The trace emission gate. `payload_module` is one of the
   `Statifier.Effect.Trace.*` modules; `fields` is the keyword list passed to
   its `new/2` (the counters are stamped automatically, never repeated at the
   call site).

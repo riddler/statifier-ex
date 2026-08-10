@@ -8,7 +8,7 @@ defmodule Statifier.Effect.Trace.MacrostepStable do
   as it stood at quiescence.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.MachineState
