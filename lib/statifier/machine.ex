@@ -8,11 +8,13 @@ defmodule Statifier.Machine do
   ## Layout (ADR-0005)
 
   `states` is a tuple of `Statifier.Machine.State.t()` in document order,
-  index 0 being the synthesized `:scxml` root (plan Decision 2: `parent`
-  `nil`, `id` `nil`). Every compiled state carries its own `index`, its
-  `parent` index (`nil` only at the root), and `last` - the highest index in
-  its own subtree, making the range `index..last` self-inclusive and
-  contiguous by construction (plan Decision 3). `descendant?/3`, `ancestor?/3`,
+  index 0 being the synthesized `:scxml` root - the spec treats `<scxml>` as
+  a state for LCCA and transition-domain purposes, so giving it a real index
+  removes the special case from `get_transition_domain` rather than adding
+  one; its `parent` and `id` are both `nil`. Every compiled state carries its
+  own `index`, its `parent` index (`nil` only at the root), and `last` - the
+  highest index in its own subtree, making the range `index..last`
+  self-inclusive and contiguous by construction. `descendant?/3`, `ancestor?/3`,
   `lcca/2`, `document_order/2`, and `exit_order/2` below are exactly the
   integer/range comparisons ADR-0005 was adopted for - no precomputed cache,
   no ancestor-path table.
@@ -25,30 +27,32 @@ defmodule Statifier.Machine do
   `@doc`.
 
   `id_to_index` is partial: an entry only for a state with a non-nil,
-  non-empty id (plan Decision 10, mirroring
-  `Statifier.Validator.Checks.Ids`'s own uniqueness set). There is no
-  `index_to_id` map - `elem(states, i).id` is already that function, total
-  with `nil`s, exposed here as `id/2`.
+  non-empty id, mirroring `Statifier.Validator.Checks.Ids`'s own uniqueness
+  set. There is no `index_to_id` map - `elem(states, i).id` is already that
+  function, total with `nil`s, exposed here as `id/2`.
 
   `transitions` and `contents` are dense tuples indexed by `t_index`/`c_index`
-  (ADR-0012 item 3). Phase 4 populates `transitions` (`transition/2` below is
-  its `elem/2` reader, mirroring `at/2`); Phase 5 populates `contents`
-  (`content/2` below, the same `elem/2` reader shape).
+  (ADR-0012 item 3). The compiler's transition pass populates `transitions`
+  (`transition/2` below is its `elem/2` reader, mirroring `at/2`); the
+  compiler's executable-content pass populates `contents` (`content/2`
+  below, the same `elem/2` reader shape).
 
   ## Expressions
 
   Every `cond`, every `<log expr=...>`, every `<content expr=...>` or
   `<content>` text body compiles once into `expr()`
-  (`docs/architecture.md:76-82`, ADR-0014). Nothing before Phase 3 builds one;
-  the type is declared here because it is Machine data, not because anything
-  yet produces a `{:compiled, ...}` value.
+  (`docs/architecture.md:76-82`, ADR-0014). Nothing before the compiler's
+  expression-compilation seam builds one; the type is declared here because
+  it is Machine data, not because anything yet produces a `{:compiled, ...}`
+  value.
 
   ## No top-level `initial`
 
-  Decision 12: the root state at index 0 already carries resolved `initial`
-  indexes (Decision 2 exists precisely so the root needs no special case), so
-  a second, Machine-level `initial` field would duplicate that fact the way
-  Decision 3 rejects for `first`. `initial/1` reads it off index 0.
+  The root state at index 0 already carries resolved `initial` indexes -
+  giving it a real index in the first place is what lets the root need no
+  special case here - so a second, Machine-level `initial` field would
+  duplicate that fact the same way storing both ends of a self-inclusive
+  descendant range would. `initial/1` reads it off index 0.
   """
 
   alias Statifier.Machine.Content
@@ -148,8 +152,8 @@ defmodule Statifier.Machine do
   end
 
   @doc """
-  Whether `index`'s state is atomic - no children. A `:final` is atomic
-  (plan Decision 4): `kind` and atomicity are independent facts.
+  Whether `index`'s state is atomic - no children. A `:final` is atomic:
+  `kind` and atomicity are independent facts.
   """
   @spec atomic?(machine :: t(), index :: non_neg_integer()) :: boolean()
   def atomic?(%__MODULE__{} = machine, index) do
@@ -159,7 +163,7 @@ defmodule Statifier.Machine do
 
   @doc """
   Whether `index`'s state is compound: a `:state` or `:scxml` with at least
-  one child (plan Decision 4 - derived, never stored). A `:parallel` is
+  one child - derived, never stored. A `:parallel` is
   never compound even though it has children: it enters every region
   simultaneously rather than defaulting into one, so it has no positional
   default entry the way a compound `:state` does.
@@ -221,8 +225,8 @@ defmodule Statifier.Machine do
   transition must get.
 
   `Statifier.Interpreter.Selection.find_lcca/2` is the spec-named entry point
-  at the interpreter's surface, a `defdelegate` to this function (plan
-  Decision 2) - one implementation, two names.
+  at the interpreter's surface, a `defdelegate` to this function - one
+  implementation, two names.
   """
   @spec lcca(machine :: t(), indexes :: [non_neg_integer()]) :: non_neg_integer()
   def lcca(%__MODULE__{} = machine, [first | _rest] = indexes) do
@@ -240,8 +244,8 @@ defmodule Statifier.Machine do
 
   @doc """
   The id `index`'s state was written with, or `nil` for the root and for
-  every nameless state - the total reverse of `index/2` (plan Decision 10,
-  ADR-0005's "both directions").
+  every nameless state - the total reverse of `index/2`, ADR-0005's "both
+  directions".
   """
   @spec id(machine :: t(), index :: non_neg_integer()) :: String.t() | nil
   def id(%__MODULE__{} = machine, index), do: at(machine, index).id
@@ -255,8 +259,8 @@ defmodule Statifier.Machine do
   def exit_order(%__MODULE__{}, indexes), do: Enum.sort(indexes, :desc)
 
   @doc """
-  The root's resolved `initial` indexes (Decision 12) - there is no
-  Machine-level `initial` field; index 0 already carries it.
+  The root's resolved `initial` indexes - there is no Machine-level
+  `initial` field; index 0 already carries it.
   """
   @spec initial(machine :: t()) :: [non_neg_integer()]
   def initial(%__MODULE__{} = machine), do: at(machine, 0).initial

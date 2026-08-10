@@ -143,8 +143,8 @@ defmodule Statifier.MachineTest do
     # sabotage: `Machine.atomic?/2` is changed to derive atomicity from
     # `kind != :final` instead of `children == []` -> a `:final` (no
     # children, so it should read atomic) instead reads non-atomic,
-    # reddening this assertion. This is the plan Decision 4 case: kind and
-    # atomicity are independent facts.
+    # reddening this assertion. This is the case where kind and atomicity
+    # are independent facts.
     test "a :final is atomic and not compound" do
       m = machine()
       assert Machine.atomic?(m, idx(:f))
@@ -307,7 +307,7 @@ defmodule Statifier.MachineTest do
     # differs from state 1's own `initial` field (state 1, `a`, defaults to
     # its first child `a1` since it carries no `initial` attribute or
     # element, which does differ from the root's `[a]`).
-    test "reads the root's resolved initial (Decision 12, no top-level field)" do
+    test "reads the root's resolved initial (no top-level field)" do
       m = machine()
       assert Machine.initial(m) == [idx(:a)]
     end

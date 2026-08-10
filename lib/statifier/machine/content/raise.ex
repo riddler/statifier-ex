@@ -29,7 +29,7 @@ defmodule Statifier.Machine.Content.Raise do
 
     # spec 4.2's <raise>: enqueue one internal event named by `event`, cause
     # stamped from this node and its owning block. No effect is emitted -
-    # the queued event is core state, not an effect (plan Decision 7).
+    # the queued event is core state, not an effect.
     @spec execute(node :: Raise.t(), context :: Context.t()) :: {:ok, Context.t(), []}
     def execute(%Raise{c_index: c_index, event: event}, %Context{} = context) do
       machine_state =

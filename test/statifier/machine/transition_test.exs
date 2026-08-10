@@ -29,7 +29,7 @@ defmodule Statifier.Machine.TransitionTest do
     index
   end
 
-  # Exercises every transition role Decision 9 assigns a t_index to: two
+  # Exercises every transition role that gets a t_index: two
   # plain transitions on `a` (one targetless, one with a dot-split
   # descriptor), a plain transition *and* an `<initial>` element's
   # transition on `b` (the latter a forward reference to `b1`, not yet
@@ -277,7 +277,7 @@ defmodule Statifier.Machine.TransitionTest do
     end
   end
 
-  describe "compile/1 - content stays empty (Phase 5's job)" do
+  describe "compile/1 - content stays empty (the executable-content pass's job)" do
     # sabotage: n/a - this asserts a field this phase deliberately leaves at
     # its default; there is no lib/ behavior computing a non-empty value yet
     # for sabotage to break.
