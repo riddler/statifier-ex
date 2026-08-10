@@ -11,7 +11,7 @@ defmodule Statifier.TmpDirTest do
   # restored in `on_exit`. A hardcoded literal is exactly what let two
   # concurrent `mix test` OS processes running this file agree on the same
   # `STATIFIER_TMP_ROOT` value transiently and race each other's
-  # `setup_tmp_dir/1` `rm_rf!` calls (st-iao); deriving from this process's
+  # `setup_tmp_dir/1` `rm_rf!` calls; deriving from this process's
   # own root keeps every override unique to it regardless.
   defp restore_env(nil), do: System.delete_env(TmpDir.env_var())
   defp restore_env(value), do: System.put_env(TmpDir.env_var(), value)
@@ -153,7 +153,7 @@ defmodule Statifier.TmpDirTest do
       |> Enum.filter(&(&1 |> File.read!() |> then(fn src -> Regex.match?(pattern, src) end)))
 
     assert offenders == [],
-           "use @tag :isolated_tmp_dir (Statifier.TmpDir) - ExUnit's tag hardcodes a shared tmp/ root (st-0vz): " <>
+           "use @tag :isolated_tmp_dir (Statifier.TmpDir) - ExUnit's tag hardcodes a shared tmp/ root, letting concurrent runs compute byte-identical scratch paths and race: " <>
              Enum.join(offenders, ", ")
   end
 end

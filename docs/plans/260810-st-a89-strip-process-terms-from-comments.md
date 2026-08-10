@@ -705,12 +705,12 @@ fixture rather than its origin - drop the `st-6f7` prefix, keep "live repro:".
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/mix test/mix test/support
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/mix test/mix test/support
       test/statifier/tmp_dir_test.exs test/fixtures` returns exactly three
       hits: `test/mix/statifier/gate_guard_test.exs` lines 98, 195 and 209
-- [ ] The removed-line check over the phase paths is clean
-- [ ] `mix test test/mix test/statifier/tmp_dir_test.exs` passes (the assertion
+- [x] The removed-line check over the phase paths is clean
+- [x] `mix test test/mix test/statifier/tmp_dir_test.exs` passes (the assertion
       message rewrites are asserted on by the tests themselves)
 
 #### Manual Verification:
@@ -1065,5 +1065,19 @@ the Manual Verification items are deferred and surfaced once at the end.
       requirements and every spec citation survives
 
 **Implementation Note**: As Phase 1.
+
+---
+
+### Phase 8
+
+- [ ] `AdrGuard`, `AdrJudge` and `GateGuard` still name every `.claude/wurk/**`,
+      `docs/adr/` and gate-ledger path they operate on - point 3's "the code's
+      own inputs"
+- [ ] Every ADR-0015 citation that sat beside a removed bead ID survives
+- [ ] `gate_guard_test.exs`'s simulated diff and ledger strings are byte
+      identical to before
+
+**Implementation Note**: As Phase 1. This phase touches no `lib/statifier/`
+module, so the Appendix D conformance criterion does not apply.
 
 ---

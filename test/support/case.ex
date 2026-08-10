@@ -13,8 +13,10 @@ defmodule Statifier.Case do
 
   Each of those lives in its own private helper below - `parse_document/1`,
   `initialize/1`, `send_event/2`, `active_leaf_states/1`. v2 has no engine yet,
-  so today they flunk naming the call they are waiting on; landing the Phase 1/2
-  API is a one-file change here, and the four-function contract stays a hard
+  so today they flunk naming the call they are waiting on; landing the engine
+  API these calls name (`Statifier.parse/1`, `Statifier.initialize/1`,
+  `Interpreter.send_event/2`, `Configuration.active_leaf_states/1`) is a
+  one-file change here, and the four-function contract stays a hard
   constraint on the library surface rather than something the corpus can widen.
 
   Documents using features v2 does not support flunk with the feature named
@@ -122,8 +124,10 @@ defmodule Statifier.Case do
     flunk("""
     #{call} does not exist yet.
 
-    Statifier.Case is waiting on the Phase 1/2 engine API. Replace the matching
-    helper in test/support/case.ex with the real call when it lands.
+    Statifier.Case is waiting on the engine API these four calls name
+    (`Statifier.parse/1`, `Statifier.initialize/1`, `Interpreter.send_event/2`,
+    `Configuration.active_leaf_states/1`). Replace the matching helper in
+    test/support/case.ex with the real call when it lands.
     """)
   end
 end

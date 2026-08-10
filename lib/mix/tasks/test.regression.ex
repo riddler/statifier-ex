@@ -100,7 +100,7 @@ defmodule Mix.Tasks.Test.Regression do
   same working directory, over largely the same modules. Scratch directories
   (`Statifier.TmpDir`) are collision-proof by construction - `root/0` always
   ends in a `System.pid()` segment, so the two runs cannot land on the same
-  path even by accident (st-iao). `STATIFIER_TMP_ROOT` is set here anyway, not
+  path even by accident. `STATIFIER_TMP_ROOT` is set here anyway, not
   for isolation but so the ratchet's pid-scoped tree lands under a
   recognizable `tmp/regression/<pid>/` rather than an anonymous `tmp/<pid>/`
   indistinguishable from the Tests stage's own.

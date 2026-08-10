@@ -67,7 +67,7 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # git repo this test was actively using in the other process - reproduced
   # while writing this test, once as directory corruption, once as "unable to
   # read current working directory" mid-`git init`. `TmpDir.root/0` now ends
-  # in a `System.pid()` segment unconditionally (st-iao), so this directory is
+  # in a `System.pid()` segment unconditionally, so this directory is
   # unique to this OS process without an extra suffix - kept anyway, spelled
   # via `TmpDir.process_id/0`, as a second discriminator that costs nothing
   # and needs no reasoning about `TmpDir.root/0`'s internals to trust.
@@ -302,10 +302,11 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # execute/2 is asserted too - every other test in this file injects both
   # explicitly, which never reaches that default. Asserting that with this
   # checkout's own working tree used to be safe on the premise that it never
-  # touches lib/statifier/ (only test/ files) - st-l5k.3 made that premise
-  # permanently false, and once any lib/statifier/ file is dirty the real
-  # `git diff` finds a real core change and this test shells out to the real
-  # `claude` CLI (st-c8c). So instead this builds a throwaway git repo under
+  # touches lib/statifier/ (only test/ files) - a later change added
+  # lib/statifier/ edits to this checkout's own working tree, making that
+  # premise permanently false, and once any lib/statifier/ file is dirty the
+  # real `git diff` finds a real core change and this test shells out to the
+  # real `claude` CLI. So instead this builds a throwaway git repo under
   # a scratch dir - one committed file outside lib/statifier/, nothing else -
   # and chdirs the OS process into it for the call: `--base HEAD`
   # always resolves there, and `git diff` against HEAD is structurally empty
@@ -315,8 +316,8 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # regardless of what this worktree's own lib/statifier/ looks like.
   #
   # The registry now also carries ADR-0015's `.claude/wurk/**` scope
-  # (st-laz, rescoped from `.claude/skills/**/SKILL.md` under st-6yb), so the
-  # premise widens to cover it too: the seeded repo has
+  # (rescoped from `.claude/skills/**/SKILL.md` when the wurk tooling moved to
+  # another repo), so the premise widens to cover it too: the seeded repo has
   # one `README.md` and no `.claude/` tree at all, so it is out of scope for
   # every registered ADR, not just the lib/statifier/ ones - the skip still
   # fires the same way.

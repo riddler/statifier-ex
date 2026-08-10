@@ -15,7 +15,7 @@ defmodule Mix.Statifier.AdrGuard do
   guard's shape (added diff lines only, a citation escape hatch, a skip when
   no base ref resolves) was wrong for it; `.claude/scripts/test/contract_test.rb`
   was its permanent enforcement site until both the tree and that test were
-  removed once the kit's mechanics moved to another repo (st-6yb) - see
+  removed once the kit's mechanics moved to another repo - see
   ADR-0015's Consequences for the historical detail.
 
   The naming check is the one with judgment in it. An exactly-spelled Appendix D
