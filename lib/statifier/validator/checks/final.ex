@@ -8,9 +8,9 @@ defmodule Statifier.Validator.Checks.Final do
   - `{:final_has_states, id}` for a state child, `id` being the child's.
   - `{:final_has_transitions, id}` for a `<transition>` child, `id` being
     the `<final>`'s - a `<final>` is where a region stops, so it has no
-    outgoing transition to take (st-dje, which st-l5k.5's Decision 7 first
-    deferred and this module then absorbed rather than growing a ninth
-    check for one more child type).
+    outgoing transition to take. This case was deferred at first, then
+    folded into this module rather than growing a ninth check for one
+    more child type.
 
   An `initial` attribute or `<initial>` element on a `:final` is *not*
   reported here: check 3 already refuses it as `:initial_on_atomic_state`

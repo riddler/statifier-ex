@@ -17,7 +17,7 @@ defmodule Statifier.ValidatorTest do
   end
 
   # Corpus-shaped: compound states with both `initial` forms (on different
-  # states, per Phase 3's mutual-exclusion rule - Decision 10), a <parallel>
+  # states, since one state may not carry both `initial` forms), a <parallel>
   # with two regions *led by a <history>* (SCION's history3/4/4b/5 all open a
   # <parallel> that way, and check 7 must not read that child order as a
   # default-entry mistake), both shallow and deep <history> each with a legal
@@ -76,8 +76,8 @@ defmodule Statifier.ValidatorTest do
   """
 
   # Same shape, the root spelled with an explicit prefix bound to the SCXML
-  # namespace - proves Decision 2 (check 9 tests the resolved namespace,
-  # not the literal `xmlns` attribute) end to end, not just at the root.
+  # namespace - proves check 9 tests the resolved namespace,
+  # not the literal `xmlns` attribute, end to end, not just at the root.
   @valid_prefixed_document """
   <s:scxml xmlns:s="http://www.w3.org/2005/07/scxml" version="1.0" initial="compound_attr">
       <s:state id="compound_attr" initial="child_a">

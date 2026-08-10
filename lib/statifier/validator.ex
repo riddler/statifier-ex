@@ -25,8 +25,7 @@ defmodule Statifier.Validator do
      exact source `document` was parsed from, guarded by `is_binary/1`.
      Passing a different binary produces wrong `Location.slice/2` results in
      any check that reads it, not a crash - there is no arity-1 convenience
-     that could silently disable those checks
-     (`docs/plans/260808-st-l5k.5-document-validator.md` Decision 1).
+     that could silently disable those checks.
   """
 
   alias Statifier.Document

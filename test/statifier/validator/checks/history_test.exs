@@ -19,7 +19,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
     Validator.validate(lower!(xml), xml)
   end
 
-  describe "Context.compound?/1 (Decision 6)" do
+  describe "Context.compound?/1" do
     # A <state> whose only child is a <history> cannot be represented as
     # "atomic" through an XML fixture: the history itself is a member of
     # its parent's `states` list, so `states != []` is trivially satisfied
@@ -167,7 +167,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
   describe "check/2 - transition_count (shared sub-check)" do
     # sabotage: DefaultTransition.count_errors/3 matches `0 -> []` instead
     # of `1 -> []` -> a history with zero transitions is (wrongly) treated
-    # as fine, reddening this assertion (Decision 8's spec-over-bead call)
+    # as fine, reddening this assertion (spec 3.10 requires the default
+    # transition unconditionally)
     test "a history with zero transitions is reported" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">

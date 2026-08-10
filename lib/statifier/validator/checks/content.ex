@@ -1,6 +1,6 @@
 defmodule Statifier.Validator.Checks.Content do
   @moduledoc """
-  st-f6k (spec 5.6): a `<content>` element must not specify both an `expr`
+  Spec 5.6: a `<content>` element must not specify both an `expr`
   attribute and inline text. Reports `{:content_expr_and_text, expr}` at the
   `<content>` element's own `location`.
 
@@ -17,7 +17,7 @@ defmodule Statifier.Validator.Checks.Content do
 
   The only `%Statifier.Document.Content{}` a document can hold today is a
   `<final>`'s `<donedata><content>` (`Statifier.Document.Donedata`), so that
-  is the one place this check walks. When Phase 3 gives `<send>` a
+  is the one place this check walks. When `<send>` gains a
   `<content>` child, this walk grows an arm; the rule itself is unchanged,
   since spec 5.6 states it on `<content>` rather than on either parent.
 

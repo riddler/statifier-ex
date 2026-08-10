@@ -111,7 +111,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
 
   describe "check/2 - final_has_transitions" do
     # sabotage: check_final/1 drops its `transitions` arm, reporting only
-    # state children the way it did before st-dje -> the <final> below
+    # state children as it originally did -> the <final> below
     # produces no error at all and validate!/1 returns {:ok, _}, reddening
     # this assertion
     test "a <transition> on a <final> is reported at the transition's own span" do

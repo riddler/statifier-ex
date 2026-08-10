@@ -1,11 +1,11 @@
 defmodule Statifier.Validator.Checks.DefaultTransition do
   @moduledoc """
-  The sub-check checks 4 and 5 share (Decision 8): an `<initial>` element's
+  The sub-check checks 4 and 5 share: an `<initial>` element's
   and a `:history` state's whole content model is one constrained
   `<transition>` - required, exactly one, a non-null `target`, no `event`,
   no `cond`. Spec 3.6 states this for `<initial>`; spec 3.10 states it for
-  `<history>`'s default transition, more strictly than the bead's own
-  wording ("when present") - Decision 8 records the divergence.
+  `<history>`'s default transition, more strictly than a looser
+  "when present" reading - the spec's stricter wording wins.
 
   `Statifier.Document.Initial.transitions` and a `:history` state's own
   `transitions` share the same `[Transition.t()]` shape
@@ -26,8 +26,8 @@ defmodule Statifier.Validator.Checks.DefaultTransition do
   short-scan tolerance) never gets an `attribute_locations` entry either, so
   a document that trips *both* that tolerance *and* writes `event=""` slips
   past this check unreported. Accepted: it is the only oracle available at
-  this layer, and closing it means changing what lowering records, which is
-  st-l5k.4's contract, not this bead's. `cond` needs no such oracle - it is
+  this layer, and closing it means changing what lowering records, which
+  belongs to `Statifier.Lowering.Attributes`, not this check. `cond` needs no such oracle - it is
   `nil` when absent and `""` when written empty, so `!= nil` is exact.
   """
 

@@ -4,14 +4,14 @@ defmodule Statifier.Validator.Error do
   list. Mirrors `Statifier.Lowering.Error`'s shape (`reason`, `message`,
   `location`) with character-identical field names, so a future common
   diagnostic protocol can adopt both without either layer's reason union
-  leaking into the other's (`docs/plans/260808-st-l5k.5-document-validator.md`
-  Decision 3). The two layers' error lists are never observed together -
-  `Statifier.Validator.validate/2` only ever receives a document lowering
-  already accepted - so sharing the *shape* rather than the type is enough.
+  leaking into the other's. The two layers' error lists are never observed
+  together - `Statifier.Validator.validate/2` only ever receives a document
+  lowering already accepted - so sharing the *shape* rather than the type is
+  enough.
 
   `reason` is a closed tagged-tuple union, declared once in full here even
-  though Phase 1 only produces `:duplicate_id`. Later phases add a
-  constructor per reason rather than reopening the type, following
+  though initially only `:duplicate_id` has a constructor. Later additions
+  add a constructor per reason rather than reopening the type, following
   `Statifier.Lowering.Error`'s own precedent.
 
   `code/1` returns the reason tuple's tag atom - the stable error code the
@@ -84,7 +84,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 1 (spec 3.14, st-2jp): a state was written with `id=""`. `id` is
+  Check 1 (spec 3.14): a state was written with `id=""`. `id` is
   typed as an XML Schema ID, whose lexical space is an XML `Name` and
   therefore excludes the empty string, so an empty id is not a name a
   transition could ever target.
@@ -122,7 +122,7 @@ defmodule Statifier.Validator.Error do
   Check 3 (spec 3.3, 3.6): an `initial` attribute or `Document.initial`
   names `id`, and no state in the document carries that id. An `<initial>`
   element's own transition targets are never reported by this constructor -
-  check 2 already owns their existence (Decision 5).
+  check 2 already owns their existence.
   """
   @spec unresolved_initial(id :: binary(), location :: Location.t()) :: t()
   def unresolved_initial(id, %Location{} = location) when is_binary(id) do
@@ -164,7 +164,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 3 (spec 3.3, Decision 8): `id` names a state carrying an `initial`
+  Check 3 (spec 3.3): `id` names a state carrying an `initial`
   attribute or `<initial>` element, and the spec MUST NOT: an atomic state
   (no `states` children, or a `:parallel`, `:final`, or `:history` kind) has
   nothing to default into. Fires ahead of, and suppresses, the descendancy
@@ -195,7 +195,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Checks 4 and 5 (spec 3.6, 3.10, Decision 8): `owner`'s content model is
+  Checks 4 and 5 (spec 3.6, 3.10): `owner`'s content model is
   exactly one `<transition>`, and it holds `count` instead. Fires for both
   zero (nothing to default into) and two-or-more (which one wins is
   undefined).
@@ -212,7 +212,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Checks 4 and 5 (spec 3.6, 3.10, Decision 8): `owner`'s one transition
+  Checks 4 and 5 (spec 3.6, 3.10): `owner`'s one transition
   carries no usable `target` - `target=""` and an absent `target` are the
   same failure here.
   """
@@ -264,7 +264,7 @@ defmodule Statifier.Validator.Error do
   @doc """
   Check 5 (spec 3.10): a `<history type="...">` value that is neither
   `"shallow"` nor `"deep"`. `raw` is the source text as written
-  (`Location.slice/2`, Decision 1), so the message quotes what the author
+  (`Location.slice/2`), so the message quotes what the author
   actually typed rather than the default it silently lowered to.
   """
   @spec history_bad_type(raw :: binary(), location :: Location.t()) :: t()
@@ -277,9 +277,9 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  st-i0x (spec 3.5): a `<transition type="...">` value that is neither
+  Spec 3.5: a `<transition type="...">` value that is neither
   `"internal"` nor `"external"`. `raw` is the source text as written
-  (`Location.slice/2`, Decision 1) - lowering maps any out-of-range value
+  (`Location.slice/2`) - lowering maps any out-of-range value
   onto the `:external` default, so the atom alone cannot tell
   `type="external"` from `type="sideways"`.
   """
@@ -293,7 +293,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  st-i0x (spec 3.2.1): an `<scxml binding="...">` value that is neither
+  Spec 3.2.1: an `<scxml binding="...">` value that is neither
   `"early"` nor `"late"`. Same slice-back substrate as
   `transition_bad_type/2`, against the `:early` default.
   """
@@ -324,7 +324,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 6 (spec 3.7, st-dje): `id` names a `:final` carrying a
+  Check 6 (spec 3.7): `id` names a `:final` carrying a
   `<transition>`. A `<final>` is where a region stops, so it has no
   outgoing transitions to take - spec 3.7's content model is `onentry`,
   `onexit`, and `donedata` only. Reported once per offending transition, at
@@ -343,7 +343,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 7 (spec 3.3, Decision 6): `id` names a compound state with no
+  Check 7 (spec 3.3): `id` names a compound state with no
   `initial` attribute and no `<initial>` element, whose first child in
   document order has `child_kind` - a `:history` pseudo-state cannot be
   entered by the spec 3.3 default-entry fallback. Reported at the first
@@ -380,7 +380,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  st-f6k (spec 5.6): a `<content>` element carries both an `expr` attribute
+  Spec 5.6: a `<content>` element carries both an `expr` attribute
   and inline text - the spec's "MUST NOT specify both" that
   `lib/statifier/document/content.ex` deliberately leaves representable so
   this check can report it. `expr` is the attribute's value as lowered, so
@@ -400,10 +400,11 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 9 (spec 3.2.1, Decision 2): the root element's resolved namespace,
+  Check 9 (spec 3.2.1): the root element's resolved namespace,
   `document.namespace`, is not the SCXML namespace. `uri` is
   `document.namespace` itself - `nil` for a fragment that declares no
-  namespace at all, the boilerplate-free case st-700 left representable.
+  namespace at all, the boilerplate-free case that relaxed parsing left
+  representable.
   """
   @spec bad_namespace(uri :: binary() | nil, location :: Location.t()) :: t()
   def bad_namespace(uri, %Location{} = location) do
