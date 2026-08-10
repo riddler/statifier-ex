@@ -1,11 +1,12 @@
 defmodule Statifier.Machine.Donedata do
   @moduledoc """
   One compiled `<donedata>` element - the interned counterpart to
-  `Statifier.Document.Donedata` (plan Phase 5), reachable only through its
-  owning `:final` state as `elem(machine.states, i).donedata`.
+  `Statifier.Document.Donedata`, built by the compiler's executable-content
+  pass, reachable only through its owning `:final` state as
+  `elem(machine.states, i).donedata`.
 
-  `expr` is the folded `<content>` value (plan Decision 7):
-  `{:compiled, ...}` when the `<content>` child wrote an `expr` attribute,
+  `expr` is the folded `<content>` value: `{:compiled, ...}` when the
+  `<content>` child wrote an `expr` attribute,
   `{:static, text}` when it carried a text body instead, and `nil` when
   `<donedata>` has no `<content>` child at all. Validator check 9
   (`Statifier.Validator.Checks.Content`) already guarantees a `<content>`
@@ -19,8 +20,8 @@ defmodule Statifier.Machine.Donedata do
   (`lib/statifier/document/content.ex:17-21`). `nil` exactly when `expr` is
   `nil`.
 
-  `expr` carries no `c_index` (plan Decision 8): it is not executable
-  content, never appears in a block, and no `execute_block` ever runs it.
+  `expr` carries no `c_index`: it is not executable content, never appears
+  in a block, and no `execute_block` ever runs it.
   """
 
   alias Statifier.Machine

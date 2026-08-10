@@ -1,10 +1,11 @@
 defmodule Statifier.Compiler.Expressions do
   @moduledoc """
-  The expression-compilation seam (plan Phase 3): compiles raw predicator
-  source - a `cond`, an `expr`, or a `<content>` text body - into the single
+  The expression-compilation seam: compiles raw predicator source - a
+  `cond`, an `expr`, or a `<content>` text body - into the single
   `Machine.expr()` sum type, on its own, before either of its two consumers
-  (Phase 4's transitions, Phase 5's content/donedata) so neither lands a
-  raw-string field and changes its type afterwards.
+  (the transition pass's transitions, the executable-content pass's
+  content/donedata) so neither lands a raw-string field and changes its type
+  afterwards.
 
   ADR-0014 item 1 commits to spans, not point positions: `compile/3` always
   calls `Predicator.compile_with_spans/1`, never `compile_with_positions/1`.
@@ -21,11 +22,11 @@ defmodule Statifier.Compiler.Expressions do
   @typedoc """
   Identifies the node a compiled expression belongs to, in the same
   ADR-0012 constraint-3 index space `Statifier.Compiler.Error` names an
-  owner by (plan Decision 6): a transition's `t_index`, a content node's
-  `c_index`, or a final state's own index for its `<donedata>`. Nothing
-  calls `compile/3` with a real index yet - Phase 4 wires transitions,
-  Phase 5 wires content and donedata - so this phase's own tests exercise
-  the type directly with placeholder indexes.
+  owner by: a transition's `t_index`, a content node's `c_index`, or a
+  final state's own index for its `<donedata>`. Nothing calls `compile/3`
+  with a real index yet - the transition pass wires transitions, the
+  executable-content pass wires content and donedata - so this phase's own
+  tests exercise the type directly with placeholder indexes.
   """
   @type owner_ref ::
           {:transition, non_neg_integer()}
@@ -41,7 +42,7 @@ defmodule Statifier.Compiler.Expressions do
   is reported against: the attribute *value* span
   (`attribute_locations[:cond]` / `[:expr]`) when the author wrote the
   attribute, the owning node's own `location` otherwise - the caller's
-  choice, not this function's (plan Phase 3, Changes Required #2).
+  choice, not this function's.
 
   On success, `compile_with_spans/1`'s `%Predicator.Compiled{}` is stored
   whole - its `positions` table is a span table (ADR-0014 item 1), never
@@ -52,8 +53,8 @@ defmodule Statifier.Compiler.Expressions do
   (verified against the installed predicator 4.0.0 dependency:
   `deps/predicator/lib/predicator.ex`'s `build_compiled_result/1` private
   clause), so the structured `{line, column}` predicator actually failed at
-  is recovered by a second, failure-path-only call to `Predicator.parse/2`
-  (Decision 6) - `Predicator.parse/2` always returns
+  is recovered by a second, failure-path-only call to `Predicator.parse/2` -
+  `Predicator.parse/2` always returns
   `{:error, message, line, column}` on failure regardless of the `spans:`
   option, since spans are a property of successfully parsed AST nodes, not
   of the error tuple.
@@ -73,8 +74,8 @@ defmodule Statifier.Compiler.Expressions do
 
   @doc """
   Wraps a literal value with no expression to evaluate - the `{:static, v}`
-  arm of `Machine.expr()` for a plain `<content>text</content>` body
-  (plan Decision 7; there is no predicator source and nothing to compile).
+  arm of `Machine.expr()` for a plain `<content>text</content>` body -
+  there is no predicator source and nothing to compile.
   """
   @spec static(value :: term()) :: Machine.expr()
   def static(value), do: {:static, value}

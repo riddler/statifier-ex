@@ -1,19 +1,18 @@
 defmodule Statifier.Machine.Transition do
   @moduledoc """
   One compiled `<transition>` element - the interned counterpart to
-  `Statifier.Document.Transition` (plan Phase 4).
+  `Statifier.Document.Transition`, built by the compiler's transition pass.
 
   `t_index` is a dense document-order identity assigned to **every**
   `<transition>` element in the machine, including the transition inside an
-  `<initial>` element and a `:history` state's own default transition (plan
-  Decision 9) - both run executable content (spec 3.3, 3.6) and both need a
-  stable index trace effects and tooling can name. Selectability is a
-  property of *where* a `t_index` is stored, not of the index itself:
+  `<initial>` element and a `:history` state's own default transition - both
+  run executable content (spec 3.3, 3.6) and both need a stable index trace
+  effects and tooling can name. Selectability is a property of *where* a
+  `t_index` is stored, not of the index itself:
   `Statifier.Machine.State.transitions` holds only the selectable ones a
   state's own event matching walks; the `<initial>` element's transition and
   a history's default live in `initial_transition` / `history_default`
-  instead, so `select_transitions` (st-wju.3) never has to filter this
-  struct by kind.
+  instead, so `select_transitions` never has to filter this struct by kind.
 
   `source` is the owning state's index - for a plain transition, the state
   it is a direct child of; for an `<initial>` element's transition or a
@@ -29,7 +28,7 @@ defmodule Statifier.Machine.Transition do
   separated descriptor. `Statifier.Document.Transition.event` already did
   the first (whitespace) split at lowering time; this struct does the
   *second* (dot) split, so `event="a.b c"` compiles to `[["a", "b"], ["c"]]`
-  and st-wju.3's matching walks tokens without ever splitting a string at
+  and event matching walks tokens without ever splitting a string at
   runtime.
 
   `cond` is `Machine.expr() | nil`, compiled through
@@ -41,7 +40,8 @@ defmodule Statifier.Machine.Transition do
   (ADR-0014 item 4). Both are `nil` exactly when `cond` was not written.
 
   `content` is `[c_index]`, the transition's own executable content in
-  document order - `[]` in this phase; Phase 5 populates it.
+  document order - `[]` until the compiler's executable-content pass
+  populates it.
   """
 
   alias Statifier.Machine

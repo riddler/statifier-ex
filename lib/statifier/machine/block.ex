@@ -1,7 +1,8 @@
 defmodule Statifier.Machine.Block do
   @moduledoc """
   One compiled `<onentry>` or `<onexit>` element - the interned counterpart
-  to `Statifier.Document.Block` (plan Phase 5).
+  to `Statifier.Document.Block`, built by the compiler's executable-content
+  pass.
 
   `content` is `[c_index]`, the block's own executable content in document
   order. A block exists because `<onentry>`/`<onexit>` are real elements

@@ -25,7 +25,7 @@ defmodule Statifier.Machine.ContentTest do
   # Exercises every content role the compiler assigns a `c_index` to: `a`'s
   # onentry (two nodes: a raise, then a plain log), `a`'s onexit (one raise),
   # and `a`'s own transition content (a log with expr). `b`'s <donedata>
-  # holds a static <content> text body and carries no c_index (Decision 8).
+  # holds a static <content> text body and carries no c_index.
   # Hand-drawn source order:
   #
   #  c0  a's onentry raise ("enter")
@@ -199,7 +199,7 @@ defmodule Statifier.Machine.ContentTest do
     # `dstate.donedata` is present, growing `c_next`/`contents_acc` the way
     # a Decision-8 violation would -> `tuple_size(m.contents)` comes back 5
     # instead of 4, reddening this assertion.
-    test "donedata content is absent from machine.contents (Decision 8)" do
+    test "donedata content is absent from machine.contents" do
       m = machine()
 
       # Only 4 executable-content nodes exist in the whole document (the

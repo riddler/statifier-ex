@@ -334,12 +334,12 @@ use the ADR's wording.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/statifier/compiler* lib/statifier/machine.ex
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/statifier/compiler* lib/statifier/machine.ex
       lib/statifier/machine test/statifier/compiler* test/statifier/machine*`
       returns zero hits
-- [ ] The removed-line check over the phase paths is clean
-- [ ] No executable line changed in the phase's diff
+- [x] The removed-line check over the phase paths is clean
+- [x] No executable line changed in the phase's diff
 
 #### Manual Verification:
 - [ ] Every `Phase N` in `machine/state.ex`'s table maps to the compiler pass
@@ -992,5 +992,17 @@ full gate as the phase gate. In interactive execution, pause here for the human
 to confirm the manual review before moving on. In looped (`--loop`) execution,
 the Automated Verification list gates advancement via `/wurk:commit --auto` and
 the Manual Verification items are deferred and surfaced once at the end.
+
+---
+
+### Phase 2
+
+- [ ] Every `Phase N` in `machine/state.ex`'s table maps to the compiler pass
+      that actually writes that field, verified against `compiler.ex`
+- [ ] The unnumbered word "phase" survives wherever it described a compiler pass
+- [ ] Comments touching `lib/statifier/` still match the W3C spec; no Appendix D
+      name or spec citation was altered
+
+**Implementation Note**: As Phase 1.
 
 ---

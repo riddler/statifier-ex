@@ -3,24 +3,24 @@ defmodule Statifier.Machine.Content do
   Namespace for the compiled executable-content node family: one struct per
   node kind, `Statifier.Machine.Content.Raise` and
   `Statifier.Machine.Content.Log`, the interned counterpart to
-  `Statifier.Document.Raise` / `Statifier.Document.Log` (plan Phase 5). This
-  module owns the family's shared vocabulary - `owner/0` and the `t()`
-  union - and no longer a struct itself: an Elixir protocol dispatches on
-  the struct module, so each node kind needs its own struct for
-  `Statifier.ExecutableContent` (Phase 2) to implement without a central
-  `case` on a `kind` field. Each future executable-content node (st-af3's
-  `<assign>`, `<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`; st-cmq's
-  `<send>`/`<cancel>`/`<invoke>`) gets its own struct here too, and its own
+  `Statifier.Document.Raise` / `Statifier.Document.Log`. This module owns
+  the family's shared vocabulary - `owner/0` and the `t()` union - and no
+  longer a struct itself: an Elixir protocol dispatches on the struct
+  module, so each node kind needs its own struct for
+  `Statifier.ExecutableContent` to implement without a central `case` on a
+  `kind` field. Each future executable-content node (`<assign>`,
+  `<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`, `<send>`, `<cancel>`,
+  `<invoke>`) gets its own struct here too, and its own
   `Statifier.ExecutableContent` implementation, never a clause added to this
   module.
 
   `c_index` is a dense document-order identity assigned to **every**
   `<raise>`/`<log>` node reachable through `onentry`, `onexit`, or a
   `<transition>`'s own content, across the whole machine (ADR-0012 item 3).
-  `<donedata>`'s own `<content>` child is deliberately excluded (plan
-  Decision 8): it is not executable content, never appears in a block, and
-  no `execute_block` ever runs it, so giving it a `c_index` would stop
-  `c_index` meaning "the nth executable-content node".
+  `<donedata>`'s own `<content>` child is deliberately excluded: it is not
+  executable content, never appears in a block, and no `execute_block` ever
+  runs it, so giving it a `c_index` would stop `c_index` meaning "the nth
+  executable-content node".
   """
 
   alias Statifier.Machine.Content.Log

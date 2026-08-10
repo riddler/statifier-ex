@@ -141,7 +141,7 @@ defmodule Statifier.Compiler.AcceptanceTest do
   end
 
   # AC: "Predicator position side table stored with instructions; upgrade
-  # path to spans noted (st-2pj/st-mp4)"
+  # path to spans noted"
   #
   # sabotage: in `Statifier.Compiler.Expressions.compile/3`, change
   # `Predicator.compile_with_spans(source)` to

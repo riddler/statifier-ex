@@ -32,9 +32,8 @@ defmodule Statifier.Machine.Content.Log do
     @moduledoc false
 
     # spec 4.7's <log>: "log the label and the value of expr". `machine_state`
-    # is untouched (plan Decision 7) - <log> has an effect and nothing else,
-    # ADR-0003's whole point being that the core does not log, it returns log
-    # entries.
+    # is untouched - <log> has an effect and nothing else, ADR-0003's whole
+    # point being that the core does not log, it returns log entries.
     @spec execute(node :: Log.t(), context :: Context.t()) ::
             {:ok, Context.t(), [{:log, Effect.Log.t()}]}
     def execute(%Log{} = node, %Context{} = context) do
@@ -52,14 +51,14 @@ defmodule Statifier.Machine.Content.Log do
       {:ok, context, [{:log, log_effect}]}
     end
 
-    # `value`'s expr slot is compiled but not yet evaluated (plan Decision
-    # 10): st-af3 evaluates a compiled expr against the datamodel. Until
-    # then `value` is the static value or `nil` - not a rescue-to-default,
-    # nothing failed, the expression simply has not been evaluated yet
+    # `value`'s expr slot is compiled but not yet evaluated: evaluating a
+    # compiled expr against the datamodel is not yet implemented, so `value`
+    # is the static value or `nil` - not a rescue-to-default, nothing
+    # failed, the expression simply has not been evaluated yet
     # (`docs/datamodel.md`). Exactly the shape and reasoning
     # `static_donedata/2` used (`lib/statifier/interpreter/exit_entry.ex`),
-    # so the two places carrying an unevaluated expression until st-af3
-    # look the same and are found by the same grep.
+    # so the two places carrying an unevaluated expression look the same
+    # and are found by the same grep.
     @spec value(node :: Log.t()) :: term()
     defp value(%Log{expr: nil}), do: nil
     defp value(%Log{expr: {:static, term}}), do: term

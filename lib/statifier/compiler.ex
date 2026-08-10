@@ -10,15 +10,16 @@ defmodule Statifier.Compiler do
   pointers and self-inclusive descendant ranges (ADR-0005), resolves every
   `initial` to indexes, compiles every `<transition>` element - including an
   `<initial>` element's own transition and a `:history` state's default -
-  into `Statifier.Machine.Transition` (Phase 4), and compiles every
-  executable-content node reachable through `onentry`, `onexit`, or a
-  transition's own content into `Statifier.Machine.Content`, plus every
-  `:final` state's `<donedata>` into `Statifier.Machine.Donedata` (Phase 5).
+  into `Statifier.Machine.Transition` via its own transition pass, and
+  compiles every executable-content node reachable through `onentry`,
+  `onexit`, or a transition's own content into `Statifier.Machine.Content`,
+  plus every `:final` state's `<donedata>` into `Statifier.Machine.Donedata`,
+  via its own executable-content pass.
 
   ## One walk, not two (states); a real second pass (transitions, content,
   donedata)
 
-  The plan's "numbering walk" and "reference resolution" are, for `initial`
+  The "numbering walk" and "reference resolution" are, for `initial`
   specifically, one traversal rather than two: a state's `initial` can only
   legally name a descendant of that state (validator checks 3 and 7), and
   descendants are always finished - numbered, and their own ids entered into
@@ -86,8 +87,9 @@ defmodule Statifier.Compiler do
 
   @typedoc """
   The numbering walk's threaded state (see moduledoc). `id_to_index` and
-  `states_acc` are Phase 2's; `t_next`/`transitions_acc` are Phase 4's;
-  `c_next`/`contents_acc`/`donedata_acc` are Phase 5's.
+  `states_acc` belong to the interning pass; `t_next`/`transitions_acc` to
+  the transition pass; `c_next`/`contents_acc`/`donedata_acc` to the
+  executable-content pass.
   """
   @type acc :: %{
           id_to_index: %{optional(String.t()) => non_neg_integer()},
@@ -188,7 +190,7 @@ defmodule Statifier.Compiler do
   #
   # `last` is never computed separately from this traversal - a state's
   # `last` is `next_index - 1` at the point its own subtree finishes, which
-  # is exactly the recursion's return value (plan Implementation Approach).
+  # is exactly the recursion's return value.
   @spec walk_siblings(
           siblings :: [DState.t()],
           next_index :: non_neg_integer(),
@@ -241,9 +243,9 @@ defmodule Statifier.Compiler do
   # A state's own compiled `onentry`/`onexit` blocks and `t_index`-bearing
   # transitions, assigned the moment the state itself is visited - before the
   # walk descends into its children - so a state's own content and
-  # transitions always sort before any of its descendants' (plan Decision 9,
-  # extended to content). Assignment order mirrors the source's own
-  # `onentry*, onexit*, transition*, initial?` element order (spec 3.3-3.9):
+  # transitions always sort before any of its descendants'. Assignment order
+  # mirrors the source's own `onentry*, onexit*, transition*, initial?`
+  # element order (spec 3.3-3.9):
   # onentry content, then onexit content, then this state's own transitions
   # (and each transition's own content, assigned at the point that
   # transition itself is numbered). `:history`'s own transitions are its
@@ -387,10 +389,9 @@ defmodule Statifier.Compiler do
   # attribute, the `<initial>` element's transition target, then the
   # first-document-order-child default. Only `:state` resolves anything - a
   # `:parallel` enters every region simultaneously (no positional default to
-  # resolve), and `:final`/`:history` are never compound-entered at all
-  # (plan Changes Required #4). Validator check 7 already rejects the one
-  # illegal default case (a leading `:history` child), so the default here
-  # needs no re-checking.
+  # resolve), and `:final`/`:history` are never compound-entered at all.
+  # Validator check 7 already rejects the one illegal default case (a
+  # leading `:history` child), so the default here needs no re-checking.
   @spec resolve_initial(
           dstate :: DState.t(),
           children :: [non_neg_integer()],
@@ -438,9 +439,8 @@ defmodule Statifier.Compiler do
     end
   end
 
-  # The transition reference-resolution pass (plan Implementation Approach
-  # step 2, applied to transitions): with `id_to_index` complete, every
-  # transition's raw target id list becomes resolved indexes and every
+  # The transition reference-resolution pass: with `id_to_index` complete,
+  # every transition's raw target id list becomes resolved indexes and every
   # `cond` is compiled. Errors accumulate rather than short-circuit and are
   # sorted by `location.start_offset` before returning, mirroring
   # `Statifier.Lowering.finalize/2` (`lib/statifier/lowering.ex:137-141`) -
@@ -575,10 +575,11 @@ defmodule Statifier.Compiler do
   end
 
   # Compiles every `:final` state's own `<donedata>` into
-  # `Statifier.Machine.Donedata.t()`. No `c_index` is assigned (plan
-  # Decision 8): `donedata_acc` is keyed by owning state index, not a dense
-  # counter, so this pass has no density property to assert - only that
-  # every entry compiles.
+  # `Statifier.Machine.Donedata.t()`. No `c_index` is assigned - `<donedata>`'s
+  # content is not executable content, never appears in a block, and no
+  # `execute_block` ever runs it, so `donedata_acc` is keyed by owning state
+  # index, not a dense counter, and this pass has no density property to
+  # assert - only that every entry compiles.
   @spec build_donedata_map(donedata_acc :: %{non_neg_integer() => DDonedata.t()}) ::
           {:ok, %{non_neg_integer() => MDonedata.t()}} | {:error, [Error.t()]}
   defp build_donedata_map(donedata_acc) do
@@ -617,8 +618,8 @@ defmodule Statifier.Compiler do
     end
   end
 
-  # `<content>`'s folded value (plan Decision 7): the compiled arm from a
-  # written `expr` attribute, the static arm from its text body otherwise -
+  # `<content>`'s folded value: the compiled arm from a written `expr`
+  # attribute, the static arm from its text body otherwise -
   # validator check 9 (`Statifier.Validator.Checks.Content`) already
   # guarantees the two are never both present.
   @spec build_content_expr(content :: DContent.t(), owner :: Expressions.owner_ref()) ::
@@ -633,8 +634,8 @@ defmodule Statifier.Compiler do
   # The compiled arm's diagnostic span is `attribute_locations[:expr]`'s
   # value span when the author wrote `expr` (mirrors `cond_location/1` and
   # `expr_location/1`). The static arm's is the `<content>` node's own
-  # `location` (plan Decision 7): `Content.text` has no span of its own by
-  # design (`lib/statifier/document/content.ex:17-21`).
+  # `location`: `Content.text` has no span of its own by design
+  # (`lib/statifier/document/content.ex:17-21`).
   @spec content_expr_location(content :: DContent.t()) :: Location.t()
   defp content_expr_location(%DContent{expr: nil, location: location}), do: location
 

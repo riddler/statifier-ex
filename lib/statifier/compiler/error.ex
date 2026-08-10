@@ -11,8 +11,8 @@ defmodule Statifier.Compiler.Error do
   reaching the compiler is a validator bug, left to raise rather than
   converted into a value of this type. The one failure mode that *is* the
   compiler's own - a `cond`/`expr`/`<content>` source that fails to
-  compile - is `:expression_compile_error` (Phase 3, plan Decision 6),
-  built by `Statifier.Compiler.Expressions.compile/3` on its failure path.
+  compile - is `:expression_compile_error`, built by
+  `Statifier.Compiler.Expressions.compile/3` on its failure path.
   """
 
   alias Predicator.Errors.ParseError
@@ -24,8 +24,8 @@ defmodule Statifier.Compiler.Error do
   (`Statifier.Compiler.Expressions.owner_ref/0` - a transition, a content
   node, or a final state's donedata), the raw expression `source`, and
   predicator's own `%Predicator.Errors.ParseError{}` verbatim, in
-  predicator's own `{line, column}` coordinate space (plan Decision 6: the
-  translation into document columns happens at reporting time, not here).
+  predicator's own `{line, column}` coordinate space - the translation into
+  document columns happens at reporting time, not here.
   """
   @type reason ::
           {:expression_compile_error, Expressions.owner_ref(), source :: String.t(),
@@ -41,8 +41,8 @@ defmodule Statifier.Compiler.Error do
         }
 
   @doc """
-  A `cond`/`expr`/`<content>` source that failed to compile (plan Decision
-  6). `location` is the caller's choice - the attribute *value* span
+  A `cond`/`expr`/`<content>` source that failed to compile. `location` is
+  the caller's choice - the attribute *value* span
   (`attribute_locations[:cond]` / `[:expr]`) when the author wrote the
   attribute, the owning node's own `location` when
   `Statifier.Lowering.Attributes.put_location/4` produced no entry
