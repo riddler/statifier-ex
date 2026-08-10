@@ -855,12 +855,12 @@ ADR-0018 point 2 and must be restored.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] `mix gate.verify` confirms the run was a full, unprofiled, unscoped gate
-- [ ] The whole-tree grep returns only the residuals in the table above
-- [ ] `git diff main...HEAD` changes no executable line - the whole branch is
+- [x] Full `mix quality` passes
+- [x] `mix gate.verify` confirms the run was a full, unprofiled, unscoped gate
+- [x] The whole-tree grep returns only the residuals in the table above
+- [x] `git diff main...HEAD` changes no executable line - the whole branch is
       comments, docstrings, test descriptions, and `.md` prose
-- [ ] The whole-branch guard-survival check leaves no unmatched removal
+- [x] The whole-branch guard-survival check leaves no unmatched removal
 
 #### Manual Verification:
 - [ ] Spot-check ten rewritten comments across different phases: each reads
@@ -1094,5 +1094,19 @@ module, so the Appendix D conformance criterion does not apply.
 
 **Implementation Note**: As Phase 1. No `lib/statifier/` module is touched, so
 the Appendix D conformance criterion does not apply.
+
+---
+
+### Phase 10
+
+- [ ] Spot-check ten rewritten comments across different phases: each reads
+      correctly with no knowledge of beads, plans, or this sweep
+- [ ] The `# sabotage:` note count is unchanged from `main`
+      (`git grep -c 'sabotage:' | wc -l` on both sides)
+- [ ] Interpreter comments still describe the Appendix D pseudocode line for
+      line and every spec section reference is intact (ADR-0002)
+
+**Implementation Note**: As Phase 1. If this phase's diff is empty, do not
+create an empty commit; report the clean grep instead.
 
 ---
