@@ -152,6 +152,6 @@ preserve when it does:
 | trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
 | compiler retains locations on states, transitions, executable content | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content` |
 | compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |
-| compiler assigns document-order indexes to transitions and executable-content nodes | `t_index`/`c_index`, dense from 0 |
+| compiler assigns document-order indexes to transitions and executable-content nodes (`t_index`/`c_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
 | Appendix D query functions take/return plain values, unfused | `Statifier.Interpreter.Selection`, `Statifier.Interpreter.ExitEntry`, `Statifier.Interpreter.Content` |
