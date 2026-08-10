@@ -385,12 +385,12 @@ scope.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/statifier/interpreter/selection.ex
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/statifier/interpreter/selection.ex
       lib/statifier/interpreter/name_match.ex test/statifier/interpreter/selection*`
       returns zero hits
-- [ ] The removed-line check over the phase paths is clean
-- [ ] No executable line changed in the phase's diff
+- [x] The removed-line check over the phase paths is clean
+- [x] No executable line changed in the phase's diff
 
 #### Manual Verification:
 - [ ] `selection.ex`'s moduledoc section headings name the behavior rather than
@@ -1002,6 +1002,18 @@ the Manual Verification items are deferred and surfaced once at the end.
 - [ ] The unnumbered word "phase" survives wherever it described a compiler pass
 - [ ] Comments touching `lib/statifier/` still match the W3C spec; no Appendix D
       name or spec citation was altered
+
+**Implementation Note**: As Phase 1.
+
+---
+
+### Phase 3
+
+- [ ] `selection.ex`'s moduledoc section headings name the behavior rather than
+      a decision number, and each section still states its invariant
+- [ ] `select_transitions`/`selectTransitions` and every other Appendix D name
+      and spec section in the module is untouched, and the surrounding prose
+      still matches the pseudocode line for line (ADR-0002)
 
 **Implementation Note**: As Phase 1.
 

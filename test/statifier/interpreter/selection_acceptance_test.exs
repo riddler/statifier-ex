@@ -19,9 +19,9 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   end
 
   # Hand-drawn from `@document`, depth-first, document order - one document
-  # covering every bead acceptance-criteria line a test can decide, so this
-  # file reads next to the bead's own list rather than Phase 1-3's per-rule
-  # fixtures.
+  # covering every acceptance-criteria line a test can decide, so this
+  # file reads as one whole next to the narrower per-rule fixtures in the
+  # other test files in this directory.
   #
   #  0 scxml (root)
   #  1   full_name           -- 3.13: full-name match
@@ -196,7 +196,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   # test" - re-asserted end to end from a real compiled document rather than
   # the literal token lists name_match_test.exs uses, so this exercises the
   # compiler's `events` shape feeding the matcher, not the matcher's own
-  # rules (Phase 1 already covers those).
+  # rules (`name_match_test.exs` already covers those).
   #
   # sabotage: `descriptor_match?/2` in
   # lib/statifier/interpreter/name_match.ex compares
@@ -240,9 +240,9 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
 
   # sabotage: `normalize/1` only strips a trailing `"*"` when it is the
   # descriptor's *only* token (`["*"] -> []`, everything else left alone) -
-  # the exact v1 gap this bead names - so `["foo", "*"]` is compared
-  # literally against `["foo"]` and `["foo", "bar"]`, matching neither, and
-  # both selects below fail to fire.
+  # the exact `foo.*`-matches-`foo` gap `docs/architecture.md` names - so
+  # `["foo", "*"]` is compared literally against `["foo"]` and `["foo",
+  # "bar"]`, matching neither, and both selects below fail to fire.
   test "3.13: trailing .* matches both the bare prefix and a longer name" do
     m = machine()
     ms = machine_state(m, [idx(:trailing_star)])
@@ -292,8 +292,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     assert [%Transition{}] = transitions
   end
 
-  # AC: "Child preempts ancestor" - re-asserted end to end (Phase 3 already
-  # covers the shape; this is the acceptance-criteria line by name).
+  # AC: "Child preempts ancestor" - re-asserted end to end (`selection_test.exs`
+  # already covers the shape; this is the acceptance-criteria line by name).
   #
   # sabotage: `selected_for_atomic_state/3` walks
   # `Machine.proper_ancestors(machine, state_index)` only, dropping
@@ -378,7 +378,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   end
 
   # AC: "cond seam is one stubbed function returning {:ok, boolean} |
-  # {:error, e}; Phase 3 replaces the stub only"
+  # {:error, e}; a later datamodel evaluation replaces the stub only"
   #
   # sabotage: `condition_match/2`'s written-`cond` clause returns `{:ok,
   # true}` instead of `{:error, {:unsupported, :cond}}` -> the `{:error, _}`

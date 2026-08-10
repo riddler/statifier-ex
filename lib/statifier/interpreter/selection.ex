@@ -6,13 +6,13 @@ defmodule Statifier.Interpreter.Selection do
   needs only topology, `machine`) as its first argument - the mechanical
   deviation `docs/observability.md` constraint 1 sanctions for reifying the
   pseudocode's `configuration` and `historyValue` globals onto
-  `%Statifier.MachineState{}` (plan Decision 3). Each function's own `@doc`
+  `%Statifier.MachineState{}`. Each function's own `@doc`
   says which global its first argument stands in for; this paragraph states
   the rule once so they do not each re-argue it.
 
-  `compute_exit_set/2` returns a `MapSet` of indexes, not an `OrderedSet`
-  (plan Decision 6): `remove_conflicting_transitions` (Phase 3) wants set
-  intersection and gets it directly, and a caller that wants exit *order*
+  `compute_exit_set/2` returns a `MapSet` of indexes, not an `OrderedSet`:
+  `remove_conflicting_transitions` wants set intersection and gets it directly,
+  and a caller that wants exit *order*
   pipes the result through `Statifier.Machine.exit_order/2`, which already
   exists for exactly that. No function in this module orders an exit set
   itself.
@@ -28,24 +28,25 @@ defmodule Statifier.Interpreter.Selection do
 
   `select_transitions/2` and `select_eventless_transitions/1` are the two
   functions in this module that thread `machine_state` through their
-  *return* value as well as their first argument (plan Decision 8): both
+  *return* value as well as their first argument: both
   return `{MachineState.t(), [Transition.t()]}` rather than a bare list, so
-  that when st-af3 replaces `condition_match/2`'s stub with a real
-  evaluation and starts enqueuing `error.execution` on a failed `cond`, both
-  entry points already have a machine_state to enqueue onto - st-af3 changes
-  a function body, not either signature. Every other query in this module,
-  including `remove_conflicting_transitions/2` itself, still returns a plain
-  value with no machine_state, because none of them can raise. In this phase
+  that when `condition_match/2`'s stub is replaced with a real datamodel
+  evaluation that enqueues `error.execution` on a failed `cond`, both
+  entry points already have a machine_state to enqueue onto - that change
+  will touch a function body, not either signature. Every other query in this
+  module, including `remove_conflicting_transitions/2` itself, still returns a
+  plain value with no machine_state, because none of them can raise. Today
   the machine_state comes back unchanged from both entry points; a test
-  below pins that so the day it stops being true is a deliberate st-af3 edit.
+  below pins that so the day it stops being true is a deliberate,
+  signature-preserving edit to `condition_match/2`'s body.
 
   The two walks and the conflict filter are Appendix D's two nested loops
   with labelled breaks, decomposed into named private helpers to stay under
-  Credo's cyclomatic-complexity and nesting limits (plan Decision 9) - each
+  Credo's cyclomatic-complexity and nesting limits - each
   helper's doc names the pseudocode lines it stands in for, so "diff against
   the pseudocode" still works one level down. The enabled set is deduplicated
   by `t_index`, keeping the first occurrence, in place of the pseudocode's
-  `OrderedSet` (plan Decision 10).
+  `OrderedSet`.
   """
 
   alias Statifier.Event
@@ -57,16 +58,18 @@ defmodule Statifier.Interpreter.Selection do
   @doc """
   `findLCCA` (Appendix D) - see `Statifier.Machine.lcca/2` for the body.
 
-  One implementation, two names (plan Decision 2): `Machine.lcca/2` is the
-  port under st-wju.1's "name the spec operation it serves" convention;
-  this `defdelegate` puts the spec's own name at the interpreter's port
-  surface, where `mix adr.check` looks and where ADR-0002 expects to find it.
+  One implementation, two names: `Machine.lcca/2` is the
+  port under `Statifier.Machine`'s own convention of naming its query
+  helpers after the spec operation they serve rather than after the spec
+  function itself; this `defdelegate` puts the spec's own name at the
+  interpreter's port surface, where `mix adr.check` looks and where
+  ADR-0002 expects to find it.
   """
   defdelegate find_lcca(machine, indexes), to: Statifier.Machine, as: :lcca
 
   @doc """
   `getEffectiveTargetStates` (Appendix D) - `transition`'s targets, with every
-  `:history` target resolved to a concrete set of indexes (plan Decision 5).
+  `:history` target resolved to a concrete set of indexes.
 
   `machine_state` stands in for two pseudocode globals: `historyValue`
   (`machine_state.history_values`) and, indirectly through
@@ -83,8 +86,9 @@ defmodule Statifier.Interpreter.Selection do
   so the result is **not** deduplicated: `target="hs b1a"`, where `hs`
   resolves to `b1a`, yields that index twice. Every consumer is insensitive
   to it - `get_transition_domain/2` feeds the list to `Enum.all?/2` and to
-  `find_lcca/2`, neither of which changes answer on a repeat, and st-wju.4's
-  entry set absorbs repeats into the set it is building - so the dedupe would
+  `find_lcca/2`, neither of which changes answer on a repeat, and
+  `Statifier.Interpreter.ExitEntry`'s entry-set construction absorbs repeats
+  into the set it is building - so the dedupe would
   be dead work at every call site that exists. Deduplicate at the consumer
   that needs it, if one ever does, rather than here.
   """
@@ -130,7 +134,7 @@ defmodule Statifier.Interpreter.Selection do
 
   `machine_state` stands in for the same globals as
   `get_effective_target_states/2`, which this function calls first. Two
-  literal-port details (plan Decision 6):
+  literal-port details:
 
   - The guard here is on *effective* targets (an empty resolution, e.g. an
     unrecorded history with no default reachable, yields `nil`), distinct
@@ -178,7 +182,7 @@ defmodule Statifier.Interpreter.Selection do
   @doc """
   `computeExitSet` (Appendix D) - every index in `machine_state.configuration`
   that a proper descendant of any transition in `transitions`'s domain, unioned
-  across `transitions` (plan Decision 6).
+  across `transitions`.
 
   Two literal-port details that must survive review:
 
@@ -230,15 +234,15 @@ defmodule Statifier.Interpreter.Selection do
   end
 
   @doc """
-  `conditionMatch` (Appendix D) - Decision 7's one `cond` seam. `nil` `cond`
+  `conditionMatch` (Appendix D) - the one `cond` seam. `nil` `cond`
   always passes; a *written* `cond` is currently an error rather than an
   assumed `true`, because treating an unevaluated condition as satisfied
   would be the "rescue-to-default at a leaf" failure `docs/architecture.md`
-  names as a v1 defect. st-af3 replaces this function's body with a real
-  predicator evaluation and, at the call site below, raises `error.execution`
-  on the error case (an inline comment there cites st-af3 too); neither this
-  function's signature nor the selection logic that calls it changes when
-  that lands - only the body does.
+  names as a v1 defect. This function's body is a stub; the datamodel
+  evaluation that replaces it will raise `error.execution` at the call site
+  below on the error case; neither this function's signature nor the
+  selection logic that calls it will change when that lands - only the body
+  will.
 
   Unreachable from the corpus today: `FeatureDetector` marks
   `conditional_transitions` `:unsupported`, so no compiled document can carry
@@ -253,15 +257,15 @@ defmodule Statifier.Interpreter.Selection do
   @doc """
   `selectTransitions` (Appendix D) - the transitions `event` enables, one per
   atomic state in `machine_state.configuration` at most (child preempts
-  ancestor), deduplicated by `t_index` (Decision 10), and filtered through
+  ancestor), deduplicated by `t_index`, and filtered through
   `remove_conflicting_transitions/2` per the pseudocode's own last line.
 
   `event.name` is tokenized once via `NameMatch.tokenize/1` before the walk
-  and threaded down to every atomic state's search (Decision 4's hoist out of
-  the per-transition matcher) rather than re-split per transition.
+  and threaded down to every atomic state's search - a hoist out of the
+  per-transition matcher - rather than re-split per transition.
 
   Returns `{machine_state, transitions}`: the machine_state comes back
-  unchanged in this phase (plan Decision 8) - see the moduledoc.
+  unchanged today - see the moduledoc.
   """
   @spec select_transitions(machine_state :: MachineState.t(), event :: Event.t()) ::
           {MachineState.t(), [Transition.t()]}
@@ -286,8 +290,8 @@ defmodule Statifier.Interpreter.Selection do
   (`Credo.Check.Design.DuplicatedCode` is disabled in `.credo.exs` for
   exactly this reason).
 
-  Returns `{machine_state, transitions}`, unchanged machine_state in this
-  phase, matching `select_transitions/2` (plan Decision 8).
+  Returns `{machine_state, transitions}`, unchanged machine_state today,
+  matching `select_transitions/2`.
   """
   @spec select_eventless_transitions(machine_state :: MachineState.t()) ::
           {MachineState.t(), [Transition.t()]}
@@ -302,8 +306,7 @@ defmodule Statifier.Interpreter.Selection do
   end
 
   # The atomic-state outer loop of both `selectTransitions` and
-  # `selectEventlessTransitions`: every active leaf, in document order
-  # (Decision 9).
+  # `selectEventlessTransitions`: every active leaf, in document order.
   @spec atomic_states_in_document_order(machine_state :: MachineState.t()) :: [
           non_neg_integer()
         ]
@@ -315,7 +318,7 @@ defmodule Statifier.Interpreter.Selection do
 
   # The labelled `break loop` in each atomic state's walk: self, then each
   # proper ancestor outward, stopping at the first state that has an enabled
-  # transition (Decision 9). `event_tokens` is `nil` for the eventless walk
+  # transition. `event_tokens` is `nil` for the eventless walk
   # and a token list for the event-matched walk; `first_matching_transition/4`
   # reads that to pick the right per-transition predicate. `List.wrap/1`
   # turns `find_value`'s `Transition.t() | nil` into the `[]` or `[transition]`
@@ -337,7 +340,7 @@ defmodule Statifier.Interpreter.Selection do
 
   # The per-state inner loop: the state's own `transitions`, in the document
   # order they are stored, through `Machine.transition/2`, stopping at the
-  # first one whose predicate holds (Decision 9).
+  # first one whose predicate holds.
   @spec first_matching_transition(
           machine_state :: MachineState.t(),
           machine :: Machine.t(),
@@ -377,8 +380,8 @@ defmodule Statifier.Interpreter.Selection do
 
   @doc """
   `removeConflictingTransitions` (Appendix D) - `enabled_transitions`,
-  filtered down to a conflict-free set, ported exactly for its filter order
-  (plan Decision 9): two transitions conflict iff their exit sets intersect;
+  filtered down to a conflict-free set, ported exactly for its filter order:
+  two transitions conflict iff their exit sets intersect;
   on conflict, a `t1` sourced in a descendant of `t2`'s source preempts
   `t2` (`t2` is marked for removal, `t1` keeps checking the rest of the
   filtered set); otherwise `t1` itself is preempted and its inner loop stops
@@ -387,8 +390,8 @@ defmodule Statifier.Interpreter.Selection do
   (descendant) source". A surviving `t1` has every transition it marked for
   removal dropped from the filtered set and is appended to it.
 
-  This is the function ADR-0002 was partly adopted to fix (plan "What v1 got
-  wrong here"): v1's conflict resolution reduced every transition's exit set
+  This is the function ADR-0002 was partly adopted to fix: v1's conflict
+  resolution reduced every transition's exit set
   to a boolean "does it leave the nearest parallel ancestor" and collapsed an
   entire microstep to one transition whenever both a leaving and a
   non-leaving transition were enabled, discarding unrelated, genuinely
@@ -398,7 +401,7 @@ defmodule Statifier.Interpreter.Selection do
 
   The insertion order `enabled_transitions` arrives in is
   `select_transitions/2`/`select_eventless_transitions/1`'s document-order,
-  dedup-by-`t_index` walk (Decision 10) - the pseudocode's own comment about
+  dedup-by-`t_index` walk - the pseudocode's own comment about
   `toList`'s ordering "the order of the states that selected them" is exactly
   that walk, not anything this function itself orders.
   """
@@ -420,8 +423,7 @@ defmodule Statifier.Interpreter.Selection do
   # (`Enum.reduce_while/3` for the pseudocode's `break`), collecting
   # descendant-sourced conflicts to remove instead. Returns `{:preempted,
   # filtered}` (t1 does not survive, filtered is returned as-is) or `{:keep,
-  # filtered_without_removed}` (t1 survives, its marked conflicts are gone)
-  # (Decision 9).
+  # filtered_without_removed}` (t1 survives, its marked conflicts are gone).
   @spec resolve_against_filtered(
           machine_state :: MachineState.t(),
           t1 :: Transition.t(),
