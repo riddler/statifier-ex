@@ -30,11 +30,11 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   Every call site that would run executable content - `<onexit>`,
   `<onentry>`, an `<initial>` transition's content, default history
-  content - goes through the private `execute_block/3` seam, whose body is
-  a no-op stub today. st-wju.5 owns the block runner and the
-  `Trace.ContentExecuted` emission that wraps it; this bead owns only
-  *where and in what order* blocks run. Replacing `execute_block/3`'s body
-  changes no call site and no ordering.
+  content - goes through the private `execute_block/3` seam, which
+  delegates to `Statifier.Interpreter.Content.execute_block/3`: that module
+  owns the block runner and the `Trace.ContentExecuted` emission that wraps
+  it. This module owns only *where and in what order* blocks run, which is
+  what the exit/entry pseudocode defines.
 
   ## History recording (Decision 7)
 
@@ -69,9 +69,9 @@ defmodule Statifier.Interpreter.ExitEntry do
   (Decision 6) actually needs to build a `Content.owner()`.
   """
 
+  alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
-  alias Statifier.Machine.Content
   alias Statifier.Machine.Donedata
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
@@ -232,17 +232,18 @@ defmodule Statifier.Interpreter.ExitEntry do
     end)
   end
 
-  # ADR-0002: the pseudocode's `executeContent(content)`. st-wju.5 owns the
-  # block runner and the `Trace.ContentExecuted` emission that wraps it;
-  # this bead owns only *where and in what order* blocks run, which is
-  # what the exit/entry pseudocode defines. Replacing this body with a
-  # call to that runner changes no call site and no ordering (Decision 6).
+  # ADR-0002: the pseudocode's `executeContent(content)`. See
+  # `Statifier.Interpreter.Content.execute_block/3` for the block runner
+  # itself and the `Trace.ContentExecuted` emission that wraps it; this
+  # bead owns only *where and in what order* blocks run, which is what the
+  # exit/entry pseudocode defines (Decision 6).
   @spec execute_block(
           machine_state :: MachineState.t(),
-          owner :: Content.owner(),
+          owner :: Machine.Content.owner(),
           c_indexes :: [non_neg_integer()]
         ) :: {MachineState.t(), [Effect.t()]}
-  defp execute_block(machine_state, _owner, _c_indexes), do: {machine_state, []}
+  defp execute_block(machine_state, owner, c_indexes),
+    do: Content.execute_block(machine_state, owner, c_indexes)
 
   @doc """
   `computeEntrySet` (Appendix D) - the entry-set bookkeeping every

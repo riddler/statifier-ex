@@ -509,4 +509,36 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       refute ExitEntry.in_final_state?(ms, idx(:reg1_final))
     end
   end
+
+  # Proves the content seam is live end-to-end (st-wju.5): entering a state
+  # with an onentry <raise> now genuinely enqueues the event on the internal
+  # queue, not the st-wju.4 no-op stub's silent nothing. A dedicated document
+  # is used - the shared `@document` above has no bare onentry <raise>.
+  #
+  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the st-wju.4
+  # stub (`defp execute_block(machine_state, _owner, _c_indexes), do:
+  # {machine_state, []}`) -> the internal queue stays empty, reddening this
+  # assertion.
+  test "the onentry seam is live: entering a with an onentry <raise> queues its event" do
+    m =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="trigger">
+          <state id="trigger">
+              <transition event="go" target="a"/>
+          </state>
+          <state id="a">
+              <onentry>
+                  <raise event="in"/>
+              </onentry>
+          </state>
+      </scxml>
+      """)
+
+    transition = transition_named(m, "go")
+    ms = MachineState.new(m)
+
+    {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+    assert [%{name: "in", type: :internal}] = MachineState.internal_events(result)
+  end
 end
