@@ -3,13 +3,12 @@ defmodule Statifier.Effect.SendDelayed do
   Payload for `{:send_delayed, %__MODULE__{}}` - spec 6.2's `<send>` when
   `delay`/`delayexpr` is present. Carries every field
   `Statifier.Effect.Send` does, plus `delay_ms`, the resolved delay in
-  milliseconds; st-cmq's session owns the timer that eventually fires this
-  send, this bead only defines the shape it schedules.
+  milliseconds. The timer that eventually fires this send is not yet
+  implemented; this module only defines the shape it schedules.
 
   `c_index` identifies the `<send>` content node (constraint 3, never a
   compiled content-node struct); `macrostep`/`microstep` are the counters
-  as they stood when the send was scheduled (Decision 5), not when the
-  timer fires.
+  as they stood when the send was scheduled, not when the timer fires.
   """
 
   @enforce_keys [:event, :delay_ms, :macrostep, :microstep]

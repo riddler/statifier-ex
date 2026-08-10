@@ -7,7 +7,7 @@ defmodule Statifier.Effect.Trace.EventDequeued do
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
   are always stamped from the `Statifier.MachineState` at hand and no call
-  site can forget or duplicate them (Decision 4).
+  site can forget or duplicate them.
   """
 
   alias Statifier.Event

@@ -5,7 +5,7 @@ defmodule Statifier.Event do
   constraint-4 cause slot (`docs/observability.md`) for events the platform
   raised itself.
 
-  ## `type` is provenance, not routing (Decision 10)
+  ## `type` is provenance, not routing
 
   `type :: :external | :internal | :platform` mirrors spec 5.10.1's three
   event types exactly. `:platform` events (`error.execution`,
@@ -27,12 +27,12 @@ defmodule Statifier.Event do
   ## What is deliberately absent
 
   - `_event`, spec 5.10's system variable holding the last processed event,
-    is datamodel content (plan Decision 11) and lands with st-af3 in the
-    datamodel slot. It is not a field here.
+    is datamodel content and lands in the datamodel slot once that
+    evaluation work exists. It is not a field here.
   - `origin` and `sendid` (spec 5.10.1's remaining event fields) are left
     out rather than carried dead: they matter to `<send>`/`<invoke>`
-    round-tripping, which is st-cmq's session work. st-cmq adds them when a
-    caller exists.
+    round-tripping, which the not-yet-implemented session support handles.
+    They get added once that caller exists.
   """
 
   alias Statifier.Event.Cause
@@ -40,7 +40,7 @@ defmodule Statifier.Event do
   @enforce_keys [:name, :type]
   defstruct [:name, :type, data: nil, cause: nil]
 
-  @typedoc "Spec 5.10.1's three event types - provenance, not queue routing (Decision 10)."
+  @typedoc "Spec 5.10.1's three event types - provenance, not queue routing."
   @type type :: :external | :internal | :platform
 
   @type t :: %__MODULE__{
@@ -76,7 +76,7 @@ defmodule Statifier.Event do
   @doc """
   An event the platform itself raised (`error.execution`,
   `error.communication`, `done.state.*`) - rides the internal queue exactly
-  like `internal/3` (Decision 10); `type: :platform` only distinguishes its
+  like `internal/3`; `type: :platform` only distinguishes its
   provenance for a consumer that cares.
   """
   @spec platform(name :: String.t(), cause :: Cause.t(), opts :: keyword()) :: t()

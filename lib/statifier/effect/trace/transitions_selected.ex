@@ -9,7 +9,7 @@ defmodule Statifier.Effect.Trace.TransitionsSelected do
   against, or `nil` for an eventless round.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.Event

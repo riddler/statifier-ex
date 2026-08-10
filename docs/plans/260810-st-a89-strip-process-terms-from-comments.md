@@ -565,12 +565,12 @@ requirement) and fold it in before stripping.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/statifier/effect* lib/statifier/event*
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/statifier/effect* lib/statifier/event*
       lib/statifier/executable_content* test/statifier/event_test.exs
       test/statifier/executable_content_test.exs` returns zero hits
-- [ ] The removed-line check over the phase paths is clean
-- [ ] No executable line changed in the phase's diff
+- [x] The removed-line check over the phase paths is clean
+- [x] No executable line changed in the phase's diff
 
 #### Manual Verification:
 - [ ] Every ADR-0012 and ADR-0003 citation in the effect and trace modules
@@ -1040,6 +1040,18 @@ the Manual Verification items are deferred and surfaced once at the end.
       code, with no bead named as the thing that will implement it
 - [ ] The touched `lib/statifier/` functions still match Appendix D line for
       line and their spec citations are intact
+
+**Implementation Note**: As Phase 1.
+
+---
+
+### Phase 6
+
+- [ ] Every ADR-0012 and ADR-0003 citation in the effect and trace modules
+      survives
+- [ ] The statements about which effect variants exist today are true of the
+      current tree, not copied from a stale comment
+- [ ] Touched `lib/statifier/` comments still match the spec and Appendix D
 
 **Implementation Note**: As Phase 1.
 

@@ -54,8 +54,8 @@ defmodule Statifier.EventTest do
   describe "platform/3" do
     # sabotage: `Event.platform/3` stamps `type: :internal` instead of
     # `type: :platform` -> this assertion reddens, since :platform is
-    # provenance-only (Decision 10) and must stay distinguishable from
-    # :internal even though both ride the same queue.
+    # provenance-only and must stay distinguishable from :internal even
+    # though both ride the same queue.
     test "stamps type: :platform" do
       assert %Event{type: :platform} = Event.platform("error.execution", @cause)
     end

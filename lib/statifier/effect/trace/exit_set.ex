@@ -6,7 +6,7 @@ defmodule Statifier.Effect.Trace.ExitSet do
   states to be exited (constraint 3, integer indexes), in exit order.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand (Decision 4).
+  are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.MachineState
