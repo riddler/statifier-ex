@@ -143,27 +143,15 @@ preserve when it does:
   interpreter and are its problem.
 - No performance work on tracing beyond the emission gate.
 
-## Implementation checklist
+## Where the seams live
 
-For the Phase 1 interpreter work and its reviews:
-
-- [x] machine_state struct holds configuration, internal queue, history,
-      datamodel, `running`, and step counters - no interpreter loop variable
-      that is not reconstructible from the struct (`Statifier.MachineState`,
-      st-wju.2)
-- [ ] `microstep` step function exists; macrostep folds over it
-- [x] trace effect types defined with the vocabulary above; emission gated
-      (`Statifier.Effect`, `Statifier.Effect.Trace.*`, st-wju.2)
-- [x] compiler retains locations on states, transitions, executable content
-      (`Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`,
-      st-wju.1)
-- [x] compiled expressions carry their span table with the instructions
-      (ADR-0014) (`Statifier.Compiler.Expressions.compile/3` stores
-      `%Predicator.Compiled{}` whole, st-wju.1)
-- [x] compiler assigns document-order indexes to transitions and
-      executable-content nodes (`t_index`/`c_index`, dense from 0, st-wju.1)
-- [x] internally raised events carry cause metadata (identity + step)
-      (`Statifier.Event.Cause`, `MachineState.raise_internal/4`, st-wju.2)
-- [x] Appendix D query functions take/return plain values, unfused
-      (`Statifier.Interpreter.Selection`, st-wju.3; `Statifier.Interpreter.ExitEntry`,
-      st-wju.4; `Statifier.Interpreter.Content`, st-wju.5)
+| Seam | Where it lives |
+|---|---|
+| machine_state struct holds configuration, internal queue, history, datamodel, `running`, and step counters - no interpreter loop variable that is not reconstructible from the struct | `Statifier.MachineState` |
+| `microstep` step function exists; macrostep folds over it | not yet implemented |
+| trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
+| compiler retains locations on states, transitions, executable content | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content` |
+| compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |
+| compiler assigns document-order indexes to transitions and executable-content nodes | `t_index`/`c_index`, dense from 0 |
+| internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
+| Appendix D query functions take/return plain values, unfused | `Statifier.Interpreter.Selection`, `Statifier.Interpreter.ExitEntry`, `Statifier.Interpreter.Content` |

@@ -39,7 +39,7 @@ from the three above in kind, not just in tag:
 - **Why it is excluded.** Real CLI calls, real spend, and ~15-20 minutes for the
   full corpus (roughly two model round trips per fixture). Tagged
   `:adr_judge_corpus` and excluded in `test/test_helper.exs` the same way `:scion`
-  and `:scxml_w3` are, plus st-c8c's reason on top: `:test`'s
+  and `:scxml_w3` are. There is a further reason on top: `:test`'s
   `@default_caller` still raises on a forgotten `opts[:caller]` everywhere else,
   and this module's own tests keep injecting stubs - only the corpus test module
   opts into the real caller, visibly, at its own call site.
@@ -171,13 +171,13 @@ built-in `Tests` stage concurrently, in the same working directory, and
 modules. ExUnit's `@tag :tmp_dir` hardcodes its scratch root to `tmp/`
 relative to the process's cwd with no way to configure it, so two concurrent
 runs of the same test compute byte-identical paths and race on
-`rm_rf!`/`mkdir_p!` (st-0vz).
+`rm_rf!`/`mkdir_p!`.
 
 Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead - same `tmp_dir`
 context key, same directory shape, but `root/0` always ends in a
 `System.pid()` segment, so two concurrent OS processes cannot resolve to the
-same scratch path even if they somehow agree on everything else (st-iao;
-`test/statifier/tmp_dir_test.exs` itself used to do exactly that, mutating
+same scratch path even if they somehow agree on everything else
+(`test/statifier/tmp_dir_test.exs` itself used to do exactly that, mutating
 `STATIFIER_TMP_ROOT` process-globally mid-run). `STATIFIER_TMP_ROOT` (default
 `"tmp"`) still exists, but only to choose where a run's pid-scoped tree lives
 for readability - `mix test.regression` sets it to `tmp/regression` so the
