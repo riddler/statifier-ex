@@ -6,11 +6,11 @@ defmodule Statifier.Compiler.Error do
 
   This union is deliberately small. `Statifier.Validator` owns every
   non-expression failure mode exclusively (checks 1-11 at
-  `lib/statifier/validator.ex:47-59`): every id `Statifier.Compiler` looks up
-  is guaranteed present by the time it gets there, so an unresolved reference
-  reaching the compiler is a validator bug, left to raise rather than
-  converted into a value of this type. The one failure mode that *is* the
-  compiler's own - a `cond`/`expr`/`<content>` source that fails to
+  `lib/statifier/validator.ex:47-59`): every id `Statifier.Compiler` looks
+  up is guaranteed present by the time it gets there, so an unresolved
+  reference reaching the compiler is a validator bug, left to raise rather
+  than converted into a value of this type. The one failure mode that *is*
+  the compiler's own - a `cond`/`expr`/`<content>` source that fails to
   compile - is `:expression_compile_error`, built by
   `Statifier.Compiler.Expressions.compile/3` on its failure path.
   """

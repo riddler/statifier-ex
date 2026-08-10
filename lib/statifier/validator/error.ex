@@ -324,12 +324,11 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Check 6 (spec 3.7): `id` names a `:final` carrying a
-  `<transition>`. A `<final>` is where a region stops, so it has no
-  outgoing transitions to take - spec 3.7's content model is `onentry`,
-  `onexit`, and `donedata` only. Reported once per offending transition, at
-  the **transition's own** `location` rather than the `<final>`'s, matching
-  `final_has_states/2`.
+  Check 6 (spec 3.7): `id` names a `:final` carrying a `<transition>`. A
+  `<final>` is where a region stops, so it has no outgoing transitions to
+  take - spec 3.7's content model is `onentry`, `onexit`, and `donedata`
+  only. Reported once per offending transition, at the **transition's own**
+  `location` rather than the `<final>`'s, matching `final_has_states/2`.
   """
   @spec final_has_transitions(id :: binary() | nil, location :: Location.t()) :: t()
   def final_has_transitions(id, %Location{} = location) do

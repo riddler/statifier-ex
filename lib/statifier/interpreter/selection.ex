@@ -28,14 +28,14 @@ defmodule Statifier.Interpreter.Selection do
 
   `select_transitions/2` and `select_eventless_transitions/1` are the two
   functions in this module that thread `machine_state` through their
-  *return* value as well as their first argument: both
-  return `{MachineState.t(), [Transition.t()]}` rather than a bare list, so
-  that when `condition_match/2`'s stub is replaced with a real datamodel
-  evaluation that enqueues `error.execution` on a failed `cond`, both
-  entry points already have a machine_state to enqueue onto - that change
-  will touch a function body, not either signature. Every other query in this
-  module, including `remove_conflicting_transitions/2` itself, still returns a
-  plain value with no machine_state, because none of them can raise. Today
+  *return* value as well as their first argument: both return
+  `{MachineState.t(), [Transition.t()]}` rather than a bare list, so that
+  when `condition_match/2`'s stub is replaced with a real datamodel
+  evaluation that enqueues `error.execution` on a failed `cond`, both entry
+  points already have a machine_state to enqueue onto - that change will
+  touch a function body, not either signature. Every other query in this
+  module, including `remove_conflicting_transitions/2` itself, still returns
+  a plain value with no machine_state, because none of them can raise. Today
   the machine_state comes back unchanged from both entry points; a test
   below pins that so the day it stops being true is a deliberate,
   signature-preserving edit to `condition_match/2`'s body.
@@ -82,15 +82,15 @@ defmodule Statifier.Interpreter.Selection do
   default's targets are ordinary transition targets that may (pathologically,
   but representably) include another history state.
 
-  Returns a plain list where the pseudocode accumulates into an `OrderedSet`,
-  so the result is **not** deduplicated: `target="hs b1a"`, where `hs`
-  resolves to `b1a`, yields that index twice. Every consumer is insensitive
-  to it - `get_transition_domain/2` feeds the list to `Enum.all?/2` and to
-  `find_lcca/2`, neither of which changes answer on a repeat, and
-  `Statifier.Interpreter.ExitEntry`'s entry-set construction absorbs repeats
-  into the set it is building - so the dedupe would
-  be dead work at every call site that exists. Deduplicate at the consumer
-  that needs it, if one ever does, rather than here.
+  Returns a plain list where the pseudocode accumulates into an
+  `OrderedSet`, so the result is **not** deduplicated: `target="hs b1a"`,
+  where `hs` resolves to `b1a`, yields that index twice. Every consumer is
+  insensitive to it - `get_transition_domain/2` feeds the list to
+  `Enum.all?/2` and to `find_lcca/2`, neither of which changes answer on a
+  repeat, and `Statifier.Interpreter.ExitEntry`'s entry-set construction
+  absorbs repeats into the set it is building - so the dedupe would be dead
+  work at every call site that exists. Deduplicate at the consumer that
+  needs it, if one ever does, rather than here.
   """
   @spec get_effective_target_states(
           machine_state :: MachineState.t(),
@@ -391,13 +391,13 @@ defmodule Statifier.Interpreter.Selection do
   removal dropped from the filtered set and is appended to it.
 
   This is the function ADR-0002 was partly adopted to fix: v1's conflict
-  resolution reduced every transition's exit set
-  to a boolean "does it leave the nearest parallel ancestor" and collapsed an
-  entire microstep to one transition whenever both a leaving and a
-  non-leaving transition were enabled, discarding unrelated, genuinely
-  non-conflicting transitions from other parallel regions. This port computes
-  a real exit set per transition (`compute_exit_set/2`) and only ever removes
-  a transition that actually intersects another's exit set.
+  resolution reduced every transition's exit set to a boolean "does it leave
+  the nearest parallel ancestor" and collapsed an entire microstep to one
+  transition whenever both a leaving and a non-leaving transition were
+  enabled, discarding unrelated, genuinely non-conflicting transitions from
+  other parallel regions. This port computes a real exit set per transition
+  (`compute_exit_set/2`) and only ever removes a transition that actually
+  intersects another's exit set.
 
   The insertion order `enabled_transitions` arrives in is
   `select_transitions/2`/`select_eventless_transitions/1`'s document-order,

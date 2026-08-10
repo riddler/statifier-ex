@@ -27,20 +27,20 @@ defmodule Mix.Statifier.AdrJudge do
 
   `@default_model` is measured, not assumed: the fixture corpus
   (`test/mix/statifier/adr_judge_corpus_test.exs`,
-  `mix test --only adr_judge_corpus`) ran against both `claude-haiku-4-5-20251001`
-  and `claude-sonnet-5`. Both scored 0 false negatives and 0 false positives
-  out of 8 fixtures - grounding the refute prompt in the diff hunks was what
-  fixed the bug, and neither model has an accuracy edge over the other on this
-  corpus.
-  Accuracy therefore does not pick the default, and latency does: sonnet ran
-  the corpus in 91.4s against haiku's 272.4s, and a real three-entry
-  `mix adr.judge` in 19.6s against haiku's 54.4s. The default is
-  `claude-sonnet-5` for that wall-clock margin, a deliberate trade of token
-  cost for gate time on a stage that is `:merge`-profile-only and opt-in, so
-  the spend lands on a path already chosen. Re-run the corpus with
-  `STATIFIER_ADR_JUDGE_MODEL` set to compare a candidate model before changing
-  `@default_model`; see `docs/testing.md`'s corpus subsection for the recorded
-  scores and how to read a failure.
+  `mix test --only adr_judge_corpus`) ran against both
+  `claude-haiku-4-5-20251001` and `claude-sonnet-5`. Both scored 0 false
+  negatives and 0 false positives out of 8 fixtures - grounding the refute
+  prompt in the diff hunks was what fixed the bug, and neither model has an
+  accuracy edge over the other on this corpus. Accuracy therefore does not
+  pick the default, and latency does: sonnet ran the corpus in 91.4s against
+  haiku's 272.4s, and a real three-entry `mix adr.judge` in 19.6s against
+  haiku's 54.4s. The default is `claude-sonnet-5` for that wall-clock
+  margin, a deliberate trade of token cost for gate time on a stage that is
+  `:merge`-profile-only and opt-in, so the spend lands on a path already
+  chosen. Re-run the corpus with `STATIFIER_ADR_JUDGE_MODEL` set to compare
+  a candidate model before changing `@default_model`; see
+  `docs/testing.md`'s corpus subsection for the recorded scores and how to
+  read a failure.
 
   `analyze/2` is pure given a `source()` (a diff already split into one
   in-scope slice per judged ADR) and an `opts[:caller]` (a function from a

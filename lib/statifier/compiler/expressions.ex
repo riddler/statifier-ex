@@ -54,10 +54,9 @@ defmodule Statifier.Compiler.Expressions do
   `deps/predicator/lib/predicator.ex`'s `build_compiled_result/1` private
   clause), so the structured `{line, column}` predicator actually failed at
   is recovered by a second, failure-path-only call to `Predicator.parse/2` -
-  `Predicator.parse/2` always returns
-  `{:error, message, line, column}` on failure regardless of the `spans:`
-  option, since spans are a property of successfully parsed AST nodes, not
-  of the error tuple.
+  `Predicator.parse/2` always returns `{:error, message, line, column}` on
+  failure regardless of the `spans:` option, since spans are a property of
+  successfully parsed AST nodes, not of the error tuple.
   """
   @spec compile(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           {:ok, Machine.expr()} | {:error, Error.t()}

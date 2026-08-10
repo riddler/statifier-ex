@@ -9,8 +9,8 @@ defmodule Statifier.Interpreter.NameMatch do
   - `errors` and `error` share a string prefix but not a token, and 3.13
   matches tokens, not characters.
 
-  Normalization folds the three special cases the spec
-  describes into one prefix test:
+  Normalization folds the three special cases the spec describes into one
+  prefix test:
 
   ```
   ["*"]            -> []            (bare * -> empty prefix -> matches all)

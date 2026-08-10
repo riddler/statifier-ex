@@ -163,10 +163,10 @@ defmodule Statifier.Machine do
 
   @doc """
   Whether `index`'s state is compound: a `:state` or `:scxml` with at least
-  one child - derived, never stored. A `:parallel` is
-  never compound even though it has children: it enters every region
-  simultaneously rather than defaulting into one, so it has no positional
-  default entry the way a compound `:state` does.
+  one child - derived, never stored. A `:parallel` is never compound even
+  though it has children: it enters every region simultaneously rather than
+  defaulting into one, so it has no positional default entry the way a
+  compound `:state` does.
   """
   @spec compound?(machine :: t(), index :: non_neg_integer()) :: boolean()
   def compound?(%__MODULE__{} = machine, index) do
