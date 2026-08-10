@@ -31,10 +31,11 @@ statifier-*.tar
 # committed; only the generated test modules under test/{scion,scxml}_tests/ are.
 /tools/corpus/scratch/
 
-# Fetched W3C SCXML REC and its extracted Appendix D pseudocode (see
-# tools/spec/README.md). A local reading aid, not conformance corpus
-# material: the W3C Document License covers verbatim redistribution of the
-# REC, not an extracted subset, so this never gets vendored into the repo.
+# Backstop for the Appendix D cache (see tools/spec/README.md). spec:fetch
+# writes into the common .git dir by default, where no branch can commit it -
+# this covers the case of SPEC_SCRATCH being pointed back inside the tree. The
+# W3C Document License covers verbatim redistribution of the REC, not the
+# extracted subset, so neither ever gets vendored.
 /tools/spec/scratch/
 
 # Beads / Dolt files (added by bd init)

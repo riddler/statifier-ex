@@ -47,8 +47,15 @@ CORPUS_SCION_OUT = "{{config_root}}/test/scion_tests"
 # corpus scratch area stays exclusively upstream corpus material.
 SPEC_SCXML_REC_URL = "https://www.w3.org/TR/scxml/"
 SPEC_DIR = "{{config_root}}/tools/spec"
-SPEC_SCRATCH = "{{config_root}}/tools/spec/scratch"
-SPEC_APPENDIX_D_OUT = "{{config_root}}/tools/spec/scratch/appendix-d.txt"
+
+# SPEC_SCRATCH is deliberately NOT set here, for two reasons. A value in this
+# block would override one exported in your shell, same as CORPUS_W3_MIRROR
+# above. And {{config_root}} is per-worktree, so a value here would give every
+# worktree its own copy of one document that never varies between them - which
+# is the repeat fetch this whole task exists to avoid. The tasks below derive
+# the default from the shared git dir instead, so every worktree reads and
+# writes one cache. Export SPEC_SCRATCH yourself to put it somewhere else -
+# somewhere git ignores, since the extracted text is not redistributable.
 
 [tasks.corpus]
 description = "Regenerate the SCION + W3C conformance corpus (fetch, transform, emit)"
@@ -174,21 +181,44 @@ dir = "{{config_root}}"
 shell = "bash -c"
 run = '''
 set -euo pipefail
+# The REC does not vary between branches, so the cache is shared rather than
+# per-worktree: --git-common-dir resolves to the same .git from every
+# worktree and from the main checkout, which makes it the one location all of
+# them agree on. Inside that directory rather than beside it, because no
+# checkout tracks anything under .git on any branch - so extracted spec text
+# cannot be committed by accident even from a checkout whose .gitignore
+# predates the rule covering it. A gitignore rule protects one worktree at a
+# time; this protects all of them, which the W3C Document License question in
+# tools/spec/README.md is worth.
+scratch="${SPEC_SCRATCH:-$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache}"
+out="$scratch/appendix-d.txt"
 # Matches corpus:fetch:saxon and corpus:fetch:scion: check the finished
 # artifact before doing any network work, so a re-run costs nothing and
 # w3.org's rate limiter never sees a second request for the same document.
-if [ -f "$SPEC_APPENDIX_D_OUT" ]; then exit 0; fi
-mkdir -p "$SPEC_SCRATCH"
-html="$SPEC_SCRATCH/scxml-rec.html"
+if [ -f "$out" ]; then
+  echo "cached: $out"
+  exit 0
+fi
+mkdir -p "$scratch"
+html="$scratch/scxml-rec.html"
 if [ ! -f "$html" ]; then
   curl -fsSL "$SPEC_SCXML_REC_URL" -o "$html"
 fi
 # Plain `elixir`, not `mix run`: the extractor needs xmerl, which Mix prunes
 # from the code path, and nothing from the project.
-elixir "$SPEC_DIR/extract_appendix_d.exs" "$html" "$SPEC_APPENDIX_D_OUT"
+elixir "$SPEC_DIR/extract_appendix_d.exs" "$html" "$out"
+echo "wrote: $out"
 '''
 
 [tasks."spec:clean"]
 description = "Discard the fetched REC and extracted Appendix D text; the next spec:fetch run refetches"
+dir = "{{config_root}}"
 shell = "bash -c"
-run = 'rm -rf "$SPEC_SCRATCH"'
+run = '''
+set -euo pipefail
+# Same resolution as spec:fetch: the cache being cleaned is the shared one
+# every worktree reads, not a per-worktree copy.
+scratch="${SPEC_SCRATCH:-$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache}"
+rm -rf "$scratch"
+echo "removed: $scratch"
+'''
