@@ -221,15 +221,15 @@ defmodule Statifier.MachineState do
   Raises an internal event: builds its `Cause` from `origin` and the
   machine_state's own counters *as they stand right now*, builds the
   `:internal` event, and enqueues it - so cause metadata cannot be
-  forgotten at a call site. This is the one function st-wju.4
-  (`done.state.*`) and st-wju.5 (`<raise>`) call; there is no
-  `raise_platform/4` sibling here (st-af3 decides whether `error.execution`
-  needs one).
+  forgotten at a call site. This is the function st-wju.5's `<raise>`
+  calls. `done.state.*` is a `:platform` event per spec 5.10.1 and is
+  raised through `raise_platform/4` instead (st-wju.4 plan Decision 8) -
+  both enqueue on this same internal queue, `type` is provenance, not
+  routing.
 
   `origin` is `Cause.origin/0`: st-wju.5's `<raise>` passes
   `{:content, c_index, owner}` (the raising node and its owning
-  onentry/onexit/transition block); st-wju.4's `done.state.*` on entering a
-  final state passes `{:state, state_index}` (no content node backs it).
+  onentry/onexit/transition block).
   """
   @spec raise_internal(
           machine_state :: t(),
@@ -245,6 +245,38 @@ defmodule Statifier.MachineState do
       ) do
     cause = Cause.new(origin, macrostep, microstep)
     event = Event.internal(name, cause, opts)
+    enqueue_internal(machine_state, event)
+  end
+
+  @doc """
+  Raises a platform event: identical to `raise_internal/4` except it builds
+  an `Event.platform/3` event instead of `Event.internal/3` - so `type` is
+  stamped `:platform` per spec 5.10.1. This is the function st-wju.4's
+  `done.state.*` calls (plan Decision 8): `Statifier.Event`'s moduledoc
+  classifies `done.state.*` as a platform-raised event, not one raised by
+  executable content, and `raise_internal/4` would stamp the wrong `type`.
+
+  Both `raise_internal/4` and this function enqueue on the *same* internal
+  queue - `type` is provenance, not routing (`Statifier.Event`'s Decision
+  10) - so nothing about ordering or dequeue changes between the two.
+
+  `origin` is `Cause.origin/0`: st-wju.4's `done.state.*` on entering a
+  final state passes `{:state, state_index}` (no content node backs it).
+  """
+  @spec raise_platform(
+          machine_state :: t(),
+          name :: String.t(),
+          origin :: Cause.origin(),
+          opts :: keyword()
+        ) :: t()
+  def raise_platform(
+        %__MODULE__{macrostep: macrostep, microstep: microstep} = machine_state,
+        name,
+        origin,
+        opts \\ []
+      ) do
+    cause = Cause.new(origin, macrostep, microstep)
+    event = Event.platform(name, cause, opts)
     enqueue_internal(machine_state, event)
   end
 
