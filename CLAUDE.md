@@ -177,3 +177,34 @@ ADR-0011 makes both rules mechanical:
 - **Prove the run was a full gate.** `mix gate.verify` runs the gate and exits
   non-zero if the run was profiled, scoped, `--quick`, or `--skip`-ed. Report a
   full green off its output, not off a run you remember being unscoped.
+
+### Which skipped stages are gaps and which will never apply
+
+"Read the `○` lines" above splits a skipped stage two ways; the kit splits it
+three, and the third is a claim this project makes rather than a fact about the
+run. The manifest holds the mechanism in `gate.project_level_skips` and
+`gate.not_applicable_skips`; per ADR-0017 point 6, the policy behind each
+pattern is recorded here, because a key that reclassifies what blocks is a
+decision and not a constant.
+
+- **Not applicable** (`gate.not_applicable_skips`) - the stage will never run
+  here, no matter who works on the repo. Gettext is the whole list: statifier-ex
+  is an SCXML engine library with no user-facing strings and no `.po` files, and
+  gettext is translation tooling for applications. The two `.po` patterns are
+  the same declaration reached by a different stage message. Nothing closes this
+  "gap" because there is no gap - so `/wurk:commit` reports and `/wurk:mr`
+  request bodies stop naming it, which is what keeps the remaining skip lines
+  worth reading.
+- **Project-level gap** (`gate.project_level_skips`) - a real hole in what this
+  project checks, standing open on every run. It does not block a commit, since
+  gating on it would refuse every commit forever, but it stays named in every
+  report so it does not go quiet. Doctor is here: whether to adopt it is an open
+  decision owned by st-1xz, not a stage anyone has declared inapplicable. Do not
+  move a pattern here into the not-applicable list to quiet a report.
+- **Run-level** - neither list matches, and the gate is red. The stage should
+  have run and could not.
+
+Adding a pattern to either list means writing the reason into this section on
+the same branch. A pattern that arrives with no prose is the exact failure
+ADR-0017 point 6 describes, and `mix quality --profile merge` will refuse the
+branch for it.
