@@ -112,9 +112,21 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
 
     {result, effects} = ExitEntry.exit_states(ms, [leave_all(m)])
 
-    assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}}] = effects
+    assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}} | rest] = effects
     assert indexes == [idx(:a2), idx(:a1), idx(:aa), idx(:a)]
     refute MapSet.member?(result.configuration, idx(:a))
+
+    # aa exits before a in descending order, so its onexit block's own
+    # effects (a log, then that block's ContentExecuted) come first.
+    aa_index = idx(:aa)
+    a_index = idx(:a)
+
+    assert [
+             {:log, %Effect.Log{label: "aa-exit"}},
+             {:trace, %Effect.Trace.ContentExecuted{owner: {:onexit, ^aa_index, 0}}},
+             {:log, %Effect.Log{label: "a-exit"}},
+             {:trace, %Effect.Trace.ContentExecuted{owner: {:onexit, ^a_index, 0}}}
+           ] = rest
   end
 
   # AC: "the exit set is intersected with the configuration"
@@ -206,9 +218,12 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
 
       {result, effects} = ExitEntry.exit_states(ms, [leave_all(m)])
 
-      assert [{:trace, %Effect.Trace.ExitSet{indexes: exited}}] = effects
+      assert [{:trace, %Effect.Trace.ExitSet{indexes: exited}} | rest] = effects
       refute idx(:c) in exited
       refute Map.has_key?(result.history_values, idx(:hc))
+
+      labels = for {:log, log} <- rest, do: log.label
+      assert labels == ["aa-exit", "a-exit"]
     end
 
     # AC: "History recorded from the pre-exit configuration before any
@@ -258,8 +273,12 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
 
       {_result, effects} = ExitEntry.exit_states(ms, [leave_all(m)])
 
-      assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}}] = effects
+      assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}} | rest] = effects
       assert indexes == Machine.exit_order(m, [idx(:a), idx(:aa), idx(:a1)])
+
+      # The two onexit blocks' effects follow the ExitSet trace, in exit order.
+      labels = for {:log, log} <- rest, do: log.label
+      assert labels == ["aa-exit", "a-exit"]
     end
 
     # sabotage: `Effect.trace/3`'s call site in `exit_states/2` is replaced
@@ -289,5 +308,22 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
     assert [{:trace, %Effect.Trace.ExitSet{indexes: []}}] = effects
     assert result.configuration == ms.configuration
     assert result.history_values == ms.history_values
+  end
+
+  # Proves the content seam is live end-to-end (st-wju.5): `a`'s
+  # <onexit><log label="a-exit"/></onexit> now genuinely returns the effect,
+  # not the st-wju.4 no-op stub's empty list.
+  #
+  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the st-wju.4
+  # stub (`defp execute_block(machine_state, _owner, _c_indexes), do:
+  # {machine_state, []}`) -> the :log effect never appears, reddening this
+  # assertion.
+  test "the onexit seam is live: a's onexit block returns its :log effect" do
+    m = machine()
+    ms = machine_state(m, [idx(:a)])
+
+    {_result, effects} = ExitEntry.exit_states(ms, [leave_all(m)])
+
+    assert Enum.any?(effects, &match?({:log, %Effect.Log{label: "a-exit"}}, &1))
   end
 end

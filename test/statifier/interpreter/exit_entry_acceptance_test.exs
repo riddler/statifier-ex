@@ -177,8 +177,17 @@ defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
 
     {_result, effects} = ExitEntry.exit_states(ms, [leave_a])
 
-    assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}}] = effects
+    assert [{:trace, %Effect.Trace.ExitSet{indexes: indexes}} | rest] = effects
     assert indexes == [idx(:a1x), idx(:a1), idx(:a)]
+
+    # a1's own onexit block ("a1-exit") is the only one in this document's
+    # exit set; a1x and a have none.
+    a1_index = idx(:a1)
+
+    assert [
+             {:log, %Effect.Log{label: "a1-exit"}},
+             {:trace, %Effect.Trace.ContentExecuted{owner: {:onexit, ^a1_index, 0}}}
+           ] = rest
   end
 
   # AC: "Exit order reverse document order, entry order document order,
