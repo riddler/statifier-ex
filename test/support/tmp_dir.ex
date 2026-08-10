@@ -6,12 +6,12 @@ defmodule Statifier.TmpDir do
   the current working directory (`ex_unit/lib/ex_unit/runner.ex`) with no way
   to configure it. That root is process-global, so two `mix test` runs in the
   same directory - which is exactly what the `Tests` and `Regression ratchet`
-  stages of a bare `mix quality` are - race on the same paths (st-0vz).
+  stages of a bare `mix quality` are - race on the same paths.
 
   Tag a test `@tag :isolated_tmp_dir` and it receives `:tmp_dir` in its
   context, same as ExUnit's tag provides.
 
-  `root/0` is scoped by `System.pid()` (st-iao): every concurrent `mix test`
+  `root/0` is scoped by `System.pid()`: every concurrent `mix test`
   OS process gets a distinct segment appended to its root, so two runs cannot
   compute the same scratch path even if `STATIFIER_TMP_ROOT` somehow resolves
   to the same value in both - which is exactly what happened before this
@@ -64,7 +64,7 @@ defmodule Statifier.TmpDir do
   This OS process's discriminator, appended to `root/0` unconditionally.
 
   `System.pid/0` as a string. No two concurrent OS processes ever share one,
-  which is what makes `root/0` collision-proof by construction (st-iao).
+  which is what makes `root/0` collision-proof by construction.
   """
   @spec process_id() :: String.t()
   def process_id, do: to_string(System.pid())

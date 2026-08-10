@@ -7,9 +7,10 @@ defmodule Mix.Statifier.AdrJudgeCorpusTest do
   # Real `claude` CLI calls: ~11-78s per fixture (one propose call, plus one
   # refute call per proposed candidate), ~6 minutes for the whole corpus at
   # the measured baseline. Excluded by default in test_helper.exs for the same
-  # reason :scion and :scxml_w3 are - and for st-c8c's reason on top of that,
-  # since this is the one module in the suite that reaches the real caller on
-  # purpose. Run by hand: `mix test --only adr_judge_corpus`.
+  # reason :scion and :scxml_w3 are - and because the `:test` build's default
+  # caller raises on a forgotten `opts[:caller]`, so only this module opts
+  # into the real CLI, visibly, at its own call site. Run by hand:
+  # `mix test --only adr_judge_corpus`.
   @moduletag :adr_judge_corpus
   @moduletag timeout: :infinity
 

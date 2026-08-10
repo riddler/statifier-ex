@@ -193,7 +193,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert refute_prompt =~ "unique-adr-marker-xyz"
   end
 
-  # st-6f7: the refute pass never saw the diff, so "the change does not show
+  # The refute pass never saw the diff, so "the change does not show
   # X" was an assumption it could not check even in principle. It now carries
   # the same rendered hunks the propose pass saw, keyed off the candidate's
   # own judged ADR.
@@ -217,7 +217,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert refute_prompt =~ "trace(:exit_set, state)"
   end
 
-  # st-6f7: the old wording ("argue against it if a good-faith argument
+  # The old wording ("argue against it if a good-faith argument
   # exists ... only conclude it survives if you cannot construct that
   # argument") let any unverifiable exculpatory hypothesis overturn a claim.
   # The prompt now names that failure mode explicitly and excludes it.
@@ -310,7 +310,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     refute refute_prompt =~ "trace(:exit_set, state)"
   end
 
-  # st-6f7: the prompt rework touched the response-JSON instruction (adding
+  # A prompt rework touched the response-JSON instruction (adding
   # "grounds") but not parse_refute/1 - a well-formed {"violation": true/false}
   # and an unparseable response still resolve exactly as before.
   # sabotage: have parse_refute/1 also require a non-empty "grounds" field for
@@ -511,7 +511,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     assert finding.file == "lib/statifier/interpreter.ex"
   end
 
-  # st-c8c: in a :test build, analyze/2's default caller is
+  # In a :test build, analyze/2's default caller is
   # AdrJudge.refuse_real_call/1, not the real `call_claude_cli/1` - so a test
   # that forgets to inject opts[:caller] fails loudly and instantly instead of
   # quietly shelling out to the real `claude` CLI and spending real money.

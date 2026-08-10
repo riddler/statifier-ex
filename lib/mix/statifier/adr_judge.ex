@@ -18,19 +18,20 @@ defmodule Mix.Statifier.AdrJudge do
   prompt requires the refuting argument to be grounded in that material - the
   ADR text, the claim, or the hunks. A defence of the shape "the change does
   not show X, but X might exist elsewhere" is unverifiable with no tool
-  access to check it, so it does not overturn a claim (st-6f7: the refute
-  pass had overturned a real ADR-0012 violation on exactly that hypothesis, a
-  mechanism the diff never showed and the pass had no way to confirm). The
+  access to check it, so it does not overturn a claim (the refute pass had
+  previously overturned a real ADR-0012 violation on exactly that hypothesis,
+  a mechanism the diff never showed and the pass had no way to confirm). The
   tie rule survives narrowed to match: ambiguity *within the shown material*
   still breaks toward "not a violation," but uncertainty about material
   never shown is not a tie.
 
-  `@default_model` is measured, not assumed: st-6f7 Phase 4 ran the fixture
-  corpus (`test/mix/statifier/adr_judge_corpus_test.exs`,
-  `mix test --only adr_judge_corpus`) against both `claude-haiku-4-5-20251001`
+  `@default_model` is measured, not assumed: the fixture corpus
+  (`test/mix/statifier/adr_judge_corpus_test.exs`,
+  `mix test --only adr_judge_corpus`) ran against both `claude-haiku-4-5-20251001`
   and `claude-sonnet-5`. Both scored 0 false negatives and 0 false positives
-  out of 8 fixtures - grounding the refute prompt (Phase 2) was what fixed the
-  bug, and neither model has an accuracy edge over the other on this corpus.
+  out of 8 fixtures - grounding the refute prompt in the diff hunks was what
+  fixed the bug, and neither model has an accuracy edge over the other on this
+  corpus.
   Accuracy therefore does not pick the default, and latency does: sonnet ran
   the corpus in 91.4s against haiku's 272.4s, and a real three-entry
   `mix adr.judge` in 19.6s against haiku's 54.4s. The default is
@@ -105,7 +106,7 @@ defmodule Mix.Statifier.AdrJudge do
   - ADR-0015 constraints 1, 2, 3, and 5 - constraint 1's enforcement site
     (`.claude/scripts/test/contract_test.rb`) was removed along with the
     `.claude/scripts/` tree it guarded once the kit's mechanics moved to
-    another repo (st-6yb); 2, 3, and 5 were covered by the same script suite.
+    another repo; 2, 3, and 5 were covered by the same script suite.
     ADR-0015 says plainly that re-enforcing constraint 1 elsewhere weakens
     it, so the same reasoning still rules out judging it here even though
     nothing enforces it in this repo today.
@@ -116,10 +117,10 @@ defmodule Mix.Statifier.AdrJudge do
     searching this survey for "ADR-0006" finds the answer to "why is that
     one not judged?" - which is how the survey is meant to be read.
 
-  See `docs/plans/260807-st-laz-adr-judge-multi-adr.md` for the full survey
-  this passage summarizes. `AdrGuard`'s moduledoc records the mirror-image
-  reasoning for the mechanically-checkable ADRs - the two modules are meant
-  to be read as a pair.
+  The reasoning above is the survey's conclusion for each candidate ADR.
+  `AdrGuard`'s moduledoc records the mirror-image reasoning for the
+  mechanically-checkable ADRs - the two modules are meant to be read as a
+  pair.
   """
 
   @type finding :: %{
@@ -153,8 +154,8 @@ defmodule Mix.Statifier.AdrJudge do
         }
 
   # One entry per ADR whose rule needs a model's judgment rather than a
-  # mechanical grep - see docs/plans/260807-st-laz-adr-judge-multi-adr.md for
-  # which ADRs qualify and why. Scopes are data, not functions: a module
+  # mechanical grep - see the moduledoc's "What is judged, and what is not"
+  # section for which ADRs qualify and why. Scopes are data, not functions: a module
   # attribute cannot hold an anonymous function, and keeping scope.describe
   # here means the skip reason (scope_descriptions/0) has one definition
   # site instead of being written again in the task.
@@ -164,7 +165,8 @@ defmodule Mix.Statifier.AdrJudge do
   # ADR-0015's constraints 1, 2, 3, and 5 had their own enforcement sites
   # (ADR-0015's Consequences section; constraint 1's was
   # `.claude/scripts/test/contract_test.rb`, removed with the rest of
-  # `.claude/scripts/` under st-6yb) and must not be re-judged here: ADR-0015
+  # `.claude/scripts/` when the kit's mechanics moved to another repo) and
+  # must not be re-judged here: ADR-0015
   # states plainly that re-enforcing constraint 1 through a weaker mechanism
   # is a regression, and the same reasoning applies to duplicating any of
   # them through a probabilistic one instead.
@@ -212,7 +214,7 @@ defmodule Mix.Statifier.AdrJudge do
   @default_model "claude-sonnet-5"
   @model_env "STATIFIER_ADR_JUDGE_MODEL"
 
-  # st-c8c: with `claude` on PATH and an in-scope dirty tree, a test that
+  # With `claude` on PATH and an in-scope dirty tree, a test that
   # forgets to inject `opts[:caller]` makes real CLI calls - measured at ~2
   # minutes of gate time per run (the Tests stage and the Regression ratchet
   # each run the suite) plus real spend. Every judged scope added since makes
@@ -644,7 +646,7 @@ defmodule Mix.Statifier.AdrJudge do
   Every test in this suite injects its own `opts[:caller]` stub; a test that
   forgets to is a bug, and the fix is to inject one, not to make a real
   `claude` CLI call and a real charge on that test's behalf. See the
-  `@default_caller` moduledoc comment (st-c8c) for the incident this guards
+  `@default_caller` moduledoc comment for the incident this guards
   against.
   """
   @spec refuse_real_call(prompt :: String.t()) :: no_return()

@@ -3,7 +3,7 @@
     key: "adr-0012-debuggability",
     file: "0012_dropped_location.diff",
     expect: :violation,
-    note: "st-6f7 live repro: enforced :location dropped from Document.Content"
+    note: "live repro: enforced :location dropped from Document.Content"
   },
   %{
     key: "adr-0012-debuggability",
