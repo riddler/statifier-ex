@@ -93,6 +93,8 @@ above, and `Statifier.Effect` is the `effect`.
   machine, runs `<donedata>`, and emits the terminal effect.
 - `done.state.<id>` events are generated for compound and parallel completion.
 - Event descriptor matching follows spec 3.13 exactly (including `foo.*` matching `foo`).
+- The transition-selection block lives in `Statifier.Interpreter.Selection`;
+  `Statifier.Interpreter.NameMatch` is the 3.13 matcher above.
 
 ### Executable content
 
