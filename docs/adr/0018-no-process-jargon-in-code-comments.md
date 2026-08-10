@@ -217,11 +217,23 @@ already carry it and none of which rots into the code.**
   - **Its own escape marker, not the shared one.** Every other check in the
     guard has the violation in *code* and the escape in a *comment*, so the two
     sit on different axes. Here they sit on the same axis, and the existing
-    `ADR-0\d{3}|deviation` pattern would clear a violation *by accident*: a
-    legitimate line such as `# see ADR-0012 item 3, added under st-af3` matches
-    the hatch without anyone having asserted anything. The check therefore
-    needs a dedicated marker so that clearing it is a deliberate act rather
-    than a side effect of a citation this record explicitly encourages.
+    `ADR-0\d{3}|deviation` pattern would clear a violation *by accident*. That
+    is not hypothetical - three lines in the tree at the time of writing would
+    exempt themselves:
+
+    - `Mix.Statifier.AdrJudge`: "`.claude/scripts/` under st-6yb) and must not
+      be re-judged here: ADR-0015" - one line, both tokens.
+    - `machine_state_acceptance_test.exs`: "call (ADR-0003); the session
+      (st-cmq) owns queueing" - the same shape, in a test.
+    - `Statifier.MachineState`: `(st-cmq)` sits on the line *below* an
+      ADR-citing line, which `cited?/1` clears through its `previous` field.
+
+    In all three the author cited an ADR for an unrelated and entirely correct
+    reason. The hatch would stop meaning "someone asserted this is fine" and
+    start meaning "this line happens to mention an ADR", which is worse than
+    having no hatch at all. The check therefore needs a dedicated marker, so
+    that clearing it is a deliberate act rather than a side effect of a
+    citation point 2 explicitly encourages.
 
   st-wjg tracks the check. Adding a gate check is gate-relevant, so it lands
   with a ledger entry per ADR-0011. It is filed separately from the sweep
