@@ -18,28 +18,29 @@ defmodule Statifier.MachineState do
   machine actually doing") are `active_leaf_states/1`, a derived view over
   `configuration`, never a second field to keep in sync.
 
-  ## The external queue is deliberately absent (Decision 8)
+  ## The external queue is deliberately absent
 
   Appendix D's `main_event_loop` owns both the internal and the external
   event queue. This struct only owns the internal one. The pure core takes
-  one external event per call (ADR-0003); the session that drives it
-  (st-cmq) owns queueing the waiting external events. This is a mechanical
-  deviation in ADR-0002's sense - the semantics of processing one external
-  event are unchanged, only the storage of the *waiting* ones moves outward
-  - so it is legal, but the divergence must carry its reason at the port
-  site: st-wju.6's `main_event_loop` port repeats this comment where it
-  matters.
+  one external event per call (ADR-0003); the session that drives it owns
+  queueing the waiting external events. This is a mechanical deviation in
+  ADR-0002's sense - the semantics of processing one external event are
+  unchanged, only the storage of the *waiting* ones moves outward - so it
+  is legal, but the divergence must carry its reason at the port site: the
+  `main_event_loop` port, not yet implemented, must repeat this comment
+  where it matters.
 
   ## `states_to_invoke` is deliberately absent
 
   Appendix D carries `statesToInvoke` as a global, but every read and write
-  of it belongs to the invoke passes of `main_event_loop`, which land with
-  the invoke bead (st-cmq). Adding an unused field now would be exactly the
-  "dead field nobody can test" mistake the bead warns against for
-  `origin`/`sendid` on `Statifier.Event`. st-cmq adds it deliberately, with
-  a caller, rather than this bead adding it as a placeholder.
+  of it belongs to the invoke passes of `main_event_loop`, not yet
+  implemented. Adding an unused field now would be exactly the "dead field
+  nobody can test" mistake avoided for `origin`/`sendid` on
+  `Statifier.Event`: the field is added deliberately, with a caller, once
+  the invoke passes exist, rather than added now as a placeholder ahead of
+  any caller.
 
-  ## `running` and `status` differ only across `exit_interpreter` (Decision 6)
+  ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
   continue condition, set `false` when a top-level final is entered.
@@ -51,18 +52,18 @@ defmodule Statifier.MachineState do
   that is no longer `running`. `new/2` produces `running: true,
   status: :running`; a machine_state that has not been initialized yet is
   indistinguishable from a running one, which is harmless because `new/2`
-  is only ever called by st-wju.6's `initialize/2`, immediately before it
-  enters the initial states.
+  is only ever called by `initialize/2`, not yet implemented, immediately
+  before it enters the initial states.
 
-  ## The counter contract (Decision 5)
+  ## The counter contract
 
   - `new/2` sets `macrostep: 0, microstep: 0`. Zero means "no macrostep has
     begun"; it is never the number of a real step.
   - `begin_macrostep/1` is the **only** writer of `macrostep`: it increments
-    it by one and resets `microstep` to `0`. st-wju.6 calls it once in
-    `initialize/2` (so the initialization macrostep is **macrostep 1**) and
-    once per accepted external event in `handle_event/2` (so the first
-    external event is **macrostep 2**).
+    it by one and resets `microstep` to `0`. Its callers, neither yet
+    implemented, are `initialize/2`, once (so the initialization macrostep
+    is **macrostep 1**), and `handle_event/2`, once per accepted external
+    event (so the first external event is **macrostep 2**).
   - `begin_microstep/1` is the **only** writer of `microstep`: it increments
     it by one. It is called once per *pseudocode microstep* - one
     exit/execute/enter round - so the first microstep of a macrostep is
@@ -80,15 +81,15 @@ defmodule Statifier.MachineState do
   contract above is enforced by review (there being exactly two writer
   functions), not mechanically.
 
-  ## `==` is not a position-equality test (Decision 2)
+  ## `==` is not a position-equality test
 
   `internal_queue` is an `:queue.queue/0`. Two `:queue` values holding the
   same events in the same order can differ structurally - the front/rear
   split depends on the push/pop history - so `==` on two `%MachineState{}`
   values is *not* a reliable "same position" test. A comparison that needs
   to know whether two machine_states are at the same interpreter position
-  (st-wju.6's fold-to-quiescence-versus-step-by-step acceptance test, for
-  one) must compare a normalized view - `configuration`,
+  (a fold-to-quiescence-versus-step-by-step acceptance test, for one) must
+  compare a normalized view - `configuration`,
   `internal_events/1`, `history_values`, the counters, `status` - never raw
   struct equality. `internal_events/1` is exactly that normalized,
   inspection-and-assertion view of the queue; no code outside this module
@@ -118,16 +119,17 @@ defmodule Statifier.MachineState do
   @typedoc """
   The datamodel slot - a map today (`docs/datamodel.md:33-41`'s evaluation
   context is a predicator context, i.e. a map), typed as `map()` rather
-  than `term()`/`any()` so st-af3 adds content, not shape, and dialyzer has
-  something to check in the meantime.
+  than `term()`/`any()` so that filling in real datamodel evaluation only
+  adds content, not shape, and dialyzer has something to check in the
+  meantime.
   """
   @type datamodel :: map()
 
   @typedoc """
-  Whether trace effects are emitted (Decision 12). A plain boolean, not a
-  level: the `Effect.trace/3` gate's contract is one field read and nothing
-  built when off, and a later level would arrive as a separate field so
-  this one never turns into a comparison.
+  Whether trace effects are emitted. A plain boolean, not a level: the
+  `Effect.trace/3` gate's contract is one field read and nothing built when
+  off, and a later level would arrive as a separate field so this one
+  never turns into a comparison.
   """
   @type trace :: boolean()
 
@@ -148,7 +150,8 @@ defmodule Statifier.MachineState do
   A fresh position over `machine`: empty configuration, empty internal
   queue, no history values, counters at zero, `running: true`,
   `status: :running`. Does **not** enter any state - entering the initial
-  configuration is `initialize/2`'s job (st-wju.6), not this constructor's.
+  configuration is the not-yet-implemented `initialize/2`'s job, not this
+  constructor's.
 
   Options: `:trace` (default `false`) and `:datamodel` (default `%{}`).
   """
@@ -170,12 +173,13 @@ defmodule Statifier.MachineState do
 
   @doc """
   The active *leaf* states - `configuration` filtered by
-  `Statifier.Machine.atomic?/2`. A `:final` is atomic (per `Machine`'s own
-  Decision 4) and therefore appears in this view. `:history` pseudo-states
-  never enter `configuration` in the first place, so this filter never has
-  to exclude them - there is nothing history-shaped to filter out. The
-  string-id translation of this view is st-wju.7's API boundary, not
-  this module's: everything here stays integer indexes (ADR-0005).
+  `Statifier.Machine.atomic?/2`. A `:final` is atomic - `kind` and
+  atomicity are independent facts (`Machine.atomic?/2`) - and therefore
+  appears in this view. `:history` pseudo-states never enter
+  `configuration` in the first place, so this filter never has to exclude
+  them - there is nothing history-shaped to filter out. The string-id
+  translation of this view belongs to a future API boundary, not this
+  module's: everything here stays integer indexes (ADR-0005).
 
   This is `O(n)` in the configuration size and is meant for the API
   boundary and for inspection, not for a per-microstep interpreter path.
@@ -209,10 +213,10 @@ defmodule Statifier.MachineState do
 
   @doc """
   The pending internal events as a plain list, oldest first - the FIFO
-  order the queue's own opaque structure does not directly expose
-  (Decision 2). This is the inspection and assertion path for every test
-  and every future debugger; no interpreter code path needs it, since
-  `dequeue_internal/1` alone drives selection.
+  order the queue's own opaque structure does not directly expose. This is
+  the inspection and assertion path for every test and every future
+  debugger; no interpreter code path needs it, since `dequeue_internal/1`
+  alone drives selection.
   """
   @spec internal_events(machine_state :: t()) :: [Event.t()]
   def internal_events(%__MODULE__{internal_queue: queue}), do: :queue.to_list(queue)
@@ -221,15 +225,15 @@ defmodule Statifier.MachineState do
   Raises an internal event: builds its `Cause` from `origin` and the
   machine_state's own counters *as they stand right now*, builds the
   `:internal` event, and enqueues it - so cause metadata cannot be
-  forgotten at a call site. This is the function st-wju.5's `<raise>`
+  forgotten at a call site. This is the function `<raise>`'s
+  executable-content implementation (`Statifier.Machine.Content.Raise`)
   calls. `done.state.*` is a `:platform` event per spec 5.10.1 and is
-  raised through `raise_platform/4` instead (st-wju.4 plan Decision 8) -
-  both enqueue on this same internal queue, `type` is provenance, not
-  routing.
+  raised through `raise_platform/4` instead - both enqueue on this same
+  internal queue, `type` is provenance, not routing.
 
-  `origin` is `Cause.origin/0`: st-wju.5's `<raise>` passes
-  `{:content, c_index, owner}` (the raising node and its owning
-  onentry/onexit/transition block).
+  `origin` is `Cause.origin/0`: `<raise>` passes `{:content, c_index,
+  owner}` (the raising node and its owning onentry/onexit/transition
+  block).
   """
   @spec raise_internal(
           machine_state :: t(),
@@ -251,17 +255,18 @@ defmodule Statifier.MachineState do
   @doc """
   Raises a platform event: identical to `raise_internal/4` except it builds
   an `Event.platform/3` event instead of `Event.internal/3` - so `type` is
-  stamped `:platform` per spec 5.10.1. This is the function st-wju.4's
-  `done.state.*` calls (plan Decision 8): `Statifier.Event`'s moduledoc
-  classifies `done.state.*` as a platform-raised event, not one raised by
-  executable content, and `raise_internal/4` would stamp the wrong `type`.
+  stamped `:platform` per spec 5.10.1. This is the function
+  `Statifier.Interpreter.ExitEntry.raise_parent_completion/3` calls for
+  `done.state.*`: `Statifier.Event`'s moduledoc classifies `done.state.*`
+  as a platform-raised event, not one raised by executable content, and
+  `raise_internal/4` would stamp the wrong `type`.
 
   Both `raise_internal/4` and this function enqueue on the *same* internal
-  queue - `type` is provenance, not routing (`Statifier.Event`'s Decision
-  10) - so nothing about ordering or dequeue changes between the two.
+  queue - `type` is provenance, not routing - so nothing about ordering or
+  dequeue changes between the two.
 
-  `origin` is `Cause.origin/0`: st-wju.4's `done.state.*` on entering a
-  final state passes `{:state, state_index}` (no content node backs it).
+  `origin` is `Cause.origin/0`: `done.state.*` on entering a final state
+  passes `{:state, state_index}` (no content node backs it).
   """
   @spec raise_platform(
           machine_state :: t(),
@@ -282,8 +287,8 @@ defmodule Statifier.MachineState do
 
   @doc """
   Begins a new macrostep: increments `macrostep` by one and resets
-  `microstep` to `0`. The only writer of `macrostep` (counter contract,
-  Decision 5).
+  `microstep` to `0`. The only writer of `macrostep` (the counter
+  contract above).
   """
   @spec begin_macrostep(machine_state :: t()) :: t()
   def begin_macrostep(%__MODULE__{macrostep: macrostep} = machine_state) do
@@ -292,8 +297,8 @@ defmodule Statifier.MachineState do
 
   @doc """
   Begins a new microstep: increments `microstep` by one, leaving
-  `macrostep` unchanged. The only writer of `microstep` (counter contract,
-  Decision 5) - called once per exit/execute/enter round, never for a
+  `macrostep` unchanged. The only writer of `microstep` (the counter
+  contract above) - called once per exit/execute/enter round, never for a
   selection round that enabled no transitions.
   """
   @spec begin_microstep(machine_state :: t()) :: t()

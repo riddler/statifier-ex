@@ -97,11 +97,12 @@ defmodule Statifier.MachineStateAcceptanceTest do
   end
 
   # AC: "External queue explicitly NOT in core state; divergence documented
-  # for st-wju.6" (Decision 8). The pure core takes one external event per
-  # call (ADR-0003); the session (st-cmq) owns queueing the waiting external
-  # events. This is a mechanical deviation from Appendix D's `main_event_loop`,
-  # which owns both queues - the semantics of processing one external event
-  # are unchanged, only the storage of the waiting ones moves outward.
+  # at the port site." The pure core takes one external event per call
+  # (ADR-0003); the session that drives it owns queueing the waiting
+  # external events. This is a mechanical deviation from Appendix D's
+  # `main_event_loop`, which owns both queues - the semantics of processing
+  # one external event are unchanged, only the storage of the waiting ones
+  # moves outward.
   #
   # sabotage: add `external_queue: nil` to `MachineState`'s `defstruct` ->
   # `:external_queue` appears in the field set and this refutation reddens.
@@ -198,8 +199,8 @@ defmodule Statifier.MachineStateAcceptanceTest do
     assert Enum.all?(results, &(&1 == []))
   end
 
-  # AC: "Counter semantics defined in @doc (advance sites named, agreed with
-  # st-wju.6)" - the zeroed-at-construction half of that contract.
+  # AC: "Counter semantics defined in @doc, with advance sites named" - the
+  # zeroed-at-construction half of that contract.
   #
   # sabotage: `MachineState.new/2` sets `microstep: 1` instead of `0` ->
   # this assertion reddens; zero must mean "no macrostep has begun yet".
@@ -213,7 +214,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # AC: "Leaf-state derived view implemented and tested against nested
   # compound/parallel configs" - driven from XML through the real compile
   # pipeline (Parser -> Lowering -> Validator -> Compiler), distinct in kind
-  # from the Phase 2 unit test's hand-assembled configuration.
+  # from `machine_state_test.exs`'s hand-assembled configuration.
   #
   # sabotage: `MachineState.active_leaf_states/1` drops the `atomic?` filter
   # and returns the whole configuration unchanged -> the ancestors (`a`,

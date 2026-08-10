@@ -489,12 +489,12 @@ shape on one line; keep the ADR.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/statifier/machine_state.ex
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/statifier/machine_state.ex
       lib/statifier/interpreter/content.ex test/statifier/interpreter/content*
       test/statifier/machine_state*` returns zero hits
-- [ ] The removed-line check over the phase paths is clean
-- [ ] No executable line changed in the phase's diff
+- [x] The removed-line check over the phase paths is clean
+- [x] No executable line changed in the phase's diff
 
 #### Manual Verification:
 - [ ] Every ADR-0003 citation that sat beside a removed bead ID survives
@@ -1028,6 +1028,18 @@ the Manual Verification items are deferred and surfaced once at the end.
       `exitStates`/`enterStates` pseudocode line for line, and `computeExitSet`
       and every other spec name survives unchanged (ADR-0002)
 - [ ] `docs/observability.md`'s "constraint 1" citation on line 10 survives
+
+**Implementation Note**: As Phase 1.
+
+---
+
+### Phase 5
+
+- [ ] Every ADR-0003 citation that sat beside a removed bead ID survives
+- [ ] Comments describing what is not yet implemented say so as a fact about the
+      code, with no bead named as the thing that will implement it
+- [ ] The touched `lib/statifier/` functions still match Appendix D line for
+      line and their spec citations are intact
 
 **Implementation Note**: As Phase 1.
 
