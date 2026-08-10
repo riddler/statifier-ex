@@ -439,11 +439,11 @@ framing or the bead.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes
-- [ ] The tightened grep over `lib/statifier/interpreter/exit_entry.ex
+- [x] Full `mix quality` passes
+- [x] The tightened grep over `lib/statifier/interpreter/exit_entry.ex
       test/statifier/interpreter/exit_entry*` returns zero hits
-- [ ] The removed-line check over the phase paths is clean
-- [ ] No executable line changed in the phase's diff
+- [x] The removed-line check over the phase paths is clean
+- [x] No executable line changed in the phase's diff
 
 #### Manual Verification:
 - [ ] Each of the six retitled moduledoc sections still states the invariant its
@@ -1014,6 +1014,20 @@ the Manual Verification items are deferred and surfaced once at the end.
 - [ ] `select_transitions`/`selectTransitions` and every other Appendix D name
       and spec section in the module is untouched, and the surrounding prose
       still matches the pseudocode line for line (ADR-0002)
+
+**Implementation Note**: As Phase 1.
+
+---
+
+### Phase 4
+
+- [ ] Each of the six retitled moduledoc sections still states the invariant its
+      decision number stood for; the module reads as a specification of the two
+      functions, not as a plan summary
+- [ ] `exit_states/2` and `enter_states/2` still describe the Appendix D
+      `exitStates`/`enterStates` pseudocode line for line, and `computeExitSet`
+      and every other spec name survives unchanged (ADR-0002)
+- [ ] `docs/observability.md`'s "constraint 1" citation on line 10 survives
 
 **Implementation Note**: As Phase 1.
 
