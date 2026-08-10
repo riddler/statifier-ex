@@ -36,10 +36,12 @@
     "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"],
     "project_level_skips": [
       "^:doctor not installed$",
+      "^disabled in \\.quality\\.exs$"
+    ],
+    "not_applicable_skips": [
       "^:gettext not installed$",
       "^no \\.po files found$",
-      "^no \\.po files outside the source locale$",
-      "^disabled in \\.quality\\.exs$"
+      "^no \\.po files outside the source locale$"
     ]
   },
 
