@@ -3,6 +3,7 @@
 #   mise install        provision the toolchain below
 #   mise tasks          list the tasks
 #   mise run corpus     regenerate the conformance corpus
+#   mise run spec:fetch cache Appendix D pseudocode for local diffing
 
 [tools]
 erlang = "27.3"
@@ -37,6 +38,17 @@ CORPUS_SCION_CASES = "{{config_root}}/tools/corpus/scratch/scion/cases"
 # Generator output, committed: regeneration lands as a reviewable diff.
 CORPUS_W3_OUT = "{{config_root}}/test/scxml_tests"
 CORPUS_SCION_OUT = "{{config_root}}/test/scion_tests"
+
+# W3C SCXML REC, fetched and reduced to its Appendix D pseudocode for local
+# diffing against this codebase's port (see tools/spec/README.md). A
+# separate namespace from CORPUS_*: this is a reading aid for verifying a
+# ported function, not conformance corpus generation, and scratch/ lives
+# under its own gitignored path rather than tools/corpus/scratch/ so the
+# corpus scratch area stays exclusively upstream corpus material.
+SPEC_SCXML_REC_URL = "https://www.w3.org/TR/scxml/"
+SPEC_DIR = "{{config_root}}/tools/spec"
+SPEC_SCRATCH = "{{config_root}}/tools/spec/scratch"
+SPEC_APPENDIX_D_OUT = "{{config_root}}/tools/spec/scratch/appendix-d.txt"
 
 [tasks.corpus]
 description = "Regenerate the SCION + W3C conformance corpus (fetch, transform, emit)"
@@ -155,3 +167,28 @@ run = 'mix run "$CORPUS_DIR/scxml_w3/check_exprs.exs" "$CORPUS_W3_CASES/mandator
 description = "Discard every upstream download; the next corpus run refetches"
 shell = "bash -c"
 run = 'rm -rf "$CORPUS_SCRATCH"'
+
+[tasks."spec:fetch"]
+description = "Fetch the W3C SCXML REC and extract Appendix D pseudocode for local diffing (gitignored, never vendored)"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+# Matches corpus:fetch:saxon and corpus:fetch:scion: check the finished
+# artifact before doing any network work, so a re-run costs nothing and
+# w3.org's rate limiter never sees a second request for the same document.
+if [ -f "$SPEC_APPENDIX_D_OUT" ]; then exit 0; fi
+mkdir -p "$SPEC_SCRATCH"
+html="$SPEC_SCRATCH/scxml-rec.html"
+if [ ! -f "$html" ]; then
+  curl -fsSL "$SPEC_SCXML_REC_URL" -o "$html"
+fi
+# Plain `elixir`, not `mix run`: the extractor needs xmerl, which Mix prunes
+# from the code path, and nothing from the project.
+elixir "$SPEC_DIR/extract_appendix_d.exs" "$html" "$SPEC_APPENDIX_D_OUT"
+'''
+
+[tasks."spec:clean"]
+description = "Discard the fetched REC and extracted Appendix D text; the next spec:fetch run refetches"
+shell = "bash -c"
+run = 'rm -rf "$SPEC_SCRATCH"'
