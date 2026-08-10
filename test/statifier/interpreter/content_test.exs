@@ -65,8 +65,8 @@ defmodule Statifier.Interpreter.ContentTest do
   defp machine_state(machine, opts \\ [trace: true]), do: MachineState.new(machine, opts)
 
   # Substitutes one compiled cell with `node` - the fixture-preserving
-  # technique plan Decision 11 states: a `Machine` built by the compiler with
-  # one cell replaced, never a `%Machine{}` literal.
+  # technique used throughout this file: a `Machine` built by the compiler
+  # with one cell replaced, never a `%Machine{}` literal.
   defp machine_with_node(machine, c_index, node) do
     %{machine | contents: put_elem(machine.contents, c_index, node)}
   end
@@ -169,7 +169,7 @@ defmodule Statifier.Interpreter.ContentTest do
     end
   end
 
-  # sabotage: `ExitEntry`'s seam is reverted to the st-wju.4 no-op stub
+  # sabotage: `ExitEntry`'s seam is reverted to the no-op stub
   # (`defp execute_block(machine_state, _owner, _c_indexes), do: {machine_state, []}`)
   # -> the second onentry block's own `:log` effect would never appear,
   # reddening this assertion.

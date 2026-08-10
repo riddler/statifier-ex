@@ -25,10 +25,10 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   end
 
   # Hand-drawn, depth-first, document order - one document covering every
-  # bead acceptance-criteria line a test in this file can decide, so this
-  # file reads next to st-wju.5's own acceptance-criteria list rather than
-  # Phase 1-3's per-rule fixtures (`selection_acceptance_test.exs` is the
-  # sibling this shape is borrowed from).
+  # acceptance-criteria line a test in this file can decide, so this file is
+  # organized around its own AC list rather than one fixture per rule
+  # (`selection_acceptance_test.exs` is the sibling this shape is borrowed
+  # from).
   #
   # c-indexes, document order across the whole machine:
   #
@@ -256,11 +256,11 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
     refute Enum.any?(effects_off, &match?({:trace, _}, &1))
   end
 
-  # AC: "Context type decision documented with the Phase 3 datamodel
-  # threading in view" - the executable half: constructing a `%Context{}`
-  # with only `machine_state` and `owner` and running both real node kinds
-  # through it pins the field set now, so a later bead adds a field rather
-  # than silently replacing the struct.
+  # AC: "Context type decision documented with the datamodel threading in
+  # view" - the executable half: constructing a `%Context{}` with only
+  # `machine_state` and `owner` and running both real node kinds through it
+  # pins the field set now, so a later change adds a field rather than
+  # silently replacing the struct.
   #
   # sabotage: a third field (`:extra`) is added to `Statifier.ExecutableContent.Context`'s
   # `defstruct` -> the `Map.keys/1` equality below gains a third entry and
@@ -285,21 +285,21 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   # the sabotage lines already recorded on "AC2: an error stops the
   # remainder of the block from running" above and on
   # `content_test.exs`'s stop-on-error tests, each independently verified
-  # against `run_nodes/2`'s `Enum.reduce_while/3`. Recorded here as the
-  # bead's own review judgment rather than as a test that asserts about
-  # tests.
+  # against `run_nodes/2`'s `Enum.reduce_while/3`. Recorded here as a
+  # review judgment rather than as a test that asserts about tests.
 
-  # The round-trip this bead can reach without st-wju.6: `enter_states/2`
-  # over a document whose `<onentry>` raises an event leaves that event on
-  # the internal queue - the closest this bead gets to "a microstep worked".
+  # The round trip this test can assert without the macrostep loop, which is
+  # not yet implemented: `enter_states/2` over a document whose `<onentry>`
+  # raises an event leaves that event on the internal queue - the closest
+  # this test gets to "a microstep worked".
   #
   # sabotage: `execute_block/3` in `lib/statifier/interpreter/exit_entry.ex`
-  # is reverted to the st-wju.4 no-op stub (`defp execute_block(machine_state,
+  # is reverted to the no-op stub (`defp execute_block(machine_state,
   # _owner, _c_indexes), do: {machine_state, []}`) -> the internal queue
   # stays empty, reddening the assertion below (the same mutation
   # `exit_entry_enter_test.exs`'s "the onentry seam is live" test verifies;
-  # restated here because the plan names this exact round-trip as a Phase 4
-  # acceptance line).
+  # restated here because this round trip is a documented acceptance line
+  # for this module).
   test "round-trip: enter_states/2 over a document whose onentry raises an event leaves it on the internal queue" do
     m = machine()
     transition = m.transitions |> Tuple.to_list() |> Enum.find(&(&1.events == [["go"]]))

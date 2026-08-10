@@ -84,8 +84,8 @@ defmodule Statifier.MachineStateTest do
 
     # sabotage: `MachineState.new/2` seeds `configuration` with the
     # machine's initial indexes instead of an empty set -> this assertion
-    # reddens, since entering the initial configuration is initialize/2's
-    # job (st-wju.6), not new/2's.
+    # reddens, since entering the initial configuration is the not-yet-
+    # implemented `initialize/2`'s job, not `new/2`'s.
     test "configuration starts empty" do
       ms = new_machine_state()
       assert MapSet.size(ms.configuration) == 0
