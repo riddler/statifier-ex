@@ -87,13 +87,12 @@ defmodule Statifier.MachineState do
   same events in the same order can differ structurally - the front/rear
   split depends on the push/pop history - so `==` on two `%MachineState{}`
   values is *not* a reliable "same position" test. A comparison that needs
-  to know whether two machine_states are at the same interpreter position
-  (a fold-to-quiescence-versus-step-by-step acceptance test, for one) must
-  compare a normalized view - `configuration`,
-  `internal_events/1`, `history_values`, the counters, `status` - never raw
-  struct equality. `internal_events/1` is exactly that normalized,
-  inspection-and-assertion view of the queue; no code outside this module
-  touches `:queue` directly.
+  to know whether two machine_states are at the same interpreter position (a
+  fold-to-quiescence-versus-step-by-step acceptance test, for one) must
+  compare a normalized view - `configuration`, `internal_events/1`,
+  `history_values`, the counters, `status` - never raw struct equality.
+  `internal_events/1` is exactly that normalized, inspection-and-assertion
+  view of the queue; no code outside this module touches `:queue` directly.
   """
 
   alias Statifier.Event

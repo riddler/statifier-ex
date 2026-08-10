@@ -17,10 +17,10 @@ defmodule Statifier.Validator.Checks.History do
       own to test against. Reuses check 3's constructor: this is the same
       shape of mistake, just against a different parent. Skipped when the
       target does not resolve at all (`Statifier.Validator.Checks.Targets`
-      already reported that) or when the parent is not
-      compound - a non-compound parent has already been reported by
-      `:history_bad_parent`, and testing descendancy against it (an id
-      that may not even exist, for the document root) would be a second,
+      already reported that) or when the parent is not compound - a
+      non-compound parent has already been reported by
+      `:history_bad_parent`, and testing descendancy against it (an id that
+      may not even exist, for the document root) would be a second,
       meaningless error for the same mistake.
   - `{:history_bad_type, raw}` when `type` was written and, sliced back out
     of `context.source`, is neither `"shallow"` nor `"deep"`.

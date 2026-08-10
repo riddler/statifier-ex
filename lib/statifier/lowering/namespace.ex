@@ -70,12 +70,11 @@ defmodule Statifier.Lowering.Namespace do
   `{uri_or_nil, local_name}`.
 
   A name with no `:` resolves against the `:default` binding, which is `nil`
-  when no bare `xmlns` is in scope - the same lenient reading applies here as
-  to an unprefixed root. A prefixed name resolves against its own prefix,
-  which is likewise `nil` when
-  the prefix was never declared; that document is malformed, but a prefixed
-  local name still dispatches under the same leniency rather than lowering
-  refusing to read it.
+  when no bare `xmlns` is in scope - the same lenient reading applies here
+  as to an unprefixed root. A prefixed name resolves against its own prefix,
+  which is likewise `nil` when the prefix was never declared; that document
+  is malformed, but a prefixed local name still dispatches under the same
+  leniency rather than lowering refusing to read it.
   """
   @spec resolve(qualified_name :: String.t(), scope :: scope()) :: {String.t() | nil, String.t()}
   def resolve(qualified_name, scope) when is_binary(qualified_name) and is_map(scope) do
