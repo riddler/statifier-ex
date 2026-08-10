@@ -95,6 +95,8 @@ above, and `Statifier.Effect` is the `effect`.
 - Event descriptor matching follows spec 3.13 exactly (including `foo.*` matching `foo`).
 - The transition-selection block lives in `Statifier.Interpreter.Selection`;
   `Statifier.Interpreter.NameMatch` is the 3.13 matcher above.
+- The exit and entry blocks - history recording/restoration and
+  `done.state.*` generation included - live in `Statifier.Interpreter.ExitEntry`.
 
 ### Executable content
 
