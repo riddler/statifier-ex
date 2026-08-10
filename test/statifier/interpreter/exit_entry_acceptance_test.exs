@@ -19,10 +19,9 @@ defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
   end
 
   # Hand-drawn from `@document`, depth-first, document order - one document
-  # covering every bead acceptance-criteria line a test in this file can
-  # decide, so this file reads next to st-wju.4's own acceptance-criteria list
-  # rather than Phase 1-3's per-rule fixtures (`selection_acceptance_test.exs`
-  # is the sibling this shape is borrowed from).
+  # covering every acceptance-criteria line a test in this file can decide,
+  # shaped the same way `selection_acceptance_test.exs` is (the sibling this
+  # shape is borrowed from) rather than split into one fixture per rule.
   #
   #  0 scxml (root)
   #  1   region
@@ -440,9 +439,10 @@ defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
 
   # AC: "All functions pure, plain values in and out; callable standalone" -
   # the executable form of `docs/observability.md` constraint 5, matching the
-  # same assertion in st-wju.3's acceptance test: every one of the six
-  # functions is called directly here with values built by hand from the
-  # compiled machine, no support code and no stepping.
+  # same assertion `selection_acceptance_test.exs` makes for its own
+  # functions: every one of the six functions is called directly here with
+  # values built by hand from the compiled machine, no support code and no
+  # stepping.
   #
   # sabotage: `in_final_state?/2`'s parallel branch's `Enum.all?/2` is
   # changed to `Enum.any?/2` -> a parallel with only one region final would
@@ -482,12 +482,16 @@ defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
     refute ExitEntry.in_final_state?(partial, idx(:par))
   end
 
-  # AC: "a microstep worked" - the closest this bead can get without
-  # st-wju.6: `exit_states/2` then `enter_states/2` over the same transition
-  # list, from a hand-built configuration, leaves a configuration that is
-  # exactly the ancestors-closed set the entry order describes. `leave`
-  # (`a1` -> `a2`, domain `a`) exits `a1`/`a1x` and re-enters via the same
-  # transition list, so the round trip is self-contained in one call pair.
+  # This is the closest thing to a full microstep round trip these two
+  # functions alone can prove: `exit_states/2` then `enter_states/2` over
+  # the same transition list, from a hand-built configuration, leaves a
+  # configuration that is exactly the ancestors-closed set the entry order
+  # describes. `leave` (`a1` -> `a2`, domain `a`) exits `a1`/`a1x` and
+  # re-enters via the same transition list, so the round trip is
+  # self-contained in one call pair. What it does not reach: transition
+  # selection is not exercised here, and nothing calls these two functions
+  # back to back the way a real microstep will - both are asserted directly
+  # against a hand-built `machine_state` instead.
   #
   # sabotage: `enter_states/2`'s `arrive/3` is changed to add each entered
   # state to a copy of `machine_state.configuration` that is discarded (the

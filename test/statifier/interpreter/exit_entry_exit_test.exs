@@ -310,11 +310,11 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
     assert result.history_values == ms.history_values
   end
 
-  # Proves the content seam is live end-to-end (st-wju.5): `a`'s
+  # Proves the content seam is live end-to-end: `a`'s
   # <onexit><log label="a-exit"/></onexit> now genuinely returns the effect,
-  # not the st-wju.4 no-op stub's empty list.
+  # not the no-op stub's empty list.
   #
-  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the st-wju.4
+  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the no-op
   # stub (`defp execute_block(machine_state, _owner, _c_indexes), do:
   # {machine_state, []}`) -> the :log effect never appears, reddening this
   # assertion.

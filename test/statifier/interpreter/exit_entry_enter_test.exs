@@ -237,8 +237,8 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
   describe "per-state block sources (onentry, default entry, default history content)" do
     # AC: "the ordering of block invocations per state is onentry, then
     # default entry, then default history content" - `execute_block/3` is a
-    # no-op stub (plan Decision 6), so no test here can observe a block
-    # actually *running*; what is decidable without execution is that
+    # no-op stub, so no test here can observe a block actually *running*;
+    # what is decidable without execution is that
     # `combo` carries three distinct, non-empty content sources and that
     # `enter_states/2`'s bookkeeping flags/registers exactly the ones
     # `arrive/3` is documented to run in that order - `run_onentry_blocks/2`
@@ -426,9 +426,9 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     # sabotage: `raise_completion_events/2`'s `parent == 0` check is
     # inverted to `parent != 0` -> the top-level branch (`running: false`)
     # is skipped in favor of `raise_parent_completion/3`, which raises
-    # nothing here too (the `:scxml` root's own id is `nil`, so Decision 9's
-    # guard swallows it) - but `running` is left `true`, reddening this
-    # assertion.
+    # nothing here too (the `:scxml` root's own id is `nil`, so the
+    # id-less-parent guard swallows it) - but `running` is left `true`,
+    # reddening this assertion.
     test "entering a top-level final sets running: false and raises nothing" do
       m = machine()
       ms = machine_state(m)
@@ -441,7 +441,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     end
 
     # AC: "a done.state.* whose parent state has no written id is not
-    # raised" (Decision 9)
+    # raised"
     #
     # sabotage: `raise_parent_completion/3`'s guard is changed from
     # `is_binary(parent_id) and parent_id != ""` to `parent_id != ""`
@@ -510,12 +510,12 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     end
   end
 
-  # Proves the content seam is live end-to-end (st-wju.5): entering a state
-  # with an onentry <raise> now genuinely enqueues the event on the internal
-  # queue, not the st-wju.4 no-op stub's silent nothing. A dedicated document
-  # is used - the shared `@document` above has no bare onentry <raise>.
+  # Proves the content seam is live end-to-end: entering a state with an
+  # onentry <raise> now genuinely enqueues the event on the internal queue,
+  # not the no-op stub's silent nothing. A dedicated document is used - the
+  # shared `@document` above has no bare onentry <raise>.
   #
-  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the st-wju.4
+  # sabotage: `execute_block/3` in exit_entry.ex is reverted to the no-op
   # stub (`defp execute_block(machine_state, _owner, _c_indexes), do:
   # {machine_state, []}`) -> the internal queue stays empty, reddening this
   # assertion.

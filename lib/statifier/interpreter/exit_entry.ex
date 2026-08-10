@@ -7,26 +7,27 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   `machine_state` stands in for the pseudocode's globals exactly as
   `Statifier.Interpreter.Selection`'s moduledoc states for the same reason
-  (`docs/observability.md` constraint 1, plan Decision 3 for this bead) -
-  every function here that reads a global takes `machine_state` as its
-  first argument.
+  (`docs/observability.md` constraint 1) - every function here that reads a
+  global takes `machine_state` as its first argument.
 
-  ## Return shapes (Decision 2)
+  ## Return shapes
 
-  `exit_states/2` and `enter_states/2` are the two functions in this bead
-  that both mutate the position and emit effects, so both return
+  `exit_states/2` and `enter_states/2` are the two functions here that both
+  mutate the position and emit effects, so both return
   `{MachineState.t(), [Effect.t()]}` - the shape `docs/observability.md`
-  fixes for `microstep/1`, their only future caller (st-wju.6). Effect
-  order within the returned list is emission order: the trace effect
-  first, then each block's effects in the order the blocks ran.
+  fixes for `microstep/1`, which will be their only caller. Effect order
+  within the returned list is emission order: the trace effect first, then
+  each block's effects in the order the blocks ran.
 
-  ## Ordering (Decision 4)
+  ## Ordering
 
   Exit order and entry order are never hand-sorted here: `exit_states/2`
   pipes `Statifier.Interpreter.Selection.compute_exit_set/2`'s `MapSet`
-  through `Statifier.Machine.exit_order/2` (descending index).
+  through `Statifier.Machine.exit_order/2` (descending index), and
+  `enter_states/2` mirrors it through `Statifier.Machine.document_order/2`
+  (ascending index).
 
-  ## The content seam (Decision 6)
+  ## The content seam
 
   Every call site that would run executable content - `<onexit>`,
   `<onentry>`, an `<initial>` transition's content, default history
@@ -36,7 +37,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   it. This module owns only *where and in what order* blocks run, which is
   what the exit/entry pseudocode defines.
 
-  ## History recording (Decision 7)
+  ## History recording
 
   `exit_states/2` records history in a full first pass over the exit set,
   reading the configuration exactly as it stood before any state exited -
@@ -48,14 +49,13 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   One mechanical deviation in the recorded value itself: the pseudocode's
   `configuration.toList().filter(f)` produces an ordered list, while
-  `machine_state.history_values` holds a `MapSet` (the shape st-wju.2 fixed
-  for the field). Order is dropped rather than preserved because nothing
-  reads it - `add_descendant_states_to_enter/3` re-enters a restored value
-  through the same descendant and ancestor walks any other target set goes
-  through, and `enter_states/2` sorts the whole entry set into document
-  order afterwards regardless.
+  `machine_state.history_values` holds a `MapSet`. Order is dropped rather
+  than preserved because nothing reads it - `add_descendant_states_to_enter/3`
+  re-enters a restored value through the same descendant and ancestor walks
+  any other target set goes through, and `enter_states/2` sorts the whole
+  entry set into document order afterwards regardless.
 
-  ## The entry set (Decision 3)
+  ## The entry set
 
   `compute_entry_set/2`, `add_descendant_states_to_enter/3`, and
   `add_ancestor_states_to_enter/4` are pure queries: none of them touch
@@ -64,9 +64,9 @@ defmodule Statifier.Interpreter.ExitEntry do
   `defaultHistoryContent` out-parameters become one accumulator of type
   `entry_set()`, threaded in and returned last - the minimal mechanical
   deviation Elixir's lack of out-parameters forces. `default_history_content`
-  stores the default transition's `t_index` rather than its `[c_index]` list
-  (Decision 5): strictly more information, and what the content seam
-  (Decision 6) actually needs to build a `Content.owner()`.
+  stores the default transition's `t_index` rather than its `[c_index]` list:
+  strictly more information, and what the content seam actually needs to
+  build a `Content.owner()`.
   """
 
   alias Statifier.Interpreter.Content
@@ -80,13 +80,12 @@ defmodule Statifier.Interpreter.ExitEntry do
   require Statifier.Effect, as: Effect
 
   @typedoc """
-  The pseudocode's three `computeEntrySet` out-parameters (Decision 3),
-  threaded as one accumulator: the states a transition set will enter, the
-  subset of those entered via a compound state's `<initial>` declaration
-  rather than as an explicit target (so default-entry content runs only for
-  them), and a map from a history state's parent to the `t_index` of the
-  default transition whose content runs because that history was
-  unrecorded (Decision 5).
+  The pseudocode's three `computeEntrySet` out-parameters, threaded as one
+  accumulator: the states a transition set will enter, the subset of those
+  entered via a compound state's `<initial>` declaration rather than as an
+  explicit target (so default-entry content runs only for them), and a map
+  from a history state's parent to the `t_index` of the default transition
+  whose content runs because that history was unrecorded.
   """
   @type entry_set :: {
           states_to_enter :: MapSet.t(non_neg_integer()),
@@ -103,19 +102,17 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   1. `states_to_exit` = `Selection.compute_exit_set/2` over
      `enabled_transitions`, piped through `Machine.exit_order/2` for exit
-     order (Decision 4) - the boundary decision this bead's own note
-     records: `compute_exit_set/2` returns an unordered `MapSet`, and
-     ordering it is this function's job, not `Selection`'s.
+     order: `compute_exit_set/2` returns an unordered `MapSet`, and ordering
+     it is this function's job, not `Selection`'s.
   2. The pseudocode's `statesToInvoke.delete(s)` line is skipped:
      `states_to_invoke` is deliberately absent from `MachineState` until
-     st-cmq (invoke) adds it with its own caller.
+     `<invoke>` support adds it with its own caller.
   3. `Effect.trace(machine_state, Effect.Trace.ExitSet, indexes:
-     states_to_exit)` is emitted before any mutation (Decision 13), over
-     the *original* `machine_state` - the macro's own hygienic
-     `machine_state` rebinding inside its expansion does not touch this
-     function's parameter (Decision 13's own note).
+     states_to_exit)` is emitted before any mutation, over the *original*
+     `machine_state` - the macro's own hygienic `machine_state` rebinding
+     inside its expansion does not touch this function's parameter.
   4. `record_history_values/2` runs its whole first pass over
-     `states_to_exit`, reading the untouched configuration (Decision 7).
+     `states_to_exit`, reading the untouched configuration.
   5. `states_to_exit` is reduced through `depart/2`, each state running its
      `onexit` blocks and then leaving the configuration.
   """
@@ -143,8 +140,8 @@ defmodule Statifier.Interpreter.ExitEntry do
   # `exitStates`'s history-recording loop - `for s in statesToExit: for h
   # in s.history: historyValue[h.id] = ...` - the whole first pass, run
   # before any `onexit` content and before any state leaves the
-  # configuration (Decision 7). Reads `history_children` (populated by the
-  # compiler), so this is a field read per exiting state, never a scan.
+  # configuration. Reads `history_children` (populated by the compiler), so
+  # this is a field read per exiting state, never a scan.
   @spec record_history_values(
           machine_state :: MachineState.t(),
           states_to_exit :: [non_neg_integer()]
@@ -172,11 +169,11 @@ defmodule Statifier.Interpreter.ExitEntry do
     %{machine_state | history_values: Map.put(machine_state.history_values, history_index, value)}
   end
 
-  # The two lambdas `exitStates` records history with, verbatim (Decision
-  # 7): a `:shallow` history records `s`'s active *immediate* children; a
-  # `:deep` history records `s`'s active *atomic descendants*.
-  # `descendant?/3` is proper, which is correct here because `s` is not
-  # atomic when it has a history child.
+  # The two lambdas `exitStates` records history with, verbatim: a
+  # `:shallow` history records `s`'s active *immediate* children; a `:deep`
+  # history records `s`'s active *atomic descendants*. `descendant?/3` is
+  # proper, which is correct here because `s` is not atomic when it has a
+  # history child.
   @spec recorded_value(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -200,8 +197,8 @@ defmodule Statifier.Interpreter.ExitEntry do
   end
 
   # `exitStates`'s per-state exit body: run its onexit blocks, skip
-  # `cancelInvoke` (st-cmq owns invocations; nothing exists yet to
-  # cancel), then remove it from the configuration.
+  # `cancelInvoke` (no `<invoke>` support exists yet; nothing to cancel),
+  # then remove it from the configuration.
   @spec depart(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           {MachineState.t(), [Effect.t()]}
   defp depart(machine_state, state_index) do
@@ -235,8 +232,8 @@ defmodule Statifier.Interpreter.ExitEntry do
   # ADR-0002: the pseudocode's `executeContent(content)`. See
   # `Statifier.Interpreter.Content.execute_block/3` for the block runner
   # itself and the `Trace.ContentExecuted` emission that wraps it; this
-  # bead owns only *where and in what order* blocks run, which is what the
-  # exit/entry pseudocode defines (Decision 6).
+  # module owns only *where and in what order* blocks run, which is what
+  # the exit/entry pseudocode defines.
   @spec execute_block(
           machine_state :: MachineState.t(),
           owner :: Machine.Content.owner(),
@@ -248,17 +245,17 @@ defmodule Statifier.Interpreter.ExitEntry do
   @doc """
   `computeEntrySet` (Appendix D) - the entry-set bookkeeping every
   `enabled_transitions` transition contributes, folded into one
-  `entry_set()` accumulator (Decision 3).
+  `entry_set()` accumulator.
 
   Per transition, in the pseudocode's own order: each *written* target
   (`transition.targets`, not the resolved history/effective set) through
   `add_descendant_states_to_enter/3`, then the transition's domain
   (`Selection.get_transition_domain/2`), then each *effective* target
   (`Selection.get_effective_target_states/2` - already resolves both
-  history branches, plan Decision 5 of st-wju.3, consumed rather than
-  re-ported) through `add_ancestor_states_to_enter/4` bounded by that
-  domain. The written-versus-effective distinction is the pseudocode's own
-  and is preserved here rather than collapsed into one walk.
+  history branches, consumed rather than re-resolved here) through
+  `add_ancestor_states_to_enter/4` bounded by that domain. The
+  written-versus-effective distinction is the pseudocode's own and is
+  preserved here rather than collapsed into one walk.
   """
   @spec compute_entry_set(machine_state :: MachineState.t(), transitions :: [Transition.t()]) ::
           entry_set()
@@ -298,16 +295,17 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   - **history** (`enter_history_target/3`): a recorded value in
     `machine_state.history_values` restores those states; an unrecorded one
-    registers `default_history_content` (Decision 5) and follows the
-    history's default transition's targets instead.
+    registers `default_history_content` and follows the history's default
+    transition's targets instead.
   - **compound**: `state_index` is added, flagged in
     `states_for_default_entry`, and its initial targets are entered
     (`enter_initial_targets/3`). When the document wrote an `<initial>`
     element, the targets come from
     `Machine.transition(machine, state.initial_transition).targets` - the
     pseudocode's `state.initial.transition.target` - because that transition
-    is also what carries the default-entry content Phase 3 runs. **Mechanical
-    deviation**: `Statifier.Compiler.resolve_initial/3` only populates
+    is also what carries the default-entry content `run_default_entry/3`
+    runs on the way in. **Mechanical deviation**:
+    `Statifier.Compiler.resolve_initial/3` only populates
     `initial_transition` for a written `<initial>` element; a state
     defaulted through the `initial` attribute or the first-child fallback
     carries its resolved default in `State.initial` instead, with no
@@ -353,11 +351,12 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # The history arm of `addDescendantStatesToEnter`: a recorded value
   # restores those states directly; an unrecorded history registers
-  # `default_history_content[history.parent] = history_default_t_index`
-  # (Decision 5 - the `t_index`, not the pseudocode's bare content list) and
-  # follows the default transition's targets instead. Both branches finish
-  # through `enter_restored/4`, the shared "enter these targets, then walk
-  # ancestors up to the history's parent" tail.
+  # `default_history_content[history.parent] = history_default_t_index` -
+  # the `t_index`, not the pseudocode's bare content list, since that is
+  # what the content seam needs to build a `Content.owner()` - and follows
+  # the default transition's targets instead. Both branches finish through
+  # `enter_restored/4`, the shared "enter these targets, then walk ancestors
+  # up to the history's parent" tail.
   @spec enter_history_target(
           machine_state :: MachineState.t(),
           history_index :: non_neg_integer(),
@@ -540,7 +539,7 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # `statesForDefaultEntry.add(state)` - flags a compound state entered via
   # its `<initial>` declaration rather than as an explicit target, so
-  # `enter_states/2` (Phase 3) knows to run its default-entry content.
+  # `enter_states/2` knows to run its default-entry content.
   @spec flag_default_entry(acc :: entry_set(), state_index :: non_neg_integer()) :: entry_set()
   defp flag_default_entry({states_to_enter, default_entry, history_content}, state_index) do
     {states_to_enter, MapSet.put(default_entry, state_index), history_content}
@@ -548,7 +547,7 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # `defaultHistoryContent[state.parent] = state.transition.content` -
   # keyed by the history state's *parent* index, valued by the default
-  # transition's `t_index` rather than its content list (Decision 5).
+  # transition's `t_index` rather than its content list.
   @spec register_default_history_content(
           acc :: entry_set(),
           parent_index :: non_neg_integer(),
@@ -569,13 +568,11 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   Body, in the pseudocode's own order:
 
-  1. `compute_entry_set/2` over `enabled_transitions` (Decision 3).
-  2. `entry_order` = `Machine.document_order/2` over `states_to_enter`
-     (Decision 4) - ascending index, the mirror of `exit_states/2`'s
-     `exit_order`.
+  1. `compute_entry_set/2` over `enabled_transitions`.
+  2. `entry_order` = `Machine.document_order/2` over `states_to_enter` -
+     ascending index, the mirror of `exit_states/2`'s `exit_order`.
   3. `Effect.trace(machine_state, Effect.Trace.EntrySet, indexes:
-     entry_order)` before any mutation (Decision 13), over the *original*
-     `machine_state`.
+     entry_order)` before any mutation, over the *original* `machine_state`.
   4. `entry_order` is reduced through `arrive/3`, each state added to the
      configuration, its `onentry` blocks run, its default-entry / default-
      history content run when flagged/registered, then its completion
@@ -603,10 +600,10 @@ defmodule Statifier.Interpreter.ExitEntry do
   end
 
   # `enterStates`'s per-state entry body: add to the configuration, skip
-  # `statesToInvoke.add(s)` (st-cmq owns invocations) and the `binding ==
-  # "late"` datamodel initialization (st-af3 owns the datamodel), run
-  # `onentry` blocks, run default-entry / default-history content, then
-  # raise this state's completion events.
+  # `statesToInvoke.add(s)` (no `<invoke>` support exists yet) and the
+  # `binding == "late"` datamodel initialization (the datamodel is not
+  # evaluated yet), run `onentry` blocks, run default-entry /
+  # default-history content, then raise this state's completion events.
   @spec arrive(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -681,8 +678,8 @@ defmodule Statifier.Interpreter.ExitEntry do
     {machine_state, initial_effects ++ history_effects}
   end
 
-  # `state.initial.transition`'s content (Decision 6) - only when the
-  # document actually wrote an `<initial>` element; see
+  # `state.initial.transition`'s content - only when the document actually
+  # wrote an `<initial>` element; see
   # `add_descendant_states_to_enter/3`'s compound-arm doc for why
   # `initial_transition` can be `nil` here.
   @spec run_initial_transition_content(
@@ -697,9 +694,9 @@ defmodule Statifier.Interpreter.ExitEntry do
     end
   end
 
-  # `execute_block/3` for a transition's own content (Decision 6), shared by
-  # the `<initial>` transition and the default history transition - both
-  # own their content as `{:transition, t_index}`.
+  # `execute_block/3` for a transition's own content, shared by the
+  # `<initial>` transition and the default history transition - both own
+  # their content as `{:transition, t_index}`.
   @spec run_transition_content(
           machine_state :: MachineState.t(),
           machine :: Machine.t(),
@@ -711,11 +708,11 @@ defmodule Statifier.Interpreter.ExitEntry do
   end
 
   # `enterStates`'s `isFinalState(s)` tail. State index 0 is the `:scxml`
-  # root (st-wju.1's Decision 2), so a final state whose parent is 0 is a
-  # top-level final: `running: false`, nothing raised (Decision 11) - the
-  # pseudocode's `isSCXMLElement(s.parent)`. Otherwise `done.state.*` is
-  # raised for the parent (and, when it completes a parallel, the
-  # grandparent too) through `raise_parent_completion/3`.
+  # root, so a final state whose parent is 0 is a top-level final:
+  # `running: false`, nothing raised - the pseudocode's
+  # `isSCXMLElement(s.parent)`. Otherwise `done.state.*` is raised for the
+  # parent (and, when it completes a parallel, the grandparent too) through
+  # `raise_parent_completion/3`.
   @spec raise_completion_events(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer()
@@ -734,13 +731,13 @@ defmodule Statifier.Interpreter.ExitEntry do
     end
   end
 
-  # `new Event("done.state." + parent.id, s.donedata)` (Decision 10),
-  # skipped when `parent` has no written id (Decision 9 -
-  # `Statifier.Validator.Checks.Ids` keeps `nil`/`""` ids legal, and an
-  # unnamed state's completion is unobservable). Then, when `parent`'s own
-  # parent is a `:parallel` whose every region now satisfies
-  # `in_final_state?/2`, `done.state.{grandparent_id}` follows with no
-  # `data` - the pseudocode's nested check, not a sibling of this one.
+  # `new Event("done.state." + parent.id, s.donedata)`, skipped when
+  # `parent` has no written id - `Statifier.Validator.Checks.Ids` keeps
+  # `nil`/`""` ids legal, and an unnamed state's completion is
+  # unobservable. Then, when `parent`'s own parent is a `:parallel` whose
+  # every region now satisfies `in_final_state?/2`,
+  # `done.state.{grandparent_id}` follows with no `data` - the pseudocode's
+  # nested check, not a sibling of this one.
   @spec raise_parent_completion(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -772,7 +769,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   # only when `parent`'s own parent is a `:parallel` and every one of its
   # regions (`region_indexes/2` - never a `:history` pseudo-state, the same
   # landmine `enter_uncovered_regions/3` avoids) satisfies
-  # `in_final_state?/2`. Same id guard as the parent event (Decision 9).
+  # `in_final_state?/2`. Same id guard as the parent event.
   @spec maybe_raise_grandparent_completion(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -808,13 +805,12 @@ defmodule Statifier.Interpreter.ExitEntry do
     end
   end
 
-  # Decision 10: `state.donedata`'s `expr` folds to the raised event's
-  # `data`. `{:static, term}` rides directly; `{:compiled, _, _}` becomes
-  # `nil` - not a rescue-to-default, the value simply has not been
-  # evaluated yet (st-af3 evaluates it later) and the corpus cannot reach it
-  # (`FeatureDetector` flunks any document with a datamodel expression). A
-  # `nil` donedata, or a donedata with no `<content>` child at all
-  # (`expr: nil`), both become `nil` data.
+  # `state.donedata`'s `expr` folds to the raised event's `data`.
+  # `{:static, term}` rides directly; `{:compiled, _, _}` becomes `nil` -
+  # not a rescue-to-default, the value simply has not been evaluated yet
+  # and the corpus cannot reach it (`FeatureDetector` flunks any document
+  # with a datamodel expression). A `nil` donedata, or a donedata with no
+  # `<content>` child at all (`expr: nil`), both become `nil` data.
   @spec static_donedata(machine :: Machine.t(), state_index :: non_neg_integer()) :: term()
   defp static_donedata(machine, state_index) do
     case Machine.at(machine, state_index).donedata do
@@ -830,7 +826,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   through its active descendants, "in a final state": a compound state
   answers true when some active child is a `:final`; a parallel answers
   true only when *every* region does, recursively; anything else (an
-  atomic `:final` included) answers false. Ported verbatim (Decision 14).
+  atomic `:final` included) answers false. Ported verbatim.
   """
   @spec in_final_state?(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           boolean()
