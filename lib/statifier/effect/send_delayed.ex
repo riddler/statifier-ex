@@ -7,7 +7,7 @@ defmodule Statifier.Effect.SendDelayed do
   send, this bead only defines the shape it schedules.
 
   `c_index` identifies the `<send>` content node (constraint 3, never a
-  `%Statifier.Machine.Content{}`); `macrostep`/`microstep` are the counters
+  compiled content-node struct); `macrostep`/`microstep` are the counters
   as they stood when the send was scheduled (Decision 5), not when the
   timer fires.
   """

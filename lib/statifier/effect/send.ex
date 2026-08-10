@@ -10,8 +10,8 @@ defmodule Statifier.Effect.Send do
   `id` attribute (generated when the element has none).
 
   `c_index` is the identity (`docs/observability.md` constraint 3) of the
-  `<send>` content node that produced this effect - never a
-  `%Statifier.Machine.Content{}` struct. `macrostep`/`microstep` are the
+  `<send>` content node that produced this effect - never a compiled
+  content-node struct. `macrostep`/`microstep` are the
   step counters as they stood at the moment of the send (Decision 5).
   """
 

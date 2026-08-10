@@ -46,7 +46,7 @@ defmodule Statifier.Effect do
   Every trace payload carries `macrostep`/`microstep` (constraint 4) and,
   wherever it names an entity, a constraint-3 *identity* - a state index, a
   `t_index`, a `c_index` - never a `%Statifier.Machine.State{}`,
-  `%Statifier.Machine.Transition{}`, or `%Statifier.Machine.Content{}`.
+  `%Statifier.Machine.Transition{}`, or a compiled content-node struct.
   Tooling resolves an identity back to its node through
   `Statifier.Machine.at/2`, `transition/2`, or `content/2`
   (`docs/observability.md:73-74`).
