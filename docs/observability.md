@@ -166,4 +166,4 @@ For the Phase 1 interpreter work and its reviews:
       (`Statifier.Event.Cause`, `MachineState.raise_internal/4`, st-wju.2)
 - [x] Appendix D query functions take/return plain values, unfused
       (`Statifier.Interpreter.Selection`, st-wju.3; `Statifier.Interpreter.ExitEntry`,
-      st-wju.4; st-wju.5 holds the same line for its own queries)
+      st-wju.4; `Statifier.Interpreter.Content`, st-wju.5)
