@@ -16,24 +16,27 @@ defmodule Statifier.Machine.State do
 
   ## Fields that are kind-scoped
 
-  | Field | Meaningful on | Landed in |
-  |---|---|---|
-  | `id` | any (nilable except it is always `nil` on `:scxml`) | interning pass |
-  | `parent` | any (`nil` only at index 0) | interning pass |
-  | `last` | any - the high end of this state's self-inclusive descendant range, `index` being the low end | interning pass |
-  | `children` | any (`[]` on an atomic state) | interning pass |
-  | `initial` | `:state`, `:scxml` - `[]` on `:parallel`, `:final`, `:history`, and any atomic state | interning pass |
-  | `history_type` | `:history` | interning pass |
-  | `history_children` | any compound/parallel state - its own direct `:history` children, so exit-time recording finds them without scanning | interning pass |
-  | `transitions` | `:state`, `:parallel`, `:history` - the state's own selectable transitions' `t_index` list | transition pass |
-  | `onentry` / `onexit` | any - `[Machine.Block.t()]`, one entry per `<onentry>`/`<onexit>` element the state wrote | executable-content pass |
-  | `initial_transition` | `:state`, `:scxml` - the `<initial>` element's transition `t_index`, or `nil` | transition pass |
-  | `history_default` | `:history` - its default transition's `t_index` | transition pass |
-  | `donedata` | `:final` - the compiled `Machine.Donedata.t()`, or `nil` | executable-content pass |
+  | Field | Meaningful on |
+  |---|---|
+  | `id` | any (nilable except it is always `nil` on `:scxml`) |
+  | `parent` | any (`nil` only at index 0) |
+  | `last` | any - the high end of this state's self-inclusive descendant range, `index` being the low end |
+  | `children` | any (`[]` on an atomic state) |
+  | `initial` | `:state`, `:scxml` - `[]` on `:parallel`, `:final`, `:history`, and any atomic state |
+  | `history_type` | `:history` |
+  | `history_children` | any compound/parallel state - its own direct `:history` children, so exit-time recording finds them without scanning |
+  | `transitions` | `:state`, `:parallel`, `:history` - the state's own selectable transitions' `t_index` list |
+  | `onentry` / `onexit` | any - `[Machine.Block.t()]`, one entry per `<onentry>`/`<onexit>` element the state wrote |
+  | `initial_transition` | `:state`, `:scxml` - the `<initial>` element's transition `t_index`, or `nil` |
+  | `history_default` | `:history` - its default transition's `t_index` |
+  | `donedata` | `:final` - the compiled `Machine.Donedata.t()`, or `nil` |
 
-  `transitions`, `initial_transition`, and `history_default` are declared
-  here but left at their empty defaults until the compiler's transition pass
-  populates them, so the struct shape does not change once that pass runs.
+  Every field above `donedata` is written in one pass: the compiler's
+  state-interning walk builds each `%Statifier.Machine.State{}` whole, index
+  and `t_index`/`c_index` references included. `donedata` is the exception -
+  it is filled in after that walk, once the `<donedata>` compilation has run,
+  so it is the only field whose value is not known when the struct is first
+  built.
   """
 
   alias Statifier.Machine.Block
