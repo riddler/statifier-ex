@@ -258,14 +258,14 @@ descriptions. Leave every `# sabotage:` line byte-identical.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (`mix quality --profile loop` between edits, not
+- [x] Full `mix quality` passes (`mix quality --profile loop` between edits, not
       as the phase gate)
-- [ ] The tightened grep over `lib/statifier/lowering* lib/statifier/document*
+- [x] The tightened grep over `lib/statifier/lowering* lib/statifier/document*
       lib/statifier/parser* test/statifier/lowering test/statifier/document*`
       returns zero hits
-- [ ] `git diff -U0` over the phase paths removes no `sabotage`, `ADR-0`,
+- [x] `git diff -U0` over the phase paths removes no `sabotage`, `ADR-0`,
       `Appendix D`, `w3.org` or `docs/*.md` line (the check above)
-- [ ] `git diff` over the phase paths shows no change to any executable line -
+- [x] `git diff` over the phase paths shows no change to any executable line -
       comments, `@moduledoc`/`@doc`/`@typedoc` and test descriptions only
 
 #### Manual Verification:
@@ -971,3 +971,26 @@ exact revert.
   (the sabotage convention in full)
 - Follow-on, deliberately not in this plan: `st-wjg` (the AdrGuard bead-ID
   check)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Each rewritten comment reads correctly to someone who has never seen the
+      bead or the plan: it states a fact about the code, not about the work
+- [ ] Where a `Decision N` citation was removed, the invariant that decision
+      recorded is now stated in the comment itself
+- [ ] Comments touching `lib/statifier/` still describe behavior that matches
+      the W3C spec; no Appendix D name or spec section was altered
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the human
+to confirm the manual review before moving on. In looped (`--loop`) execution,
+the Automated Verification list gates advancement via `/wurk:commit --auto` and
+the Manual Verification items are deferred and surfaced once at the end.
+
+---

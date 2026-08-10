@@ -25,7 +25,7 @@ defmodule Statifier.Lowering.UnsupportedTest do
     error
   end
 
-  describe "Phase 3 elements are rejected by name, at their own location" do
+  describe "elements outside the supported set are rejected by name, at their own location" do
     # sabotage: `Lowering`'s dispatch map grows a stray
     # `"script" => &Builders.build_state/2` entry -> this test reddens
     # because the document lowers successfully instead of reporting
@@ -105,10 +105,10 @@ defmodule Statifier.Lowering.UnsupportedTest do
     # (`Lowering.walk_child/4` does not walk an unsupported element's
     # children) - a `<datamodel><data/></datamodel>` fixture would only ever
     # surface "datamodel" as the error, never reaching "data" itself.
-    # Placed directly under <scxml> instead (a judgment call, see this
-    # bead's Phase 6 plan notes) - the element is not in a spec-legal
-    # position here, but the assertion still proves the *name* "data" is
-    # rejected regardless of where it is written.
+    # Placed directly under <scxml> instead (a deliberate judgment call) -
+    # the element is not in a spec-legal position here, but the assertion
+    # still proves the *name* "data" is rejected regardless of where it is
+    # written.
     #
     # sabotage: `Lowering`'s dispatch map grows a stray "data" entry
     # dispatching to `build_log/2` -> this test reddens because `<data>`

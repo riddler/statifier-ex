@@ -1,7 +1,6 @@
 defmodule Statifier.Lowering.Namespace do
   @moduledoc """
-  Prefix scope resolution for `Statifier.Lowering`'s walk (Decision 8,
-  `docs/plans/260807-st-l5k.4-lowers-dom-to-document.md` Phase 5).
+  Prefix scope resolution for `Statifier.Lowering`'s walk.
 
   A scope is a plain map from a declared prefix (a `String.t()`, or the atom
   `:default` for a bare `xmlns="..."`) to the URI it was bound to. It is
@@ -22,7 +21,7 @@ defmodule Statifier.Lowering.Namespace do
 
   @doc """
   The SCXML namespace URI. Dispatch treats an element resolving to this URI,
-  or to no namespace at all, as SCXML's own vocabulary (Decision 8).
+  or to no namespace at all, as SCXML's own vocabulary.
   """
   @spec scxml_namespace() :: String.t()
   def scxml_namespace, do: @scxml_namespace
@@ -31,7 +30,7 @@ defmodule Statifier.Lowering.Namespace do
   Whether `uri` dispatches as SCXML's own vocabulary: the SCXML namespace
   itself, or **no namespace at all**.
 
-  The `nil` case is the relaxed-parsing commitment (st-700). A fragment that
+  The `nil` case is the relaxed-parsing commitment. A fragment that
   declares no `xmlns` - `<scxml><state id="a"/></scxml>` - lowers exactly as
   its fully-declared twin does. v1 achieved this by inserting `xmlns=` into
   the source string before parsing; v2 relaxes this check instead, so spans
@@ -39,9 +38,8 @@ defmodule Statifier.Lowering.Namespace do
   no translation step. Tightening this predicate would break a documented
   capability, not merely a fixture.
 
-  Reporting an absent or non-SCXML `xmlns` is the validator's job (st-l5k.5),
-  which has `Document.xmlns` and its `attribute_locations` entry to report
-  from.
+  Reporting an absent or non-SCXML `xmlns` is the validator's job, which has
+  `Document.xmlns` and its `attribute_locations` entry to report from.
   """
   @spec scxml_vocabulary?(uri :: String.t() | nil) :: boolean()
   def scxml_vocabulary?(uri), do: uri in [nil, @scxml_namespace]
@@ -72,8 +70,9 @@ defmodule Statifier.Lowering.Namespace do
   `{uri_or_nil, local_name}`.
 
   A name with no `:` resolves against the `:default` binding, which is `nil`
-  when no bare `xmlns` is in scope - the lenient case Decision 8 asks for. A
-  prefixed name resolves against its own prefix, which is likewise `nil` when
+  when no bare `xmlns` is in scope - the same lenient reading applies here as
+  to an unprefixed root. A prefixed name resolves against its own prefix,
+  which is likewise `nil` when
   the prefix was never declared; that document is malformed, but a prefixed
   local name still dispatches under the same leniency rather than lowering
   refusing to read it.

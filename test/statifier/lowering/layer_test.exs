@@ -1,7 +1,7 @@
 defmodule Statifier.Lowering.LayerTest do
   use ExUnit.Case, async: true
 
-  # Decision 10's mechanical defense: a (child, parent) clause matrix cannot
+  # This guard's mechanical defense: a (child, parent) clause matrix cannot
   # satisfy "no SCXML element name appears more than once as a whole string
   # literal across the layer", because every such clause names both a child
   # and a parent. This is the same vocabulary and AST-walk technique as
@@ -16,8 +16,8 @@ defmodule Statifier.Lowering.LayerTest do
 
   # `Statifier.Lowering` itself lives at `lib/statifier/lowering.ex`, one
   # level above the `lib/statifier/lowering/` directory the other four
-  # modules live under (Decision 1's layout table) - and it is the one file
-  # that actually holds the dispatch map's thirteen element-name literals.
+  # modules live under - and it is the one file that actually holds the
+  # dispatch map's thirteen element-name literals.
   # Excluding it would make the guard blind to exactly the mutation it
   # exists to catch (a duplicated literal split across `lowering.ex` and
   # `builders.ex`), so the source list is the whole layer, matching how
@@ -42,7 +42,7 @@ defmodule Statifier.Lowering.LayerTest do
   # clause - they are plain data flowing through ordinary function-call
   # arguments and return values, in the *body* of a function.
   #
-  # The clause matrix Decision 10 actually guards against is a name used to
+  # The clause matrix this guard actually guards against is a name used to
   # **decide dispatch**: a map literal's keys (`@dispatch` itself), or a
   # literal appearing in a `def`/`defp` **head** - its argument patterns or
   # its `when` guard - which is exactly the shape `parent_name == "state"`

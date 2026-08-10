@@ -36,7 +36,7 @@ defmodule Statifier.Lowering.Attributes do
 
   An absent attribute becomes `[]`, and so does one written as `""` - the
   two are told apart, when it matters, by `attribute_locations`, never by
-  the list itself (Decision 6).
+  the list itself.
   """
   @spec list(element :: Element.t(), name :: binary()) :: [String.t()]
   def list(%Element{} = element, name) when is_binary(name) do
@@ -55,8 +55,8 @@ defmodule Statifier.Lowering.Attributes do
   `mapping`.
 
   An out-of-range value (`mapping` misses it) still lowers to `default`
-  rather than erroring - an enumerated value outside its range is a
-  semantic check, st-l5k.5's shape, not lowering's (Residual Note 2).
+  rather than erroring - an enumerated value outside its range is the
+  validator's job to check, not lowering's.
   """
   @spec atom(
           element :: Element.t(),

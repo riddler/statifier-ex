@@ -25,11 +25,11 @@ defmodule Statifier.Lowering do
 
   ## Dispatch is context-free
 
-  The dispatch map's keys are exactly the supported element names
-  (Decision 4); no `build_*` function in `Builders` takes a parent element
-  name as an argument. A builder does not know or care what its parent was -
-  the parent, when it exists, is what decides whether the child's tagged
-  result has anywhere to go (`Builders.place/3`, from Phase 2 on). The
+  The dispatch map's keys are exactly the supported element names; no
+  `build_*` function in `Builders` takes a parent element name as an
+  argument. A builder does not know or care what its parent was - the
+  parent, when it exists, is what decides whether the child's tagged
+  result has anywhere to go (`Builders.place/3`). The
   parent's own element name is known only to itself, and is used solely to
   word a `{:misplaced_element, name, parent_name}` error about one of *its
   own* children - it is never handed down to a child builder.
@@ -39,8 +39,8 @@ defmodule Statifier.Lowering do
   Both dispatch sites (`lower/1`, `walk_child/4`) accept an element with no
   namespace as SCXML's own vocabulary, not only one resolved to the SCXML
   namespace. `Statifier.Lowering.Namespace.scxml_vocabulary?/1` is the
-  mechanism and its moduledoc states the commitment (st-700); this is a
-  pointer for the reader who starts here instead.
+  mechanism and its moduledoc states the commitment; this is a pointer for
+  the reader who starts here instead.
   """
 
   alias Statifier.Document
@@ -93,7 +93,7 @@ defmodule Statifier.Lowering do
   # filters text out and would silently drop the stray-text rule with it.
   #
   # Returns tagged child results in document order (each builder's own
-  # `{slot, struct}` tag, per Decision 3) alongside the accumulated errors,
+  # `{slot, struct}` tag) alongside the accumulated errors,
   # so a container builder can fold the results into its own struct via its
   # own `place/2` without this function knowing anything about slots.
   @spec walk_children(element :: Element.t(), ctx :: map()) :: {[term()], [Error.t()]}

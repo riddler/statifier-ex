@@ -8,10 +8,9 @@ defmodule Statifier.Lowering.Builders do
   Every builder lowers its own children first, through
   `Statifier.Lowering.walk_children/2`, before building its own struct, so
   errors accumulate in document order regardless of nesting depth. No
-  builder here takes a parent element name as an argument (Decision 3):
-  placement of a tagged child result into a parent's slot is each
-  container's own `place/3` (from Phase 2 on), never a fact the child
-  itself needs to know.
+  builder here takes a parent element name as an argument: placement of a
+  tagged child result into a parent's slot is each container's own
+  `place/3`, never a fact the child itself needs to know.
   """
 
   alias Statifier.Document
@@ -99,7 +98,7 @@ defmodule Statifier.Lowering.Builders do
   Additionally reads `type`, mapped to `:shallow | :deep` with `:shallow` as
   the default (spec 3.10) - an out-of-range value (`type="sideways"`) lowers
   to `:shallow` and still keeps its `attribute_locations` entry, rather than
-  erroring (Residual Note 2).
+  erroring, so a future validator check can point at the offending text.
   """
   @spec build_history(element :: Element.t(), ctx :: map()) :: {{:state, State.t()}, [Error.t()]}
   def build_history(%Element{} = element, ctx) do
@@ -120,7 +119,7 @@ defmodule Statifier.Lowering.Builders do
 
   `transitions` holds however many `<transition>` children are present,
   including zero and two - lowering builds what is written; the transition
-  count is st-l5k.5's check to make (`Statifier.Document.Initial`'s
+  count is the validator's check to make (`Statifier.Document.Initial`'s
   moduledoc).
   """
   @spec build_initial(element :: Element.t(), ctx :: map()) ::
@@ -141,7 +140,8 @@ defmodule Statifier.Lowering.Builders do
   Reads `event` and `target` (both whitespace-split), `cond` (raw source
   string), and `type` (atom, default `:external`). An out-of-range `type`
   value lowers to `:external` and still keeps its `attribute_locations`
-  entry (Residual Note 2), the same rule `<history>`'s `type` follows.
+  entry, so a future validator check can point at the offending text, the
+  same rule `<history>`'s `type` follows.
 
   A `<transition>`'s executable content children (`<raise>`, `<log>`) are
   placed directly into `Transition.content`, unwrapped - a transition has no
@@ -264,12 +264,12 @@ defmodule Statifier.Lowering.Builders do
   tagged `{:donedata, donedata}`.
 
   `content` stays `nil` when `<donedata>` has no `<content>` child and
-  becomes a `%Statifier.Document.Content{}` when it does - the only Phase 1
-  shape (`Statifier.Document.Donedata`'s moduledoc). A `<param>` child
-  misses the dispatch map entirely and comes back from
+  becomes a `%Statifier.Document.Content{}` when it does - the only shape
+  lowering currently builds (`Statifier.Document.Donedata`'s moduledoc). A
+  `<param>` child misses the dispatch map entirely and comes back from
   `Statifier.Lowering.walk_children/2` as `{:unsupported_element, "param"}`
-  at `<param>`'s own location, the same Phase 3 rejection every other
-  unsupported element gets - no special-case code is needed here for it.
+  at `<param>`'s own location, the same rejection every other unsupported
+  element gets - no special-case code is needed here for it.
   """
   @spec build_donedata(element :: Element.t(), ctx :: map()) ::
           {{:donedata, Donedata.t()}, [Error.t()]}
@@ -286,7 +286,7 @@ defmodule Statifier.Lowering.Builders do
   Builds a `%Statifier.Document.Content{}` from a `<content>` element,
   tagged `{:content, content}`.
 
-  Reads `expr` (Decision 5) and sets `text` to `Statifier.Parser.DOM.text/1`'s
+  Reads `expr` and sets `text` to `Statifier.Parser.DOM.text/1`'s
   concatenation of `<content>`'s own direct text children, **verbatim and
   untrimmed** - the struct's own moduledoc defines `text` as exactly that
   concatenation. `<content>` is the one element exempt from the stray-text
@@ -321,8 +321,8 @@ defmodule Statifier.Lowering.Builders do
   end
 
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
-  # `tag` atom, its own contribution - never a parent element name, per
-  # Decision 3). `Block` has no slot for anything but `Document.content_node`
+  # `tag` atom, its own contribution - never a parent element name). `Block`
+  # has no slot for anything but `Document.content_node`
   # children; any other child (a `<state>`, say) misses that slot and comes
   # back from `place/3` as `{:misplaced_element, name, "onentry"|"onexit"}`.
   @spec build_block(element :: Element.t(), ctx :: map(), tag :: :onentry | :onexit) ::
@@ -339,7 +339,7 @@ defmodule Statifier.Lowering.Builders do
 
   # Shared by `build_state/2`, `build_parallel/2`, `build_final/2`, and
   # `build_history/2` (`state_like/3` takes a `kind` atom, its own
-  # contribution - never a parent element name, per Decision 3). Reads the
+  # contribution - never a parent element name). Reads the
   # attributes meaningful across the state family (`id`, `initial`), places
   # its children into `states`, `transitions`, and `initial_element` via
   # `place/3`, and tags the result `{:state, state}` - the slot every one of

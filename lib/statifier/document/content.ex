@@ -11,7 +11,7 @@ defmodule Statifier.Document.Content do
   (`test/scxml_tests/mandatory/content/test529_test.exs:30` is `21`,
   `test/scxml_tests/mandatory/donedata/test294_test.exs:48` is `foo`).
   Lowering is expected to error on an element child inside `<content>`
-  rather than silently drop it, the mirror image of st-l5k.4's rule for
+  rather than silently drop it, the mirror image of lowering's rule for
   stray non-whitespace text elsewhere.
 
   `text` is `Statifier.Parser.DOM.text/1`'s concatenation of the direct text
@@ -24,8 +24,8 @@ defmodule Statifier.Document.Content do
   time, even though spec 5.6 says a document MUST NOT specify both. That
   mutual exclusion is a validator concern, not this layer's - holding both
   is exactly what lets `Statifier.Validator.Checks.Content` report a
-  document that violates it (st-f6k), as `{:content_expr_and_text, expr}`
-  at this node's own `location`. Whitespace-only `text` is source
+  document that violates it, as `{:content_expr_and_text, expr}` at this
+  node's own `location`. Whitespace-only `text` is source
   formatting rather than a payload and is not reported.
   """
 

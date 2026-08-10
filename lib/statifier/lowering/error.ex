@@ -5,15 +5,15 @@ defmodule Statifier.Lowering.Error do
   Mirrors `Statifier.Parser.ParseError`'s shape (`reason`, `message`,
   `location`) but is a plain struct rather than a `defexception` - lowering
   never raises, and `Statifier.Lowering.lower/1` returns errors in a list
-  rather than as a single exception (`docs/plans/260807-st-l5k.4-lowers-dom-to-document.md`
-  Decision 2).
+  rather than as a single exception, so a builder that fails on its own
+  account can still return a partial result, the walk keeps going, and
+  every error found in one pass is reported rather than just the first.
 
-  The `reason` union below is the finished set for the whole bead, declared
-  once here even though Phase 1 only produced `:unsupported_element`,
-  `:stray_text`, and `:unexpected_root`. Later phases added a constructor
-  rather than reopening the type: `missing_attribute/3` in Phase 3,
-  `foreign_element/3` in Phase 5. `misplaced/3` was written in Phase 1 (Phase
-  2 is its first caller) so all four Phase 1 constructors landed together.
+  The `reason` union below is declared as the complete, closed set of
+  shapes lowering can report. `missing_attribute/3` and `foreign_element/3`
+  extend it alongside the `unsupported_element`, `stray_text`,
+  `unexpected_root`, and `misplaced_element` constructors, each added
+  without reopening the type.
   """
 
   alias Statifier.Parser.Location
@@ -87,8 +87,8 @@ defmodule Statifier.Lowering.Error do
   end
 
   @doc """
-  The document's root element is not `<scxml>` (or, once Phase 5 resolves
-  namespaces, does not resolve to it).
+  The document's root element is not `<scxml>` (or does not resolve to it
+  once namespace prefixes are resolved).
   """
   @spec unexpected_root(name :: binary(), location :: Location.t()) :: t()
   def unexpected_root(name, %Location{} = location) when is_binary(name) do
@@ -117,9 +117,10 @@ defmodule Statifier.Lowering.Error do
 
   @doc """
   An element resolves to a namespace URI that is neither absent nor the SCXML
-  namespace - a genuinely foreign element (Decision 8). `name` is the
-  qualified name exactly as written, prefix included, so the message points
-  at what the source actually said.
+  namespace - a genuinely foreign element, since an unprefixed element or one
+  declaring no `xmlns` still dispatches as SCXML's own vocabulary. `name` is
+  the qualified name exactly as written, prefix included, so the message
+  points at what the source actually said.
   """
   @spec foreign_element(name :: binary(), uri :: binary(), location :: Location.t()) :: t()
   def foreign_element(name, uri, %Location{} = location)

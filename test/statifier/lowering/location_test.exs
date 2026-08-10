@@ -14,7 +14,7 @@ defmodule Statifier.Lowering.LocationTest do
   alias Statifier.Parser.Location
 
   # In the style of `test/statifier/parser/location_accuracy_test.exs:13-37`:
-  # one document exercising every Phase 1 (dispatch-map-supported) element,
+  # one document exercising every dispatch-map-supported element,
   # every locatable attribute written so its span can be checked. Every
   # tokenized or enumerated field is written with a value equal to its own
   # rendered form (single spaces between tokens, the atom's own name) so a
@@ -77,7 +77,7 @@ defmodule Statifier.Lowering.LocationTest do
   # of `attribute.value_location` (the span inside the quotes alone) -> every
   # `assert_attribute_location/3` call below gains a `name="`/`"` wrapper
   # around the expected text, and the exact-equality assertions redden
-  test "every node and attribute span in a full Phase 1 tree slices back to its own text" do
+  test "every node and attribute span in a full document tree slices back to its own text" do
     document = lower!()
 
     assert_node_location(document.location, "scxml")

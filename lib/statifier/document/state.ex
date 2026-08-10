@@ -3,9 +3,9 @@ defmodule Statifier.Document.State do
   One `<state>`, `<parallel>`, `<final>`, or `<history>` element - a single
   struct with a `kind` atom rather than four per-kind structs.
 
-  This shape is adopted from the research (`docs/research/260807-st-l5k.2-typed-document-structs.md`)
-  and is not re-argued here; the plan's Decision 0 records two refinements
-  the research did not make, both carried forward into this moduledoc.
+  One struct with a `kind` atom rather than four per-kind structs, with two
+  refinements beyond that basic shape, both carried forward into this
+  moduledoc:
 
   ## The kind set
 
@@ -17,8 +17,7 @@ defmodule Statifier.Document.State do
 
   `:initial` is deliberately absent. `<initial>` has no `id` attribute at
   all (spec 3.6), so it is not a state; it is a slot on its parent,
-  `initial_element` below (see `Statifier.Document.Initial` and the plan's
-  Decision 4).
+  `initial_element` below (see `Statifier.Document.Initial`).
 
   `:atomic` and `:compound` are also absent. v1 widened its atom set at
   parse time so `isCompoundState` became a pure atom match
@@ -31,7 +30,9 @@ defmodule Statifier.Document.State do
   `collect_atomic_descendants/1` fall through final states
   (`../statifier/lib/statifier/history_tracker.ex:163-170`). The compiler
   remains free to stamp a widened discriminator on the *compiled* state -
-  st-wju.1's own `kind` field is unconstrained by this bead.
+  this Document layer's `kind` set constrains only lowering's own output,
+  never whatever field the compiler's compiled-state struct uses for its
+  own `kind`.
 
   ## Fields that are kind-scoped
 
@@ -41,15 +42,15 @@ defmodule Statifier.Document.State do
 
   | Field | Meaningful on | Representable misuse | Caught by |
   |---|---|---|---|
-  | `donedata` | `:final` | donedata on a non-final state | st-l5k.5 check 8 |
-  | `states` | `:state`, `:parallel` | state children under a `:final` | st-l5k.5 check 6 |
-  | `states` | any | a `:history` child of `:final` or of another `:history` | st-l5k.5 check 5 |
-  | `initial` / `initial_element` | `:state` | both forms on one state | st-l5k.5 check 4 |
-  | `initial` / `initial_element` | `:state` | an initial on an atomic state | st-l5k.5 check 3 (target resolution and descendancy) |
+  | `donedata` | `:final` | donedata on a non-final state | the validator's check 8 |
+  | `states` | `:state`, `:parallel` | state children under a `:final` | the validator's check 6 |
+  | `states` | any | a `:history` child of `:final` or of another `:history` | the validator's check 5 |
+  | `initial` / `initial_element` | `:state` | both forms on one state | the validator's check 4 |
+  | `initial` / `initial_element` | `:state` | an initial on an atomic state | the validator's check 3 (target resolution and descendancy) |
   | `history_type` | `:history` | `history_type` on a non-history kind | **nothing** - unbuildable from lowering, see below |
-  | `transitions` | `:state`, `:parallel`, `:history`, `:initial` slot | transitions on a `:final` | st-l5k.5 check 6, widened by st-dje |
+  | `transitions` | `:state`, `:parallel`, `:history`, `:initial` slot | transitions on a `:final` | the validator's check 6, widened to also cover this case |
   | `id` | any | `nil` id | not an error; the spec makes `id` optional |
-  | `id` | any | `id=""` written explicitly | st-l5k.5 check 1, widened by st-2jp |
+  | `id` | any | `id=""` written explicitly | the validator's check 1, widened to treat an explicit empty id as an error |
 
   The remaining "nothing" row is stated here rather than hidden.
   `history_type` on a non-history kind is unreachable from lowering, which
@@ -60,15 +61,14 @@ defmodule Statifier.Document.State do
 
   A `:final` carrying `transitions` **is** reachable from lowering (spec 3.7
   gives `<final>` no `<transition>` children, but nothing here refuses to
-  build one). That was the plan's Residual Note 1, left for st-l5k.5 to pick
-  up; st-dje resolved it the first way the note offered, by widening check 6
-  rather than adding a ninth check. This struct was unaffected either way.
+  build one). The validator's check 6 was widened to cover this case rather
+  than adding a ninth check. This struct was unaffected either way.
 
   `id: String.t() | nil` no longer overloads `nil` the way it might if
   `<initial>` were a kind: with `<initial>` off the kind set entirely,
   `nil` means exactly one thing here - the author omitted an optional `id`.
   An `id` written as `""` is a different thing and lowering keeps it that
-  way: st-2jp resolved it as an error (spec 3.14 types `id` as an XML
+  way: the validator treats it as an error (spec 3.14 types `id` as an XML
   Schema ID, whose lexical space excludes the empty string), reported by
   check 1 as `{:empty_id}` and, like a `nil` id, excluded from that check's
   uniqueness set.

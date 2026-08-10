@@ -4,7 +4,7 @@ defmodule Statifier.Document.Initial do
   entry point via a `<transition>` rather than an `initial` attribute.
 
   This is a slot on its parent, `Statifier.Document.State.initial_element`,
-  not a `kind` on `Statifier.Document.State` - see the plan's Decision 4.
+  not a `kind` on `Statifier.Document.State`.
   `<initial>` has no `id` attribute at all (spec 3.6), so it fails the rule
   the kind set follows ("a kind is a thing with an id a transition can
   target"). v1 gave it a synthetic id
@@ -16,7 +16,7 @@ defmodule Statifier.Document.Initial do
   `transitions` is a **list**, not a single nilable `Transition.t()`, even
   though the spec requires exactly one `<transition>` child. Both the
   zero-transition case and the two-or-more case must survive lowering long
-  enough to be named: st-l5k.5 check 4 reports a `<state>` with both an
+  enough to be named: the validator's check 4 reports a `<state>` with both an
   `initial` attribute and an `<initial>` element, and the same "hold the
   wrong shape long enough to report it" principle applies to `<initial>`'s
   own transition count. A `%Statifier.Document.State{kind: :history}`

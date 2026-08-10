@@ -8,8 +8,8 @@ defmodule Statifier.Lowering.CoverageTest do
   # The same 25-name vocabulary `test/statifier/parser/generic_handler_test.exs`
   # scans for, kept as its own copy: `lib/` may not reference `test/support/`
   # (ADR-0006) and this guard belongs to the lowering layer, not the
-  # parser's (Decision 9). Checked "by eye" against the other list per the
-  # plan's own Manual Verification item.
+  # parser's. The two lists are kept in sync by manual inspection, not a
+  # shared source.
   @scxml_element_names ~w(
     scxml state parallel final initial history transition onentry onexit
     datamodel data log raise assign send param content if elseif else
@@ -24,8 +24,8 @@ defmodule Statifier.Lowering.CoverageTest do
     raise log donedata content
   )
 
-  # The twelve names Decision 4's `@phase_3_elements` exists to word the
-  # message for - deferred, not partially built.
+  # The twelve names `@phase_3_elements` exists to word the unsupported-
+  # element message for - deferred, not partially built.
   @phase_3_elements ~w(
     datamodel data assign send param if elseif else foreach invoke cancel
     script
@@ -37,7 +37,7 @@ defmodule Statifier.Lowering.CoverageTest do
   # unsupported element's children) - a `<datamodel><data/></datamodel>`
   # fixture would only ever surface `"datamodel"` as the error, never
   # reaching `"data"` at all. `<data>` is therefore placed directly under
-  # `<scxml>` instead (a judgment call, recorded in the Phase 6 plan notes),
+  # `<scxml>` instead (a deliberate deviation from a spec-legal position),
   # which still proves the name itself is rejected, just not in a
   # spec-legal position.
   @fixtures %{
@@ -92,10 +92,10 @@ defmodule Statifier.Lowering.CoverageTest do
   end
 
   # sabotage: drop `"final" => &Builders.build_final/2` from `Lowering`'s
-  # dispatch map (Phase 6's own mutation list) - "final" is still listed
-  # here as supported, but its fixture now produces
-  # `{:unsupported_element, "final"}` instead of building, and the `{:ok,
-  # _}` assertion below reddens for "final" specifically
+  # dispatch map - "final" is still listed here as supported, but its
+  # fixture now produces `{:unsupported_element, "final"}` instead of
+  # building, and the `{:ok, _}` assertion below reddens for "final"
+  # specifically
   test "every supported element name builds successfully" do
     for name <- @supported do
       xml = Map.fetch!(@fixtures, name)
