@@ -25,7 +25,7 @@ defmodule Statifier.Interpreter.SelectionTest do
   #  2   ancestor             -- child preempts ancestor
   #  3     descendant
   #  4   multi                -- sibling document-order priority (two txns)
-  #  5   condfail             -- written cond -> not selected (Decision 7)
+  #  5   condfail             -- written cond -> not selected
   #  6   condpass             -- no cond -> selected
   #  7   eventless_state      -- eventless vs event-bearing
   #  8   ancestor_for_dedup   -- shared-ancestor transition dedup

@@ -9,7 +9,7 @@ defmodule Statifier.Interpreter.NameMatch do
   - `errors` and `error` share a string prefix but not a token, and 3.13
   matches tokens, not characters.
 
-  Normalization (Decision 4) folds the three special cases the spec
+  Normalization folds the three special cases the spec
   describes into one prefix test:
 
   ```
@@ -35,8 +35,7 @@ defmodule Statifier.Interpreter.NameMatch do
   `nameMatch(descriptorList, eventName)` strings; `tokenize/1` is the other
   half of that split, applied to the event name **once per selection round**
   by `Statifier.Interpreter.Selection.select_transitions/2` rather than once
-  per transition, which is a mechanical hoist and not a semantic change
-  (Decision 4).
+  per transition, which is a mechanical hoist and not a semantic change.
 
   A transition with `events == []` is eventless and is never handed to this
   matcher: `Statifier.Interpreter.Selection.select_transitions/2` considers

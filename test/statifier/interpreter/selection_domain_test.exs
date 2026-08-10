@@ -113,9 +113,10 @@ defmodule Statifier.Interpreter.SelectionDomainTest do
 
   # Finds the transition among `machine`'s own transitions whose single event
   # descriptor is `event_name` - the fixture gives every transition under
-  # test a distinct `event` attribute purely as a lookup key. Phase 2 does not
-  # test event matching (that's Phase 3); this is only how the test picks the
-  # `Transition.t()` it wants to hand to a domain/exit-set function.
+  # test a distinct `event` attribute purely as a lookup key. This file does
+  # not test event matching (`selection_test.exs` does); this is only how the
+  # test picks the `Transition.t()` it wants to hand to a domain/exit-set
+  # function.
   defp transition_named(machine, event_name) do
     machine.transitions
     |> Tuple.to_list()
