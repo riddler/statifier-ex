@@ -164,4 +164,6 @@ For the Phase 1 interpreter work and its reviews:
       executable-content nodes (`t_index`/`c_index`, dense from 0, st-wju.1)
 - [x] internally raised events carry cause metadata (identity + step)
       (`Statifier.Event.Cause`, `MachineState.raise_internal/4`, st-wju.2)
-- [ ] Appendix D query functions take/return plain values, unfused
+- [x] Appendix D query functions take/return plain values, unfused
+      (`Statifier.Interpreter.Selection`, st-wju.3; st-wju.4 and st-wju.5 hold
+      the same line for their own queries)
