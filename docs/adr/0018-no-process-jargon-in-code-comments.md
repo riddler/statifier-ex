@@ -22,6 +22,12 @@ It has been reached for constantly. Measured against the current tree:
 - 61 files cite a plan document's internal numbering ("plan Decision 10",
   "Decision 12"), 148 mentions, and 15 lines name a `docs/plans/` file by its
   dated filename.
+- The habit has reached the prose documents too. `docs/observability.md` tags
+  each entry of its seam list with the bead that owns the seam, and
+  `docs/testing.md` carries both a plan-phase-keyed results table and two
+  incident IDs. Those are maintained guides rather than dated records, which is
+  what makes them a case this record has to answer rather than a separate
+  question.
 
 Read at the moment of writing, each of those is informative. Read six months
 later, each has a different problem:
@@ -62,13 +68,14 @@ and none of them is the source file.
 
 **Comments, moduledocs, and doc strings explain the code. Process artifacts -
 bead IDs, phase and step numbers, plan-document decision numbers, plan filenames,
-and `wurk`/beads tooling jargon - do not appear in `lib/` or `test/` source.
-That context belongs in the commit message, the bead's notes, and the plan or
-research document, all of which already carry it and none of which rots into
-the code.**
+and `wurk`/beads tooling jargon - do not appear in `lib/` or `test/` source, nor
+in the maintained guides under `docs/`. That context belongs in the commit
+message, the bead's notes, and the plan or research document, all of which
+already carry it and none of which rots into the code.**
 
 1. **What is banned.** In any comment, `@moduledoc`, `@doc`, `@typedoc` or
-   test description under `lib/` or `test/`:
+   test description under `lib/` or `test/`, and in the maintained guides that
+   point 4 names:
 
    | Banned | Example of the shape |
    |---|---|
@@ -100,7 +107,10 @@ the code.**
      produced it. It stays required, unchanged.
    - **Long-lived project documents cited by stable path.** `docs/architecture.md`,
      `docs/datamodel.md`, `docs/testing.md`, `docs/observability.md`. These are
-     maintained alongside the code, unlike a dated plan snapshot.
+     maintained alongside the code, unlike a dated plan snapshot, so pointing at
+     one from a comment stays resolvable. Being citable is not being exempt:
+     point 4 binds these same four files, for the same reason they are safe to
+     cite.
    - **The word "phase" as an ordinary description of a pipeline.** `Statifier.Compiler`'s
      "This phase interns every state to a flat tuple" is describing a compiler
      pass. What is banned is the *numbered* reference back to a plan's phases,
@@ -116,7 +126,37 @@ the code.**
    the way any other bead reference does. The test is whether removing the
    reference removes information about *what the code does*.
 
-4. **How to rewrite instead of delete.** A comment carrying a process reference
+4. **Which documents this binds, and why the split is by genre.** The rule is
+   about lifetime, so it reaches any file maintained alongside the code and
+   stops at files that are dated records by construction:
+
+   - **Bound: the maintained guides.** `docs/architecture.md`,
+     `docs/datamodel.md`, `docs/testing.md`, `docs/observability.md`. These are
+     revised as the code is revised and read by the same reader, so a phase
+     number rots there exactly as it rots in a moduledoc. `docs/observability.md`
+     currently tags its seam list with the bead that owns each seam; once those
+     beads close the tags read as pending work and are not.
+   - **Exempt: dated records.** Records under `docs/adr/`, `docs/plans/`,
+     `docs/research/`, the gate ledger `docs/quality-gate-changes.md`, and
+     changelog fragments named `changelog.d/<issue-id>.md`. In all of these the
+     bead ID *is* the entry rather than a trace left on something else. This
+     record cites bead IDs freely for that reason.
+   - **Exempt: documents whose subject is the process.** `docs/workflow.md`
+     describes the bead, worktree and plan machinery, so naming that machinery
+     is describing its own subject - the same reasoning point 3 applies to
+     `AdrGuard` and `GateGuard`.
+
+   Inside the bound set, one distinction decides the borderline cases: **a
+   citation is allowed when the cited document is the evidence for a claim
+   being made, and banned when it is the origin story of the code.**
+   `docs/testing.md`'s table of ADR-judge false-negative rates is keyed to the
+   plan phases that produced each prompt revision; those numbers are
+   uninterpretable without knowing which prompt produced them, so the citation
+   is the measurement's provenance and it stays. The same file's `(st-0vz)` and
+   `(st-iao)` asides are origin stories - the durable fact is the failure mode
+   those incidents exposed, and it survives the ID being removed.
+
+5. **How to rewrite instead of delete.** A comment carrying a process reference
    almost always carries a real fact wearing the wrong clothes. Restate the
    fact:
 
@@ -133,7 +173,7 @@ the code.**
    If restating the fact leaves nothing, the comment was about the process and
    deleting it is correct.
 
-5. **Where the context goes instead.** Nothing here asks anyone to write less
+6. **Where the context goes instead.** Nothing here asks anyone to write less
    down; it routes it. The commit message names the bead and describes the
    functional change (`CLAUDE.md`'s commit conventions). The bead's notes carry
    the working record and survive the close. The plan or research document
@@ -146,9 +186,10 @@ the code.**
 - The existing tree does not comply, and this record is a change of practice
   rather than a codification of one. That is stated plainly so no reader
   mistakes the current comments for the standard. st-a89 tracks the cleanup
-  sweep and is blocked on this record; it inherits point 4 as its rewrite
-  protocol, and the counts in the Context as its starting scope. Nothing in
-  this ADR's own branch touches `lib/` or `test/`.
+  sweep and is blocked on this record; it inherits point 5 as its rewrite
+  protocol, and the counts in the Context as its starting scope, plus the four
+  maintained guides point 4 brings in. Nothing in this ADR's own branch touches
+  `lib/`, `test/`, or those guides.
 - New code is held to this immediately, cleanup or no cleanup. A reviewer can
   cite ADR-0018 on a diff rather than arguing taste, which is the point of
   having the record land before the sweep.
@@ -161,34 +202,28 @@ the code.**
 - Comments get slightly longer in the rewrite, because "Phase 4" is three
   characters shorter than the fact it was standing in for. The exchange is a
   few words for a sentence that stays true.
-- This is a candidate for a mechanical check but does not get one here.
-  `Mix.Statifier.AdrGuard` already flags likely violations of the ADRs whose
-  shape is a line pattern over added diff lines, and a bead-ID regex over
-  comment lines is exactly that shape. It is deliberately not added in this
-  record: the tree is 59 files away from clean, so a guard added today would
-  fire on nearly every branch that touches an existing moduledoc and be
-  disabled within a week. The honest order is the sweep first, the guard after
-  - and adding a guard is a gate-relevant change, so it is a human's call on
-  the record (ADR-0011) rather than a follow-on an agent takes.
+- **`Mix.Statifier.AdrGuard` gains a bead-ID check, narrowed, and it does not
+  wait for the sweep.** The guard analyzes *added diff lines only*, so a check
+  added now does not fire on the 59 files already in the tree: it fires when a
+  branch adds a line carrying a bead ID, and code written under this record is
+  compliant by construction. Two constraints on how it is built, both load
+  bearing:
 
-## Open questions
+  - **Bead IDs only** (`st-` plus the id, including dotted children). That
+    third of the rule is a precise pattern with essentially no false positives.
+    "Phase N" and "Decision N" are ordinary English before they are process
+    references, and point 2 deliberately keeps the unnumbered word "phase" - a
+    regex cannot draw that line, so those stay a review matter.
+  - **Its own escape marker, not the shared one.** Every other check in the
+    guard has the violation in *code* and the escape in a *comment*, so the two
+    sit on different axes. Here they sit on the same axis, and the existing
+    `ADR-0\d{3}|deviation` pattern would clear a violation *by accident*: a
+    legitimate line such as `# see ADR-0012 item 3, added under st-af3` matches
+    the hatch without anyone having asserted anything. The check therefore
+    needs a dedicated marker so that clearing it is a deliberate act rather
+    than a side effect of a citation this record explicitly encourages.
 
-Recorded rather than guessed at; no maintainer was available when this record
-was written.
-
-- **Does this bind `docs/` and `CHANGELOG.md`?** As written it binds `lib/`
-  and `test/` only. Project documents that discuss the workflow have to name
-  the workflow, and ADRs like this one cite bead IDs freely because a decision
-  record *is* a dated artifact. Changelog fragments are named `changelog.d/<issue-id>.md`
-  by convention, so the ID is structural there. The unclear case is a
-  long-lived guide such as `docs/architecture.md` picking up a phase number
-  from the plan that revised it; the same rot applies, but nobody has been
-  bitten by it yet and a rule with no observed failure is worth less than the
-  words spent on it.
-- **Should `AdrGuard` eventually cover this, and with what escape hatch?** The
-  guard's existing convention clears a false positive with an inline comment
-  naming an ADR or the word "deviation". That convention interacts oddly with
-  a rule about comment content, since the escape hatch is itself a comment. If
-  the check is ever built, it needs a deliberate answer for the legitimate
-  ADR-and-spec citations in point 2, which share a line shape with nothing
-  else in the codebase and should be cheap to distinguish.
+  st-wjg tracks the check. Adding a gate check is gate-relevant, so it lands
+  with a ledger entry per ADR-0011. It is filed separately from the sweep
+  because it constrains new code while the sweep is still running, which is the
+  order that keeps the tree from getting worse in the meantime.
