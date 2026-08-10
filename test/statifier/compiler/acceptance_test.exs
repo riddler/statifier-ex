@@ -306,7 +306,8 @@ defmodule Statifier.Compiler.AcceptanceTest do
     modules = [
       Statifier.Machine.State,
       Statifier.Machine.Transition,
-      Statifier.Machine.Content,
+      Statifier.Machine.Content.Log,
+      Statifier.Machine.Content.Raise,
       Statifier.Machine.Donedata,
       Statifier.Machine.Block
     ]

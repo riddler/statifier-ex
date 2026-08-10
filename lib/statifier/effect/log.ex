@@ -5,7 +5,7 @@ defmodule Statifier.Effect.Log do
   resolved `expr` (or `nil` for a label-only `<log>`).
 
   `c_index` identifies the `<log>` content node (constraint 3, never a
-  `%Statifier.Machine.Content{}`); `macrostep`/`microstep` are the counters
+  compiled content-node struct); `macrostep`/`microstep` are the counters
   as they stood when the log ran (Decision 5). This is the effect the
   core-engine epic actually produces today, alongside `:done` (plan
   Decision 14).

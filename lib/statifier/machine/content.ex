@@ -1,8 +1,18 @@
 defmodule Statifier.Machine.Content do
   @moduledoc """
-  One compiled `<raise>` or `<log>` executable-content node - the interned
-  counterpart to `Statifier.Document.Raise` / `Statifier.Document.Log` (plan
-  Phase 5).
+  Namespace for the compiled executable-content node family: one struct per
+  node kind, `Statifier.Machine.Content.Raise` and
+  `Statifier.Machine.Content.Log`, the interned counterpart to
+  `Statifier.Document.Raise` / `Statifier.Document.Log` (plan Phase 5). This
+  module owns the family's shared vocabulary - `owner/0` and the `t()`
+  union - and no longer a struct itself: an Elixir protocol dispatches on
+  the struct module, so each node kind needs its own struct for
+  `Statifier.ExecutableContent` (Phase 2) to implement without a central
+  `case` on a `kind` field. Each future executable-content node (st-af3's
+  `<assign>`, `<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`; st-cmq's
+  `<send>`/`<cancel>`/`<invoke>`) gets its own struct here too, and its own
+  `Statifier.ExecutableContent` implementation, never a clause added to this
+  module.
 
   `c_index` is a dense document-order identity assigned to **every**
   `<raise>`/`<log>` node reachable through `onentry`, `onexit`, or a
@@ -11,30 +21,10 @@ defmodule Statifier.Machine.Content do
   Decision 8): it is not executable content, never appears in a block, and
   no `execute_block` ever runs it, so giving it a `c_index` would stop
   `c_index` meaning "the nth executable-content node".
-
-  ## Fields that are kind-scoped
-
-  | Field | Meaningful on |
-  |---|---|
-  | `event` | `:raise` - the literal event name being enqueued |
-  | `label` | `:log` - the optional diagnostic label |
-  | `expr` | `:log` - the optional `Machine.expr()` to evaluate and log |
-  | `expr_location` | `:log` - `attribute_locations[:expr]`'s value span, `nil` when `expr` was never written |
   """
 
-  alias Statifier.Machine
-  alias Statifier.Parser.Location
-
-  @enforce_keys [:c_index, :kind, :location]
-  defstruct [
-    :c_index,
-    :kind,
-    :location,
-    event: nil,
-    label: nil,
-    expr: nil,
-    expr_location: nil
-  ]
+  alias Statifier.Machine.Content.Log
+  alias Statifier.Machine.Content.Raise
 
   @typedoc """
   Which block of executable content a node lives in - the block identity a
@@ -55,13 +45,6 @@ defmodule Statifier.Machine.Content do
           | {:onexit, non_neg_integer(), non_neg_integer()}
           | {:transition, non_neg_integer()}
 
-  @type t :: %__MODULE__{
-          c_index: non_neg_integer(),
-          kind: :raise | :log,
-          event: String.t() | nil,
-          label: String.t() | nil,
-          expr: Machine.expr() | nil,
-          location: Location.t(),
-          expr_location: Location.t() | nil
-        }
+  @typedoc "Any compiled executable-content node - the family this module maps."
+  @type t :: Raise.t() | Log.t()
 end

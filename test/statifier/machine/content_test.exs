@@ -4,7 +4,8 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Compiler
   alias Statifier.Lowering
   alias Statifier.Machine
-  alias Statifier.Machine.Content
+  alias Statifier.Machine.Content.Log
+  alias Statifier.Machine.Content.Raise
   alias Statifier.Parser
   alias Statifier.Validator
 
@@ -104,9 +105,9 @@ defmodule Statifier.Machine.ContentTest do
 
   describe "compile/1 - raise content" do
     # sabotage: `Statifier.Compiler.build_content_node/2`'s `%DRaise{}` clause
-    # hardcodes `kind: :log` instead of `kind: :raise` -> this pattern match
-    # reddens.
-    test "a <raise> node compiles to kind :raise with its event name" do
+    # builds a `%Content.Log{}` instead of a `%Content.Raise{}` -> this
+    # pattern match reddens.
+    test "a <raise> node compiles to a Content.Raise struct with its event name" do
       m = machine()
       a = state_of(m, "a")
 
@@ -114,7 +115,24 @@ defmodule Statifier.Machine.ContentTest do
       [raise_c_index, _log_c_index] = onentry_block.content
       raise_content = Machine.content(m, raise_c_index)
 
-      assert %Content{kind: :raise, event: "enter"} = raise_content
+      assert %Raise{event: "enter"} = raise_content
+    end
+
+    # sabotage: `Statifier.Machine.Content.Raise`'s `defstruct` gains a
+    # `label: nil` field (the union struct's shape leaking back in) -> this
+    # refutation reddens because `Map.has_key?/2` starts returning `true`.
+    test "a Content.Raise node has no label or expr field at all" do
+      m = machine()
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [raise_c_index, _log_c_index] = onentry_block.content
+      raise_content = Machine.content(m, raise_c_index)
+
+      fields = raise_content |> Map.from_struct() |> Map.keys()
+
+      refute :label in fields
+      refute :expr in fields
     end
   end
 
@@ -130,7 +148,7 @@ defmodule Statifier.Machine.ContentTest do
       [_raise_c_index, log_c_index] = onentry_block.content
       log_content = Machine.content(m, log_c_index)
 
-      assert %Content{kind: :log, label: "hi", expr: nil} = log_content
+      assert %Log{label: "hi", expr: nil} = log_content
     end
 
     # sabotage: `Statifier.Compiler.build_content_node/2`'s expr-bearing
@@ -145,8 +163,22 @@ defmodule Statifier.Machine.ContentTest do
       [log_c_index] = transition.content
       log_content = Machine.content(m, log_c_index)
 
-      assert %Content{kind: :log, expr: {:compiled, %Predicator.Compiled{}, "1 + 1"}} =
-               log_content
+      assert %Log{expr: {:compiled, %Predicator.Compiled{}, "1 + 1"}} = log_content
+    end
+
+    # sabotage: `Statifier.Compiler.build_content_node/2`'s `%DRaise{}` clause
+    # is changed to build a `%Content.Log{}` instead of a `%Content.Raise{}`
+    # -> `Machine.content/2` at the raise's own `c_index` no longer returns a
+    # `%Raise{}`, reddening this pattern match.
+    test "Machine.content/2 returns each kind at its own c_index" do
+      m = machine()
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [raise_c_index, log_c_index] = onentry_block.content
+
+      assert %Raise{c_index: ^raise_c_index} = Machine.content(m, raise_c_index)
+      assert %Log{c_index: ^log_c_index} = Machine.content(m, log_c_index)
     end
   end
 
@@ -175,8 +207,9 @@ defmodule Statifier.Machine.ContentTest do
       # them.
       assert tuple_size(m.contents) == 4
 
-      refute Enum.any?(Tuple.to_list(m.contents), fn %Content{} = content ->
-               match?({:static, "done text"}, content.expr)
+      refute Enum.any?(Tuple.to_list(m.contents), fn
+               %Log{expr: expr} -> match?({:static, "done text"}, expr)
+               %Raise{} -> false
              end)
     end
   end

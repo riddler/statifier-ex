@@ -6,7 +6,7 @@ defmodule Statifier.Effect.Cancel do
   is tracking.
 
   `c_index` identifies the `<cancel>` content node (constraint 3, never a
-  `%Statifier.Machine.Content{}`); `macrostep`/`microstep` are the counters
+  compiled content-node struct); `macrostep`/`microstep` are the counters
   as they stood at the moment of the cancel (Decision 5).
   """
 

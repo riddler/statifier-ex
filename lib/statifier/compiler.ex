@@ -77,6 +77,8 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
+  alias Statifier.Machine.Content.Log, as: MLog
+  alias Statifier.Machine.Content.Raise, as: MRaise
   alias Statifier.Machine.Donedata, as: MDonedata
   alias Statifier.Machine.State, as: MState
   alias Statifier.Machine.Transition, as: MTransition
@@ -539,20 +541,19 @@ defmodule Statifier.Compiler do
   @spec build_content_node(c_index :: non_neg_integer(), node :: DRaise.t() | DLog.t()) ::
           {:ok, MContent.t()} | {:error, Error.t()}
   defp build_content_node(c_index, %DRaise{event: event, location: location}) do
-    {:ok, %MContent{c_index: c_index, kind: :raise, event: event, location: location}}
+    {:ok, %MRaise{c_index: c_index, event: event, location: location}}
   end
 
   defp build_content_node(c_index, %DLog{expr: nil, label: label, location: location}) do
-    {:ok, %MContent{c_index: c_index, kind: :log, label: label, expr: nil, location: location}}
+    {:ok, %MLog{c_index: c_index, label: label, expr: nil, location: location}}
   end
 
   defp build_content_node(c_index, %DLog{expr: source, label: label, location: location} = log) do
     case Expressions.compile(source, {:content, c_index}, expr_location(log)) do
       {:ok, expr} ->
         {:ok,
-         %MContent{
+         %MLog{
            c_index: c_index,
-           kind: :log,
            label: label,
            expr: expr,
            location: location,
