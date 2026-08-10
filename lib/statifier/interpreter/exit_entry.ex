@@ -63,6 +63,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
   alias Statifier.Machine.Content
+  alias Statifier.Machine.Donedata
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.MachineState
@@ -549,5 +550,299 @@ defmodule Statifier.Interpreter.ExitEntry do
          t_index
        ) do
     {states_to_enter, default_entry, Map.put(history_content, parent_index, t_index)}
+  end
+
+  @doc """
+  `enterStates` (Appendix D) - the entry-ordered set `compute_entry_set/2`
+  computes, added to the configuration with `onentry`, default-entry, and
+  default-history content run per state, then completion events raised.
+
+  Body, in the pseudocode's own order:
+
+  1. `compute_entry_set/2` over `enabled_transitions` (Decision 3).
+  2. `entry_order` = `Machine.document_order/2` over `states_to_enter`
+     (Decision 4) - ascending index, the mirror of `exit_states/2`'s
+     `exit_order`.
+  3. `Effect.trace(machine_state, Effect.Trace.EntrySet, indexes:
+     entry_order)` before any mutation (Decision 13), over the *original*
+     `machine_state`.
+  4. `entry_order` is reduced through `arrive/3`, each state added to the
+     configuration, its `onentry` blocks run, its default-entry / default-
+     history content run when flagged/registered, then its completion
+     events raised.
+  """
+  @spec enter_states(machine_state :: MachineState.t(), enabled_transitions :: [Transition.t()]) ::
+          {MachineState.t(), [Effect.t()]}
+  def enter_states(%MachineState{machine: machine} = machine_state, enabled_transitions) do
+    {states_to_enter, states_for_default_entry, default_history_content} =
+      compute_entry_set(machine_state, enabled_transitions)
+
+    entry_order = Machine.document_order(machine, states_to_enter)
+
+    trace_effects = Effect.trace(machine_state, Effect.Trace.EntrySet, indexes: entry_order)
+
+    bookkeeping = {states_for_default_entry, default_history_content}
+
+    {machine_state, arrive_effects} =
+      Enum.reduce(entry_order, {machine_state, []}, fn state_index, {ms, effects} ->
+        {ms, new_effects} = arrive(ms, state_index, bookkeeping)
+        {ms, effects ++ new_effects}
+      end)
+
+    {machine_state, trace_effects ++ arrive_effects}
+  end
+
+  # `enterStates`'s per-state entry body: add to the configuration, skip
+  # `statesToInvoke.add(s)` (st-cmq owns invocations) and the `binding ==
+  # "late"` datamodel initialization (st-af3 owns the datamodel), run
+  # `onentry` blocks, run default-entry / default-history content, then
+  # raise this state's completion events.
+  @spec arrive(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          bookkeeping ::
+            {MapSet.t(non_neg_integer()), %{optional(non_neg_integer()) => non_neg_integer()}}
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp arrive(machine_state, state_index, bookkeeping) do
+    machine_state = %{
+      machine_state
+      | configuration: MapSet.put(machine_state.configuration, state_index)
+    }
+
+    {machine_state, onentry_effects} = run_onentry_blocks(machine_state, state_index)
+
+    {machine_state, default_entry_effects} =
+      run_default_entry(machine_state, state_index, bookkeeping)
+
+    {machine_state, completion_effects} = raise_completion_events(machine_state, state_index)
+
+    {machine_state, onentry_effects ++ default_entry_effects ++ completion_effects}
+  end
+
+  # `state.onentry` in document order, each block through the
+  # `execute_block/3` seam with `{:onentry, state_index, ordinal}` -
+  # `ordinal` is the block's position in the state's own `onentry` list,
+  # the mirror of `run_onexit_blocks/2`.
+  @spec run_onentry_blocks(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
+          {MachineState.t(), [Effect.t()]}
+  defp run_onentry_blocks(%MachineState{machine: machine} = machine_state, state_index) do
+    machine
+    |> Machine.at(state_index)
+    |> Map.fetch!(:onentry)
+    |> Enum.with_index()
+    |> Enum.reduce({machine_state, []}, fn {block, ordinal}, {ms, effects} ->
+      {ms, new_effects} = execute_block(ms, {:onentry, state_index, ordinal}, block.content)
+      {ms, effects ++ new_effects}
+    end)
+  end
+
+  # The default-entry and default-history-content steps of `enterStates`'s
+  # per-state body: when `state_index` is flagged in
+  # `states_for_default_entry`, run its `<initial>` transition's content -
+  # guarded on `initial_transition` being non-nil, since a state defaulted
+  # through the `initial` attribute or the first-child fallback has no
+  # `<initial>` element and therefore no content to run; when
+  # `default_history_content` registers a default transition for
+  # `state_index`, run that transition's content too.
+  @spec run_default_entry(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          bookkeeping ::
+            {MapSet.t(non_neg_integer()), %{optional(non_neg_integer()) => non_neg_integer()}}
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp run_default_entry(
+         %MachineState{machine: machine} = machine_state,
+         state_index,
+         {states_for_default_entry, default_history_content}
+       ) do
+    {machine_state, initial_effects} =
+      if MapSet.member?(states_for_default_entry, state_index) do
+        run_initial_transition_content(machine_state, machine, state_index)
+      else
+        {machine_state, []}
+      end
+
+    {machine_state, history_effects} =
+      case Map.fetch(default_history_content, state_index) do
+        {:ok, t_index} -> run_transition_content(machine_state, machine, t_index)
+        :error -> {machine_state, []}
+      end
+
+    {machine_state, initial_effects ++ history_effects}
+  end
+
+  # `state.initial.transition`'s content (Decision 6) - only when the
+  # document actually wrote an `<initial>` element; see
+  # `add_descendant_states_to_enter/3`'s compound-arm doc for why
+  # `initial_transition` can be `nil` here.
+  @spec run_initial_transition_content(
+          machine_state :: MachineState.t(),
+          machine :: Machine.t(),
+          state_index :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp run_initial_transition_content(machine_state, machine, state_index) do
+    case Machine.at(machine, state_index).initial_transition do
+      nil -> {machine_state, []}
+      t_index -> run_transition_content(machine_state, machine, t_index)
+    end
+  end
+
+  # `execute_block/3` for a transition's own content (Decision 6), shared by
+  # the `<initial>` transition and the default history transition - both
+  # own their content as `{:transition, t_index}`.
+  @spec run_transition_content(
+          machine_state :: MachineState.t(),
+          machine :: Machine.t(),
+          t_index :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp run_transition_content(machine_state, machine, t_index) do
+    content = Machine.transition(machine, t_index).content
+    execute_block(machine_state, {:transition, t_index}, content)
+  end
+
+  # `enterStates`'s `isFinalState(s)` tail. State index 0 is the `:scxml`
+  # root (st-wju.1's Decision 2), so a final state whose parent is 0 is a
+  # top-level final: `running: false`, nothing raised (Decision 11) - the
+  # pseudocode's `isSCXMLElement(s.parent)`. Otherwise `done.state.*` is
+  # raised for the parent (and, when it completes a parallel, the
+  # grandparent too) through `raise_parent_completion/3`.
+  @spec raise_completion_events(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp raise_completion_events(%MachineState{machine: machine} = machine_state, state_index) do
+    if Machine.final?(machine, state_index) do
+      parent = Machine.at(machine, state_index).parent
+
+      if parent == 0 do
+        {%{machine_state | running: false}, []}
+      else
+        raise_parent_completion(machine_state, state_index, parent)
+      end
+    else
+      {machine_state, []}
+    end
+  end
+
+  # `new Event("done.state." + parent.id, s.donedata)` (Decision 10),
+  # skipped when `parent` has no written id (Decision 9 -
+  # `Statifier.Validator.Checks.Ids` keeps `nil`/`""` ids legal, and an
+  # unnamed state's completion is unobservable). Then, when `parent`'s own
+  # parent is a `:parallel` whose every region now satisfies
+  # `in_final_state?/2`, `done.state.{grandparent_id}` follows with no
+  # `data` - the pseudocode's nested check, not a sibling of this one.
+  @spec raise_parent_completion(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          parent :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp raise_parent_completion(
+         %MachineState{machine: machine} = machine_state,
+         state_index,
+         parent
+       ) do
+    case Machine.id(machine, parent) do
+      parent_id when is_binary(parent_id) and parent_id != "" ->
+        machine_state =
+          MachineState.raise_platform(
+            machine_state,
+            "done.state." <> parent_id,
+            {:state, state_index},
+            data: static_donedata(machine, state_index)
+          )
+
+        maybe_raise_grandparent_completion(machine_state, state_index, parent)
+
+      _no_id ->
+        {machine_state, []}
+    end
+  end
+
+  # The grandparent-parallel half of `raise_parent_completion/3`: raised
+  # only when `parent`'s own parent is a `:parallel` and every one of its
+  # regions (`region_indexes/2` - never a `:history` pseudo-state, the same
+  # landmine `enter_uncovered_regions/3` avoids) satisfies
+  # `in_final_state?/2`. Same id guard as the parent event (Decision 9).
+  @spec maybe_raise_grandparent_completion(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          parent :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp maybe_raise_grandparent_completion(
+         %MachineState{machine: machine} = machine_state,
+         state_index,
+         parent
+       ) do
+    grandparent = Machine.at(machine, parent).parent
+
+    parallel_complete? =
+      grandparent != nil and Machine.parallel?(machine, grandparent) and
+        machine
+        |> region_indexes(grandparent)
+        |> Enum.all?(&in_final_state?(machine_state, &1))
+
+    if parallel_complete? do
+      case Machine.id(machine, grandparent) do
+        grandparent_id when is_binary(grandparent_id) and grandparent_id != "" ->
+          {MachineState.raise_platform(
+             machine_state,
+             "done.state." <> grandparent_id,
+             {:state, state_index}
+           ), []}
+
+        _no_id ->
+          {machine_state, []}
+      end
+    else
+      {machine_state, []}
+    end
+  end
+
+  # Decision 10: `state.donedata`'s `expr` folds to the raised event's
+  # `data`. `{:static, term}` rides directly; `{:compiled, _, _}` becomes
+  # `nil` - not a rescue-to-default, the value simply has not been
+  # evaluated yet (st-af3 evaluates it later) and the corpus cannot reach it
+  # (`FeatureDetector` flunks any document with a datamodel expression). A
+  # `nil` donedata, or a donedata with no `<content>` child at all
+  # (`expr: nil`), both become `nil` data.
+  @spec static_donedata(machine :: Machine.t(), state_index :: non_neg_integer()) :: term()
+  defp static_donedata(machine, state_index) do
+    case Machine.at(machine, state_index).donedata do
+      nil -> nil
+      %Donedata{expr: nil} -> nil
+      %Donedata{expr: {:static, term}} -> term
+      %Donedata{expr: {:compiled, _predicator_compiled, _source}} -> nil
+    end
+  end
+
+  @doc """
+  `isInFinalState` (Appendix D) - whether `state_index` is, itself or
+  through its active descendants, "in a final state": a compound state
+  answers true when some active child is a `:final`; a parallel answers
+  true only when *every* region does, recursively; anything else (an
+  atomic `:final` included) answers false. Ported verbatim (Decision 14).
+  """
+  @spec in_final_state?(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
+          boolean()
+  # `isInFinalState` is `in_final_state?` - orthographic, not semantic, and a
+  # near miss on the canonical `is_in_final_state` by construction - per
+  # ADR-0002's 2026-08-09 predicate-naming amendment.
+  def in_final_state?(%MachineState{machine: machine} = machine_state, state_index) do
+    cond do
+      Machine.compound?(machine, state_index) ->
+        machine
+        |> region_indexes(state_index)
+        |> Enum.any?(fn child ->
+          MapSet.member?(machine_state.configuration, child) and Machine.final?(machine, child)
+        end)
+
+      Machine.parallel?(machine, state_index) ->
+        machine
+        |> region_indexes(state_index)
+        |> Enum.all?(&in_final_state?(machine_state, &1))
+
+      true ->
+        false
+    end
   end
 end
