@@ -13,14 +13,15 @@ in the author's head at the moment the code is written, and it is the cheapest
 thing to reach for when a comment needs to explain why a field exists or why a
 function is a stub.
 
-It has been reached for constantly. Measured against the current tree:
+It has been reached for constantly. Measured at `e2524fc` on 2026-08-10, and
+recorded as the dated snapshot it is rather than a figure to keep current:
 
-- 59 files under `lib/` and `test/` name a bead ID in a comment or a doc
-  string, 181 mentions in total.
-- 31 files name a plan phase or step by number ("Phase 4 populates
+- 73 files under `lib/` and `test/` name a bead ID in a comment or a doc
+  string, 232 mentions in total.
+- 35 files name a plan phase or step by number ("Phase 4 populates
   `transitions`", "landing the Phase 1/2 engine API").
-- 61 files cite a plan document's internal numbering ("plan Decision 10",
-  "Decision 12"), 148 mentions, and 15 lines name a `docs/plans/` file by its
+- 67 files cite a plan document's internal numbering ("plan Decision 10",
+  "Decision 12"), 200 mentions, and 15 lines name a `docs/plans/` file by its
   dated filename.
 - The habit has reached the prose documents too. `docs/observability.md` tags
   each entry of its seam list with the bead that owns the seam, and
@@ -28,6 +29,12 @@ It has been reached for constantly. Measured against the current tree:
   incident IDs. Those are maintained guides rather than dated records, which is
   what makes them a case this record has to answer rather than a separate
   question.
+
+The habit is also still accruing. The first draft of this record measured 59
+files and 181 bead-ID mentions; three sibling branches landed while it was in
+review, and the figures above are what they left behind. That is not an
+argument for urgency so much as an argument about order: a rule that only
+arrives with its cleanup sweep is a rule the tree outruns.
 
 Read at the moment of writing, each of those is informative. Read six months
 later, each has a different problem:
@@ -204,9 +211,11 @@ already carry it and none of which rots into the code.**
   few words for a sentence that stays true.
 - **`Mix.Statifier.AdrGuard` gains a bead-ID check, narrowed, and it does not
   wait for the sweep.** The guard analyzes *added diff lines only*, so a check
-  added now does not fire on the 59 files already in the tree: it fires when a
+  added now does not fire on the 73 files already in the tree: it fires when a
   branch adds a line carrying a bead ID, and code written under this record is
-  compliant by construction. Two constraints on how it is built, both load
+  compliant by construction. That is what makes the order in the Context's last
+  paragraph available at all - the guard can hold the line while the sweep is
+  still walking the backlog. Two constraints on how it is built, both load
   bearing:
 
   - **Bead IDs only** (`st-` plus the id, including dotted children). That
@@ -218,17 +227,20 @@ already carry it and none of which rots into the code.**
     guard has the violation in *code* and the escape in a *comment*, so the two
     sit on different axes. Here they sit on the same axis, and the existing
     `ADR-0\d{3}|deviation` pattern would clear a violation *by accident*. That
-    is not hypothetical - three lines in the tree at the time of writing would
-    exempt themselves:
+    is not hypothetical - four lines at `e2524fc` would exempt themselves, two
+    on the line itself and two through `cited?/1`'s `previous` field, which
+    also tests the line above:
 
     - `Mix.Statifier.AdrJudge`: "`.claude/scripts/` under st-6yb) and must not
       be re-judged here: ADR-0015" - one line, both tokens.
     - `machine_state_acceptance_test.exs`: "call (ADR-0003); the session
       (st-cmq) owns queueing" - the same shape, in a test.
-    - `Statifier.MachineState`: `(st-cmq)` sits on the line *below* an
-      ADR-citing line, which `cited?/1` clears through its `previous` field.
+    - `Statifier.MachineState`: `(st-cmq)` sits directly below a line citing
+      ADR-0003.
+    - `adr_judge_test.exs`: `(st-laz, rescoped ... under st-6yb)` sits directly
+      below a line citing ADR-0015.
 
-    In all three the author cited an ADR for an unrelated and entirely correct
+    In all four the author cited an ADR for an unrelated and entirely correct
     reason. The hatch would stop meaning "someone asserted this is fine" and
     start meaning "this line happens to mention an ADR", which is worse than
     having no hatch at all. The check therefore needs a dedicated marker, so
