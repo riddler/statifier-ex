@@ -791,13 +791,13 @@ which prompt revision produced them.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (no Elixir changed; the gate confirms the docs
+- [x] Full `mix quality` passes (no Elixir changed; the gate confirms the docs
       edit broke nothing that reads these files)
-- [ ] The tightened grep over `docs/architecture.md docs/datamodel.md
+- [x] The tightened grep over `docs/architecture.md docs/datamodel.md
       docs/testing.md docs/observability.md` returns hits only on
       `docs/testing.md` lines 65-75
-- [ ] `git diff docs/testing.md` shows no change within lines 65-75
-- [ ] `docs/observability.md` contains `## Where the seams live` and no `- [ ]`
+- [x] `git diff docs/testing.md` shows no change within lines 65-75
+- [x] `docs/observability.md` contains `## Where the seams live` and no `- [ ]`
       or `- [x]` in that section
 
 #### Manual Verification:
@@ -1079,5 +1079,20 @@ the Manual Verification items are deferred and surfaced once at the end.
 
 **Implementation Note**: As Phase 1. This phase touches no `lib/statifier/`
 module, so the Appendix D conformance criterion does not apply.
+
+---
+
+### Phase 9
+
+- [ ] Every seam listed in the old checklist appears as a table row, with the
+      same modules named - no seam silently dropped in the conversion
+- [ ] ADR-0012's normative claims about the seams read the same after the
+      conversion as before; the table is a rendering change, not a weakening
+- [ ] The `not yet implemented` row names no bead
+- [ ] The three `docs/testing.md` rewrites each state the failure mode the
+      incident exposed, so the paragraph is complete without the tracker
+
+**Implementation Note**: As Phase 1. No `lib/statifier/` module is touched, so
+the Appendix D conformance criterion does not apply.
 
 ---
