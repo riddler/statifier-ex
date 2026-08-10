@@ -219,6 +219,10 @@ defmodule Statifier.Machine do
   that index is not its own proper descendant, so the candidate equal to it is
   rejected and the walk continues outward, which is the domain such a
   transition must get.
+
+  `Statifier.Interpreter.Selection.find_lcca/2` is the spec-named entry point
+  at the interpreter's surface, a `defdelegate` to this function (plan
+  Decision 2) - one implementation, two names.
   """
   @spec lcca(machine :: t(), indexes :: [non_neg_integer()]) :: non_neg_integer()
   def lcca(%__MODULE__{} = machine, [first | _rest] = indexes) do
