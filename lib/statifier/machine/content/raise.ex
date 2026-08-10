@@ -1,6 +1,6 @@
 defmodule Statifier.Machine.Content.Raise do
   @moduledoc """
-  A compiled `<raise>` executable-content node (spec 5.10) - the interned
+  A compiled `<raise>` executable-content node (spec 4.2) - the interned
   counterpart to `Statifier.Document.Raise`. `event` is the literal event
   name being enqueued - never tokenized, unlike a `<transition>`'s `event`
   attribute (`lib/statifier/document/raise.ex:6-13`).
@@ -27,7 +27,7 @@ defmodule Statifier.Machine.Content.Raise do
   defimpl Statifier.ExecutableContent do
     @moduledoc false
 
-    # spec 5.9's <raise>: enqueue one internal event named by `event`, cause
+    # spec 4.2's <raise>: enqueue one internal event named by `event`, cause
     # stamped from this node and its owning block. No effect is emitted -
     # the queued event is core state, not an effect (plan Decision 7).
     @spec execute(node :: Raise.t(), context :: Context.t()) :: {:ok, Context.t(), []}

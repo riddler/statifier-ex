@@ -1,6 +1,6 @@
 defmodule Statifier.Machine.Content.Log do
   @moduledoc """
-  A compiled `<log>` executable-content node (spec 5.8) - the interned
+  A compiled `<log>` executable-content node (spec 4.7) - the interned
   counterpart to `Statifier.Document.Log`. `label` is the optional
   diagnostic label; `expr` is the optional `Machine.expr()` to evaluate and
   log; `expr_location` is `attribute_locations[:expr]`'s value span, `nil`
@@ -31,7 +31,7 @@ defmodule Statifier.Machine.Content.Log do
   defimpl Statifier.ExecutableContent do
     @moduledoc false
 
-    # spec 5.8's <log>: "log the label and the value of expr". `machine_state`
+    # spec 4.7's <log>: "log the label and the value of expr". `machine_state`
     # is untouched (plan Decision 7) - <log> has an effect and nothing else,
     # ADR-0003's whole point being that the core does not log, it returns log
     # entries.
