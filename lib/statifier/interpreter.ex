@@ -18,7 +18,7 @@ defmodule Statifier.Interpreter do
   |---|---|
   | `microstep/2` | `microstep(enabledTransitions)` verbatim |
   | `microstep/1` | `mainEventLoop`'s inner `while running and not macrostepDone` loop body, hoisted into a value so a paused position is data, not a stack frame |
-  | `macrostep/1` (not yet landed) | that same inner loop, folded to quiescence |
+  | `macrostep/1` | that same inner loop, folded to quiescence |
   | `main_event_loop/1` (not yet landed) | one outer-loop iteration plus the trailing `exitInterpreter()` |
   | `exit_interpreter/1` (not yet landed) | `exitInterpreter` |
   | `initialize/2`, `handle_event/2` (not yet landed) | `interpret`'s two entry seams |
@@ -122,6 +122,65 @@ defmodule Statifier.Interpreter do
     case eventless_transitions do
       [] -> internal_round(machine_state)
       _enabled -> run_selected(machine_state, eventless_transitions, nil)
+    end
+  end
+
+  @doc """
+  `mainEventLoop`'s inner `while running and not macrostepDone` loop,
+  folded to quiescence over `microstep/1` (Decision 7) - not a pseudocode
+  function name itself; `docs/observability.md`'s vocabulary for that same
+  loop, hoisted so a paused position is a value on `%MachineState{}` rather
+  than a stack frame (constraint 1). The fold ends one of two ways:
+
+  - **Quiescence** - `microstep/1` returns `:quiescent`: no eventless
+    transition is enabled and the internal queue is empty. The returned
+    `machine_state` is still `running`, and this function appends
+    `Trace.MacrostepStable` with the configuration and counters as they
+    stand.
+  - **Termination** - a microstep entered a top-level `<final>`, setting
+    `running: false` mid-fold. This is not quiescence -
+    `Trace.MacrostepStable`'s own moduledoc reserves that trace for reaching
+    a stable configuration - so no `Trace.MacrostepStable` is emitted;
+    `Trace.Done` is the vocabulary row for this case, emitted by
+    `exit_interpreter/1` (not yet landed).
+
+  The two trace effects are therefore mutually exclusive per macrostep.
+  `macrostep/1` is public rather than starting private, because it is
+  exactly `microstep/1` driven to a fixed point and a stepper and the fold
+  should be the same code path (`docs/observability.md:41-42`).
+  """
+  @spec macrostep(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
+  # `macrostep` is not an Appendix D function name. It is
+  # docs/observability.md's vocabulary for `mainEventLoop`'s inner
+  # `while running and not macrostepDone` loop, hoisted into a fold over
+  # `microstep/1` so that a paused position is a value on `%MachineState{}`
+  # rather than a stack frame (constraint 1). Mechanical, not semantic: the
+  # loop's condition and body are unchanged. ADR-0002.
+  def macrostep(%MachineState{} = machine_state) do
+    {machine_state, effects} = macrostep(machine_state, [])
+
+    stable =
+      if machine_state.running do
+        Effect.trace(machine_state, Effect.Trace.MacrostepStable,
+          configuration: machine_state.configuration
+        )
+      else
+        []
+      end
+
+    {machine_state, effects ++ stable}
+  end
+
+  @spec macrostep(machine_state :: MachineState.t(), effects :: [Effect.t()]) ::
+          {MachineState.t(), [Effect.t()]}
+  # The private accumulator behind `macrostep/1` - repeatedly calls
+  # `microstep/1` until it returns `:quiescent`, threading the
+  # machine_state and appending each round's effects in order. Not an
+  # Appendix D function name; see `macrostep/1`'s own comment. ADR-0002.
+  defp macrostep(machine_state, effects) do
+    case microstep(machine_state) do
+      :quiescent -> {machine_state, effects}
+      {machine_state, round_effects} -> macrostep(machine_state, effects ++ round_effects)
     end
   end
 
