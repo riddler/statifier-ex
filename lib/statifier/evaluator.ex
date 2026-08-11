@@ -34,6 +34,34 @@ defmodule Statifier.Evaluator do
   commitment - never once per expression - while staying fresh where a
   snapshot spanning the whole macrostep could not be.
 
+  ## Why the built context is not a `MachineState` field
+
+  Caching the context on `Statifier.MachineState` reads like the obvious
+  optimization, and it is ruled out twice over:
+
+  - **It would not be a resumable position.** `docs/observability.md`
+    constraint 1 (ADR-0012) commits to any `%MachineState{}` value being a
+    complete, inspectable, resumable position. `context/1` puts a closure
+    in `functions` (`In/1`, below), and a struct carrying an anonymous
+    function cannot be serialized, written out and read back, or
+    meaningfully diffed. A step debugger being `microstep/1` in a REPL is
+    the property that field would cost.
+  - **It would be stale by construction.** That closure captures the
+    configuration, which moves at every microstep, so a stored context
+    would keep answering `In/1` against a configuration the machine has
+    already left. Rebuilding per evaluation site is not a missed
+    optimization here; it is the correctness property, and the
+    position-snapshot note on `context/1` says so at the call site.
+
+  The plain map on `MachineState.datamodel` stays the resumable truth, and
+  this module builds a context over it on demand. The cost that buys is
+  real - `Predicator.Context.new/2` deep-normalizes the whole datamodel
+  every time, where `Predicator.Context.bind/3` is O(1) in the data's size
+  and carries `functions` and `on_unbound` over unchanged. Nothing
+  evaluates in a hot path yet, so there is nothing to measure; st-sdh
+  tracks that question, and predicator px-8ii tracks the upstream seam that
+  would let a context be both cheap to refresh and safe to store.
+
   ## The membrane
 
   `evaluate/2` returns `{:ok, term()} | {:error, Statifier.Evaluator.Error.t()}`
