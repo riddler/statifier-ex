@@ -9,18 +9,17 @@ defmodule Statifier.Interpreter do
   ## The map of the loop
 
   Appendix D's `interpret`/`mainEventLoop`/`microstep`/`exitInterpreter`
-  collapse onto this module's functions. Only `microstep/2` and `microstep/1`
-  are landed so far - the rest of this table names where the remaining
-  pieces of st-wju.6 will land, so a reader sees the whole shape even though
-  only the first row is real yet:
+  collapse onto this module's functions. `initialize/2` and `handle_event/2`
+  are not yet landed - the last row names where they will land, so a reader
+  sees the whole shape even though that row is not real yet:
 
   | This module | Appendix D |
   |---|---|
   | `microstep/2` | `microstep(enabledTransitions)` verbatim |
   | `microstep/1` | `mainEventLoop`'s inner `while running and not macrostepDone` loop body, hoisted into a value so a paused position is data, not a stack frame |
   | `macrostep/1` | that same inner loop, folded to quiescence |
-  | `main_event_loop/1` (not yet landed) | one outer-loop iteration plus the trailing `exitInterpreter()` |
-  | `exit_interpreter/1` (not yet landed) | `exitInterpreter` |
+  | `main_event_loop/1` | one outer-loop iteration plus the trailing `exitInterpreter()` |
+  | `exit_interpreter/1` | `exitInterpreter` |
   | `initialize/2`, `handle_event/2` (not yet landed) | `interpret`'s two entry seams |
 
   ## Counters
@@ -65,12 +64,29 @@ defmodule Statifier.Interpreter do
     and this module continues with the returned `machine_state` rather than
     the one it passed in, so a later bead's `condition_match/2` change
     lands as a body change in `Selection`, not a signature change here.
+  - **The outer `while running` loop is driven by the caller.** ADR-0003:
+    the pure core takes one external event per call, and the session that
+    drives it (st-cmq) owns the waiting external events and their queue.
+    `main_event_loop/1` is the loop's tail - fold to quiescence, then
+    `exit_interpreter/1` when `running` went false - not the loop itself.
+    See `main_event_loop/1`'s own `@doc` for the exact port-site comment.
+  - **The invoke passes are skipped.** Nothing in this core can invoke yet,
+    so `statesToInvoke`'s two loops, its `clear()`, and the post-invoke
+    internal-queue re-check are all commented seams naming st-cmq, in the
+    pseudocode's own position inside `main_event_loop/1`.
+  - **`returnDoneEvent` becomes a returned effect, appended last.**
+    `exit_interpreter/1` builds `{:done, %Effect.Done{}}` instead of
+    performing an I/O call (ADR-0003), and appends it after `Trace.Done`
+    rather than mid-walk - a mechanical reordering, since effects are a
+    returned list and nothing downstream observes the difference in the
+    pseudocode's own terms. See `exit_interpreter/1`'s own `@doc`.
   """
 
   alias Statifier.Event
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Interpreter.Selection
+  alias Statifier.Machine
   alias Statifier.Machine.Transition
   alias Statifier.MachineState
 
@@ -268,5 +284,130 @@ defmodule Statifier.Interpreter do
 
       {ms, effects ++ new_effects}
     end)
+  end
+
+  @doc """
+  `mainEventLoop`'s outer `while running` loop (Appendix D), one
+  iteration's tail (Decision 6). The loop itself is driven by the caller -
+  one call of `initialize/2` or `handle_event/2` performs one iteration,
+  each having already run its own selection round before calling here - so
+  this function is what is left of the pseudocode's loop body after that:
+  fold to quiescence with `macrostep/1`, then run `exit_interpreter/1` when
+  the fold left `running` false.
+  """
+  @spec main_event_loop(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
+  def main_event_loop(%MachineState{} = machine_state) do
+    {machine_state, macrostep_effects} = macrostep(machine_state)
+
+    # for state in statesToInvoke: invoke(state) (Appendix D) - skipped: no
+    # <invoke> support exists yet, so there is nothing in statesToInvoke to
+    # walk. st-cmq.
+    #
+    # statesToInvoke.clear() (Appendix D) - skipped alongside the invoke
+    # pass above; `states_to_invoke` is deliberately absent from
+    # `MachineState` until <invoke> support adds it with its own caller.
+    # st-cmq.
+    #
+    # if not internalQueue.isEmpty(): continue (Appendix D) - skipped: this
+    # guard exists only because invoking can raise internal events mid-loop,
+    # and nothing invokes yet. st-cmq.
+
+    if machine_state.running do
+      # ADR-0002 mechanical deviation, ADR-0003. Appendix D's
+      # `mainEventLoop` owns both queues and blocks on
+      # `externalQueue.dequeue()` at the end of every iteration, then checks
+      # `isCancelEvent/1` on what it dequeues. This core takes one external
+      # event per call, so the outer `while running` loop is driven by the
+      # caller (`handle_event/2`), and the waiting external events live in
+      # the session, not this struct (st-cmq). The semantics of processing
+      # one external event are unchanged; only the storage of the waiting
+      # ones moves outward. `isCancelEvent/1` moves out with them.
+      {machine_state, macrostep_effects}
+    else
+      {machine_state, exit_effects} = exit_interpreter(machine_state)
+      {machine_state, macrostep_effects ++ exit_effects}
+    end
+  end
+
+  @doc """
+  `exitInterpreter` (Appendix D) - every active state exited in exit order,
+  the top-level final's `<donedata>` collected, then the terminal effects.
+
+  Body, in the pseudocode's own order, with the deviations Decision 10
+  records:
+
+  1. The configuration is captured *before* the walk (`configuration_at_exit`)
+     - `Trace.Done.configuration` documents itself as "the configuration as
+     it stood at exit", which the walk would otherwise leave empty.
+  2. `states_to_exit` = `Machine.exit_order/2` over the configuration.
+  3. Each state, in exit order, runs its `onexit` blocks
+     (`ExitEntry.run_onexit_blocks/2` - the same per-state body
+     `exit_states/2`'s `depart/2` runs), then leaves the configuration.
+     `cancelInvoke` is skipped: no `<invoke>` support exists yet. st-cmq.
+  4. **No history recording.** Appendix D's `exitInterpreter` has no
+     history-recording loop at all - unlike `exitStates`, which has two
+     consecutive `for s in statesToExit` loops for exactly that reason.
+     "Port as written" therefore means recording nothing here; this walk
+     never touches `machine_state.history_values`.
+  5. `returnDoneEvent(s.donedata)` fires for the one state, if any, that is
+     `Machine.final?/2` with `parent == 0` - `isFinalState(s) and
+     isSCXMLElement(s.parent)`, the same test
+     `ExitEntry.raise_completion_events/2` already makes. Since the root is
+     compound, at most one child is active, so at most one top-level final
+     is ever in the exit set. Its donedata
+     (`ExitEntry.static_donedata/2`) becomes both `Trace.Done`'s and
+     `Effect.Done`'s `donedata`.
+  6. The terminal effects are appended last, `{:done, %Effect.Done{}}` last
+     of all - `returnDoneEvent` becomes a returned effect rather than an I/O
+     call (ADR-0003), and moving its emission to the end of the list is a
+     mechanical reordering: effects are a returned list, not an I/O call,
+     so nothing the pseudocode's own terms observe changes order.
+
+  `status: :done` is set only here, at the very end - the window
+  `MachineState`'s moduledoc describes between `running: false` (from
+  top-level final entry) and `status: :done` (once this walk finishes).
+  """
+  @spec exit_interpreter(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
+  def exit_interpreter(%MachineState{machine: machine} = machine_state) do
+    configuration_at_exit = machine_state.configuration
+    states_to_exit = Machine.exit_order(machine, configuration_at_exit)
+
+    {machine_state, donedata, exit_effects} =
+      Enum.reduce(states_to_exit, {machine_state, nil, []}, fn state_index,
+                                                               {ms, donedata, effects} ->
+        {ms, onexit_effects} = ExitEntry.run_onexit_blocks(ms, state_index)
+
+        # cancelInvoke(inv) for inv in s.invoke (Appendix D) - skipped: no
+        # <invoke> support exists yet, so there is nothing to cancel. st-cmq.
+
+        ms = %{ms | configuration: MapSet.delete(ms.configuration, state_index)}
+
+        donedata =
+          if Machine.final?(machine, state_index) and Machine.at(machine, state_index).parent == 0 do
+            ExitEntry.static_donedata(machine, state_index)
+          else
+            donedata
+          end
+
+        {ms, donedata, effects ++ onexit_effects}
+      end)
+
+    done_trace =
+      Effect.trace(machine_state, Effect.Trace.Done,
+        configuration: configuration_at_exit,
+        donedata: donedata
+      )
+
+    done_effect =
+      {:done,
+       %Effect.Done{
+         donedata: donedata,
+         macrostep: machine_state.macrostep,
+         microstep: machine_state.microstep
+       }}
+
+    machine_state = %{machine_state | status: :done}
+
+    {machine_state, exit_effects ++ done_trace ++ [done_effect]}
   end
 end
