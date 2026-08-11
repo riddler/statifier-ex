@@ -9,27 +9,25 @@ defmodule Statifier.CaseTest do
       xml = """
       <scxml>
         <state id="s1">
-          <onentry><log expr="hi"/></onentry>
+          <onentry><assign location="x" expr="1"/></onentry>
         </state>
       </scxml>
       """
 
       error =
         assert_raise AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "logs on entry", ["s1"], [])
+          Statifier.Case.test_scxml(xml, "assigns on entry", ["s1"], [])
         end
 
       assert error.message =~ "unsupported SCXML features"
-      assert error.message =~ "basic_states"
-      assert error.message =~ "log_elements"
-      assert error.message =~ "onentry_actions"
-      assert error.message =~ "logs on entry"
+      assert error.message =~ "assign_elements"
+      assert error.message =~ "assigns on entry"
     end
 
     # sabotage: n/a - asserts the harness fails rather than skips, no lib/ behavior
     test "never skips - an unsupported document fails the test" do
       xml = """
-      <scxml><state id="s1"/></scxml>
+      <scxml><state id="s1"><transition cond="ready" target="s1"/></state></scxml>
       """
 
       assert_raise AssertionError, fn ->
@@ -38,20 +36,22 @@ defmodule Statifier.CaseTest do
     end
   end
 
-  describe "test_scxml/4 library seam" do
-    # sabotage: n/a - asserts the not-yet-implemented seam message, no lib/ behavior
-    test "flunks naming the missing parse call once the feature gate passes" do
+  describe "test_scxml/4 end to end" do
+    # sabotage: select_transitions/2 discards its enabled set -> red
+    test "drives a compound document through compile, initialize, and one event" do
       xml = """
-      <scxml/>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">
+          <state id="s1">
+              <transition event="go" target="s2"/>
+          </state>
+          <state id="s2"/>
+      </scxml>
       """
 
-      error =
-        assert_raise AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "", [], [])
-        end
-
-      assert error.message =~ "Statifier.parse/1 does not exist yet"
-      assert error.message =~ "test/support/case.ex"
+      assert :ok =
+               Statifier.Case.test_scxml(xml, "moves on event", ["s1"], [
+                 {%{"name" => "go"}, ["s2"]}
+               ])
     end
   end
 end

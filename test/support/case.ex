@@ -12,12 +12,13 @@ defmodule Statifier.Case do
   4. read the active leaf-state set.
 
   Each of those lives in its own private helper below - `parse_document/1`,
-  `initialize/1`, `send_event/2`, `active_leaf_states/1`. v2 has no engine yet,
-  so today they flunk naming the call they are waiting on; landing the engine
-  API these calls name (`Statifier.parse/1`, `Statifier.initialize/1`,
-  `Interpreter.send_event/2`, `Configuration.active_leaf_states/1`) is a
-  one-file change here, and the four-function contract stays a hard
-  constraint on the library surface rather than something the corpus can widen.
+  `initialize/1`, `send_event/2`, `active_leaf_states/1` - and each is a thin
+  adapter over `Statifier`'s four-function API (`Statifier.compile/1`,
+  `Statifier.initialize/2`, `Statifier.send_event/2`,
+  `Statifier.active_leaf_states/1`): unwrapping the `{:ok, _}` / `{:error, _}`
+  tuples and translating the corpus's event map into the shape `Statifier`
+  expects. The four-function contract stays a hard constraint on the library
+  surface rather than something the corpus can widen.
 
   Documents using features v2 does not support flunk with the feature named
   (`Statifier.FeatureDetector`) - they never skip, so an unimplemented feature
@@ -106,28 +107,31 @@ defmodule Statifier.Case do
            "Expected active states #{inspect(Enum.sort(expected))}, but got #{inspect(Enum.sort(actual))}"
   end
 
-  # The four library calls. Each is a single line once the engine lands; until
-  # then it names what it is waiting on, so a corpus test that gets past the
-  # feature gate says which part of the API is missing rather than raising
-  # UndefinedFunctionError.
+  # The four library calls, each a thin adapter over Statifier's own function.
 
-  defp parse_document(_xml), do: not_implemented("Statifier.parse/1")
-
-  defp initialize(_document), do: not_implemented("Statifier.initialize/1")
-
-  defp send_event(_state_chart, _event_map), do: not_implemented("Interpreter.send_event/2")
-
-  defp active_leaf_states(_state_chart),
-    do: not_implemented("Configuration.active_leaf_states/1")
-
-  defp not_implemented(call) do
-    flunk("""
-    #{call} does not exist yet.
-
-    Statifier.Case is waiting on the engine API these four calls name
-    (`Statifier.parse/1`, `Statifier.initialize/1`, `Interpreter.send_event/2`,
-    `Configuration.active_leaf_states/1`). Replace the matching helper in
-    test/support/case.ex with the real call when it lands.
-    """)
+  defp parse_document(xml) do
+    case Statifier.compile(xml) do
+      {:ok, machine} -> machine
+      {:error, errors} -> flunk("Document did not compile:\n#{format_errors(errors)}")
+    end
   end
+
+  defp initialize(machine), do: machine |> Statifier.initialize() |> elem(0)
+
+  # Only the "name" key is read. The corpus's event map can carry other keys,
+  # but nothing can observe event data until the datamodel lands (st-af3), so
+  # translating them now would be a field with no reader.
+  defp send_event(state_chart, %{"name" => name}) do
+    case Statifier.send_event(state_chart, name) do
+      {:ok, next, _effects} ->
+        next
+
+      {:error, :not_running} ->
+        flunk("Sent #{inspect(name)} to a state chart that has terminated")
+    end
+  end
+
+  defp active_leaf_states(state_chart), do: Statifier.active_leaf_states(state_chart)
+
+  defp format_errors(errors), do: Enum.map_join(errors, "\n", & &1.message)
 end

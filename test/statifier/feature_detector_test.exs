@@ -172,12 +172,39 @@ defmodule Statifier.FeatureDetectorTest do
     end
   end
 
+  # The Phase 1 (st-wju.7) supported set. Keep this in step with the table in
+  # docs/plans/260811-st-wju.7-four-function-api-and-corpus-on.md - a later
+  # accidental flip in the registry should fail here rather than silently
+  # widen the corpus.
+  @supported_features MapSet.new([
+                        :basic_states,
+                        :compound_states,
+                        :parallel_states,
+                        :final_states,
+                        :initial_elements,
+                        :history_states,
+                        :event_transitions,
+                        :eventless_transitions,
+                        :targetless_transitions,
+                        :internal_transitions,
+                        :wildcard_events,
+                        :onentry_actions,
+                        :onexit_actions,
+                        :raise_elements,
+                        :log_elements,
+                        :donedata_elements
+                      ])
+
   describe "feature_registry/0" do
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
-    test "every feature is unsupported until an engine lands" do
-      assert Enum.all?(FeatureDetector.feature_registry(), fn {_feature, status} ->
-               status == :unsupported
-             end)
+    test "supports exactly the Phase 1 feature set" do
+      supported =
+        FeatureDetector.feature_registry()
+        |> Enum.filter(fn {_feature, status} -> status == :supported end)
+        |> Enum.map(fn {feature, _status} -> feature end)
+        |> MapSet.new()
+
+      assert supported == @supported_features
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
@@ -204,9 +231,9 @@ defmodule Statifier.FeatureDetectorTest do
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "reports unsupported features by name" do
       assert {:error, unsupported} =
-               FeatureDetector.validate_features(MapSet.new([:basic_states, :send_elements]))
+               FeatureDetector.validate_features(MapSet.new([:assign_elements, :send_elements]))
 
-      assert unsupported == MapSet.new([:basic_states, :send_elements])
+      assert unsupported == MapSet.new([:assign_elements, :send_elements])
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
