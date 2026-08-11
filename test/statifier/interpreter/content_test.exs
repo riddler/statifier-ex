@@ -107,12 +107,29 @@ defmodule Statifier.Interpreter.ContentTest do
            ] = effects
   end
 
-  # sabotage: `execute_block/3`'s `[]` clause is dropped, falling through to
-  # the general clause -> an empty block would still build a `Context` and
-  # emit a spurious `ContentExecuted` trace effect, reddening this equality.
-  test "an empty block returns the machine_state unchanged and no effects, even with trace: true" do
+  # sabotage: `execute_block/3`'s `[]` clause is reverted to the old early
+  # return (`def execute_block(machine_state, _owner, []), do: {machine_state,
+  # []}`) -> no trace effect would be emitted even with trace: true,
+  # reddening this assertion.
+  test "an empty block still emits ContentExecuted with c_indexes: [] when tracing is on" do
     m = machine()
     ms = machine_state(m, trace: true)
+    owner = {:onexit, a_index(m), 0}
+    [onexit_block] = Machine.at(m, a_index(m)).onexit
+    assert onexit_block.content == []
+
+    assert {^ms, effects} = Content.execute_block(ms, owner, onexit_block.content)
+
+    assert [{:trace, %Effect.Trace.ContentExecuted{owner: ^owner, c_indexes: []}}] = effects
+  end
+
+  # sabotage: the `[]` clause's `Effect.trace/3` call is replaced with a
+  # hand-built `[{:trace, %ContentExecuted{}}]` that never consults the
+  # `machine_state.trace` gate -> the effect would appear even with
+  # `trace: false`, reddening this equality.
+  test "an empty block emits nothing when tracing is off" do
+    m = machine()
+    ms = machine_state(m, trace: false)
     [onexit_block] = Machine.at(m, a_index(m)).onexit
     assert onexit_block.content == []
 
