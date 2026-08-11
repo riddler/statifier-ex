@@ -10,7 +10,7 @@
 # out_root - test/scxml_tests, mirroring that as <conformance>/<spec>/<name>_test.exs,
 #            one module per file (SCXMLTest.<Spec>.<Name>).
 #
-# Two filters apply before a case is emitted:
+# Three filters apply before a case is emitted:
 #
 #   - datamodel: only inputs conf_predicator.xsl transformed to
 #     datamodel="predicator" are emitted. The datamodel-specific optional
@@ -21,12 +21,17 @@
 #     manifest-driven only, matching the SCION emitter's behavior.
 #   - exclusions.exs: tests with no predicator equivalent (ADR-0004), skipped
 #     with the reason recorded there.
+#   - sub_documents.exs: manifest <dep> documents an <invoke> loads at
+#     runtime, not standalone conformance tests. Emitting one would assert
+#     its parent's expected configuration against a document that never
+#     reaches it on its own (st-rbp).
 #
 # required_features tags come from Statifier.FeatureDetector, loaded directly
 # since this runs outside Mix and test/support is not compiled in.
 
 Code.require_file(Path.join([__DIR__, "..", "..", "..", "test/support/feature_detector.ex"]))
 Code.require_file(Path.join([__DIR__, "..", "normalize.exs"]))
+Code.require_file(Path.join([__DIR__, "sub_documents.exs"]))
 
 defmodule Cases.XmlFormat do
   @moduledoc """
@@ -176,8 +181,18 @@ exclusions_path = Path.join(__DIR__, "exclusions.exs")
 
 [out_root, in_root | inputs] = System.argv()
 
-{matched, emitted, excluded} =
-  Enum.reduce(inputs, {MapSet.new(), 0, 0}, fn input, {matched, emitted, excluded} ->
+manifest_path = Path.join(in_root, "manifest.xml")
+
+if !File.exists?(manifest_path) do
+  IO.puts(:stderr, "missing #{manifest_path}; run `mise run corpus:fetch:w3` first")
+  System.halt(1)
+end
+
+sub_documents = Cases.SubDocuments.ids(manifest_path)
+
+{matched, emitted, excluded, sub_document} =
+  Enum.reduce(inputs, {MapSet.new(), 0, 0, 0}, fn input,
+                                                  {matched, emitted, excluded, sub_document} ->
     rel = Path.relative_to(input, in_root)
     [conformance, spec | _rest] = Path.split(rel)
     name = Path.basename(rel, ".scxml")
@@ -185,20 +200,25 @@ exclusions_path = Path.join(__DIR__, "exclusions.exs")
     normalized_spec = Cases.Normalize.identifier(spec)
     normalized_name = Cases.Normalize.identifier(name)
 
-    if Map.has_key?(exclusions, name) do
-      {MapSet.put(matched, name), emitted, excluded + 1}
-    else
-      case Cases.Emit.emit_case(
-             out_root,
-             input,
-             conformance,
-             spec,
-             normalized_spec,
-             normalized_name
-           ) do
-        :emitted -> {matched, emitted + 1, excluded}
-        :skipped -> {matched, emitted, excluded}
-      end
+    cond do
+      Map.has_key?(exclusions, name) ->
+        {MapSet.put(matched, name), emitted, excluded + 1, sub_document}
+
+      MapSet.member?(sub_documents, name) ->
+        {matched, emitted, excluded, sub_document + 1}
+
+      true ->
+        case Cases.Emit.emit_case(
+               out_root,
+               input,
+               conformance,
+               spec,
+               normalized_spec,
+               normalized_name
+             ) do
+          :emitted -> {matched, emitted + 1, excluded, sub_document}
+          :skipped -> {matched, emitted, excluded, sub_document}
+        end
     end
   end)
 
@@ -213,4 +233,6 @@ if stale != [] do
   System.halt(1)
 end
 
-IO.puts("emitted #{emitted} W3C case(s), excluded #{excluded}")
+IO.puts(
+  "emitted #{emitted} W3C case(s), excluded #{excluded}, skipped #{sub_document} sub-document(s)"
+)
