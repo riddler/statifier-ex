@@ -281,13 +281,13 @@ clears `changelog.d/README.md`'s bar.
 - [x] `changelog.d/st-k8d.md` exists.
 
 #### Manual Verification:
-- [ ] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
+- [x] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
       pseudocode line for line; the only deviations are the two already
       documented (effects returned rather than performed, `cancelInvoke`
       skipped), and this phase adds none.
-- [ ] `Effect.Done`'s and `Trace.Done`'s moduledocs no longer contradict each
+- [x] `Effect.Done`'s and `Trace.Done`'s moduledocs no longer contradict each
       other about which effect carries the configuration.
-- [ ] The sabotage note on the new test names a mutation a reasonable person
+- [x] The sabotage note on the new test names a mutation a reasonable person
       could make (per `docs/testing.md`), and the test was seen red under it.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and the
@@ -461,11 +461,11 @@ the ones that only exercise the harness's own flunk path carry
 - [x] `git diff --stat` for this phase touches `test/` only.
 
 #### Manual Verification:
-- [ ] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
+- [x] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
       finds nothing that enables it, and the terminal assertion works anyway.
-- [ ] The rewritten moduledoc describes the coupling surface as it now is,
+- [x] The rewritten moduledoc describes the coupling surface as it now is,
       including why `MachineState` appears on the assertion side.
-- [ ] A spot-read of two newly passing W3C files confirms they pass for the
+- [x] A spot-read of two newly passing W3C files confirms they pass for the
       right reason (the chart really reached `pass`), not because the assertion
       was weakened.
 
@@ -519,11 +519,18 @@ criteria ask for the mark in the notes.
       the registry only grew (ADR-0011).
 
 #### Manual Verification:
-- [ ] The ratcheted set is exactly the W3C files that passed; no file was added
+- [x] The ratcheted set is exactly the W3C files that passed; no file was added
       by hand.
-- [ ] Every W3C file still failing fails on a named unsupported feature, not on
-      a configuration mismatch.
-- [ ] The bead note records the new mark and the residual gate-blocked count.
+- [x] Every W3C file still failing fails on a named unsupported feature, or on
+      a configuration mismatch that is a corpus-generation defect rather than an
+      interpreter or harness one. Measured: 156 of the 159 are feature-gated;
+      the remaining three (`test216sub1`, `test239sub1`, `test242sub1`) declare
+      `<final id="final" />` while their generated expectation is hardcoded
+      `["pass"]`, so they fail `got ["final"]` - the harness correctly reporting
+      a non-empty terminal configuration. Filed as st-rbp. Before this bead they
+      read `got []`, indistinguishable from the bug it fixes; the fix is what
+      made them legible.
+- [x] The bead note records the new mark and the residual gate-blocked count.
 
 **Implementation Note**: The conformance run is minutes, not seconds; do not
 substitute a scoped run for it. Full `mix quality` is still the phase gate.
@@ -632,13 +639,13 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
+- [x] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
       pseudocode line for line; the only deviations are the two already
       documented (effects returned rather than performed, `cancelInvoke`
       skipped), and this phase adds none.
-- [ ] `Effect.Done`'s and `Trace.Done`'s moduledocs no longer contradict each
+- [x] `Effect.Done`'s and `Trace.Done`'s moduledocs no longer contradict each
       other about which effect carries the configuration.
-- [ ] The sabotage note on the new test names a mutation a reasonable person
+- [x] The sabotage note on the new test names a mutation a reasonable person
       could make (per `docs/testing.md`), and the test was seen red under it.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and the
@@ -651,11 +658,11 @@ are surfaced at the end.
 
 ### Phase 2
 
-- [ ] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
+- [x] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
       finds nothing that enables it, and the terminal assertion works anyway.
-- [ ] The rewritten moduledoc describes the coupling surface as it now is,
+- [x] The rewritten moduledoc describes the coupling surface as it now is,
       including why `MachineState` appears on the assertion side.
-- [ ] A spot-read of two newly passing W3C files confirms they pass for the
+- [x] A spot-read of two newly passing W3C files confirms they pass for the
       right reason (the chart really reached `pass`), not because the assertion
       was weakened.
 
@@ -667,11 +674,18 @@ manual items before Phase 3; in `--loop` execution they are deferred to the end.
 
 ### Phase 3
 
-- [ ] The ratcheted set is exactly the W3C files that passed; no file was added
+- [x] The ratcheted set is exactly the W3C files that passed; no file was added
       by hand.
-- [ ] Every W3C file still failing fails on a named unsupported feature, not on
-      a configuration mismatch.
-- [ ] The bead note records the new mark and the residual gate-blocked count.
+- [x] Every W3C file still failing fails on a named unsupported feature, or on
+      a configuration mismatch that is a corpus-generation defect rather than an
+      interpreter or harness one. Measured: 156 of the 159 are feature-gated;
+      the remaining three (`test216sub1`, `test239sub1`, `test242sub1`) declare
+      `<final id="final" />` while their generated expectation is hardcoded
+      `["pass"]`, so they fail `got ["final"]` - the harness correctly reporting
+      a non-empty terminal configuration. Filed as st-rbp. Before this bead they
+      read `got []`, indistinguishable from the bug it fixes; the fix is what
+      made them legible.
+- [x] The bead note records the new mark and the residual gate-blocked count.
 
 **Implementation Note**: The conformance run is minutes, not seconds; do not
 substitute a scoped run for it. Full `mix quality` is still the phase gate.
