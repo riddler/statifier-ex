@@ -499,7 +499,15 @@ defmodule Statifier.Interpreter do
   1. The configuration is captured *before* the walk (`configuration_at_exit`)
      - `Trace.Done.configuration` documents itself as "the configuration as
      it stood at exit", which the walk would otherwise leave empty.
-  2. `states_to_exit` = `Machine.exit_order/2` over the configuration.
+  2. `states_to_exit` = `Machine.exit_order/2` over the configuration, and
+     `Trace.ExitSet` is emitted over it before any state leaves - the same
+     phase-boundary row `exit_states/2` emits, at the one other place this
+     engine exits states. ADR-0012 item 2 binds the row to the boundaries
+     Appendix D itself names, and `exitInterpreter` names one: its
+     `statesToExit` is the same variable `exitStates` computes. `Trace.Done`
+     carries the same set as `configuration`, but it arrives after the walk
+     and means "the run ended here", so it is not a substitute for a marker
+     that means "these are about to be exited".
   3. Each state, in exit order, runs its `onexit` blocks
      (`ExitEntry.run_onexit_blocks/2` - the same per-state body
      `exit_states/2`'s `depart/2` runs), then leaves the configuration.
@@ -531,6 +539,8 @@ defmodule Statifier.Interpreter do
   def exit_interpreter(%MachineState{machine: machine} = machine_state) do
     configuration_at_exit = machine_state.configuration
     states_to_exit = Machine.exit_order(machine, configuration_at_exit)
+
+    exit_set_trace = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
 
     {machine_state, donedata, exit_effects} =
       Enum.reduce(states_to_exit, {machine_state, nil, []}, fn state_index,
@@ -568,6 +578,6 @@ defmodule Statifier.Interpreter do
 
     machine_state = %{machine_state | status: :done}
 
-    {machine_state, exit_effects ++ done_trace ++ [done_effect]}
+    {machine_state, exit_set_trace ++ exit_effects ++ done_trace ++ [done_effect]}
   end
 end

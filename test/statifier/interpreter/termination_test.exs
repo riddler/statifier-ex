@@ -171,6 +171,49 @@ defmodule Statifier.Interpreter.TerminationTest do
     end
   end
 
+  describe "exit_interpreter/1 - Trace.ExitSet" do
+    # ADR-0012 item 2: the "exit set" row belongs at every phase boundary
+    # Appendix D names, and `exitInterpreter` names one - its `statesToExit`
+    # is the same variable `exitStates` computes. `Trace.Done` carries the
+    # same states as its `configuration`, but after the walk and meaning
+    # "the run ended here", so it does not stand in for a marker meaning
+    # "these are about to be exited".
+    #
+    # sabotage: `exit_interpreter/1`'s `exit_set_trace` term is dropped from
+    # its returned effect list (`exit_effects ++ done_trace ++
+    # [done_effect]`) -> no `Trace.ExitSet` reaches the caller, reddening the
+    # match below.
+    test "emits the exit set, in exit order, before any state leaves" do
+      m = machine()
+      ms = machine_state(m, [idx(:parent), idx(:leaf)])
+
+      {_result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert [%Effect.Trace.ExitSet{} = exit_set] =
+               for({:trace, %Effect.Trace.ExitSet{} = payload} <- effects, do: payload)
+
+      assert exit_set.indexes == [idx(:leaf), idx(:parent)]
+
+      # Before any state leaves: it precedes both onexit logs, and it names
+      # states the post-walk configuration no longer holds.
+      assert Enum.find_index(effects, &match?({:trace, %Effect.Trace.ExitSet{}}, &1)) <
+               Enum.find_index(effects, &match?({:log, _}, &1))
+    end
+
+    # sabotage: `exit_interpreter/1`'s `Trace.ExitSet` emission is built as a
+    # bare `[{:trace, Effect.Trace.ExitSet.new(...)}]` list literal instead of
+    # going through the gated `Effect.trace/3` macro -> a `trace: false` run
+    # carries an ExitSet, reddening the assertion below.
+    test "is gated: a trace: false termination emits none" do
+      m = machine()
+      ms = machine_state(m, [idx(:parent), idx(:leaf)], trace: false)
+
+      {_result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert [] = for({:trace, %Effect.Trace.ExitSet{} = payload} <- effects, do: payload)
+    end
+  end
+
   describe "exit_interpreter/1 - Trace.Done" do
     # sabotage: `exit_interpreter/1`'s `configuration_at_exit =
     # machine_state.configuration` binding is moved to *after* the exit

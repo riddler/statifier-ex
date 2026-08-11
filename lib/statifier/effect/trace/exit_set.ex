@@ -1,9 +1,16 @@
 defmodule Statifier.Effect.Trace.ExitSet do
   @moduledoc """
-  Trace payload for `{:trace, %__MODULE__{}}` - emitted with
-  `compute_exit_set`'s result, before any state is exited
-  (`docs/observability.md` constraint 2's "exit set" row). `indexes` are the
-  states to be exited (constraint 3, integer indexes), in exit order.
+  Trace payload for `{:trace, %__MODULE__{}}` - emitted before any state is
+  exited (`docs/observability.md` constraint 2's "exit set" row). `indexes`
+  are the states to be exited (constraint 3, integer indexes), in exit
+  order.
+
+  Two sites emit it, matching the two places this engine exits states:
+  `Statifier.Interpreter.ExitEntry.exit_states/2` over `compute_exit_set`'s
+  result, and `Statifier.Interpreter.exit_interpreter/1` over the whole
+  configuration at termination. Both are phase boundaries Appendix D names
+  (`exitStates` and `exitInterpreter` compute the same `statesToExit`), so
+  ADR-0012 item 2 asks for the row at both.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
   are always stamped from the `Statifier.MachineState` at hand.
