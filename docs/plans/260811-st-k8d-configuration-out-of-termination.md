@@ -508,14 +508,14 @@ criteria ask for the mark in the notes.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix test --include scion --include scxml_w3` run in full and its counts
+- [x] `mix test --include scion --include scxml_w3` run in full and its counts
       recorded.
-- [ ] `mix test.baseline --only w3c` reports nothing left to ratchet after the
+- [x] `mix test.baseline --only w3c` reports nothing left to ratchet after the
       add.
-- [ ] `mix test.regression` green against the grown registry.
-- [ ] `grep w3c_tests test/passing_tests.json` shows a nonzero count.
-- [ ] Full `mix quality` passes.
-- [ ] `mix gate.check` passes with no entry in `docs/quality-gate-changes.md` -
+- [x] `mix test.regression` green against the grown registry.
+- [x] `grep w3c_tests test/passing_tests.json` shows a nonzero count.
+- [x] Full `mix quality` passes.
+- [x] `mix gate.check` passes with no entry in `docs/quality-gate-changes.md` -
       the registry only grew (ADR-0011).
 
 #### Manual Verification:
@@ -662,5 +662,18 @@ are surfaced at the end.
 **Implementation Note**: Use `mix quality --profile loop` between edits and the
 full `mix quality` as the phase gate. In interactive execution, pause for the
 manual items before Phase 3; in `--loop` execution they are deferred to the end.
+
+---
+
+### Phase 3
+
+- [ ] The ratcheted set is exactly the W3C files that passed; no file was added
+      by hand.
+- [ ] Every W3C file still failing fails on a named unsupported feature, not on
+      a configuration mismatch.
+- [ ] The bead note records the new mark and the residual gate-blocked count.
+
+**Implementation Note**: The conformance run is minutes, not seconds; do not
+substitute a scoped run for it. Full `mix quality` is still the phase gate.
 
 ---
