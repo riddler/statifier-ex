@@ -290,15 +290,15 @@ exemption line. Cases to pin, each from an inline manifest heredoc:
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never the phase bar).
-- [ ] Full `mix quality` passes with no scoping, no `--quick`, no `--skip`.
-- [ ] `mix gate.verify` confirms the run was a full gate.
-- [ ] `mix test test/corpus/sub_documents_test.exs` passes and the new file is
+- [x] `mix quality --profile loop` while iterating (never the phase bar).
+- [x] Full `mix quality` passes with no scoping, no `--quick`, no `--skip`.
+- [x] `mix gate.verify` confirms the run was a full gate.
+- [x] `mix test test/corpus/sub_documents_test.exs` passes and the new file is
       picked up by the default `mix test` run (it is not tagged `:scion` or
       `:scxml_w3`).
-- [ ] `git status --porcelain test/scxml_tests` is empty - this phase changes no
+- [x] `git status --porcelain test/scxml_tests` is empty - this phase changes no
       emitted output.
-- [ ] `mix test.regression` passes (registry untouched, asserted rather than
+- [x] `mix test.regression` passes (registry untouched, asserted rather than
       assumed).
 
 #### Manual Verification:
@@ -597,3 +597,27 @@ reasoning kept here for the reviewer.
   `docs/plans/260811-st-k8d-configuration-out-of-termination.md`
 - Local mirror used for offline regeneration:
   `~/repos/github/ex_statechart/test/scxml_w3/cases`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Spot-check two manifest entries against
+      `~/repos/github/ex_statechart/test/scxml_w3/cases/manifest.xml` (or
+      `https://www.w3.org/Voice/2013/scxml-irp/manifest.xml`) and confirm
+      `<dep>` is upstream's own declaration of an invoked sub-document, not an
+      inference this plan is making.
+- [ ] No regressions in related features: `tools/corpus/normalize.exs` and
+      `check_exprs.exs` are untouched, and `mise run corpus:check` is unaffected.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause here for the
+human to confirm the manual items. In looped (`--loop`) execution, the Automated
+Verification list gates advancement via `/wurk:commit --auto` and the Manual
+items are deferred to the end.
+
+---
