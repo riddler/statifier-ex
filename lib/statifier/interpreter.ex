@@ -20,6 +20,26 @@ defmodule Statifier.Interpreter do
   | `exit_interpreter/1` | `exitInterpreter` |
   | `initialize/2`, `handle_event/2` | `interpret`'s two entry seams |
 
+  ## Stepping it
+
+  Constraint 1's payoff is that a step debugger is `microstep/1` in iex with
+  no support code. Fold to quiescence, then hand it an event and drive the
+  next macrostep one round at a time, inspecting the position between calls:
+
+      # in iex, with `machine` already compiled
+      {machine_state, _effects} = Interpreter.initialize(machine, trace: true)
+      machine_state = MachineState.begin_macrostep(machine_state)
+
+      # one round at a time; `:quiescent` is the end of the macrostep
+      {machine_state, effects} = Interpreter.microstep(machine_state)
+      machine_state.configuration
+      Interpreter.microstep(machine_state)
+
+  Every binding above is an ordinary value: keep an earlier `machine_state`
+  to rewind to it, or round-trip one through `:erlang.term_to_binary/1` to
+  resume in another process. `macrostep/1` is the same loop run to its fixed
+  point, so stepping and folding are the same code path, not two.
+
   ## Counters
 
   `Statifier.MachineState`'s counter contract is the source of truth;
@@ -39,8 +59,16 @@ defmodule Statifier.Interpreter do
   `initialize/2` additionally advances the microstep counter once, directly,
   before its own `enter_states/2` call - the pseudocode's
   `enterStates([doc.initial.transition])` is not inside `microstep`, so
-  **the initial entry is microstep 1**, not 0: no effect and no cause
-  anywhere in this module is ever stamped `microstep: 0`.
+  **the initial entry is microstep 1**, not 0, and nothing the
+  initialization macrostep emits is stamped `microstep: 0`.
+
+  An external event is the one case that is. `begin_macrostep/1` resets the
+  microstep counter, and `handle_event/2` emits `Trace.EventDequeued` and
+  (via `run_selected/3`) `Trace.TransitionsSelected` before the round's
+  first entry has happened, so both carry `microstep: 0` - the round has
+  begun but no exit or entry has occurred yet, which is exactly what
+  `microstep: 0` means under `MachineState`'s counter contract. The first
+  `Trace.ExitSet` of that macrostep is microstep 1.
 
   This is also why the trace effects a selection round emits
   (`Trace.EventDequeued`, `Trace.TransitionsSelected`) are always stamped
