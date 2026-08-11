@@ -236,6 +236,47 @@ defmodule Statifier.Interpreter.TerminationTest do
     end
   end
 
+  describe "exit_interpreter/1 - Effect.Done configuration" do
+    # sabotage: `exit_interpreter/1`'s `%Effect.Done{}` literal is built with
+    # `configuration: machine_state.configuration` (the post-fold, emptied
+    # configuration) instead of `configuration_at_exit` -> the non-empty
+    # assertion below reddens while the empty `result.configuration` one
+    # stays green, pointing at exactly the field this mutation broke.
+    test "carries the configuration as it stood at exit, matching Trace.Done, while the returned configuration is empty" do
+      m = machine()
+      ms = machine_state(m, [idx(:done)])
+
+      {result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert {:done, %Effect.Done{configuration: core_configuration}} = List.last(effects)
+
+      assert [%Effect.Trace.Done{configuration: trace_configuration}] =
+               for({:trace, %Effect.Trace.Done{} = payload} <- effects, do: payload)
+
+      assert core_configuration == MapSet.new([idx(:done)])
+      assert core_configuration == trace_configuration
+      assert result.configuration == MapSet.new()
+    end
+
+    # sabotage: same mutation as above (`configuration:
+    # machine_state.configuration` instead of `configuration_at_exit`) ->
+    # with tracing off there is no `Trace.Done` to cross-check against, so
+    # this test is the only coverage that would catch the bug in that mode;
+    # the non-empty assertion reddens.
+    test "is still populated with tracing off, where there is no Trace.Done to carry it" do
+      m = machine()
+      ms = machine_state(m, [idx(:done)], trace: false)
+
+      {result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert {:done, %Effect.Done{configuration: core_configuration}} = List.last(effects)
+      refute Enum.any?(effects, &match?({:trace, %Effect.Trace.Done{}}, &1))
+
+      assert core_configuration == MapSet.new([idx(:done)])
+      assert result.configuration == MapSet.new()
+    end
+  end
+
   describe "main_event_loop/1 - quiescence without termination" do
     # AC: "Loop-local storage moved onto the struct ...", exercised here as
     # the negative case of Decision 6's `if machine_state.running` branch.

@@ -2,10 +2,13 @@ defmodule Statifier.Effect.Trace.Done do
   @moduledoc """
   Trace payload for `{:trace, %__MODULE__{}}` - emitted alongside
   `Statifier.Effect.Done` at top-level final entry / `exit_interpreter`
-  (`docs/observability.md` constraint 2's "done" row). `donedata` mirrors
-  the core `:done` effect's payload; `configuration` is the full
-  configuration (ADR-0005, ancestors included) as it stood at exit, which
-  the core `:done` effect does not carry.
+  (`docs/observability.md` constraint 2's "done" row). `donedata` and
+  `configuration` mirror the core `:done` effect's payload - both effects
+  are built from the same `configuration_at_exit` binding in
+  `Statifier.Interpreter.exit_interpreter/1`, so they can never disagree.
+  This effect exists for the observability row (ADR-0012,
+  `docs/observability.md:68`), not because it is the only carrier of the
+  configuration.
 
   Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
   are always stamped from the `Statifier.MachineState` at hand.

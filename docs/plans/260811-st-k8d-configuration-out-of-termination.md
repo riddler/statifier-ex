@@ -268,17 +268,17 @@ clears `changelog.d/README.md`'s bar.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (use `mix quality --profile loop` between
+- [x] Full `mix quality` passes (use `mix quality --profile loop` between
       edits; a loop run does not satisfy this phase).
-- [ ] `mix test test/statifier/interpreter/termination_test.exs` passes,
+- [x] `mix test test/statifier/interpreter/termination_test.exs` passes,
       including the new configuration test in both trace-on and trace-off form.
-- [ ] `mix test.regression` still green (no conformance movement expected in
+- [x] `mix test.regression` still green (no conformance movement expected in
       this phase; this proves it).
-- [ ] `grep -n "configuration" lib/statifier/effect/done.ex` shows the field in
+- [x] `grep -n "configuration" lib/statifier/effect/done.ex` shows the field in
       the struct, `@enforce_keys`, and `@type t()`.
-- [ ] `grep -rn "does not carry" lib/statifier/effect/` returns nothing - the
+- [x] `grep -rn "does not carry" lib/statifier/effect/` returns nothing - the
       stale `Trace.Done` sentence is gone.
-- [ ] `changelog.d/st-k8d.md` exists.
+- [x] `changelog.d/st-k8d.md` exists.
 
 #### Manual Verification:
 - [ ] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
@@ -623,3 +623,28 @@ here rather than left for the implementer:
 - Implementation sites: `lib/statifier/interpreter.ex:539-582`,
   `lib/statifier/effect/done.ex`, `lib/statifier/effect/trace/done.ex`,
   `test/support/case.ex:102-134`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] `exit_interpreter/1` matches the W3C Appendix D `exitInterpreter`
+      pseudocode line for line; the only deviations are the two already
+      documented (effects returned rather than performed, `cancelInvoke`
+      skipped), and this phase adds none.
+- [ ] `Effect.Done`'s and `Trace.Done`'s moduledocs no longer contradict each
+      other about which effect carries the configuration.
+- [ ] The sabotage note on the new test names a mutation a reasonable person
+      could make (per `docs/testing.md`), and the test was seen red under it.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and the
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual items before Phase 2. In `--loop` execution the
+automated list gates advancement via `/wurk:commit --auto` and the manual items
+are surfaced at the end.
+
+---

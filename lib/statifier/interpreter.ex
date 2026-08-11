@@ -497,8 +497,9 @@ defmodule Statifier.Interpreter do
   records:
 
   1. The configuration is captured *before* the walk (`configuration_at_exit`)
-     - `Trace.Done.configuration` documents itself as "the configuration as
-     it stood at exit", which the walk would otherwise leave empty.
+     - both `Trace.Done.configuration` and `Effect.Done.configuration`
+     document themselves as "the configuration as it stood at exit", which
+     the walk would otherwise leave empty.
   2. `states_to_exit` = `Machine.exit_order/2` over the configuration, and
      `Trace.ExitSet` is emitted over it before any state leaves - the same
      phase-boundary row `exit_states/2` emits, at the one other place this
@@ -529,7 +530,10 @@ defmodule Statifier.Interpreter do
      of all - `returnDoneEvent` becomes a returned effect rather than an I/O
      call (ADR-0003), and moving its emission to the end of the list is a
      mechanical reordering: effects are a returned list, not an I/O call,
-     so nothing the pseudocode's own terms observe changes order.
+     so nothing the pseudocode's own terms observe changes order. Both
+     `Trace.Done` and `Effect.Done` are populated from the same
+     `configuration_at_exit` and `donedata` locals, so the trace row and the
+     core effect always agree on the terminal position.
 
   `status: :done` is set only here, at the very end - the window
   `MachineState`'s moduledoc describes between `running: false` (from
@@ -572,6 +576,7 @@ defmodule Statifier.Interpreter do
       {:done,
        %Effect.Done{
          donedata: donedata,
+         configuration: configuration_at_exit,
          macrostep: machine_state.macrostep,
          microstep: machine_state.microstep
        }}
