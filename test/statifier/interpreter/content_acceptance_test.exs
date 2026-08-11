@@ -3,6 +3,7 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect
+  alias Statifier.Evaluator
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter.Content
@@ -188,7 +189,12 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
 
     owner = {:onentry, idx(m, "raiser"), 0}
     raise_node = Machine.content(m, 0)
-    context = %Context{machine_state: ms, owner: owner}
+
+    context = %Context{
+      machine_state: ms,
+      owner: owner,
+      datamodel_context: Evaluator.context(ms)
+    }
 
     assert {:ok, new_context, []} = ExecutableContent.execute(raise_node, context)
 
@@ -216,7 +222,12 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
 
     owner = {:onentry, idx(m, "logger"), 0}
     log_node = Machine.content(m, 1)
-    context = %Context{machine_state: ms, owner: owner}
+
+    context = %Context{
+      machine_state: ms,
+      owner: owner,
+      datamodel_context: Evaluator.context(ms)
+    }
 
     assert {:ok, ^context, [{:log, log_effect}]} = ExecutableContent.execute(log_node, context)
 
@@ -257,21 +268,31 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   end
 
   # AC: "Context type decision documented with the datamodel threading in
-  # view" - the executable half: constructing a `%Context{}` with only
-  # `machine_state` and `owner` and running both real node kinds through it
-  # pins the field set now, so a later change adds a field rather than
-  # silently replacing the struct.
+  # view" - the executable half: constructing a `%Context{}` with
+  # `machine_state`, `owner`, and `datamodel_context` (the reserved slot
+  # st-af3.1 Phase 3 fills) and running both real node kinds through it pins
+  # the field set now, so a later change adds a field rather than silently
+  # replacing the struct.
   #
-  # sabotage: a third field (`:extra`) is added to `Statifier.ExecutableContent.Context`'s
-  # `defstruct` -> the `Map.keys/1` equality below gains a third entry and
+  # sabotage: a fourth field (`:extra`) is added to `Statifier.ExecutableContent.Context`'s
+  # `defstruct` -> the `Map.keys/1` equality below gains a fourth entry and
   # reddens, even though construction and dispatch both still succeed.
-  test "AC7: Context has exactly machine_state and owner, and both node kinds run through it" do
+  test "AC7: Context has exactly machine_state, owner, and datamodel_context, and both node kinds run through it" do
     m = machine()
     ms = MachineState.new(m)
     owner = {:onentry, idx(m, "ordered"), 0}
-    context = %Context{machine_state: ms, owner: owner}
 
-    assert context |> Map.from_struct() |> Map.keys() |> Enum.sort() == [:machine_state, :owner]
+    context = %Context{
+      machine_state: ms,
+      owner: owner,
+      datamodel_context: Evaluator.context(ms)
+    }
+
+    assert context |> Map.from_struct() |> Map.keys() |> Enum.sort() == [
+             :datamodel_context,
+             :machine_state,
+             :owner
+           ]
 
     raise_node = Machine.content(m, 2)
     log_node = Machine.content(m, 3)

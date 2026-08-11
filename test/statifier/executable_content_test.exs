@@ -2,6 +2,7 @@ defmodule Statifier.ExecutableContentTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.Evaluator
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
   alias Statifier.Lowering
@@ -60,7 +61,11 @@ defmodule Statifier.ExecutableContentTest do
   end
 
   defp context(machine_state, owner) do
-    %Context{machine_state: machine_state, owner: owner}
+    %Context{
+      machine_state: machine_state,
+      owner: owner,
+      datamodel_context: Evaluator.context(machine_state)
+    }
   end
 
   @owner {:onentry, 0, 0}
