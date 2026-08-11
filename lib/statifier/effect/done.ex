@@ -1,11 +1,10 @@
 defmodule Statifier.Effect.Done do
   @moduledoc """
   Payload for `{:done, %__MODULE__{}}` - the terminal effect
-  `exit_interpreter` (Appendix D) will produce once, after top-level final
+  `exit_interpreter` (Appendix D) produces once, after top-level final
   entry, when `Statifier.MachineState.status` becomes `:done`. `donedata`
   is the top-level final's resolved `<donedata>` content, or `nil` when the
-  final carries none. `exit_interpreter` itself is not yet implemented, so
-  this effect is defined but unproduced today.
+  final carries none. See `Statifier.Interpreter.exit_interpreter/1`.
 
   There is no `c_index`: this effect is produced by `exit_interpreter`
   itself, not by one executable-content node. `macrostep`/`microstep` are

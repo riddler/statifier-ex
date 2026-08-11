@@ -27,8 +27,8 @@ defmodule Statifier.MachineState do
   ADR-0002's sense - the semantics of processing one external event are
   unchanged, only the storage of the *waiting* ones moves outward - so it
   is legal, but the divergence must carry its reason at the port site: the
-  `main_event_loop` port, not yet implemented, must repeat this comment
-  where it matters.
+  `main_event_loop` port (`Statifier.Interpreter.main_event_loop/1`)
+  repeats this comment at its own site, where it matters.
 
   ## `states_to_invoke` is deliberately absent
 
@@ -52,7 +52,7 @@ defmodule Statifier.MachineState do
   that is no longer `running`. `new/2` produces `running: true,
   status: :running`; a machine_state that has not been initialized yet is
   indistinguishable from a running one, which is harmless because `new/2`
-  is only ever called by `initialize/2`, not yet implemented, immediately
+  is only ever called by `Statifier.Interpreter.initialize/2`, immediately
   before it enters the initial states.
 
   ## The counter contract
@@ -60,14 +60,20 @@ defmodule Statifier.MachineState do
   - `new/2` sets `macrostep: 0, microstep: 0`. Zero means "no macrostep has
     begun"; it is never the number of a real step.
   - `begin_macrostep/1` is the **only** writer of `macrostep`: it increments
-    it by one and resets `microstep` to `0`. Its callers, neither yet
-    implemented, are `initialize/2`, once (so the initialization macrostep
-    is **macrostep 1**), and `handle_event/2`, once per accepted external
-    event (so the first external event is **macrostep 2**).
+    it by one and resets `microstep` to `0`. Its callers are
+    `Statifier.Interpreter.initialize/2`, once (so the initialization
+    macrostep is **macrostep 1**), and `Statifier.Interpreter.handle_event/2`,
+    once per accepted external event (so the first external event is
+    **macrostep 2**).
   - `begin_microstep/1` is the **only** writer of `microstep`: it increments
     it by one. It is called once per *pseudocode microstep* - one
     exit/execute/enter round - so the first microstep of a macrostep is
-    **microstep 1**.
+    **microstep 1**. Its callers are `Statifier.Interpreter.initialize/2`,
+    directly, once, immediately before its own `enter_states/2` call (the
+    initial entry is itself a microstep even though the pseudocode's
+    `enterStates([doc.initial.transition])` sits outside `microstep`), and
+    `run_selected/3`, the private tail shared by every selection round, on
+    the branch where the selected transition set is non-empty.
   - A selection round that dequeues an internal event enabling no
     transitions does **not** advance `microstep`: no exit or entry
     happened, so there was no microstep. The consumed event is still

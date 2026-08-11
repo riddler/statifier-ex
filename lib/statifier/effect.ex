@@ -27,21 +27,20 @@ defmodule Statifier.Effect do
   | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
   | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
   | `:invoke` | `Statifier.Effect.Invoke` | not yet produced (`<invoke>`) |
-  | `:done` | `Statifier.Effect.Done` | not yet produced (`exit_interpreter` is not yet implemented) |
+  | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
-  | `:trace` | `Statifier.Effect.Trace.EventDequeued` | not yet produced (event dequeued) |
-  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | not yet produced (`select_transitions` returns) |
+  | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
+  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected/3` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
   | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | `execute_block/3` (a content block ran) |
   | `:trace` | `Statifier.Effect.Trace.EntrySet` | `enter_states/2` (`compute_entry_set` result) |
-  | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | not yet produced (configuration reached quiescence) |
-  | `:trace` | `Statifier.Effect.Trace.Done` | not yet produced (top-level final entry / `exit_interpreter`) |
+  | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | `Statifier.Interpreter.macrostep/1` |
+  | `:trace` | `Statifier.Effect.Trace.Done` | `Statifier.Interpreter.exit_interpreter/1` |
 
-  Today the interpreter produces only `:log` and three of the seven trace
-  effects (`Trace.ExitSet`, `Trace.EntrySet`, `Trace.ContentExecuted`); the
-  remaining core effects (`:send`, `:send_delayed`, `:cancel`, `:invoke`,
-  `:done`) and the remaining trace effects are defined but unproduced,
-  because nothing constructs them yet.
+  The interpreter now produces `:log`, `:done`, and all seven trace
+  effects. `:send`, `:send_delayed`, `:cancel`, and `:invoke` remain
+  unproduced, because nothing in this core sends, delays, cancels, or
+  invokes yet.
 
   ## Trace effects carry indexes and counters, never structs
 
