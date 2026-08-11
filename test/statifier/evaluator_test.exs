@@ -188,4 +188,49 @@ defmodule Statifier.EvaluatorTest do
                Evaluator.evaluate(context, compiled_expr("1 / 0"))
     end
   end
+
+  describe "evaluate/2 - system variables before any event" do
+    # sabotage: `SystemVariables.initial/2` drops its `"_event" => nil` entry
+    # -> `_event` is absent from the datamodel, so `on_unbound: :error` makes
+    # this an `{:error, %UndefinedVariableError{variable: "_event"}}` instead
+    # of the undefined value, reddening both assertions.
+    test "_event is declared-but-undefined, not an unbound variable" do
+      context = Evaluator.context(new_machine_state())
+
+      assert Evaluator.evaluate(context, compiled_expr("_event")) == {:ok, :undefined}
+      assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
+    end
+
+    # sabotage: `SystemVariables.initial/2` drops `"_event" => nil` -> the
+    # comparison's left side errors before any comparison happens, so this
+    # returns an `{:error, _}` rather than `{:ok, false}`.
+    #
+    # This is the shape the W3C corpus tests boundness with (test319): a
+    # machine that has processed no event must decide `_event` is *not*
+    # bound and take the `<else>` branch. A comparison that errors takes
+    # neither branch.
+    test "an unbound-probe comparison against _event evaluates rather than erroring" do
+      context = Evaluator.context(new_machine_state())
+
+      assert Evaluator.evaluate(
+               context,
+               compiled_expr("_event !== _ioprocessors.__absent__")
+             ) == {:ok, false}
+    end
+
+    # sabotage: `MachineState.put_event/2` writes the raw `%Event{}` instead
+    # of `SystemVariables.event/1`'s map -> `_event.name` no longer resolves
+    # through map access and this reddens.
+    test "put_event/2 replaces the seeded undefined with the event's own fields" do
+      context =
+        new_machine_state()
+        |> MachineState.put_event(Statifier.Event.external("go", data: nil))
+        |> Evaluator.context()
+
+      assert Evaluator.evaluate(context, compiled_expr("_event.name")) == {:ok, "go"}
+      # Absent event data stays undefined rather than becoming `%{}` - the
+      # property `tools/corpus/scxml_w3/exclusions.exs:7-11` depends on.
+      assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
+    end
+  end
 end

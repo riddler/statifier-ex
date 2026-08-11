@@ -111,19 +111,32 @@ defmodule Statifier.MachineStateTest do
     # `author_datamodel` over `SystemVariables.initial/2`) -> the seeded
     # system variables no longer land in `datamodel`, reddening this
     # assertion.
-    test "datamodel defaults to exactly the three seeded system variables and no author data" do
+    test "datamodel defaults to exactly the four seeded system variables and no author data" do
       ms = new_machine_state()
 
       assert %{
                "_sessionid" => session_id,
                "_name" => nil,
+               "_event" => nil,
                "_ioprocessors" => %{
                  "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{"location" => session_id}
                }
              } = ms.datamodel
 
       assert is_binary(session_id)
-      assert map_size(ms.datamodel) == 3
+      assert map_size(ms.datamodel) == 4
+    end
+
+    # sabotage: `SystemVariables.initial/2` drops its `"_event" => nil` entry
+    # -> `_event` is absent rather than present-and-nil, so `Map.has_key?/2`
+    # reddens. The pair matters: an absent key and a key bound to `nil` are
+    # the same to `ms.datamodel["_event"]` and different to every evaluation
+    # built on top of it, which is what the evaluator test below covers.
+    test "_event is seeded as a present key bound to nil, not left absent" do
+      ms = new_machine_state()
+
+      assert Map.has_key?(ms.datamodel, "_event")
+      assert ms.datamodel["_event"] == nil
     end
 
     # sabotage: `MachineState.new/2` hardcodes `trace: false` and ignores
