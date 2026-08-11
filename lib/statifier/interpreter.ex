@@ -9,9 +9,7 @@ defmodule Statifier.Interpreter do
   ## The map of the loop
 
   Appendix D's `interpret`/`mainEventLoop`/`microstep`/`exitInterpreter`
-  collapse onto this module's functions. `initialize/2` and `handle_event/2`
-  are not yet landed - the last row names where they will land, so a reader
-  sees the whole shape even though that row is not real yet:
+  collapse onto this module's functions:
 
   | This module | Appendix D |
   |---|---|
@@ -20,7 +18,7 @@ defmodule Statifier.Interpreter do
   | `macrostep/1` | that same inner loop, folded to quiescence |
   | `main_event_loop/1` | one outer-loop iteration plus the trailing `exitInterpreter()` |
   | `exit_interpreter/1` | `exitInterpreter` |
-  | `initialize/2`, `handle_event/2` (not yet landed) | `interpret`'s two entry seams |
+  | `initialize/2`, `handle_event/2` | `interpret`'s two entry seams |
 
   ## Counters
 
@@ -29,11 +27,20 @@ defmodule Statifier.Interpreter do
   (`Statifier.MachineState`'s docs name it) has exactly one call site in
   this module: the non-empty branch of `run_selected/3`, the private tail
   shared by every selection round (eventless, one dequeued internal event,
-  and - once `handle_event/2` lands - the external event). A selection
-  round that finds nothing to run never reaches that call, because no exit
-  or entry happened - the same "no exit or entry happened" rule
+  and the external event `handle_event/2` selects on). A selection round
+  that finds nothing to run never reaches that call, because no exit or
+  entry happened - the same "no exit or entry happened" rule
   `MachineState`'s counter contract states for why an empty round does not
   advance `microstep`.
+
+  `macrostep`'s writer has exactly two call sites in this module:
+  `initialize/2` (the initialization macrostep is macrostep 1) and
+  `handle_event/2`, once per accepted external event (macrostep 2 onward).
+  `initialize/2` additionally advances the microstep counter once, directly,
+  before its own `enter_states/2` call - the pseudocode's
+  `enterStates([doc.initial.transition])` is not inside `microstep`, so
+  **the initial entry is microstep 1**, not 0: no effect and no cause
+  anywhere in this module is ever stamped `microstep: 0`.
 
   This is also why the trace effects a selection round emits
   (`Trace.EventDequeued`, `Trace.TransitionsSelected`) are always stamped
@@ -91,6 +98,96 @@ defmodule Statifier.Interpreter do
   alias Statifier.MachineState
 
   require Statifier.Effect, as: Effect
+
+  @doc """
+  `interpret`'s entry seam (Appendix D) - binds `opts` into a fresh
+  `%MachineState{}`, enters the top-level initial states, then runs the
+  initialization macrostep to quiescence. Documents that reach a stable
+  configuration or even terminate before any external event is ever sent
+  are corpus-normal (`enter_states/2` can already set `running: false` on a
+  top-level `<final>` entry, and `main_event_loop/1` runs
+  `exit_interpreter/1` when it does).
+
+  `opts` passes straight to `MachineState.new/2` - no option is interpreted
+  here, so a new one is a `MachineState` change, not an entry-point change.
+
+  Cannot fail: a `%Machine{}` is valid by construction
+  (`docs/architecture.md`), so this returns the same untagged
+  `{machine_state, [effect]}` pair every other loop function in this module
+  returns, rather than an `{:ok, _, _}` wrapper with one possible value.
+  """
+  @spec initialize(machine :: Machine.t(), opts :: keyword()) ::
+          {MachineState.t(), [Effect.t()]}
+  def initialize(%Machine{} = machine, opts \\ []) do
+    machine_state =
+      machine
+      |> MachineState.new(opts)
+      |> MachineState.begin_macrostep()
+      |> MachineState.begin_microstep()
+
+    # `interpret`'s skipped preamble: early datamodel binding and
+    # `executeGlobalScriptElement(doc)` are st-af3's, with no datamodel
+    # evaluation in this core yet.
+    {machine_state, enter_effects} =
+      ExitEntry.enter_states(machine_state, [initial_transition(machine)])
+
+    {machine_state, loop_effects} = main_event_loop(machine_state)
+
+    {machine_state, enter_effects ++ loop_effects}
+  end
+
+  # `expandScxmlSource(doc)` (Appendix D's own normalization step) is what
+  # gives a document an `<initial>` element where it wrote none; this is
+  # that step, done lazily for the root only. ADR-0002 mechanical
+  # deviation: a synthesized transition is not a document element, so it
+  # has no `t_index`.
+  @spec initial_transition(machine :: Machine.t()) :: Transition.t()
+  defp initial_transition(%Machine{} = machine) do
+    case Machine.at(machine, 0).initial_transition do
+      nil ->
+        %Transition{
+          t_index: nil,
+          source: 0,
+          targets: Machine.initial(machine),
+          events: [],
+          type: :external,
+          content: [],
+          location: machine.location
+        }
+
+      t_index ->
+        Machine.transition(machine, t_index)
+    end
+  end
+
+  @doc """
+  `mainEventLoop`'s external-event tail (Appendix D) - the external-event
+  counterpart to `internal_round/1`'s dequeue-and-select, driven by the
+  caller instead of a blocking queue read (ADR-0003, `main_event_loop/1`'s
+  own `@doc`). Rejects when the machine is not running - Appendix D's own
+  `running` flag, so the guard reads as the pseudocode's loop condition -
+  otherwise begins a new macrostep, selects on `event`, runs whatever it
+  enables, and folds to quiescence.
+  """
+  @spec handle_event(machine_state :: MachineState.t(), event :: Event.t()) ::
+          {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
+  def handle_event(%MachineState{running: false}, %Event{}), do: {:error, :not_running}
+
+  def handle_event(%MachineState{} = machine_state, %Event{} = event) do
+    machine_state = MachineState.begin_macrostep(machine_state)
+
+    dequeued =
+      Effect.trace(machine_state, Effect.Trace.EventDequeued, event: event, from: :external)
+
+    # `datamodel["_event"] = externalEvent` (Appendix D) is st-af3's; the
+    # invoke `finalize` and `autoforward` passes over the configuration are
+    # st-cmq's.
+    {machine_state, transitions} = Selection.select_transitions(machine_state, event)
+    {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
+    {machine_state, loop_effects} = main_event_loop(machine_state)
+
+    {:ok, machine_state, dequeued ++ selected_effects ++ loop_effects}
+  end
 
   @doc """
   `microstep(enabledTransitions)` (Appendix D) - exit the states
