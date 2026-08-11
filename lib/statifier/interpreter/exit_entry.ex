@@ -15,9 +15,16 @@ defmodule Statifier.Interpreter.ExitEntry do
   `exit_states/2` and `enter_states/2` are the two functions here that both
   mutate the position and emit effects, so both return
   `{MachineState.t(), [Effect.t()]}` - the shape `docs/observability.md`
-  fixes for `microstep/1`, which will be their only caller. Effect order
-  within the returned list is emission order: the trace effect first, then
-  each block's effects in the order the blocks ran.
+  fixes for `microstep/1`, their caller for the ordinary exit/entry path.
+  Effect order within the returned list is emission order: the trace effect
+  first, then each block's effects in the order the blocks ran.
+
+  `run_onexit_blocks/2` and `static_donedata/2` are public for a second
+  caller: `Statifier.Interpreter.exit_interpreter/1`'s termination walk
+  needs exactly the same per-state onexit body and the same `<donedata>`
+  folding rule that `depart/2` and `raise_parent_completion/3` already use
+  here, so this module owns both rather than the interpreter carrying a
+  second copy.
 
   ## Ordering
 
@@ -212,13 +219,22 @@ defmodule Statifier.Interpreter.ExitEntry do
     {machine_state, effects}
   end
 
-  # `state.onexit` in document order, each block through the `execute_block/3`
-  # seam with `{:onexit, state_index, ordinal}` - `ordinal` is the block's
-  # position in the state's own `onexit` list, exactly what
-  # `Machine.Content.owner()` documents it to be.
+  @doc """
+  `exitStates`'s per-state `for content in s.onexit: executeContent(content)`
+  (Appendix D) - `state_index`'s `onexit` blocks, in document order, each
+  through the `execute_block/3` seam with `{:onexit, state_index, ordinal}`
+  - `ordinal` is the block's position in the state's own `onexit` list,
+  exactly what `Machine.Content.owner()` documents it to be.
+
+  Two callers: `depart/2` (this module's own `exit_states/2` path) and
+  `Statifier.Interpreter.exit_interpreter/1` (the termination block, which
+  runs every active state's `onexit` blocks the same way, in exit order,
+  without the rest of `exitStates`'s history-recording and configuration
+  bookkeeping).
+  """
   @spec run_onexit_blocks(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           {MachineState.t(), [Effect.t()]}
-  defp run_onexit_blocks(%MachineState{machine: machine} = machine_state, state_index) do
+  def run_onexit_blocks(%MachineState{machine: machine} = machine_state, state_index) do
     machine
     |> Machine.at(state_index)
     |> Map.fetch!(:onexit)
@@ -805,14 +821,22 @@ defmodule Statifier.Interpreter.ExitEntry do
     end
   end
 
-  # `state.donedata`'s `expr` folds to the raised event's `data`.
-  # `{:static, term}` rides directly; `{:compiled, _, _}` becomes `nil` -
-  # not a rescue-to-default, the value simply has not been evaluated yet
-  # and the corpus cannot reach it (`FeatureDetector` flunks any document
-  # with a datamodel expression). A `nil` donedata, or a donedata with no
-  # `<content>` child at all (`expr: nil`), both become `nil` data.
+  @doc """
+  `returnDoneEvent`'s `s.donedata` argument (Appendix D) - `state_index`'s
+  `<donedata>`, folded to the value a raised or returned `done.*` event
+  carries as `data`. `{:static, term}` rides directly; `{:compiled, _, _}`
+  becomes `nil` - not a rescue-to-default, the value simply has not been
+  evaluated yet and the corpus cannot reach it (`FeatureDetector` flunks any
+  document with a datamodel expression). A `nil` donedata, or a donedata
+  with no `<content>` child at all (`expr: nil`), both become `nil` data.
+
+  Two callers: `raise_parent_completion/3` (a non-top-level final's
+  `done.state.*`) and `Statifier.Interpreter.exit_interpreter/1` (a
+  top-level final's terminal `{:done, _}` effect) - the same folding rule
+  either way.
+  """
   @spec static_donedata(machine :: Machine.t(), state_index :: non_neg_integer()) :: term()
-  defp static_donedata(machine, state_index) do
+  def static_donedata(machine, state_index) do
     case Machine.at(machine, state_index).donedata do
       nil -> nil
       %Donedata{expr: nil} -> nil
