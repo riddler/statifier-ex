@@ -94,5 +94,11 @@
     "test/scion_tests/scxml_prefix_event_name_matching/test0_test.exs",
     "test/scion_tests/scxml_prefix_event_name_matching/test1_test.exs"
   ],
-  "w3c_tests": []
+  "w3c_tests": [
+    "test/scxml_tests/mandatory/on_entry/test375_test.exs",
+    "test/scxml_tests/mandatory/on_exit/test377_test.exs",
+    "test/scxml_tests/mandatory/raise/test144_test.exs",
+    "test/scxml_tests/mandatory/scxml/test355_test.exs",
+    "test/scxml_tests/mandatory/selecting_transitions/test404_test.exs"
+  ]
 }
