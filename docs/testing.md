@@ -14,7 +14,7 @@ touch no library internals - everything goes through one `Statifier.Case` module
    127 native upstream SCION cases (9 excluded, see `tools/corpus/README.md`).
    Excluded by default.
 3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 159 emitted tests (156
-   mandatory + 3 optional) out of 198 upstream W3C cases. Excluded by default.
+   mandatory + 3 optional) out of 193 upstream W3C cases. Excluded by default.
    Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
    entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
 

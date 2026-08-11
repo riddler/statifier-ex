@@ -78,16 +78,18 @@ The pipeline runs end to end: fetch, transform, and both emitters take an
 empty `scratch/` tree to a populated `test/scion_tests/` and
 `test/scxml_tests/`, and the emitted output is committed.
 
-Fetch and transform pull 198 W3C cases and 316 SCION cases (127 native + the
+Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 189-case `w3c-ecma` duplicate of the W3C IRP suite, kept by
 `corpus:fetch:scion` and filtered at emit time - see
 `tools/corpus/scion/exclusions.exs`). The **W3C emitter** produces
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
-`.scxml`, comments stripped), and a single `test_scxml/4` call. 159 of the 198
-W3C cases emit (156 mandatory + 3 optional); the rest are filtered out (see
-below). `test/scxml_tests/` is populated.
+`.scxml`, comments stripped), and a single `test_scxml/4` call. Of the 198
+downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
+runtime rather than conformance cases, leaving 193 cases; 159 of those emit
+(156 mandatory + 3 optional), and the rest are filtered out (see below).
+`test/scxml_tests/` is populated.
 
 The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
