@@ -42,6 +42,11 @@ defmodule Statifier.Machine.Transition do
   `content` is `[c_index]`, the transition's own executable content in
   document order - `[]` until the compiler's executable-content pass
   populates it.
+
+  `t_index` is `non_neg_integer() | nil`: `nil` names exactly one producer,
+  the synthesized initial transition `Statifier.Interpreter.initialize/2`
+  builds when the root wrote no `<initial>` element - not a document
+  element, so it has no document-order index.
   """
 
   alias Statifier.Machine
@@ -61,7 +66,7 @@ defmodule Statifier.Machine.Transition do
   ]
 
   @type t :: %__MODULE__{
-          t_index: non_neg_integer(),
+          t_index: non_neg_integer() | nil,
           source: non_neg_integer(),
           targets: [non_neg_integer()],
           events: [[String.t()]],
