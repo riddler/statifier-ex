@@ -20,16 +20,39 @@ defmodule Statifier.Evaluator.SystemVariables do
   @scxml_event_processor "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
 
   @doc """
-  The three session-lifetime system variables (spec 5.10): `_sessionid`,
-  `_name`, and `_ioprocessors`. Called once, by `MachineState.new/2`, and
+  All four system variables (spec 5.10) as they stand before any event.
+  Called once, by `MachineState.new/2`.
+
+  `_sessionid`, `_name`, and `_ioprocessors` are session-lifetime and are
   never rewritten afterward - `_sessionid` stays stable for the session's
-  whole lifetime (ADR-0008).
+  whole lifetime (ADR-0008). `_event` is different: it is seeded here to
+  `nil` and thereafter written only by `MachineState.put_event/2`.
+
+  ## Why `_event` is seeded rather than left absent
+
+  Spec 5.10's system variables are *declared* for the session's whole
+  lifetime; `_event` merely has no value until an event is being processed.
+  A datamodel is a plain map, so the only way to say "declared, no value
+  yet" is to bind the key to `nil` and let
+  `Predicator.Context.new/2` normalize it to `:undefined`. Leaving the key
+  out instead says something different and wrong - "no such variable" -
+  which under `Statifier.Evaluator.context/1`'s `on_unbound: :error`
+  (ADR-0014 item 5) makes every pre-event `_event` reference an
+  `UndefinedVariableError` rather than the undefined value the spec wants.
+
+  The W3C corpus is the evidence for which reading is right: test319 asserts
+  that `_event` compares equal to undefined before any event has been
+  processed, and takes its `<else>` branch to pass. Under the ECMAScript
+  datamodel those tests were written against, an *undeclared* identifier
+  throws `ReferenceError` - so the test can only pass if `_event` is
+  declared and holds undefined, which is exactly what seeding reproduces.
   """
   @spec initial(machine :: Machine.t(), session_id :: String.t()) :: map()
   def initial(%Machine{} = machine, session_id) when is_binary(session_id) do
     %{
       "_sessionid" => session_id,
       "_name" => machine.name,
+      "_event" => nil,
       "_ioprocessors" => %{
         @scxml_event_processor => %{"location" => session_id}
       }

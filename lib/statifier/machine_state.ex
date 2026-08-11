@@ -99,11 +99,18 @@ defmodule Statifier.MachineState do
     `new/2`, from `SystemVariables.initial/2` merged **over** the
     `:datamodel` option's map - an author-supplied datamodel can never
     shadow a system variable.
-  - `_event` is written only by `put_event/2`, the same "exactly one
-    writer" discipline the counter contract above already states for
-    `macrostep`/`microstep`, and the same enforced-by-review status.
+  - `_event` is **seeded** to `nil` by `new/2` from the same
+    `SystemVariables.initial/2` map, and thereafter written only by
+    `put_event/2`. That is one writer per phase rather than two writers of
+    one value: the seed is what makes `_event` *declared* for the session's
+    whole lifetime with no value yet (spec 5.10, and see
+    `SystemVariables.initial/2`'s own docs for why an absent key would say
+    something different and wrong), and `put_event/2` is the only thing
+    that ever gives it one. The same enforced-by-review status the counter
+    contract above states for `macrostep`/`microstep` applies to that second
+    half.
 
-  Seeding the three session-lifetime variables in `new/2` rather than at
+  Seeding the system variables in `new/2` rather than at
   `interpret`'s own datamodel-initialization step is a mechanical deviation
   from Appendix D's ordering, not a semantic one (ADR-0002):
   `Statifier.Interpreter.initialize/2` calls `new/2` as its first statement,
@@ -183,10 +190,10 @@ defmodule Statifier.MachineState do
   constructor's.
 
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`), and
-  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008). The
-  three session-lifetime system variables (`SystemVariables.initial/2`) are
-  merged **over** the `:datamodel` option's map, so author-supplied data can
-  never shadow a system variable.
+  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008). All
+  four system variables (`SystemVariables.initial/2`) are merged **over**
+  the `:datamodel` option's map, so author-supplied data can never shadow a
+  system variable.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
