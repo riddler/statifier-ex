@@ -2,7 +2,9 @@ defmodule Statifier.Interpreter.ContentTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.ContextRecorder
   alias Statifier.Effect
+  alias Statifier.Evaluator
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Lowering
@@ -63,6 +65,19 @@ defmodule Statifier.Interpreter.ContentTest do
   defp a_onentry_blocks(machine), do: Machine.at(machine, a_index(machine)).onentry
   defp b_onentry_blocks(machine), do: Machine.at(machine, b_index(machine)).onentry
   defp machine_state(machine, opts \\ [trace: true]), do: MachineState.new(machine, opts)
+
+  # `MachineState.new/2` has no `:configuration` option (same gap
+  # `evaluator_test.exs` works around), so a configuration with `id` active
+  # is set directly on the built machine_state.
+  defp machine_state_with_active(machine, id) do
+    ms = machine_state(machine)
+    %{ms | configuration: MapSet.new([Machine.index(machine, id) |> elem(1)])}
+  end
+
+  defp compiled_expr(source) do
+    {:ok, compiled} = Predicator.compile_with_spans(source)
+    {:compiled, compiled, source}
+  end
 
   # Substitutes one compiled cell with `node` - the fixture-preserving
   # technique used throughout this file: a `Machine` built by the compiler
@@ -278,5 +293,83 @@ defmodule Statifier.Interpreter.ContentTest do
              effects
 
     assert [%{name: "one"}, %{name: "two"}] = MachineState.internal_events(result)
+  end
+
+  describe "datamodel_context" do
+    # sabotage: `execute_block/3` builds `datamodel_context` from
+    # `%{machine_state | configuration: MapSet.new()}` instead of
+    # `machine_state` itself -> `In("a")` would come back `false` even
+    # though `a` is active, reddening the first assertion.
+    test "the context reaching a node evaluates In(...) correctly for the configuration the block ran at" do
+      m = machine() |> machine_with_node(1, %ContextRecorder{c_index: 1, label: "ctx"})
+      ms = machine_state_with_active(m, "a")
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {_result, effects} = Content.execute_block(ms, @owner, block1.content)
+
+      assert [{:log, %Effect.Log{label: "ctx", value: datamodel_context}} | _rest] = effects
+
+      assert Evaluator.evaluate(datamodel_context, compiled_expr("In('a')")) == {:ok, true}
+      assert Evaluator.evaluate(datamodel_context, compiled_expr("In('b')")) == {:ok, false}
+    end
+
+    # sabotage: `run_nodes/2`'s fold is changed to rebuild `datamodel_context`
+    # from the fold's current `context.machine_state` before dispatching each
+    # node, instead of reusing the one `execute_block/3` built once -> the
+    # second node's recorded context would pick up the first node's datamodel
+    # mutation (`x` becomes bound), reddening the second assertion below,
+    # and the two recorded contexts would stop being the same value,
+    # reddening the equality.
+    test "every node in a two-node block receives the same context value, unaffected by an earlier node's datamodel write" do
+      m =
+        machine()
+        |> machine_with_node(5, %ContextRecorder{c_index: 5, label: "r1", put: %{"x" => 1}})
+        |> machine_with_node(6, %ContextRecorder{c_index: 6, label: "r2"})
+
+      ms = machine_state(m)
+      [block] = b_onentry_blocks(m)
+
+      {_result, effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert [
+               {:log, %Effect.Log{label: "r1", value: ctx1}},
+               {:log, %Effect.Log{label: "r2", value: ctx2}} | _rest
+             ] = effects
+
+      assert ctx1 == ctx2
+      assert {:error, _reason} = Evaluator.evaluate(ctx2, compiled_expr("x"))
+    end
+
+    # sabotage: `execute_block/3`'s `%Context{}` literal drops the
+    # `datamodel_context:` field's value and passes `nil` instead of
+    # `Evaluator.context(machine_state)` -> `@enforce_keys` would still let
+    # a caller-supplied `nil` through since it only checks presence, not
+    # value, so instead of a compile error this reddens by returning `nil`
+    # where a `%Predicator.Context{}` is expected.
+    test "a transition-owned block and an onentry-owned block both get a context" do
+      m = machine() |> machine_with_node(4, %ContextRecorder{c_index: 4, label: "t-ctx"})
+      ms = machine_state_with_active(m, "a")
+      transition = m.transitions |> Tuple.to_list() |> Enum.find(&(&1.events == [["go"]]))
+
+      {_result, transition_effects} =
+        Content.execute_block(ms, {:transition, transition.t_index}, transition.content)
+
+      assert [
+               {:log, %Effect.Log{label: "t-ctx", value: %Predicator.Context{} = t_context}}
+               | _rest
+             ] = transition_effects
+
+      assert Evaluator.evaluate(t_context, compiled_expr("In('a')")) == {:ok, true}
+
+      onentry_m = machine() |> machine_with_node(1, %ContextRecorder{c_index: 1, label: "e-ctx"})
+      onentry_ms = machine_state_with_active(onentry_m, "a")
+      [onentry_block, _block2] = a_onentry_blocks(onentry_m)
+
+      {_result, onentry_effects} =
+        Content.execute_block(onentry_ms, @owner, onentry_block.content)
+
+      assert [{:log, %Effect.Log{label: "e-ctx", value: %Predicator.Context{}}} | _rest] =
+               onentry_effects
+    end
   end
 end

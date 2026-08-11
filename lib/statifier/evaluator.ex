@@ -22,16 +22,17 @@ defmodule Statifier.Evaluator do
   - `Statifier.Validator.Context.t()` - unrelated: a validation-time
     accumulator, nothing to do with expression evaluation.
 
-  ## Never once per macrostep
+  ## Never scoped to a whole macrostep
 
-  `docs/datamodel.md:41` was written as "once per macrostep"; that reading
-  is provably wrong, because two of the context's own inputs change within
-  a macrostep - `_event` is rewritten on every internal-event round, and
-  `In(stateId)` reads a configuration that moves at every microstep. This
-  module is instead called once per evaluation site (once per executable-
-  content block today; once per selection round once `cond` is wired), which
-  keeps the actual commitment - never once per expression - while staying
-  fresh where the per-macrostep reading could not be.
+  `docs/datamodel.md` was originally written to say this context is built
+  once for the whole macrostep; that reading is provably wrong, because two
+  of the context's own inputs change within a macrostep - `_event` is
+  rewritten on every internal-event round, and `In(stateId)` reads a
+  configuration that moves at every microstep. This module is instead
+  called once per evaluation site (once per executable-content block today;
+  once per selection round once `cond` is wired), which keeps the actual
+  commitment - never once per expression - while staying fresh where a
+  snapshot spanning the whole macrostep could not be.
 
   ## The membrane
 
@@ -53,8 +54,8 @@ defmodule Statifier.Evaluator do
   `machine_state.machine` and `machine_state.configuration` as they stand at
   the moment of this call, so a context built before a configuration change
   keeps answering `In/1` against the old configuration - callers rebuild
-  per evaluation site rather than caching across one, which is the
-  "never once per macrostep" property above made concrete.
+  per evaluation site rather than caching across one, which is the "never
+  scoped to a whole macrostep" property above made concrete.
   """
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
   def context(%MachineState{} = machine_state) do

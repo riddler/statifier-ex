@@ -38,7 +38,12 @@ Every evaluation goes through one module with one context type:
   `%Predicator.Compiled{}` envelope is upstream's (predicator ADR-0009), not a
   statifier-side wrapper; we keep owning `source` because only statifier
   knows where the expression sat in the document (see ADR-0014 item 2).
-- The evaluation context is built once per macrostep, not per expression.
+- The evaluation context is built once per evaluation site (once per
+  executable-content block today), never once per expression, and never
+  scoped to a whole macrostep: `_event` is rewritten on every internal-event
+  round and `In(stateId)` reads a configuration that moves at every
+  microstep, so a snapshot spanning the whole macrostep would already be
+  stale before a later evaluation site in that same macrostep read it.
 - Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
   errors to `error.execution` internal events per spec. Leaves never swallow errors.
 - Type coercion to/from event data has one normalization function with defined rules,
@@ -64,7 +69,9 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
 
 1. **Persistent bound context**: build a context once (data + host functions like
    `In/1`), evaluate many expressions against it, rebind cheaply when data changes.
-   v1 rebuilt the full context map per expression.
+   v1 rebuilt the full context map per expression. `Predicator.Context.bind/3`
+   is the cheap-rebind path that would let the once-per-block interval above
+   widen again, once a caller needs to.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is

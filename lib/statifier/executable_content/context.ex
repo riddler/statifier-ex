@@ -15,14 +15,17 @@ defmodule Statifier.ExecutableContent.Context do
 
   ## Where the datamodel context goes
 
-  `docs/datamodel.md:41` commits to building the predicator evaluation
-  context once per macrostep, not once per expression. That memoized context
-  is neither `machine_state` (it is derived from the datamodel, and rebuilt
-  only when the datamodel changes) nor node-local - it is exactly
-  macrostep-scoped state that every node evaluating an `expr` needs to read.
-  The datamodel evaluation work, once it exists, adds it as a new field on
-  this struct, which changes no protocol signature and no existing
-  implementation that does not read the new field.
+  `datamodel_context` carries the `Predicator.Context.t()` every node in a
+  block evaluates its `expr` against - `Predicator.Context` is upstream's
+  own envelope, not a statifier-side wrapper (the same call ADR-0014 item 2
+  made for the compiled struct). It is built once per **block** by
+  `Statifier.Interpreter.Content.execute_block/3`, not once for the whole
+  macrostep: `_event` is rewritten on every internal-event round and `In/1`
+  reads a configuration that moves at every microstep, so a snapshot
+  spanning the whole macrostep would already be stale by the time a later
+  block in that same macrostep read it. Once per block is the tightest
+  interval that stays correct while still holding the "never per
+  expression" commitment `docs/datamodel.md` makes.
   The alternative - a third `execute/3` argument - would change every
   implementation's arity the day it landed; a struct field is the versionable
   slot instead, so the arity never has to move again.
@@ -36,11 +39,12 @@ defmodule Statifier.ExecutableContent.Context do
   alias Statifier.Machine.Content
   alias Statifier.MachineState
 
-  @enforce_keys [:machine_state, :owner]
-  defstruct [:machine_state, :owner]
+  @enforce_keys [:machine_state, :owner, :datamodel_context]
+  defstruct [:machine_state, :owner, :datamodel_context]
 
   @type t :: %__MODULE__{
           machine_state: MachineState.t(),
-          owner: Content.owner()
+          owner: Content.owner(),
+          datamodel_context: Predicator.Context.t()
         }
 end

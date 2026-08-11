@@ -39,6 +39,18 @@ defmodule Statifier.Interpreter.Content do
   `machine_state` inside a hygienic quote, so passing this function's own
   `machine_state` local is never shadowed by the macro's expansion.
 
+  ## The datamodel context, built once per block
+
+  `execute_block/3` builds one `Statifier.Evaluator.context/1` value up
+  front and hands it to every node in the block through
+  `Statifier.ExecutableContent.Context`'s `datamodel_context` field - the
+  "never per expression" commitment `docs/datamodel.md` makes, kept at the
+  tightest interval that stays correct (see that struct's own moduledoc for
+  why per-block rather than per-macrostep). A node that mutates the
+  datamodel (`<assign>`, st-af3.4) will have to rebuild or rebind that
+  context before the next node in the same block reads it; this is the seam
+  where that has to happen.
+
   ## Errors-are-events, once
 
   A node's `Statifier.ExecutableContent.execute/2` returns `{:error, reason}`
@@ -61,6 +73,7 @@ defmodule Statifier.Interpreter.Content do
   """
 
   alias Statifier.Effect
+  alias Statifier.Evaluator
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
   alias Statifier.Machine
@@ -86,7 +99,11 @@ defmodule Statifier.Interpreter.Content do
   end
 
   def execute_block(machine_state, owner, c_indexes) do
-    context = %Context{machine_state: machine_state, owner: owner}
+    context = %Context{
+      machine_state: machine_state,
+      owner: owner,
+      datamodel_context: Evaluator.context(machine_state)
+    }
 
     {context, effects, executed, error} = run_nodes(context, c_indexes)
 
