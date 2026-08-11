@@ -449,16 +449,16 @@ the ones that only exercise the harness's own flunk path carry
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop profile between edits only).
-- [ ] `mix test test/statifier/case_test.exs` passes, including the new
+- [x] Full `mix quality` passes (loop profile between edits only).
+- [x] `mix test test/statifier/case_test.exs` passes, including the new
       terminal and nameless-leaf tests.
-- [ ] `mix test --include scxml_w3` shows no remaining `Expected active states
+- [x] `mix test --include scxml_w3` shows no remaining `Expected active states
       ["pass"], but got []` failures.
-- [ ] `mix test --include scion` still shows the 87 known-passing SCION tests
+- [x] `mix test --include scion` still shows the 87 known-passing SCION tests
       passing (no harness regression).
-- [ ] `mix test.regression` green with `test/passing_tests.json` unchanged in
+- [x] `mix test.regression` green with `test/passing_tests.json` unchanged in
       this phase.
-- [ ] `git diff --stat` for this phase touches `test/` only.
+- [x] `git diff --stat` for this phase touches `test/` only.
 
 #### Manual Verification:
 - [ ] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
@@ -646,5 +646,21 @@ full `mix quality` as the phase gate. In interactive execution, pause here for
 the human to confirm the manual items before Phase 2. In `--loop` execution the
 automated list gates advancement via `/wurk:commit --auto` and the manual items
 are surfaced at the end.
+
+---
+
+### Phase 2
+
+- [ ] Tracing is off in every corpus run - `grep -rn "trace" test/support/case.ex`
+      finds nothing that enables it, and the terminal assertion works anyway.
+- [ ] The rewritten moduledoc describes the coupling surface as it now is,
+      including why `MachineState` appears on the assertion side.
+- [ ] A spot-read of two newly passing W3C files confirms they pass for the
+      right reason (the chart really reached `pass`), not because the assertion
+      was weakened.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and the
+full `mix quality` as the phase gate. In interactive execution, pause for the
+manual items before Phase 3; in `--loop` execution they are deferred to the end.
 
 ---
