@@ -1,6 +1,7 @@
 defmodule StatifierTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Event
   alias Statifier.Machine
 
   # sabotage: in `Statifier.compile/1`, swap `Compiler.compile(document)` for
@@ -82,5 +83,113 @@ defmodule StatifierTest do
     assert {:error, errors} = Statifier.compile(xml)
     assert is_list(errors)
     assert [%Statifier.Compiler.Error{}] = errors
+  end
+
+  describe "initialize/2" do
+    @compound_doc """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <state id="a1">
+                <transition event="go" target="b"/>
+            </state>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+
+    defp compound_machine do
+      {:ok, machine} = Statifier.compile(@compound_doc)
+      machine
+    end
+
+    # sabotage: in `Statifier.initialize/2`, replace the
+    # `Interpreter.initialize(machine, opts)` body with
+    # `Interpreter.initialize(machine, [])` (drop `opts`) -> the trace-effects
+    # assertion below reddens because `trace: true` is never passed through
+    # and no trace effects come back
+    test "returns the initial leaf configuration as string ids, and an effect list gated by :trace" do
+      machine = compound_machine()
+
+      {machine_state, no_trace_effects} = Statifier.initialize(machine)
+      assert Statifier.active_leaf_states(machine_state) == MapSet.new(["a1"])
+      assert no_trace_effects == []
+
+      {_machine_state, trace_effects} = Statifier.initialize(machine, trace: true)
+      assert trace_effects != []
+    end
+  end
+
+  describe "send_event/2" do
+    # sabotage: in `Statifier.send_event/2`'s string clause, change
+    # `Event.external(name)` to `Event.external("nope")` (ignore the given
+    # name) -> the "reach the same configuration" assertion below reddens
+    # because the string-clause call no longer moves the configuration to
+    # "b"
+    test "a name string and an %Event{} reach the same configuration" do
+      machine = compound_machine()
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      assert {:ok, via_string, _effects} = Statifier.send_event(machine_state, "go")
+
+      assert {:ok, via_event, _effects} =
+               Statifier.send_event(machine_state, Event.external("go"))
+
+      assert Statifier.active_leaf_states(via_string) == MapSet.new(["b"])
+      assert Statifier.active_leaf_states(via_event) == MapSet.new(["b"])
+    end
+
+    # sabotage: in `Statifier.send_event/2`'s final clause, replace
+    # `Interpreter.handle_event(machine_state, event)` with `{:error,
+    # :not_running}` -> the `{:ok, _, _}` match below reddens because a live
+    # machine_state now errors on an event that should simply enable
+    # nothing
+    test "an event that enables nothing leaves the configuration unchanged and still returns {:ok, _, _}" do
+      machine = compound_machine()
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      assert {:ok, next, _effects} = Statifier.send_event(machine_state, "nope")
+      assert Statifier.active_leaf_states(next) == MapSet.new(["a1"])
+    end
+
+    @terminal_doc """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="done">
+        <final id="done"/>
+    </scxml>
+    """
+
+    # sabotage: in `Statifier.send_event/2`'s final clause, change
+    # `Interpreter.handle_event(machine_state, event)` to always return
+    # `{:ok, machine_state, []}` -> the `{:error, :not_running}` match below
+    # reddens because a terminated machine_state no longer errors
+    test "a document that terminates on entry yields {:error, :not_running} from a subsequent send_event/2" do
+      {:ok, machine} = Statifier.compile(@terminal_doc)
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      assert Statifier.send_event(machine_state, "go") == {:error, :not_running}
+    end
+  end
+
+  describe "active_leaf_states/1" do
+    # sabotage: in `Statifier.active_leaf_states/1`, drop the
+    # `Enum.reject(&is_nil/1)` call -> this test reddens with a
+    # `MapSet.new/1` crash (or a `nil` member) instead of the clean
+    # `MapSet.new(["named"])` result, because the nameless leaf's `nil` id
+    # is no longer filtered out
+    test "returns leaves only, as string ids, excluding a nameless leaf state" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+          <parallel id="p">
+              <state id="named"/>
+              <state/>
+          </parallel>
+      </scxml>
+      """
+
+      {:ok, machine} = Statifier.compile(xml)
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      assert Statifier.active_leaf_states(machine_state) == MapSet.new(["named"])
+      refute "p" in Statifier.active_leaf_states(machine_state)
+    end
   end
 end
