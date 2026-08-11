@@ -20,13 +20,18 @@ defmodule Statifier do
     none of them is inspected, logged, or executed here. A caller that wants
     to act on `:log`, `:done`, or a `:trace` effect does so itself.
 
-  Only `compile/1` lands in this phase; `initialize/2`, `send_event/2`, and
-  `active_leaf_states/1` complete the four-function surface in a later phase.
+  All four functions land in this module: `compile/1` runs the parse
+  pipeline; `initialize/2`, `send_event/2`, and `active_leaf_states/1` wrap
+  `Statifier.Interpreter`.
   """
 
   alias Statifier.Compiler
+  alias Statifier.Effect
+  alias Statifier.Event
+  alias Statifier.Interpreter
   alias Statifier.Lowering
   alias Statifier.Machine
+  alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Validator
 
@@ -64,5 +69,69 @@ defmodule Statifier do
       {:ok, root} -> {:ok, root}
       {:error, error} -> {:error, [error]}
     end
+  end
+
+  @doc """
+  Initializes `machine` into its starting `Statifier.MachineState`, running
+  the initialization macrostep to quiescence.
+
+  A straight pass-through to `Statifier.Interpreter.initialize/2`, mirroring
+  that function's own untagged `{machine_state, [effect]}` pair rather than
+  wrapping it in an `{:ok, _, _}` this facade would have to invent: a
+  `%Machine{}` is valid by construction, so initialization cannot fail.
+  `opts` is `Statifier.MachineState.new/2`'s own option set (`:trace`,
+  `:datamodel`), passed straight through and interpreted by neither this
+  function nor `Interpreter.initialize/2` itself.
+
+  The returned effects are data, never performed here (ADR-0003) - a caller
+  that wants the initialization log/trace effects has them; a caller that
+  does not is free to discard them.
+  """
+  @spec initialize(machine :: Machine.t(), opts :: keyword()) ::
+          {MachineState.t(), [Effect.t()]}
+  def initialize(%Machine{} = machine, opts \\ []),
+    do: Interpreter.initialize(machine, opts)
+
+  @doc """
+  Sends one event to `machine_state`, running a macrostep to quiescence and
+  returning the resulting position.
+
+  A straight pass-through to `Statifier.Interpreter.handle_event/2`:
+  `{:error, :not_running}` comes back unchanged when `machine_state` has
+  already terminated, rather than being reinterpreted into some other
+  shape. As with `initialize/2`, the returned effects are handed back as
+  data and never inspected, logged, or executed here (ADR-0003).
+
+  `event` may be a `Statifier.Event.t()` or a plain name string; the string
+  clause is a convenience over `Statifier.Event.external/2` and carries no
+  data of its own - a caller who needs event data builds the `%Event{}`
+  directly.
+  """
+  @spec send_event(machine_state :: MachineState.t(), event :: Event.t() | String.t()) ::
+          {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
+  def send_event(%MachineState{} = machine_state, name) when is_binary(name),
+    do: send_event(machine_state, Event.external(name))
+
+  def send_event(%MachineState{} = machine_state, %Event{} = event),
+    do: Interpreter.handle_event(machine_state, event)
+
+  @doc """
+  The active leaf states of `machine_state`, as a `MapSet` of string ids.
+
+  `Statifier.MachineState.active_leaf_states/1` returns interned integer
+  indexes; this is the boundary ADR-0005 reserves for translating them to
+  the ids a caller wrote in the document, and nothing beneath `Statifier`
+  ever returns a string id. `Statifier.Machine.id/2` returns `nil` for the
+  root and for every nameless state - a state with no id cannot be named by
+  any caller's expectation either, so it is dropped rather than raised or
+  given a synthetic name that no document actually wrote.
+  """
+  @spec active_leaf_states(machine_state :: MachineState.t()) :: MapSet.t(String.t())
+  def active_leaf_states(%MachineState{machine: machine} = machine_state) do
+    machine_state
+    |> MachineState.active_leaf_states()
+    |> Enum.map(&Machine.id(machine, &1))
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
   end
 end
