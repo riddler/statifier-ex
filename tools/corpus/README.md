@@ -53,6 +53,7 @@ tools/corpus/
   scxml_w3/manifest.exs     W3C manifest parser + TXML fetcher
   scxml_w3/conf_predicator.xsl  TXML -> SCXML for the predicator datamodel
   scxml_w3/exclusions.exs   tests with no predicator equivalent, with reasons
+  scxml_w3/sub_documents.exs  manifest <dep> ids: <invoke>-loaded fixtures, not standalone tests
   scxml_w3/cases.exs        W3C emitter
   scratch/                  gitignored; everything fetched from upstream
     saxon/
@@ -84,8 +85,8 @@ Fetch and transform pull 198 W3C cases and 316 SCION cases (127 native + the
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
-`.scxml`, comments stripped), and a single `test_scxml/4` call. 162 of the 198
-W3C cases emit (159 mandatory + 3 optional); the rest are filtered out (see
+`.scxml`, comments stripped), and a single `test_scxml/4` call. 159 of the 198
+W3C cases emit (156 mandatory + 3 optional); the rest are filtered out (see
 below). `test/scxml_tests/` is populated.
 
 The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
@@ -115,7 +116,7 @@ Remaining work, tracked in beads:
 
 1. **st-00p.10** - wire the regression ratchet into `mix quality`.
 
-Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
+Three filters apply before a W3C case is emitted, all in `scxml_w3/cases.exs`:
 
 - **datamodel**: only inputs `conf_predicator.xsl` transformed to
   `datamodel="predicator"` are emitted. The datamodel-specific optional suites
@@ -125,6 +126,12 @@ Two filters apply before a W3C case is emitted, both in `scxml_w3/cases.exs`:
 - **exclusions.exs**: tests with no predicator equivalent (script, list
   concatenation, string prefix, and the BasicHTTP Event I/O Processor tree),
   recorded with a reason atom per ADR-0004.
+- **sub_documents.exs**: manifest `<dep>` documents an `<invoke>` loads at
+  runtime rather than a `<start>` document run as its own conformance test.
+  This is a different category from `exclusions.exs`: an exclusion is a test
+  with no predicator equivalent, still a would-be standalone test if datamodel
+  support existed; a sub-document is never a standalone test at all, so it is
+  filtered by manifest role rather than recorded as an exclusion (st-rbp).
 
 One filter applies before a SCION case is emitted, in `scion/cases.exs`:
 

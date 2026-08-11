@@ -423,29 +423,29 @@ sub-document filter and the reason it is not an `exclusions.exs` entry. Add
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never the phase bar).
-- [ ] Full `mix quality` passes with no scoping, no `--quick`, no `--skip`.
-- [ ] `mix gate.verify` confirms the run was a full gate.
-- [ ] `git status --porcelain test/scxml_tests` after regeneration shows exactly
+- [x] `mix quality --profile loop` while iterating (never the phase bar).
+- [x] Full `mix quality` passes with no scoping, no `--quick`, no `--skip`.
+- [x] `mix gate.verify` confirms the run was a full gate.
+- [x] `git status --porcelain test/scxml_tests` after regeneration shows exactly
       the five expected deletions and nothing else.
-- [ ] `git status --porcelain test/scion_tests` is empty.
-- [ ] `find test/scxml_tests -name '*_test.exs' | wc -l` returns 159, matching
+- [x] `git status --porcelain test/scion_tests` is empty.
+- [x] `find test/scxml_tests -name '*_test.exs' | wc -l` returns 159, matching
       the number `docs/testing.md` now states.
-- [ ] `find test/scxml_tests -iname '*sub1_test.exs'` returns nothing. (Do not
+- [x] `find test/scxml_tests -iname '*sub1_test.exs'` returns nothing. (Do not
       use `grep -rl sub1 test/scxml_tests` as the check: it legitimately still
       matches six files afterwards - the five parents that name a child inside
       their inlined XML, `test216`, `test226`, `test239`, `test242`, `test276`,
       plus `test422`, whose unrelated SCXML happens to declare
       `<state id="sub1">`.)
-- [ ] `mix test --include scxml_w3` no longer reports the
+- [x] `mix test --include scxml_w3` no longer reports the
       `Expected active states ["pass"], but got ["final"]` failures for
       `test216sub1`, `test239sub1`, `test242sub1`.
-- [ ] `mix test.regression` passes - no registry entry pointed at a deleted
+- [x] `mix test.regression` passes - no registry entry pointed at a deleted
       file.
-- [ ] `mix test test/corpus/` passes, including `emitted_paths_test.exs`.
-- [ ] Re-running the emit command a second time produces no further diff
+- [x] `mix test test/corpus/` passes, including `emitted_paths_test.exs`.
+- [x] Re-running the emit command a second time produces no further diff
       (idempotent regeneration).
-- [ ] `mix gate.check` passes with no `docs/quality-gate-changes.md` entry,
+- [x] `mix gate.check` passes with no `docs/quality-gate-changes.md` entry,
       confirming this branch touches no guarded path.
 
 #### Manual Verification:
@@ -613,6 +613,32 @@ before considering the plan fully landed.
       inference this plan is making.
 - [ ] No regressions in related features: `tools/corpus/normalize.exs` and
       `check_exprs.exs` are untouched, and `mise run corpus:check` is unaffected.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause here for the
+human to confirm the manual items. In looped (`--loop`) execution, the Automated
+Verification list gates advancement via `/wurk:commit --auto` and the Manual
+items are deferred to the end.
+
+---
+
+### Phase 2
+
+- [ ] A full networked `mise run corpus` on a machine with network access
+      reproduces the same `test/scxml_tests/` tree, confirming the mirror-seeded
+      run was faithful and that `corpus:emit`'s SCION half still works. This is
+      the item the offline procedure above substitutes for locally and cannot
+      itself prove.
+- [ ] Judgment call: read the five deleted modules' SCXML in the git diff and
+      confirm each is an invoked fixture rather than a conformance assertion
+      that merely happens to end in a state named `final`.
+- [ ] Confirm the emitted count stated in `docs/testing.md` and
+      `tools/corpus/README.md` reads correctly to someone who did not write this
+      change, given the pre-existing 162-vs-164 drift being corrected in the
+      same commit.
+- [ ] No regressions in related features: `mise run corpus:check` still passes
+      over the transformed mandatory tree, including the sub-documents that
+      remain in `scratch/`.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; full
 `mix quality` is the phase gate. In interactive execution, pause here for the

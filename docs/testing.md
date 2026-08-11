@@ -13,8 +13,10 @@ touch no library internals - everything goes through one `Statifier.Case` module
 2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 118 emitted tests out of
    127 native upstream SCION cases (9 excluded, see `tools/corpus/README.md`).
    Excluded by default.
-3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 162 emitted tests (159
+3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 159 emitted tests (156
    mandatory + 3 optional) out of 198 upstream W3C cases. Excluded by default.
+   Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
+   entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
 
 `Statifier.Case.test_scxml/4` needs exactly four things from the library: parse,
 build/initialize, synchronous send-event, and the active leaf-state set. That is the
