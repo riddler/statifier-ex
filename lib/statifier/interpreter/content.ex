@@ -22,10 +22,15 @@ defmodule Statifier.Interpreter.Content do
   is the whole block; on an error it is a prefix ending at (and including)
   the failing node - the failing node did execute, it just returned
   `{:error, _}` rather than succeeding, so it is not absent from the trace,
-  only absent from the effect list. An empty block (`c_indexes: []`) returns
-  `{machine_state, []}` immediately, before the trace gate is even
-  considered: nothing ran, so there is nothing to report, and the untraced
-  hot path stays the cheapest possible shape.
+  only absent from the effect list. An empty block still goes through the
+  trace gate: with tracing on it emits one `Trace.ContentExecuted` carrying
+  the block's owner and `c_indexes: []`, because a trace consumer cannot
+  otherwise tell an `<onentry/>` that ran with no content apart from an
+  `<onentry>` that never ran at all - the effect stream would be identical
+  either way. With tracing off the empty-block clause still costs nothing:
+  it calls `Effect.trace/3` directly rather than building a `Context` and
+  running the fold, so it keeps the cheapest possible shape on the untraced
+  hot path.
 
   `Effect.trace/3` is called with the block's *final* `machine_state`: no
   node in a block calls `MachineState.begin_macrostep/1` or
@@ -44,11 +49,15 @@ defmodule Statifier.Interpreter.Content do
   `Statifier.MachineState.raise_platform/4` raises `"error.execution"` with
   cause origin `{:content, c_index, owner}` and `data: reason` -
   `raise_platform/4` rather than `raise_internal/4` because spec 5.10.1
-  classifies `error.*` as a platform event, even though the origin still
-  names the content node the platform is raising about. Nodes that already
-  ran keep the effects they already produced, in order; the failing node
-  contributes none of its own (it returned an error, not a partial
-  success).
+  classifies `error.*` as a platform event (the `type` VALUE), while spec
+  3.12.2 is what requires the error to go on the internal queue at all.
+  `raise_internal/4` and `raise_platform/4`
+  (`lib/statifier/machine_state.ex:240`, `:272`) enqueue identically and
+  differ only in the `type` stamp, so 3.12.2 is satisfied either way and
+  only 5.10.1 decides between them - the origin still names the content
+  node the platform is raising about. Nodes that already ran keep the
+  effects they already produced, in order; the failing node contributes
+  none of its own (it returned an error, not a partial success).
   """
 
   alias Statifier.Effect
@@ -71,7 +80,10 @@ defmodule Statifier.Interpreter.Content do
           owner :: Content.owner(),
           c_indexes :: [non_neg_integer()]
         ) :: {MachineState.t(), [Effect.t()]}
-  def execute_block(machine_state, _owner, []), do: {machine_state, []}
+  def execute_block(machine_state, owner, []) do
+    {machine_state,
+     Effect.trace(machine_state, Effect.Trace.ContentExecuted, owner: owner, c_indexes: [])}
+  end
 
   def execute_block(machine_state, owner, c_indexes) do
     context = %Context{machine_state: machine_state, owner: owner}
@@ -127,7 +139,9 @@ defmodule Statifier.Interpreter.Content do
 
   # The errors-are-events conversion: `raise_platform/4`, not
   # `raise_internal/4`, since spec 5.10.1 classifies `error.*` as a
-  # platform event regardless of what raised it.
+  # platform event regardless of what raised it; spec 3.12.2 is what
+  # requires the error on the internal queue at all, and both functions
+  # satisfy that identically - only 5.10.1 decides between them.
   @spec raise_execution_error(
           machine_state :: MachineState.t(),
           owner :: Content.owner(),
