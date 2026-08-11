@@ -76,11 +76,10 @@ Rules:
 - Trace effects are ordinary members of the effect list - same ordering
   guarantees, same delivery path. No side channel.
 - "Either selection function" is `select_eventless_transitions/1` and
-  `select_transitions/2` both. The one exception is the terminal eventless
-  probe: when it comes up empty and the internal queue is also empty, the
-  round returns quiescence with no effect list to carry a trace, and
-  `macrostep stable` marks that same instant at the same counters. Every
-  other empty probe emits the row.
+  `select_transitions/2` both, with no exception - including the terminal
+  eventless probe that ends a macrostep, which is why the round reporting
+  quiescence carries an effect list of its own rather than being a bare
+  atom.
 
 ## Constraint 3: the Machine retains locations and identities
 
