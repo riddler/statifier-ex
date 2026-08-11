@@ -207,9 +207,11 @@ defmodule Statifier.Interpreter do
     dequeued =
       Effect.trace(machine_state, Effect.Trace.EventDequeued, event: event, from: :external)
 
-    # `datamodel["_event"] = externalEvent` (Appendix D) is st-af3's; the
-    # invoke `finalize` and `autoforward` passes over the configuration are
+    # `datamodel["_event"] = externalEvent` (Appendix D); the invoke
+    # `finalize` and `autoforward` passes over the configuration are
     # st-cmq's.
+    machine_state = MachineState.put_event(machine_state, event)
+
     {machine_state, transitions} = Selection.select_transitions(machine_state, event)
     {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
     {machine_state, loop_effects} = main_event_loop(machine_state)
@@ -380,13 +382,17 @@ defmodule Statifier.Interpreter do
         {:quiescent, machine_state, probe_effects}
 
       {:ok, event, machine_state} ->
+        # The eventless probe above dequeues nothing and runs before this
+        # point, so it has no event to write - the pseudocode assigns
+        # `_event` only when it has one, and `_event` keeps the previous
+        # round's value until this dequeued event's own assignment below.
         {machine_state, eventless_probe_effects} = run_selected(machine_state, [], nil)
 
         dequeued_trace =
           Effect.trace(machine_state, Effect.Trace.EventDequeued, event: event, from: :internal)
 
-        # datamodel["_event"] = internalEvent (Appendix D) - st-af3's seam;
-        # no datamodel write happens in this bead.
+        # datamodel["_event"] = internalEvent (Appendix D)
+        machine_state = MachineState.put_event(machine_state, event)
 
         {machine_state, transitions} = Selection.select_transitions(machine_state, event)
         {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
