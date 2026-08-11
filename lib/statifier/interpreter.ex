@@ -30,7 +30,7 @@ defmodule Statifier.Interpreter do
       {machine_state, _effects} = Interpreter.initialize(machine, trace: true)
       machine_state = MachineState.begin_macrostep(machine_state)
 
-      # one round at a time; `:quiescent` is the end of the macrostep
+      # one round at a time; a `{:quiescent, _, _}` return ends the macrostep
       {machine_state, effects} = Interpreter.microstep(machine_state)
       machine_state.configuration
       Interpreter.microstep(machine_state)
@@ -85,14 +85,14 @@ defmodule Statifier.Interpreter do
     `mainEventLoop`'s inner loop body, hoisted so a debugger can pause
     between rounds without support code (constraint 1). See `microstep/1`'s
     own `@doc`.
-  - **The terminal eventless probe emits no `Trace.TransitionsSelected`.**
-    When `Selection.select_eventless_transitions/1` finds nothing *and* the
-    internal queue is also empty, `microstep/1` returns bare `:quiescent`
-    before any trace is built - the round produces no effect list at all,
-    so there is nothing to append a trace to. Every *other* selection,
-    including an eventless probe that comes back empty while the queue
-    still has an event, does emit `Trace.TransitionsSelected` with
-    `t_indexes: []`. See `internal_round/1`.
+  - **Quiescence is a tagged return, not a bare atom.** `microstep/1`
+    returns `{:quiescent, machine_state, effects}` so the round that ends a
+    macrostep can carry out both the machine_state its selection returned
+    and that selection's own `Trace.TransitionsSelected`. Every selection
+    this module makes emits that trace, with no exception for the terminal
+    probe, so `docs/observability.md`'s "includes the empty set" is
+    literally true. See `microstep/1`'s own `@doc` for why the
+    machine_state half is load-bearing rather than tidiness.
   - **The machine_state `Selection` returns is threaded, never discarded.**
     Both `Selection.select_eventless_transitions/1` and
     `Selection.select_transitions/2` return `{machine_state, transitions}`,
@@ -243,19 +243,45 @@ defmodule Statifier.Interpreter do
   hoisted into a named, resumable round (Decision 1) - not a pseudocode
   function name itself. One call makes exactly one round of progress:
 
-  - Not `running` - returns `:quiescent`, nothing changes.
+  - Not `running` - returns `{:quiescent, machine_state, []}`, nothing
+    changes.
   - An eventless transition is enabled - the round runs it, exactly as
     `microstep/2` above.
   - No eventless transition is enabled - falls to `internal_round/1`,
     which dequeues one internal event (if any) and selects on it.
 
   Never runs two rounds and never inspects the call stack for a paused
-  position: the returned `machine_state` (or the caller's own unchanged
-  one, on `:quiescent`) *is* the position.
+  position: the returned `machine_state` *is* the position, on both the
+  progressing and the quiescent return.
+
+  **Quiescence carries a machine_state and an effect list of its own**
+  (Decision 2, revised). The round that ends a macrostep still ran a
+  selection - `Selection.select_eventless_transitions/1` - and that call
+  returns a machine_state. A bare `:quiescent` atom has nowhere to put it,
+  so the fold would fall back to the machine_state it passed *in* and drop
+  whatever the final selection wrote, on the one round every macrostep ends
+  with.
+
+  Be precise about which writes that loses, because the obvious candidate
+  is not one of them. When st-af3's `condition_match/2` enqueues
+  `error.execution` on a failed `cond`, the enqueue is self-rescuing: it
+  leaves the internal queue non-empty, so `internal_round/1` takes its
+  dequeue branch instead of the terminal one and the write survives even
+  under the old shape. What the old shape lost was any selection-side write
+  that does *not* touch the internal queue - a datamodel write, a memo, a
+  diagnostic - since only a queue write changes which branch runs. Carrying
+  the machine_state out closes that gap without having to predict which
+  kind of write st-af3 lands on.
+
+  The effect slot is the other half: it is what the terminal eventless
+  probe's own `Trace.TransitionsSelected` rides out on, which is why
+  `docs/observability.md`'s "includes the empty set" holds with no
+  exception.
   """
   @spec microstep(machine_state :: MachineState.t()) ::
-          {MachineState.t(), [Effect.t()]} | :quiescent
-  def microstep(%MachineState{running: false}), do: :quiescent
+          {MachineState.t(), [Effect.t()]} | {:quiescent, MachineState.t(), [Effect.t()]}
+  def microstep(%MachineState{running: false} = machine_state),
+    do: {:quiescent, machine_state, []}
 
   def microstep(%MachineState{} = machine_state) do
     {machine_state, eventless_transitions} = Selection.select_eventless_transitions(machine_state)
@@ -273,9 +299,14 @@ defmodule Statifier.Interpreter do
   loop, hoisted so a paused position is a value on `%MachineState{}` rather
   than a stack frame (constraint 1). The fold ends one of two ways:
 
-  - **Quiescence** - `microstep/1` returns `:quiescent`: no eventless
-    transition is enabled and the internal queue is empty. The returned
-    `machine_state` is still `running`, and this function appends
+  - **Quiescence** - `microstep/1` returns
+    `{:quiescent, machine_state, effects}`: no eventless transition is
+    enabled and the internal queue is empty. That round's own effects (the
+    terminal eventless probe's `Trace.TransitionsSelected`) are appended
+    like any other round's, and its `machine_state` is the one this fold
+    returns - never the one it passed in, which is what keeps a write made
+    by the final selection from being dropped. The returned `machine_state`
+    is still `running`, so this function then appends
     `Trace.MacrostepStable` with the configuration and counters as they
     stand.
   - **Termination** - a microstep entered a top-level `<final>`, setting
@@ -320,29 +351,33 @@ defmodule Statifier.Interpreter do
   # Appendix D function name; see `macrostep/1`'s own comment. ADR-0002.
   defp macrostep(machine_state, effects) do
     case microstep(machine_state) do
-      :quiescent -> {machine_state, effects}
+      {:quiescent, machine_state, round_effects} -> {machine_state, effects ++ round_effects}
       {machine_state, round_effects} -> macrostep(machine_state, effects ++ round_effects)
     end
   end
 
   # The eventless probe came back empty. `MachineState.dequeue_internal/1`
-  # is the second half of Decision 2's :quiescent test (no eventless
-  # transition enabled *and* the internal queue is empty) - both tests are
-  # made before any mutation, so an `:empty` queue here yields bare
-  # `:quiescent` with no trace built at all: the round produces no effect
-  # list, so there is nothing to append one to.
+  # is the second half of Decision 2's quiescence test (no eventless
+  # transition enabled *and* the internal queue is empty).
   #
-  # A dequeued event is a genuine round: it first records the eventless
-  # probe that came up empty (`run_selected/3` with `[]`, giving
-  # `Trace.TransitionsSelected` with `t_indexes: []` - Decision 2's
-  # non-terminal case), then the `EventDequeued` trace, then selects on the
-  # event and runs whatever it enables.
+  # Both branches record the empty eventless probe the same way
+  # (`run_selected/3` with `[]`, giving `Trace.TransitionsSelected` with
+  # `t_indexes: []`), and both carry out the machine_state selection
+  # returned. The terminal branch differs only in tagging its return
+  # `:quiescent` so the fold stops - it is a round that made no progress,
+  # not a round that did not happen, and the `machine_state` it carries is
+  # the one `Selection.select_eventless_transitions/1` handed back, never
+  # the one `microstep/1` passed in (see `microstep/1`'s own `@doc`).
+  #
+  # A dequeued event continues: the `EventDequeued` trace, then selection on
+  # the event, then whatever it enables.
   @spec internal_round(machine_state :: MachineState.t()) ::
-          {MachineState.t(), [Effect.t()]} | :quiescent
+          {MachineState.t(), [Effect.t()]} | {:quiescent, MachineState.t(), [Effect.t()]}
   defp internal_round(machine_state) do
     case MachineState.dequeue_internal(machine_state) do
       :empty ->
-        :quiescent
+        {machine_state, probe_effects} = run_selected(machine_state, [], nil)
+        {:quiescent, machine_state, probe_effects}
 
       {:ok, event, machine_state} ->
         {machine_state, eventless_probe_effects} = run_selected(machine_state, [], nil)

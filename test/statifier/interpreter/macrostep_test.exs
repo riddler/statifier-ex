@@ -74,13 +74,15 @@ defmodule Statifier.Interpreter.MacrostepTest do
 
   defp trace_effects(effects), do: Enum.filter(effects, &Effect.trace?/1)
 
-  # Steps `microstep/1` by hand until it returns `:quiescent`, accumulating
+  # Steps `microstep/1` by hand until it reports quiescence, accumulating
   # effects in call order - the step-by-step counterpart to `macrostep/1`,
-  # used only by the equivalence test below.
+  # used only by the equivalence test below. The quiescent round carries a
+  # machine_state and effects of its own, so this takes both from the
+  # return rather than falling back to the value it passed in.
   defp step_to_quiescence(machine_state, effects \\ []) do
     case Interpreter.microstep(machine_state) do
-      :quiescent ->
-        {machine_state, effects}
+      {:quiescent, machine_state, round_effects} ->
+        {machine_state, effects ++ round_effects}
 
       {machine_state, round_effects} ->
         step_to_quiescence(machine_state, effects ++ round_effects)
@@ -119,10 +121,17 @@ defmodule Statifier.Interpreter.MacrostepTest do
       assert result.microstep == ms.microstep + 2
 
       # Two microsteps ran: p1 -> p2, then p2 -> p3. Each contributes an
-      # ExitSet and an EntrySet trace, so four structural traces plus the
-      # two TransitionsSelected rounds plus the final MacrostepStable.
-      selected = for {:trace, %Effect.Trace.TransitionsSelected{}} <- effects, do: 1
-      assert length(selected) == 2
+      # ExitSet and an EntrySet trace, so four structural traces plus three
+      # TransitionsSelected rounds plus the final MacrostepStable. Three,
+      # not two: the terminal eventless probe that ends the fold is a
+      # selection like any other and emits its own row with `t_indexes: []`
+      # (Decision 2, revised), which is what makes
+      # `docs/observability.md`'s "includes the empty set" hold without an
+      # exception.
+      selected = for {:trace, %Effect.Trace.TransitionsSelected{} = p} <- effects, do: p
+      assert length(selected) == 3
+      assert [[], [], []] != Enum.map(selected, & &1.t_indexes)
+      assert List.last(selected).t_indexes == []
     end
 
     # sabotage: `internal_round/1`'s

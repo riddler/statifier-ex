@@ -164,25 +164,71 @@ defmodule Statifier.Interpreter.MicrostepTest do
              end)
     end
 
-    # sabotage: `microstep/1`'s `internal_round/1` clause for `:empty` is
-    # changed to `{machine_state, []}` instead of `:quiescent` -> the return
-    # shape no longer matches, reddening the pattern match below.
-    test "on an empty queue with nothing eventless returns :quiescent" do
+    # sabotage: `internal_round/1`'s `:empty` clause is changed to
+    # `{machine_state, probe_effects}` (dropping the `:quiescent` tag) ->
+    # the return shape no longer matches, reddening the pattern match below.
+    test "on an empty queue with nothing eventless reports quiescence, carrying its own position" do
       m = machine()
       ms = machine_state(m, [idx(:internal_target)])
 
-      assert :quiescent = Interpreter.microstep(ms)
+      assert {:quiescent, result, _effects} = Interpreter.microstep(ms)
+      assert result.configuration == ms.configuration
+      assert MachineState.internal_events(result) == []
+      assert {result.macrostep, result.microstep} == {ms.macrostep, ms.microstep}
     end
 
-    # sabotage: the `def microstep(%MachineState{running: false}), do:
-    # :quiescent` clause is deleted, falling through to the general clause
-    # -> a stopped machine_state is (wrongly) run through selection instead
-    # of short-circuiting, reddening the pattern match below.
-    test "on running: false returns :quiescent" do
+    # sabotage: `internal_round/1`'s `:empty` clause has its
+    # `run_selected(machine_state, [], nil)` call deleted, returning
+    # `{:quiescent, machine_state, []}` -> the terminal probe stops emitting
+    # `TransitionsSelected`, reddening the assertion below.
+    test "the terminal eventless probe still emits TransitionsSelected with t_indexes: []" do
+      m = machine()
+      ms = machine_state(m, [idx(:internal_target)], trace: true)
+
+      assert {:quiescent, _result, effects} = Interpreter.microstep(ms)
+
+      assert [%Effect.Trace.TransitionsSelected{t_indexes: [], event: nil}] =
+               for({:trace, %Effect.Trace.TransitionsSelected{} = p} <- effects, do: p)
+    end
+
+    # sabotage: the `def microstep(%MachineState{running: false} =
+    # machine_state), do: {:quiescent, machine_state, []}` clause is deleted,
+    # falling through to the general clause -> a stopped machine_state is
+    # (wrongly) run through selection instead of short-circuiting, reddening
+    # the pattern match below.
+    test "on running: false reports quiescence with no effects" do
       m = machine()
       ms = %{machine_state(m, [idx(:eventless_holder)]) | running: false}
 
-      assert :quiescent = Interpreter.microstep(ms)
+      assert {:quiescent, ^ms, []} = Interpreter.microstep(ms)
+    end
+
+    # Decision 2 (revised): quiescence carries the machine_state that
+    # `Selection.select_eventless_transitions/1` returned, not the one
+    # `microstep/1` was handed. Selection returns it unchanged today
+    # (selection_test.exs pins that), so no runtime assertion can currently
+    # tell the two apart - this pins the source shape instead, the same way
+    # "the machine_state Selection returns is threaded" below does.
+    #
+    # The write this protects is a non-queue one. An `error.execution`
+    # enqueue rescues itself: it leaves the internal queue non-empty, so
+    # `internal_round/1` takes its dequeue branch rather than the terminal
+    # one. A datamodel write or a memo has no such luck, and under the old
+    # bare-`:quiescent` shape the fold dropped it with nothing going red.
+    #
+    # sabotage: `macrostep/2`'s quiescent clause is changed to
+    # `{:quiescent, _ms, round_effects} -> {machine_state, effects ++
+    # round_effects}`, falling back to the parameter instead of the returned
+    # position -> the source no longer contains the rebind, reddening the
+    # `=~` assertion.
+    test "the quiescent round's machine_state is carried out, not discarded" do
+      source = File.read!(Path.join(File.cwd!(), "lib/statifier/interpreter.ex"))
+
+      assert source =~ "{machine_state, probe_effects} = run_selected(machine_state, [], nil)\n"
+      assert source =~ "{:quiescent, machine_state, probe_effects}"
+
+      assert source =~
+               "{:quiescent, machine_state, round_effects} -> {machine_state, effects ++ round_effects}"
     end
 
     # sabotage: `run_selected/3`'s `Enum.map(transitions, & &1.t_index)` is

@@ -167,8 +167,9 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
 
   defp step_to_quiescence_round_tripped(machine_state, effects \\ []) do
     case Interpreter.microstep(machine_state) do
-      :quiescent ->
-        {machine_state, effects}
+      {:quiescent, next_state, round_effects} ->
+        round_tripped = :erlang.binary_to_term(:erlang.term_to_binary(next_state))
+        {round_tripped, effects ++ round_effects}
 
       {next_state, round_effects} ->
         round_tripped = :erlang.binary_to_term(:erlang.term_to_binary(next_state))
