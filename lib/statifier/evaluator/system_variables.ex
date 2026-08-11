@@ -1,0 +1,57 @@
+defmodule Statifier.Evaluator.SystemVariables do
+  @moduledoc """
+  Spec 5.10's system variables, as the plain maps
+  `Statifier.MachineState.datamodel` carries them in. Two functions, so that
+  neither `Statifier.MachineState` nor `Statifier.Interpreter` grows spec
+  5.10 knowledge of its own - `MachineState.new/2` calls `initial/2` once,
+  and `MachineState.put_event/2` calls `event/1` on every write.
+
+  `nil` for an absent field is deliberate everywhere it appears here, not an
+  oversight: `Predicator.Context.new/2` normalizes `nil` to `:undefined`
+  recursively (`deps/predicator/lib/predicator/context.ex:190-237`), so a
+  `nil` written here becomes the spec-correct "not bound" answer once a
+  `Statifier.Evaluator.context/1` wraps it, rather than the `%{}` a naive
+  default would produce.
+  """
+
+  alias Statifier.Event
+  alias Statifier.Machine
+
+  @scxml_event_processor "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+
+  @doc """
+  The three session-lifetime system variables (spec 5.10): `_sessionid`,
+  `_name`, and `_ioprocessors`. Called once, by `MachineState.new/2`, and
+  never rewritten afterward - `_sessionid` stays stable for the session's
+  whole lifetime (ADR-0008).
+  """
+  @spec initial(machine :: Machine.t(), session_id :: String.t()) :: map()
+  def initial(%Machine{} = machine, session_id) when is_binary(session_id) do
+    %{
+      "_sessionid" => session_id,
+      "_name" => machine.name,
+      "_ioprocessors" => %{
+        @scxml_event_processor => %{"location" => session_id}
+      }
+    }
+  end
+
+  @doc """
+  `_event`'s value for `event` - spec 5.10.1's fields. `sendid`, `origin`,
+  `origintype`, and `invokeid` are `nil` because `Statifier.Event` does not
+  carry them yet (its own moduledoc); they become real once `<send>` and
+  `<invoke>` land.
+  """
+  @spec event(event :: Event.t()) :: map()
+  def event(%Event{} = event) do
+    %{
+      "name" => event.name,
+      "type" => Atom.to_string(event.type),
+      "sendid" => nil,
+      "origin" => nil,
+      "origintype" => nil,
+      "invokeid" => nil,
+      "data" => event.data
+    }
+  end
+end

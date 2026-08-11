@@ -87,6 +87,29 @@ defmodule Statifier.MachineState do
   contract above is enforced by review (there being exactly two writer
   functions), not mechanically.
 
+  ## System variables live in the datamodel
+
+  Spec 5.10 places `_sessionid`, `_name`, `_ioprocessors`, and `_event`
+  alongside the author's own data in the datamodel - `datamodel` therefore
+  is not "the author's data only". `Statifier.Evaluator.SystemVariables`
+  owns the shape of each; this module owns *when* each is written, and each
+  has exactly one writer:
+
+  - `_sessionid`, `_name`, and `_ioprocessors` are written exactly once, by
+    `new/2`, from `SystemVariables.initial/2` merged **over** the
+    `:datamodel` option's map - an author-supplied datamodel can never
+    shadow a system variable.
+  - `_event` is written only by `put_event/2`, the same "exactly one
+    writer" discipline the counter contract above already states for
+    `macrostep`/`microstep`, and the same enforced-by-review status.
+
+  Seeding the three session-lifetime variables in `new/2` rather than at
+  `interpret`'s own datamodel-initialization step is a mechanical deviation
+  from Appendix D's ordering, not a semantic one (ADR-0002):
+  `Statifier.Interpreter.initialize/2` calls `new/2` as its first statement,
+  so the variables are bound before anything can read them, and `new/2` is
+  the only writer of the struct's initial fields regardless.
+
   ## `==` is not a position-equality test
 
   `internal_queue` is an `:queue.queue/0`. Two `:queue` values holding the
@@ -101,6 +124,7 @@ defmodule Statifier.MachineState do
   view of the queue; no code outside this module touches `:queue` directly.
   """
 
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Machine
@@ -158,16 +182,23 @@ defmodule Statifier.MachineState do
   configuration is the not-yet-implemented `initialize/2`'s job, not this
   constructor's.
 
-  Options: `:trace` (default `false`) and `:datamodel` (default `%{}`).
+  Options: `:trace` (default `false`), `:datamodel` (default `%{}`), and
+  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008). The
+  three session-lifetime system variables (`SystemVariables.initial/2`) are
+  merged **over** the `:datamodel` option's map, so author-supplied data can
+  never shadow a system variable.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
+    session_id = Keyword.get_lazy(opts, :session_id, fn -> UXID.generate!(prefix: "sess") end)
+    author_datamodel = Keyword.get(opts, :datamodel, %{})
+
     %__MODULE__{
       machine: machine,
       configuration: MapSet.new(),
       internal_queue: :queue.new(),
       history_values: %{},
-      datamodel: Keyword.get(opts, :datamodel, %{}),
+      datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,
       macrostep: 0,
@@ -225,6 +256,18 @@ defmodule Statifier.MachineState do
   """
   @spec internal_events(machine_state :: t()) :: [Event.t()]
   def internal_events(%__MODULE__{internal_queue: queue}), do: :queue.to_list(queue)
+
+  @doc """
+  `datamodel["_event"] = event` (Appendix D) - the one and only writer of
+  the `_event` system variable (spec 5.10.1). Both of `mainEventLoop`'s
+  assignments, the external one (`Statifier.Interpreter.handle_event/2`)
+  and the internal one (`Statifier.Interpreter.internal_round/1`), go
+  through here.
+  """
+  @spec put_event(machine_state :: t(), event :: Event.t()) :: t()
+  def put_event(%__MODULE__{datamodel: datamodel} = machine_state, %Event{} = event) do
+    %{machine_state | datamodel: Map.put(datamodel, "_event", SystemVariables.event(event))}
+  end
 
   @doc """
   Raises an internal event: builds its `Cause` from `origin` and the

@@ -101,10 +101,29 @@ defmodule Statifier.MachineStateTest do
     # sabotage: `MachineState.new/2` defaults `history_values` to a map
     # seeded with an unrelated key instead of `%{}` -> this assertion
     # reddens.
-    test "history_values and datamodel default to empty maps" do
+    test "history_values defaults to an empty map" do
       ms = new_machine_state()
       assert ms.history_values == %{}
-      assert ms.datamodel == %{}
+    end
+
+    # sabotage: `MachineState.new/2`'s `Map.merge/2` call has its arguments
+    # swapped (`SystemVariables.initial/2` over `author_datamodel` becomes
+    # `author_datamodel` over `SystemVariables.initial/2`) -> the seeded
+    # system variables no longer land in `datamodel`, reddening this
+    # assertion.
+    test "datamodel defaults to exactly the three seeded system variables and no author data" do
+      ms = new_machine_state()
+
+      assert %{
+               "_sessionid" => session_id,
+               "_name" => nil,
+               "_ioprocessors" => %{
+                 "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{"location" => session_id}
+               }
+             } = ms.datamodel
+
+      assert is_binary(session_id)
+      assert map_size(ms.datamodel) == 3
     end
 
     # sabotage: `MachineState.new/2` hardcodes `trace: false` and ignores
@@ -116,9 +135,113 @@ defmodule Statifier.MachineStateTest do
 
     # sabotage: `MachineState.new/2` ignores the `:datamodel` option and
     # always stores `%{}` -> this assertion reddens.
-    test "the :datamodel option is honored" do
+    test "the :datamodel option is honored, merged under the seeded system variables" do
       ms = new_machine_state(datamodel: %{"x" => 1})
-      assert ms.datamodel == %{"x" => 1}
+      assert ms.datamodel["x"] == 1
+      assert is_binary(ms.datamodel["_sessionid"])
+    end
+
+    # sabotage: `MachineState.new/2` merges `SystemVariables.initial/2`
+    # *under* the author's datamodel instead of over it (arguments to
+    # `Map.merge/2` swapped) -> an author-supplied `_sessionid` survives
+    # instead of being overwritten, reddening this assertion.
+    test "a system variable in the :datamodel option can never shadow the real one" do
+      ms = new_machine_state(datamodel: %{"_sessionid" => "author-supplied"})
+      refute ms.datamodel["_sessionid"] == "author-supplied"
+    end
+
+    # sabotage: `MachineState.new/2`'s `Keyword.get_lazy(opts, :session_id,
+    # ...)` is changed to `Keyword.get(opts, :session_id, "ignored")` ->
+    # the caller-supplied `:session_id` value is dropped in favor of the
+    # generated default, reddening the equality assertion.
+    test "a supplied :session_id option wins over the generated default" do
+      ms = new_machine_state(session_id: "sess_fixed")
+      assert ms.datamodel["_sessionid"] == "sess_fixed"
+
+      assert ms.datamodel["_ioprocessors"]["http://www.w3.org/TR/scxml/#SCXMLEventProcessor"][
+               "location"
+             ] == "sess_fixed"
+    end
+
+    # sabotage: `MachineState.new/2`'s generated `:session_id` default is
+    # changed from `UXID.generate!(prefix: "sess")` to
+    # `UXID.generate!(prefix: "usr")` -> the prefix assertion reddens.
+    test "the generated default :session_id carries the sess_ prefix (ADR-0008)" do
+      ms = new_machine_state()
+      assert String.starts_with?(ms.datamodel["_sessionid"], "sess_")
+    end
+
+    # sabotage: `SystemVariables.initial/2` reads `machine.id` instead of
+    # `machine.name` -> `_name` no longer reflects the `<scxml name>`
+    # attribute, reddening this assertion.
+    test "_name is the <scxml name> attribute" do
+      {:ok, root} =
+        Parser.parse("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="my-machine" initial="a">
+            <state id="a"/>
+        </scxml>
+        """)
+
+      {:ok, document} = Lowering.lower(root)
+      {:ok, document} = Validator.validate(document, "")
+      {:ok, named_machine} = Compiler.compile(document)
+
+      ms = MachineState.new(named_machine)
+      assert ms.datamodel["_name"] == "my-machine"
+    end
+  end
+
+  describe "put_event/2" do
+    # sabotage: `put_event/2`'s `Map.put/3` is changed to write under the
+    # key `"event"` instead of `"_event"` -> the lookup below finds
+    # nothing, reddening the pattern match.
+    test "writes datamodel[\"_event\"] to the event's system-variable shape" do
+      ms = new_machine_state()
+      event = Event.external("go", data: %{"x" => 1})
+
+      result = MachineState.put_event(ms, event)
+
+      assert %{
+               "name" => "go",
+               "type" => "external",
+               "sendid" => nil,
+               "origin" => nil,
+               "origintype" => nil,
+               "invokeid" => nil,
+               "data" => %{"x" => 1}
+             } = result.datamodel["_event"]
+    end
+
+    # sabotage: `put_event/2` is changed to `Map.merge/2` the event's shape
+    # into `datamodel` at the top level instead of nesting it under
+    # `"_event"` -> `_sessionid` (a sibling key) is clobbered, reddening the
+    # equality assertion.
+    test "does not disturb the session-lifetime system variables already seeded" do
+      ms = new_machine_state()
+      session_id = ms.datamodel["_sessionid"]
+
+      result = MachineState.put_event(ms, Event.external("go"))
+
+      assert result.datamodel["_sessionid"] == session_id
+    end
+
+    # sabotage: `put_event/2`'s `%{machine_state | datamodel: ...}` update
+    # is changed to build a fresh `%{"_event" => ...}` map instead of
+    # `Map.put/3`-ing into the existing `datamodel` -> `_sessionid` stays
+    # stable across the *first* `put_event/2` call but a second call would
+    # have nothing to preserve it against; more directly, this assertion
+    # reddens because `_sessionid` disappears from the result entirely.
+    test "_sessionid stays stable across several put_event/2 calls" do
+      ms = new_machine_state()
+      session_id = ms.datamodel["_sessionid"]
+
+      result =
+        ms
+        |> MachineState.put_event(Event.external("go"))
+        |> MachineState.put_event(Event.internal("done", Cause.new({:state, idx(:a)}, 1, 1)))
+
+      assert result.datamodel["_sessionid"] == session_id
+      assert result.datamodel["_event"]["name"] == "done"
     end
   end
 
