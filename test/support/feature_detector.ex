@@ -11,8 +11,14 @@ defmodule Statifier.FeatureDetector do
   when one lands, a `detect_features/1` clause for it is added alongside the
   string clause.
 
-  The registry reflects what v2 actually supports today, which is nothing. Each
-  phase flips its features to `:supported` as they land.
+  The registry reflects what v2 actually supports today: the Phase 1 engine
+  surface landed through st-wju.7 - basic/compound/parallel/final/history
+  states, the initial attribute and `<initial>` element, event/eventless/
+  targetless/internal/wildcard transitions, `<onentry>`/`<onexit>`,
+  `<raise>`, `<log>`, and static `<donedata>`. Everything datamodel-flavored
+  (`cond`, `<datamodel>`, `<assign>`, `<script>`, `<send>`, `<invoke>`, and so
+  on) stays `:unsupported`. Each later phase flips more features to
+  `:supported` as they land.
   """
 
   @doc """
@@ -42,30 +48,47 @@ defmodule Statifier.FeatureDetector do
   @spec feature_registry() :: %{atom() => :supported | :unsupported | :partial}
   def feature_registry do
     %{
-      basic_states: :unsupported,
-      compound_states: :unsupported,
-      parallel_states: :unsupported,
-      final_states: :unsupported,
-      initial_elements: :unsupported,
-      history_states: :unsupported,
-      event_transitions: :unsupported,
-      eventless_transitions: :unsupported,
+      # st-wju.1 / st-wju.6
+      basic_states: :supported,
+      # st-wju.4 (also covers the `initial` attribute - the detector has no
+      # separate atom for it)
+      compound_states: :supported,
+      # st-wju.4
+      parallel_states: :supported,
+      # st-wju.4 / st-wju.6
+      final_states: :supported,
+      # st-wju.4
+      initial_elements: :supported,
+      # st-wju.4 (shallow and deep)
+      history_states: :supported,
+      # st-wju.3
+      event_transitions: :supported,
+      # st-wju.6
+      eventless_transitions: :supported,
       conditional_transitions: :unsupported,
-      targetless_transitions: :unsupported,
-      internal_transitions: :unsupported,
-      wildcard_events: :unsupported,
+      # st-wju.3
+      targetless_transitions: :supported,
+      # st-wju.3
+      internal_transitions: :supported,
+      # st-wju.3 (Statifier.Interpreter.NameMatch implements spec 3.13's
+      # trailing wildcard)
+      wildcard_events: :supported,
       event_expressions: :unsupported,
       target_expressions: :unsupported,
       datamodel: :unsupported,
       data_elements: :unsupported,
       assign_elements: :unsupported,
       script_elements: :unsupported,
-      onentry_actions: :unsupported,
-      onexit_actions: :unsupported,
+      # st-wju.5
+      onentry_actions: :supported,
+      # st-wju.5
+      onexit_actions: :supported,
       if_elements: :unsupported,
       foreach_elements: :unsupported,
-      log_elements: :unsupported,
-      raise_elements: :unsupported,
+      # st-wju.5
+      log_elements: :supported,
+      # st-wju.5
+      raise_elements: :supported,
       send_elements: :unsupported,
       send_content_elements: :unsupported,
       send_param_elements: :unsupported,
@@ -74,7 +97,8 @@ defmodule Statifier.FeatureDetector do
       cancel_elements: :unsupported,
       invoke_elements: :unsupported,
       finalize_elements: :unsupported,
-      donedata_elements: :unsupported
+      # st-wju.6 (static donedata only)
+      donedata_elements: :supported
     }
   end
 
