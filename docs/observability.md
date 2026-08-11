@@ -36,10 +36,11 @@ Instead:
   variables: configuration, internal event queue, history values, datamodel,
   `running` flag, and the step counters from constraint 4. Any machine_state
   value is a complete, inspectable, resumable position.
-- `microstep(machine_state) -> {machine_state, [effect]} | :quiescent` (exact
-  signature to be settled at implementation) is the unit of progress, and a
-  macrostep is a fold over it. The fold function may start private but must be
-  trivially publishable - no fused loop that would need dismantling.
+- `Statifier.Interpreter.microstep/1` -
+  `microstep(machine_state) -> {machine_state, [effect]} | :quiescent` - is the
+  unit of progress, and `Statifier.Interpreter.macrostep/1` is a fold over it.
+  The fold function started private (`macrostep/2`) and is trivially
+  publishable through `macrostep/1` - no fused loop needed dismantling.
 - This does not conflict with the literal port: the pseudocode's functions map
   one-to-one; only the *storage* of loop state moves onto the struct, and that
   deviation gets its mechanical-reason comment per ADR-0002.
@@ -148,7 +149,7 @@ preserve when it does:
 | Seam | Where it lives |
 |---|---|
 | machine_state struct holds configuration, internal queue, history, datamodel, `running`, and step counters - no interpreter loop variable that is not reconstructible from the struct | `Statifier.MachineState` |
-| `microstep` step function exists; macrostep folds over it | not yet implemented |
+| `microstep` step function exists; macrostep folds over it | `Statifier.Interpreter` |
 | trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
 | compiler retains locations on states, transitions, executable content | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content` |
 | compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |

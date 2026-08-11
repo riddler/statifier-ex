@@ -15,9 +15,10 @@ defmodule Statifier.Interpreter.ExitEntry do
   `exit_states/2` and `enter_states/2` are the two functions here that both
   mutate the position and emit effects, so both return
   `{MachineState.t(), [Effect.t()]}` - the shape `docs/observability.md`
-  fixes for `microstep/1`, their caller for the ordinary exit/entry path.
-  Effect order within the returned list is emission order: the trace effect
-  first, then each block's effects in the order the blocks ran.
+  fixes for `microstep/1`. `Statifier.Interpreter.microstep/2` is their
+  caller for the ordinary exit/entry path. Effect order within the returned
+  list is emission order: the trace effect first, then each block's effects
+  in the order the blocks ran.
 
   `run_onexit_blocks/2` and `static_donedata/2` are public for a second
   caller: `Statifier.Interpreter.exit_interpreter/1`'s termination walk
