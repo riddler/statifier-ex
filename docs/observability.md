@@ -60,7 +60,7 @@ commitment):
 | Trace effect | Emitted when |
 |---|---|
 | event dequeued | an external or internal event is selected for processing |
-| transitions selected | `select_transitions` returns (includes the empty set) |
+| transitions selected | either selection function returns (includes the empty set) |
 | exit set | `compute_exit_set` result, before exiting |
 | content executed | a block of executable content ran (with its identity, constraint 3) |
 | entry set | `compute_entry_set` result, before entering |
@@ -75,6 +75,12 @@ Rules:
   (constraint 3), never bare structs that force tooling to re-derive context.
 - Trace effects are ordinary members of the effect list - same ordering
   guarantees, same delivery path. No side channel.
+- "Either selection function" is `select_eventless_transitions/1` and
+  `select_transitions/2` both. The one exception is the terminal eventless
+  probe: when it comes up empty and the internal queue is also empty, the
+  round returns quiescence with no effect list to carry a trace, and
+  `macrostep stable` marks that same instant at the same counters. Every
+  other empty probe emits the row.
 
 ## Constraint 3: the Machine retains locations and identities
 
