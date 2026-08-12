@@ -174,9 +174,9 @@ ADR-0011 makes both rules mechanical:
   line, adds a `@tag :skip`, or shrinks `test/passing_tests.json` without an
   entry in `docs/quality-gate-changes.md` naming that path. The entry is a
   human's call on the record, not one an agent writes for itself.
-  `.doctor.exs` joined the guarded set alongside the rest: it holds
-  doc-coverage thresholds, the same shape of gate-config file as
-  `.sobelow-conf`.
+  `.doctor.exs` is guarded for the same reason `.sobelow-conf` is: it holds
+  thresholds the gate enforces, so moving one is a decision rather than a
+  tweak.
 - **Prove the run was a full gate.** `mix gate.verify` runs the gate and exits
   non-zero if the run was profiled, scoped, `--quick`, or `--skip`-ed. Report a
   full green off its output, not off a run you remember being unscoped.
@@ -221,7 +221,7 @@ decision and not a constant.
   `:doctor` is now a dev dependency, `.doctor.exs` holds 100% thresholds on
   every axis, and `mix quality` reports Doctor as a real stage instead of the
   standing skip line. The category and its manifest key stay, because the next
-  stage this project declines to run belongs here rather than in the
+  stage this project checks nothing for belongs here rather than in the
   not-applicable list. Do not move a pattern here into the not-applicable list
   to quiet a report.
 - **Run-level** - neither list matches, and the gate is red. The stage should

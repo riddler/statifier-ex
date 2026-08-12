@@ -13,6 +13,12 @@
 # axis (deps/doctor/lib/config.ex:37-52), never bent to fit the codebase.
 # `ignore_modules` and `ignore_paths` stay empty: the measured codebase meets
 # every threshold without excluding anything.
+#
+# `raise: false` below is not the enforcement switch, and turning it on would
+# change nothing that matters: a shortfall exits non-zero either way, whether
+# the gate runs `mix doctor --raise` or a developer runs a bare `mix doctor`.
+# The flag only picks how the failure surfaces - an exception versus a report
+# and a non-zero status - and the report is the more readable of the two.
 %Doctor.Config{
   ignore_modules: [],
   ignore_paths: [],

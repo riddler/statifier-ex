@@ -297,11 +297,16 @@ this keeps the manifest edit from arriving bare.
       cases exist.
 
 #### Manual Verification:
-- [ ] Each new test was actually sabotaged - the covered code was broken, the
+- [x] Each new test was actually sabotaged - the covered code was broken, the
       test went red, and the change was reverted - and the sabotage note names
-      the real mutation.
-- [ ] The `CLAUDE.md` sentence reads as policy, not as a changelog line.
-- [ ] No regressions in the other gate stages' behavior.
+      the real mutation. Re-run at review time: dropping `.doctor.exs` from
+      `@guarded_paths` reds two tests (the new one and the every-guarded-path
+      assertion), dropping `:doctor` from `@mix_exs_pattern` reds one; the
+      suite is back to 30/0 after both reverts.
+- [x] The `CLAUDE.md` sentence reads as policy, not as a changelog line.
+      Rewritten at review time - "joined the guarded set" was a past-tense
+      event; it now states the standing reason instead.
+- [x] No regressions in the other gate stages' behavior.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
@@ -410,15 +415,25 @@ exactly the fifteen sites in the table above, and reports nothing for
 - [x] `grep -rn "iex>" lib/statifier/validator/checks/ lib/statifier/compiler.ex lib/statifier/lowering.ex lib/statifier/validator.ex` returns no *new* matches relative to `origin/main`.
 
 #### Manual Verification:
-- [ ] Each `@doc` says something the `@spec` does not - a return contract, an
+- [x] Each `@doc` says something the `@spec` does not - a return contract, an
       ordering guarantee, an error case - rather than paraphrasing the types.
-- [ ] The four entry-point docs (`compile/1`, `lower/1`, `validate/2`,
+      All fifteen state the condition under which the check returns `[]`,
+      which no typespec expresses.
+- [x] The four entry-point docs (`compile/1`, `lower/1`, `validate/2`,
       `scoped_chunks/2`) would help a reader who has not read the module body.
-- [ ] No `@doc` contradicts the module's `@moduledoc` or an ADR it cites.
-- [ ] `lib/statifier/` was touched, so per this project's plan extension: the
+      `compile/1` says an error means a compiler defect rather than a
+      malformed document, and `validate/2` warns that a substituted `source`
+      binary yields wrong slices rather than raising.
+- [x] No `@doc` contradicts the module's `@moduledoc` or an ADR it cites.
+      Spot-checked the two cross-references: `Final`'s "check 3 already owns
+      that mistake" matches its own moduledoc and `Checks.InitialTargets`, and
+      the "Check N" numbering is a repo-wide convention (`validator/error.ex`);
+      `Enums`' raw-source claim matches `Location.slice/2` in `out_of_range/5`.
+- [x] `lib/statifier/` was touched, so per this project's plan extension: the
       touched functions are unchanged in behavior, so the W3C Appendix D
       correspondence is trivially preserved - confirm by eye that the diff
-      contains no executable line, only attributes.
+      contains no executable line, only attributes. Confirmed: every added
+      line in `e10d663` is inside a `@doc` heredoc.
 
 **Implementation Note**: Same as Phase 1. No test file changes are expected in
 this phase, so the sabotage rule has nothing to bite on; if a test does get
@@ -496,12 +511,15 @@ there is nothing to classify.
       gate-key change arrive with its prose.
 
 #### Manual Verification:
-- [ ] The rewritten `CLAUDE.md` bullet still explains what the *category* is
+- [x] The rewritten `CLAUDE.md` bullet still explains what the *category* is
       for, not only that it is currently empty - a reader arriving at the next
-      skipped stage must be able to classify it from this text.
-- [ ] Nothing in `CLAUDE.md` still says the doctor decision is open or owned
-      by st-1xz.
-- [ ] The not-applicable bullet is unchanged.
+      skipped stage must be able to classify it from this text. The bullet's
+      opening definition survives untouched. Its closing sentence was reworded
+      at review time: "the next stage this project declines to run" described
+      the not-applicable case, and now reads "checks nothing for".
+- [x] Nothing in `CLAUDE.md` still says the doctor decision is open or owned
+      by st-1xz. The one surviving mention records who decided it.
+- [x] The not-applicable bullet is unchanged.
 
 **Implementation Note**: Same as Phase 1. This is the last commit on the
 branch.
@@ -615,15 +633,23 @@ phase's commit once the human has written it - not a follow-up commit.
       `mix gate.verify` confirms a full unscoped run.
 
 #### Manual Verification:
-- [ ] **A human writes the `docs/quality-gate-changes.md` entry.** This is a
+- [x] **A human writes the `docs/quality-gate-changes.md` entry.** This is a
       blocking handoff, not an agent step. Until it exists the phase cannot
-      commit, and that refusal is the design working.
-- [ ] The human confirms the thresholds are the right bar for this project -
+      commit, and that refusal is the design working. Written by JohnnyT and
+      committed in `746823a` alongside the guarded changes it justifies.
+- [x] The human confirms the thresholds are the right bar for this project -
       that 100% doc coverage is discipline the project intends to keep, not a
-      number chosen because it happened to be reachable.
+      number chosen because it happened to be reachable. Confirmed at review
+      time, with the consequence named: `ignore_paths` is empty, so the
+      `lib/mix/` task-support modules are held to the library's own bar. The
+      threshold was also shown to bite - deleting one `@doc` makes `mix doctor`
+      exit non-zero.
 - [ ] Doctor's build-lock contention with the parallel analysis stages is
       cosmetic in practice (a few `Waiting for lock on the build directory`
-      lines), not a slowdown worth configuring around.
+      lines), not a slowdown worth configuring around. **Still unverified** -
+      observing it needs a full gate run watched live, which the review did
+      not do. No slowdown was reported across the branch's gate runs, which is
+      weak evidence rather than a check.
 
 **If Phase 1 was declined**: the guard-related criteria above simply do not
 apply. `mix gate.check` reports nothing, there is no ledger entry to wait on,
@@ -725,11 +751,16 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Each new test was actually sabotaged - the covered code was broken, the
+- [x] Each new test was actually sabotaged - the covered code was broken, the
       test went red, and the change was reverted - and the sabotage note names
-      the real mutation.
-- [ ] The `CLAUDE.md` sentence reads as policy, not as a changelog line.
-- [ ] No regressions in the other gate stages' behavior.
+      the real mutation. Re-run at review time: dropping `.doctor.exs` from
+      `@guarded_paths` reds two tests (the new one and the every-guarded-path
+      assertion), dropping `:doctor` from `@mix_exs_pattern` reds one; the
+      suite is back to 30/0 after both reverts.
+- [x] The `CLAUDE.md` sentence reads as policy, not as a changelog line.
+      Rewritten at review time - "joined the guarded set" was a past-tense
+      event; it now states the standing reason instead.
+- [x] No regressions in the other gate stages' behavior.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
@@ -742,15 +773,25 @@ the end.
 
 ### Phase 2
 
-- [ ] Each `@doc` says something the `@spec` does not - a return contract, an
+- [x] Each `@doc` says something the `@spec` does not - a return contract, an
       ordering guarantee, an error case - rather than paraphrasing the types.
-- [ ] The four entry-point docs (`compile/1`, `lower/1`, `validate/2`,
+      All fifteen state the condition under which the check returns `[]`,
+      which no typespec expresses.
+- [x] The four entry-point docs (`compile/1`, `lower/1`, `validate/2`,
       `scoped_chunks/2`) would help a reader who has not read the module body.
-- [ ] No `@doc` contradicts the module's `@moduledoc` or an ADR it cites.
-- [ ] `lib/statifier/` was touched, so per this project's plan extension: the
+      `compile/1` says an error means a compiler defect rather than a
+      malformed document, and `validate/2` warns that a substituted `source`
+      binary yields wrong slices rather than raising.
+- [x] No `@doc` contradicts the module's `@moduledoc` or an ADR it cites.
+      Spot-checked the two cross-references: `Final`'s "check 3 already owns
+      that mistake" matches its own moduledoc and `Checks.InitialTargets`, and
+      the "Check N" numbering is a repo-wide convention (`validator/error.ex`);
+      `Enums`' raw-source claim matches `Location.slice/2` in `out_of_range/5`.
+- [x] `lib/statifier/` was touched, so per this project's plan extension: the
       touched functions are unchanged in behavior, so the W3C Appendix D
       correspondence is trivially preserved - confirm by eye that the diff
-      contains no executable line, only attributes.
+      contains no executable line, only attributes. Confirmed: every added
+      line in `e10d663` is inside a `@doc` heredoc.
 
 **Implementation Note**: Same as Phase 1. No test file changes are expected in
 this phase, so the sabotage rule has nothing to bite on; if a test does get
@@ -760,15 +801,23 @@ added, it needs its sabotage note.
 
 ### Phase 4
 
-- [ ] **A human writes the `docs/quality-gate-changes.md` entry.** This is a
+- [x] **A human writes the `docs/quality-gate-changes.md` entry.** This is a
       blocking handoff, not an agent step. Until it exists the phase cannot
-      commit, and that refusal is the design working.
-- [ ] The human confirms the thresholds are the right bar for this project -
+      commit, and that refusal is the design working. Written by JohnnyT and
+      committed in `746823a` alongside the guarded changes it justifies.
+- [x] The human confirms the thresholds are the right bar for this project -
       that 100% doc coverage is discipline the project intends to keep, not a
-      number chosen because it happened to be reachable.
+      number chosen because it happened to be reachable. Confirmed at review
+      time, with the consequence named: `ignore_paths` is empty, so the
+      `lib/mix/` task-support modules are held to the library's own bar. The
+      threshold was also shown to bite - deleting one `@doc` makes `mix doctor`
+      exit non-zero.
 - [ ] Doctor's build-lock contention with the parallel analysis stages is
       cosmetic in practice (a few `Waiting for lock on the build directory`
-      lines), not a slowdown worth configuring around.
+      lines), not a slowdown worth configuring around. **Still unverified** -
+      observing it needs a full gate run watched live, which the review did
+      not do. No slowdown was reported across the branch's gate runs, which is
+      weak evidence rather than a check.
 
 **If Phase 1 was declined**: the guard-related criteria above simply do not
 apply. `mix gate.check` reports nothing, there is no ledger entry to wait on,
@@ -785,12 +834,15 @@ outstanding ledger entry and halt rather than retry.
 
 ### Phase 3
 
-- [ ] The rewritten `CLAUDE.md` bullet still explains what the *category* is
+- [x] The rewritten `CLAUDE.md` bullet still explains what the *category* is
       for, not only that it is currently empty - a reader arriving at the next
-      skipped stage must be able to classify it from this text.
-- [ ] Nothing in `CLAUDE.md` still says the doctor decision is open or owned
-      by st-1xz.
-- [ ] The not-applicable bullet is unchanged.
+      skipped stage must be able to classify it from this text. The bullet's
+      opening definition survives untouched. Its closing sentence was reworded
+      at review time: "the next stage this project declines to run" described
+      the not-applicable case, and now reads "checks nothing for".
+- [x] Nothing in `CLAUDE.md` still says the doctor decision is open or owned
+      by st-1xz. The one surviving mention records who decided it.
+- [x] The not-applicable bullet is unchanged.
 
 **Implementation Note**: Same as Phase 1. This is the last commit on the
 branch.
