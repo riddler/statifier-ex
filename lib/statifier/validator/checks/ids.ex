@@ -22,6 +22,13 @@ defmodule Statifier.Validator.Checks.Ids do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns an `:empty_id` error for every state written `id=""` and a
+  `:duplicate_id` error for every occurrence of a repeated non-empty id after
+  its first, canonical occurrence in document order. `nil` ids (an omitted
+  optional attribute) are excluded entirely. Returns `[]` when every id in
+  the document is unique or absent.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states = flatten(states)

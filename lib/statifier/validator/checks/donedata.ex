@@ -12,6 +12,11 @@ defmodule Statifier.Validator.Checks.Donedata do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns a `:donedata_not_on_final` error for every state that carries a
+  non-nil `donedata` but is not itself a `:final` state. Returns `[]` when
+  every `<donedata>` element in the document sits on a `<final>`.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states

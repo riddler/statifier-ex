@@ -66,6 +66,20 @@ defmodule Statifier.Lowering do
     "content" => &Builders.build_content/2
   }
 
+  @doc """
+  Lowers a generic `%Statifier.Parser.DOM.Element{}` tree - the parsed
+  `<scxml>` root - into a typed `%Statifier.Document{}` tree, in one
+  traversal that dispatches every child through `Statifier.Lowering.Builders`
+  by element name.
+
+  Returns `{:ok, document}` only when the whole walk accumulated no errors;
+  any error at all, anywhere in the tree, produces `{:error, errors}` with
+  the errors sorted into document order - never a partial document, even
+  when most of the tree built successfully. An element outside the SCXML
+  vocabulary (and not using the relaxed no-namespace fallback) is reported
+  as `{:foreign_element, name, uri, location}`; a non-`<scxml>` root name is
+  `{:unexpected_root, local_name, location}`.
+  """
   @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
   def lower(%Element{name: name, location: location} = root) do
     scope = Namespace.push(%{}, root)

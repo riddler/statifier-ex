@@ -35,6 +35,16 @@ defmodule Statifier.Validator.Checks.InitialTargets do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns, per state and for the document's own root `initial` attribute, one
+  of `:initial_on_atomic_state` (the initial reference has nothing to default
+  into and suppresses every other reason for that state),
+  `:unresolved_initial` (the id does not resolve in `Context.states`),
+  `:initial_not_descendant` (a resolved target is not a descendant of the
+  containing state), or `:initial_not_top_level` (a resolved document-root
+  initial is not itself a top-level state). Returns `[]` when every `initial`
+  reference in the document resolves and lands on a legal target.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{} = document, %Context{} = context) do
     state_errors =

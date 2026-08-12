@@ -101,6 +101,22 @@ defmodule Statifier.Compiler do
           donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()}
         }
 
+  @doc """
+  Compiles an already-validated `%Statifier.Document{}` into a flat
+  `%Statifier.Machine{}`: every state interned to a document-order index with
+  parent pointers and self-inclusive descendant ranges, every `initial`
+  resolved to indexes, every transition (including an `<initial>` element's
+  own and a `:history` state's default) compiled to
+  `Statifier.Machine.Transition`, and every reachable executable-content node
+  compiled to `Statifier.Machine.Content` or `Statifier.Machine.Donedata`.
+
+  Returns `{:ok, machine}` on success. A `Document` that reached this stage
+  is expected to already be structurally valid - `compile/1` does not
+  re-run validator checks - so `{:error, errors}` here signals a compiler
+  defect (an id that fails to resolve during the numbering walk) rather than
+  a malformed input document; callers should treat it as unexpected, not as
+  routine error-event handling.
+  """
   @spec compile(document :: Document.t()) :: {:ok, Machine.t()} | {:error, [Error.t()]}
   def compile(%Document{} = document) do
     acc0 = %{

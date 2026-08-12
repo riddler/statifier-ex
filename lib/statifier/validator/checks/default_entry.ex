@@ -29,6 +29,14 @@ defmodule Statifier.Validator.Checks.DefaultEntry do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns a `:default_entry_not_enterable` error for every compound `<state>`
+  that has neither an `initial` attribute nor an `<initial>` element and
+  whose first child in document order is a `:history` pseudo-state - since
+  document-order fallback would otherwise try to enter a state spec 3.10
+  forbids entering that way. Returns `[]` when every implicit default entry
+  in the document lands on a real state.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states

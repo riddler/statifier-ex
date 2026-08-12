@@ -27,6 +27,12 @@ defmodule Statifier.Validator.Checks.Boilerplate do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns a `:bad_namespace` error when `document.namespace` does not resolve
+  to the SCXML vocabulary, a `:bad_version` error when `document.version` is
+  not the literal string `"1.0"`, or both when both are wrong. Returns `[]`
+  when the root element's boilerplate is entirely in order.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{} = document, %Context{}) do
     check_namespace(document) ++ check_version(document)

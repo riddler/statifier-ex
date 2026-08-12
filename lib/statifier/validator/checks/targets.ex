@@ -20,6 +20,14 @@ defmodule Statifier.Validator.Checks.Targets do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns an `:unresolved_target` error for every `<transition>` in the
+  document (plain, `<initial>`, and `<history>` default alike) whose `target`
+  id does not resolve to a state in `Context.states`. Owns target existence
+  for the whole document, so later checks may treat an id this check already
+  reported as already handled rather than re-reporting it. Returns `[]` when
+  every transition target resolves.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{}, %Context{transitions: transitions} = context) do
     Enum.flat_map(transitions, fn {transition, _owner} ->

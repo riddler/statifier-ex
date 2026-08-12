@@ -40,6 +40,15 @@ defmodule Statifier.Validator.Checks.Enums do
   @transition_types ["internal", "external"]
   @bindings ["early", "late"]
 
+  @doc """
+  Returns a `:transition_bad_type` error for every `<transition type="...">`
+  whose written value is neither `"internal"` nor `"external"`, and a
+  `:scxml_bad_binding` error when the root `<scxml binding="...">` is neither
+  `"early"` nor `"late"`. Both checks slice the raw source text rather than
+  trusting the lowered atom, since an out-of-range value and a valid one can
+  lower to the same default. Returns `[]` when both enumerated attributes are
+  in range everywhere they were written.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{} = document, %Context{} = context) do
     transition_type_errors(context) ++ binding_errors(document, context)

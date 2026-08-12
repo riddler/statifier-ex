@@ -433,6 +433,14 @@ defmodule Mix.Statifier.AdrJudge do
   # alike) - unlike the mechanical guards, a judge-shaped ADR violation is as
   # likely to be a *removed* line (a dropped trace call, say) as an added
   # one, so an added-lines-only view would miss it.
+  @doc """
+  Splits a raw unified diff into one `{path, chunk}` pair per touched file,
+  then keeps only the files `in_scope?/2` accepts for `scope`. Each `chunk`
+  is that file's whole diff text - context lines, removals, and additions
+  alike, not only added lines - because a judge-shaped ADR violation (a
+  dropped trace call, say) is as likely to be a removed line as an added one.
+  Returns `[]` when the diff touches no file inside `scope`.
+  """
   @spec scoped_chunks(diff :: String.t(), scope :: scope()) :: [{String.t(), String.t()}]
   def scoped_chunks(diff, scope) do
     diff

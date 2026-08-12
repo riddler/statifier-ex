@@ -367,12 +367,12 @@ dashes. Match the file you are editing.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green - notably Credo strict, `warnings_as_errors`
+- [x] Full `mix quality` is green - notably Credo strict, `warnings_as_errors`
       compile, and Dialyzer, which is what proves an added attribute did not
       change how a function is compiled.
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate.
-- [ ] `mix quality --profile loop` used between edits.
-- [ ] This command exits 0 and prints nothing (it is the stand-in for doctor,
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate.
+- [x] `mix quality --profile loop` used between edits.
+- [x] This command exits 0 and prints nothing (it is the stand-in for doctor,
       which is not installed until Phase 4):
 
 ```bash
@@ -407,7 +407,7 @@ This script was run against the current tree during planning: it reports
 exactly the fifteen sites in the table above, and reports nothing for
 `default_transition.ex`'s already-documented `check/2` (the positive control).
 
-- [ ] `grep -rn "iex>" lib/statifier/validator/checks/ lib/statifier/compiler.ex lib/statifier/lowering.ex lib/statifier/validator.ex` returns no *new* matches relative to `origin/main`.
+- [x] `grep -rn "iex>" lib/statifier/validator/checks/ lib/statifier/compiler.ex lib/statifier/lowering.ex lib/statifier/validator.ex` returns no *new* matches relative to `origin/main`.
 
 #### Manual Verification:
 - [ ] Each `@doc` says something the `@spec` does not - a return contract, an
@@ -737,5 +737,23 @@ human to confirm the manual testing before moving on. In looped (`--loop`)
 execution, this phase's Automated Verification gates advancement
 automatically, and Manual Verification items are deferred and surfaced once at
 the end.
+
+---
+
+### Phase 2
+
+- [ ] Each `@doc` says something the `@spec` does not - a return contract, an
+      ordering guarantee, an error case - rather than paraphrasing the types.
+- [ ] The four entry-point docs (`compile/1`, `lower/1`, `validate/2`,
+      `scoped_chunks/2`) would help a reader who has not read the module body.
+- [ ] No `@doc` contradicts the module's `@moduledoc` or an ADR it cites.
+- [ ] `lib/statifier/` was touched, so per this project's plan extension: the
+      touched functions are unchanged in behavior, so the W3C Appendix D
+      correspondence is trivially preserved - confirm by eye that the diff
+      contains no executable line, only attributes.
+
+**Implementation Note**: Same as Phase 1. No test file changes are expected in
+this phase, so the sabotage rule has nothing to bite on; if a test does get
+added, it needs its sabotage note.
 
 ---

@@ -32,6 +32,12 @@ defmodule Statifier.Validator.Checks.Content do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Walks every `<final>`'s `<donedata><content>` in the document and returns a
+  `:content_expr_and_text` error for each one that carries both an `expr`
+  attribute and non-blank inline text. Returns `[]` when no `<content>`
+  element mixes the two forms.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states

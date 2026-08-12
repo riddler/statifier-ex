@@ -57,6 +57,17 @@ defmodule Statifier.Validator do
     &Enums.check/2
   ]
 
+  @doc """
+  Runs all eleven `@checks` against `document`, collecting every error rather
+  than stopping at the first one, and returns `{:ok, document}` when none
+  fired or `{:error, errors}` otherwise, with `errors` sorted by
+  `location.start_offset` regardless of which check reported them. `document`
+  is returned unchanged on success - this pass never rewrites its input.
+
+  `source` must be the exact binary `document` was parsed from; a mismatched
+  `source` produces wrong `Location.slice/2` results in any check that reads
+  it rather than raising, so callers must not pass a substitute binary.
+  """
   @spec validate(document :: Document.t(), source :: binary()) ::
           {:ok, Document.t()} | {:error, [Error.t()]}
   def validate(%Document{} = document, source) when is_binary(source) do
