@@ -18,6 +18,21 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     machine
   end
 
+  # `@document` deliberately contains an id-less compound wrapping a
+  # `<final>` (index 20 below), the one shape
+  # `raise_parent_completion/3`'s `_no_id` arm exists for. st-t8w will
+  # make `Statifier.Validator` refuse exactly that document, so this
+  # fixture compiles through Parser -> Lowering -> Compiler and skips the
+  # validator: the guard it covers is defense in depth behind a gate that
+  # will reject the input, and a test for it cannot pass through that
+  # gate by construction.
+  defp compile_unvalidated!(xml) do
+    {:ok, root} = Parser.parse(xml)
+    {:ok, document} = Lowering.lower(root)
+    {:ok, machine} = Compiler.compile(document)
+    machine
+  end
+
   # Hand-drawn from `@document`, depth-first, document order. `<initial>`,
   # `<transition>`, and `<donedata>`/`<content>` elements contribute no
   # state index of their own.
@@ -42,7 +57,10 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
   # 17         reg2_final       (final)
   # 18     donedata_holder     (compound)
   # 19       dd_final           (final; static donedata "42")
-  # 20     (unnamed compound - no id)
+  # 20     (unnamed compound - no id; intentionally validator-rejected -
+  #        st-t8w makes `Statifier.Validator` refuse this shape, so this
+  #        fixture is compiled through `compile_unvalidated!/1`, not
+  #        `compile!/1`; do not "fix" this by giving the state an id)
   # 21       noid_final         (final)
   # 22     trigger             (go-* transitions)
   # 23   top_final              (final; parent 0 - top-level)
@@ -149,7 +167,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     top_final: 23
   }
 
-  defp machine, do: compile!(@document)
+  defp machine, do: compile_unvalidated!(@document)
   defp idx(name), do: Map.fetch!(@indexes, name)
 
   defp machine_state(machine, configuration \\ [], opts \\ [trace: true]) do
