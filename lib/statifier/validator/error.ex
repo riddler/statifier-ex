@@ -48,6 +48,7 @@ defmodule Statifier.Validator.Error do
           | {:scxml_bad_binding, raw :: binary()}
           | {:final_has_states, id :: binary()}
           | {:final_has_transitions, id :: binary() | nil}
+          | {:final_parent_missing_id, final_id :: binary() | nil}
           | {:default_entry_not_enterable, id :: binary(), child_kind :: atom()}
           | {:donedata_not_on_final, id :: binary()}
           | {:content_expr_and_text, expr :: binary()}
@@ -337,6 +338,27 @@ defmodule Statifier.Validator.Error do
       message:
         "state #{inspect(id)} is a <final> and must not carry a <transition> - " <>
           "only onentry, onexit, and donedata are legal there",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 12 (spec 3.7, Appendix D `enterStates`): a `<final>` state's parent
+  carries no `id`. Entering a non-top-level `<final>` raises
+  `done.state.{parent.id}`, so a parent with no written id has a completion
+  event the spec names after a name it does not have - and no transition
+  could match `"done.state."` even if it were raised. `final_id` is the
+  offending `<final>` child's own id (itself optionally `nil`), which names
+  the completion the document loses; the location is the **parent's** span,
+  since the parent is the element that has to change.
+  """
+  @spec final_parent_missing_id(final_id :: binary() | nil, location :: Location.t()) :: t()
+  def final_parent_missing_id(final_id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:final_parent_missing_id, final_id},
+      message:
+        "a state containing <final> #{inspect(final_id)} must have an id - its " <>
+          "completion event is named done.state.<id>",
       location: location
     }
   end

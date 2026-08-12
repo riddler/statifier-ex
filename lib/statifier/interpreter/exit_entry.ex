@@ -749,12 +749,21 @@ defmodule Statifier.Interpreter.ExitEntry do
   end
 
   # `new Event("done.state." + parent.id, s.donedata)`, skipped when
-  # `parent` has no written id - `Statifier.Validator.Checks.Ids` keeps
-  # `nil`/`""` ids legal, and an unnamed state's completion is
-  # unobservable. Then, when `parent`'s own parent is a `:parallel` whose
-  # every region now satisfies `in_final_state?/2`,
-  # `done.state.{grandparent_id}` follows with no `data` - the pseudocode's
-  # nested check, not a sibling of this one.
+  # `parent` has no written id. As of st-t8w this guard is defense in depth,
+  # not the primary gate: `Statifier.Validator.Checks.FinalParent` now
+  # refuses any document where a `<final>`'s parent carries no `id`, so an
+  # id-less parent should never reach this point through the ordinary
+  # Parser -> Lowering -> Validator -> Compiler pipeline. The guard stays
+  # anyway because `Statifier.Compiler.compile/1` is public and reachable
+  # without going through `Statifier.Validator.validate/2`
+  # (`docs/architecture.md` principle 4 makes the validator the only gate in
+  # the *pipeline*, not a type-level guarantee about every caller), and
+  # `Machine.id/2`'s return type still admits `nil`. Then, when `parent`'s
+  # own parent is a `:parallel` whose every region now satisfies
+  # `in_final_state?/2`, `done.state.{grandparent_id}` follows with no
+  # `data` - the pseudocode's nested check, not a sibling of this one; see
+  # `maybe_raise_grandparent_completion/3` for why *its* guard is not
+  # defense in depth.
   @spec raise_parent_completion(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -786,7 +795,14 @@ defmodule Statifier.Interpreter.ExitEntry do
   # only when `parent`'s own parent is a `:parallel` and every one of its
   # regions (`region_indexes/2` - never a `:history` pseudo-state, the same
   # landmine `enter_uncovered_regions/3` avoids) satisfies
-  # `in_final_state?/2`. Same id guard as the parent event.
+  # `in_final_state?/2`. Same id guard as the parent event, but unlike that
+  # one this guard is NOT made unreachable by `Checks.FinalParent` (st-t8w) -
+  # do not delete it "by symmetry" with the parent guard above. Whether a
+  # `:parallel`'s every region currently satisfies `in_final_state?/2` is a
+  # runtime configuration property, not a static document property, so no
+  # validator rule can refuse the id-less `:parallel` ahead of time; this
+  # guard remains the only thing standing between that document and a raise
+  # with no id to name.
   @spec maybe_raise_grandparent_completion(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
