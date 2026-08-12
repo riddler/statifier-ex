@@ -51,7 +51,8 @@ defmodule Statifier.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:sobelow, "~> 0.14", only: :dev, runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:doctor, "~> 0.23", only: :dev, runtime: false}
     ]
   end
 end

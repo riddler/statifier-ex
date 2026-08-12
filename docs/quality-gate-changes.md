@@ -13,6 +13,53 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-12 - st-1xz
+
+Approved-by: JohnnyT (in session)
+
+- mix.exs: adds `{:doctor, "~> 0.23", only: :dev, runtime: false}`, so the
+  Doctor stage runs instead of reporting itself skipped
+- .doctor.exs: adds the file, setting every coverage threshold to 1.0 (module
+  doc, overall doc, struct type specs, overall spec) with `raise: true`
+
+Reason: `mix quality` has reported `○ Doctor: skipped (:doctor not installed)`
+on every run since the gate existed, and `.claude/wurk.json` classified it as a
+project-level gap - warned about forever, decided never. st-1xz is the bead
+that decides it, and it decides in favor of running the stage. Doc coverage is
+a discipline this project already follows by review: CLAUDE.md requires `@spec`
+on public functions, ADR-0002 requires interpreter functions to keep their
+Appendix D names with moduledocs explaining the port, and several moduledocs do
+real explanatory work. This makes that mechanical, in the same spirit as the
+ADR guard and the regression ratchet.
+
+The thresholds are set above doctor's own defaults on three axes, not below:
+module doc 0.4 -> 1.0, overall doc 0.5 -> 1.0, overall spec 0.0 -> 1.0. Nothing
+was bent to fit. Measured before the threshold was written, the codebase was
+already at 100% moduledoc coverage, 100% spec coverage and 100% struct type
+specs; the only shortfall was fifteen public functions with no `@doc`, and
+those were backfilled in commit e10d663 - a separate, attribute-only commit
+that landed under the old thresholds - rather than accommodated by a lower
+number. `mix doctor` now reports 89 modules, 0 failed. The stage costs ~1.7s.
+
+Adds a stage; loosens nothing, skips no existing check, and lowers no
+threshold.
+
+The same branch first made doctor's config surface guarded, in commit 5931088:
+`lib/mix/statifier/gate_guard.ex` gained `.doctor.exs` in `@guarded_paths` and
+`:doctor` in `@mix_exs_pattern`, mirrored into `.claude/wurk.json`'s
+`gate.moving_files` and CLAUDE.md. That file is not itself a guarded path, and
+it is named here because it is the reason this entry is required at all: before
+it, both changes above would have landed silently. A doc-coverage threshold
+file nobody watches is lowerable without a record, which is the exact shape
+ADR-0011 exists to prevent - so the guard was extended ahead of introducing the
+file it guards, rather than after.
+
+Retiring the `^:doctor not installed$` pattern from
+`.claude/wurk.json`'s `gate.project_level_skips`, and the CLAUDE.md prose that
+named Doctor as an open decision owned by st-1xz, follows in the next commit -
+it has to, since a stage that is neither skipped nor classified is a hard red
+until it actually runs.
+
 ## 2026-08-09 - st-6yb
 
 Approved-by: JohnnyT (in session)
