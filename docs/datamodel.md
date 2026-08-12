@@ -71,7 +71,13 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `In/1`), evaluate many expressions against it, rebind cheaply when data changes.
    v1 rebuilt the full context map per expression. `Predicator.Context.bind/3`
    is the cheap-rebind path that would let the once-per-block interval above
-   widen again, once a caller needs to.
+   widen again, once a caller needs to. Landed in predicator 5.0.0:
+   `Predicator.FunctionProvider` (a module supplying named functions),
+   `Context.new/2`'s `providers:` and `host:` options, and `Context.put_host/2`
+   (an O(1) `%{context | host: host}` refresh). Not taken here yet: `In/1` is
+   still an inline `functions:` closure, which 5.0 still supports and
+   dispatches identically to a provider entry. Taking this seam is st-sdh's
+   call, deferred until something evaluates in a hot path worth benchmarking.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is
@@ -79,7 +85,11 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    assignment past the end pads with `:undefined`; a negative index raises
    `:invalid_index`.
 3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
-   bare atom that every embedding normalizes ad hoc.
+   bare atom that every embedding normalizes ad hoc. Landed in predicator 5.0.0:
+   the `undefined` literal (upstream px-ocp). Consuming it here is st-unt's
+   work - it needs an XSL edit emitting `===` (non-strict `==` propagates
+   `:undefined` rather than returning a boolean), a corpus regeneration, and a
+   ratchet update.
 4. **Statement sequences** (above).
 5. **String prefix/substring**: landed in predicator 3.7.0 (`starts_with/2`,
    `ends_with/2`, `substring/2,3`, `index_of/2`); `conf:varPrefix` (test224) no

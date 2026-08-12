@@ -475,16 +475,16 @@ declines.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` is green. Doctor is a real stage in this repo with 100%
+- [x] Full `mix quality` is green. Doctor is a real stage in this repo with 100%
       thresholds on every axis (st-1xz), so a moduledoc edit that breaks
       structure fails the gate rather than passing quietly.
-- [ ] `mix gate.verify` confirms the run was a full gate.
-- [ ] `git diff --stat` for this phase touches only `docs/datamodel.md` and
+- [x] `mix gate.verify` confirms the run was a full gate.
+- [x] `git diff --stat` for this phase touches only `docs/datamodel.md` and
       `lib/statifier/evaluator.ex`, and the `lib/` diff is comment lines only -
       no line of executable code changes.
-- [ ] `git grep -n 'px-8ii' -- lib/ docs/` shows no remaining text describing it
+- [x] `git grep -n 'px-8ii' -- lib/ docs/` shows no remaining text describing it
       as an unlanded or pending upstream seam.
-- [ ] `mix test --include scion --include scxml_w3` still passes (a comment-only
+- [x] `mix test --include scion --include scxml_w3` still passes (a comment-only
       change should not move it; running it is how that is known rather than
       assumed).
 
@@ -588,6 +588,28 @@ this phase is that the closure discards the argument whose type changed. Use
 gate. In interactive execution, pause for the manual items. In `--loop`
 execution the automated list gates advancement and the manual items are
 deferred to the end.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment on the touched `lib/statifier/` file: no
+      executable line of `Statifier.Evaluator` changed, so SCXML 5.10 `In()`
+      behavior is untouched by construction - confirm by reading the diff.
+- [ ] The narrowed serializability sentence still supports the ADR-0012
+      constraint-1 conclusion it introduces. A reader who accepts only the narrow
+      claim should still accept that the context does not belong on
+      `%MachineState{}`.
+- [ ] `docs/datamodel.md` seam 1 reads as "landed upstream, deliberately not
+      consumed here yet, tracked by st-sdh" and not as "done". A future reader
+      must not conclude statifier already uses `FunctionProvider`.
+- [ ] The prose matches the file's existing house style (both files use plain
+      ASCII punctuation today; keep it).
+
+**Implementation Note**: No new tests, so the sabotage rule does not apply -
+there is no `lib/` behavior asserted by this phase. Use
+`mix quality --profile loop` between edits and full `mix quality` as the phase
+gate.
 
 ---
 ## Testing Strategy
