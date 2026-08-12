@@ -35,13 +35,13 @@
     "also_gated_paths": [],
     "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"],
     "project_level_skips": [
-      "^:doctor not installed$",
-      "^disabled in \\.quality\\.exs$"
+      "^:doctor not installed$"
     ],
     "not_applicable_skips": [
       "^:gettext not installed$",
       "^no \\.po files found$",
-      "^no \\.po files outside the source locale$"
+      "^no \\.po files outside the source locale$",
+      "^disabled in \\.quality\\.exs$"
     ]
   },
 
