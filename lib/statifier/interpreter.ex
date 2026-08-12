@@ -97,8 +97,9 @@ defmodule Statifier.Interpreter do
     Both `Selection.select_eventless_transitions/1` and
     `Selection.select_transitions/2` return `{machine_state, transitions}`,
     and this module continues with the returned `machine_state` rather than
-    the one it passed in, so a later bead's `condition_match/2` change
-    lands as a body change in `Selection`, not a signature change here.
+    the one it passed in - st-af3.2's real `condition_match/2` landed as a
+    body change in `Selection`, exactly as this was built to absorb, with no
+    signature change here.
   - **The outer `while running` loop is driven by the caller.** ADR-0003:
     the pure core takes one external event per call, and the session that
     drives it (st-cmq) owns the waiting external events and their queue.
@@ -265,15 +266,18 @@ defmodule Statifier.Interpreter do
   with.
 
   Be precise about which writes that loses, because the obvious candidate
-  is not one of them. When st-af3's `condition_match/2` enqueues
-  `error.execution` on a failed `cond`, the enqueue is self-rescuing: it
-  leaves the internal queue non-empty, so `internal_round/1` takes its
-  dequeue branch instead of the terminal one and the write survives even
-  under the old shape. What the old shape lost was any selection-side write
-  that does *not* touch the internal queue - a datamodel write, a memo, a
-  diagnostic - since only a queue write changes which branch runs. Carrying
-  the machine_state out closes that gap without having to predict which
-  kind of write st-af3 lands on.
+  is not one of them. `Selection.condition_match/2` enqueues
+  `error.execution` on a failed `cond` (st-af3.2), and that enqueue is
+  self-rescuing: it leaves the internal queue non-empty, so
+  `internal_round/1` takes its dequeue branch instead of the terminal one
+  and the write survives even under the old shape - traced end to end and
+  pinned by `InterpreterAcceptanceTest`'s
+  "a failed cond becomes a catchable error.execution" tests. What the old
+  shape lost was any selection-side write that does *not* touch the
+  internal queue - a datamodel write, a memo, a diagnostic - since only a
+  queue write changes which branch runs. Carrying the machine_state out
+  closes that gap without having to predict which kind of write a future
+  selection-side change lands on.
 
   The effect slot is the other half: it is what the terminal eventless
   probe's own `Trace.TransitionsSelected` rides out on, which is why
