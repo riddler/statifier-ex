@@ -47,7 +47,15 @@ Appendix D function names - `select_transitions`,
 `exit_states`, `main_event_loop`, `exit_interpreter`. SCXML element names as
 they appear in tests and lowering builders. Project coinages: `t_index` /
 `c_index`, LCCA, full configuration versus leaf-state view, `done.state.<id>`,
-`error.execution`, UXID prefixes `sess_` / `send_` / `inv_`.
+`error.execution`, UXID prefix `sess_`.
+
+`send_` and `inv_` are also ADR-0008 UXID prefixes - for send ids and
+invocations - but they are not search keys yet: `<send>` and `<invoke>` are
+unimplemented, so nothing generates either prefix. Grepping `inv_` returns
+nothing, and grepping `send_` is worse than nothing - it returns a pile of
+unrelated `send_event` / `send_id` matches rather than the empty result that
+would at least signal "not implemented". Both become good keys once `<send>`
+and `<invoke>` land.
 
 ## Reading rules
 
