@@ -50,6 +50,7 @@ defmodule Corpus.BoundnessNotationTest do
                Enum.join(offenders, "\n")
     end
 
+    # sabotage: n/a - non-vacuity guard over generated corpus, no lib/ behavior
     test "the strict undefined literal is used somewhere (non-vacuity)" do
       hits =
         for path <- corpus_files(),
