@@ -6,6 +6,7 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
   alias Statifier.Event
   alias Statifier.Interpreter
   alias Statifier.Lowering
+  alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Validator
@@ -309,5 +310,138 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
       for {:trace, %Effect.Trace.EventDequeued{from: :internal}} <- effects, do: 1
 
     assert length(internal_dequeues) == 2
+  end
+
+  # AC (st-af3.2): "a failing cond enqueues error.execution catchable in the
+  # same macrostep", proven through the real interpreter loop rather than
+  # `Selection`'s entry points directly (`selection_test.exs` already covers
+  # those). The `go` transition's cond names an unbound variable, so
+  # `Selection.select_transitions/2` does not enable it and raises
+  # `error.execution` on the internal queue instead; the sibling
+  # `event="error.execution"` transition on the same state is what proves
+  # the raised event is catchable within the one `handle_event/2` call that
+  # raised it - one macrostep, per `docs/architecture.md` principle 3 and
+  # spec 3.12.2/5.10.1. Deliberately event-matched (not eventless) so the
+  # macrostep terminates - see the plan's "What We're NOT Doing" on the
+  # eventless-cond-error livelock (st-sd1), which this test does not touch.
+  describe "a failed cond becomes a catchable error.execution" do
+    @catch_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
+        <state id="a">
+            <transition event="go" cond="nope" target="b"/>
+            <transition event="error.execution" target="caught"/>
+        </state>
+        <state id="b"/>
+        <state id="caught"/>
+    </scxml>
+    """
+
+    # No `event="error.execution"` catcher anywhere - proves the engine
+    # reaches quiescence with the error consumed rather than hanging, and
+    # that the failed cond actually gated the transition (`b` is never
+    # entered).
+    @uncaught_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
+        <state id="a">
+            <transition event="go" cond="nope" target="b"/>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+
+    defp catch_machine, do: compile!(@catch_document)
+    defp uncaught_machine, do: compile!(@uncaught_document)
+
+    defp state_index(machine, id) do
+      {:ok, index} = Machine.index(machine, id)
+      index
+    end
+
+    defp catcher_transition(machine) do
+      machine.transitions
+      |> Tuple.to_list()
+      |> Enum.find(&(&1.events == [["error", "execution"]]))
+    end
+
+    # sabotage: `Selection.raise_cond_errors/2` (via `Cause.origin/0`'s
+    # `{:transition, t_index}` arm) is short-circuited to return
+    # `machine_state` unchanged, dropping the error before it reaches the
+    # internal queue -> `handle_event/2` no longer has anything to catch,
+    # so the configuration stays `a` and this assertion reddens.
+    test "the error is raised, dequeued, and selected on inside one handle_event/2 call - configuration holds caught, not b" do
+      m = catch_machine()
+      {fresh, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, result, _effects} = Interpreter.handle_event(fresh, Event.external("go"))
+
+      assert result.configuration == MapSet.new([0, state_index(m, "caught")])
+      refute state_index(m, "b") in result.configuration
+    end
+
+    # sabotage: `Interpreter.handle_event/2`'s `MachineState.begin_macrostep/1`
+    # call is duplicated so a second macrostep begins mid-round while
+    # catching the internal `error.execution` -> the macrostep counter
+    # advances by two instead of one, reddening the equality below.
+    test "same macrostep: the macrostep counter advances by exactly the one handle_event/2 began, and the internal queue is empty at quiescence" do
+      m = catch_machine()
+      {fresh, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, result, _effects} = Interpreter.handle_event(fresh, Event.external("go"))
+
+      assert result.macrostep == fresh.macrostep + 1
+      assert MachineState.internal_events(result) == []
+    end
+
+    # sabotage: `Interpreter.internal_round/1`'s dequeue branch is changed
+    # to select without first emitting `Trace.EventDequeued` (the trace
+    # effect is dropped, selection still runs) -> no `EventDequeued` with
+    # `from: :internal` for `error.execution` shows up, reddening the
+    # `Enum.find_index` assertions below.
+    test "trace: EventDequeued(from: :internal) for error.execution is followed by TransitionsSelected naming the catcher" do
+      m = catch_machine()
+      {fresh, _init_effects} = Interpreter.initialize(m, trace: true)
+      catcher = catcher_transition(m)
+
+      assert {:ok, _result, effects} = Interpreter.handle_event(fresh, Event.external("go"))
+
+      dequeued_index =
+        Enum.find_index(effects, fn
+          {:trace,
+           %Effect.Trace.EventDequeued{from: :internal, event: %{name: "error.execution"}}} ->
+            true
+
+          _other ->
+            false
+        end)
+
+      selected_index =
+        Enum.find_index(effects, fn
+          {:trace, %Effect.Trace.TransitionsSelected{t_indexes: t_indexes}} ->
+            catcher.t_index in t_indexes
+
+          _other ->
+            false
+        end)
+
+      assert is_integer(dequeued_index)
+      assert is_integer(selected_index)
+      assert dequeued_index < selected_index
+    end
+
+    # sabotage: `Selection.cond_enabled/3`'s `{:error, reason} -> {false,
+    # cond_errors ++ [{transition, reason}]}` clause is changed to `{:error,
+    # _reason} -> {true, cond_errors}` -> a failing cond wrongly enables its
+    # transition, so `handle_event/2` takes `go` straight to `b` instead of
+    # gating it, reddening the configuration assertion below.
+    test "an uncaught error.execution reaches quiescence with the error consumed and the configuration still in a" do
+      m = uncaught_machine()
+      {fresh, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, result, _effects} = Interpreter.handle_event(fresh, Event.external("go"))
+
+      assert result.configuration == MapSet.new([0, state_index(m, "a")])
+      assert MachineState.internal_events(result) == []
+      assert result.running
+    end
   end
 end
