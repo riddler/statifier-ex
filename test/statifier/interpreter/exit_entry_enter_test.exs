@@ -20,12 +20,12 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
   # `@document` deliberately contains an id-less compound wrapping a
   # `<final>` (index 20 below), the one shape
-  # `raise_parent_completion/3`'s `_no_id` arm exists for. st-t8w will
-  # make `Statifier.Validator` refuse exactly that document, so this
-  # fixture compiles through Parser -> Lowering -> Compiler and skips the
+  # `raise_parent_completion/3`'s `_no_id` arm exists for. st-t8w makes
+  # `Statifier.Validator` refuse exactly that document, so this fixture
+  # compiles through Parser -> Lowering -> Compiler and skips the
   # validator: the guard it covers is defense in depth behind a gate that
-  # will reject the input, and a test for it cannot pass through that
-  # gate by construction.
+  # rejects the input, and a test for it cannot pass through that gate by
+  # construction.
   defp compile_unvalidated!(xml) do
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root)
