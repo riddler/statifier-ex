@@ -485,13 +485,13 @@ there is nothing to classify.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green, and its output contains no `○` line for
+- [x] Full `mix quality` is green, and its output contains no `○` line for
       Doctor at all - the stage reports `✓`.
-- [ ] `mix gate.verify` confirms a full, unscoped gate.
-- [ ] `ruby ~/.claude/skills/wurk:kit/scripts/gate.rb` (via the manifest lint
+- [x] `mix gate.verify` confirms a full, unscoped gate.
+- [x] `ruby ~/.claude/skills/wurk:kit/scripts/gate.rb` (via the manifest lint
       in `/wurk:kit`) accepts the manifest with an empty
       `project_level_skips` list.
-- [ ] `mix quality --profile merge` is green, including the ADR judge, which
+- [x] `mix quality --profile merge` is green, including the ADR judge, which
       is what checks the ADR-0017 point 6 obligation that a `.claude/wurk.json`
       gate-key change arrive with its prose.
 
@@ -780,5 +780,19 @@ is the trade named in "Decisions taken without a human present", item 2.
 `--loop`, this phase will not advance: `/wurk:commit --auto` sees a red gate
 and stops. That is the intended behavior. The loop should surface the
 outstanding ledger entry and halt rather than retry.
+
+---
+
+### Phase 3
+
+- [ ] The rewritten `CLAUDE.md` bullet still explains what the *category* is
+      for, not only that it is currently empty - a reader arriving at the next
+      skipped stage must be able to classify it from this text.
+- [ ] Nothing in `CLAUDE.md` still says the doctor decision is open or owned
+      by st-1xz.
+- [ ] The not-applicable bullet is unchanged.
+
+**Implementation Note**: Same as Phase 1. This is the last commit on the
+branch.
 
 ---
