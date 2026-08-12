@@ -23,6 +23,14 @@ defmodule Statifier.Validator.Checks.Final do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns a `:final_has_states` error for every state child of a `:final`
+  state and a `:final_has_transitions` error for every `<transition>` child
+  of one - a `<final>`'s only legal content is `onentry`, `onexit`, and
+  `donedata`. An `initial` attribute or `<initial>` element on a `:final` is
+  not reported here; check 3 already owns that mistake. Returns `[]` when no
+  `:final` state carries an illegal child.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states

@@ -21,6 +21,17 @@ defmodule Statifier.Validator.Checks.InitialElement do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns an `:initial_attribute_and_element` error for every state whose
+  `<initial>` element coexists with an `initial` attribute, plus the shared
+  default-transition errors from
+  `Statifier.Validator.Checks.DefaultTransition` for that element's content
+  model (required, exactly one transition, a target, no `event`, no `cond`).
+  Does not itself check target existence or descendancy - those belong to
+  `Statifier.Validator.Checks.Targets` and
+  `Statifier.Validator.Checks.InitialTargets`. Returns `[]` when every
+  `<initial>` element in the document is well-formed.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
     states

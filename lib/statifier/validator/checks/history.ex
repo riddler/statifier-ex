@@ -36,6 +36,16 @@ defmodule Statifier.Validator.Checks.History do
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
 
+  @doc """
+  Returns, per `:history` state in the document, any combination of a
+  `:history_bad_parent` error (the parent is not a compound `<state>` or
+  `<parallel>`), the shared default-transition errors from
+  `Statifier.Validator.Checks.DefaultTransition`, an `:initial_not_descendant`
+  error (the default transition's target is not a descendant of the
+  history's own parent), and a `:history_bad_type` error (a written `type`
+  that is neither `"shallow"` nor `"deep"`). Returns `[]` when every
+  `:history` state's placement, default transition, and type are all legal.
+  """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{} = context) do
     states
