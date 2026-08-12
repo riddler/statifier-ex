@@ -396,12 +396,12 @@ temporarily revert one emitted cond to `_statifier_unbound` (and separately to
 
 #### Automated Verification:
 
-- [ ] `mix test test/corpus/boundness_notation_test.exs` passes.
-- [ ] Full `mix quality` is green, attested by `mix gate.verify`. Use
+- [x] `mix test test/corpus/boundness_notation_test.exs` passes.
+- [x] Full `mix quality` is green, attested by `mix gate.verify`. Use
       `mix quality --profile loop` while iterating.
-- [ ] The new test runs in the default suite (it appears in `mix test` output
+- [x] The new test runs in the default suite (it appears in `mix test` output
       without `--include scxml_w3`).
-- [ ] `test/passing_tests.json` is unmodified; `internal_tests`' existing globs
+- [x] `test/passing_tests.json` is unmodified; `internal_tests`' existing globs
       already cover `test/corpus/`, so `mix test.regression` picks the new test
       up with no registry edit.
 
@@ -524,5 +524,22 @@ looped (`--loop`) execution, the Automated Verification above gates
 advancement via `/wurk:commit --auto`, and the Manual items are surfaced once
 at the end. Reviewing a 24-file generated diff is genuinely a human step; a
 looped run should treat it as deferred, not as satisfied.
+
+---
+
+### Phase 2
+
+- [ ] Each sabotage claimed in a comment was actually performed and observed
+      red, then reverted.
+- [ ] The failure message on a seeded violation names the file and is
+      actionable for someone who has never read this plan.
+- [ ] No regressions in related features: the other `test/corpus/` guards still
+      pass and the new test does not duplicate what
+      `emitted_paths_test.exs` already asserts.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause for the human
+to confirm the sabotage evidence. In looped execution, the Automated
+Verification gates advancement and the Manual items are deferred.
 
 ---
