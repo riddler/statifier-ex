@@ -289,11 +289,11 @@ this keeps the manifest edit from arriving bare.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green, including the Gate guard stage - this phase
+- [x] Full `mix quality` is green, including the Gate guard stage - this phase
       introduces no guarded change of its own, so the guard must stay green.
-- [ ] `mix gate.verify` confirms the run was a full, unscoped, unskipped gate.
-- [ ] `mix quality --profile loop` used between edits (not as the phase gate).
-- [ ] `mix test test/mix/statifier/gate_guard_test.exs` passes, and the two new
+- [x] `mix gate.verify` confirms the run was a full, unscoped, unskipped gate.
+- [x] `mix quality --profile loop` used between edits (not as the phase gate).
+- [x] `mix test test/mix/statifier/gate_guard_test.exs` passes, and the two new
       cases exist.
 
 #### Manual Verification:
@@ -716,3 +716,26 @@ decided, with the reasoning recorded so a human can overturn it cheaply.
 - Guard tests: `test/mix/statifier/gate_guard_test.exs:37`
 - Prior plan that classified this skip: `docs/plans/260812-st-rtm-wurk-config-catchup.md`
 - Commit extension: `.claude/wurk/commit.md:46`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Each new test was actually sabotaged - the covered code was broken, the
+      test went red, and the change was reverted - and the sabotage note names
+      the real mutation.
+- [ ] The `CLAUDE.md` sentence reads as policy, not as a changelog line.
+- [ ] No regressions in the other gate stages' behavior.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+the full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving on. In looped (`--loop`)
+execution, this phase's Automated Verification gates advancement
+automatically, and Manual Verification items are deferred and surfaced once at
+the end.
+
+---

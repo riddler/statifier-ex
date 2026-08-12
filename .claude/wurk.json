@@ -33,7 +33,7 @@
     "guard_ledger": "docs/quality-gate-changes.md",
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
     "also_gated_paths": [],
-    "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"],
+    "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf", ".doctor.exs"],
     "sabotage": {
       "test_roots": ["test/"],
       "test_pattern": "\\btest\\s+\"",

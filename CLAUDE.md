@@ -170,10 +170,13 @@ ADR-0011 makes both rules mechanical:
 
 - **A guarded change needs a ledger entry.** The `Gate guard` stage
   (`mix gate.check`) fails when the branch edits `.quality.exs`, `.credo.exs`,
-  `coveralls.json`, `.sobelow-conf`, a gate-relevant `mix.exs` line, adds a
-  `@tag :skip`, or shrinks `test/passing_tests.json` without an entry in
-  `docs/quality-gate-changes.md` naming that path. The entry is a human's call
-  on the record, not one an agent writes for itself.
+  `coveralls.json`, `.sobelow-conf`, `.doctor.exs`, a gate-relevant `mix.exs`
+  line, adds a `@tag :skip`, or shrinks `test/passing_tests.json` without an
+  entry in `docs/quality-gate-changes.md` naming that path. The entry is a
+  human's call on the record, not one an agent writes for itself.
+  `.doctor.exs` joined the guarded set alongside the rest: it holds
+  doc-coverage thresholds, the same shape of gate-config file as
+  `.sobelow-conf`.
 - **Prove the run was a full gate.** `mix gate.verify` runs the gate and exits
   non-zero if the run was profiled, scoped, `--quick`, or `--skip`-ed. Report a
   full green off its output, not off a run you remember being unscoped.
