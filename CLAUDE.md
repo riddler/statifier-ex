@@ -188,13 +188,28 @@ pattern is recorded here, because a key that reclassifies what blocks is a
 decision and not a constant.
 
 - **Not applicable** (`gate.not_applicable_skips`) - the stage will never run
-  here, no matter who works on the repo. Gettext is the whole list: statifier-ex
+  here, no matter who works on the repo. Gettext is one member: statifier-ex
   is an SCXML engine library with no user-facing strings and no `.po` files, and
   gettext is translation tooling for applications. The two `.po` patterns are
   the same declaration reached by a different stage message. Nothing closes this
   "gap" because there is no gap - so `/wurk:commit` reports and `/wurk:mr`
   request bodies stop naming it, which is what keeps the remaining skip lines
   worth reading.
+
+  The other member is `^disabled in \.quality\.exs$`, which today only ever
+  matches the ADR judge. `.quality.exs:23` disables that stage on purpose, to
+  avoid real `claude` CLI calls and real spend on every bare gate run; the
+  `merge` profile re-enables it, and `.claude/wurk/mr.md` runs
+  `mix quality --profile merge` unconditionally before every push. The stage
+  runs here - only the bare gate declines to run it - so nobody should ever
+  "close the gap" of the bare gate skipping it; that would be a regression
+  against a deliberate design, not a fix. The skip summary string carries no
+  stage name, so this pattern classifies every stage disabled in
+  `.quality.exs`, not just the ADR judge specifically - `adr_judge` is simply
+  the only stage disabled there today. Disabling a second stage in
+  `.quality.exs` changes what this pattern silently classifies, and obliges
+  whoever does it to re-argue the classification in this section rather than
+  inheriting the ADR judge's answer by default.
 - **Project-level gap** (`gate.project_level_skips`) - a real hole in what this
   project checks, standing open on every run. It does not block a commit, since
   gating on it would refuse every commit forever, but it stays named in every
