@@ -49,6 +49,7 @@ defmodule Statifier.Interpreter.Selection do
   `OrderedSet`.
   """
 
+  alias Statifier.Evaluator
   alias Statifier.Event
   alias Statifier.Interpreter.NameMatch
   alias Statifier.Machine
@@ -234,15 +235,23 @@ defmodule Statifier.Interpreter.Selection do
   end
 
   @doc """
-  `conditionMatch` (Appendix D) - the one `cond` seam. `nil` `cond`
-  always passes; a *written* `cond` is currently an error rather than an
-  assumed `true`, because treating an unevaluated condition as satisfied
-  would be the "rescue-to-default at a leaf" failure `docs/architecture.md`
-  names as a v1 defect. This function's body is a stub; the datamodel
-  evaluation that replaces it will raise `error.execution` at the call site
-  below on the error case; neither this function's signature nor the
-  selection logic that calls it will change when that lands - only the body
-  will.
+  `conditionMatch` (Appendix D) - the one `cond` seam. `nil` `cond` always
+  passes; a *written* `cond` is evaluated through `Statifier.Evaluator`
+  against a `Predicator.Context.t()` built from `machine_state` - once per
+  call here, and once per selection round in the private walk below (the
+  "once per evaluation site" contract `Statifier.Evaluator`'s own moduledoc
+  states). `{:ok, true}` enables the transition; `{:ok, false}` and
+  `{:error, _}` both do not. A non-boolean `{:ok, value}` - anything other
+  than `true` or `false` - is treated as an `{:error, {:non_boolean_cond,
+  value}}`, not as a falsy value: collapsing it to `false` would be the
+  "rescue-to-default at a leaf" failure `docs/architecture.md` principle 3
+  forbids, and ADR-0004 rules out borrowing ECMAScript truthiness, since
+  predicator is the datamodel and has no truthiness rules of its own.
+
+  This function never enqueues anything itself - it is a pure query, plain
+  values in and out, per this module's own moduledoc. The `{:error, _}`
+  path's `error.execution` enqueue lives in the two entry points below, not
+  here.
 
   Unreachable from the corpus today: `FeatureDetector` marks
   `conditional_transitions` `:unsupported`, so no compiled document can carry
@@ -251,8 +260,32 @@ defmodule Statifier.Interpreter.Selection do
   """
   @spec condition_match(machine_state :: MachineState.t(), transition :: Transition.t()) ::
           {:ok, boolean()} | {:error, term()}
-  def condition_match(%MachineState{}, %Transition{cond: nil}), do: {:ok, true}
-  def condition_match(%MachineState{}, %Transition{}), do: {:error, {:unsupported, :cond}}
+  def condition_match(%MachineState{} = machine_state, %Transition{} = transition) do
+    evaluate_cond(Evaluator.context(machine_state), transition)
+  end
+
+  # `conditionMatch`'s body over a context the caller already built - the
+  # selection walk builds one per round (`Statifier.Evaluator`'s "once per
+  # evaluation site" contract), while `condition_match/2` above builds one per
+  # call so the spec-named port stays callable from a machine_state alone
+  # (docs/observability.md constraint 5). ADR-0002 mechanical decomposition of
+  # one pseudocode function, not a second one.
+  @spec evaluate_cond(context :: Predicator.Context.t(), transition :: Transition.t()) ::
+          {:ok, boolean()} | {:error, term()}
+  defp evaluate_cond(_context, %Transition{cond: nil}), do: {:ok, true}
+
+  defp evaluate_cond(context, %Transition{cond: cond}) do
+    case Evaluator.evaluate(context, cond) do
+      {:ok, true} -> {:ok, true}
+      {:ok, false} -> {:ok, false}
+      # D1: a cond that evaluates to a non-boolean is a type failure, not a
+      # falsy value - collapsing it to `false` would be the rescue-to-default
+      # at a leaf docs/architecture.md principle 3 forbids. ADR-0004: predicator
+      # is the datamodel and has no ECMAScript truthiness to borrow.
+      {:ok, other} -> {:error, {:non_boolean_cond, other}}
+      {:error, %Evaluator.Error{} = error} -> {:error, error}
+    end
+  end
 
   @doc """
   `selectTransitions` (Appendix D) - the transitions `event` enables, one per
