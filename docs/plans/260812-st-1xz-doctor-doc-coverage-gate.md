@@ -604,14 +604,14 @@ phase's commit once the human has written it - not a follow-up commit.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` shows `✓ Doctor` with a 100% summary, and the
+- [x] `mix quality` shows `✓ Doctor` with a 100% summary, and the
       `○ Doctor: skipped (:doctor not installed)` line is gone.
-- [ ] `mix doctor` alone exits 0.
-- [ ] Every stage other than Gate guard is green.
-- [ ] `mix gate.check` reports exactly two findings, on `mix.exs` and
+- [x] `mix doctor` alone exits 0.
+- [x] Every stage other than Gate guard is green.
+- [x] `mix gate.check` reports exactly two findings, on `mix.exs` and
       `.doctor.exs`, and no others - proving Phase 1's guard extension fires
       on precisely the intended surface.
-- [ ] After the human writes the ledger entry: full `mix quality` green, and
+- [x] After the human writes the ledger entry: full `mix quality` green, and
       `mix gate.verify` confirms a full unscoped run.
 
 #### Manual Verification:
@@ -755,5 +755,30 @@ the end.
 **Implementation Note**: Same as Phase 1. No test file changes are expected in
 this phase, so the sabotage rule has nothing to bite on; if a test does get
 added, it needs its sabotage note.
+
+---
+
+### Phase 4
+
+- [ ] **A human writes the `docs/quality-gate-changes.md` entry.** This is a
+      blocking handoff, not an agent step. Until it exists the phase cannot
+      commit, and that refusal is the design working.
+- [ ] The human confirms the thresholds are the right bar for this project -
+      that 100% doc coverage is discipline the project intends to keep, not a
+      number chosen because it happened to be reachable.
+- [ ] Doctor's build-lock contention with the parallel analysis stages is
+      cosmetic in practice (a few `Waiting for lock on the build directory`
+      lines), not a slowdown worth configuring around.
+
+**If Phase 1 was declined**: the guard-related criteria above simply do not
+apply. `mix gate.check` reports nothing, there is no ledger entry to wait on,
+and this becomes an ordinary green phase that commits without a handoff. The
+cost is that `.doctor.exs` is then a threshold file no check watches, which
+is the trade named in "Decisions taken without a human present", item 2.
+
+**Implementation Note**: Same loop/full-gate rule as the other phases. Under
+`--loop`, this phase will not advance: `/wurk:commit --auto` sees a red gate
+and stops. That is the intended behavior. The loop should surface the
+outstanding ledger entry and halt rather than retry.
 
 ---
