@@ -38,7 +38,7 @@ defmodule Mix.Statifier.GateGuardTest do
   # dropping a path from the module does not silently shrink the test with it.
   # sabotage: drop `.credo.exs` from @guarded_paths -> red on that path
   test "every guarded gate-config path fires on any hunk" do
-    paths = [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"]
+    paths = [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf", ".doctor.exs"]
     assert GateGuard.guarded_paths() == paths
 
     for path <- paths do
@@ -47,6 +47,13 @@ defmodule Mix.Statifier.GateGuardTest do
       assert %{file: ^path, line: nil, check: "gate-config", severity: "error"} = finding
       assert finding.message =~ "no entry in docs/quality-gate-changes.md"
     end
+  end
+
+  # sabotage: drop ".doctor.exs" from @guarded_paths -> red
+  test "a new .doctor.exs fires as a gate-config change" do
+    diff = file_diff(".doctor.exs", ["  min_overall_doc_coverage: 100"])
+
+    assert [%{file: ".doctor.exs", check: "gate-config"}] = GateGuard.analyze(source(diff))
   end
 
   # sabotage: match mix.exs by path instead of by line content -> red
@@ -72,6 +79,13 @@ defmodule Mix.Statifier.GateGuardTest do
       assert [%{file: "mix.exs", line: 10, check: "gate-config"}] =
                GateGuard.analyze(source(file_diff("mix.exs", [line])))
     end
+  end
+
+  # sabotage: drop `:doctor` from @mix_exs_pattern -> red
+  test "a mix.exs line adding the :doctor dep fires as a gate-config change" do
+    diff = file_diff("mix.exs", [~s|      {:doctor, "~> 0.23", only: :dev, runtime: false},|])
+
+    assert [%{file: "mix.exs", line: 10, check: "gate-config"}] = GateGuard.analyze(source(diff))
   end
 
   # sabotage: filter mix_exs_findings/1 to added lines only -> red

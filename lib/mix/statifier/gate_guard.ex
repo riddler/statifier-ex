@@ -33,14 +33,14 @@ defmodule Mix.Statifier.GateGuard do
           head_registry: String.t() | nil
         }
 
-  @guarded_paths [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"]
+  @guarded_paths [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf", ".doctor.exs"]
   @ledger_path "docs/quality-gate-changes.md"
   @registry_path "test/passing_tests.json"
 
   # `mix.exs` is matched by line content rather than by path: most edits to it
   # (a dep bump, an unrelated alias) have nothing to do with the gate, and a
   # path-level guard would make every dependency change need a ledger entry.
-  @mix_exs_pattern ~r/test_coverage|dialyzer:|warnings_as_errors|aliases|:ex_quality|:credo|:excoveralls|:dialyxir|:sobelow/
+  @mix_exs_pattern ~r/test_coverage|dialyzer:|warnings_as_errors|aliases|:ex_quality|:credo|:excoveralls|:dialyxir|:sobelow|:doctor/
 
   # The prefixes are pinned because `diff.mnemonicPrefix` in a developer's git
   # config would otherwise rename them out from under the parser.
