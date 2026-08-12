@@ -23,14 +23,14 @@ defmodule SCXMLTest.SystemVariables.Test330 do
             <onentry>
                 <raise event="foo" />
             </onentry>
-            <transition event="foo" cond="_event.name !== _statifier_unbound and _event.type !== _statifier_unbound and _event.sendid !== _statifier_unbound and _event.origin !== _statifier_unbound and _event.origintype !== _statifier_unbound and _event.invokeid !== _statifier_unbound and _event.data !== _statifier_unbound" target="s1" />
+            <transition event="foo" cond="_event.name !== undefined and _event.type !== undefined and _event.sendid !== undefined and _event.origin !== undefined and _event.origintype !== undefined and _event.invokeid !== undefined and _event.data !== undefined" target="s1" />
             <transition event="*" target="fail" />
         </state>
         <state id="s1">
             <onentry>
                 <send event="foo" />
             </onentry>
-            <transition event="foo" cond="_event.name !== _statifier_unbound and _event.type !== _statifier_unbound and _event.sendid !== _statifier_unbound and _event.origin !== _statifier_unbound and _event.origintype !== _statifier_unbound and _event.invokeid !== _statifier_unbound and _event.data !== _statifier_unbound" target="pass" />
+            <transition event="foo" cond="_event.name !== undefined and _event.type !== undefined and _event.sendid !== undefined and _event.origin !== undefined and _event.origintype !== undefined and _event.invokeid !== undefined and _event.data !== undefined" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">

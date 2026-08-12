@@ -311,23 +311,23 @@ and investigate before committing - not something to accept.
 
 #### Automated Verification:
 
-- [ ] `mise run corpus:check` reports no unexpected failures and no stale
+- [x] `mise run corpus:check` reports no unexpected failures and no stale
       allowlist entry (this is what proves `undefined` and the respelled conds
       compile under predicator 5.0).
-- [ ] `grep -rn _statifier_unbound . --exclude-dir=.git --exclude-dir=docs`
+- [x] `grep -rn _statifier_unbound . --exclude-dir=.git --exclude-dir=docs`
       returns nothing.
-- [ ] `grep -rEn '(^|[^!=])== *undefined' test/scxml_tests/` returns nothing.
-- [ ] `grep -rl 'undefined' test/scxml_tests/ | wc -l` is exactly 24, matching
+- [x] `grep -rEn '(^|[^!=])== *undefined' test/scxml_tests/` returns nothing.
+- [x] `grep -rl 'undefined' test/scxml_tests/ | wc -l` is exactly 24, matching
       the previously-sentinel file list.
-- [ ] `git status --porcelain` shows changes only under `test/scxml_tests/`,
+- [x] `git status --porcelain` shows changes only under `test/scxml_tests/`,
       `tools/corpus/scxml_w3/conf_predicator.xsl`,
       `tools/corpus/scxml_w3/exclusions.exs`, and `docs/plans/`.
-- [ ] Full `mix quality` is green, attested by `mix gate.verify` (not a
+- [x] Full `mix quality` is green, attested by `mix gate.verify` (not a
       `--profile loop` or scoped run). Use `mix quality --profile loop` while
       iterating.
-- [ ] `mix test.regression` is green (it must be unaffected: none of the 24
+- [x] `mix test.regression` is green (it must be unaffected: none of the 24
       files is in `test/passing_tests.json`).
-- [ ] `test/passing_tests.json` is unmodified, so the gate guard raises no
+- [x] `test/passing_tests.json` is unmodified, so the gate guard raises no
       ratchet finding and no `docs/quality-gate-changes.md` entry is needed.
 
 #### Manual Verification:
@@ -496,3 +496,33 @@ Verification gates advancement and the Manual items are deferred.
 - Bead: st-unt. Handoffs: st-af3.2 (wires `cond`), st-af3.3 (`<data>` seeding -
   carries the corpus requirement as a note), st-af3.6 and st-cmq.6/st-cmq.7
   (non-`<data>` roots), st-af3.8 (ratchets what then passes).
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Read the emitted diff for at least one file per template family
+      (test528 `conf:emptyEventData`, test223 `conf:isBound`, test277
+      `conf:unboundVar`/`noValue`, test319 `conf:systemVarIsBound`, test330
+      `conf:eventFieldsAreBound`, test333 `conf:eventFieldHasNoValue`) and
+      confirm each cond changed only in the identifier, never the operator.
+- [ ] Confirm the diff contains no `@tag required_features` churn beyond what
+      the cond change explains, and no reordering or reformatting of unrelated
+      files - i.e. that regeneration reproduced the recorded deterministic
+      output.
+- [ ] Read the rewritten XSL header and `exclusions.exs` note and confirm each
+      describes what the file now does, including the root-load caveat.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause here for the
+human to confirm the manual review of the generated diff before Phase 2. In
+looped (`--loop`) execution, the Automated Verification above gates
+advancement via `/wurk:commit --auto`, and the Manual items are surfaced once
+at the end. Reviewing a 24-file generated diff is genuinely a human step; a
+looped run should treat it as deferred, not as satisfied.
+
+---

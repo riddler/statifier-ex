@@ -44,7 +44,7 @@ defmodule SCXMLTest.Foreach.Test150 do
             <transition event="*" target="s2" />
         </state>
         <state id="s2">
-            <transition cond="Var4 !== _statifier_unbound" target="pass" />
+            <transition cond="Var4 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">

@@ -22,7 +22,7 @@ defmodule SCXMLTest.Data.Test552 do
             <data id="Var1" src="file:test552.txt" />
         </datamodel>
         <state id="s0">
-            <transition cond="Var1 !== _statifier_unbound" target="pass" />
+            <transition cond="Var1 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">

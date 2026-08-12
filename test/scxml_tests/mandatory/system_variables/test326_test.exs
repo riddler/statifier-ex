@@ -27,7 +27,7 @@ defmodule SCXMLTest.SystemVariables.Test326 do
             <data id="Var2" />
         </datamodel>
         <state id="s0">
-            <transition cond="Var1 !== _statifier_unbound" target="s1" />
+            <transition cond="Var1 !== undefined" target="s1" />
             <transition cond="true" target="fail" />
         </state>
         <state id="s1">

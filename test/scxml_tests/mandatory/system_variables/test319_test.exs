@@ -19,7 +19,7 @@ defmodule SCXMLTest.SystemVariables.Test319 do
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" datamodel="predicator" version="1.0" name="machineName">
         <state id="s0">
             <onentry>
-                <if cond="_event !== _statifier_unbound">
+                <if cond="_event !== undefined">
                     <raise event="bound" />
                     <else />
                     <raise event="unbound" />

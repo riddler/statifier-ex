@@ -21,7 +21,7 @@ defmodule SCXMLTest.SystemVariables.Test333 do
             <onentry>
                 <send event="foo" />
             </onentry>
-            <transition event="foo" cond="_event.sendid === _statifier_unbound" target="pass" />
+            <transition event="foo" cond="_event.sendid === undefined" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">

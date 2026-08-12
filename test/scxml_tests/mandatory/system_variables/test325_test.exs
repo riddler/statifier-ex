@@ -22,7 +22,7 @@ defmodule SCXMLTest.SystemVariables.Test325 do
             <data id="Var1" expr="_ioprocessors" />
         </datamodel>
         <state id="s0">
-            <transition cond="Var1 !== _statifier_unbound" target="pass" />
+            <transition cond="Var1 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">

@@ -52,7 +52,7 @@ defmodule SCXMLTest.ScxmlEventProcessor.Test351 do
             <transition event="*" target="fail" />
         </state>
         <state id="s3">
-            <transition cond="Var2 === _statifier_unbound" target="pass" />
+            <transition cond="Var2 === undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">

@@ -5,10 +5,12 @@
 #   :needs_predicator_feature - blocked on an upstream predicator capability
 #   :needs_basichttp         - BasicHTTP Event I/O Processor, out of scope
 #
-# NOTE: conf:emptyEventData (test343, test488, test528) is NOT excluded - it is
-# emitted as `_event.data === _statifier_unbound`, which holds only if the
-# engine represents absent event data as undefined rather than %{}. If the
-# datamodel decides otherwise, those three move here.
+# NOTE: no boundness test is excluded here. Boundness is spelled
+# `=== undefined` / `!== undefined` against predicator 5.0's `undefined`
+# literal, tested against a root the datamodel binds - conf:emptyEventData
+# (test343, test488, test528) is emitted as `_event.data === undefined`. A
+# `Var<n>` boundness cond depends on st-af3.3 seeding the declared `<data>` it
+# names, not on an exclusion here.
 
 %{
   "test302" => {:needs_script, "conf:script - predicator has no statement layer"},

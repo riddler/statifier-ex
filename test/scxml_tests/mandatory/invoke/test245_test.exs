@@ -35,7 +35,7 @@ defmodule SCXMLTest.Invoke.Test245 do
                 <content>
                     <scxml initial="sub0" version="1.0" datamodel="predicator">
                         <state id="sub0">
-                            <transition cond="Var2 !== _statifier_unbound" target="subFinal">
+                            <transition cond="Var2 !== undefined" target="subFinal">
                                 <send target="#_parent" event="failure" />
                             </transition>
                             <transition target="subFinal">
