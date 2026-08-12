@@ -342,27 +342,27 @@ a literal. Write the user-facing consequence, not the version number:
 
 #### Automated Verification:
 
-- [ ] `mix deps.get` resolves predicator to 5.0.0, and
+- [x] `mix deps.get` resolves predicator to 5.0.0, and
       `grep -n predicator mix.lock` shows `"5.0.0"`.
-- [ ] `git diff mix.lock` changes exactly one entry (the predicator line).
-- [ ] Reserved-word sweep, the deterministic form promoted from the research
+- [x] `git diff mix.lock` changes exactly one entry (the predicator line).
+- [x] Reserved-word sweep, the deterministic form promoted from the research
       (expects **zero** output lines; it returns zero on the pre-bump tree, so a
       non-zero result is a real finding introduced by something on this branch):
 
       git grep -nE '(cond|expr|eventexpr|targetexpr|typeexpr|delayexpr|sendidexpr|srcexpr|array|location|item|idlocation)="[^"]*\b(if|else|while|undefined)\b' -- test/ tools/
 
-- [ ] `git grep -n '~> 4\.0' -- mix.exs docs/` returns nothing for predicator.
-- [ ] Full `mix quality` is green (use `mix quality --profile loop` between
+- [x] `git grep -n '~> 4\.0' -- mix.exs docs/` returns nothing for predicator.
+- [x] Full `mix quality` is green (use `mix quality --profile loop` between
       edits; a loop run never satisfies this criterion). This includes the
       `Gate guard` stage, which must report no findings - see Deferred Manual
       Verification if it does not.
-- [ ] `mix gate.verify` confirms the green run was a full, unprofiled,
+- [x] `mix gate.verify` confirms the green run was a full, unprofiled,
       unscoped, un-`--skip`-ed gate.
-- [ ] `mix test --include scion --include scxml_w3` passes. This is the real
+- [x] `mix test --include scion --include scxml_w3` passes. This is the real
       sweep proof: every corpus expression compiles through
       `Statifier.Compiler.Expressions` on these runs.
-- [ ] `mix test.regression` passes.
-- [ ] `git status --porcelain test/passing_tests.json test/scion_tests
+- [x] `mix test.regression` passes.
+- [x] `git status --porcelain test/passing_tests.json test/scion_tests
       test/scxml_tests` is empty - no corpus file and no ratchet entry changed.
 
 #### Manual Verification:
@@ -552,6 +552,44 @@ must not be silently worked around.
    not consumed here" is a deliberate state to write down, and it is the piece
    of prose most likely to be read later as a promise.
 
+
+### Phase 1
+
+- [ ] The commit-message body records the sweep result in words: 1224 values
+      checked across 212 files, 8 failures under 5.0.0, byte-identical 8 under
+      4.0.0, all negative fixtures or the existing `conf:illegalItem` allowlist
+      entry, zero reserved-word hits - citing
+      `docs/research/260812-st-p3t-predicator-5-bump.md` section 4. This is what
+      makes the bead's sweep criterion auditable after the branch merges.
+- [ ] Spec-conformance judgment on the touched `lib/statifier/` function.
+      `.claude/wurk/plan.md` states this as "matches the W3C Appendix D
+      pseudocode line for line", which cannot apply literally here:
+      `in_function/1` is not an Appendix D algorithm function at all - it is the
+      `In(stateId)` predicate defined in spec section 5.10, dispatched by
+      predicator rather than called from the interpreter loop. The substitute
+      standard, which is the extension's intent applied to this function: it
+      still implements SCXML 5.10 `In(stateId)` exactly as before - a state id
+      the document never declared answers `{:ok, false}` rather than erroring,
+      and the configuration read is the one captured at `context/1` time. The
+      change is to the spec and a parameter name only; the body must be
+      byte-identical apart from the rename. No Appendix D function is touched by
+      either phase, so ADR-0002's deviation rule has nothing to record.
+- [ ] The changelog fragment describes the user-visible syntax change, not the
+      version bump.
+- [ ] No regressions in related features: `In(stateId)` guards still behave
+      correctly in the `test/scion_tests/in/` and W3C `In` cases.
+
+**Implementation Note**: No new test is added in this phase, so the sabotage
+rule does not apply - it governs new tests asserting `lib/` behavior, and the
+existing conformance suite already covers `In/1` and every corpus expression.
+The behavior change under test here is zero by design; the whole argument for
+this phase is that the closure discards the argument whose type changed. Use
+`mix quality --profile loop` between edits and full `mix quality` as the phase
+gate. In interactive execution, pause for the manual items. In `--loop`
+execution the automated list gates advancement and the manual items are
+deferred to the end.
+
+---
 ## Testing Strategy
 
 ### Unit Tests:
