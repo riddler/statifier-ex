@@ -32,5 +32,15 @@ defmodule Statifier.Event.CauseTest do
 
       assert %Cause{origin: {:state, 9}, macrostep: 6, microstep: 2} = cause
     end
+
+    # sabotage: `Cause.new/3` swaps the `macrostep`/`microstep` arguments
+    # when building the struct -> the counters land in the wrong fields,
+    # reddening this assertion (distinct counter values from the tests above
+    # so a swap cannot pass by coincidence).
+    test "stamps a :transition origin with the given counters" do
+      cause = Cause.new({:transition, 7}, 4, 8)
+
+      assert %Cause{origin: {:transition, 7}, macrostep: 4, microstep: 8} = cause
+    end
   end
 end

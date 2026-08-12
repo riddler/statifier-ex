@@ -29,16 +29,15 @@ defmodule Statifier.Interpreter.Selection do
   `select_transitions/2` and `select_eventless_transitions/1` are the two
   functions in this module that thread `machine_state` through their
   *return* value as well as their first argument: both return
-  `{MachineState.t(), [Transition.t()]}` rather than a bare list, so that
-  when `condition_match/2`'s stub is replaced with a real datamodel
-  evaluation that enqueues `error.execution` on a failed `cond`, both entry
-  points already have a machine_state to enqueue onto - that change will
-  touch a function body, not either signature. Every other query in this
-  module, including `remove_conflicting_transitions/2` itself, still returns
-  a plain value with no machine_state, because none of them can raise. Today
-  the machine_state comes back unchanged from both entry points; a test
-  below pins that so the day it stops being true is a deliberate,
-  signature-preserving edit to `condition_match/2`'s body.
+  `{MachineState.t(), [Transition.t()]}` rather than a bare list, so that a
+  failed `cond` discovered mid-walk has a machine_state to enqueue
+  `error.execution` onto. The machine_state comes back **unchanged** when no
+  `cond` fails during that round, and carries one `error.execution` event per
+  failed `cond` - in walk order - when one or more do. This is the
+  deliberate, signature-preserving edit the paragraph above used to
+  anticipate; it has landed. Every other query in this module, including
+  `remove_conflicting_transitions/2` itself, still returns a plain value with
+  no machine_state, because none of them can raise.
 
   The two walks and the conflict filter are Appendix D's two nested loops
   with labelled breaks, decomposed into named private helpers to stay under
@@ -55,6 +54,13 @@ defmodule Statifier.Interpreter.Selection do
   alias Statifier.Machine
   alias Statifier.Machine.Transition
   alias Statifier.MachineState
+
+  # A failed `cond`, paired with the transition it belongs to - the
+  # accumulator D2 threads through the private walk instead of writing
+  # machine_state mid-walk. Strictly smaller than a machine_state, and every
+  # helper below stays standalone-callable per docs/observability.md
+  # constraint 5.
+  @typep cond_error :: {Transition.t(), term()}
 
   @doc """
   `findLCCA` (Appendix D) - see `Statifier.Machine.lcca/2` for the body.
@@ -298,18 +304,26 @@ defmodule Statifier.Interpreter.Selection do
   per-transition matcher - rather than re-split per transition.
 
   Returns `{machine_state, transitions}`: the machine_state comes back
-  unchanged today - see the moduledoc.
+  unchanged when no `cond` fails during this round, and carries one
+  `error.execution` per failed `cond` (in walk order) when one does - see the
+  moduledoc.
   """
   @spec select_transitions(machine_state :: MachineState.t(), event :: Event.t()) ::
           {MachineState.t(), [Transition.t()]}
   def select_transitions(%MachineState{} = machine_state, %Event{name: name}) do
     event_tokens = NameMatch.tokenize(name)
+    context = Evaluator.context(machine_state)
 
-    enabled =
+    {enabled, cond_errors} =
       machine_state
       |> atomic_states_in_document_order()
-      |> Enum.flat_map(&selected_for_atomic_state(machine_state, &1, event_tokens))
-      |> Enum.uniq_by(& &1.t_index)
+      |> Enum.flat_map_reduce(
+        [],
+        &selected_for_atomic_state(machine_state, context, &1, event_tokens, &2)
+      )
+
+    machine_state = raise_cond_errors(machine_state, cond_errors)
+    enabled = Enum.uniq_by(enabled, & &1.t_index)
 
     {machine_state, remove_conflicting_transitions(machine_state, enabled)}
   end
@@ -323,17 +337,25 @@ defmodule Statifier.Interpreter.Selection do
   (`Credo.Check.Design.DuplicatedCode` is disabled in `.credo.exs` for
   exactly this reason).
 
-  Returns `{machine_state, transitions}`, unchanged machine_state today,
-  matching `select_transitions/2`.
+  Returns `{machine_state, transitions}`, matching `select_transitions/2`:
+  unchanged when no `cond` fails, carrying one `error.execution` per failed
+  `cond` (in walk order) when one does.
   """
   @spec select_eventless_transitions(machine_state :: MachineState.t()) ::
           {MachineState.t(), [Transition.t()]}
   def select_eventless_transitions(%MachineState{} = machine_state) do
-    enabled =
+    context = Evaluator.context(machine_state)
+
+    {enabled, cond_errors} =
       machine_state
       |> atomic_states_in_document_order()
-      |> Enum.flat_map(&selected_for_atomic_state(machine_state, &1, nil))
-      |> Enum.uniq_by(& &1.t_index)
+      |> Enum.flat_map_reduce(
+        [],
+        &selected_for_atomic_state(machine_state, context, &1, nil, &2)
+      )
+
+    machine_state = raise_cond_errors(machine_state, cond_errors)
+    enabled = Enum.uniq_by(enabled, & &1.t_index)
 
     {machine_state, remove_conflicting_transitions(machine_state, enabled)}
   end
@@ -352,63 +374,151 @@ defmodule Statifier.Interpreter.Selection do
   # The labelled `break loop` in each atomic state's walk: self, then each
   # proper ancestor outward, stopping at the first state that has an enabled
   # transition. `event_tokens` is `nil` for the eventless walk
-  # and a token list for the event-matched walk; `first_matching_transition/4`
-  # reads that to pick the right per-transition predicate. `List.wrap/1`
-  # turns `find_value`'s `Transition.t() | nil` into the `[]` or `[transition]`
-  # `flat_map` needs.
+  # and a token list for the event-matched walk; `first_matching_transition/6`
+  # reads that to pick the right per-transition predicate.
+  #
+  # `Enum.reduce_while/3` for the same labelled `break loop` `Enum.find_value/2`
+  # used to implement, now threading the cond-error accumulator out alongside
+  # the result (D2). Structure is unchanged; only the accumulator is new.
+  # ADR-0002.
   @spec selected_for_atomic_state(
           machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
           state_index :: non_neg_integer(),
-          event_tokens :: [String.t()] | nil
-        ) :: [Transition.t()]
+          event_tokens :: [String.t()] | nil,
+          cond_errors :: [cond_error()]
+        ) :: {[Transition.t()], [cond_error()]}
   defp selected_for_atomic_state(
          %MachineState{machine: machine} = machine_state,
+         context,
          state_index,
-         event_tokens
+         event_tokens,
+         cond_errors
        ) do
     [state_index | Machine.proper_ancestors(machine, state_index)]
-    |> Enum.find_value(&first_matching_transition(machine_state, machine, &1, event_tokens))
-    |> List.wrap()
+    |> Enum.reduce_while({[], cond_errors}, fn s, {[], errors} ->
+      case first_matching_transition(machine_state, context, machine, s, event_tokens, errors) do
+        {nil, errors} -> {:cont, {[], errors}}
+        {transition, errors} -> {:halt, {[transition], errors}}
+      end
+    end)
   end
 
   # The per-state inner loop: the state's own `transitions`, in the document
   # order they are stored, through `Machine.transition/2`, stopping at the
-  # first one whose predicate holds.
+  # first one whose predicate holds. `Enum.reduce_while/3` in place of
+  # `Enum.find/2`, threading the same accumulator (D2).
   @spec first_matching_transition(
           machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
           machine :: Machine.t(),
           state_index :: non_neg_integer(),
-          event_tokens :: [String.t()] | nil
-        ) :: Transition.t() | nil
-  defp first_matching_transition(machine_state, machine, state_index, event_tokens) do
+          event_tokens :: [String.t()] | nil,
+          cond_errors :: [cond_error()]
+        ) :: {Transition.t() | nil, [cond_error()]}
+  defp first_matching_transition(
+         machine_state,
+         context,
+         machine,
+         state_index,
+         event_tokens,
+         cond_errors
+       ) do
     machine
     |> Machine.at(state_index)
     |> Map.fetch!(:transitions)
     |> Enum.map(&Machine.transition(machine, &1))
-    |> Enum.find(&transition_enabled?(machine_state, &1, event_tokens))
+    |> Enum.reduce_while({nil, cond_errors}, fn transition, {nil, errors} ->
+      case transition_enabled(machine_state, context, transition, event_tokens, errors) do
+        {true, errors} -> {:halt, {transition, errors}}
+        {false, errors} -> {:cont, {nil, errors}}
+      end
+    end)
   end
 
   # `event_tokens == nil` is the eventless predicate (`!t.event` in the
   # pseudocode); a token list is the event-matched predicate
-  # (`t.event` and `nameMatch`). Both branches end in `condition_match/2`,
-  # which the pseudocode calls unconditionally on the last candidate
-  # transition it is about to accept.
-  @spec transition_enabled?(
+  # (`t.event` and `nameMatch`). Both branches end in `condition_match/2`
+  # (here, `cond_enabled/3` over a prebuilt context), which the pseudocode
+  # calls unconditionally on the last candidate transition it is about to
+  # accept.
+  @spec transition_enabled(
           machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
           transition :: Transition.t(),
-          event_tokens :: [String.t()] | nil
-        ) :: boolean()
-  defp transition_enabled?(machine_state, %Transition{events: []} = transition, nil) do
-    condition_match(machine_state, transition) == {:ok, true}
+          event_tokens :: [String.t()] | nil,
+          cond_errors :: [cond_error()]
+        ) :: {boolean(), [cond_error()]}
+  defp transition_enabled(
+         _machine_state,
+         context,
+         %Transition{events: []} = transition,
+         nil,
+         cond_errors
+       ) do
+    cond_enabled(context, transition, cond_errors)
   end
 
-  defp transition_enabled?(_machine_state, %Transition{events: []}, _event_tokens), do: false
+  defp transition_enabled(
+         _machine_state,
+         _context,
+         %Transition{events: []},
+         _event_tokens,
+         cond_errors
+       ) do
+    {false, cond_errors}
+  end
 
-  defp transition_enabled?(_machine_state, %Transition{}, nil), do: false
+  defp transition_enabled(_machine_state, _context, %Transition{}, nil, cond_errors) do
+    {false, cond_errors}
+  end
 
-  defp transition_enabled?(machine_state, %Transition{} = transition, event_tokens) do
-    NameMatch.name_match?(transition.events, event_tokens) and
-      condition_match(machine_state, transition) == {:ok, true}
+  defp transition_enabled(
+         _machine_state,
+         context,
+         %Transition{} = transition,
+         event_tokens,
+         cond_errors
+       ) do
+    if NameMatch.name_match?(transition.events, event_tokens) do
+      cond_enabled(context, transition, cond_errors)
+    else
+      {false, cond_errors}
+    end
+  end
+
+  # `condition_match/2`'s body over a prebuilt context, folding a failed
+  # `cond` into the accumulator instead of dropping it. Not enabling *and*
+  # recording: docs/architecture.md principle 3 - the error becomes an
+  # event, it is never swallowed into a bare `false`.
+  @spec cond_enabled(
+          context :: Predicator.Context.t(),
+          transition :: Transition.t(),
+          cond_errors :: [cond_error()]
+        ) :: {boolean(), [cond_error()]}
+  defp cond_enabled(context, transition, cond_errors) do
+    case evaluate_cond(context, transition) do
+      {:ok, true} -> {true, cond_errors}
+      {:ok, false} -> {false, cond_errors}
+      {:error, reason} -> {false, cond_errors ++ [{transition, reason}]}
+    end
+  end
+
+  # The errors-are-events conversion for a failed `cond`, in document order -
+  # `raise_platform/4` not `raise_internal/4` because spec 5.10.1 classifies
+  # `error.*` as a platform event, exactly as
+  # `Statifier.Interpreter.Content.raise_execution_error/4` does for a failed
+  # content node; spec 3.12.2 is what puts it on the internal queue at all.
+  # The origin names the transition, whose `cond_location` an ADR-0014 item 4
+  # diagnostic resolves through `Machine.transition/2`.
+  @spec raise_cond_errors(machine_state :: MachineState.t(), cond_errors :: [cond_error()]) ::
+          MachineState.t()
+  defp raise_cond_errors(machine_state, cond_errors) do
+    Enum.reduce(cond_errors, machine_state, fn {transition, reason}, ms ->
+      MachineState.raise_platform(ms, "error.execution", {:transition, transition.t_index},
+        data: reason
+      )
+    end)
   end
 
   @doc """
