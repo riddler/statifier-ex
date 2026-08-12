@@ -62,8 +62,19 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
   #        fixture is compiled through `compile_unvalidated!/1`, not
   #        `compile!/1`; do not "fix" this by giving the state an id)
   # 21       noid_final         (final)
-  # 22     trigger             (go-* transitions)
-  # 23   top_final              (final; parent 0 - top-level)
+  # 22     noid_par            (parallel; no id - covers
+  #        `maybe_raise_grandparent_completion/3`'s own `_no_id` arm, the
+  #        grandparent-side twin of index 20's parent-side coverage; kept
+  #        distinct from `par` above so completing `par`'s regions is not
+  #        entangled with this fixture)
+  # 23       noid_par_reg1      (compound; no <initial> -> default child)
+  # 24         noid_par_reg1_active
+  # 25         noid_par_reg1_final (final)
+  # 26       noid_par_reg2      (compound; no <initial> -> default child)
+  # 27         noid_par_reg2_active
+  # 28         noid_par_reg2_final (final)
+  # 29     trigger             (go-* transitions)
+  # 30   top_final              (final; parent 0 - top-level)
   #
   # `reg1`/`reg2` each carry a non-final default child so that sweeping an
   # "uncovered region" of the parallel (`enter_uncovered_regions/3`, pulled
@@ -125,6 +136,16 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
           <state>
               <final id="noid_final"/>
           </state>
+          <parallel>
+              <state id="noid_par_reg1">
+                  <state id="noid_par_reg1_active"/>
+                  <final id="noid_par_reg1_final"/>
+              </state>
+              <state id="noid_par_reg2">
+                  <state id="noid_par_reg2_active"/>
+                  <final id="noid_par_reg2_final"/>
+              </state>
+          </parallel>
           <state id="trigger">
               <transition event="go-combo" target="combo"/>
               <transition event="go-combo-hist" target="combo_hist"/>
@@ -135,6 +156,8 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
               <transition event="go-reg2-final" target="reg2_final"/>
               <transition event="go-dd-final" target="dd_final"/>
               <transition event="go-noid-final" target="noid_final"/>
+              <transition event="go-noid-par-reg1-final" target="noid_par_reg1_final"/>
+              <transition event="go-noid-par-reg2-final" target="noid_par_reg2_final"/>
               <transition event="go-top-final" target="top_final"/>
           </state>
       </state>
@@ -163,8 +186,15 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     donedata_holder: 18,
     dd_final: 19,
     noid_final: 21,
-    trigger: 22,
-    top_final: 23
+    noid_par: 22,
+    noid_par_reg1: 23,
+    noid_par_reg1_active: 24,
+    noid_par_reg1_final: 25,
+    noid_par_reg2: 26,
+    noid_par_reg2_active: 27,
+    noid_par_reg2_final: 28,
+    trigger: 29,
+    top_final: 30
   }
 
   defp machine, do: compile_unvalidated!(@document)
@@ -474,6 +504,38 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
       assert MachineState.internal_events(result) == []
       assert MapSet.member?(result.configuration, idx(:noid_final))
+    end
+
+    # AC: "a done.state.* whose *grandparent* state has no written id is not
+    # raised" - the grandparent-side twin of the test above, exercising
+    # `maybe_raise_grandparent_completion/3`'s own `_no_id` arm rather than
+    # `raise_parent_completion/3`'s. `noid_par_reg2` itself has an id, so its
+    # own `done.state.noid_par_reg2` still raises; only the parallel's event
+    # is swallowed.
+    #
+    # sabotage: `maybe_raise_grandparent_completion/3`'s guard is changed
+    # from `is_binary(grandparent_id) and grandparent_id != ""` to
+    # `grandparent_id != ""` (accepting `nil`) -> `"done.state." <> nil`
+    # raises an `ArgumentError` instead of the crash-free no-op this test
+    # expects, reddening it.
+    test "a parallel grandparent with no id raises nothing for itself and does not crash" do
+      m = machine()
+
+      ms =
+        machine_state(m, [
+          idx(:region),
+          idx(:noid_par),
+          idx(:noid_par_reg1),
+          idx(:noid_par_reg1_final)
+        ])
+
+      transition = transition_named(m, "go-noid-par-reg2-final")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.name == "done.state.noid_par_reg2"
+      assert MapSet.member?(result.configuration, idx(:noid_par_reg2_final))
     end
   end
 

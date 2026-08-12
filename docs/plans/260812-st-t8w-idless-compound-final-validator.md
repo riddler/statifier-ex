@@ -406,19 +406,19 @@ tag is called by some check module" guard is satisfied by change 2.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` green while iterating (never as the phase gate)
-- [ ] Full `mix quality` green, including the 90% `lib/` coverage floor and Doctor's
+- [x] `mix quality --profile loop` green while iterating (never as the phase gate)
+- [x] Full `mix quality` green, including the 90% `lib/` coverage floor and Doctor's
       100% documentation thresholds on the new public function and module
-- [ ] `mix gate.verify` confirms the green was a full, unscoped run
-- [ ] `mix test --include scion --include scxml_w3` shows the same pass/fail split
+- [x] `mix gate.verify` confirms the green was a full, unscoped run
+- [x] `mix test --include scion --include scxml_w3` shows the same pass/fail split
       as on `origin/main` - the corpus scan predicts zero newly failing documents
-- [ ] `mix test.regression` green with `test/passing_tests.json` unchanged (no
+- [x] `mix test.regression` green with `test/passing_tests.json` unchanged (no
       `mix test.baseline add` should be needed; if one is, the corpus scan was
       wrong and that is a finding, not a ratchet step)
-- [ ] `mix gate.check` clean - this branch edits no file in the manifest's
+- [x] `mix gate.check` clean - this branch edits no file in the manifest's
       `moving_files`, adds no `@tag :skip`, and does not shrink
       `test/passing_tests.json`, so no `docs/quality-gate-changes.md` entry is due
-- [ ] `mix adr.check` clean
+- [x] `mix adr.check` clean
 
 #### Manual Verification:
 
@@ -594,6 +594,31 @@ before considering the plan fully landed.
       stated reason, not as a shortcut
 - [ ] No other test file compiles this fixture (`grep -rn "noid_final" test/`
       returns only this file)
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause here for the
+human to confirm the manual items. In looped (`--loop`) execution, the Automated
+Verification list gates advancement via `/wurk:commit --auto` and the Manual
+items are surfaced once at the end.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment on the touched interpreter file: the guards in
+      `raise_parent_completion/3` and `maybe_raise_grandparent_completion/3` still
+      match Appendix D's `enterStates` tail line for line, with the deviation
+      (skipping the event) unchanged and now carrying a comment citing st-t8w for
+      the mechanical reason (ADR-0002)
+- [ ] The two guard comments say *different* things, and the grandparent one is
+      not phrased in a way that invites a later symmetry-driven deletion
+- [ ] The error message reads usefully with a `nil` `final_id` (`"a state
+      containing <final> nil must have an id"`) - awkward but honest, and the
+      location still points at the element to fix
+- [ ] Each new test's sabotage was actually performed: broken, confirmed red,
+      reverted, confirmed green, mutation recorded above the `test` line
+- [ ] Reading `docs/plans/260810-st-wju.4-ports-exit-and-entry-sets.md` Decision 9
+      alongside the new comments, the two tell one consistent story
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; full
 `mix quality` is the phase gate. In interactive execution, pause here for the
