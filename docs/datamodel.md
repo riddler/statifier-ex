@@ -86,10 +86,14 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `:invalid_index`.
 3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
    bare atom that every embedding normalizes ad hoc. Landed in predicator 5.0.0:
-   the `undefined` literal (upstream px-ocp). Consuming it here is st-unt's
-   work - it needs an XSL edit emitting `===` (non-strict `==` propagates
-   `:undefined` rather than returning a boolean), a corpus regeneration, and a
-   ratchet update.
+   the `undefined` literal (upstream px-ocp). Consumed here by st-unt:
+   `conf_predicator.xsl`'s seven boundness templates emit `=== undefined` /
+   `!== undefined` (non-strict `==` propagates `:undefined` rather than
+   returning a boolean), and the 24 affected W3C corpus files were regenerated.
+   No ratchet update was owed - none of those files is in
+   `test/passing_tests.json`. The literal does not rescue a genuinely unbound
+   root, so a `Var<n>` boundness cond still waits on st-af3.3 seeding the
+   declared `<data>` it names.
 4. **Statement sequences** (above).
 5. **String prefix/substring**: landed in predicator 3.7.0 (`starts_with/2`,
    `ends_with/2`, `substring/2,3`, `index_of/2`); `conf:varPrefix` (test224) no
