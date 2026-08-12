@@ -1,7 +1,9 @@
 defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   use ExUnit.Case, async: true
 
+  alias Predicator.Errors.UndefinedVariableError
   alias Statifier.Compiler
+  alias Statifier.Evaluator
   alias Statifier.Event
   alias Statifier.Interpreter.Selection
   alias Statifier.Lowering
@@ -44,11 +46,13 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   # 18   targetless_holder   -- targetless selects with empty exit set
   # 19   domain_holder       -- internal vs external domain, same source/target
   # 20     domain_child
-  # 21   cond_holder         -- written cond -> {:error, _}
-  # 22   nocond_holder       -- nil cond -> {:ok, true}
-  # 23   tgt
-  # 24   tgt-a
-  # 25   tgt-b
+  # 21   cond_holder         -- cond="true" -> {:ok, true}
+  # 22   condfalse_holder    -- cond="false" -> {:ok, false}
+  # 23   condunbound_holder  -- cond names an unbound variable -> {:error, %Evaluator.Error{}}
+  # 24   nocond_holder       -- nil cond -> {:ok, true}
+  # 25   tgt
+  # 26   tgt-a
+  # 27   tgt-b
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="full_name">
       <state id="full_name">
@@ -107,6 +111,12 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
       <state id="cond_holder">
           <transition event="c-evt" cond="true" target="tgt"/>
       </state>
+      <state id="condfalse_holder">
+          <transition event="cf-evt" cond="false" target="tgt"/>
+      </state>
+      <state id="condunbound_holder">
+          <transition event="cu-evt" cond="nope" target="tgt"/>
+      </state>
       <state id="nocond_holder">
           <transition event="nc-evt" target="tgt"/>
       </state>
@@ -138,10 +148,12 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     domain_holder: 19,
     domain_child: 20,
     cond_holder: 21,
-    nocond_holder: 22,
-    tgt: 23,
-    tgt_a: 24,
-    tgt_b: 25
+    condfalse_holder: 22,
+    condunbound_holder: 23,
+    nocond_holder: 24,
+    tgt: 25,
+    tgt_a: 26,
+    tgt_b: 27
   }
 
   defp machine, do: compile!(@document)
@@ -377,20 +389,29 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     assert Selection.get_transition_domain(ms, external) == 0
   end
 
-  # AC: "cond seam is one stubbed function returning {:ok, boolean} |
-  # {:error, e}; a later datamodel evaluation replaces the stub only"
+  # AC: "cond gates selection" - `condition_match/2` evaluates a written
+  # `cond` through `Statifier.Evaluator` rather than treating it as an
+  # automatic error: `nil` passes, a truthy expression passes, a falsy one
+  # does not, and an expression that fails to evaluate (here, an unbound
+  # variable) surfaces as an `Evaluator.Error`, not a swallowed `false`.
   #
-  # sabotage: `condition_match/2`'s written-`cond` clause returns `{:ok,
-  # true}` instead of `{:error, {:unsupported, :cond}}` -> the `{:error, _}`
-  # assertion below reddens.
-  test "condition_match/2 is the one cond seam: nil cond -> {:ok, true}, written cond -> {:error, _}" do
+  # sabotage: `evaluate_cond/2`'s `{:ok, true} -> {:ok, true}` clause is
+  # changed to `{:ok, true} -> {:ok, false}` -> the `cond="true"` assertion
+  # below reddens.
+  test "condition_match/2: nil -> {:ok, true}, true -> {:ok, true}, false -> {:ok, false}, unbound -> error" do
     m = machine()
     ms = machine_state(m, [])
     nocond = transition_named(m, "nc-evt")
-    withcond = transition_named(m, "c-evt")
+    condtrue = transition_named(m, "c-evt")
+    condfalse = transition_named(m, "cf-evt")
+    condunbound = transition_named(m, "cu-evt")
 
     assert Selection.condition_match(ms, nocond) == {:ok, true}
-    assert {:error, _reason} = Selection.condition_match(ms, withcond)
+    assert Selection.condition_match(ms, condtrue) == {:ok, true}
+    assert Selection.condition_match(ms, condfalse) == {:ok, false}
+
+    assert {:error, %Evaluator.Error{error: %UndefinedVariableError{}}} =
+             Selection.condition_match(ms, condunbound)
   end
 
   # AC: "All functions pure, plain values in and out; callable standalone in

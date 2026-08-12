@@ -1,10 +1,13 @@
 defmodule Statifier.Interpreter.SelectionTest do
   use ExUnit.Case, async: true
 
+  alias Predicator.Errors.UndefinedVariableError
   alias Statifier.Compiler
+  alias Statifier.Evaluator
   alias Statifier.Event
   alias Statifier.Interpreter.Selection
   alias Statifier.Lowering
+  alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Validator
@@ -25,35 +28,36 @@ defmodule Statifier.Interpreter.SelectionTest do
   #  2   ancestor             -- child preempts ancestor
   #  3     descendant
   #  4   multi                -- sibling document-order priority (two txns)
-  #  5   condfail             -- written cond -> not selected
-  #  6   condpass             -- no cond -> selected
-  #  7   eventless_state      -- eventless vs event-bearing
-  #  8   ancestor_for_dedup   -- shared-ancestor transition dedup
-  #  9     dedup_parallel      (children [10,12], last 13)
-  # 10       dedup1
-  # 11         dedup1a
-  # 12       dedup2
-  # 13         dedup2a
-  # 14   regression_parallel  -- the named v1 parallel-regions regression
-  # 15     preg1               (children [16,17], last 17)
-  # 16       preg1a             (transition event="go" internal -> preg1b)
-  # 17       preg1b
-  # 18     preg2               (children [19,20], last 20)
-  # 19       preg2a             (transition event="go" internal -> preg2b)
-  # 20       preg2b
-  # 21   unrelated_go          (transition event="go" internal -> its child)
-  # 22     unrelated_go_child
-  # 23   targetless_holder     -- targetless transition
-  # 24   P                     -- descendant/ancestor conflict fixture
-  # 25     L                    (children [26,27], last 27)
-  # 26       l1                  (transition external -> l2, sibling conflict)
-  # 27       l2                  (transition external -> l1, sibling conflict)
-  # 28     R                    (children [29,30], last 30)
-  # 29       r1
-  # 30       r2
-  # 31   tgt                   -- generic transition target, never entered
-  # 32   tgt-a
-  # 33   tgt-b
+  #  5   condfail             -- written cond, evaluates false -> not selected
+  #  6   condtrue             -- written cond, evaluates true -> selected
+  #  7   condpass             -- no cond -> selected
+  #  8   eventless_state      -- eventless vs event-bearing
+  #  9   ancestor_for_dedup   -- shared-ancestor transition dedup
+  # 10     dedup_parallel      (children [11,13], last 14)
+  # 11       dedup1
+  # 12         dedup1a
+  # 13       dedup2
+  # 14         dedup2a
+  # 15   regression_parallel  -- the named v1 parallel-regions regression
+  # 16     preg1               (children [17,18], last 18)
+  # 17       preg1a             (transition event="go" internal -> preg1b)
+  # 18       preg1b
+  # 19     preg2               (children [20,21], last 21)
+  # 20       preg2a             (transition event="go" internal -> preg2b)
+  # 21       preg2b
+  # 22   unrelated_go          (transition event="go" internal -> its child)
+  # 23     unrelated_go_child
+  # 24   targetless_holder     -- targetless transition
+  # 25   P                     -- descendant/ancestor conflict fixture
+  # 26     L                    (children [27,28], last 28)
+  # 27       l1                  (transition external -> l2, sibling conflict)
+  # 28       l2                  (transition external -> l1, sibling conflict)
+  # 29     R                    (children [30,31], last 31)
+  # 30       r1
+  # 31       r2
+  # 32   tgt                   -- generic transition target, never entered
+  # 33   tgt-a
+  # 34   tgt-b
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="event_state">
       <state id="event_state">
@@ -70,7 +74,10 @@ defmodule Statifier.Interpreter.SelectionTest do
           <transition event="multi-evt" target="tgt-b"/>
       </state>
       <state id="condfail">
-          <transition event="cond-evt" cond="true" target="tgt"/>
+          <transition event="cond-evt" cond="false" target="tgt"/>
+      </state>
+      <state id="condtrue">
+          <transition event="cond-evt-true" cond="true" target="tgt"/>
       </state>
       <state id="condpass">
           <transition event="cond-evt2" target="tgt"/>
@@ -140,34 +147,35 @@ defmodule Statifier.Interpreter.SelectionTest do
     descendant: 3,
     multi: 4,
     condfail: 5,
-    condpass: 6,
-    eventless_state: 7,
-    ancestor_for_dedup: 8,
-    dedup_parallel: 9,
-    dedup1: 10,
-    dedup1a: 11,
-    dedup2: 12,
-    dedup2a: 13,
-    regression_parallel: 14,
-    preg1: 15,
-    preg1a: 16,
-    preg1b: 17,
-    preg2: 18,
-    preg2a: 19,
-    preg2b: 20,
-    unrelated_go: 21,
-    unrelated_go_child: 22,
-    targetless_holder: 23,
-    p: 24,
-    l: 25,
-    l1: 26,
-    l2: 27,
-    r: 28,
-    r1: 29,
-    r2: 30,
-    tgt: 31,
-    tgt_a: 32,
-    tgt_b: 33
+    condtrue: 6,
+    condpass: 7,
+    eventless_state: 8,
+    ancestor_for_dedup: 9,
+    dedup_parallel: 10,
+    dedup1: 11,
+    dedup1a: 12,
+    dedup2: 13,
+    dedup2a: 14,
+    regression_parallel: 15,
+    preg1: 16,
+    preg1a: 17,
+    preg1b: 18,
+    preg2: 19,
+    preg2a: 20,
+    preg2b: 21,
+    unrelated_go: 22,
+    unrelated_go_child: 23,
+    targetless_holder: 24,
+    p: 25,
+    l: 26,
+    l1: 27,
+    l2: 28,
+    r: 29,
+    r1: 30,
+    r2: 31,
+    tgt: 32,
+    tgt_a: 33,
+    tgt_b: 34
   }
 
   defp machine, do: compile!(@document)
@@ -185,6 +193,144 @@ defmodule Statifier.Interpreter.SelectionTest do
     machine.transitions
     |> Tuple.to_list()
     |> Enum.find(&(&1.events == [[event_name]]))
+  end
+
+  # A second, narrower document just for `condition_match/2`'s own unit
+  # coverage below - separate from `@document` so its cond expressions (and
+  # any bound datamodel) do not disturb the document-order indexes the rest
+  # of this file's sabotage comments and `@indexes` map depend on.
+  @cond_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="cond_s1">
+      <state id="cond_s1">
+          <transition event="nilcond" target="cond_s2"/>
+          <transition event="truecond" cond="true" target="cond_s2"/>
+          <transition event="falsecond" cond="false" target="cond_s2"/>
+          <transition event="boundgt3" cond="x > 3" target="cond_s2"/>
+          <transition event="boundgt9" cond="x > 9" target="cond_s2"/>
+          <transition event="unbound" cond="nope" target="cond_s2"/>
+          <transition event="nonbool" cond="1" target="cond_s2"/>
+          <transition event="inconfig" cond="In('cond_s1')" target="cond_s2"/>
+          <transition event="notinconfig" cond="In('cond_s2')" target="cond_s2"/>
+          <transition event="innotdeclared" cond="In('no-such-state')" target="cond_s2"/>
+      </state>
+      <state id="cond_s2"/>
+  </scxml>
+  """
+
+  defp cond_machine, do: compile!(@cond_document)
+
+  defp cond_transition_named(machine, event_name) do
+    machine.transitions
+    |> Tuple.to_list()
+    |> Enum.find(&(&1.events == [[event_name]]))
+  end
+
+  defp cond_machine_state(machine, configuration, opts \\ []) do
+    %{MachineState.new(machine, opts) | configuration: MapSet.new(configuration)}
+  end
+
+  defp idx_cond(machine, id) do
+    {:ok, index} = Machine.index(machine, id)
+    index
+  end
+
+  describe "condition_match/2" do
+    # sabotage: `evaluate_cond/2`'s `cond: nil` clause is changed from
+    # `{:ok, true}` to `{:error, :nope}` -> this reddens because a `nil` cond
+    # no longer unconditionally passes.
+    test "cond: nil returns {:ok, true} with an empty datamodel" do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+      transition = cond_transition_named(m, "nilcond")
+
+      assert Selection.condition_match(ms, transition) == {:ok, true}
+    end
+
+    # sabotage: `evaluate_cond/2`'s `{:ok, true} -> {:ok, true}` clause is
+    # changed to `{:ok, true} -> {:ok, false}` -> this reddens because a
+    # written `cond="true"` no longer reports itself enabled.
+    test ~s(cond="true" returns {:ok, true}) do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+      transition = cond_transition_named(m, "truecond")
+
+      assert Selection.condition_match(ms, transition) == {:ok, true}
+    end
+
+    # sabotage: `evaluate_cond/2`'s `{:ok, false} -> {:ok, false}` clause is
+    # changed to `{:ok, false} -> {:ok, true}` -> this reddens because a
+    # written `cond="false"` no longer reports itself disabled.
+    test ~s(cond="false" returns {:ok, false}) do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+      transition = cond_transition_named(m, "falsecond")
+
+      assert Selection.condition_match(ms, transition) == {:ok, false}
+    end
+
+    # sabotage: `evaluate_cond/2`'s compiled-cond clause calls
+    # `Evaluator.evaluate/2` with a hardcoded empty context instead of the
+    # one built from `machine_state` -> this reddens because `x > 3` can no
+    # longer see the bound `x` and errors as unbound instead of returning
+    # `{:ok, true}`.
+    test "a cond over bound data evaluates against the machine_state's datamodel" do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")], datamodel: %{"x" => 5})
+      gt3 = cond_transition_named(m, "boundgt3")
+      gt9 = cond_transition_named(m, "boundgt9")
+
+      assert Selection.condition_match(ms, gt3) == {:ok, true}
+      assert Selection.condition_match(ms, gt9) == {:ok, false}
+    end
+
+    # sabotage: `evaluate_cond/2`'s `{:error, %Evaluator.Error{} = error} ->
+    # {:error, error}` clause is changed to `{:error, _error} -> {:ok, false}`
+    # -> this reddens because an unbound-variable cond is swallowed into a
+    # falsy value instead of surfacing as an error.
+    test "a cond naming an unbound variable returns an Evaluator.Error with a non-nil span" do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+      transition = cond_transition_named(m, "unbound")
+
+      assert {:error,
+              %Evaluator.Error{
+                source: "nope",
+                error: %UndefinedVariableError{},
+                span: span
+              }} = Selection.condition_match(ms, transition)
+
+      refute is_nil(span)
+    end
+
+    # sabotage: `evaluate_cond/2`'s `{:ok, other} -> {:error,
+    # {:non_boolean_cond, other}}` clause is changed to
+    # `{:ok, other} -> {:ok, other}` (D1's rejected shape - truthy
+    # non-boolean) -> this reddens because `cond="1"` now returns `{:ok, 1}`
+    # instead of an error.
+    test "a non-boolean cond returns {:error, {:non_boolean_cond, value}}" do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+      transition = cond_transition_named(m, "nonbool")
+
+      assert Selection.condition_match(ms, transition) == {:error, {:non_boolean_cond, 1}}
+    end
+
+    # sabotage: `Evaluator.context/1`'s `In/1` host function's matched-id
+    # branch is swapped to always return `{:ok, false}` -> this reddens
+    # because `In('cond_s1')` against a configuration containing `cond_s1`
+    # comes back false instead of true.
+    test "a cond calling In/1 answers against the machine_state's configuration" do
+      m = cond_machine()
+      ms = cond_machine_state(m, [idx_cond(m, "cond_s1")])
+
+      in_config = cond_transition_named(m, "inconfig")
+      not_in_config = cond_transition_named(m, "notinconfig")
+      not_declared = cond_transition_named(m, "innotdeclared")
+
+      assert Selection.condition_match(ms, in_config) == {:ok, true}
+      assert Selection.condition_match(ms, not_in_config) == {:ok, false}
+      assert Selection.condition_match(ms, not_declared) == {:ok, false}
+    end
   end
 
   describe "select_transitions/2" do
@@ -240,23 +386,34 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert target == idx(:tgt_a)
     end
 
-    # sabotage: `condition_match/2`'s second clause (`%Transition{}` with a
-    # written `cond`) is changed from `{:error, {:unsupported, :cond}}` to
-    # `{:ok, true}` -> this reddens because the cond-bearing transition is
-    # wrongly selected.
-    test "a transition with a written cond is not selected" do
+    # sabotage: `evaluate_cond/2`'s `{:ok, false} -> {:ok, false}` clause is
+    # changed to `{:ok, false} -> {:ok, true}` -> this reddens because a cond
+    # that genuinely evaluates false now wrongly selects its transition.
+    test "a transition whose cond evaluates false is not selected" do
       m = machine()
       ms = machine_state(m, [idx(:condfail)])
 
       assert {_ms, []} = Selection.select_transitions(ms, Event.external("cond-evt"))
     end
 
+    # sabotage: `evaluate_cond/2`'s `{:ok, true} -> {:ok, true}` clause is
+    # changed to `{:ok, true} -> {:ok, false}` -> this reddens because a cond
+    # that genuinely evaluates true no longer selects its transition.
+    test "a transition whose cond evaluates true is selected" do
+      m = machine()
+      ms = machine_state(m, [idx(:condtrue)])
+
+      {_ms, transitions} = Selection.select_transitions(ms, Event.external("cond-evt-true"))
+
+      assert [%{events: [["cond-evt-true"]]}] = transitions
+    end
+
     # sabotage: `transition_enabled?/3`'s event-matched clause drops the
     # `condition_match(machine_state, transition) == {:ok, true}` conjunct
     # -> this passes regardless (nil cond always matches), so instead this
-    # sabotages the twin: `condition_match/2`'s first clause (`cond: nil`) is
-    # changed to `{:error, :nope}` -> this reddens because a transition with
-    # no cond is no longer selected either.
+    # sabotages the twin: `evaluate_cond/2`'s `cond: nil` clause is changed
+    # from `{:ok, true}` to `{:error, :nope}` -> this reddens because a
+    # transition with no cond is no longer selected either.
     test "a transition with no cond is selected" do
       m = machine()
       ms = machine_state(m, [idx(:condpass)])
