@@ -42,10 +42,11 @@ defmodule Statifier.Evaluator do
   - **It would not be a resumable position.** `docs/observability.md`
     constraint 1 (ADR-0012) commits to any `%MachineState{}` value being a
     complete, inspectable, resumable position. `context/1` puts a closure
-    in `functions` (`In/1`, below), and a struct carrying an anonymous
-    function cannot be serialized, written out and read back, or
-    meaningfully diffed. A step debugger being `microstep/1` in a REPL is
-    the property that field would cost.
+    in `functions` (`In/1`, below), and a local fun is a reference to a
+    specific module and code version: a struct carrying one does not
+    survive a node boundary, a code reload, or being written to disk and
+    read back later, and it cannot be meaningfully diffed. A step debugger
+    being `microstep/1` in a REPL is the property that field would cost.
   - **It would be stale by construction.** That closure captures the
     configuration, which moves at every microstep, so a stored context
     would keep answering `In/1` against a configuration the machine has
@@ -59,8 +60,10 @@ defmodule Statifier.Evaluator do
   every time, where `Predicator.Context.bind/3` is O(1) in the data's size
   and carries `functions` and `on_unbound` over unchanged. Nothing
   evaluates in a hot path yet, so there is nothing to measure; st-sdh
-  tracks that question, and predicator px-8ii tracks the upstream seam that
-  would let a context be both cheap to refresh and safe to store.
+  tracks that question. The upstream seam that would let a context be
+  both cheap to refresh and safe to store landed in predicator 5.0.0
+  (px-8ii): `Predicator.FunctionProvider` plus `Context.new/2`'s `host:`
+  option and `Context.put_host/2`.
 
   ## The membrane
 
