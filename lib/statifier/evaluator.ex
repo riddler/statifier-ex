@@ -131,9 +131,9 @@ defmodule Statifier.Evaluator do
   # have is answered "not active", the same answer it would get for any
   # other inactive state.
   @spec in_function(machine_state :: MachineState.t()) ::
-          (list(), map() -> {:ok, boolean()})
+          (list(), Predicator.Context.t() -> {:ok, boolean()})
   defp in_function(%MachineState{machine: machine, configuration: configuration}) do
-    fn [state_id], _raw_context ->
+    fn [state_id], _predicator_context ->
       case Machine.index(machine, state_id) do
         {:ok, index} -> {:ok, MapSet.member?(configuration, index)}
         :error -> {:ok, false}
