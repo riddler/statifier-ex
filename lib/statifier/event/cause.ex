@@ -41,12 +41,25 @@ defmodule Statifier.Event.Cause do
     content node behind it (`done.state.*` on entering a final state names
     the state whose entry triggered it, not a content node - there is no
     `<raise>` or block to point to).
+  - `{:transition, t_index}` - the platform raised the event about a
+    transition's own `cond`, with no content node behind it. `t_index`
+    resolves through `Statifier.Machine.transition/2`, and the transition it
+    names carries both `cond` and `cond_location`, which is how an ADR-0014
+    item 4 diagnostic reaches the failing expression's span in the document
+    without this cause duplicating the location itself. This is distinct
+    from the `Content.owner()` value `{:transition, t_index}` that can appear
+    *nested inside* a `{:content, _, _}` origin above - that shape names the
+    transition owning a content node (a `<raise>` living in the transition's
+    block); this arm has no content node at all. The moduledoc's own history
+    note above (`:14-23`) refers to that older, different two-arm shape, not
+    to this one.
 
   Never a struct - both indexes resolve through `Statifier.Machine`.
   """
   @type origin ::
           {:content, non_neg_integer(), Content.owner()}
           | {:state, non_neg_integer()}
+          | {:transition, non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),

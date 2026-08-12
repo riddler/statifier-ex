@@ -234,6 +234,63 @@ defmodule Statifier.Interpreter.SelectionTest do
     index
   end
 
+  # A third document, just for Phase 2's enqueue coverage: a failed `cond`
+  # raising `error.execution` on the machine_state both entry points return.
+  # Separate from `@document`/`@cond_document` for the same reason
+  # `@cond_document` is separate from `@document` - its own states, its own
+  # event names, no shared index bookkeeping.
+  @cond_error_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="one_off">
+      <state id="one_off">
+          <transition event="go" cond="nope" target="tgt"/>
+      </state>
+      <state id="nonbool_fail">
+          <transition event="go" cond="1" target="tgt"/>
+      </state>
+      <state id="skip_reach">
+          <transition event="skipgo" target="tgt"/>
+          <transition event="skipgo" cond="nope" target="tgt"/>
+      </state>
+      <parallel id="par">
+          <state id="p1">
+              <transition event="pgo" cond="nope" target="tgt"/>
+          </state>
+          <state id="p2">
+              <transition event="pgo" cond="1" target="tgt"/>
+          </state>
+      </parallel>
+      <state id="eventless_fail">
+          <transition cond="nope" target="tgt"/>
+      </state>
+      <state id="tgt"/>
+  </scxml>
+  """
+
+  defp cond_error_machine, do: compile!(@cond_error_document)
+
+  defp cond_error_transition_named(machine, event_name) do
+    machine.transitions
+    |> Tuple.to_list()
+    |> Enum.find(&(&1.events == [[event_name]]))
+  end
+
+  defp cond_error_idx(machine, id) do
+    {:ok, index} = Machine.index(machine, id)
+    index
+  end
+
+  # The eventless states in `@cond_error_document` have exactly one
+  # transition each, with no `event` attribute - `cond_error_transition_named/2`
+  # cannot find them (it matches on a written `event`), so this resolves via
+  # the owning state's `transitions` list instead.
+  defp cond_error_eventless_transition(machine, state_id) do
+    machine
+    |> Machine.at(cond_error_idx(machine, state_id))
+    |> Map.fetch!(:transitions)
+    |> hd()
+    |> then(&Machine.transition(machine, &1))
+  end
+
   describe "condition_match/2" do
     # sabotage: `evaluate_cond/2`'s `cond: nil` clause is changed from
     # `{:ok, true}` to `{:error, :nope}` -> this reddens because a `nil` cond
@@ -490,6 +547,131 @@ defmodule Statifier.Interpreter.SelectionTest do
       sources = transitions |> Enum.map(& &1.source) |> Enum.sort()
       assert sources == Enum.sort([idx(:preg1a), idx(:preg2a), idx(:unrelated_go)])
     end
+
+    # sabotage: `cond_enabled/3`'s `{:error, reason} -> {false, cond_errors ++
+    # [{transition, reason}]}` clause is changed to `{:error, _reason} ->
+    # {false, cond_errors}` (drops the recorded error) -> this reddens
+    # because `internal_events/1` on the returned machine_state comes back
+    # empty instead of holding the raised `error.execution`.
+    test "a failing cond on an event-matched transition enqueues an error.execution" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "one_off")])
+      transition = cond_error_transition_named(m, "go")
+
+      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+
+      assert transitions == []
+      assert [error_event] = MachineState.internal_events(result_ms)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:transition, transition.t_index}
+      assert %Evaluator.Error{source: "nope", error: %UndefinedVariableError{}} = error_event.data
+    end
+
+    # sabotage: `evaluate_cond/2`'s `{:ok, other} -> {:error,
+    # {:non_boolean_cond, other}}` clause is changed to `{:ok, other} ->
+    # {:ok, false}` (D1's rejected shape, collapsed to a plain non-selection)
+    # -> this reddens because the non-boolean cond no longer raises
+    # `error.execution` at all.
+    test "a non-boolean cond enqueues an error.execution with {:non_boolean_cond, value}" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "nonbool_fail")])
+
+      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+
+      assert transitions == []
+      assert [error_event] = MachineState.internal_events(result_ms)
+      assert error_event.data == {:non_boolean_cond, 1}
+    end
+
+    # sabotage: `raise_cond_errors/2` is changed to call
+    # `MachineState.raise_platform/4` with `0, 0` hardcoded instead of the
+    # transition's counters (`Cause.new(origin, 0, 0)` in effect) -> this
+    # reddens because the cause's counters no longer match a machine_state
+    # whose counters were advanced before selection ran.
+    test "the cause's macrostep and microstep equal the machine_state's at selection time" do
+      m = cond_error_machine()
+
+      ms =
+        m
+        |> machine_state([cond_error_idx(m, "one_off")])
+        |> Map.put(:macrostep, 3)
+        |> Map.put(:microstep, 2)
+
+      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+
+      assert [error_event] = MachineState.internal_events(result_ms)
+      assert error_event.cause.macrostep == 3
+      assert error_event.cause.microstep == 2
+    end
+
+    # sabotage: `selected_for_atomic_state/5`'s `Enum.reduce_while/2` initial
+    # accumulator is changed from `{[], cond_errors}` to `{[], []}` (drops
+    # errors carried in from an earlier atomic state in the same round)
+    # -> this reddens because only one of the two parallel regions'
+    # errors survives instead of both, in document order.
+    test "two failing conds reachable in one round enqueue two errors in document order" do
+      m = cond_error_machine()
+      p1_transition = cond_error_transition_named(m, "pgo")
+      ms = machine_state(m, [cond_error_idx(m, "p1"), cond_error_idx(m, "p2")])
+
+      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("pgo"))
+
+      assert transitions == []
+      assert [first_error, second_error] = MachineState.internal_events(result_ms)
+      assert first_error.cause.origin == {:transition, p1_transition.t_index}
+      assert %Evaluator.Error{} = first_error.data
+      assert second_error.data == {:non_boolean_cond, 1}
+    end
+
+    # sabotage: `first_matching_transition/6`'s `Enum.reduce_while/2` is
+    # changed to evaluate every transition instead of halting on the first
+    # enabled one (`{:halt, {transition, errors}}` replaced with
+    # `{:cont, {transition, errors}}`) -> this reddens because the never-
+    # reached sibling's failing cond now wrongly enqueues an error too.
+    test "a failing cond on a transition the walk never reaches enqueues nothing" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "skip_reach")])
+
+      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("skipgo"))
+
+      assert [%{cond: nil}] = transitions
+      assert MachineState.internal_events(result_ms) == []
+    end
+
+    # sabotage: `raise_cond_errors/2` raises `{:transition, transition.source}`
+    # instead of `{:transition, transition.t_index}` -> this reddens because
+    # the origin now names the failing transition's *source state* index
+    # instead of the transition itself, so resolving it through
+    # `Machine.transition/2` returns a different transition than the one
+    # whose `cond` actually failed.
+    test "cond_location is reachable from the raised event" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "one_off")])
+      expected_transition = cond_error_transition_named(m, "go")
+
+      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+
+      assert [error_event] = MachineState.internal_events(result_ms)
+      assert {:transition, t_index} = error_event.cause.origin
+      assert Machine.transition(m, t_index) == expected_transition
+      assert %Statifier.Parser.Location{} = expected_transition.cond_location
+    end
+
+    # sabotage: `raise_cond_errors/2`'s `Enum.reduce/3` is replaced with a
+    # no-op (`fn _pair, ms -> ms end`) -> this reddens because the returned
+    # machine_state no longer differs from the input even though a cond
+    # failed - the deliberate counterpart to "the machine_state comes back
+    # unchanged" above.
+    test "the machine_state carries an error.execution when a cond fails" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "one_off")])
+
+      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+
+      refute result_ms == ms
+      assert length(MachineState.internal_events(result_ms)) == 1
+    end
   end
 
   describe "select_eventless_transitions/1" do
@@ -517,6 +699,41 @@ defmodule Statifier.Interpreter.SelectionTest do
       {returned_ms, _transitions} = Selection.select_eventless_transitions(ms)
 
       assert returned_ms == ms
+    end
+
+    # sabotage: `cond_enabled/3`'s `{:error, reason} -> {false, cond_errors ++
+    # [{transition, reason}]}` clause is changed to `{:error, _reason} ->
+    # {false, cond_errors}` (drops the recorded error) -> this reddens
+    # because `internal_events/1` on the returned machine_state comes back
+    # empty instead of holding the raised `error.execution`.
+    test "a failing cond on an eventless transition enqueues an error.execution" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "eventless_fail")])
+      transition = cond_error_eventless_transition(m, "eventless_fail")
+
+      {result_ms, transitions} = Selection.select_eventless_transitions(ms)
+
+      assert transitions == []
+      assert [error_event] = MachineState.internal_events(result_ms)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:transition, transition.t_index}
+      assert %Evaluator.Error{source: "nope", error: %UndefinedVariableError{}} = error_event.data
+    end
+
+    # sabotage: `raise_cond_errors/2`'s `Enum.reduce/3` is replaced with a
+    # no-op (`fn _pair, ms -> ms end`) -> this reddens because the returned
+    # machine_state no longer differs from the input even though a cond
+    # failed - the deliberate counterpart to "the machine_state comes back
+    # unchanged" above.
+    test "the machine_state carries an error.execution when a cond fails" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "eventless_fail")])
+
+      {result_ms, _transitions} = Selection.select_eventless_transitions(ms)
+
+      refute result_ms == ms
+      assert length(MachineState.internal_events(result_ms)) == 1
     end
   end
 
