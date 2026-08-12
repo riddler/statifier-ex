@@ -381,14 +381,14 @@ summarized here.
 
 #### Automated Verification:
 
-- [ ] `.claude/wurk/codebase.md` exists and is non-empty.
-- [ ] `wc -l .claude/wurk/codebase.md` is under 70 lines - ADR-0011's
+- [x] `.claude/wurk/codebase.md` exists and is non-empty.
+- [x] `wc -l .claude/wurk/codebase.md` is under 70 lines - ADR-0011's
       "around a screenful", made checkable, pinned near wurk's own 55-line
       file rather than at a round number, with the margin covering the two
       headings this repo's deeper pipeline needs that wurk's does not.
-- [ ] Every path the file names resolves: each `lib/`, `test/`, `tools/`, or
+- [x] Every path the file names resolves: each `lib/`, `test/`, `tools/`, or
       `docs/` path mentioned exists on disk.
-- [ ] Full `mix quality` green (unchanged; the file is prompt text and no
+- [x] Full `mix quality` green (unchanged; the file is prompt text and no
       stage reads it).
 
 #### Manual Verification:
@@ -665,6 +665,28 @@ before considering the plan fully landed.
       they owe the section if they disable a second stage?
 - [ ] The stated reporting outcome holds: a `/wurk:mr` request body on a green
       branch would name Doctor and nothing else.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] `mix quality --profile merge` produces no ADR judge finding: the file
+      carries orientation, not a policy call lifted out of `commit.md`,
+      `implement.md`, or CLAUDE.md.
+- [ ] Spawn a `wurk-codebase-analyzer` with the file pasted under "Project
+      orientation, from .claude/wurk/codebase.md" and a question about an
+      interpreter function; confirm it reaches for Appendix D names and
+      describes the function against the pseudocode.
+- [ ] Every claim in the file is true today - especially the suite split and
+      the module families, which are the parts that rot first.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
