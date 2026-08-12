@@ -39,9 +39,7 @@
       "test_pattern": "\\btest\\s+\"",
       "exempt_prefixes": ["test/scion_tests/", "test/scxml_tests/"]
     },
-    "project_level_skips": [
-      "^:doctor not installed$"
-    ],
+    "project_level_skips": [],
     "not_applicable_skips": [
       "^:gettext not installed$",
       "^no \\.po files found$",

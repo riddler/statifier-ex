@@ -216,9 +216,14 @@ decision and not a constant.
 - **Project-level gap** (`gate.project_level_skips`) - a real hole in what this
   project checks, standing open on every run. It does not block a commit, since
   gating on it would refuse every commit forever, but it stays named in every
-  report so it does not go quiet. Doctor is here: whether to adopt it is an open
-  decision owned by st-1xz, not a stage anyone has declared inapplicable. Do not
-  move a pattern here into the not-applicable list to quiet a report.
+  report so it does not go quiet. The list is empty today: Doctor was its only
+  member, and st-1xz decided it rather than declaring it inapplicable -
+  `:doctor` is now a dev dependency, `.doctor.exs` holds 100% thresholds on
+  every axis, and `mix quality` reports Doctor as a real stage instead of the
+  standing skip line. The category and its manifest key stay, because the next
+  stage this project declines to run belongs here rather than in the
+  not-applicable list. Do not move a pattern here into the not-applicable list
+  to quiet a report.
 - **Run-level** - neither list matches, and the gate is red. The stage should
   have run and could not.
 
