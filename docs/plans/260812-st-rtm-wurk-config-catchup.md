@@ -279,14 +279,14 @@ beyond dropping any implication that it also covers the disabled stages.
 
 #### Manual Verification:
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding against the
+- [x] `mix quality --profile merge` produces no ADR judge finding against the
       `.claude/wurk` scope for this diff - the key and its prose moved
       together, and the prose states the policy rather than pointing at the
       key.
-- [ ] Read the new CLAUDE.md paragraph cold: does it tell someone who has
+- [x] Read the new CLAUDE.md paragraph cold: does it tell someone who has
       never seen `.quality.exs` why the ADR judge skip is not a gap, and what
       they owe the section if they disable a second stage?
-- [ ] The stated reporting outcome holds: a `/wurk:mr` request body on a green
+- [x] The stated reporting outcome holds: a `/wurk:mr` request body on a green
       branch would name Doctor and nothing else.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -393,14 +393,14 @@ summarized here.
 
 #### Manual Verification:
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding: the file
+- [x] `mix quality --profile merge` produces no ADR judge finding: the file
       carries orientation, not a policy call lifted out of `commit.md`,
       `implement.md`, or CLAUDE.md.
-- [ ] Spawn a `wurk-codebase-analyzer` with the file pasted under "Project
+- [x] Spawn a `wurk-codebase-analyzer` with the file pasted under "Project
       orientation, from .claude/wurk/codebase.md" and a question about an
       interpreter function; confirm it reaches for Appendix D names and
       describes the function against the pseudocode.
-- [ ] Every claim in the file is true today - especially the suite split and
+- [x] Every claim in the file is true today - especially the suite split and
       the module families, which are the parts that rot first.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -504,15 +504,15 @@ st-29g's, still open.
 
 #### Manual Verification:
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding: the new
+- [x] `mix quality --profile merge` produces no ADR judge finding: the new
       `gate.sabotage` key points back at `docs/testing.md` and
       `.claude/wurk/commit.md`, which state the discipline, and the new
       `docs/workflow.md` section records the decision rather than replacing
       the discipline with a check on its own artifact.
-- [ ] Run `/wurk:commit` (or `gate.rb` directly) on a branch with a new test
+- [x] Run `/wurk:commit` (or `gate.rb` directly) on a branch with a new test
       and confirm `data.sabotage.enabled` is now `true` and `missing` reports
       what it should - the scan being on is the whole point of the change.
-- [ ] Read the `rebase.auto_resolve_paths` row cold: is "off" still the right
+- [x] Read the `rebase.auto_resolve_paths` row cold: is "off" still the right
       answer for this repo, or does a real conflict since plan time argue
       otherwise?
 
@@ -656,14 +656,14 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding against the
+- [x] `mix quality --profile merge` produces no ADR judge finding against the
       `.claude/wurk` scope for this diff - the key and its prose moved
       together, and the prose states the policy rather than pointing at the
       key.
-- [ ] Read the new CLAUDE.md paragraph cold: does it tell someone who has
+- [x] Read the new CLAUDE.md paragraph cold: does it tell someone who has
       never seen `.quality.exs` why the ADR judge skip is not a gap, and what
       they owe the section if they disable a second stage?
-- [ ] The stated reporting outcome holds: a `/wurk:mr` request body on a green
+- [x] The stated reporting outcome holds: a `/wurk:mr` request body on a green
       branch would name Doctor and nothing else.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -678,14 +678,14 @@ blocking here.
 
 ### Phase 2
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding: the file
+- [x] `mix quality --profile merge` produces no ADR judge finding: the file
       carries orientation, not a policy call lifted out of `commit.md`,
       `implement.md`, or CLAUDE.md.
-- [ ] Spawn a `wurk-codebase-analyzer` with the file pasted under "Project
+- [x] Spawn a `wurk-codebase-analyzer` with the file pasted under "Project
       orientation, from .claude/wurk/codebase.md" and a question about an
       interpreter function; confirm it reaches for Appendix D names and
       describes the function against the pseudocode.
-- [ ] Every claim in the file is true today - especially the suite split and
+- [x] Every claim in the file is true today - especially the suite split and
       the module families, which are the parts that rot first.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -700,15 +700,15 @@ blocking here.
 
 ### Phase 3
 
-- [ ] `mix quality --profile merge` produces no ADR judge finding: the new
+- [x] `mix quality --profile merge` produces no ADR judge finding: the new
       `gate.sabotage` key points back at `docs/testing.md` and
       `.claude/wurk/commit.md`, which state the discipline, and the new
       `docs/workflow.md` section records the decision rather than replacing
       the discipline with a check on its own artifact.
-- [ ] Run `/wurk:commit` (or `gate.rb` directly) on a branch with a new test
+- [x] Run `/wurk:commit` (or `gate.rb` directly) on a branch with a new test
       and confirm `data.sabotage.enabled` is now `true` and `missing` reports
       what it should - the scan being on is the whole point of the change.
-- [ ] Read the `rebase.auto_resolve_paths` row cold: is "off" still the right
+- [x] Read the `rebase.auto_resolve_paths` row cold: is "off" still the right
       answer for this repo, or does a real conflict since plan time argue
       otherwise?
 
