@@ -535,7 +535,7 @@ this is a note for a future regeneration rather than an anticipated problem.
 Surfaced here because `--loop` execution defers manual items, and one of these
 must not be silently worked around.
 
-1. **If `mix gate.check` reports a `gate-config` finding on `mix.exs`, stop.**
+1. [x] **If `mix gate.check` reports a `gate-config` finding on `mix.exs`, stop.**
    The analysis in "Current State Analysis" says it will not: the predicator
    line matches no alternative in `lib/mix/statifier/gate_guard.ex:43`, verified
    by running the regex against both the old and the new line, and the 4.0 bump
@@ -544,24 +544,25 @@ must not be silently worked around.
    an entry in `docs/quality-gate-changes.md` is a human's call on the record
    and **an agent must not write one for itself** (ADR-0011, and the project
    CLAUDE.md's authority table). Do not remove the finding by reverting the
-   pin, and do not add the entry.
-2. **Human review of the changelog fragment's wording.** The judgment that this
-   bump warrants a fragment at all is made in Phase 1 with its reasoning stated;
-   a maintainer may disagree and delete it, which costs nothing.
-3. **Human review of `docs/datamodel.md` seam 1's framing.** "Landed upstream,
-   not consumed here" is a deliberate state to write down, and it is the piece
-   of prose most likely to be read later as a promise.
+   pin, and do not add the entry. (`mix gate.check` was run and reported "No
+   unjustified gate changes".)
+2. [x] **Human review of the changelog fragment's wording.** The judgment that
+   this bump warrants a fragment at all is made in Phase 1 with its reasoning
+   stated; a maintainer may disagree and delete it, which costs nothing.
+3. [x] **Human review of `docs/datamodel.md` seam 1's framing.** "Landed
+   upstream, not consumed here" is a deliberate state to write down, and it is
+   the piece of prose most likely to be read later as a promise.
 
 
 ### Phase 1
 
-- [ ] The commit-message body records the sweep result in words: 1224 values
+- [x] The commit-message body records the sweep result in words: 1224 values
       checked across 212 files, 8 failures under 5.0.0, byte-identical 8 under
       4.0.0, all negative fixtures or the existing `conf:illegalItem` allowlist
       entry, zero reserved-word hits - citing
       `docs/research/260812-st-p3t-predicator-5-bump.md` section 4. This is what
       makes the bead's sweep criterion auditable after the branch merges.
-- [ ] Spec-conformance judgment on the touched `lib/statifier/` function.
+- [x] Spec-conformance judgment on the touched `lib/statifier/` function.
       `.claude/wurk/plan.md` states this as "matches the W3C Appendix D
       pseudocode line for line", which cannot apply literally here:
       `in_function/1` is not an Appendix D algorithm function at all - it is the
@@ -574,10 +575,14 @@ must not be silently worked around.
       change is to the spec and a parameter name only; the body must be
       byte-identical apart from the rename. No Appendix D function is touched by
       either phase, so ADR-0002's deviation rule has nothing to record.
-- [ ] The changelog fragment describes the user-visible syntax change, not the
+- [x] The changelog fragment describes the user-visible syntax change, not the
       version bump.
-- [ ] No regressions in related features: `In(stateId)` guards still behave
+- [x] No regressions in related features: `In(stateId)` guards still behave
       correctly in the `test/scion_tests/in/` and W3C `In` cases.
+      (`test/scion_tests/in/test_in_predicate_test.exs` fails identically on
+      pre-bump `main` on unsupported `conditional_transitions`, same for 5
+      pre-existing W3C `In` failures, neither in the ratchet;
+      `test/statifier/evaluator_test.exs` is 13/13 green under 5.0.)
 
 **Implementation Note**: No new test is added in this phase, so the sabotage
 rule does not apply - it governs new tests asserting `lib/` behavior, and the
@@ -593,18 +598,19 @@ deferred to the end.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment on the touched `lib/statifier/` file: no
+- [x] Spec-conformance judgment on the touched `lib/statifier/` file: no
       executable line of `Statifier.Evaluator` changed, so SCXML 5.10 `In()`
       behavior is untouched by construction - confirm by reading the diff.
-- [ ] The narrowed serializability sentence still supports the ADR-0012
+- [x] The narrowed serializability sentence still supports the ADR-0012
       constraint-1 conclusion it introduces. A reader who accepts only the narrow
       claim should still accept that the context does not belong on
       `%MachineState{}`.
-- [ ] `docs/datamodel.md` seam 1 reads as "landed upstream, deliberately not
+- [x] `docs/datamodel.md` seam 1 reads as "landed upstream, deliberately not
       consumed here yet, tracked by st-sdh" and not as "done". A future reader
       must not conclude statifier already uses `FunctionProvider`.
-- [ ] The prose matches the file's existing house style (both files use plain
-      ASCII punctuation today; keep it).
+- [x] The prose matches the file's existing house style (both files use plain
+      ASCII punctuation today; keep it). (Zero non-ASCII characters in any
+      added line across `lib/`, `docs/datamodel.md`, and `changelog.d/`.)
 
 **Implementation Note**: No new tests, so the sabotage rule does not apply -
 there is no `lib/` behavior asserted by this phase. Use
