@@ -198,6 +198,24 @@ nothing here, so an area label on them would block batches for no reason. When
 one lands and bumps `mix.lock`, that bump is `area:build` work and gets its own
 bead.
 
+## Wurk manifest decisions
+
+A review pass over `.claude/wurk.json`'s remaining schema fields against wurk
+`docs/manifest.md`'s "Per-repo starting values" table, recorded so a future
+reader can tell "we looked and chose the default" from "nobody looked."
+
+| Field | Decision | Reason |
+|---|---|---|
+| `rebase.auto_resolve_paths` | Leave absent (feature off) | wurk ADR-0010 biases hard toward stopping, and the validator rejects any entry that is or is under `.claude/`, or that collides with `gate.build_paths`, `also_gated_paths`, `moving_files`, `guard_ledger`, or `parallelism.repair_when`. What is left is `docs/`, and this repo's conflict-prone docs are already per-issue-named - `docs/plans/<date>-<id>-*.md`, `changelog.d/<id>.md`, `docs/research/*` - so two branches do not write the same file (`changelog.d/README.md` states that as the reason fragments exist). wurk allows exactly `docs/plan.md`, a single shared file this repo has no equivalent of. There is no incident to point at here and no file the allowlist would help; opting in would buy model spend and a new failure surface for nothing. |
+| `repo.default_branch` | Leave absent | The loader default is `main` and this repo's default branch is `main`. Setting it explicitly changes no behavior at any of the six sites `docs/manifest.md:141-151` lists. |
+| `models.direction` | Keep `fable` | Landed by st-4i0, settled against the wu-ubm research; wurk `docs/manifest.md:383-390` records the resolution as yes. Unchanged. |
+| `gate.sabotage` | **Add** | Was absent, contrary to wurk's per-repo table. Its absence made `.claude/wurk/commit.md` Step 0 inert. `test_roots: ["test/"]`, `test_pattern: "\btest\s+\""`, `exempt_prefixes: ["test/scion_tests/", "test/scxml_tests/"]` - the last matches `.claude/wurk/commit.md`'s exemption for generated corpus files and `docs/testing.md`'s exemption rule. |
+| `gate.attest` | Keep `["mix", "gate.verify"]` | Matches the table; `mix gate.verify` is the tier-2 proof that a run was a full gate rather than a profiled or scoped one (ADR-0011). Unchanged. |
+| `gate.guard_ledger` | Keep `docs/quality-gate-changes.md` | Matches the table and matches `Mix.Statifier.GateGuard`'s own `@ledger_path` (`lib/mix/statifier/gate_guard.ex:37`), which is the definition site the kit field has to agree with. Unchanged. |
+
+Deliberately not decided here: `gate.also_gated_paths`, and whether
+`.claude/wurk.json` belongs in it, is st-29g's call, still open.
+
 ## Merge policy: rebase only
 
 GitHub is configured to allow **rebase merging only**. This is not a style

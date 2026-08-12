@@ -479,9 +479,9 @@ st-29g's, still open.
 
 #### Automated Verification:
 
-- [ ] `ruby ~/.claude/skills/wurk:kit/scripts/lib/manifest.rb check` reports
+- [x] `ruby ~/.claude/skills/wurk:kit/scripts/lib/manifest.rb check` reports
       `ok: true` and `valid: true`.
-- [ ] The sabotage probe confirms the section is live and reads back the
+- [x] The sabotage probe confirms the section is live and reads back the
       intended values:
 
       ```bash
@@ -496,11 +496,11 @@ st-29g's, still open.
 
       Expected: `true`, `["test/"]`, `"\\btest\\s+\""`,
       `["test/scion_tests/", "test/scxml_tests/"]`.
-- [ ] `rebase` is still absent from the manifest and `models.direction` still
+- [x] `rebase` is still absent from the manifest and `models.direction` still
       reads `fable`.
-- [ ] `git diff` for the phase shows `docs/workflow.md` changed alongside
+- [x] `git diff` for the phase shows `docs/workflow.md` changed alongside
       `.claude/wurk.json` - the same key-and-prose pairing Phase 1 requires.
-- [ ] Full `mix quality` green.
+- [x] Full `mix quality` green.
 
 #### Manual Verification:
 
@@ -687,6 +687,30 @@ blocking here.
       describes the function against the pseudocode.
 - [ ] Every claim in the file is true today - especially the suite split and
       the module families, which are the parts that rot first.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] `mix quality --profile merge` produces no ADR judge finding: the new
+      `gate.sabotage` key points back at `docs/testing.md` and
+      `.claude/wurk/commit.md`, which state the discipline, and the new
+      `docs/workflow.md` section records the decision rather than replacing
+      the discipline with a check on its own artifact.
+- [ ] Run `/wurk:commit` (or `gate.rb` directly) on a branch with a new test
+      and confirm `data.sabotage.enabled` is now `true` and `missing` reports
+      what it should - the scan being on is the whole point of the change.
+- [ ] Read the `rebase.auto_resolve_paths` row cold: is "off" still the right
+      answer for this repo, or does a real conflict since plan time argue
+      otherwise?
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

@@ -34,6 +34,11 @@
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
     "also_gated_paths": [],
     "moving_files": [".quality.exs", ".credo.exs", "coveralls.json", ".sobelow-conf"],
+    "sabotage": {
+      "test_roots": ["test/"],
+      "test_pattern": "\\btest\\s+\"",
+      "exempt_prefixes": ["test/scion_tests/", "test/scxml_tests/"]
+    },
     "project_level_skips": [
       "^:doctor not installed$"
     ],
