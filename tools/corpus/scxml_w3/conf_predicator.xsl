@@ -2,12 +2,17 @@
 <!-- Copyright 1998-2003 W3C (MIT, ERCIM, Keio), All Rights Reserved. See http://www.w3.org/Consortium/Legal/. -->
 <!-- Emits predicator expressions (ADR-0004), not ECMAScript.
 
-     Boundness: predicator 3.5 has no undefined literal and no typeof/bound
-     predicate. `===` is the one operator that compares the internal :undefined
-     an unbound identifier evaluates to, so boundness is written as a comparison
-     against _statifier_unbound - an identifier no generated document ever
-     binds. Revisit if predicator grows a typed undefined (docs/datamodel.md
-     seam 3).
+     Boundness: predicator 5.0's `undefined` literal is a direct boundness
+     test - `x === undefined` / `x !== undefined` never consults
+     on_unbound. The comparison must stay strict (`===` / `!==`): `==` against
+     `undefined` propagates the internal :undefined instead of returning a
+     boolean, so a non-strict comparison is not a boundness test at all. The
+     literal does not rescue a genuinely unbound ROOT - loading a root that was
+     never bound still raises UndefinedVariableError under ADR-0014 item 5,
+     because the load fails before the comparison runs. So a `Var<n>` cond only
+     evaluates correctly once the datamodel seeds the declared `<data>` it
+     names (st-af3.3); a property of an already-bound root (`_event.data`, a
+     system variable) needs no such seeding.
 
      Templates with no predicator equivalent emit nothing useful on purpose;
      their tests are listed in exclusions.exs. Do not "fix" them by emitting
@@ -445,7 +450,7 @@ is the second argument -->
 </xsl:template>
 
 <xsl:template match="//@conf:emptyEventData">
-	<xsl:attribute name="cond">_event.data === _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond">_event.data === undefined</xsl:attribute>
 </xsl:template>
 
 <!-- return true if the _name system var has the specified quoted value -->
@@ -474,22 +479,22 @@ is the second argument -->
 
 <!-- true if id has a value -->
 <xsl:template match="//@conf:isBound">
-	<xsl:attribute name="cond">Var<xsl:value-of select="." /> !== _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> !== undefined</xsl:attribute>
 </xsl:template>
 
 <!-- return true if specified var has been created but is not bound -->
 <xsl:template match="//@conf:unboundVar">
-	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === undefined</xsl:attribute>
 </xsl:template>
 
 <!-- true if system var has a value -->
 <xsl:template match="//@conf:systemVarIsBound">
-	<xsl:attribute name="cond"><xsl:value-of select="." /> !== _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond"><xsl:value-of select="." /> !== undefined</xsl:attribute>
 </xsl:template>
 
 <!-- true if id does not have a value -->
 <xsl:template match="//@conf:noValue">
-	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond">Var<xsl:value-of select="." /> === undefined</xsl:attribute>
 </xsl:template>
 
 <!-- always returns true -->
@@ -504,7 +509,7 @@ is the second argument -->
 
 <!-- returns true if all the required fields of _event are bound -->
   <xsl:template match="//@conf:eventFieldsAreBound">
-    <xsl:attribute name="cond">_event.name !== _statifier_unbound and _event.type !== _statifier_unbound and _event.sendid !== _statifier_unbound and _event.origin !== _statifier_unbound and _event.origintype !== _statifier_unbound and _event.invokeid !== _statifier_unbound and _event.data !== _statifier_unbound</xsl:attribute>
+    <xsl:attribute name="cond">_event.name !== undefined and _event.type !== undefined and _event.sendid !== undefined and _event.origin !== undefined and _event.origintype !== undefined and _event.invokeid !== undefined and _event.data !== undefined</xsl:attribute>
   </xsl:template>
 
 <!-- returns true if  _event.data contains the specified item.
@@ -514,7 +519,7 @@ is the second argument -->
 
 <!-- returns true if specified field of _event has no value -->
 <xsl:template match="//@conf:eventFieldHasNoValue">
-	<xsl:attribute name="cond">_event.<xsl:value-of select="." /> === _statifier_unbound</xsl:attribute>
+	<xsl:attribute name="cond">_event.<xsl:value-of select="." /> === undefined</xsl:attribute>
 </xsl:template>
 
 <!-- true if the language of _event matches the processor's datamodel.  Unused by both trees. -->

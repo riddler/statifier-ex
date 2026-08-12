@@ -27,7 +27,7 @@ defmodule SCXMLTest.Send.Test183 do
             <onentry>
                 <send event="event1" idlocation="Var1" />
             </onentry>
-            <transition cond="Var1 !== _statifier_unbound" target="pass" />
+            <transition cond="Var1 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">

@@ -33,7 +33,7 @@ defmodule SCXMLTest.Content.Test528 do
             </final>
         </state>
         <state id="s1">
-            <transition event="done.state.s0" cond="_event.data === _statifier_unbound" target="pass" />
+            <transition event="done.state.s0" cond="_event.data === undefined" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">

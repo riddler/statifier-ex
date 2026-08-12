@@ -29,7 +29,7 @@ defmodule SCXMLTest.Data.Test277 do
             <onentry>
                 <raise event="foo" />
             </onentry>
-            <transition event="error.execution" cond="Var1 === _statifier_unbound" target="s1" />
+            <transition event="error.execution" cond="Var1 === undefined" target="s1" />
             <transition event="*" target="fail" />
         </state>
         <state id="s1">

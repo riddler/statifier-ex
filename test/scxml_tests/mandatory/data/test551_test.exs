@@ -20,7 +20,7 @@ defmodule SCXMLTest.Data.Test551 do
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" binding="early" datamodel="predicator">
         <state id="s0">
-            <transition cond="Var1 !== _statifier_unbound" target="pass" />
+            <transition cond="Var1 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <state id="s1">

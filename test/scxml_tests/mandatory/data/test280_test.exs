@@ -24,7 +24,7 @@ defmodule SCXMLTest.Data.Test280 do
             <data id="Var1" />
         </datamodel>
         <state id="s0">
-            <transition cond="Var2 === _statifier_unbound" target="s1" />
+            <transition cond="Var2 === undefined" target="s1" />
             <transition target="fail" />
         </state>
         <state id="s1">

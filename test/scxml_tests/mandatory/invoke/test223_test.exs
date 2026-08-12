@@ -42,7 +42,7 @@ defmodule SCXMLTest.Invoke.Test223 do
             <transition event="*" target="s1" />
         </state>
         <state id="s1">
-            <transition cond="Var1 !== _statifier_unbound" target="pass" />
+            <transition cond="Var1 !== undefined" target="pass" />
             <transition target="fail" />
         </state>
         <final id="pass">
