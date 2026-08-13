@@ -91,11 +91,14 @@ defmodule Statifier.MachineState do
 
   ## The counter contract
 
-  - `new/2` sets `macrostep: 0, microstep: 0`. Zero means "no macrostep has
-    begun"; it is never the number of a real step.
+  - `new/2` sets `macrostep: 0, microstep: 0, round: 0`. Zero means "no
+    macrostep has begun", "no microstep of the current macrostep has
+    begun", and "no round of the current macrostep's fold has begun",
+    respectively; none of the three is ever the number of a real step or
+    round.
   - `begin_macrostep/1` is the **only** writer of `macrostep`: it increments
-    it by one and resets `microstep` to `0`. Its callers are
-    `Statifier.Interpreter.initialize/2`, once (so the initialization
+    it by one and resets both `microstep` and `round` to `0`. Its callers
+    are `Statifier.Interpreter.initialize/2`, once (so the initialization
     macrostep is **macrostep 1**), and `Statifier.Interpreter.handle_event/2`,
     once per accepted external event (so the first external event is
     **macrostep 2**).
@@ -113,13 +116,25 @@ defmodule Statifier.MachineState do
     happened, so there was no microstep. The consumed event is still
     visible, because the event-dequeued trace effect is emitted at the
     current counters.
+  - `begin_round/1` is the **only** writer of `round`: it increments it by
+    one. Its single call site is `Statifier.Interpreter.microstep/1`'s
+    head, both clauses included, so the first round of a macrostep's fold
+    is **round 1** and every round the fold spends is counted, whether or
+    not it advances `microstep` - which is what makes `round` defined even
+    under `max_macrostep_rounds: :infinity`, where it counts up rather than
+    deriving from the budget (ADR-0020). Effects emitted before the fold
+    begins - `handle_event/2`'s own `EventDequeued` and everything
+    `initialize/2` emits before entering the fold - are stamped `round: 0`
+    for the same reason they are stamped `microstep: 0`: no round has
+    begun yet.
   - Cause metadata and trace effects are both stamped with the counters
     *as they stand at the moment of the stamp*, i.e. after the `begin_*`
     call for the step they belong to.
 
-  No later function may assign `macrostep` or `microstep` directly; the
-  contract above is enforced by review (there being exactly two writer
-  functions), not mechanically.
+  No later function may assign `macrostep`, `microstep`, or `round`
+  directly; the contract above is enforced by review (there being exactly
+  three writer functions, `begin_macrostep/1`, `begin_microstep/1`, and
+  `begin_round/1`), not mechanically.
 
   ## System variables live in the datamodel
 
@@ -184,6 +199,7 @@ defmodule Statifier.MachineState do
     status: :running,
     macrostep: 0,
     microstep: 0,
+    round: 0,
     trace: false,
     max_macrostep_rounds: 10_000
   ]
@@ -211,7 +227,9 @@ defmodule Statifier.MachineState do
   in `new/2` and read-only thereafter, like `trace`. One round is one
   `Statifier.Interpreter.microstep/1` call inside the fold, empty rounds
   included; it is not a microstep count, because a livelocked fold can run
-  forever without advancing the microstep counter at all.
+  forever without advancing the microstep counter at all. The `round`
+  counter counts the same rounds this budget bounds, so at exhaustion
+  `round` equals the spent budget (ADR-0020).
   """
   @type max_macrostep_rounds :: pos_integer() | :infinity
 
@@ -226,6 +244,7 @@ defmodule Statifier.MachineState do
           status: :running | :done,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
+          round: non_neg_integer(),
           trace: trace(),
           max_macrostep_rounds: max_macrostep_rounds()
         }
@@ -259,6 +278,7 @@ defmodule Statifier.MachineState do
       status: :running,
       macrostep: 0,
       microstep: 0,
+      round: 0,
       trace: Keyword.get(opts, :trace, false),
       max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000)
     }
@@ -391,13 +411,13 @@ defmodule Statifier.MachineState do
   end
 
   @doc """
-  Begins a new macrostep: increments `macrostep` by one and resets
-  `microstep` to `0`. The only writer of `macrostep` (the counter
-  contract above).
+  Begins a new macrostep: increments `macrostep` by one and resets both
+  `microstep` and `round` to `0`. The only writer of `macrostep` (the
+  counter contract above).
   """
   @spec begin_macrostep(machine_state :: t()) :: t()
   def begin_macrostep(%__MODULE__{macrostep: macrostep} = machine_state) do
-    %{machine_state | macrostep: macrostep + 1, microstep: 0}
+    %{machine_state | macrostep: macrostep + 1, microstep: 0, round: 0}
   end
 
   @doc """
@@ -409,5 +429,18 @@ defmodule Statifier.MachineState do
   @spec begin_microstep(machine_state :: t()) :: t()
   def begin_microstep(%__MODULE__{microstep: microstep} = machine_state) do
     %{machine_state | microstep: microstep + 1}
+  end
+
+  @doc """
+  Begins a new round of this macrostep's fold: increments `round` by one,
+  leaving `macrostep` and `microstep` unchanged. The only writer of `round`
+  (the counter contract above) - called once per
+  `Statifier.Interpreter.microstep/1` invocation, empty rounds and the
+  terminal probe included, which is the same definition of a round that
+  `max_macrostep_rounds` uses (ADR-0020).
+  """
+  @spec begin_round(machine_state :: t()) :: t()
+  def begin_round(%__MODULE__{round: round} = machine_state) do
+    %{machine_state | round: round + 1}
   end
 end
