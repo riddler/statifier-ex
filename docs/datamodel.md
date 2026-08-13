@@ -50,6 +50,25 @@ Every evaluation goes through one module with one context type:
   stale before a later evaluation site in that same macrostep read it.
 - Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
   errors to `error.execution` internal events per spec. Leaves never swallow errors.
+- **An expression that fails to compile is rejected at load time everywhere
+  except `<data expr>`, which defers to runtime.** Spec 5.9.4 permits either
+  ("The SCXML Processor MAY reject documents containing syntactically
+  ill-formed expressions at document load time, or it MAY wait and place
+  'error.execution' in the internal event queue at runtime"), so both halves
+  conform - but the clause frames the choice as one processor-wide policy, and
+  this engine currently makes it per element class. The asymmetry is deliberate,
+  not an oversight: `test/scion_tests/data/data_invalid_test.exs` declares an
+  unparseable `<data expr="{p1: 'v1'"/>` and asserts `pass` by *catching* the
+  resulting `error.execution`, so load-time rejection would make that document
+  unloadable and the test unpassable. A `<data expr>` that will not compile is
+  therefore captured as `{:invalid, error}` on the compiled node and raised at
+  binding time, while `cond` and `<log expr>` still fail `Compiler.compile/1`.
+
+  If this is ever unified, it unifies toward deferral rather than away from it:
+  deferral loads strictly more documents, and no corpus file requires load-time
+  rejection. The trigger to watch for is a corpus document with an unparseable
+  `cond` plus an `error.execution` handler - none exists today, and test344 is
+  not one (its `cond="1"` compiles, then fails boolean coercion at evaluation).
 - Type coercion to/from event data has one normalization function with defined rules,
   shared by `<param>`, `<content>`, `namelist`, and `<donedata>`.
 

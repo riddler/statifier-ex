@@ -372,5 +372,53 @@ defmodule Statifier.Interpreter.DatamodelTest do
       assert result == ms
       assert result.datamodel["Other1"] == nil
     end
+
+    # sabotage: `Datamodel.bind_state_data/4`'s `:late, 0` clause is deleted,
+    # so the root falls through to the general `:late` clause -> root entry
+    # rebinds the top-level <data> with no environment check and "Var1" comes
+    # back 1 instead of 99, reddening both assertions below.
+    test ~s(under binding="late", root entry does not overwrite an environment value) do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <datamodel>
+                <data id="Var1" expr="1"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      # Spec 5.3.2: the environment's value MUST replace the one the top-level
+      # <data> declares. The root is state index 0 and is entered like any
+      # other state, so without the `:late, 0` no-op its own `data` list - which
+      # *is* the top-level list - would be bound a second time by `arrive/3`,
+      # after `initialize/1` correctly skipped it.
+      {ms, _effects} = Interpreter.initialize(machine, datamodel: %{"Var1" => 99})
+
+      assert ms.datamodel["Var1"] == 99
+      assert MapSet.member?(ms.configuration, 0), "the root must really have been entered"
+    end
+
+    # sabotage: as above, the `:late, 0` clause is deleted -> `enter_state/2`
+    # on the root binds the top-level <data> and returns a changed struct,
+    # reddening the `== ms` identity assertion below.
+    test ~s(under binding="late", enter_state/2 on the root is a no-op) do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <datamodel>
+                <data id="Var1" expr="1"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      ms =
+        machine
+        |> MachineState.new(datamodel: %{"Var1" => 99})
+        |> Datamodel.initialize()
+
+      assert Datamodel.enter_state(ms, 0) == ms
+    end
   end
 end
