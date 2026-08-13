@@ -251,13 +251,13 @@ and leaves `macrostep`/`microstep` alone; `begin_microstep/1` does not touch
       increments `round`.
 
 #### Manual Verification:
-- [ ] Spec conformance: the touched functions still match the W3C Appendix D
+- [x] Spec conformance: the touched functions still match the W3C Appendix D
       pseudocode line for line - `begin_round/1` is a new hoisting artifact
       with no pseudocode counterpart (ADR-0002, comment owed in Phase 2), and
       no ported procedure changed.
-- [ ] The counter contract prose reads as one contract over three counters, not
+- [x] The counter contract prose reads as one contract over three counters, not
       two plus an appendix.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -358,17 +358,17 @@ contract, on the one fixture where it is visible).
       `begin_round/1` call (the terminal-probe count reddens).
 
 #### Manual Verification:
-- [ ] Spec conformance: `microstep/1`'s two clauses still match the pseudocode
+- [x] Spec conformance: `microstep/1`'s two clauses still match the pseudocode
       inner-loop body line for line; the only addition is the counter write,
       and its mechanical reason is stated inline per ADR-0002.
-- [ ] In iex on the livelock document, `Interpreter.microstep/1` stepped by
+- [x] In iex on the livelock document, `Interpreter.microstep/1` stepped by
       hand from a fresh position reports `round: 1, 2, 3, ...` and matches what
       the fold reports at the same depth (ADR-0019's resumable-position
       payoff).
-- [ ] `docs/observability.md` constraint 4 reads correctly for the code as it
+- [x] `docs/observability.md` constraint 4 reads correctly for the code as it
       stands after this phase - three counters, one writer each - with the
       trace and cause bullets still describing the pre-stamp reality.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -510,14 +510,14 @@ comment.
       and no other does).
 
 #### Manual Verification:
-- [ ] Spec conformance: no ported procedure changed in this phase; the trace
+- [x] Spec conformance: no ported procedure changed in this phase; the trace
       payloads are ADR-0003 effect data, outside the Appendix D pseudocode.
-- [ ] Read a `trace: true` livelock dump by hand at
+- [x] Read a `trace: true` livelock dump by hand at
       `max_macrostep_rounds: 20`: the rounds are visibly numbered, countable
       without counting lines, and round *n* diffs against round *n*+1 in
       exactly one field. This is the bead's acceptance criterion, judged by a
       reader rather than by an assertion.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -656,16 +656,16 @@ the `BudgetExhausted` effect.
 - [x] Every new or changed test carries a `# sabotage: ... -> red` line.
 
 #### Manual Verification:
-- [ ] Spec conformance: `terminal_effects/2` and the two raise functions still
+- [x] Spec conformance: `terminal_effects/2` and the two raise functions still
       match their pseudocode counterparts - the raise sites are ADR-0002
       hoists that already existed, and only the stamped field set changed.
-- [ ] An `error.execution` message built from a cause reads correctly with the
+- [x] An `error.execution` message built from a cause reads correctly with the
       round included, and constraint 4's exemplar ("raised by the `<assign>` at
       line 42, transition 7, microstep 3") still parses as a sentence with the
       round added.
-- [ ] The changelog fragment reads as one line a library user would care about,
+- [x] The changelog fragment reads as one line a library user would care about,
       per `changelog.d/README.md`'s "too much" example.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -778,13 +778,13 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Spec conformance: the touched functions still match the W3C Appendix D
+- [x] Spec conformance: the touched functions still match the W3C Appendix D
       pseudocode line for line - `begin_round/1` is a new hoisting artifact
       with no pseudocode counterpart (ADR-0002, comment owed in Phase 2), and
       no ported procedure changed.
-- [ ] The counter contract prose reads as one contract over three counters, not
+- [x] The counter contract prose reads as one contract over three counters, not
       two plus an appendix.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -798,17 +798,17 @@ blocking here.
 
 ### Phase 2
 
-- [ ] Spec conformance: `microstep/1`'s two clauses still match the pseudocode
+- [x] Spec conformance: `microstep/1`'s two clauses still match the pseudocode
       inner-loop body line for line; the only addition is the counter write,
       and its mechanical reason is stated inline per ADR-0002.
-- [ ] In iex on the livelock document, `Interpreter.microstep/1` stepped by
+- [x] In iex on the livelock document, `Interpreter.microstep/1` stepped by
       hand from a fresh position reports `round: 1, 2, 3, ...` and matches what
       the fold reports at the same depth (ADR-0019's resumable-position
       payoff).
-- [ ] `docs/observability.md` constraint 4 reads correctly for the code as it
+- [x] `docs/observability.md` constraint 4 reads correctly for the code as it
       stands after this phase - three counters, one writer each - with the
       trace and cause bullets still describing the pre-stamp reality.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -822,14 +822,14 @@ blocking here.
 
 ### Phase 3
 
-- [ ] Spec conformance: no ported procedure changed in this phase; the trace
+- [x] Spec conformance: no ported procedure changed in this phase; the trace
       payloads are ADR-0003 effect data, outside the Appendix D pseudocode.
-- [ ] Read a `trace: true` livelock dump by hand at
+- [x] Read a `trace: true` livelock dump by hand at
       `max_macrostep_rounds: 20`: the rounds are visibly numbered, countable
       without counting lines, and round *n* diffs against round *n*+1 in
       exactly one field. This is the bead's acceptance criterion, judged by a
       reader rather than by an assertion.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -843,16 +843,16 @@ blocking here.
 
 ### Phase 4
 
-- [ ] Spec conformance: `terminal_effects/2` and the two raise functions still
+- [x] Spec conformance: `terminal_effects/2` and the two raise functions still
       match their pseudocode counterparts - the raise sites are ADR-0002
       hoists that already existed, and only the stamped field set changed.
-- [ ] An `error.execution` message built from a cause reads correctly with the
+- [x] An `error.execution` message built from a cause reads correctly with the
       round included, and constraint 4's exemplar ("raised by the `<assign>` at
       line 42, transition 7, microstep 3") still parses as a sentence with the
       round added.
-- [ ] The changelog fragment reads as one line a library user would care about,
+- [x] The changelog fragment reads as one line a library user would care about,
       per `changelog.d/README.md`'s "too much" example.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
