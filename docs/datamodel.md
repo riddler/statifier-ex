@@ -19,8 +19,12 @@ continuity with v1's converted W3C tests).
 
 ## What the datamodel provides
 
-- `<datamodel>` / `<data>` with `expr`, child content, and `src` (fetch at
-  document-load time only, `binding="early"` and `late` both supported).
+- `<datamodel>` / `<data>` with `expr`, child content, and `src` - `binding="early"`
+  and `late` both supported. `src` is lowered, validated, and compiled like any
+  other attribute, but it is never fetched: a `<data>` with an `src` raises
+  `error.execution` per spec 5.3.2 rather than loading the named document. The
+  fetch's correct timing is unsettled between this paragraph and spec 5.3.2 -
+  that contradiction is named here, not resolved.
 - `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
   auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
   v1 refused to create intermediates).

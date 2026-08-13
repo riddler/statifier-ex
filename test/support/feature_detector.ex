@@ -75,8 +75,10 @@ defmodule Statifier.FeatureDetector do
       wildcard_events: :supported,
       event_expressions: :unsupported,
       target_expressions: :unsupported,
-      datamodel: :unsupported,
-      data_elements: :unsupported,
+      # st-af3.3
+      datamodel: :supported,
+      # st-af3.3
+      data_elements: :supported,
       assign_elements: :unsupported,
       script_elements: :unsupported,
       # st-wju.5

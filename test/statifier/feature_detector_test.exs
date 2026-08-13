@@ -172,8 +172,10 @@ defmodule Statifier.FeatureDetectorTest do
     end
   end
 
-  # The Phase 1 (st-wju.7) supported set. Keep this in step with the table in
-  # docs/plans/260811-st-wju.7-four-function-api-and-corpus-on.md - a later
+  # The Phase 1 (st-wju.7) supported set, plus each later bead's registry
+  # flips. Keep this in step with the table in
+  # docs/plans/260811-st-wju.7-four-function-api-and-corpus-on.md and with
+  # every subsequent flip (st-af3.3 adds datamodel/data_elements) - a later
   # accidental flip in the registry should fail here rather than silently
   # widen the corpus.
   @supported_features MapSet.new([
@@ -192,12 +194,16 @@ defmodule Statifier.FeatureDetectorTest do
                         :onexit_actions,
                         :raise_elements,
                         :log_elements,
-                        :donedata_elements
+                        :donedata_elements,
+                        # st-af3.3
+                        :datamodel,
+                        # st-af3.3
+                        :data_elements
                       ])
 
   describe "feature_registry/0" do
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
-    test "supports exactly the Phase 1 feature set" do
+    test "supports exactly the current supported feature set" do
       supported =
         FeatureDetector.feature_registry()
         |> Enum.filter(fn {_feature, status} -> status == :supported end)

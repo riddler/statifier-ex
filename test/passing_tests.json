@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-08-11",
+  "last_updated": "2026-08-13",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -95,6 +95,7 @@
     "test/scion_tests/scxml_prefix_event_name_matching/test1_test.exs"
   ],
   "w3c_tests": [
+    "test/scxml_tests/mandatory/evaluationof_executable_content/test158_test.exs",
     "test/scxml_tests/mandatory/on_entry/test375_test.exs",
     "test/scxml_tests/mandatory/on_exit/test377_test.exs",
     "test/scxml_tests/mandatory/raise/test144_test.exs",

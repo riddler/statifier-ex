@@ -91,10 +91,11 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # Appendix D's `s.isFirstEntry`, which cannot live on a compiled, immutable
   # `%Machine.State{}` in this port - see that field's own moduledoc section.
   #
-  # sabotage: add `states_to_invoke: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex -> the struct grows a thirteenth key and
-  # this equality assertion reddens, which is exactly the "someone adds a
-  # field without updating the docs" failure the plan calls out.
+  # sabotage: add `states_to_invoke: nil` to `MachineState`'s `defstruct`
+  # in lib/statifier/machine_state.ex - the struct then grows a
+  # thirteenth key, and this equality assertion reddens for exactly
+  # the "someone adds a field without updating the docs" failure the
+  # plan calls out.
   test "machine_state holds the twelve fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
