@@ -191,6 +191,10 @@ defmodule Statifier.StatifierIfTest do
     assert active_states(next_state_chart, next_effects) == MapSet.new(["c"])
   end
 
+  # sabotage: `Statifier.Machine.Content.If`'s `select/3` `{:ok, true}` arm
+  # scans on (`select(rest, ...)`) instead of returning the branch -> the
+  # `<else>` partition runs instead of the first true `<elseif>`, raising
+  # `baz` rather than `bar`, so `event="*"` takes s0 to "fail" -> red
   test "SCXML mandatory/if/test147 - first true partition in document order wins" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
@@ -234,6 +238,10 @@ defmodule Statifier.StatifierIfTest do
     assert active_states(state_chart, effects) == MapSet.new(["pass"])
   end
 
+  # sabotage: `Statifier.Machine.Content.If`'s `select/3` `nil`-cond clause
+  # skips the `<else>` branch (`select(rest, ...)`) instead of selecting it
+  # -> no partition runs at all, `baz` is never raised, so `event="*"` takes
+  # s0 to "fail" -> red
   test "SCXML mandatory/if/test148 - else runs when no cond is true" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
@@ -277,6 +285,11 @@ defmodule Statifier.StatifierIfTest do
     assert active_states(state_chart, effects) == MapSet.new(["pass"])
   end
 
+  # sabotage: `Statifier.Machine.Content.If`'s `execute/2` runs
+  # `hd(branches).content` instead of returning `{:ok, context, []}` when no
+  # branch is selected -> `foo` is raised and `Var1` becomes 1, so the
+  # `cond="Var1==0"` guard on the "bat" transition no longer holds and
+  # `event="*"` takes s0 to "fail" -> red
   test "SCXML mandatory/if/test149 - nothing runs when no cond is true and there is no else" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
@@ -317,6 +330,16 @@ defmodule Statifier.StatifierIfTest do
     assert active_states(state_chart, effects) == MapSet.new(["pass"])
   end
 
+  # Despite the "unbound" in this test's name, `_event !== undefined`
+  # evaluates cleanly to `{:ok, false}` here - predicator's `undefined`
+  # literal makes unboundness testable rather than an error - so this
+  # exercises `select/3`'s ordinary false arm, not its `{:error, _}` one.
+  # Mutating the `{:error, _}` arm leaves this test green, which is why the
+  # mutation below is the false arm instead.
+  #
+  # sabotage: `Statifier.Machine.Content.If`'s `select/3` `{:ok, false}` arm
+  # returns the branch instead of scanning on -> the `_event !== undefined`
+  # partition runs, raising `bound`, which takes s0 to "fail" -> red
   test "SCXML mandatory/system_variables/test319 - _event is unbound at initialization, so else is selected" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
