@@ -247,12 +247,27 @@ defmodule Statifier.Interpreter.Selection do
   call here, and once per selection round in the private walk below (the
   "once per evaluation site" contract `Statifier.Evaluator`'s own moduledoc
   states). `{:ok, true}` enables the transition; `{:ok, false}` and
-  `{:error, _}` both do not. A non-boolean `{:ok, value}` - anything other
-  than `true` or `false` - is treated as an `{:error, {:non_boolean_cond,
-  value}}`, not as a falsy value: collapsing it to `false` would be the
-  "rescue-to-default at a leaf" failure `docs/architecture.md` principle 3
-  forbids, and ADR-0004 rules out borrowing ECMAScript truthiness, since
-  predicator is the datamodel and has no truthiness rules of its own.
+  `{:error, _}` both do not.
+
+  A non-boolean `{:ok, value}` - anything other than `true` or `false` - is
+  treated as an `{:error, {:non_boolean_cond, value}}` rather than as a falsy
+  value, because **spec 5.9.1 makes it the same case as an evaluation
+  error**: "If a conditional expression cannot be evaluated as a boolean
+  value ('true' or 'false') or if its evaluation causes an error, the SCXML
+  Processor MUST treat the expression as if it evaluated to 'false' and MUST
+  place the error 'error.execution' in the internal event queue." The spec
+  joins the two with one `or` and gives them one consequence, so collapsing a
+  non-boolean quietly to `false` would satisfy half of that MUST and drop the
+  other half. This is not a deviation from Appendix D's `conditionMatch`; it
+  is the normative clause `conditionMatch` evaluates under.
+
+  The `{:error, _}` spelling is how a *pure query* carries both halves at
+  once: `docs/architecture.md` principle 3 forbids this leaf from raising or
+  rescuing, so it reports the failure and the two entry points below turn it
+  into "not enabled" plus the enqueue. ADR-0004 is why there is no third
+  option - predicator is the datamodel and has no ECMAScript truthiness to
+  borrow, so "cannot be evaluated as a boolean" is decidable here rather
+  than being a matter of taste.
 
   This function never enqueues anything itself - it is a pure query, plain
   values in and out, per this module's own moduledoc. The `{:error, _}`
@@ -284,10 +299,12 @@ defmodule Statifier.Interpreter.Selection do
     case Evaluator.evaluate(context, cond) do
       {:ok, true} -> {:ok, true}
       {:ok, false} -> {:ok, false}
-      # D1: a cond that evaluates to a non-boolean is a type failure, not a
-      # falsy value - collapsing it to `false` would be the rescue-to-default
-      # at a leaf docs/architecture.md principle 3 forbids. ADR-0004: predicator
-      # is the datamodel and has no ECMAScript truthiness to borrow.
+      # D1: spec 5.9.1 joins "cannot be evaluated as a boolean value" and
+      # "its evaluation causes an error" into one case with one consequence -
+      # treat as false AND place error.execution. So this arm is the spec's
+      # own requirement, not an addition to Appendix D's conditionMatch;
+      # collapsing it to {:ok, false} would honor half the MUST and drop the
+      # enqueue. See this function's caller's @doc for the full clause.
       {:ok, other} -> {:error, {:non_boolean_cond, other}}
       {:error, %Evaluator.Error{} = error} -> {:error, error}
     end
