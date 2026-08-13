@@ -205,11 +205,30 @@ defmodule Statifier.Machine do
   def history?(%__MODULE__{} = machine, index), do: at(machine, index).kind == :history
 
   @doc """
-  `index`'s direct children, in document order - `getChildStates` (Appendix
-  D).
+  `index`'s direct children, in document order - **every** one, `:history`
+  pseudo-states included. This is *not* `getChildStates` (Appendix D):
+  Appendix D's `getChildStates(state1)` is defined (`### function
+  getChildStates(state1)`) as "a list containing all `<state>`, `<final>`,
+  and `<parallel>` children of `state1`" - `:history` is excluded by
+  definition. This function returns the raw `children` field as compiled,
+  because that field is also what lets `State.history_children` be a lookup
+  rather than a scan over `children` for the `:history` ones. Callers that
+  want the spec operation want `child_states/2` instead.
   """
-  @spec child_indexes(machine :: t(), index :: non_neg_integer()) :: [non_neg_integer()]
-  def child_indexes(%__MODULE__{} = machine, index), do: at(machine, index).children
+  @spec children(machine :: t(), index :: non_neg_integer()) :: [non_neg_integer()]
+  def children(%__MODULE__{} = machine, index), do: at(machine, index).children
+
+  @doc """
+  `getChildStates(state1)` (Appendix D): "a list containing all `<state>`,
+  `<final>`, and `<parallel>` children of `state1`" - `index`'s direct
+  children with any `:history` pseudo-state child excluded, in document
+  order.
+  """
+  @spec child_states(machine :: t(), index :: non_neg_integer()) :: [non_neg_integer()]
+  def child_states(%__MODULE__{} = machine, index) do
+    %State{children: children, history_children: history_children} = at(machine, index)
+    children -- history_children
+  end
 
   @doc """
   `index`'s proper ancestors, nearest first, root last - `getProperAncestors`

@@ -181,14 +181,28 @@ defmodule Statifier.MachineTest do
     end
   end
 
-  describe "child_indexes/2" do
-    # sabotage: `Machine.child_indexes/2` reads `.initial` instead of
-    # `.children` -> this comes back `[a1's default]` instead of the full
-    # children list, reddening this assertion.
-    test "returns direct children in source order" do
+  describe "children/2" do
+    # sabotage: `Machine.children/2` reads `.initial` instead of `.children`
+    # -> this comes back `[a1's default]` instead of the full children list,
+    # reddening this assertion.
+    test "returns every direct child in source order, history included" do
       m = machine()
-      assert Machine.child_indexes(m, idx(:a)) == [idx(:a1), idx(:a2), idx(:h)]
-      assert Machine.child_indexes(m, idx(:a1)) == []
+      assert Machine.children(m, idx(:a)) == [idx(:a1), idx(:a2), idx(:h)]
+      assert Machine.children(m, idx(:a1)) == []
+    end
+  end
+
+  describe "child_states/2" do
+    # sabotage: `Machine.child_states/2` returns `children` unfiltered
+    # (drops the `-- history_children` subtraction) -> `h` comes back in the
+    # result, reddening this refutation. This is the `getChildStates`
+    # (Appendix D) contract - "a list containing all <state>, <final>, and
+    # <parallel> children of state1" - `:history` pseudo-states excluded by
+    # definition.
+    test "excludes :history children that children/2 includes" do
+      m = machine()
+      assert Machine.child_states(m, idx(:a)) == [idx(:a1), idx(:a2)]
+      assert Machine.children(m, idx(:a)) == [idx(:a1), idx(:a2), idx(:h)]
     end
   end
 

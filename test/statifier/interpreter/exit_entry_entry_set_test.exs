@@ -197,6 +197,39 @@ defmodule Statifier.Interpreter.ExitEntryEntrySetTest do
     assert default_entry == MapSet.new([idx(:p1), idx(:p2)])
   end
 
+  # AC: "a <parallel> with a <history> child treats the history child as
+  # never-covered ground truth, not as a region" - `p` (the parallel entered
+  # by `go-p`, above) has an unrecorded, unrelated `<history id="hd">` child
+  # of its own. `getChildStates(state)` (Appendix D, "### function
+  # getChildStates(state1)": "Returns a list containing all <state>,
+  # <final>, and <parallel> children of state1") excludes `:history`
+  # children by definition, so `hd` is never itself a region
+  # `enter_uncovered_regions/3` walks; it stays unrecorded, and unrecorded
+  # history registers `default_history_content` only when the history
+  # pseudo-state itself is what gets entered (`enter_history_target/3`),
+  # which never happens here because nothing targeted `hd`.
+  #
+  # sabotage: `region_indexes/2` (`Statifier.Interpreter.ExitEntry`) is
+  # changed to call `Machine.children/2` instead of `Machine.child_states/2`
+  # (regions become "every direct child", `:history` included) -> `hd` is
+  # now an uncovered region of `p`, so `enter_uncovered_regions/3` calls
+  # `add_descendant_states_to_enter/3` on it, which dispatches to
+  # `enter_history_target/3` and wrongly registers
+  # `default_history_content[idx(:p)]`, reddening this refutation. Left
+  # unfixed, the same wrong registration makes an interpreter that runs the
+  # returned `history_content` execute `hd`'s default transition's content
+  # (e.g. an `<assign>`) even though `hd` was never entered.
+  test "a <parallel> with a <history> child does not register default history content for entering it directly" do
+    m = machine()
+    ms = machine_state(m)
+    transition = transition_named(m, "go-p")
+
+    {_states_to_enter, _default_entry, history_content} =
+      ExitEntry.compute_entry_set(ms, [transition])
+
+    refute Map.has_key?(history_content, idx(:p))
+  end
+
   describe "a transition into one region of a parallel, from outside the parallel" do
     setup do
       m = machine()
@@ -212,7 +245,7 @@ defmodule Statifier.Interpreter.ExitEntryEntrySetTest do
     # AC: "also enters the sibling regions ... and only the uncovered ones"
     #
     # sabotage: `enter_uncovered_regions/3` is changed to iterate only the
-    # first child of `Machine.child_indexes/2` instead of all of them -> `p2`
+    # first child of `Machine.child_states/2` instead of all of them -> `p2`
     # (the second, uncovered region) never enters, reddening this assertion.
     test "enters the named target, its ancestors up to the domain, and the uncovered sibling region",
          %{states_to_enter: states_to_enter} do
