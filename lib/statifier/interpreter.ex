@@ -126,6 +126,7 @@ defmodule Statifier.Interpreter do
 
   alias Statifier.Event
   alias Statifier.Interpreter.Content
+  alias Statifier.Interpreter.Datamodel
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
@@ -160,9 +161,32 @@ defmodule Statifier.Interpreter do
       |> MachineState.begin_macrostep()
       |> MachineState.begin_microstep()
 
-    # `interpret`'s skipped preamble: early datamodel binding and
-    # `executeGlobalScriptElement(doc)` are st-af3's, with no datamodel
-    # evaluation in this core yet.
+    # `datamodel = new Datamodel(doc)` / `if doc.binding == "early":
+    # initializeDatamodel(datamodel, doc)` (Appendix D `:101-102`), fused
+    # into one unconditional call. The pseudocode's `if doc.binding ==
+    # "early":` guard is **not** ported to this call site - it moves inside
+    # `Datamodel.initialize/1` instead (Decision 7,
+    # `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`),
+    # for three reasons that must be read together, not the usual single
+    # ADR-0002 mechanical-deviation note:
+    #   1. `initializeDatamodel` has no procedure body anywhere in Appendix
+    #      D, so there is no pseudocode definition of what the guard is
+    #      guarding - what it means is decided by clause 5.3.2/5.3.3/B.2.2
+    #      prose, not by porting a block that does not exist.
+    #   2. Spec 5.3.3 makes *creation* of every <data> unconditional under
+    #      both bindings ("...MUST create the data elements at document
+    #      initialization time"), so seeding cannot sit behind an
+    #      early-only guard without violating that MUST.
+    #   3. Under binding="late", a top-level <data> is contained in no
+    #      state, so it is never in `enterStates`' `statesToEnter` - this
+    #      call is the only place in the whole interpreter it can ever be
+    #      bound.
+    # `Datamodel.initialize/1` seeds every declared id unconditionally and
+    # binds every d_index under :early, only the root's own under :late -
+    # see its own moduledoc. `executeGlobalScriptElement(doc)` stays
+    # skipped: st-af3's, no <script> support exists in this core yet.
+    machine_state = Datamodel.initialize(machine_state)
+
     {machine_state, enter_effects} =
       ExitEntry.enter_states(machine_state, [initial_transition(machine)])
 
