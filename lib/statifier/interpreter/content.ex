@@ -75,6 +75,35 @@ defmodule Statifier.Interpreter.Content do
   node the platform is raising about. Nodes that already ran keep the
   effects they already produced, in order; the failing node contributes
   none of its own (it returned an error, not a partial success).
+
+  ## Non-fatal errors, drained here too
+
+  Spec 5.9.1: "If a conditional expression cannot be evaluated as a boolean
+  value ('true' or 'false') or if its evaluation causes an error, the SCXML
+  Processor MUST treat the expression as if it evaluated to 'false' **and**
+  MUST place the error 'error.execution' in the internal event queue." A
+  leaf node cannot raise that itself (ADR-0003's error model, and
+  `content_acceptance_test.exs`'s structural sweep mechanically enforces
+  it), so it records the reason in `context.pending_errors` instead and
+  keeps going. `run_nodes/2` drains that list after *every* node it runs -
+  on the success path and on the failure path alike - through
+  `raise_execution_error/4`, the same function the fatal path uses, so the
+  origin stamp stays `{:content, c_index, owner}` and there is still exactly
+  one site in this tree that names `"error.execution"` for content.
+
+  **Ordering caveat.** Because the drain happens after the node returns, a
+  pending error is queued *after* any event the node's own execution (e.g.
+  an `<if>`'s selected partition) already raised, whereas spec 5.9.1 reads
+  as queuing it at the moment the cond is evaluated - i.e. before. Getting
+  the order right would require either the leaf to raise (ADR-0003) or a
+  second protocol round-trip per node; neither is justified by any corpus
+  document today. Spec 4.9's closing sentence is the relevant tolerance:
+  "error events will not be removed from the queue and processed until all
+  events preceding them in the queue have been processed" - so a later
+  processing order for the error event does not change *whether* it is
+  eventually processed, and no corpus file distinguishes this window
+  (`docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`,
+  Decision 5).
   """
 
   alias Statifier.Effect
@@ -130,7 +159,11 @@ defmodule Statifier.Interpreter.Content do
   # The fold itself: each `c_index` resolved through `Machine.content/2` and
   # dispatched through `execute_one/2`, accumulating effects and executed
   # `c_indexes` in order; `{:error, reason}` halts the fold with the failing
-  # `c_index` and `reason` carried in the accumulator's last slot.
+  # `c_index` and `reason` carried in the accumulator's last slot. A
+  # three-element `{:error, new_context, reason}` halts the same way but
+  # keeps `new_context` - the context the node had already produced,
+  # `pending_errors` included - instead of discarding it back to the
+  # fold's pre-call `context` (see `drain_pending/2`, below).
   @spec run_nodes(context :: Context.t(), c_indexes :: [non_neg_integer()]) ::
           {Context.t(), [Effect.t()], [non_neg_integer()], {non_neg_integer(), term()} | nil}
   defp run_nodes(context, c_indexes) do
@@ -140,13 +173,37 @@ defmodule Statifier.Interpreter.Content do
       fn c_index, {context, effects, executed, _error} ->
         case execute_one(context, c_index) do
           {:ok, new_context, node_effects} ->
+            new_context = drain_pending(new_context, c_index)
             {:cont, {new_context, effects ++ node_effects, executed ++ [c_index], nil}}
+
+          {:error, new_context, reason} ->
+            new_context = drain_pending(new_context, c_index)
+            {:halt, {new_context, effects, executed ++ [c_index], {c_index, reason}}}
 
           {:error, reason} ->
             {:halt, {context, effects, executed ++ [c_index], {c_index, reason}}}
         end
       end
     )
+  end
+
+  # Drains `context.pending_errors` (spec 5.9.1's non-fatal channel - see the
+  # moduledoc's "Non-fatal errors, drained here too" section for the full
+  # rationale and the ordering caveat) through `raise_execution_error/4` in
+  # document order, then clears the list. Runs on both the `{:ok, _, _}` and
+  # `{:error, context, _}` arms of `run_nodes/2`'s fold, since a composite
+  # node's partial context can carry pending errors even when the node
+  # itself ultimately fails (Decision 4/5).
+  @spec drain_pending(context :: Context.t(), c_index :: non_neg_integer()) :: Context.t()
+  defp drain_pending(%Context{pending_errors: []} = context, _c_index), do: context
+
+  defp drain_pending(%Context{pending_errors: pending, owner: owner} = context, c_index) do
+    machine_state =
+      Enum.reduce(pending, context.machine_state, fn reason, machine_state ->
+        raise_execution_error(machine_state, owner, c_index, reason)
+      end)
+
+    %{context | machine_state: machine_state, pending_errors: []}
   end
 
   # One node: resolve its compiled struct through `Machine.content/2`, then

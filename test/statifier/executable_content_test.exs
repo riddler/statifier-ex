@@ -216,6 +216,19 @@ defmodule Statifier.ExecutableContentTest do
     end
   end
 
+  describe "Context.t()'s pending_errors default" do
+    # sabotage: `@enforce_keys` on `Statifier.ExecutableContent.Context` is
+    # widened to include `:pending_errors` -> every `%Context{...}` literal
+    # in this suite (and every other test file) that omits it fails to
+    # compile, reddening the whole file rather than just this test.
+    test "a hand-built %Context{} omitting pending_errors defaults it to []" do
+      ms = MachineState.new(machine())
+      ctx = context(ms, @owner)
+
+      assert %Context{pending_errors: []} = ctx
+    end
+  end
+
   describe "Protocol.assert_impl!/2" do
     # sabotage: the `defimpl Statifier.ExecutableContent` block is commented
     # out of raise.ex -> `Protocol.assert_impl!/2` raises `ArgumentError`

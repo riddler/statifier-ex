@@ -272,12 +272,16 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   # `machine_state`, `owner`, and `datamodel_context` (the reserved slot
   # st-af3.1 Phase 3 fills) and running both real node kinds through it pins
   # the field set now, so a later change adds a field rather than silently
-  # replacing the struct.
+  # replacing the struct. `pending_errors` is exactly such an addition -
+  # st-af3.5 Phase 1's non-fatal error channel (Decision 5) - and this test
+  # is the pin the sabotage note below always meant to be updated by that
+  # kind of change, not broken by it: the field is defaulted, not
+  # `@enforce_keys`'d, so the `%Context{}` construction above still omits it.
   #
-  # sabotage: a fourth field (`:extra`) is added to `Statifier.ExecutableContent.Context`'s
-  # `defstruct` -> the `Map.keys/1` equality below gains a fourth entry and
+  # sabotage: a fifth field (`:extra`) is added to `Statifier.ExecutableContent.Context`'s
+  # `defstruct` -> the `Map.keys/1` equality below gains a fifth entry and
   # reddens, even though construction and dispatch both still succeed.
-  test "AC7: Context has exactly machine_state, owner, and datamodel_context, and both node kinds run through it" do
+  test "AC7: Context has exactly machine_state, owner, datamodel_context, and pending_errors, and both node kinds run through it" do
     m = machine()
     ms = MachineState.new(m)
     owner = {:onentry, idx(m, "ordered"), 0}
@@ -291,7 +295,8 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
     assert context |> Map.from_struct() |> Map.keys() |> Enum.sort() == [
              :datamodel_context,
              :machine_state,
-             :owner
+             :owner,
+             :pending_errors
            ]
 
     raise_node = Machine.content(m, 2)

@@ -104,14 +104,19 @@ above, and `Statifier.Effect` is the `effect`.
 ### Executable content
 
 One `Statifier.ExecutableContent` node protocol with
-`execute(node, context) -> {:ok, context, [effect]} | {:error, reason}`, where
-`context` is a `Statifier.ExecutableContent.Context`. No central dispatcher
-with per-struct clauses and a parallel summary function to keep in sync.
-`Statifier.Interpreter.Content` is the block runner: it walks a block's nodes
-in document order, stopping at the first error, and is the only place that
-converts a node's `{:error, _}` into `error.execution`. A new element is a new
-`Statifier.Machine.Content.*` struct plus a `defimpl` in the same file - never
-a change to the runner or the interpreter.
+`execute(node, context) -> {:ok, context, [effect]} | {:error, reason} | {:error, context, reason}`,
+where `context` is a `Statifier.ExecutableContent.Context`. No central
+dispatcher with per-struct clauses and a parallel summary function to keep in
+sync. `Statifier.Interpreter.Content` is the block runner: it walks a block's
+nodes in document order, stopping at the first error, and is the only place
+that converts a node's error - fatal or the non-fatal spec-5.9.1 channel
+carried in `context.pending_errors` - into `error.execution`. A new element is
+a new `Statifier.Machine.Content.*` struct plus a `defimpl` in the same file -
+never a change to the runner or the interpreter (the error *model* itself -
+the shape of `result()` and what the runner drains - is a separate,
+ADR-governed thing from an element's own code; see
+`docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`,
+Decision 5, for why it was widened once).
 
 ### Sessions and invoke
 

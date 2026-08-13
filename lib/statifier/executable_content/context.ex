@@ -34,17 +34,39 @@ defmodule Statifier.ExecutableContent.Context do
   narrower projection of it: `<send>` and `<invoke>`, once implemented, read
   the configuration and the machine itself, and narrowing the type now
   would be a guess about which fields a future node needs.
+
+  ## Non-fatal errors
+
+  `pending_errors` is where a node records a spec-5.9.1-shaped error it has
+  already recovered from: "If a conditional expression cannot be evaluated
+  as a boolean value ('true' or 'false') or if its evaluation causes an
+  error, the SCXML Processor MUST treat the expression as if it evaluated to
+  'false' **and** MUST place the error 'error.execution' in the internal
+  event queue." A node that hits this treats the expression as `false` and
+  keeps running - it does not halt - but the platform still owes an
+  `error.execution` for it. Entries are bare `term()` reasons, in the order
+  the node produced them; the node never converts them itself
+  (`Statifier.ExecutableContent.execute/2` never constructs a
+  `Statifier.Event` and never raises, per ADR-0003). `Statifier.Interpreter.Content`
+  drains this list and clears it after every node it runs.
+
+  This is *not* the fatal channel: a node with a non-empty `pending_errors`
+  still ran to completion and returned `{:ok, context, effects}` (or, for a
+  composite node whose own child content failed, the three-element
+  `{:error, context, reason}` form) - it is not the same as the node itself
+  returning `{:error, reason}`.
   """
 
   alias Statifier.Machine.Content
   alias Statifier.MachineState
 
   @enforce_keys [:machine_state, :owner, :datamodel_context]
-  defstruct [:machine_state, :owner, :datamodel_context]
+  defstruct [:machine_state, :owner, :datamodel_context, pending_errors: []]
 
   @type t :: %__MODULE__{
           machine_state: MachineState.t(),
           owner: Content.owner(),
-          datamodel_context: Predicator.Context.t()
+          datamodel_context: Predicator.Context.t(),
+          pending_errors: [term()]
         }
 end
