@@ -165,15 +165,23 @@ defmodule Statifier.MachineStateAcceptanceTest do
        event: Event.external("e"),
        from: :external,
        macrostep: 0,
-       microstep: 0
+       microstep: 0,
+       round: 0
      }},
-    {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 0, microstep: 0}},
-    {:trace, %Trace.ExitSet{indexes: [], macrostep: 0, microstep: 0}},
+    {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 0, microstep: 0, round: 0}},
+    {:trace, %Trace.ExitSet{indexes: [], macrostep: 0, microstep: 0, round: 0}},
     {:trace,
-     %Trace.ContentExecuted{owner: {:transition, 0}, c_indexes: [], macrostep: 0, microstep: 0}},
-    {:trace, %Trace.EntrySet{indexes: [], macrostep: 0, microstep: 0}},
-    {:trace, %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 0, microstep: 0}},
-    {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0}}
+     %Trace.ContentExecuted{
+       owner: {:transition, 0},
+       c_indexes: [],
+       macrostep: 0,
+       microstep: 0,
+       round: 0
+     }},
+    {:trace, %Trace.EntrySet{indexes: [], macrostep: 0, microstep: 0, round: 0}},
+    {:trace,
+     %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}},
+    {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}}
   ]
 
   # AC: "One @type effect union: core effects + all seven trace effects;

@@ -10,28 +10,32 @@ defmodule Statifier.Effect.Trace.Done do
   `docs/observability.md:68`), not because it is the only carrier of the
   configuration.
 
-  Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand.
+  Built with `new/2`, never a struct literal, so `macrostep`/`microstep`/
+  `round` are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.MachineState
 
-  @enforce_keys [:configuration, :macrostep, :microstep]
-  defstruct [:donedata, :configuration, :macrostep, :microstep]
+  @enforce_keys [:configuration, :macrostep, :microstep, :round]
+  defstruct [:donedata, :configuration, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           donedata: term() | nil,
           configuration: MapSet.t(non_neg_integer()),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 
   @doc """
-  Stamps `macrostep`/`microstep` from `machine_state` and sets `fields`
-  (`:configuration`, optional `:donedata`).
+  Stamps `macrostep`/`microstep`/`round` from `machine_state` and sets
+  `fields` (`:configuration`, optional `:donedata`).
   """
   @spec new(machine_state :: MachineState.t(), fields :: keyword()) :: t()
-  def new(%MachineState{macrostep: macrostep, microstep: microstep}, fields) do
-    struct!(__MODULE__, Keyword.merge(fields, macrostep: macrostep, microstep: microstep))
+  def new(%MachineState{macrostep: macrostep, microstep: microstep, round: round}, fields) do
+    struct!(
+      __MODULE__,
+      Keyword.merge(fields, macrostep: macrostep, microstep: microstep, round: round)
+    )
   end
 end

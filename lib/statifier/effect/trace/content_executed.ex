@@ -18,8 +18,8 @@ defmodule Statifier.Effect.Trace.ContentExecuted do
   - `{:onexit, state_index, ordinal}` - an `<onexit>` block
   - `{:transition, t_index}` - a transition's own executable content
 
-  Built with `new/2`, never a struct literal, so `macrostep`/`microstep`
-  are always stamped from the `Statifier.MachineState` at hand.
+  Built with `new/2`, never a struct literal, so `macrostep`/`microstep`/
+  `round` are always stamped from the `Statifier.MachineState` at hand.
   """
 
   alias Statifier.Machine.Content
@@ -28,22 +28,26 @@ defmodule Statifier.Effect.Trace.ContentExecuted do
   @typedoc "Which block of executable content produced `c_indexes` - `Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
-  @enforce_keys [:owner, :c_indexes, :macrostep, :microstep]
-  defstruct [:owner, :c_indexes, :macrostep, :microstep]
+  @enforce_keys [:owner, :c_indexes, :macrostep, :microstep, :round]
+  defstruct [:owner, :c_indexes, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           owner: owner(),
           c_indexes: [non_neg_integer()],
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 
   @doc """
-  Stamps `macrostep`/`microstep` from `machine_state` and sets `fields`
-  (`:owner`, `:c_indexes`).
+  Stamps `macrostep`/`microstep`/`round` from `machine_state` and sets
+  `fields` (`:owner`, `:c_indexes`).
   """
   @spec new(machine_state :: MachineState.t(), fields :: keyword()) :: t()
-  def new(%MachineState{macrostep: macrostep, microstep: microstep}, fields) do
-    struct!(__MODULE__, Keyword.merge(fields, macrostep: macrostep, microstep: microstep))
+  def new(%MachineState{macrostep: macrostep, microstep: microstep, round: round}, fields) do
+    struct!(
+      __MODULE__,
+      Keyword.merge(fields, macrostep: macrostep, microstep: microstep, round: round)
+    )
   end
 end
