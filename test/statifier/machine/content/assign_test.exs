@@ -133,6 +133,9 @@ defmodule Statifier.Machine.Content.AssignTest do
     # `{:unbound_location, _}` instead), reddening these three tests'
     # `{:system_variable, _}` match.
     for name <- ~w(_event _sessionid _name _ioprocessors) do
+      # sabotage: see the note above this loop - a membership test against
+      # `["_event"]` reddens the `_sessionid`, `_name`, and `_ioprocessors`
+      # iterations of this test.
       test "assigning to #{name} yields {:error, {:system_variable, _}}" do
         ctx = context(%{})
         node = assign(unquote(name), compiled_expr("1"))
