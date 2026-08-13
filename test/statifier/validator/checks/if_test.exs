@@ -163,5 +163,34 @@ defmodule Statifier.Validator.Checks.IfTest do
 
       assert {:error, [%Error{reason: {:if_elseif_after_else}}]} = validate!(xml)
     end
+
+    # sabotage: collect_ifs/1's `%DForeach{content: content}` clause is
+    # dropped (only the `%DIf{}` clause and the `_other -> []` fallback
+    # survive) -> the offending <if> inside the <foreach> body below
+    # (test153's nesting shape) is never walked and this {:error, [...]}
+    # assertion reddens.
+    test "the offending <if> inside a <foreach> body is reported at its own line" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <foreach array="[1, 2]" item="x">
+                      <if cond="a">
+                          <log label="one"/>
+                          <else/>
+                          <log label="two"/>
+                          <elseif cond="b"/>
+                          <log label="three"/>
+                      </if>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:if_elseif_after_else}} = error]} = validate!(xml)
+
+      assert error.location.start_line == 9
+    end
   end
 end

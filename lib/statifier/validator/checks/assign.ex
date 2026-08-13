@@ -27,6 +27,7 @@ defmodule Statifier.Validator.Checks.Assign do
 
   alias Statifier.Document
   alias Statifier.Document.Assign, as: DAssign
+  alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
   alias Statifier.Document.State
@@ -80,9 +81,9 @@ defmodule Statifier.Validator.Checks.Assign do
   # that only sees the block/transition's own flat `content` list, exactly
   # the gap `Statifier.Validator.Checks.If`'s moduledoc calls out for this
   # walk specifically. Recurses so a `<assign>` nested inside a *nested*
-  # `<if>` (SCION's `if_else/test0`) is not missed either. `<foreach>` will
-  # be the next composite executable-content element; when it lands, it gets
-  # a clause here alongside `%DIf{}` rather than a second walk elsewhere.
+  # `<if>` (SCION's `if_else/test0`) is not missed either. `<foreach>` is the
+  # second composite executable-content element (st-af3.6), and gets its own
+  # clause below alongside `%DIf{}` rather than a second walk elsewhere.
   #
   # Only two checks need this at all, and the boundary is worth stating so
   # the next composite element does not re-run the audit from scratch: this
@@ -96,6 +97,8 @@ defmodule Statifier.Validator.Checks.Assign do
   defp descend(%DIf{branches: branches}) do
     branches |> Enum.flat_map(& &1.content) |> Enum.flat_map(&descend/1)
   end
+
+  defp descend(%DForeach{content: content}), do: Enum.flat_map(content, &descend/1)
 
   defp descend(other), do: [other]
 
