@@ -14,6 +14,9 @@ each major decision lives in `docs/adr/`.
    `add_descendant_states_to_enter`, `microstep`, `enter_states`, `exit_states`,
    `main_event_loop`, `exit_interpreter`. When a conformance test fails, the debugging
    move is "diff the function against the pseudocode", never "tune the heuristic".
+   Diff against the cached text, not against memory: `appendix-d.txt` and the full
+   `scxml-rec.html` sit in `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/`,
+   populated by `mise run spec:fetch` (see [`tools/spec/README.md`](../tools/spec/README.md)).
    Internal, external, and targetless transitions share one code path via the
    transition domain.
 

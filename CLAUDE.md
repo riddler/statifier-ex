@@ -107,7 +107,9 @@ mix test.regression          # ratchet: registry tests must pass (once corpus la
 
 Toolchain and repo tasks live in `mise.toml`: `mise install` provisions Erlang,
 Elixir, and the JRE Saxon needs; `mise run corpus` regenerates the conformance
-corpus (`mise tasks` lists the stages, `tools/corpus/README.md` explains them).
+corpus (`mise tasks` lists the stages, `tools/corpus/README.md` explains them);
+`mise run spec:fetch` populates the local spec cache described under
+Conventions below.
 
 Run `mix quality --profile loop` between edits; full `mix quality` must be green
 before any commit. The gate formats your code for you - do not run `mix format`
@@ -119,6 +121,15 @@ rules the gate expects you to follow.
 - W3C SCXML spec: https://www.w3.org/TR/scxml/ - interpreter functions keep the
   Appendix D names in snake_case; deviations from pseudocode are semantic bugs
   unless an inline comment cites the mechanical (effects-related) reason.
+  **Read the spec locally rather than from memory.** A cache of it lives at
+  `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/` -
+  the same directory from every worktree and from the main checkout - holding
+  `scxml-rec.html` (the whole REC, for normative clauses like 5.9.1) and
+  `appendix-d.txt` (the extracted pseudocode, one block per procedure). Run
+  `mise run spec:fetch` when it is absent: it is per-clone and deliberately
+  never committed, so a fresh clone starts without it. `tools/spec/README.md`
+  explains the layout and why it lives under `.git`. Quote the clause you are
+  citing; recalled spec text has been wrong here before.
 - Errors are events: evaluations return `{:ok, v} | {:error, e}`; only the
   interpreter raises `error.execution`. Never rescue-to-default at a leaf.
 - Structs + MapSets; `@spec` on public functions; pattern matching over multiple
