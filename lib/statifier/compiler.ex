@@ -713,7 +713,7 @@ defmodule Statifier.Compiler do
   # compile failure is captured as `{:invalid, error}` on the compiled node
   # rather than returned as `{:error, error}` (Decision 6,
   # `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`): spec
-  # 5.9.3 permits a load-time rejection or a runtime `error.execution`, and
+  # 5.9.4 permits a load-time rejection or a runtime `error.execution`, and
   # `assign_invalid_test.exs` in the corpus needs the latter - the same
   # deferral `build_data_value/2` already gives `<data expr>`. Unlike that
   # deferral, this clause never fails `build_contents/2`'s `collect/1` merge

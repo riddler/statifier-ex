@@ -1,6 +1,6 @@
 defmodule Statifier.Document.Assign do
   @moduledoc """
-  An `<assign>` executable-content element: spec 4.7.1's deep-path datamodel
+  An `<assign>` executable-content element: spec 5.4's deep-path datamodel
   write.
 
   ## Two spans that are not the same thing

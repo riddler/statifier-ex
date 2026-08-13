@@ -1,6 +1,6 @@
 defmodule Statifier.Machine.Content.Assign do
   @moduledoc """
-  A compiled `<assign>` executable-content node (spec 4.7.1, 5.9.2) - the
+  A compiled `<assign>` executable-content node (spec 5.4, 5.9.2) - the
   interned counterpart to `Statifier.Document.Assign`.
 
   `location` is the raw, uncompiled SCXML `location` attribute (a path
@@ -59,7 +59,7 @@ defmodule Statifier.Machine.Content.Assign do
   defimpl Statifier.ExecutableContent do
     @moduledoc false
 
-    # spec 4.7.1/5.9.2's <assign>: evaluate the value, resolve `location`
+    # spec 5.4.2/5.9.2's <assign>: evaluate the value, resolve `location`
     # against the block's (pre-write) datamodel context, reject a resolved
     # root that begins with "_" (Decision 5, spec 5.10 - a system variable),
     # verify the resolved root already exists (Decision 4 - vivification
