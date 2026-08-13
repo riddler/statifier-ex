@@ -53,13 +53,22 @@ defmodule Statifier.Event.Cause do
     block); this arm has no content node at all. The moduledoc's own history
     note above (`:14-23`) refers to that older, different two-arm shape, not
     to this one.
+  - `{:data, d_index}` - the platform raised the event about a `<data>`
+    element that could not be bound (`Statifier.Interpreter.Datamodel`), with
+    no content node behind it - the same shape as the `{:transition,
+    t_index}` arm above, one level down. `d_index` resolves through
+    `Statifier.Machine.data/2`, and the resolved `%Statifier.Machine.Data{}`
+    carries `id`, `value`, `location`, and `value_location`, so this cause
+    never duplicates the location itself (ADR-0014 item 4's committed field
+    set, reached with no new struct).
 
-  Never a struct - both indexes resolve through `Statifier.Machine`.
+  Never a struct - every index resolves through `Statifier.Machine`.
   """
   @type origin ::
           {:content, non_neg_integer(), Content.owner()}
           | {:state, non_neg_integer()}
           | {:transition, non_neg_integer()}
+          | {:data, non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),
