@@ -16,30 +16,24 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own thirteen keys (`lib/statifier/lowering.ex`),
+  # The dispatch map's own fifteen keys (`lib/statifier/lowering.ex`),
   # duplicated here as data rather than imported - there is nothing in
   # `lib/` to import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
-    raise log donedata content
+    raise log donedata content datamodel data
   )
 
-  # The twelve names `@phase_3_elements` exists to word the unsupported-
-  # element message for - deferred, not partially built.
+  # The ten names `@phase_3_elements` exists to word the unsupported-
+  # element message for - deferred, not partially built. `datamodel` and
+  # `data` moved to `@supported` in st-af3.3 Phase 1.
   @phase_3_elements ~w(
-    datamodel data assign send param if elseif else foreach invoke cancel
-    script
+    assign send param if elseif else foreach invoke cancel script
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only
-  # spec-legal parent is `<datamodel>`, which is itself unsupported and so
-  # never recursed into (`Lowering.walk_child/4` does not walk an
-  # unsupported element's children) - a `<datamodel><data/></datamodel>`
-  # fixture would only ever surface `"datamodel"` as the error, never
-  # reaching `"data"` at all. `<data>` is therefore placed directly under
-  # `<scxml>` instead (a deliberate deviation from a spec-legal position),
-  # which still proves the name itself is rejected, just not in a
-  # spec-legal position.
+  # spec-legal parent is `<datamodel>` (both supported as of st-af3.3 Phase
+  # 1), so its fixture nests it there.
   @fixtures %{
     "scxml" => ~s(<scxml/>),
     "state" => ~s(<scxml><state id="s"/></scxml>),
@@ -56,7 +50,7 @@ defmodule Statifier.Lowering.CoverageTest do
     "donedata" => ~s(<scxml><final id="f"><donedata/></final></scxml>),
     "content" => ~s(<scxml><final id="f"><donedata><content/></donedata></final></scxml>),
     "datamodel" => ~s(<scxml><datamodel/></scxml>),
-    "data" => ~s(<scxml><data id="x"/></scxml>),
+    "data" => ~s(<scxml><datamodel><data id="x"/></datamodel></scxml>),
     "assign" =>
       ~s(<scxml><state id="s"><transition><assign location="x" expr="1"/></transition></state></scxml>),
     "send" => ~s(<scxml><state id="s"><onentry><send event="e"/></onentry></state></scxml>),

@@ -63,7 +63,9 @@ defmodule Statifier.Lowering do
     "raise" => &Builders.build_raise/2,
     "log" => &Builders.build_log/2,
     "donedata" => &Builders.build_donedata/2,
-    "content" => &Builders.build_content/2
+    "content" => &Builders.build_content/2,
+    "datamodel" => &Builders.build_datamodel/2,
+    "data" => &Builders.build_data/2
   }
 
   @doc """

@@ -91,32 +91,9 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "assign")
     end
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "datamodel" entry
-    # dispatching to `build_scxml/2`'s own placement path -> this test
-    # reddens because `<datamodel>` builds instead of being reported
-    # unsupported
-    test "<datamodel> under <scxml>" do
-      xml = ~s(<scxml><datamodel/></scxml>)
-      assert_unsupported(xml, "datamodel")
-    end
-
-    # <data>'s only spec-legal parent is <datamodel>, which is itself
-    # unsupported and therefore never recursed into
-    # (`Lowering.walk_child/4` does not walk an unsupported element's
-    # children) - a `<datamodel><data/></datamodel>` fixture would only ever
-    # surface "datamodel" as the error, never reaching "data" itself.
-    # Placed directly under <scxml> instead (a deliberate judgment call) -
-    # the element is not in a spec-legal position here, but the assertion
-    # still proves the *name* "data" is rejected regardless of where it is
-    # written.
-    #
-    # sabotage: `Lowering`'s dispatch map grows a stray "data" entry
-    # dispatching to `build_log/2` -> this test reddens because `<data>`
-    # builds instead of being reported unsupported
-    test "<data> (placed under <scxml>, since <datamodel> would swallow it unvisited)" do
-      xml = ~s(<scxml><data id="x"/></scxml>)
-      assert_unsupported(xml, "data")
-    end
+    # `<datamodel>` and `<data>` moved from this deferred set to the
+    # supported set in st-af3.3 Phase 1 - see
+    # `test/statifier/lowering/datamodel_test.exs` for their own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
     # dispatching to `state_like/3` with `kind: :invoke` (an invented state

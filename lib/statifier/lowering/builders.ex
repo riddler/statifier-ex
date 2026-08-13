@@ -16,6 +16,8 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document
   alias Statifier.Document.Block
   alias Statifier.Document.Content
+  alias Statifier.Document.Data
+  alias Statifier.Document.Datamodel
   alias Statifier.Document.Donedata
   alias Statifier.Document.Initial
   alias Statifier.Document.Log
@@ -320,6 +322,83 @@ defmodule Statifier.Lowering.Builders do
     {{:content, content}, errors}
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Datamodel{}` from a `<datamodel>` element,
+  tagged `{:datamodel, datamodel}`.
+
+  `<datamodel>` has no attributes of its own (spec 5.2.1). Its only
+  children are `<data>` elements, placed into `Datamodel.data` in document
+  order via `place/3` and `reverse_lists/1`, the same fold every other
+  list-valued builder uses. `<datamodel>` is legal at both the document root
+  and on a `:state`/`:parallel` state (`place/3` handles both), and lowering
+  does not reject a `<datamodel>` on a `:final` or `:history` state either -
+  that placement rule belongs to `Statifier.Validator.Checks.Data`, since one
+  `%State{}` struct covers all four kinds and lowering has no way to
+  distinguish them here.
+  """
+  @spec build_datamodel(element :: Element.t(), ctx :: map()) ::
+          {{:datamodel, Datamodel.t()}, [Error.t()]}
+  def build_datamodel(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    datamodel = %Datamodel{location: element.location}
+    {datamodel, place_errors} = place_children(results, datamodel, element.name)
+    datamodel = reverse_lists(datamodel)
+
+    {{:datamodel, datamodel}, errors ++ place_errors}
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Data{}` from a `<data>` element, tagged
+  `{:data, data}`.
+
+  Reads `id` (required - spec 5.3.1), `expr`, and `src`, all raw strings, and
+  sets `text` to `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
+  concatenation of `<data>`'s direct text children - a `<data>`'s text *is*
+  its payload (spec 5.3.2), so this builder reads `element.children`
+  directly rather than calling `Statifier.Lowering.walk_children/2`, the
+  same exemption `build_content/2` takes. An element child is not silently
+  dropped: each one produces `{:misplaced_element, name, "data"}` instead of
+  a build attempt of its own - `<data>` does not hold a markup subtree.
+
+  A missing `id` means no struct can be built at all (`:id` is
+  `@enforce_keys`'d on `Data`), following `build_raise/2`'s required-attribute
+  pattern: `{nil, [Error.missing_attribute("data", "id", element.location)]}`.
+  """
+  @spec build_data(element :: Element.t(), ctx :: map()) ::
+          {{:data, Data.t()} | nil, [Error.t()]}
+  def build_data(%Element{} = element, _ctx) do
+    misplaced_errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "data", location)
+      end)
+
+    case Attributes.value(element, "id") do
+      nil ->
+        {nil, misplaced_errors ++ [Error.missing_attribute("data", "id", element.location)]}
+
+      id ->
+        attribute_locations =
+          %{}
+          |> Attributes.put_location(:id, element, "id")
+          |> Attributes.put_location(:expr, element, "expr")
+          |> Attributes.put_location(:src, element, "src")
+
+        data = %Data{
+          id: id,
+          location: element.location,
+          expr: Attributes.value(element, "expr"),
+          src: Attributes.value(element, "src"),
+          text: DOM.text(element),
+          attribute_locations: attribute_locations
+        }
+
+        {{:data, data}, misplaced_errors}
+    end
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -418,6 +497,18 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | donedata: donedata}, nil}
   end
 
+  defp place({:datamodel, datamodel}, %State{} = parent, _parent_name) do
+    {%{parent | datamodel_element: datamodel}, nil}
+  end
+
+  defp place({:datamodel, datamodel}, %Document{} = parent, _parent_name) do
+    {%{parent | datamodel_element: datamodel}, nil}
+  end
+
+  defp place({:data, data}, %Datamodel{} = parent, _parent_name) do
+    {%{parent | data: [data | parent.data]}, nil}
+  end
+
   defp place({:content, content}, %Donedata{} = parent, _parent_name) do
     {%{parent | content: content}, nil}
   end
@@ -478,5 +569,9 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Transition{} = transition) do
     %{transition | content: Enum.reverse(transition.content)}
+  end
+
+  defp reverse_lists(%Datamodel{} = datamodel) do
+    %{datamodel | data: Enum.reverse(datamodel.data)}
   end
 end

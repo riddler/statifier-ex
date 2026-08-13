@@ -86,7 +86,7 @@ defmodule Statifier.Document do
   rather than copying a `%State{}` that never existed at this layer.
   """
 
-  alias Statifier.Document.{Log, Raise, State}
+  alias Statifier.Document.{Datamodel, Log, Raise, State}
   alias Statifier.Parser.Location
 
   @typedoc """
@@ -118,6 +118,7 @@ defmodule Statifier.Document do
     binding: :early,
     initial: [],
     states: [],
+    datamodel_element: nil,
     attribute_locations: %{}
   ]
 
@@ -130,6 +131,7 @@ defmodule Statifier.Document do
           binding: :early | :late,
           initial: [String.t()],
           states: [State.t()],
+          datamodel_element: Datamodel.t() | nil,
           location: Location.t(),
           attribute_locations: attribute_locations()
         }
