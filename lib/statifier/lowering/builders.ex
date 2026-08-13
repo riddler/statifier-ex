@@ -411,15 +411,31 @@ defmodule Statifier.Lowering.Builders do
   `@enforce_keys`'d on `Assign`), following `build_raise/2`'s
   required-attribute pattern: `{nil, [Error.missing_attribute("assign",
   "location", element.location)]}`.
+
+  `text` is set to `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
+  concatenation of `<assign>`'s direct text children - spec 5.4.2's other
+  value source, an `<assign>`'s children "provide an in-line specification
+  of the legal data value" (5.4.2, 5.9.3), so this builder reads
+  `element.children` directly rather than calling
+  `Statifier.Lowering.walk_children/2`, the same exemption `build_data/2`
+  and `build_content/2` take. An element child is not silently dropped:
+  each one produces `{:misplaced_element, name, "assign"}` instead of a
+  build attempt of its own - `<assign>` does not hold a markup subtree.
   """
   @spec build_assign(element :: Element.t(), ctx :: map()) ::
           {{:content_node, Assign.t()} | nil, [Error.t()]}
-  def build_assign(%Element{} = element, ctx) do
-    {results, errors} = Lowering.walk_children(element, ctx)
+  def build_assign(%Element{} = element, _ctx) do
+    misplaced_errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "assign", location)
+      end)
 
     case Attributes.value(element, "location") do
       nil ->
-        {nil, errors ++ [Error.missing_attribute("assign", "location", element.location)]}
+        {nil,
+         misplaced_errors ++ [Error.missing_attribute("assign", "location", element.location)]}
 
       location ->
         attribute_locations =
@@ -431,12 +447,11 @@ defmodule Statifier.Lowering.Builders do
           node_location: element.location,
           location: location,
           expr: Attributes.value(element, "expr"),
+          text: DOM.text(element),
           attribute_locations: attribute_locations
         }
 
-        {assign_node, place_errors} = place_children(results, assign_node, element.name)
-
-        {{:content_node, assign_node}, errors ++ place_errors}
+        {{:content_node, assign_node}, misplaced_errors}
     end
   end
 

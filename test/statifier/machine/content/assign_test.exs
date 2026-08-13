@@ -250,6 +250,20 @@ defmodule Statifier.Machine.Content.AssignTest do
     assert {:error, %Evaluator.Error{source: "return"}} = ExecutableContent.execute(node, ctx)
   end
 
+  # sabotage: `Assign`'s `evaluate_value/2` is changed to call
+  # `Evaluator.evaluate(context.datamodel_context, value)` only for a
+  # `{:compiled, _, _}` value, falling through to `{:ok, nil}` for anything
+  # else (a plausible-looking "only real expressions need evaluating"
+  # mistake) -> a `{:static, _}` value would write `nil` instead of the
+  # static payload, reddening this test's assertion on the written value.
+  test "a {:static, _} value (Phase 3's child-content value source) writes without touching the evaluator" do
+    ctx = context(%{"x" => nil})
+    node = assign("x", {:static, [1, 2, 3]})
+
+    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert new_ctx.machine_state.datamodel["x"] == [1, 2, 3]
+  end
+
   # sabotage: `Assign`'s `execute/2` returns the original `context` unchanged
   # instead of `%{context | machine_state: ms, datamodel_context:
   # Evaluator.context(ms)}` -> the returned context's `datamodel_context`

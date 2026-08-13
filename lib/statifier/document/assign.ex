@@ -21,8 +21,9 @@ defmodule Statifier.Document.Assign do
     versa; it is also `@enforce_keys`'d, since every node has one.
 
   `expr` is the value source read from the `expr` attribute - raw,
-  uncompiled predicator source, nilable. `text` stays `nil` until Phase 3
-  populates it from child content (mirroring `Statifier.Document.Data.text`
+  uncompiled predicator source, nilable. `text` is
+  `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed concatenation of
+  `<assign>`'s direct text children (mirroring `Statifier.Document.Data.text`
   and `Statifier.Document.Content.text`); `expr` and `text` are both
   representable on this struct at once, on purpose, so
   `Statifier.Validator.Checks.Assign` can report the pair rather than

@@ -59,6 +59,7 @@ defmodule Statifier.Validator.Error do
           | {:data_value_and_children, id :: binary()}
           | {:data_reserved_id, id :: binary()}
           | {:datamodel_bad_parent, kind :: atom()}
+          | {:assign_expr_and_text, expr :: binary()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -554,6 +555,26 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:datamodel_bad_parent, kind},
       message: "<datamodel> must not be a child of a #{kind} state",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 5.4.2: an `<assign>` element carries both an `expr` attribute and
+  non-blank child content - "A conformant SCXML document MUST specify
+  either 'expr' or children of `<assign>`, but not both." `expr` is the
+  attribute's value as lowered, so the message quotes the expression rather
+  than the text, which has no span of its own. Reported at the `<assign>`'s
+  own element span (`Statifier.Document.Assign.node_location`, not the
+  SCXML `location` *attribute* that struct also carries -
+  `Statifier.Document.Assign`'s moduledoc names the two spans apart).
+  """
+  @spec assign_expr_and_text(expr :: binary(), location :: Location.t()) :: t()
+  def assign_expr_and_text(expr, %Location{} = location) when is_binary(expr) do
+    %__MODULE__{
+      reason: {:assign_expr_and_text, expr},
+      message:
+        "<assign> must not specify both an expr attribute (#{inspect(expr)}) and child content",
       location: location
     }
   end
