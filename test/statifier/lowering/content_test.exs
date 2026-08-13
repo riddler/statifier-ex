@@ -183,6 +183,35 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
+  describe "lower/1 - <assign>, child text" do
+    # sabotage: `build_assign/2`'s `%Assign{}` literal drops `text:
+    # DOM.text(element)` (leaving the struct default `text: nil`) -> this
+    # test reddens since `text` would be `nil` instead of the child text.
+    test "child text is captured on the assign node" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><assign location="x">hello</assign></onentry></state></scxml>)
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{content: [%Assign{location: "x", text: "hello"}]}] = state.onentry
+    end
+
+    # sabotage: `build_assign/2`'s `misplaced_errors` binding is replaced
+    # with a hardcoded `[]` instead of walking `DOM.elements(element)` ->
+    # the element child would be silently dropped rather than reported,
+    # reddening this test's `{:error, [...]}` match (`lower!/1` would return
+    # `{:ok, _}` instead).
+    test "an element child inside <assign> is a misplaced_element error" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><assign location="x"><log label="hi"/></assign></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "log", "assign"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+  end
+
   describe "lower/1 - <assign>, missing location" do
     # sabotage: `build_assign/2`'s `nil` branch is dropped in favor of always
     # building a `%Assign{location: nil}` (bypassing `@enforce_keys`'s

@@ -687,13 +687,24 @@ defmodule Statifier.Compiler do
     end
   end
 
+  # No `expr`: the value-source ladder's remaining two rungs (Phase 3,
+  # mirroring `build_data_value/2` minus `src` - `<assign>` has no `src`
+  # attribute) - non-blank child text folded through
+  # `Statifier.Compiler.Expressions.inline_value/1` (Decision 8 of the
+  # st-af3.3 plan), a whitespace-only or absent `text` falling to
+  # `{:static, nil}`. `inline_value/1` is reused rather than
+  # `Expressions.compile/3` because spec 5.4.2's "children ... provide an
+  # in-line specification of the legal data value" and 5.9.3 give `<assign>`
+  # children the same *value*, not *expression*, semantics 5.3.2 gives
+  # `<data>` children - the same reasoning `build_data_value/2`'s own
+  # `<data>` text rung already rests on.
   defp build_content_node(c_index, %DAssign{expr: nil} = assign) do
     {:ok,
      %MAssign{
        c_index: c_index,
        location: assign.location,
        node_location: assign.node_location,
-       value: {:static, nil},
+       value: assign_text_value(assign),
        location_location: assign_location_location(assign)
      }}
   end
@@ -707,7 +718,11 @@ defmodule Statifier.Compiler do
   # deferral `build_data_value/2` already gives `<data expr>`. Unlike that
   # deferral, this clause never fails `build_contents/2`'s `collect/1` merge
   # either, so `compile/1` still returns `{:ok, machine}` for a document
-  # whose only defect is a malformed `<assign expr>`.
+  # whose only defect is a malformed `<assign expr>`. `expr` takes
+  # precedence over any child text the document also carries -
+  # `Statifier.Validator.Checks.Assign` is what rejects a document
+  # specifying both (spec 5.4.2), so a document that reaches this compiler
+  # never legally has both.
   defp build_content_node(c_index, %DAssign{expr: source} = assign) do
     value =
       case Expressions.compile(source, {:content, c_index}, assign_expr_location(assign)) do
@@ -734,6 +749,27 @@ defmodule Statifier.Compiler do
   defp expr_location(%DLog{attribute_locations: attribute_locations, location: location}) do
     Map.get(attribute_locations, :expr, location)
   end
+
+  # The no-`expr` value: non-blank child text folded through
+  # `Expressions.inline_value/1`, `{:static, nil}` for a `nil` or
+  # whitespace-only `text` - mirrors `build_data_value/2`'s own text rung.
+  # `%DAssign{}.text` is only ever `nil` for a hand-built struct that never
+  # passed through lowering; `build_assign/2` always sets it to
+  # `Statifier.Parser.DOM.text/1`'s result (possibly `""`) for anything
+  # actually parsed.
+  @spec assign_text_value(assign :: DAssign.t()) :: Machine.expr()
+  defp assign_text_value(%DAssign{text: nil}), do: Expressions.static(nil)
+
+  defp assign_text_value(%DAssign{text: text}) do
+    if assign_text_blank?(text) do
+      Expressions.static(nil)
+    else
+      Expressions.inline_value(text)
+    end
+  end
+
+  @spec assign_text_blank?(text :: String.t()) :: boolean()
+  defp assign_text_blank?(text), do: String.trim(text) == ""
 
   # `assign_expr_location/1` and `assign_location_location/1` mirror
   # `expr_location/1`'s "caller's choice" contract but cannot share its body:

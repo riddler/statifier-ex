@@ -242,6 +242,58 @@ defmodule Statifier.Machine.ContentTest do
 
       assert %Assign{value: {:invalid, %Statifier.Compiler.Error{}}} = assign_content
     end
+
+    @child_list_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <assign location="x">[1, 2, 3]</assign>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    @child_string_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <assign location="x">hello</assign>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.assign_text_value/1` calls
+    # `Expressions.compile(text, {:content, c_index}, ...)` instead of
+    # `Expressions.inline_value(text)` -> the `[1, 2, 3]` case would compile
+    # to a `{:compiled, _, _}` datamodel read instead of folding at compile
+    # time to a `{:static, [1, 2, 3]}` literal, reddening this pattern
+    # match.
+    test ~s(<assign location="x">[1, 2, 3]</assign> compiles to {:static, [1, 2, 3]}) do
+      m = compile!(@child_list_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [assign_c_index] = onentry_block.content
+      assign_content = Machine.content(m, assign_c_index)
+
+      assert %Assign{value: {:static, [1, 2, 3]}} = assign_content
+    end
+
+    # sabotage: see the note above - the same `inline_value/1` ->
+    # `Expressions.compile/3` swap reddens this case too, since `hello`
+    # would compile to a `{:compiled, _, _}` unbound-identifier read instead
+    # of folding to the static string literal `"hello"`.
+    test ~s(<assign location="x">hello</assign> compiles to {:static, "hello"}) do
+      m = compile!(@child_string_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [assign_c_index] = onentry_block.content
+      assign_content = Machine.content(m, assign_c_index)
+
+      assert %Assign{value: {:static, "hello"}} = assign_content
+    end
   end
 
   describe "compile/1 - donedata" do
