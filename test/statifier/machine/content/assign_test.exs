@@ -124,6 +124,68 @@ defmodule Statifier.Machine.Content.AssignTest do
              ExecutableContent.execute(node, ctx)
   end
 
+  describe "system-variable protection (spec 5.10)" do
+    # sabotage: `Assign`'s `check_system_variable/1` prefix test
+    # `String.starts_with?(root, "_")` is replaced with a membership test
+    # against `["_event"]` -> `_sessionid`, `_name`, and `_ioprocessors`
+    # would incorrectly proceed past the guard (and, since none of those
+    # roots is a declared datamodel key, would surface as
+    # `{:unbound_location, _}` instead), reddening these three tests'
+    # `{:system_variable, _}` match.
+    for name <- ~w(_event _sessionid _name _ioprocessors) do
+      test "assigning to #{name} yields {:error, {:system_variable, _}}" do
+        ctx = context(%{})
+        node = assign(unquote(name), compiled_expr("1"))
+
+        assert {:error, {:system_variable, unquote(name)}} = ExecutableContent.execute(node, ctx)
+      end
+    end
+
+    # sabotage: same mutation as above (membership test against
+    # `["_event"]`) - since `"_event"` *is* in that list, this test's own
+    # dotted/bracket roots would still be caught, so it does not redden
+    # under that particular sabotage; the mutation that reddens *this* test
+    # is `check_system_variable/1`'s guard testing `List.last(path)`
+    # instead of the resolved `root` (`List.first(path)`) -> `_event.name`
+    # resolves to `["_event", "name"]` and `List.last/1` would test `"name"`,
+    # which does not start with "_", incorrectly proceeding past the guard.
+    test "a nested write under _event reports the root for both dot and bracket access" do
+      ctx = context(%{})
+
+      assert {:error, {:system_variable, "_event"}} =
+               ExecutableContent.execute(assign("_event.name", compiled_expr("1")), ctx)
+
+      assert {:error, {:system_variable, "_event"}} =
+               ExecutableContent.execute(assign("_event['name']", compiled_expr("1")), ctx)
+    end
+
+    # sabotage: `Assign`'s `check_system_variable/1` prefix test
+    # `String.starts_with?(root, "_")` is replaced with a membership test
+    # against `["_event"]` -> `_x` is not in that list, so this test's
+    # `{:system_variable, "_x"}` match would go red (it would instead
+    # surface as `{:unbound_location, "_x.foo"}`, since `"_x"` is not a
+    # declared datamodel key either).
+    test "_x.foo (the platform-variable root) yields {:error, {:system_variable, \"_x\"}}" do
+      ctx = context(%{})
+      node = assign("_x.foo", compiled_expr("1"))
+
+      assert {:error, {:system_variable, "_x"}} = ExecutableContent.execute(node, ctx)
+    end
+
+    # sabotage: `Assign`'s `check_system_variable/1` clause guard
+    # `is_binary(root)` is dropped, or the whole function is replaced with
+    # `{:error, {:system_variable, root}}` unconditionally -> a declared,
+    # non-underscore root like `my_var` would incorrectly be rejected as a
+    # system variable, reddening this test's `{:ok, _, []}` match.
+    test "a non-underscore root with an underscore inside it (my_var) still writes" do
+      ctx = context(%{"my_var" => nil})
+      node = assign("my_var", compiled_expr("1"))
+
+      assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+      assert new_ctx.machine_state.datamodel["my_var"] == 1
+    end
+  end
+
   # sabotage: `Assign`'s `check_root/3` guard `Map.has_key?(machine_state.datamodel,
   # List.first(path))` is replaced with `true` unconditionally -> an
   # undeclared root would incorrectly proceed to the write (and, since
