@@ -54,6 +54,11 @@ defmodule Statifier.Validator.Error do
           | {:content_expr_and_text, expr :: binary()}
           | {:bad_namespace, uri :: binary() | nil}
           | {:bad_version, version :: binary() | nil}
+          | {:scxml_bad_datamodel, raw :: binary()}
+          | {:data_expr_and_src, id :: binary()}
+          | {:data_value_and_children, id :: binary()}
+          | {:data_reserved_id, id :: binary()}
+          | {:datamodel_bad_parent, kind :: atom()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -468,6 +473,89 @@ defmodule Statifier.Validator.Error do
 
   defp bad_version_message(version) do
     "the root element's version #{inspect(version)} must be \"1.0\""
+  end
+
+  @doc """
+  Check 13 (spec 3.2.1): a `datamodel="..."` value outside
+  `["predicator", "elixir", "null", "ecmascript", "xpath"]` - the spec's own
+  three named values (`"null"`, `"ecmascript"`, `"xpath"`) plus this
+  platform's two (`"predicator"`, its default; `"elixir"`, an alias for
+  v1-converted documents). Accepting `"ecmascript"` and `"xpath"` does not
+  claim this engine implements either datamodel - spec 3.2.1's Valid Values
+  clause names "other platform-defined values" as legal too, and Appendix
+  B's intro states no rule for what a processor does with a datamodel it
+  does not implement. What this check actually catches is a typo
+  (`datamodel="predicater"`, `datamodel="javascript"`); which datamodel this
+  engine runs is `docs/datamodel.md`'s answer, not this attribute's. `raw`
+  is the source text as written (`Location.slice/2`), the same substrate as
+  `scxml_bad_binding/2`.
+  """
+  @spec scxml_bad_datamodel(raw :: binary(), location :: Location.t()) :: t()
+  def scxml_bad_datamodel(raw, %Location{} = location) when is_binary(raw) do
+    %__MODULE__{
+      reason: {:scxml_bad_datamodel, raw},
+      message:
+        "datamodel #{inspect(raw)} must be one of " <>
+          ~s("predicator", "elixir", "null", "ecmascript", or "xpath"),
+      location: location
+    }
+  end
+
+  @doc """
+  Check 13 (spec 5.3.2): a `<data>` carries both an `expr` and a `src`
+  attribute - "MAY have either a 'src' or an 'expr' attribute, but MUST NOT
+  have both". `id` is the offending `<data>`'s own id.
+  """
+  @spec data_expr_and_src(id :: binary(), location :: Location.t()) :: t()
+  def data_expr_and_src(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:data_expr_and_src, id},
+      message: "<data> #{inspect(id)} must not specify both expr and src",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 13 (spec 5.3.2): a `<data>` carries an `expr` or `src` attribute
+  **and** non-blank child text - "if either attribute is present, the
+  element MUST NOT have any children". Whitespace-only text does not count
+  (`Checks.Data.blank?/1`).
+  """
+  @spec data_value_and_children(id :: binary(), location :: Location.t()) :: t()
+  def data_value_and_children(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:data_value_and_children, id},
+      message: "<data> #{inspect(id)} must not specify expr or src together with child content",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 13 (spec 5.10): a `<data id="...">` begins with `_` - "A conformant
+  SCXML document MUST NOT contain ids beginning with '_' in the `<data>`
+  element".
+  """
+  @spec data_reserved_id(id :: binary(), location :: Location.t()) :: t()
+  def data_reserved_id(id, %Location{} = location) when is_binary(id) do
+    %__MODULE__{
+      reason: {:data_reserved_id, id},
+      message: "<data> id #{inspect(id)} must not begin with \"_\" - that prefix is reserved",
+      location: location
+    }
+  end
+
+  @doc """
+  Check 13 (spec 3.2.2 / 3.3.2 / 3.4.2): a `<datamodel>` sits on a `:final`
+  or `:history` state - legal only under `<scxml>`, `<state>`, and
+  `<parallel>`. `kind` is the offending state's own kind.
+  """
+  @spec datamodel_bad_parent(kind :: atom(), location :: Location.t()) :: t()
+  def datamodel_bad_parent(kind, %Location{} = location) when is_atom(kind) do
+    %__MODULE__{
+      reason: {:datamodel_bad_parent, kind},
+      message: "<datamodel> must not be a child of a #{kind} state",
+      location: location
+    }
   end
 
   @spec owner_description(owner :: owner()) :: binary()

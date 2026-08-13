@@ -125,6 +125,91 @@ defmodule Statifier.Validator.Checks.IdsTest do
     end
   end
 
+  describe "check/2 - <data> ids share the state id namespace" do
+    # sabotage: state_entries/1 drops the `datamodel_entries(state.datamodel_element)`
+    # collection from its list, so a <data> id never joins the uniqueness
+    # set at all -> the colliding <data id="a"> below goes unreported,
+    # reddening this assertion
+    test "a <data id> colliding with an earlier <state id> is reported at the <data>" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+          <datamodel>
+              <data id="a" expr="1"/>
+          </datamodel>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error]} = validate!(xml)
+      assert error.location.start_line == 4
+    end
+
+    # sabotage: datamodel_entries/1's `Datamodel{data: data}` clause maps
+    # each entry to `{nil, id_location(data)}` instead of `{data.id, ...}`
+    # -> two distinct <data> ids never collide with each other, and this
+    # assertion (which expects exactly that collision) reddens
+    test "two <data> ids in different <datamodel>s collide with each other" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <datamodel>
+                  <data id="x" expr="1"/>
+              </datamodel>
+          </state>
+          <datamodel>
+              <data id="x" expr="2"/>
+          </datamodel>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error]} = validate!(xml)
+      assert error.location.start_line == 8
+    end
+
+    # sabotage: entries/2 drops the `datamodel_entries(root_datamodel)` half
+    # of its collection -> a root-level <data id=""> never reaches
+    # empty_id_errors/1, reddening this assertion
+    test "a <data id=\"\"> is reported as empty, like a state's" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <datamodel>
+              <data id=""/>
+          </datamodel>
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert error.location.start_line == 3
+    end
+
+    # sabotage: entries/2's `Enum.sort_by(fn {_id, location} ->
+    # location.start_offset end)` call is dropped -> the collection stays in
+    # `datamodel_entries(root_datamodel) ++ state_entries(states)` order,
+    # which puts the root's own, source-*later* <data id="x"> ahead of the
+    # state-scoped, source-*earlier* one. The root one is then wrongly
+    # canonicalized as "first", so the *state-scoped* <data> (offset-wise
+    # the true first) is the one reported instead of the root one - and
+    # this assertion, which expects the root <data>'s line, reddens
+    test "the state-scoped <data> is canonical when it comes first by source offset" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <datamodel>
+                  <data id="x" expr="1"/>
+              </datamodel>
+          </state>
+          <datamodel>
+              <data id="x" expr="2"/>
+          </datamodel>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error]} = validate!(xml)
+      assert error.location.start_line == 8
+    end
+  end
+
   describe "validate/2 - document-order sort" do
     # sabotage: validate/2 concatenates check results without
     # `Enum.sort_by(&1.location.start_offset)` -> reddens when a nested
