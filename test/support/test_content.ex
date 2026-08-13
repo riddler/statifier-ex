@@ -11,6 +11,13 @@ defmodule Statifier.TestContent do
      instance stands in for a node that returns `{:error, _}`, which is how
      the stop-on-error contract stays tested despite neither real node ever
      erroring.
+  3. It is the non-fatal-error-channel node Phase 1 of
+     `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`
+     needs: `pending: [reason, ...]` returns those reasons in
+     `context.pending_errors` alongside a normal `{:ok, ...}`, and
+     `fail_with_context: true` returns the three-element
+     `{:error, context, reason}` form (honoring `pending` too), standing in
+     for a composite node - no shipped element produces either shape yet.
 
   It lives in `test/support/` because `elixirc_paths(:test)` (`mix.exs:36`)
   compiles that directory into the app only under `MIX_ENV=test`, so this
@@ -26,12 +33,14 @@ defmodule Statifier.TestContent do
   come from the compiler pipeline rather than a hand-written struct.
   """
 
-  defstruct [:c_index, :label, fail: false]
+  defstruct [:c_index, :label, fail: false, pending: [], fail_with_context: false]
 
   @type t :: %__MODULE__{
           c_index: non_neg_integer(),
           label: String.t(),
-          fail: boolean()
+          fail: boolean(),
+          pending: [term()],
+          fail_with_context: boolean()
         }
 
   # sabotage: n/a - harness plumbing, asserts no lib/ behavior
@@ -47,7 +56,16 @@ defmodule Statifier.TestContent do
       {:error, {:test_content, label}}
     end
 
-    def execute(%TestContent{label: label}, %Context{} = context) do
+    def execute(
+          %TestContent{fail_with_context: true, label: label, pending: pending},
+          %Context{} = context
+        ) do
+      context = %{context | pending_errors: context.pending_errors ++ pending}
+      {:error, context, {:test_content, label}}
+    end
+
+    def execute(%TestContent{label: label, pending: pending}, %Context{} = context) do
+      context = %{context | pending_errors: context.pending_errors ++ pending}
       {:ok, context, [{:log, %Statifier.Effect.Log{label: label, macrostep: 0, microstep: 0}}]}
     end
   end

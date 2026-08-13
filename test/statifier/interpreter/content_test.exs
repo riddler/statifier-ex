@@ -445,4 +445,100 @@ defmodule Statifier.Interpreter.ContentTest do
       assert error_event.data == {:system_variable, "_sessionid"}
     end
   end
+
+  describe "execute_block/3 - non-fatal errors" do
+    # sabotage: `drain_pending/2` drops the `pending_errors: []` reset
+    # (`%{context | machine_state: machine_state}` instead of also clearing
+    # `pending_errors`) -> the two-pending-reasons test below sees the first
+    # reason queued twice, reddening the ordered-match assertion.
+    test "a node's pending_errors produce one error.execution each, and the block keeps running" do
+      m =
+        machine()
+        |> machine_with_node(1, %TestContent{c_index: 1, label: "mid", pending: [:boom]})
+
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, effects} = Content.execute_block(ms, @owner, block1.content)
+
+      assert [
+               %{name: "one"},
+               %{name: "error.execution", cause: cause, data: :boom},
+               %{name: "two"}
+             ] = MachineState.internal_events(result)
+
+      assert cause.origin == {:content, 1, @owner}
+      assert Enum.any?(effects, &match?({:log, %Effect.Log{label: "mid"}}, &1))
+    end
+
+    # sabotage: `drain_pending/2` drops the `pending_errors: []` reset ->
+    # the first pending reason would be redrained on the next node's call and
+    # queued twice, reddening the ordered-match assertion below.
+    test "two pending reasons on one node produce two error.execution events in order" do
+      m =
+        machine()
+        |> machine_with_node(1, %TestContent{c_index: 1, label: "mid", pending: [:a, :b]})
+
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block1.content)
+
+      assert [
+               %{name: "one"},
+               %{name: "error.execution", data: :a},
+               %{name: "error.execution", data: :b},
+               %{name: "two"}
+             ] = MachineState.internal_events(result)
+    end
+
+    # sabotage: `run_nodes/2`'s `{:error, new_context, reason}` arm halts
+    # with `context` instead of `new_context` -> the pending error recorded
+    # before the failure vanishes, reddening the assertion that the pending
+    # reason's error.execution is present.
+    test "a fail_with_context node's pending errors are queued before its own fatal error.execution" do
+      m =
+        machine()
+        |> machine_with_node(1, %TestContent{
+          c_index: 1,
+          label: "mid",
+          pending: [:cond_error],
+          fail_with_context: true
+        })
+
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block1.content)
+
+      names_and_data =
+        result
+        |> MachineState.internal_events()
+        |> Enum.map(&{&1.name, &1.data})
+
+      assert [
+               {"one", nil},
+               {"error.execution", :cond_error},
+               {"error.execution", {:test_content, "mid"}}
+             ] = names_and_data
+    end
+
+    # sabotage: `run_nodes/2`'s `{:error, reason}` (two-element) arm is
+    # changed to also call `drain_pending/2` -> since `context.pending_errors`
+    # is `[]` on this path this is a no-op today, so instead sabotage the
+    # halt itself: change it to `{:cont, ...}` -> the block would not stop,
+    # reddening the refutation that the third node's event never queues.
+    test "the plain two-element {:error, reason} form still halts the block as before" do
+      m = machine() |> machine_with_node(1, %TestContent{c_index: 1, label: "boom", fail: true})
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block1.content)
+
+      names = result |> MachineState.internal_events() |> Enum.map(& &1.name)
+      assert "one" in names
+      assert "error.execution" in names
+      refute "two" in names
+    end
+  end
 end

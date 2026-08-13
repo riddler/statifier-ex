@@ -26,6 +26,14 @@ defprotocol Statifier.ExecutableContent do
     a leaf's (ADR-0003's error model: "only the interpreter raises
     `error.execution`"). This keeps the errors-are-events conversion in
     exactly one place regardless of how many node kinds exist.
+  - `{:error, context, reason}` - the node failed, and state it had already
+    legitimately produced (queued events, datamodel writes,
+    `pending_errors`) must not be discarded with it. A leaf node returns the
+    two-element form; a *composite* node - one that runs child content -
+    returns this one so that work done before the failure survives.
+
+  Both error forms keep the same rule: an implementation never constructs a
+  `Statifier.Event` and never raises.
 
   ## Effect ordering
 
@@ -47,8 +55,11 @@ defprotocol Statifier.ExecutableContent do
   alias Statifier.Effect
   alias Statifier.ExecutableContent.Context
 
-  @typedoc "What `execute/2` returns: success threads the context forward with any effects produced, in order; failure carries an opaque reason for the runner to convert."
-  @type result :: {:ok, Context.t(), [Effect.t()]} | {:error, term()}
+  @typedoc "What `execute/2` returns: success threads the context forward with any effects produced, in order; failure carries an opaque reason for the runner to convert, either bare (a leaf) or alongside the context a composite node had already produced before it failed."
+  @type result ::
+          {:ok, Context.t(), [Effect.t()]}
+          | {:error, term()}
+          | {:error, Context.t(), term()}
 
   @doc """
   Runs `node` against `context`, returning `result()`. See the moduledoc for
