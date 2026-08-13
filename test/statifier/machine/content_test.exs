@@ -4,6 +4,7 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Compiler
   alias Statifier.Lowering
   alias Statifier.Machine
+  alias Statifier.Machine.Content.Assign
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
   alias Statifier.Parser
@@ -179,6 +180,67 @@ defmodule Statifier.Machine.ContentTest do
 
       assert %Raise{c_index: ^raise_c_index} = Machine.content(m, raise_c_index)
       assert %Log{c_index: ^log_c_index} = Machine.content(m, log_c_index)
+    end
+  end
+
+  describe "compile/1 - assign content" do
+    @assign_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <assign location="user.profile.name" expr="'Ada'"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_content_node/2`'s `%DAssign{}`
+    # expr-bearing clause hardcodes `location: nil` instead of
+    # `assign.location` -> this pattern match reddens.
+    test "a compiled <assign> carries the raw location string, a compiled expr, and a location_location span" do
+      m = compile!(@assign_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [assign_c_index] = onentry_block.content
+      assign_content = Machine.content(m, assign_c_index)
+
+      assert %Assign{
+               location: "user.profile.name",
+               value: {:compiled, %Predicator.Compiled{}, "'Ada'"},
+               location_location: location_location
+             } = assign_content
+
+      refute location_location == nil
+    end
+
+    @invalid_expr_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <assign location="x" expr="{p1: 'v1'"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: the `%DAssign{}` expr-bearing clause returns `{:error, error}`
+    # on a compile failure, like `<log>`'s clause does, instead of capturing
+    # `{:invalid, error}` on the compiled node (Decision 6) -> `compile!/1`'s
+    # `{:ok, document}` match inside `compile!/1` still succeeds since
+    # lowering/validation are unaffected, but `Compiler.compile/1` itself
+    # would return `{:error, _}` instead of `{:ok, _}`, reddening the
+    # `compile!/1` helper's own match and failing this test with a
+    # `MatchError` instead of reaching the assertion below.
+    test "a syntactically bad expr compiles the document, capturing {:invalid, %Compiler.Error{}} on the node" do
+      m = compile!(@invalid_expr_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [assign_c_index] = onentry_block.content
+      assign_content = Machine.content(m, assign_c_index)
+
+      assert %Assign{value: {:invalid, %Statifier.Compiler.Error{}}} = assign_content
     end
   end
 

@@ -16,19 +16,20 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own fifteen keys (`lib/statifier/lowering.ex`),
+  # The dispatch map's own sixteen keys (`lib/statifier/lowering.ex`),
   # duplicated here as data rather than imported - there is nothing in
   # `lib/` to import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
-    raise log donedata content datamodel data
+    raise log donedata content datamodel data assign
   )
 
-  # The ten names `@phase_3_elements` exists to word the unsupported-
+  # The nine names `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
-  # `data` moved to `@supported` in st-af3.3 Phase 1.
+  # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
+  # way in st-af3.4 Phase 1.
   @phase_3_elements ~w(
-    assign send param if elseif else foreach invoke cancel script
+    send param if elseif else foreach invoke cancel script
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only

@@ -80,20 +80,11 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "else")
     end
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "assign" entry
-    # dispatching to `build_log/2` (an accidental content-node builder) ->
-    # this test reddens because `<assign>` builds a `Log` and lands in
-    # `Transition.content` instead of being reported unsupported
-    test "<assign> under a <transition>" do
-      xml =
-        ~s(<scxml><state id="s"><transition><assign location="x" expr="1"/></transition></state></scxml>)
-
-      assert_unsupported(xml, "assign")
-    end
-
     # `<datamodel>` and `<data>` moved from this deferred set to the
     # supported set in st-af3.3 Phase 1 - see
     # `test/statifier/lowering/datamodel_test.exs` for their own coverage.
+    # `<assign>` moved the same way in st-af3.4 Phase 1 - see
+    # `test/statifier/lowering/content_test.exs` for its own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
     # dispatching to `state_like/3` with `kind: :invoke` (an invented state

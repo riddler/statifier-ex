@@ -46,10 +46,15 @@ defmodule Statifier.Interpreter.Content do
   `Statifier.ExecutableContent.Context`'s `datamodel_context` field - the
   "never per expression" commitment `docs/datamodel.md` makes, kept at the
   tightest interval that stays correct (see that struct's own moduledoc for
-  why per-block rather than per-macrostep). A node that mutates the
-  datamodel (`<assign>`, st-af3.4) will have to rebuild or rebind that
-  context before the next node in the same block reads it; this is the seam
-  where that has to happen.
+  why per-block rather than per-macrostep). This module builds that context
+  exactly once, before any node in the block runs, and never rebuilds it
+  itself - the seam named here is taken in
+  `Statifier.Machine.Content.Assign`'s own `execute/2` (Decision 3,
+  `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`), never in
+  this runner (`docs/architecture.md:112-114`'s "never a change to the
+  runner"). A node that does *not* rebuild the context - every node but
+  `<assign>` today - still sees the block's original snapshot for the rest of
+  the block, datamodel writes included.
 
   ## Errors-are-events, once
 

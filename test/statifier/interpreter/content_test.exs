@@ -9,8 +9,10 @@ defmodule Statifier.Interpreter.ContentTest do
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Lowering
   alias Statifier.Machine
+  alias Statifier.Machine.Content.Assign
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Parser.Location
   alias Statifier.TestContent
   alias Statifier.Validator
 
@@ -370,6 +372,58 @@ defmodule Statifier.Interpreter.ContentTest do
 
       assert [{:log, %Effect.Log{label: "e-ctx", value: %Predicator.Context{}}} | _rest] =
                onentry_effects
+    end
+  end
+
+  describe "<assign>, through the real block runner" do
+    defp assign_node(c_index, location, expr_source) do
+      {:ok, compiled} = Predicator.compile_with_spans(expr_source)
+
+      %Assign{
+        c_index: c_index,
+        location: location,
+        node_location: Location.at_offset("", 0),
+        value: {:compiled, compiled, expr_source}
+      }
+    end
+
+    # sabotage: `Statifier.Machine.Content.Assign`'s `execute/2` returns the
+    # unchanged `context` instead of rebuilding `datamodel_context` (Decision
+    # 3's seam) -> the `ContextRecorder` running right after it in the same
+    # block would still evaluate against the pre-write snapshot, reddening
+    # the second assertion below.
+    test "a real <assign> earlier in a block is visible to a ContextRecorder later in the same block" do
+      m =
+        machine()
+        |> machine_with_node(5, assign_node(5, "x", "1 + 1"))
+        |> machine_with_node(6, %ContextRecorder{c_index: 6, label: "r2"})
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "x", nil)}
+      [block] = b_onentry_blocks(m)
+
+      {_result, effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      assert Evaluator.evaluate(datamodel_context, compiled_expr("x")) == {:ok, 2}
+    end
+
+    # sabotage: `Statifier.Interpreter.Content.raise_execution_error/4` calls
+    # `MachineState.raise_internal/4` instead of `raise_platform/4` -> the
+    # raised event's `type` would come back `:internal` instead of
+    # `:platform`, reddening the type assertion below.
+    test "an <assign> failure raises exactly one error.execution and halts the block" do
+      m = machine() |> machine_with_node(1, assign_node(1, "undeclared_root", "1"))
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block1.content)
+
+      assert [%{name: "one"}, error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 1, @owner}
+      assert error_event.data == {:unbound_location, "undeclared_root"}
     end
   end
 end

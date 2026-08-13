@@ -3,11 +3,15 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
   alias Statifier.Compiler
   alias Statifier.Evaluator
+  alias Statifier.ExecutableContent
+  alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter
   alias Statifier.Interpreter.Datamodel
   alias Statifier.Lowering
+  alias Statifier.Machine.Content.Assign
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Parser.Location
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -225,6 +229,48 @@ defmodule Statifier.Interpreter.DatamodelTest do
     assert ms.datamodel["Root1"] == 1
     assert Map.has_key?(ms.datamodel, "Local1")
     assert ms.datamodel["Local1"] == nil
+  end
+
+  # sabotage (Decision 2): `Statifier.Machine.Content.Assign`'s `write/4` is
+  # changed to write `assigned_context.data` (the normalized view read back
+  # out of `Predicator.ContextLocation.put/3` applied to
+  # `context.datamodel_context.data`) into `machine_state.datamodel`, instead
+  # of writing through the raw `machine_state.datamodel` directly ->
+  # `Predicator.Context.new/2` deep-normalizes `nil` to `:undefined`, so the
+  # unrelated seeded-but-unbound "Other" id would come back `:undefined`
+  # instead of `nil`, reddening the `== nil` assertion below.
+  test "after an <assign> to one id, an unrelated seeded-but-unbound <data> id is still nil" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+          <datamodel>
+              <data id="Var1"/>
+              <data id="Other"/>
+          </datamodel>
+          <state id="s0"/>
+      </scxml>
+      """)
+
+    ms = machine |> MachineState.new() |> Datamodel.initialize()
+
+    node = %Assign{
+      c_index: 0,
+      location: "Var1",
+      node_location: Location.at_offset("", 0),
+      value: {:static, 1}
+    }
+
+    context = %Context{
+      machine_state: ms,
+      owner: {:onentry, 0, 0},
+      datamodel_context: Evaluator.context(ms)
+    }
+
+    assert {:ok, new_context, []} = ExecutableContent.execute(node, context)
+
+    assert new_context.machine_state.datamodel["Var1"] == 1
+    assert Map.has_key?(new_context.machine_state.datamodel, "Other")
+    assert new_context.machine_state.datamodel["Other"] == nil
   end
 
   describe "the call site (Statifier.Interpreter.initialize/2)" do

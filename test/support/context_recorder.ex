@@ -9,15 +9,21 @@ defmodule Statifier.ContextRecorder do
   property) and that it evaluates `In(...)` correctly for the configuration
   the block ran at.
 
-  The optional `:put` field lets one instance stand in for a future
-  datamodel-mutating node (`<assign>`, st-af3.4): when set, `execute/2`
-  merges it into `machine_state.datamodel` and returns a `Context` carrying
-  that updated `machine_state` - but *not* a rebuilt `datamodel_context`,
-  since no shipped node rebuilds that field either (`execute_block/3` builds
-  it exactly once, before the block's nodes run at all). This is what makes
-  the once-per-block property observable through data rather than only
-  through reference equality: a later node in the same block still evaluates
-  against the pre-mutation snapshot.
+  The optional `:put` field lets one instance stand in for a datamodel-
+  mutating node that deliberately does *not* rebuild the context: when set,
+  `execute/2` merges it into `machine_state.datamodel` and returns a
+  `Context` carrying that updated `machine_state` - but *not* a rebuilt
+  `datamodel_context`, unlike `Statifier.Machine.Content.Assign`, which does
+  rebuild it in its own `execute/2` (Decision 3,
+  `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`;
+  `execute_block/3` itself still builds `datamodel_context` exactly once,
+  before the block's nodes run at all - the rebuild, when one happens, is
+  always a node's own doing, never the runner's). This struct's *not*
+  rebuilding is what makes the once-per-block property observable through
+  data rather than only through reference equality: a later node reading
+  this recorder's `put` in the same block still evaluates against the
+  pre-mutation snapshot, which is the contrast a test wants against
+  `<assign>`'s own behavior.
 
   It lives in `test/support/` for the same reason `Statifier.TestContent`
   does: `elixirc_paths(:test)` (`mix.exs:36`) compiles this directory only

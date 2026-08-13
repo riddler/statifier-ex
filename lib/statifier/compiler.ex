@@ -82,6 +82,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Compiler.Error
   alias Statifier.Compiler.Expressions
   alias Statifier.Document
+  alias Statifier.Document.Assign, as: DAssign
   alias Statifier.Document.Block, as: DBlock
   alias Statifier.Document.Content, as: DContent
   alias Statifier.Document.Data, as: DData
@@ -95,6 +96,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
+  alias Statifier.Machine.Content.Assign, as: MAssign
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
   alias Statifier.Machine.Data, as: MData
@@ -120,7 +122,7 @@ defmodule Statifier.Compiler do
           t_next: non_neg_integer(),
           transitions_acc: %{optional(non_neg_integer()) => map()},
           c_next: non_neg_integer(),
-          contents_acc: %{optional(non_neg_integer()) => DRaise.t() | DLog.t()},
+          contents_acc: %{optional(non_neg_integer()) => DRaise.t() | DLog.t() | DAssign.t()},
           donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()},
           d_next: non_neg_integer(),
           data_acc: %{
@@ -450,11 +452,12 @@ defmodule Statifier.Compiler do
   end
 
   # Assigns dense, ascending `c_index` values to `nodes` (a flat
-  # `[Statifier.Document.Raise.t() | Statifier.Document.Log.t()]`, either a
-  # block's own content or a transition's own content), in source order,
-  # recording each raw node for `build_contents/2` to compile later. Returns
-  # the assigned `c_index`es in the same order as `nodes`.
-  @spec assign_content_nodes(nodes :: [DRaise.t() | DLog.t()], acc :: acc()) ::
+  # `[Statifier.Document.Raise.t() | Statifier.Document.Log.t() |
+  # Statifier.Document.Assign.t()]`, either a block's own content or a
+  # transition's own content), in source order, recording each raw node for
+  # `build_contents/2` to compile later. Returns the assigned `c_index`es in
+  # the same order as `nodes`.
+  @spec assign_content_nodes(nodes :: [DRaise.t() | DLog.t() | DAssign.t()], acc :: acc()) ::
           {[non_neg_integer()], acc()}
   defp assign_content_nodes(nodes, acc) do
     {c_indexes, acc} =
@@ -654,7 +657,10 @@ defmodule Statifier.Compiler do
     end
   end
 
-  @spec build_content_node(c_index :: non_neg_integer(), node :: DRaise.t() | DLog.t()) ::
+  @spec build_content_node(
+          c_index :: non_neg_integer(),
+          node :: DRaise.t() | DLog.t() | DAssign.t()
+        ) ::
           {:ok, MContent.t()} | {:error, Error.t()}
   defp build_content_node(c_index, %DRaise{event: event, location: location}) do
     {:ok, %MRaise{c_index: c_index, event: event, location: location}}
@@ -681,6 +687,45 @@ defmodule Statifier.Compiler do
     end
   end
 
+  defp build_content_node(c_index, %DAssign{expr: nil} = assign) do
+    {:ok,
+     %MAssign{
+       c_index: c_index,
+       location: assign.location,
+       node_location: assign.node_location,
+       value: {:static, nil},
+       location_location: assign_location_location(assign)
+     }}
+  end
+
+  # `<assign expr>` compiles like every other expression - **except** a
+  # compile failure is captured as `{:invalid, error}` on the compiled node
+  # rather than returned as `{:error, error}` (Decision 6,
+  # `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`): spec
+  # 5.9.3 permits a load-time rejection or a runtime `error.execution`, and
+  # `assign_invalid_test.exs` in the corpus needs the latter - the same
+  # deferral `build_data_value/2` already gives `<data expr>`. Unlike that
+  # deferral, this clause never fails `build_contents/2`'s `collect/1` merge
+  # either, so `compile/1` still returns `{:ok, machine}` for a document
+  # whose only defect is a malformed `<assign expr>`.
+  defp build_content_node(c_index, %DAssign{expr: source} = assign) do
+    value =
+      case Expressions.compile(source, {:content, c_index}, assign_expr_location(assign)) do
+        {:ok, expr} -> expr
+        {:error, error} -> {:invalid, error}
+      end
+
+    {:ok,
+     %MAssign{
+       c_index: c_index,
+       location: assign.location,
+       node_location: assign.node_location,
+       value: value,
+       location_location: assign_location_location(assign),
+       expr_location: assign_expr_location(assign)
+     }}
+  end
+
   # `attribute_locations[:expr]`'s value span when the author wrote `expr`
   # and it carries a recorded span, the `<log>` node's own `location`
   # otherwise (`Statifier.Compiler.Expressions.compile/3`'s "caller's
@@ -688,6 +733,22 @@ defmodule Statifier.Compiler do
   @spec expr_location(log :: DLog.t()) :: Location.t()
   defp expr_location(%DLog{attribute_locations: attribute_locations, location: location}) do
     Map.get(attribute_locations, :expr, location)
+  end
+
+  # `assign_expr_location/1` and `assign_location_location/1` mirror
+  # `expr_location/1`'s "caller's choice" contract but cannot share its body:
+  # `%DAssign{}`'s own element span lives under `node_location`, not
+  # `location` - `location` on that struct is the SCXML `location`
+  # *attribute* itself (a raw path string), per `Statifier.Document.Assign`'s
+  # moduledoc.
+  @spec assign_expr_location(assign :: DAssign.t()) :: Location.t()
+  defp assign_expr_location(%DAssign{attribute_locations: attribute_locations} = assign) do
+    Map.get(attribute_locations, :expr, assign.node_location)
+  end
+
+  @spec assign_location_location(assign :: DAssign.t()) :: Location.t()
+  defp assign_location_location(%DAssign{attribute_locations: attribute_locations} = assign) do
+    Map.get(attribute_locations, :location, assign.node_location)
   end
 
   # Compiles every `:final` state's own `<donedata>` into

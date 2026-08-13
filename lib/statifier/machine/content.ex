@@ -1,15 +1,15 @@
 defmodule Statifier.Machine.Content do
   @moduledoc """
   Namespace for the compiled executable-content node family: one struct per
-  node kind, `Statifier.Machine.Content.Raise` and
-  `Statifier.Machine.Content.Log`, the interned counterpart to
-  `Statifier.Document.Raise` / `Statifier.Document.Log`. This module owns
-  the family's shared vocabulary - `owner/0` and the `t()` union - and no
-  longer a struct itself: an Elixir protocol dispatches on the struct
-  module, so each node kind needs its own struct for
-  `Statifier.ExecutableContent` to implement without a central `case` on a
-  `kind` field. Each future executable-content node (`<assign>`,
-  `<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`, `<send>`, `<cancel>`,
+  node kind, `Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
+  and `Statifier.Machine.Content.Assign`, the interned counterpart to
+  `Statifier.Document.Raise` / `Statifier.Document.Log` /
+  `Statifier.Document.Assign`. This module owns the family's shared
+  vocabulary - `owner/0` and the `t()` union - and no longer a struct itself:
+  an Elixir protocol dispatches on the struct module, so each node kind needs
+  its own struct for `Statifier.ExecutableContent` to implement without a
+  central `case` on a `kind` field. Each future executable-content node
+  (`<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`, `<send>`, `<cancel>`,
   `<invoke>`) gets its own struct here too, and its own
   `Statifier.ExecutableContent` implementation, never a clause added to this
   module.
@@ -23,6 +23,7 @@ defmodule Statifier.Machine.Content do
   executable-content node".
   """
 
+  alias Statifier.Machine.Content.Assign
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
 
@@ -46,5 +47,5 @@ defmodule Statifier.Machine.Content do
           | {:transition, non_neg_integer()}
 
   @typedoc "Any compiled executable-content node - the family this module maps."
-  @type t :: Raise.t() | Log.t()
+  @type t :: Raise.t() | Log.t() | Assign.t()
 end
