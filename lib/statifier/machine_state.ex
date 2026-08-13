@@ -40,6 +40,40 @@ defmodule Statifier.MachineState do
   the invoke passes exist, rather than added now as a placeholder ahead of
   any caller.
 
+  ## `entered_states` is `s.isFirstEntry` moved off the state
+
+  Appendix D tracks first entry as a mutable flag on the state itself,
+  `s.isFirstEntry`, set `false` the moment late binding consumes it
+  (`enterStates`, `appendix-d.txt:307-315`). A compiled `%Machine.State{}`
+  is immutable compile-time data in this port (`docs/architecture.md`
+  principle 4), so there is nowhere on the state to flip that flag - the set
+  moves to the runtime struct instead, keyed by `state_index`. This is an
+  ADR-0002 mechanical deviation: the semantics are unchanged (a state's
+  first entry is still detected exactly once, before any second entry could
+  read it), only the storage moves from the immutable compiled document to
+  the position that changes every microstep.
+
+  `entered_states` is populated unconditionally - every entered state's
+  index is added here, not only under `binding == :late` - even though only
+  late binding ever reads it (`Statifier.Interpreter.Datamodel.enter_state/2`
+  is a no-op under `:early`). Considered and rejected: gating the `MapSet.put`
+  on `machine.binding == :late`, which would save one put per state entry
+  under early binding at the cost of making the field's meaning conditional
+  on the document being interpreted - exactly the "not a complete,
+  inspectable position" failure ADR-0012 constraint 1 exists to prevent. A
+  `%MachineState{}` value must be a complete, inspectable, resumable
+  position regardless of which document produced it; `entered_states` is
+  that same field on every document, not only late-binding ones.
+
+  Not a substitute for `states_for_default_entry`
+  (`Statifier.Interpreter.ExitEntry.entry_set()`): that set is recomputed
+  fresh per `enter_states/2` call and answers "was this state entered via its
+  `<initial>` default this time", while `entered_states` accumulates across
+  the whole session and answers "has this state ever been entered before" -
+  a state re-entered through history restoration has no default entry at
+  all, so the two sets diverge exactly where late binding's "first time"
+  question needs the session-long answer.
+
   ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
@@ -144,6 +178,7 @@ defmodule Statifier.MachineState do
     # :queue.new/0 in new/2; nil is unreachable once new/2 has run.
     internal_queue: nil,
     history_values: %{},
+    entered_states: MapSet.new(),
     datamodel: %{},
     running: true,
     status: :running,
@@ -185,6 +220,7 @@ defmodule Statifier.MachineState do
           configuration: MapSet.t(non_neg_integer()),
           internal_queue: :queue.queue(Event.t()),
           history_values: %{optional(non_neg_integer()) => MapSet.t(non_neg_integer())},
+          entered_states: MapSet.t(non_neg_integer()),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -217,6 +253,7 @@ defmodule Statifier.MachineState do
       configuration: MapSet.new(),
       internal_queue: :queue.new(),
       history_values: %{},
+      entered_states: MapSet.new(),
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,

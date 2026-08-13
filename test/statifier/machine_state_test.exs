@@ -106,6 +106,16 @@ defmodule Statifier.MachineStateTest do
       assert ms.history_values == %{}
     end
 
+    # sabotage: `MachineState.new/2` seeds `entered_states` with
+    # `MapSet.new([0])` (as if the root were already entered) instead of
+    # `MapSet.new()` -> this assertion reddens, since entering the initial
+    # configuration - and therefore recording any first entry - is
+    # `Statifier.Interpreter.initialize/2`'s job, not `new/2`'s.
+    test "entered_states starts empty" do
+      ms = new_machine_state()
+      assert MapSet.size(ms.entered_states) == 0
+    end
+
     # sabotage: `MachineState.new/2`'s `Map.merge/2` call has its arguments
     # swapped (`SystemVariables.initial/2` over `author_datamodel` becomes
     # `author_datamodel` over `SystemVariables.initial/2`) -> the seeded
