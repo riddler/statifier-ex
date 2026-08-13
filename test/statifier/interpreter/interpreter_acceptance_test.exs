@@ -323,7 +323,11 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
   # raised it - one macrostep, per `docs/architecture.md` principle 3 and
   # spec 3.12.2/5.10.1. Deliberately event-matched (not eventless) so the
   # macrostep terminates - see the plan's "What We're NOT Doing" on the
-  # eventless-cond-error livelock (st-sd1), which this test does not touch.
+  # eventless-cond-error livelock (st-sd1) - see the "an erroring eventless
+  # cond terminates on the round budget" block below, which is the pair to
+  # this one: this block proves an event-matched failing cond is catchable
+  # same-macrostep, that block proves an eventless failing cond terminates
+  # on ADR-0019's round budget instead of livelocking.
   describe "a failed cond becomes a catchable error.execution" do
     @catch_document """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
@@ -442,6 +446,155 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
       assert result.configuration == MapSet.new([0, state_index(m, "a")])
       assert MachineState.internal_events(result) == []
       assert result.running
+    end
+  end
+
+  # AC (st-sd1): "A macrostep that cannot reach quiescence terminates with a
+  # defined, observable outcome instead of hanging" - the bead's own
+  # reproduction, driven through the real interpreter loop rather than the
+  # fold's unit fixture (`macrostep_test.exs`'s self-loop block already
+  # covers the shape-agnostic budget). Eventless, not event-matched, which
+  # is the one difference from `@uncaught_document` above: each round, the
+  # eventless probe evaluates the failing cond, enqueues `error.execution`,
+  # and returns `[]`; `internal_round/1` dequeues the error and selects on
+  # it, which never re-evaluates the eventless cond (an event-matched round
+  # short-circuits `%Transition{events: []}` before reaching it); nothing is
+  # enabled, the queue empties, and the cycle repeats forever without
+  # ADR-0019's round budget. The livelock strikes during the initialization
+  # macrostep, so the entry point is `Interpreter.initialize/2` with a small
+  # explicit budget so a regression reddens in milliseconds instead of at
+  # ExUnit's 60-second timeout.
+  describe "an erroring eventless cond terminates on the round budget" do
+    @livelock_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
+        <state id="a">
+            <transition cond="nope" target="b"/>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+
+    defp livelock_machine, do: compile!(@livelock_document)
+
+    defp budget_exhausted(effects) do
+      Enum.find_value(effects, fn
+        {:budget_exhausted, payload} -> payload
+        _other -> nil
+      end)
+    end
+
+    # sabotage: the `defp macrostep(machine_state, effects, 0)` head is
+    # removed, so the fold is unbounded again -> this test hangs. Confirmed
+    # red under this test's own `@tag timeout: 5_000` while the mutation
+    # was in place (the mutation genuinely reintroduces the hang; only the
+    # wait to observe it is bounded); reverted and confirmed green. This is
+    # the whole bead in one mutation.
+    @tag timeout: 5_000
+    test "it terminates with the effect instead of hanging" do
+      m = livelock_machine()
+
+      {result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert [%Effect.BudgetExhausted{budget: 20}] =
+               for({:budget_exhausted, payload} <- effects, do: payload)
+
+      refute has_trace?(effects, Effect.Trace.MacrostepStable)
+      assert result.running
+      assert result.status == :running
+      assert result.configuration == MapSet.new([0, state_index(m, "a")])
+      refute state_index(m, "b") in result.configuration
+    end
+
+    # sabotage: `spend/1`'s integer clause is changed to `rounds_left`
+    # (never decrementing) - the mechanical form of "the budget is charged
+    # only on rounds that run a microstep": the livelock's rounds never run
+    # one, so under either phrasing the fold never spends its budget and
+    # times this test out. Confirmed red under this test's own
+    # `@tag timeout: 5_000` while the mutation was in place; reverted and
+    # confirmed green.
+    @tag timeout: 5_000
+    test "the bound counts rounds, not microsteps" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert %Effect.BudgetExhausted{microstep: 1} = budget_exhausted(effects)
+    end
+
+    # Verified against the running interpreter rather than assumed from the
+    # plan's prose: for this single-transition reproduction, each round's
+    # eventless probe raises exactly one `error.execution` and
+    # `internal_round/1` dequeues that same event before the round ends -
+    # the "queue empties, cycle repeats" this phase's own Manual
+    # Verification item describes - so the queue is genuinely empty at
+    # every round boundary, exhaustion included, whatever the budget. (An
+    # earlier draft of this test asserted the field non-empty, per the
+    # plan text; that assertion cannot pass against correct `lib/` code for
+    # this exact fixture and was corrected here rather than weakened - see
+    # this phase's implementation report.) What this test actually proves,
+    # per ADR-0019's "the pending internal events ... is where a livelock's
+    # repeatedly-raised events pile up": the payload's field is read live
+    # from the machine_state's own queue at the moment of exhaustion, not a
+    # placeholder - so it would show a non-empty queue on a livelock shape
+    # where events do pile up (e.g. one that raises more per round than
+    # `internal_round/1` drains).
+    #
+    # sabotage: `terminal_effects/2`'s `:exhausted` clause hardcodes
+    # `pending_internal_events: [%Statifier.Event{name: "bogus"}]` instead
+    # of reading `MachineState.internal_events(machine_state)` -> the
+    # equality assertion below reddens (the hardcoded placeholder does not
+    # match the real, empty queue).
+    test "the pending internal events field reads the machine_state's own queue" do
+      m = livelock_machine()
+
+      {result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert %Effect.BudgetExhausted{pending_internal_events: pending} =
+               budget_exhausted(effects)
+
+      assert pending == MachineState.internal_events(result)
+    end
+
+    # `Effect.BudgetExhausted.budget` always echoes the configured
+    # `machine_state.max_macrostep_rounds`, whatever value the fold was
+    # actually seeded with - so a mutation that reseeds the fold from a
+    # stale carried-over value would still report `budget: 20` and slip
+    # past a check of that field alone. The round-count assertion below is
+    # what actually exercises the seed: it counts this fixture's own
+    # `Trace.EventDequeued(from: :internal)` occurrences, one per
+    # completed round (`internal_round/1` dequeues and reraises
+    # `error.execution` every round), and requires the full budget's worth
+    # in *each* call.
+    #
+    # sabotage: `macrostep/1`'s seed is changed from
+    # `machine_state.max_macrostep_rounds` to `machine_state.microstep`
+    # (a value already on the struct, carried across calls rather than
+    # read fresh from the configured budget) -> both calls run only one
+    # round instead of twenty, reddening the round-count assertions below
+    # (the `budget: 20` match alone does not catch this, since that field
+    # is read from the configured option, not the fold's actual seed -
+    # confirmed by running this exact mutation and observing it pass under
+    # a `budget:`-only assertion before this stronger check was added).
+    test "a later call gets a fresh budget and exhausts again" do
+      m = livelock_machine()
+
+      {exhausted, init_effects} =
+        Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert {:ok, _result, effects} = Interpreter.handle_event(exhausted, Event.external("go"))
+
+      assert [%Effect.BudgetExhausted{budget: 20}] =
+               for({:budget_exhausted, payload} <- effects, do: payload)
+
+      assert internal_dequeue_count(init_effects) == 20
+      assert internal_dequeue_count(effects) == 20
+    end
+
+    defp internal_dequeue_count(effects) do
+      Enum.count(effects, fn
+        {:trace, %Effect.Trace.EventDequeued{from: :internal}} -> true
+        _other -> false
+      end)
     end
   end
 end

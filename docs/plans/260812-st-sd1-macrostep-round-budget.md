@@ -721,11 +721,11 @@ at ADR-0019, so the two blocks read as the pair they are.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] The whole default suite completes in its usual wall-clock time - no test
+- [x] Full `mix quality` passes.
+- [x] The whole default suite completes in its usual wall-clock time - no test
       sits at an ExUnit timeout.
-- [ ] `mix test.regression` is green.
-- [ ] Every new test carries a sabotage line whose mutation was run red and
+- [x] `mix test.regression` is green.
+- [x] Every new test carries a sabotage line whose mutation was run red and
       reverted. The two hang-shaped mutations are run with a short
       `@tag timeout:` or `mix test --max-cases 1` so confirming red does not
       cost a 60-second wait - the mutation is still genuinely run, only
@@ -892,6 +892,30 @@ blocking here.
 - [ ] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
       `trace: true` run in iex, and the repeating `TransitionsSelected` /
       `EventDequeued` rounds read as the cycle ADR-0019 describes.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+      line - this phase adds tests only, so the check is that no `lib/` change
+      was needed to make them pass. If one was, the phase boundary was wrong
+      and Phase 2 was incomplete.
+- [ ] The reproduction matches the bead's description step for step: eventless
+      probe raises, error is dequeued and selects nothing, queue empties, cycle
+      repeats.
+- [ ] Reading the `trace: true` effect list by hand shows the repeating
+      round structure, confirming the returned machine_state is the debugging
+      artifact ADR-0019's Consequences promise.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
