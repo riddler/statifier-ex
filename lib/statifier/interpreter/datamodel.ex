@@ -219,19 +219,44 @@ defmodule Statifier.Interpreter.Datamodel do
   `entered_states` mutation, which `arrive/3` already owns for every other
   step of the same pseudocode body.
 
-  A no-op, returning `machine_state` unchanged with no allocation, in two
+  A no-op, returning `machine_state` unchanged with no allocation, in three
   cases: under `binding == :early` (every `d_index` was already bound at
-  `initialize/1`, before any state was entered), and under `binding == :late`
+  `initialize/1`, before any state was entered), under `binding == :late`
   on a state whose own `<datamodel>` is empty (`data == []` - nothing to
-  bind).
+  bind), and on `state_index == 0` for the reason below.
+
+  ## Why `state_index == 0` is a no-op
+
+  Index 0 is the document root, and it is in `configuration` like any other
+  state, so `arrive/3` calls this function for it. But the root's own `data`
+  list **is** the top-level data list - the `<datamodel>` that is a child of
+  `<scxml>` - which `initialize/1` has already bound (Decision 3: top-level
+  `<data>` binds at initialization under both bindings, since 5.3.3's "the
+  state that contains it" has no answer for a `<data>` contained in no
+  state). Binding it a second time here is duplication, and not harmless
+  duplication: this function deliberately applies no environment override,
+  so the second pass would overwrite an environment-supplied value with the
+  document's own and violate 5.3.2's
+
+      "The SCXML Processor MUST use any values provided by the environment
+      at instantiation time in place of those contained in the top-level
+      <data> elements."
+
+  Only `binding == "late"` reaches this path at all, and only a document
+  whose environment seeds a top-level id observes it - which is why no
+  corpus file catches it. Spec 6.4.3 makes it reachable in practice: an
+  invoked session's `<param>`/`namelist` values arrive as exactly this
+  environment seed, so without this guard a late-bound invoked child would
+  silently discard the values its parent passed it (st-cmq).
 
   Otherwise: one `Evaluator.context/1` for `state_index`'s whole `data` list
   (B.2.2's "no ordering dependencies" licenses this exactly as it does in
   `initialize/1`), each `d_index` bound through the same `bind_value/4` this
   module's `initialize/1` uses - same seeded-`nil`-on-failure,
   `raise_platform/4` shape, Decision 2/3 unchanged. There is no environment
-  override here: Decision 1 scopes that skip to top-level `<data>` only, and
-  a state-scoped `<data>` is never top-level.
+  override on this path: Decision 1 scopes that skip to top-level `<data>`
+  only, and a state-scoped `<data>` on any state but the root is never
+  top-level.
   """
   @spec enter_state(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           MachineState.t()
@@ -252,6 +277,11 @@ defmodule Statifier.Interpreter.Datamodel do
           state_index :: non_neg_integer()
         ) :: MachineState.t()
   defp bind_state_data(machine_state, _machine, :early, _state_index), do: machine_state
+
+  # The root's own data is the top-level data, already bound by initialize/1 -
+  # see this function's "Why `state_index == 0` is a no-op" section. Must
+  # precede the general :late clause.
+  defp bind_state_data(machine_state, _machine, :late, 0), do: machine_state
 
   defp bind_state_data(machine_state, machine, :late, state_index) do
     case Machine.at(machine, state_index).data do
