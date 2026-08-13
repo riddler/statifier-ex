@@ -624,7 +624,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert second_error.data == {:non_boolean_cond, 1}
     end
 
-    # sabotage: `first_matching_transition/6`'s `Enum.reduce_while/2` is
+    # sabotage: `first_matching_transition/5`'s `Enum.reduce_while/2` is
     # changed to evaluate every transition instead of halting on the first
     # enabled one (`{:halt, {transition, errors}}` replaced with
     # `{:cont, {transition, errors}}`) -> this reddens because the never-
