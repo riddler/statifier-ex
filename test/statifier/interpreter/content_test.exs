@@ -650,4 +650,122 @@ defmodule Statifier.Interpreter.ContentTest do
       refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "unreachable"}}, &1))
     end
   end
+
+  describe "<foreach>, through the real block runner" do
+    @foreach_visible_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <foreach array="[1, 2, 3]" item="v">
+                    <assign location="sum" expr="sum + v"/>
+                </foreach>
+                <log label="r2"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Machine.Content.Foreach`'s `defimpl`'s
+    # `write_iteration/4`/`run_content/2` fold is changed to keep folding
+    # with the enclosing block's own pre-call `context` on every step
+    # instead of threading `new_context` forward (discarding the loop's own
+    # `<assign>` rebuilds) -> the node after the `</foreach>` in the same
+    # block would still evaluate `sum` against the pre-loop snapshot (`0`),
+    # reddening this test's assertion - Decision 1's mechanical reason
+    # (reason 1), pinned end to end, extended from `<if>` to `<foreach>`.
+    test "a <foreach> body write is visible to a later node in the same enclosing block" do
+      m =
+        @foreach_visible_document
+        |> compile!()
+        |> machine_with_node(2, %ContextRecorder{c_index: 2, label: "r2"})
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "sum", 0)}
+      [block] = a_onentry_blocks(m)
+
+      {_result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      assert Evaluator.evaluate(datamodel_context, compiled_expr("sum")) == {:ok, 6}
+    end
+
+    @foreach_noniterable_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <foreach array="Var4" item="x">
+                    <log label="unreachable"/>
+                </foreach>
+                <log label="never"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Interpreter.Content.run_nodes/2`'s `{:error,
+    # reason}` arm (the two-element form `<foreach>` returns for a
+    # pre-iteration failure, Decision 6 of
+    # docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md) is changed
+    # to keep folding the rest of the block instead of halting -> the
+    # `refute` below (the node after `</foreach>` never running) reddens,
+    # and a second internal event would appear.
+    test "a non-iterable array raises exactly one error.execution and the node after </foreach> does not run" do
+      m = compile!(@foreach_noniterable_document)
+      ms = machine_state(m)
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "Var4", 7)}
+      [block] = a_onentry_blocks(m)
+
+      {result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 0, @owner}
+      assert error_event.data == {:not_iterable, 7}
+
+      refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "unreachable"}}, &1))
+      refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "never"}}, &1))
+    end
+
+    @foreach_failing_body_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <foreach array="[1, 2]" item="v">
+                    <assign location="seen" expr="seen + 1"/>
+                    <log label="boom"/>
+                </foreach>
+                <log label="never"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Interpreter.Content.run_nodes/2`'s `{:error,
+    # new_context, reason}` arm is changed to halt with `{c_index, {:some,
+    # reason}}` (double-wrapping) instead of passing `reason` through as
+    # `Statifier.Machine.Content.Foreach`'s own `{:nested_content, _, _}`
+    # value unwrapped -> the `data ==` pattern match below reddens.
+    test "a failing body raises exactly one error.execution naming the inner node, keeping the partial mutation" do
+      m =
+        @foreach_failing_body_document
+        |> compile!()
+        |> machine_with_node(2, %TestContent{c_index: 2, label: "boom", fail: true})
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "seen", 0)}
+      [block] = a_onentry_blocks(m)
+
+      {result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 0, @owner}
+      assert error_event.data == {:nested_content, 2, {:test_content, "boom"}}
+
+      assert result.datamodel["seen"] == 1
+      refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "never"}}, &1))
+    end
+  end
 end

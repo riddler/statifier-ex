@@ -5,6 +5,7 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Lowering
   alias Statifier.Machine
   alias Statifier.Machine.Content.Assign
+  alias Statifier.Machine.Content.Foreach
   alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
@@ -457,6 +458,111 @@ defmodule Statifier.Machine.ContentTest do
       {:ok, root} = Parser.parse(@bad_cond_document)
       {:ok, document} = Lowering.lower(root)
       {:ok, document} = Validator.validate(document, @bad_cond_document)
+
+      assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
+    end
+  end
+
+  describe "compile/1 - foreach content" do
+    # Hand-drawn c_index assignment, document order: the outer <foreach>'s
+    # own c_index is assigned before its content (Decision 2, extended to
+    # <foreach> by Decision 8 of
+    # docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md), same as
+    # <if>'s own c_index precedes its branches'; a <foreach> nested inside
+    # an <if> nested inside the outer <foreach> is numbered to arbitrary
+    # depth the same way a nested <if> is.
+    #
+    #  c0  the outer <foreach>
+    #  c1  <log label="one"/>       - outer foreach's own content
+    #  c2  the <if>                 - outer foreach's own content
+    #  c3  the inner <foreach>      - the <if>'s only branch's content
+    #  c4  <log label="nested"/>    - inner foreach's own content
+    @foreach_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <foreach array="items" item="x" index="i">
+                    <log label="one"/>
+                    <if cond="a">
+                        <foreach array="inner" item="y">
+                            <log label="nested"/>
+                        </foreach>
+                    </if>
+                </foreach>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.assign_content_node/2`'s `%DForeach{}`
+    # clause assigns the `<foreach>`'s own `c_index` *after* recursing into
+    # its content (moving the `c_index = acc.c_next` / `c_next: c_index + 1`
+    # step below the `assign_content_nodes/2` call) -> the outer `<foreach>`
+    # would be numbered after its own first content node instead of before
+    # it, reddening this density/order assertion.
+    test "c_indexes are dense and in document order, including across a nested <if>/<foreach>" do
+      m = compile!(@foreach_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      assert onentry_block.content == [0]
+
+      assert tuple_size(m.contents) == 5
+      assert m.contents |> Tuple.to_list() |> Enum.map(& &1.c_index) == [0, 1, 2, 3, 4]
+
+      outer_foreach = Machine.content(m, 0)
+      assert %Foreach{c_index: 0, item: "x", index: "i", content: [1, 2]} = outer_foreach
+
+      assert %Log{c_index: 1, label: "one"} = Machine.content(m, 1)
+
+      inner_if = Machine.content(m, 2)
+      assert %If{c_index: 2, branches: [%If.Branch{content: [3]}]} = inner_if
+
+      inner_foreach = Machine.content(m, 3)
+      assert %Foreach{c_index: 3, item: "y", index: nil, content: [4]} = inner_foreach
+
+      assert %Log{c_index: 4, label: "nested"} = Machine.content(m, 4)
+    end
+
+    # sabotage: `Statifier.Compiler.build_content_node/2`'s `%{foreach: _,
+    # content: _}` clause is changed to build `%MForeach{array: {:static,
+    # nil}, ...}` unconditionally (dropping the compiled `array_expr`)
+    # instead of compiling `foreach_node.array` through
+    # `Expressions.compile/3` -> this pattern match reddens.
+    test "array compiles to a Machine.expr()" do
+      m = compile!(@foreach_document)
+      outer_foreach = Machine.content(m, 0)
+
+      assert %Foreach{array: {:compiled, %Predicator.Compiled{}, "items"}, array_location: loc} =
+               outer_foreach
+
+      refute loc == nil
+    end
+
+    @bad_array_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <foreach array="{p1: 'v1'" item="x">
+                    <log label="unreachable"/>
+                </foreach>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_content_node/2`'s `%{foreach: _,
+    # content: _}` clause captures a compile failure as `{:invalid, error}`
+    # on the node instead of returning `{:error, error}` (borrowing
+    # Decision 6's `<assign expr>` deferral, which the plan's own Decision 6
+    # closing paragraph explicitly says `array` does NOT get - `array`
+    # joins `cond` on the load-time-failure side of the ladder) ->
+    # `Compiler.compile/1` would return `{:ok, _}` instead of `{:error, _}`,
+    # reddening this match.
+    test "a syntactically bad array expression fails Compiler.compile/1, never deferred" do
+      {:ok, root} = Parser.parse(@bad_array_document)
+      {:ok, document} = Lowering.lower(root)
+      {:ok, document} = Validator.validate(document, @bad_array_document)
 
       assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end

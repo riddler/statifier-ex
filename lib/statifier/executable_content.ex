@@ -6,9 +6,10 @@ defprotocol Statifier.ExecutableContent do
   behavior lives in exactly one place, this protocol's `defimpl` for that
   node's struct, in the same file as the struct itself
   (`Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
-  `Statifier.Machine.Content.If`). A future datamodel element (`<foreach>`,
-  `<script>`) or session element (`<send>`/`<cancel>`/`<invoke>`) adds a
-  struct and a `defimpl`, never a clause here or in the block runner.
+  `Statifier.Machine.Content.If`, `Statifier.Machine.Content.Foreach`). A
+  future datamodel element (`<script>`) or session element
+  (`<send>`/`<cancel>`/`<invoke>`) adds a struct and a `defimpl`, never a
+  clause here or in the block runner.
 
   `Statifier.Machine.Content.If` is the first *composite* node - one that
   runs child content of its own rather than acting alone - and its own
@@ -16,6 +17,13 @@ defprotocol Statifier.ExecutableContent do
   `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`)
   is where the reasoning for folding its own children directly, rather than
   calling back into the block runner, lives.
+  `Statifier.Machine.Content.Foreach` is the second composite node and
+  reuses that reasoning unchanged; its own contribution is settling what
+  `<if>` left open only by analogy - spec 4.6.3 states outright that a
+  child failure halts "the block that contains it" too, so the three-element
+  `{:error, context, reason}` form's purpose (Decision 4 of
+  `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`) is spelled
+  out in the spec text itself here, not inferred.
 
   ## Contract
 

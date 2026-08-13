@@ -20,6 +20,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Data
   alias Statifier.Document.Datamodel
   alias Statifier.Document.Donedata
+  alias Statifier.Document.Foreach
   alias Statifier.Document.If
   alias Statifier.Document.Initial
   alias Statifier.Document.Log
@@ -588,6 +589,76 @@ defmodule Statifier.Lowering.Builders do
     {{:else, branch}, misplaced_errors ++ attribute_errors}
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Foreach{}` from a `<foreach>` element (spec
+  4.6), tagged `{:content_node, foreach_node}`.
+
+  Reads the two required attributes, `array` and `item` (4.6.2), following
+  `build_raise/2`'s required-attribute shape - a missing one means no
+  struct can be built at all. Unlike `build_raise/2`, **both** are checked
+  before failing: a `<foreach>` missing both reports two
+  `{:missing_attribute, "foreach", _}` errors rather than stopping at the
+  first, since neither attribute's presence depends on the other and two
+  errors is strictly more useful to a document author fixing both at once.
+  `item`'s *legality* as a variable name is a runtime check (Decision 1 of
+  `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`), not
+  lowering's concern - only its presence is checked here.
+
+  The optional `index` (4.6.2) is read unconditionally and defaults to
+  `nil` when absent, following `Statifier.Document.Foreach`'s own default.
+
+  Otherwise walks children through the shared dispatch, then places each
+  tagged result into `content` via `place/3`'s `%Foreach{}` clause - no
+  partitioning tags are produced or consumed here, unlike `<if>`, since
+  `<foreach>` has exactly one child block (Decision 8).
+  """
+  @spec build_foreach(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Foreach.t()} | nil, [Error.t()]}
+  def build_foreach(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    array = Attributes.value(element, "array")
+    item = Attributes.value(element, "item")
+
+    # Built in reverse document order (`item`, then `array`) to match every
+    # other list-valued builder's own accumulation convention
+    # (`place_children/3`, `reverse_lists/1`): `Statifier.Lowering.walk_child/4`
+    # reverses whatever a builder returns before prepending it onto the
+    # caller's own error list, so building newest-first here is what makes
+    # the two errors land in document order (`array`, then `item`) once
+    # `Statifier.Lowering.lower/1` sorts the whole tree's errors by
+    # `location.start_offset`.
+    missing_errors =
+      for {attribute, value} <- [{"item", item}, {"array", array}], is_nil(value) do
+        Error.missing_attribute("foreach", attribute, element.location)
+      end
+
+    case missing_errors do
+      [] ->
+        attribute_locations =
+          %{}
+          |> Attributes.put_location(:array, element, "array")
+          |> Attributes.put_location(:item, element, "item")
+          |> Attributes.put_location(:index, element, "index")
+
+        foreach_node = %Foreach{
+          location: element.location,
+          array: array,
+          item: item,
+          index: Attributes.value(element, "index"),
+          attribute_locations: attribute_locations
+        }
+
+        {foreach_node, place_errors} = place_children(results, foreach_node, element.name)
+        foreach_node = reverse_lists(foreach_node)
+
+        {{:content_node, foreach_node}, errors ++ place_errors}
+
+      _missing ->
+        {nil, errors ++ missing_errors}
+    end
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -729,10 +800,12 @@ defmodule Statifier.Lowering.Builders do
   # once the fold finishes - the same two-step every other list-valued
   # builder in this module takes.
   #
-  # This clause must precede the `%Assign{}`-specific clause below: that
-  # clause matches `{:content_node, %Assign{}}` against *any* parent
-  # (unconditionally), so an `<assign>` landing inside an `<if>` partition
-  # would otherwise always report misplaced instead of joining its branch.
+  # This clause, and `%Foreach{}`'s right below it, must precede the
+  # `%Assign{}`-specific clause below: that clause matches
+  # `{:content_node, %Assign{}}` against *any* parent (unconditionally), so
+  # an `<assign>` landing inside an `<if>` partition or a `<foreach>` body
+  # would otherwise always report misplaced instead of joining its branch
+  # or content list.
   defp place({:content_node, node}, %If{branches: [open | closed]} = parent, _parent_name) do
     open = %{open | content: [node | open.content]}
     {%{parent | branches: [open | closed]}, nil}
@@ -744,6 +817,13 @@ defmodule Statifier.Lowering.Builders do
 
   defp place({:else, branch}, %If{branches: [open | closed]} = parent, _parent_name) do
     {%{parent | branches: [branch, open | closed]}, nil}
+  end
+
+  # `<foreach>` has no partitioning (Decision 8) - every `{:content_node,
+  # _}` result its children produce lands directly in `content`, the same
+  # single-slot shape `%Block{}` and `%Transition{}` use.
+  defp place({:content_node, node}, %Foreach{} = parent, _parent_name) do
+    {%{parent | content: [node | parent.content]}, nil}
   end
 
   # `%Assign{}`'s own element span lives under `node_location`, not
@@ -769,11 +849,13 @@ defmodule Statifier.Lowering.Builders do
     {parent, Error.misplaced(Atom.to_string(tag), parent_name, Map.fetch!(value, :location))}
   end
 
-  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t() | If.t()) :: binary()
+  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t()) ::
+          binary()
   defp content_node_name(%Raise{}), do: "raise"
   defp content_node_name(%Log{}), do: "log"
   defp content_node_name(%Assign{}), do: "assign"
   defp content_node_name(%If{}), do: "if"
+  defp content_node_name(%Foreach{}), do: "foreach"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
@@ -819,5 +901,12 @@ defmodule Statifier.Lowering.Builders do
       end)
 
     %{if_node | branches: branches}
+  end
+
+  # `%Foreach{}`'s `content` was built newest-first, the same plain
+  # one-list shape `%Block{}`'s clause above reverses - no second nesting
+  # level, unlike `%If{}`'s branches (Decision 8: one flat content list).
+  defp reverse_lists(%Foreach{} = foreach_node) do
+    %{foreach_node | content: Enum.reverse(foreach_node.content)}
   end
 end

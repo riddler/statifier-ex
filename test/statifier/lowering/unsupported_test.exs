@@ -101,12 +101,8 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "send")
     end
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "foreach" entry
-    # dispatching to `build_block/3` -> this test reddens because
-    # `<foreach>` builds a `Block` instead of being reported unsupported
-    test "<foreach> under <onentry>" do
-      xml = ~s(<scxml><state id="s"><onentry><foreach item="x"/></onentry></state></scxml>)
-      assert_unsupported(xml, "foreach")
-    end
+    # `<foreach>` moved from this deferred set to the supported set in
+    # st-af3.6 Phase 1 - see `test/statifier/lowering/content_test.exs` for
+    # its own coverage.
   end
 end

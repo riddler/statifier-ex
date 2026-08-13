@@ -3,6 +3,7 @@ defmodule Statifier.Lowering.ContentTest do
 
   alias Statifier.Document.Assign
   alias Statifier.Document.Block
+  alias Statifier.Document.Foreach
   alias Statifier.Document.If
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
@@ -442,6 +443,212 @@ defmodule Statifier.Lowering.ContentTest do
                            }
                          ]
                        }
+                     ]
+                   }
+                 ]
+               }
+             ] = state.onentry
+    end
+  end
+
+  describe "lower/1 - <foreach>, happy path" do
+    # sabotage: `build_foreach/2` reads `element, "index"` through
+    # `Attributes.value/2` unconditionally into `index` but the field is
+    # dropped from the built `%Foreach{}` (hardcoded `nil` instead) -> this
+    # test's `index: "i"` match reddens.
+    test "both required attributes, optional index, and children in document order" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <foreach array="items" item="x" index="i">
+                      <log label="one"/>
+                      <log label="two"/>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %Foreach{
+                     array: "items",
+                     item: "x",
+                     index: "i",
+                     content: [%Log{label: "one"}, %Log{label: "two"}],
+                     attribute_locations: attribute_locations
+                   }
+                 ]
+               }
+             ] = state.onentry
+
+      assert Map.has_key?(attribute_locations, :array)
+      assert Map.has_key?(attribute_locations, :item)
+      assert Map.has_key?(attribute_locations, :index)
+    end
+  end
+
+  describe "lower/1 - a self-closed <foreach>, an empty content list" do
+    # sabotage: `build_foreach/2` builds the `%Foreach{}`'s `content` field
+    # with a hardcoded non-empty default instead of the walked (empty)
+    # children -> this test's empty-list match reddens.
+    test "a self-closed <foreach> lowers to content: [] (Decision 6: legal, no error)" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <foreach array="items" item="x"/>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      state = only_state(document)
+
+      assert [%Block{content: [%Foreach{array: "items", item: "x", index: nil, content: []}]}] =
+               state.onentry
+    end
+  end
+
+  describe "lower/1 - <foreach>, missing required attributes" do
+    # sabotage: `build_foreach/2`'s missing-attribute check for `array` is
+    # dropped (only `item`'s absence is checked) -> this test would see no
+    # `{:missing_attribute, "foreach", "array"}` error, reddening the match.
+    test "a missing array produces a missing_attribute error" do
+      xml = ~s(<scxml><state id="s"><onentry><foreach item="x"/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "foreach", "array"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+
+    # sabotage: same as above, mirrored for `item`
+    test "a missing item produces a missing_attribute error" do
+      xml = ~s(<scxml><state id="s"><onentry><foreach array="items"/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "foreach", "item"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+
+    # sabotage: `build_foreach/2`'s missing-attribute check short-circuits
+    # on the first absent attribute (`case`/`with` instead of the `for`
+    # comprehension over both) -> only one error would be reported instead
+    # of two, reddening this test's two-error match.
+    test "a <foreach> missing both array and item reports two errors" do
+      xml = ~s(<scxml><state id="s"><onentry><foreach/></onentry></state></scxml>)
+
+      assert {:error,
+              [
+                %Error{reason: {:missing_attribute, "foreach", "array"}},
+                %Error{reason: {:missing_attribute, "foreach", "item"}}
+              ]} =
+               xml |> parse!() |> Lowering.lower()
+    end
+  end
+
+  describe "lower/1 - <assign> inside <foreach>" do
+    # sabotage: `place/3`'s `%Foreach{}` clause is moved below the
+    # unconditional `%Assign{}` clause -> the `%Assign{}` clause matches
+    # `{:content_node, %Assign{}}` against any parent first, so this
+    # `<assign>` would report `{:misplaced_element, "assign", "foreach"}`
+    # instead of joining `content`, reddening this test.
+    test "an <assign> inside a <foreach> body lands in content, not misplaced" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <foreach array="items" item="x">
+                      <assign location="y" expr="x"/>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      state = only_state(document)
+
+      assert [%Block{content: [%Foreach{content: [%Assign{location: "y"}]}]}] = state.onentry
+    end
+  end
+
+  describe "lower/1 - <foreach> and <if> nested in each other" do
+    # sabotage: `place/3`'s `%Foreach{}` clause prepends into the wrong
+    # field (e.g. always into a hardcoded `[]` rather than
+    # `parent.content`) -> the nested `%If{}` would never appear inside the
+    # outer `<foreach>`'s content, reddening this match.
+    test "a <foreach> inside an <if> partition lowers to a %Foreach{} in that branch" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <foreach array="items" item="x">
+                          <log label="inner"/>
+                      </foreach>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %If{
+                     branches: [
+                       %If.Branch{
+                         cond: "a",
+                         content: [
+                           %Foreach{array: "items", item: "x", content: [%Log{label: "inner"}]}
+                         ]
+                       }
+                     ]
+                   }
+                 ]
+               }
+             ] = state.onentry
+    end
+
+    # sabotage: same clause, opposite nesting direction - a hardcoded `[]`
+    # instead of threading `open`/`closed` through the outer `<foreach>`'s
+    # own `place/3` step would drop the inner `%If{}` from `content`
+    # entirely, reddening this match.
+    test "an <if> inside a <foreach> body lowers to a %If{} in that content list" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <foreach array="items" item="x">
+                      <if cond="b">
+                          <log label="inner"/>
+                      </if>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %Foreach{
+                     array: "items",
+                     item: "x",
+                     content: [
+                       %If{branches: [%If.Branch{cond: "b", content: [%Log{label: "inner"}]}]}
                      ]
                    }
                  ]
