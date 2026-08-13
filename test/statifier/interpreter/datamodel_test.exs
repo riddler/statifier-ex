@@ -285,4 +285,92 @@ defmodule Statifier.Interpreter.DatamodelTest do
                Enum.sort(["_event", "_ioprocessors", "_name", "_sessionid"])
     end
   end
+
+  describe "enter_state/2 (Phase 5's per-state late-binding step)" do
+    defp late_machine do
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+          <state id="s0">
+              <datamodel>
+                  <data id="Var1" expr="1"/>
+              </datamodel>
+          </state>
+      </scxml>
+      """)
+    end
+
+    # sabotage: `Datamodel.bind_state_data/4`'s `:late` clause is changed to
+    # `Enum.reduce([], machine_state, ...)` instead of folding over the
+    # state's real `d_indexes` -> "Var1" would stay nil even after
+    # `enter_state/2` runs, reddening this assertion.
+    test ~s(under binding="late", a state-scoped <data expr="1"> binds to 1 at enter_state/2) do
+      machine = late_machine()
+      s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
+
+      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      assert ms.datamodel["Var1"] == nil
+
+      ms = Datamodel.enter_state(ms, s0)
+      assert ms.datamodel["Var1"] == 1
+    end
+
+    # sabotage: `Datamodel.bind_state_data/4`'s two clause heads are swapped
+    # (`:early` guards the binding body, `:late` guards the no-op) -> an
+    # early-binding document's state-scoped <data> would rebind at
+    # enter_state/2, changing a value a prior write left there back to its
+    # document default, reddening the `== "kept"` assertion below.
+    test "under binding=\"early\", enter_state/2 is a no-op" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <state id="s0">
+                <datamodel>
+                    <data id="Var1" expr="1"/>
+                </datamodel>
+            </state>
+        </scxml>
+        """)
+
+      s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
+
+      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      # Var1 was already bound to 1 by initialize/1 under :early; simulate a
+      # write an <assign>-equivalent left afterward.
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "Var1", "kept")}
+
+      result = Datamodel.enter_state(ms, s0)
+
+      assert result == ms
+      assert result.datamodel["Var1"] == "kept"
+    end
+
+    # sabotage: `Datamodel.bind_state_data/4`'s `:late` clause reads
+    # `0..(tuple_size(machine.data_elements) - 1)` (every d_index in the
+    # whole machine, the `:early` clause's own range) instead of
+    # `Machine.at(machine, state_index).data` -> entering `s0`, which
+    # declares no `<datamodel>` of its own, would incorrectly also bind the
+    # sibling `other` state's still-unentered `<data id="Other1">`,
+    # reddening the `== nil` assertion below.
+    test "under binding=\"late\", a state with no <datamodel> touches no other state's data" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <state id="s0"/>
+            <state id="other">
+                <datamodel>
+                    <data id="Other1" expr="7"/>
+                </datamodel>
+            </state>
+        </scxml>
+        """)
+
+      s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
+      ms = machine |> MachineState.new() |> Datamodel.initialize()
+
+      result = Datamodel.enter_state(ms, s0)
+
+      assert result == ms
+      assert result.datamodel["Other1"] == nil
+    end
+  end
 end

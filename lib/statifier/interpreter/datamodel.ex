@@ -203,6 +203,70 @@ defmodule Statifier.Interpreter.Datamodel do
     end
   end
 
+  @doc """
+  `enterStates`'s per-state datamodel step (Appendix D `:312`, prose in the
+  moduledoc's "no Appendix D procedure body" section above) - binds
+  `state_index`'s own `<datamodel>` (`Machine.at(machine, state_index).data`)
+  under `binding == :late`.
+
+  This function does not itself test "is this the first time `state_index`
+  has been entered" - Appendix D's `s.isFirstEntry` (`appendix-d.txt:312`).
+  `Statifier.Interpreter.ExitEntry.arrive/3` is the only caller, and it tests
+  membership in `MachineState.entered_states` (the ADR-0002 substitute for
+  `s.isFirstEntry`, documented at that field) *before* calling this function,
+  so by the time this function runs, "first entry" has already been decided.
+  Splitting it this way keeps this module free of `MachineState.configuration`/
+  `entered_states` mutation, which `arrive/3` already owns for every other
+  step of the same pseudocode body.
+
+  A no-op, returning `machine_state` unchanged with no allocation, in two
+  cases: under `binding == :early` (every `d_index` was already bound at
+  `initialize/1`, before any state was entered), and under `binding == :late`
+  on a state whose own `<datamodel>` is empty (`data == []` - nothing to
+  bind).
+
+  Otherwise: one `Evaluator.context/1` for `state_index`'s whole `data` list
+  (B.2.2's "no ordering dependencies" licenses this exactly as it does in
+  `initialize/1`), each `d_index` bound through the same `bind_value/4` this
+  module's `initialize/1` uses - same seeded-`nil`-on-failure,
+  `raise_platform/4` shape, Decision 2/3 unchanged. There is no environment
+  override here: Decision 1 scopes that skip to top-level `<data>` only, and
+  a state-scoped `<data>` is never top-level.
+  """
+  @spec enter_state(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
+          MachineState.t()
+  # Not a re-derivation of enterStates: that name stays on
+  # Statifier.Interpreter.ExitEntry.enter_states/2, the actual Appendix D
+  # port. This is the state-scoped datamodel pass ADR-0002's "no procedure
+  # body to port" note above names as this module's own call site, one level
+  # under enterStates, the same relationship initialize/1 has to interpret.
+  # ADR-0002.
+  def enter_state(%MachineState{machine: machine} = machine_state, state_index) do
+    bind_state_data(machine_state, machine, machine.binding, state_index)
+  end
+
+  @spec bind_state_data(
+          machine_state :: MachineState.t(),
+          machine :: Machine.t(),
+          binding :: :early | :late,
+          state_index :: non_neg_integer()
+        ) :: MachineState.t()
+  defp bind_state_data(machine_state, _machine, :early, _state_index), do: machine_state
+
+  defp bind_state_data(machine_state, machine, :late, state_index) do
+    case Machine.at(machine, state_index).data do
+      [] ->
+        machine_state
+
+      d_indexes ->
+        context = Evaluator.context(machine_state)
+
+        Enum.reduce(d_indexes, machine_state, fn d_index, ms ->
+          bind_value(ms, context, d_index, Machine.data(machine, d_index))
+        end)
+    end
+  end
+
   # The errors-are-events conversion for a <data> that could not be bound -
   # raise_platform/4, not raise_internal/4, for the same spec 5.10.1 reason
   # Statifier.Interpreter.Content.raise_execution_error/4 and

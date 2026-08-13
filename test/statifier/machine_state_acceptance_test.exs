@@ -73,6 +73,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :configuration,
     :internal_queue,
     :history_values,
+    :entered_states,
     :datamodel,
     :running,
     :status,
@@ -83,15 +84,18 @@ defmodule Statifier.MachineStateAcceptanceTest do
   ]
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
-  # indexes), FIFO internal queue, history values, datamodel slot, running,
-  # status, macrostep/microstep counters, trace option, round budget
-  # (ADR-0019) - nothing loop-local left unreified"
+  # indexes), FIFO internal queue, history values, first-entry tracking,
+  # datamodel slot, running, status, macrostep/microstep counters, trace
+  # option, round budget (ADR-0019) - nothing loop-local left unreified".
+  # `entered_states` (st-af3.3 Phase 5) is the ADR-0002 substitute for
+  # Appendix D's `s.isFirstEntry`, which cannot live on a compiled, immutable
+  # `%Machine.State{}` in this port - see that field's own moduledoc section.
   #
   # sabotage: add `states_to_invoke: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex -> the struct grows a twelfth key and
+  # lib/statifier/machine_state.ex -> the struct grows a thirteenth key and
   # this equality assertion reddens, which is exactly the "someone adds a
   # field without updating the docs" failure the plan calls out.
-  test "machine_state holds the eleven fields, and the struct has no others" do
+  test "machine_state holds the twelve fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)

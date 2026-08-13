@@ -3,6 +3,8 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect
+  alias Statifier.Event
+  alias Statifier.Interpreter
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Lowering
   alias Statifier.Machine
@@ -620,5 +622,136 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     {result, _effects} = ExitEntry.enter_states(ms, [transition])
 
     assert [%{name: "in", type: :internal}] = MachineState.internal_events(result)
+  end
+
+  describe "arrive/3's late-binding step (Phase 5)" do
+    defp compile_late!(xml), do: compile!(xml)
+
+    # A compound state `c` with its own state-scoped late-bound `<data>`,
+    # entered directly (`go`), left (`leave`), and re-entered both by a
+    # plain transition (`back_plain`) and through a shallow history (`back`)
+    # - the two re-entry paths Phase 5's plan explicitly distinguishes
+    # (`states_for_default_entry` would get the history path wrong).
+    @late_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="outside" binding="late">
+        <state id="outside">
+            <transition event="go" target="c"/>
+            <transition event="back" target="h"/>
+            <transition event="back_plain" target="c"/>
+        </state>
+        <state id="c">
+            <datamodel>
+                <data id="X" expr="1"/>
+            </datamodel>
+            <initial>
+                <transition target="c_a"/>
+            </initial>
+            <state id="c_a">
+                <transition event="leave" target="outside"/>
+            </state>
+            <history id="h" type="shallow">
+                <transition target="c_a"/>
+            </history>
+        </state>
+    </scxml>
+    """
+
+    defp late_machine, do: compile_late!(@late_document)
+
+    # sabotage: `Datamodel.bind_state_data/4`'s `:late` clause is changed to
+    # read `Machine.at(machine, 0).data` (the root's own data, always empty
+    # here) instead of `Machine.at(machine, state_index).data` -> `c`'s own
+    # `<data id="X">` would never bind at first entry, reddening the `== 1`
+    # assertion below.
+    test "a state-scoped <data expr=\"1\"> is nil before first entry and 1 after" do
+      m = late_machine()
+      {:ok, c} = Machine.index(m, "c")
+
+      {ms, _effects} = Interpreter.initialize(m)
+      assert ms.datamodel["X"] == nil
+
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("go"))
+
+      assert MapSet.member?(ms.configuration, c)
+      assert ms.datamodel["X"] == 1
+    end
+
+    # AC: "a re-entered state does not rebind" - the mutation the plan calls
+    # out as "the one worth the most": `arrive/3` testing
+    # `entered_states` membership *after* the `MapSet.put` instead of
+    # before would make every entry, first or not, read as a first entry's
+    # successor... no - it would make every entry look like a *repeat*, so
+    # even the very first entry would never bind. That is caught by the
+    # test above already; this test instead pins the complementary half -
+    # a *second* entry must not rebind over a value a prior write left.
+    #
+    # sabotage: `arrive/3` puts `state_index` into `entered_states` *before*
+    # testing membership (`first_entry? = not MapSet.member?(...)` moved to
+    # after the `%{machine_state | entered_states: ...}` rebind) -> every
+    # entry, including this test's plain re-entry, would test membership
+    # against a set that already contains its own index, so `first_entry?`
+    # is always false and `Datamodel.enter_state/2` is never called at all -
+    # `X` would never leave its seeded `nil` even on the very first entry,
+    # reddening the setup assertion `ms.datamodel["X"] == 1` before this
+    # test's own re-entry check even runs.
+    test "a state re-entered through a plain transition does not rebind" do
+      m = late_machine()
+
+      {ms, _effects} = Interpreter.initialize(m)
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("go"))
+      assert ms.datamodel["X"] == 1
+
+      # Simulate an <assign>-equivalent write st-af3.4 will make real.
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "X", 99)}
+
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("leave"))
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("back_plain"))
+
+      assert ms.datamodel["X"] == 99
+    end
+
+    # AC: "a state re-entered through history restoration does not rebind
+    # either" - the case `states_for_default_entry` would get wrong: `c` is
+    # re-entered here as the shallow history's parent, not via its own
+    # `<initial>`, so it is never flagged in `states_for_default_entry` even
+    # though it genuinely re-enters and `arrive/3` genuinely runs for it.
+    #
+    # sabotage: same as the plain-re-entry test above - `arrive/3` tests
+    # `entered_states` membership after the `MapSet.put` rather than before.
+    test "a state re-entered through history restoration does not rebind" do
+      m = late_machine()
+
+      {ms, _effects} = Interpreter.initialize(m)
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("go"))
+      assert ms.datamodel["X"] == 1
+
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "X", 99)}
+
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("leave"))
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("back"))
+
+      {:ok, c_a} = Machine.index(m, "c_a")
+      assert MapSet.member?(ms.configuration, c_a)
+      assert ms.datamodel["X"] == 99
+    end
+
+    # sabotage: `arrive/3`'s `%{machine_state | entered_states:
+    # MapSet.put(...)}` rebind is deleted, so `machine_state.entered_states`
+    # never gains any member on entry -> `c`'s index would never join the
+    # set, reddening the `MapSet.member?(ms.entered_states, c)` assertion
+    # below before the round trip is even taken.
+    test "entered_states survives a term_to_binary/1 round trip" do
+      m = late_machine()
+      {ms, _effects} = Interpreter.initialize(m)
+      {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("go"))
+
+      {:ok, c} = Machine.index(m, "c")
+      assert MapSet.member?(ms.entered_states, c)
+
+      roundtripped = ms |> :erlang.term_to_binary() |> :erlang.binary_to_term()
+
+      assert roundtripped.entered_states == ms.entered_states
+      assert MapSet.member?(roundtripped.entered_states, c)
+    end
   end
 end

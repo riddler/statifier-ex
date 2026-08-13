@@ -78,6 +78,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   """
 
   alias Statifier.Interpreter.Content
+  alias Statifier.Interpreter.Datamodel
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
   alias Statifier.Machine.Donedata
@@ -617,10 +618,12 @@ defmodule Statifier.Interpreter.ExitEntry do
   end
 
   # `enterStates`'s per-state entry body: add to the configuration, skip
-  # `statesToInvoke.add(s)` (no `<invoke>` support exists yet) and the
-  # `binding == "late"` datamodel initialization (the datamodel is not
-  # evaluated yet), run `onentry` blocks, run default-entry /
-  # default-history content, then raise this state's completion events.
+  # `statesToInvoke.add(s)` (no `<invoke>` support exists yet), bind
+  # `state_index`'s own datamodel under `binding == "late"` on first entry
+  # (st-af3.3 Phase 5 - `MachineState.entered_states` is the ADR-0002
+  # substitute for Appendix D's `s.isFirstEntry`, see that field's moduledoc
+  # section), run `onentry` blocks, run default-entry / default-history
+  # content, then raise this state's completion events.
   @spec arrive(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -632,6 +635,26 @@ defmodule Statifier.Interpreter.ExitEntry do
       machine_state
       | configuration: MapSet.put(machine_state.configuration, state_index)
     }
+
+    # `if binding == "late" and s.isFirstEntry: initializeDataModel(...); s.isFirstEntry = false`
+    # (Appendix D `:312-314`). Membership is tested *before* the `MapSet.put`
+    # below - reversing that order would put `state_index` into
+    # `entered_states` first, so the membership test would then always see
+    # its own index already present and `first_entry?` would be `false` on
+    # *every* entry, first included: `Datamodel.enter_state/2` would never
+    # run at all, and every state-scoped late-bound `<data>` would stay
+    # permanently `nil`.
+    first_entry? = not MapSet.member?(machine_state.entered_states, state_index)
+
+    machine_state = %{
+      machine_state
+      | entered_states: MapSet.put(machine_state.entered_states, state_index)
+    }
+
+    machine_state =
+      if first_entry?,
+        do: Datamodel.enter_state(machine_state, state_index),
+        else: machine_state
 
     {machine_state, onentry_effects} = run_onentry_blocks(machine_state, state_index)
 
