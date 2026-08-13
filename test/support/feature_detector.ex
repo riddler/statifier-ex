@@ -88,7 +88,8 @@ defmodule Statifier.FeatureDetector do
       onexit_actions: :supported,
       # st-af3.5
       if_elements: :supported,
-      foreach_elements: :unsupported,
+      # st-af3.6
+      foreach_elements: :supported,
       # st-wju.5
       log_elements: :supported,
       # st-wju.5
