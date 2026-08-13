@@ -60,6 +60,8 @@ defmodule Statifier.Validator.Error do
           | {:data_reserved_id, id :: binary()}
           | {:datamodel_bad_parent, kind :: atom()}
           | {:assign_expr_and_text, expr :: binary()}
+          | {:if_elseif_after_else}
+          | {:if_duplicate_else}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -575,6 +577,38 @@ defmodule Statifier.Validator.Error do
       reason: {:assign_expr_and_text, expr},
       message:
         "<assign> must not specify both an expr attribute (#{inspect(expr)}) and child content",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 4.3.2: "In a conformant SCXML document, `<else>` MUST occur after all
+  `<elseif>` tags." An `<elseif>` branch that follows the `<if>`'s `<else>`
+  branch violates that ordering. Reported at the offending `<elseif>`'s own
+  `location` (`Statifier.Document.If.Branch.location`), not the enclosing
+  `<if>`'s.
+  """
+  @spec if_elseif_after_else(location :: Location.t()) :: t()
+  def if_elseif_after_else(%Location{} = location) do
+    %__MODULE__{
+      reason: {:if_elseif_after_else},
+      message: "<elseif> must not follow <else> - <else> must occur after all <elseif> tags",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 4.3.2: an `<if>` with more than one `<else>` branch (each an
+  attribute-less, `cond`-less partition per `Statifier.Document.If.Branch`).
+  4.3 caps `<else>` at "0 or 1 times", so a second one is malformed
+  regardless of position. Reported at the **second** `<else>`'s own
+  `location`, never the first's.
+  """
+  @spec if_duplicate_else(location :: Location.t()) :: t()
+  def if_duplicate_else(%Location{} = location) do
+    %__MODULE__{
+      reason: {:if_duplicate_else},
+      message: "<if> must not carry more than one <else> branch",
       location: location
     }
   end
