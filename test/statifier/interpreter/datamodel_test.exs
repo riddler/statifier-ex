@@ -231,13 +231,13 @@ defmodule Statifier.Interpreter.DatamodelTest do
     assert ms.datamodel["Local1"] == nil
   end
 
-  # sabotage (Decision 2): `Statifier.Machine.Content.Assign`'s `write/4` is
-  # changed to write `assigned_context.data` (the normalized view read back
-  # out of `Predicator.ContextLocation.put/3` applied to
+  # sabotage: `Statifier.Machine.Content.Assign`'s write step is changed to
+  # write `assigned_context.data` (the normalized view read back out of
+  # `Predicator.ContextLocation.put/3` applied to
   # `context.datamodel_context.data`) into `machine_state.datamodel`, instead
-  # of writing through the raw `machine_state.datamodel` directly ->
-  # `Predicator.Context.new/2` deep-normalizes `nil` to `:undefined`, so the
-  # unrelated seeded-but-unbound "Other" id would come back `:undefined`
+  # of writing through the raw `machine_state.datamodel` directly (Decision
+  # 2) -> `Predicator.Context.new/2` deep-normalizes `nil` to `:undefined`, so
+  # the unrelated seeded-but-unbound "Other" id would come back `:undefined`
   # instead of `nil`, reddening the `== nil` assertion below.
   test "after an <assign> to one id, an unrelated seeded-but-unbound <data> id is still nil" do
     machine =

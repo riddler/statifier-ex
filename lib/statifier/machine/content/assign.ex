@@ -60,14 +60,15 @@ defmodule Statifier.Machine.Content.Assign do
     @moduledoc false
 
     # spec 4.7.1/5.9.2's <assign>: evaluate the value, resolve `location`
-    # against the block's (pre-write) datamodel context, verify the
-    # resolved root already exists (Decision 4 - vivification never creates
-    # an undeclared top-level variable), then write into the *raw*
-    # `machine_state.datamodel` and rebuild the block's datamodel context so
-    # a later node in the same block sees the write (Decision 3 - this is
-    # the seam `Statifier.Interpreter.Content`'s moduledoc names as taken
-    # here, in the node, never in the runner). Every predicator failure
-    # becomes `{:error, reason}`, never a raise and never a platform
+    # against the block's (pre-write) datamodel context, reject a resolved
+    # root that begins with "_" (Decision 5, spec 5.10 - a system variable),
+    # verify the resolved root already exists (Decision 4 - vivification
+    # never creates an undeclared top-level variable), then write into the
+    # *raw* `machine_state.datamodel` and rebuild the block's datamodel
+    # context so a later node in the same block sees the write (Decision 3 -
+    # this is the seam `Statifier.Interpreter.Content`'s moduledoc names as
+    # taken here, in the node, never in the runner). Every predicator
+    # failure becomes `{:error, reason}`, never a raise and never a platform
     # notification of its own - the runner is the sole conversion site for
     # that (ADR-0003).
     @spec execute(node :: Assign.t(), context :: Context.t()) ::
@@ -75,6 +76,7 @@ defmodule Statifier.Machine.Content.Assign do
     def execute(%Assign{} = node, %Context{} = context) do
       with {:ok, value} <- evaluate_value(node, context),
            {:ok, path} <- resolve_location(node, context),
+           :ok <- check_system_variable(path),
            :ok <- check_root(node, context, path),
            {:ok, new_datamodel} <- write(node, context, path, value) do
         machine_state = %{context.machine_state | datamodel: new_datamodel}
@@ -119,7 +121,38 @@ defmodule Statifier.Machine.Content.Assign do
       end
     end
 
-    # Step 3 (Decision 4): the resolved root segment must already be a key
+    # Step 3 (Decision 5, spec 5.10): the resolved root segment must not
+    # begin with "_". Spec 5.10: "Variable names beginning with '_' are
+    # reserved for system use[, and] A conformant SCXML document MUST NOT
+    # contain ids beginning with '_' in the <data> element" - and "The
+    # Processor MUST cause any attempt to change the value of a system
+    # variable to fail" (and, per that same clause, queue the runner's usual
+    # execution-failure event - left to the block runner's sole conversion
+    # site, ADR-0003, exactly like every other `{:error, reason}` this node
+    # returns). A prefix test on the *resolved* root (rather than a
+    # membership test against the four named variables,
+    # `_event`/`_sessionid`/`_name`/`_ioprocessors`) can never collide with a
+    # legitimate author id - the second quoted sentence above is exactly the
+    # licence for that - and it covers `_x` (5.10's platform-variable root)
+    # and any future system variable for free. Testing the resolved root
+    # rather than the raw `location` attribute string handles `_event.name`
+    # and `_event['name']` uniformly. This runs before Decision 4's
+    # root-existence check, so an undeclared system-looking root (e.g.
+    # `_undeclared`) reports as a system-variable violation rather than an
+    # unbound location.
+    @spec check_system_variable(path :: Predicator.ContextLocation.location_path()) ::
+            :ok | {:error, {:system_variable, String.t()}}
+    defp check_system_variable([root | _rest]) when is_binary(root) do
+      if String.starts_with?(root, "_") do
+        {:error, {:system_variable, root}}
+      else
+        :ok
+      end
+    end
+
+    defp check_system_variable(_path), do: :ok
+
+    # Step 4 (Decision 4): the resolved root segment must already be a key
     # of `machine_state.datamodel` - predicator's own `put/3` would happily
     # vivify an undeclared root, but 5.9.2 requires this to fail when a
     # location "cannot be evaluated to yield a valid location", and
@@ -139,7 +172,7 @@ defmodule Statifier.Machine.Content.Assign do
       end
     end
 
-    # Step 4: the write itself, against the *raw* `machine_state.datamodel`
+    # Step 5: the write itself, against the *raw* `machine_state.datamodel`
     # (`nil`s intact) rather than the normalized context read in step 2 -
     # Decision 2's `nil`-versus-`:undefined` round trip. `context.data`
     # deep-normalizes `nil` to `:undefined`, and nothing in `lib/` reads it

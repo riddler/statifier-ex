@@ -425,5 +425,24 @@ defmodule Statifier.Interpreter.ContentTest do
       assert error_event.cause.origin == {:content, 1, @owner}
       assert error_event.data == {:unbound_location, "undeclared_root"}
     end
+
+    # sabotage: `Statifier.Machine.Content.Assign`'s `check_system_variable/1`
+    # (spec 5.10) returns `:ok` unconditionally instead of
+    # `{:error, {:system_variable, root}}` -> no `error.execution` would be
+    # raised and the block would run to completion instead of halting,
+    # reddening the assertions below.
+    test "a system-variable <assign> in a block raises error.execution and halts the block" do
+      m = machine() |> machine_with_node(1, assign_node(1, "_sessionid", "1"))
+      ms = machine_state(m)
+      [block1, _block2] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block1.content)
+
+      assert [%{name: "one"}, error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 1, @owner}
+      assert error_event.data == {:system_variable, "_sessionid"}
+    end
   end
 end
