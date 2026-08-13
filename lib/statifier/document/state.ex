@@ -43,6 +43,7 @@ defmodule Statifier.Document.State do
   | Field | Meaningful on | Representable misuse | Caught by |
   |---|---|---|---|
   | `donedata` | `:final` | donedata on a non-final state | the validator's check 8 |
+  | `datamodel_element` | `:state`, `:parallel` | a `<datamodel>` on a `:final` or `:history` state | `Statifier.Validator.Checks.Data`'s `:datamodel_bad_parent` |
   | `states` | `:state`, `:parallel` | state children under a `:final` | the validator's check 6 |
   | `states` | any | a `:history` child of `:final` or of another `:history` | the validator's check 5 |
   | `initial` / `initial_element` | `:state` | both forms on one state | the validator's check 4 |
@@ -84,6 +85,7 @@ defmodule Statifier.Document.State do
 
   alias Statifier.Document
   alias Statifier.Document.Block
+  alias Statifier.Document.Datamodel
   alias Statifier.Document.Donedata
   alias Statifier.Document.Initial
   alias Statifier.Document.Transition
@@ -102,6 +104,7 @@ defmodule Statifier.Document.State do
     onexit: [],
     history_type: nil,
     donedata: nil,
+    datamodel_element: nil,
     attribute_locations: %{}
   ]
 
@@ -116,6 +119,7 @@ defmodule Statifier.Document.State do
           onexit: [Block.t()],
           history_type: :shallow | :deep | nil,
           donedata: Donedata.t() | nil,
+          datamodel_element: Datamodel.t() | nil,
           location: Location.t(),
           attribute_locations: Document.attribute_locations()
         }
