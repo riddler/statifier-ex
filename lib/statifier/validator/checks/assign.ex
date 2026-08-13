@@ -27,6 +27,7 @@ defmodule Statifier.Validator.Checks.Assign do
 
   alias Statifier.Document
   alias Statifier.Document.Assign, as: DAssign
+  alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
   alias Statifier.Document.State
   alias Statifier.Validator.Context
@@ -61,14 +62,32 @@ defmodule Statifier.Validator.Checks.Assign do
   defp block_assigns(blocks) do
     blocks
     |> Enum.flat_map(& &1.content)
+    |> Enum.flat_map(&descend/1)
     |> Enum.filter(&match?(%DAssign{}, &1))
   end
 
   defp transition_assigns(transitions) do
     transitions
     |> Enum.flat_map(& &1.content)
+    |> Enum.flat_map(&descend/1)
     |> Enum.filter(&match?(%DAssign{}, &1))
   end
+
+  # A content node walk stops at the top level unless it descends into every
+  # *composite* node's own partitions - a `%DIf{}` does not carry an
+  # `<assign>` itself, it carries branches that carry one. Without this, an
+  # `<assign>` written inside an `<if>` partition is invisible to any check
+  # that only sees the block/transition's own flat `content` list, exactly
+  # the gap `Statifier.Validator.Checks.If`'s moduledoc calls out for this
+  # walk specifically. Recurses so a `<assign>` nested inside a *nested*
+  # `<if>` (SCION's `if_else/test0`) is not missed either. `<foreach>` will
+  # be the next composite executable-content element; when it lands, it gets
+  # a clause here alongside `%DIf{}` rather than a second walk elsewhere.
+  defp descend(%DIf{branches: branches}) do
+    branches |> Enum.flat_map(& &1.content) |> Enum.flat_map(&descend/1)
+  end
+
+  defp descend(other), do: [other]
 
   defp initial_assigns(nil), do: []
   defp initial_assigns(%Initial{transitions: transitions}), do: transition_assigns(transitions)

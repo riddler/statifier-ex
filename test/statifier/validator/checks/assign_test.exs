@@ -133,5 +133,28 @@ defmodule Statifier.Validator.Checks.AssignTest do
 
       assert error.location.start_line == 5
     end
+
+    # sabotage: block_assigns/1's `|> Enum.flat_map(&descend/1)` step is
+    # reverted to the old flat `Enum.filter(&match?(%DAssign{}, &1))` (no
+    # descent into a %DIf{}'s branches) -> the offending <assign> inside the
+    # <if> partition below is invisible to the flat top-level content list
+    # and this {:error, [...]} assertion reddens.
+    test "an <assign> with both expr and children inside an <if> partition is still reported" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <assign location="x" expr="1">literal</assign>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+
+      assert error.location.start_line == 5
+    end
   end
 end
