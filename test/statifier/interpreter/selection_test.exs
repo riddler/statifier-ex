@@ -391,9 +391,9 @@ defmodule Statifier.Interpreter.SelectionTest do
   end
 
   describe "select_transitions/2" do
-    # sabotage: `first_matching_transition/4`'s `Enum.find/2` predicate is
-    # changed from `transition_enabled?/3` to a constant `false` -> this
-    # reddens because nothing is ever selected.
+    # sabotage: `first_matching_transition/5`'s `Enum.reduce_while/3` body is
+    # changed from `transition_enabled/4` to a constant `{false, errors}` ->
+    # this reddens because nothing is ever selected.
     test "an event-matched transition on the atomic state itself is selected" do
       m = machine()
       ms = machine_state(m, [idx(:event_state)])
@@ -403,7 +403,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert [%{events: [["matched"]]}] = transitions
     end
 
-    # sabotage: `transition_enabled?/3`'s event-matched clause calls
+    # sabotage: `transition_enabled/4`'s event-matched clause calls
     # `NameMatch.name_match?/2` but ignores its result (replaced with the
     # literal `true`) -> this reddens because a non-matching event now
     # wrongly selects the transition anyway.
@@ -414,7 +414,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert {_ms, []} = Selection.select_transitions(ms, Event.external("nonexistent"))
     end
 
-    # sabotage: `selected_for_atomic_state/3` walks
+    # sabotage: `selected_for_atomic_state/5` walks
     # `Machine.proper_ancestors(machine, state_index)` only, dropping the
     # `state_index` itself from the head of the list -> this reddens because
     # the child's own transition is skipped and the ancestor's is selected
@@ -429,7 +429,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert source == idx(:descendant)
     end
 
-    # sabotage: `first_matching_transition/4` reverses the state's own
+    # sabotage: `first_matching_transition/5` reverses the state's own
     # `transitions` list before searching (`Enum.reverse/1` inserted before
     # `Enum.map/2`) -> this reddens because the second-written transition
     # (targeting `tgt-b`) wins instead of the first.
@@ -465,8 +465,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert [%{events: [["cond-evt-true"]]}] = transitions
     end
 
-    # sabotage: `transition_enabled?/3`'s event-matched clause drops the
-    # `condition_match(machine_state, transition) == {:ok, true}` conjunct
+    # sabotage: `transition_enabled/4`'s event-matched clause returns
+    # `{true, cond_errors}` directly instead of calling `cond_enabled/3`
     # -> this passes regardless (nil cond always matches), so instead this
     # sabotages the twin: `evaluate_cond/2`'s `cond: nil` clause is changed
     # from `{:ok, true}` to `{:error, :nope}` -> this reddens because a
@@ -480,7 +480,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       assert [%{events: [["cond-evt2"]]}] = transitions
     end
 
-    # sabotage: `transition_enabled?/3`'s `events: []` guard clause is
+    # sabotage: `transition_enabled/4`'s `events: []` clauses are
     # deleted and its event-matched clause is widened to
     # `transition.events == [] or NameMatch.name_match?(...)` -> this
     # reddens because the eventless transition (document-order first on
@@ -676,8 +676,8 @@ defmodule Statifier.Interpreter.SelectionTest do
 
   describe "select_eventless_transitions/1" do
     # sabotage: `select_eventless_transitions/1` passes a non-`nil`
-    # `event_tokens` (`[]` instead of `nil`) to `selected_for_atomic_state/3`
-    # -> this reddens because `transition_enabled?/3`'s eventless clause no
+    # `event_tokens` (`[]` instead of `nil`) to `selected_for_atomic_state/5`
+    # -> this reddens because `transition_enabled/4`'s eventless clause no
     # longer matches (it requires `nil`), so nothing is selected.
     test "selects a transition with no event attribute and ignores an event-bearing one" do
       m = machine()

@@ -307,7 +307,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   # AC: "Child preempts ancestor" - re-asserted end to end (`selection_test.exs`
   # already covers the shape; this is the acceptance-criteria line by name).
   #
-  # sabotage: `selected_for_atomic_state/3` walks
+  # sabotage: `selected_for_atomic_state/5` walks
   # `Machine.proper_ancestors(machine, state_index)` only, dropping
   # `state_index` itself from the head of the list -> the child's own
   # transition is skipped and the ancestor's is wrongly selected instead.
@@ -323,7 +323,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
 
   # AC: "sibling document-order priority"
   #
-  # sabotage: `first_matching_transition/4` reverses the state's own
+  # sabotage: `first_matching_transition/5` reverses the state's own
   # `transitions` list before searching -> the second-written transition
   # (targeting `tgt-b`) wins instead of the first.
   test "sibling document-order priority" do
