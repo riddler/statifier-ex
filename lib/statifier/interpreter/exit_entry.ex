@@ -478,26 +478,18 @@ defmodule Statifier.Interpreter.ExitEntry do
     end)
   end
 
-  # `getChildStates(state)` (Appendix D) - "all `<state>`, `<final>`, and
-  # `<parallel>` children of `state`", i.e. its actual regions. Mechanical
-  # deviation: `Machine.child_indexes/2` returns *every* direct child
-  # (its own `@doc` names it `getChildStates`, but the compiled `children`
-  # field carries a `:history` child too, precisely so
-  # `State.history_children` can be a lookup rather than a scan). A
-  # `:history` pseudo-state is never itself entered - it never becomes a
-  # member of `states_to_enter` - so treating it as an uncovered region
-  # would recurse into `enter_history_target/3` on every pass and never
-  # satisfy `covered?/3`, looping forever. Regions are `children --
-  # history_children`.
+  # The local spelling of `Machine.child_states/2` - `getChildStates(state1)`
+  # (Appendix D), "a list containing all `<state>`, `<final>`, and
+  # `<parallel>` children of `state1`", i.e. its actual regions.
+  # `Machine.children/2` (all direct children, `:history` included) is the
+  # wrong function here: a `:history` pseudo-state is never itself entered -
+  # it never becomes a member of `states_to_enter` - so treating it as an
+  # uncovered region would recurse into `enter_history_target/3` on every
+  # pass and never satisfy `covered?/3`, looping forever.
   @spec region_indexes(machine :: Machine.t(), state_index :: non_neg_integer()) :: [
           non_neg_integer()
         ]
-  defp region_indexes(machine, state_index) do
-    %State{children: children, history_children: history_children} =
-      Machine.at(machine, state_index)
-
-    children -- history_children
-  end
+  defp region_indexes(machine, state_index), do: Machine.child_states(machine, state_index)
 
   # `statesToEnter.some(lambda s: isDescendant(s, child))` - whether some
   # already-accumulated state is a (proper) descendant of `child_index`,
