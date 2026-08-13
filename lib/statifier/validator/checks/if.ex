@@ -34,10 +34,13 @@ defmodule Statifier.Validator.Checks.If do
   places `Statifier.Validator.Checks.Assign` walks - and recurses into every
   `<if>` nested inside another `<if>`'s branch content (SCION's
   `if_else/test0` nests two deep), since spec 4.3.2 explicitly allows
-  nested `<if>` as executable content.
+  nested `<if>` as executable content. It recurses into a `<foreach>`'s own
+  content the same way, so an `<if>` written inside a loop body (`test153`)
+  is not invisible to this check either.
   """
 
   alias Statifier.Document
+  alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.If.Branch
   alias Statifier.Document.Initial
@@ -93,6 +96,8 @@ defmodule Statifier.Validator.Checks.If do
     nested = branches |> Enum.flat_map(& &1.content) |> Enum.flat_map(&collect_ifs/1)
     [if_node | nested]
   end
+
+  defp collect_ifs(%DForeach{content: content}), do: Enum.flat_map(content, &collect_ifs/1)
 
   defp collect_ifs(_other), do: []
 

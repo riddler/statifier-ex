@@ -218,12 +218,10 @@ defmodule Statifier.Machine.Content.ForeachTest do
               ]} = ExecutableContent.execute(node, context(m))
     end
 
-    # sabotage (Decision 2/3): a body <assign> is what proves a write in
-    # iteration n is visible in iteration n+1 - `write_iteration/4`'s
-    # `Map.put/3` for `item` is changed to write into a throwaway key
-    # (`"__item"`) instead of `node.item`, so the body's `expr="sum + v"`
-    # would read a stale/undefined `v` -> this test's final-sum assertion
-    # reddens (the `test155` shape).
+    # sabotage: write_iteration/4's Map.put/3 for `item` writes into a
+    # throwaway key ("__item") instead of node.item, so the body's
+    # expr="sum + v" reads a stale/undefined `v` -> this test's final-sum
+    # assertion reddens (the test155 shape).
     test "a body <assign> accumulates across iterations" do
       m = machine() |> machine_with_node(0, assign_node(0, "sum", "sum + v"))
       node = foreach_node(array: {:static, [1, 2, 3]}, item: "v", content: [0])
@@ -234,12 +232,11 @@ defmodule Statifier.Machine.Content.ForeachTest do
       assert ctx.machine_state.datamodel["sum"] == 6
     end
 
-    # sabotage (Decision 5): `evaluate_array/2` is called again inside
-    # `run_loop/3` (moved from `execute/2`'s `with` chain into the fold) ->
-    # a body that empties the array's own source variable would shrink the
-    # remaining iteration count instead of running all three (the
-    # `test525` shape) -> this test's exact-three-iterations assertion
-    # reddens.
+    # sabotage: evaluate_array/2 is called again inside run_loop/3 (moved
+    # from execute/2's with chain into the fold) -> a body that empties the
+    # array's own source variable shrinks the remaining iteration count
+    # instead of running all three (the test525 shape) -> this test's
+    # exact-three-iterations assertion reddens.
     test "mutating the array's own source variable inside the body does not change the iteration count" do
       m = machine() |> machine_with_node(0, assign_node(0, "Var1", "[]"))
       node = foreach_node(array: compiled_expr("Var1"), item: "v", index: "i", content: [0])

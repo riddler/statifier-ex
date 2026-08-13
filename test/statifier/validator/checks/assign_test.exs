@@ -156,5 +156,51 @@ defmodule Statifier.Validator.Checks.AssignTest do
 
       assert error.location.start_line == 5
     end
+
+    # sabotage: descend/1's `%DForeach{content: content}` clause is dropped
+    # (only `%DIf{}` and the `other` fallback survive) -> the offending
+    # <assign> inside the <foreach> body below is invisible to the flat
+    # top-level content list and this {:error, [...]} assertion reddens.
+    test "an <assign> with both expr and children inside a <foreach> body is still reported" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <foreach array="[1, 2]" item="x">
+                      <assign location="y" expr="1">literal</assign>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+
+      assert error.location.start_line == 5
+    end
+
+    # sabotage: same as above - descend/1's `%DForeach{content: content}`
+    # clause is dropped -> the offending <assign> inside the <foreach>
+    # nested inside the <if> partition below is invisible and this
+    # {:error, [...]} assertion reddens.
+    test "an <assign> inside a <foreach> nested in an <if> partition is still reported" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <foreach array="[1, 2]" item="x">
+                          <assign location="y" expr="1">literal</assign>
+                      </foreach>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+
+      assert error.location.start_line == 6
+    end
   end
 end
