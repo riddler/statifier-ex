@@ -117,6 +117,11 @@ defmodule Statifier.Interpreter do
     rather than mid-walk - a mechanical reordering, since effects are a
     returned list and nothing downstream observes the difference in the
     pseudocode's own terms. See `exit_interpreter/1`'s own `@doc`.
+  - **The macrostep fold is bounded.** Appendix D's inner loop is
+    unbounded; a pure core has no external entity to cancel a
+    non-terminating macrostep, so the fold spends a round budget and stops
+    with a `:budget_exhausted` effect on exhaustion (ADR-0019). See the
+    private fold's own comment above `defp macrostep/3`.
   """
 
   alias Statifier.Event
@@ -307,7 +312,7 @@ defmodule Statifier.Interpreter do
   folded to quiescence over `microstep/1` (Decision 7) - not a pseudocode
   function name itself; `docs/observability.md`'s vocabulary for that same
   loop, hoisted so a paused position is a value on `%MachineState{}` rather
-  than a stack frame (constraint 1). The fold ends one of two ways:
+  than a stack frame (constraint 1). The fold ends one of three ways:
 
   - **Quiescence** - `microstep/1` returns
     `{:quiescent, machine_state, effects}`: no eventless transition is
@@ -324,9 +329,17 @@ defmodule Statifier.Interpreter do
     `Trace.MacrostepStable`'s own moduledoc reserves that trace for reaching
     a stable configuration - so no `Trace.MacrostepStable` is emitted;
     `Trace.Done` is the vocabulary row for this case, emitted by
-    `exit_interpreter/1` (not yet landed).
+    `exit_interpreter/1`.
+  - **Budget exhaustion** (ADR-0019) - the private fold spent
+    `machine_state.max_macrostep_rounds` without reaching quiescence. The
+    position comes back exactly as the last round left it: `running` stays
+    `true` and `status` stays `:running` (no `exit_interpreter/1` runs, no
+    `Effect.Done` is built - faking termination would be a semantic lie).
+    `Trace.MacrostepStable` is not emitted, and a
+    `{:budget_exhausted, %Effect.BudgetExhausted{}}` core effect is
+    appended last.
 
-  The two trace effects are therefore mutually exclusive per macrostep.
+  The three outcomes are therefore mutually exclusive per macrostep.
   `macrostep/1` is public rather than starting private, because it is
   exactly `microstep/1` driven to a fixed point and a stepper and the fold
   should be the same code path (`docs/observability.md:41-42`).
@@ -339,32 +352,83 @@ defmodule Statifier.Interpreter do
   # rather than a stack frame (constraint 1). Mechanical, not semantic: the
   # loop's condition and body are unchanged. ADR-0002.
   def macrostep(%MachineState{} = machine_state) do
-    {machine_state, effects} = macrostep(machine_state, [])
+    {outcome, machine_state, effects} =
+      macrostep(machine_state, [], machine_state.max_macrostep_rounds)
 
-    stable =
-      if machine_state.running do
-        Effect.trace(machine_state, Effect.Trace.MacrostepStable,
-          configuration: machine_state.configuration
-        )
-      else
-        []
-      end
-
-    {machine_state, effects ++ stable}
+    {machine_state, effects ++ terminal_effects(machine_state, outcome)}
   end
 
-  @spec macrostep(machine_state :: MachineState.t(), effects :: [Effect.t()]) ::
-          {MachineState.t(), [Effect.t()]}
-  # The private accumulator behind `macrostep/1` - repeatedly calls
-  # `microstep/1` until it returns `:quiescent`, threading the
-  # machine_state and appending each round's effects in order. Not an
-  # Appendix D function name; see `macrostep/1`'s own comment. ADR-0002.
-  defp macrostep(machine_state, effects) do
-    case microstep(machine_state) do
-      {:quiescent, machine_state, round_effects} -> {machine_state, effects ++ round_effects}
-      {machine_state, round_effects} -> macrostep(machine_state, effects ++ round_effects)
+  # The three mutually exclusive ways one macrostep ends (ADR-0019).
+  # `:quiescent` while still `running` is the stable configuration and the one
+  # case `Trace.MacrostepStable` names; `:quiescent` with `running: false` is
+  # termination, whose vocabulary row is `Trace.Done` from
+  # `exit_interpreter/1`; `:exhausted` is the spent round budget, a core
+  # effect because it is the outcome of the call rather than diagnostics about
+  # it, so it is built directly and not through the `Effect.trace/3` gate.
+  @spec terminal_effects(machine_state :: MachineState.t(), outcome :: :quiescent | :exhausted) ::
+          [Effect.t()]
+  defp terminal_effects(machine_state, :quiescent) do
+    if machine_state.running do
+      Effect.trace(machine_state, Effect.Trace.MacrostepStable,
+        configuration: machine_state.configuration
+      )
+    else
+      []
     end
   end
+
+  defp terminal_effects(machine_state, :exhausted) do
+    [
+      {:budget_exhausted,
+       %Effect.BudgetExhausted{
+         configuration: machine_state.configuration,
+         budget: machine_state.max_macrostep_rounds,
+         pending_internal_events: MachineState.internal_events(machine_state),
+         macrostep: machine_state.macrostep,
+         microstep: machine_state.microstep
+       }}
+    ]
+  end
+
+  @spec macrostep(
+          machine_state :: MachineState.t(),
+          effects :: [Effect.t()],
+          rounds_left :: MachineState.max_macrostep_rounds() | 0
+        ) :: {:quiescent | :exhausted, MachineState.t(), [Effect.t()]}
+  # ADR-0002 mechanical deviation (ADR-0019). Appendix D's inner loop is
+  # unbounded, and the REC allows that ("A macrostep may not [terminate].
+  # ... This is currently allowed.") because it presumes an interpreter
+  # an "external entity" can cancel mid-macrostep. A pure core (ADR-0003)
+  # has no external entity inside a fold - a non-terminating macrostep
+  # would hang the calling process with no recourse - so the fold spends
+  # one round per `microstep/1` call and stops with a `:budget_exhausted`
+  # effect when `max_macrostep_rounds` runs out. The loop's condition and
+  # body are otherwise unchanged; `max_macrostep_rounds: :infinity`
+  # restores the literal spec behavior for a caller that owns its own
+  # interruption.
+  #
+  # The private accumulator behind `macrostep/1` - repeatedly calls
+  # `microstep/1` until it returns `:quiescent`, threading the machine_state
+  # and appending each round's effects in order. Not an Appendix D function
+  # name; see `macrostep/1`'s own comment. ADR-0002.
+  defp macrostep(machine_state, effects, 0), do: {:exhausted, machine_state, effects}
+
+  # The ordinary round, charged against the budget by `spend/1`; the name
+  # carries the same ADR-0002 caveat as the clause above.
+  defp macrostep(machine_state, effects, rounds_left) do
+    case microstep(machine_state) do
+      {:quiescent, machine_state, round_effects} ->
+        {:quiescent, machine_state, effects ++ round_effects}
+
+      {machine_state, round_effects} ->
+        macrostep(machine_state, effects ++ round_effects, spend(rounds_left))
+    end
+  end
+
+  @spec spend(rounds_left :: MachineState.max_macrostep_rounds()) ::
+          MachineState.max_macrostep_rounds() | 0
+  defp spend(:infinity), do: :infinity
+  defp spend(rounds_left), do: rounds_left - 1
 
   # The eventless probe came back empty. `MachineState.dequeue_internal/1`
   # is the second half of Decision 2's quiescence test (no eventless

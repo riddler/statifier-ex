@@ -105,12 +105,12 @@ defmodule Statifier.Interpreter.MacrostepTest do
   end
 
   describe "macrostep/1" do
-    # sabotage: `macrostep/2`'s non-quiescent clause is changed from
-    # `macrostep(machine_state, effects ++ round_effects)` to
-    # `macrostep(machine_state, effects)`, dropping each round's effects
-    # while still recursing to quiescence -> the final configuration is
-    # still right but the effect list is short, reddening the
-    # `TransitionsSelected` count assertion below.
+    # sabotage: `macrostep/3`'s non-quiescent clause is changed from
+    # `macrostep(machine_state, effects ++ round_effects, spend(rounds_left))`
+    # to `macrostep(machine_state, effects, spend(rounds_left))`, dropping
+    # each round's effects while still recursing to quiescence -> the final
+    # configuration is still right but the effect list is short, reddening
+    # the `TransitionsSelected` count assertion below.
     test "a chain of eventless transitions drains in one call" do
       m = machine()
       ms = machine_state(m, [idx(:p1)])
@@ -225,11 +225,11 @@ defmodule Statifier.Interpreter.MacrostepTest do
     # same effect sequence, except that the fold appends one extra
     # `MacrostepStable` the step loop never builds on its own.
     #
-    # sabotage: `macrostep/2`'s accumulator is changed from
-    # `macrostep(machine_state, effects ++ round_effects)` to
-    # `macrostep(machine_state, round_effects ++ effects)` (prepending
-    # instead of appending) -> the fold's effect order diverges from the
-    # step loop's, reddening the effect-sequence equality.
+    # sabotage: `macrostep/3`'s accumulator is changed from
+    # `macrostep(machine_state, effects ++ round_effects, spend(rounds_left))`
+    # to `macrostep(machine_state, round_effects ++ effects, spend(rounds_left))`
+    # (prepending instead of appending) -> the fold's effect order diverges
+    # from the step loop's, reddening the effect-sequence equality.
     test "stepping and folding from the same start reach the same position and effects" do
       m = machine()
       ms = machine_state(m, [idx(:pre_q)])
@@ -245,6 +245,147 @@ defmodule Statifier.Interpreter.MacrostepTest do
                  {:trace, %Effect.Trace.MacrostepStable{} = payload} <- fold_effects,
                  do: payload
                )
+    end
+  end
+
+  # An ordinary eventless self-loop - deliberately not a `cond`, so the
+  # budget block proves the bound is shape-agnostic (ADR-0019: "The bound
+  # must be engine-level and shape-agnostic").
+  #
+  #  0 scxml (root)
+  #  1   spin      -- eventless transition -> spin
+  @spin_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="spin">
+      <state id="spin">
+          <transition target="spin"/>
+      </state>
+  </scxml>
+  """
+
+  defp spin_machine, do: compile!(@spin_document)
+
+  defp budget_exhausted_effects(effects) do
+    Enum.filter(effects, &match?({:budget_exhausted, _}, &1))
+  end
+
+  describe "macrostep/1 round budget" do
+    # sabotage: `defp macrostep(machine_state, effects, 0)` (the base case)
+    # is removed, so the fold is unbounded again -> the fold never returns
+    # and the test hangs. Bounded with `@tag timeout: 2_000` while
+    # confirming red, so the mutation costs about two seconds instead of
+    # ExUnit's 60-second default; the mutation is still genuinely run, only
+    # the wait is bounded.
+    @tag timeout: 2_000
+    test "exhaustion returns the effect and no MacrostepStable" do
+      m = spin_machine()
+      ms = machine_state(m, [1], max_macrostep_rounds: 5, trace: true)
+
+      {_result, effects} = Interpreter.macrostep(ms)
+
+      assert [{:budget_exhausted, %Effect.BudgetExhausted{budget: 5}}] =
+               budget_exhausted_effects(effects)
+
+      refute Enum.any?(effects, &match?({:trace, %Effect.Trace.MacrostepStable{}}, &1))
+    end
+
+    # sabotage: `macrostep/1` is given an extra clause that forces
+    # `running: false` on the returned machine_state whenever the private
+    # fold's outcome is `:exhausted` -> the `running` assertion below
+    # reddens.
+    test "the position is intact and resumable" do
+      m = spin_machine()
+      ms = machine_state(m, [1], max_macrostep_rounds: 5, trace: true)
+
+      {result, _effects} = Interpreter.macrostep(ms)
+
+      assert result.running
+      assert result.status == :running
+      assert result.configuration == MapSet.new([1])
+
+      assert {next_result, _next_effects} = Interpreter.microstep(result)
+      assert next_result.configuration == MapSet.new([1])
+    end
+
+    # sabotage: `spend/1`'s integer clause is changed from `rounds_left - 1`
+    # to `rounds_left` (never decrementing) -> the fold no longer terminates
+    # and the test hangs. Bounded with `@tag timeout: 2_000` while confirming
+    # red. A second mutation - `defp macrostep(ms, effects, 0)` changed to
+    # match `1` - reddens the counter equality by one instead of hanging.
+    @tag timeout: 2_000
+    test "the budget bounds rounds exactly" do
+      m = spin_machine()
+      ms = machine_state(m, [1], max_macrostep_rounds: 5, trace: true)
+
+      {_result, effects} = Interpreter.macrostep(ms)
+
+      assert [{:budget_exhausted, %Effect.BudgetExhausted{macrostep: macrostep, microstep: 5}}] =
+               budget_exhausted_effects(effects)
+
+      assert macrostep == ms.macrostep
+    end
+
+    # sabotage: `macrostep/1` seeds the fold with `0` instead of
+    # `machine_state.max_macrostep_rounds` -> the chain exhausts immediately
+    # and both assertions below redden.
+    test "a legitimate chart is untouched by the default budget" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)])
+
+      {result, effects} = Interpreter.macrostep(ms)
+
+      assert result.configuration == MapSet.new([idx(:p3)])
+      assert Enum.any?(effects, &match?({:trace, %Effect.Trace.MacrostepStable{}}, &1))
+      assert budget_exhausted_effects(effects) == []
+    end
+
+    # The off-by-one boundary: the `@document` chain from `p1` folds to
+    # quiescence in exactly three rounds (probed directly against the
+    # running code, per the plan's instruction not to assume it).
+    #
+    # sabotage: the `0`-matching head is changed to a `when rounds_left <= 1`
+    # guard -> the exact-budget case exhausts instead of reaching quiescence,
+    # reddening the quiescence assertions.
+    test "a budget exactly equal to the rounds needed still reaches quiescence" do
+      m = machine()
+      exact_ms = machine_state(m, [idx(:p1)], max_macrostep_rounds: 3, trace: true)
+      short_ms = machine_state(m, [idx(:p1)], max_macrostep_rounds: 2, trace: true)
+
+      {exact_result, exact_effects} = Interpreter.macrostep(exact_ms)
+
+      assert exact_result.configuration == MapSet.new([idx(:p3)])
+      assert Enum.any?(exact_effects, &match?({:trace, %Effect.Trace.MacrostepStable{}}, &1))
+      assert budget_exhausted_effects(exact_effects) == []
+
+      {_short_result, short_effects} = Interpreter.macrostep(short_ms)
+
+      assert [{:budget_exhausted, _payload}] = budget_exhausted_effects(short_effects)
+    end
+
+    # sabotage: `spend(:infinity)` is changed to return `0` -> the
+    # `:infinity` run exhausts after one round instead of reaching
+    # quiescence, reddening the configuration assertion.
+    test ":infinity folds a terminating chart to quiescence" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)], max_macrostep_rounds: :infinity, trace: true)
+
+      {result, effects} = Interpreter.macrostep(ms)
+
+      assert result.configuration == MapSet.new([idx(:p3)])
+      assert Enum.any?(effects, &match?({:trace, %Effect.Trace.MacrostepStable{}}, &1))
+      assert budget_exhausted_effects(effects) == []
+    end
+
+    # sabotage: `terminal_effects/2`'s `:exhausted` clause is routed through
+    # `Effect.trace/3` instead of built directly -> the untraced run emits
+    # nothing, reddening the effect assertion below.
+    test "trace: false still yields the effect" do
+      m = spin_machine()
+      ms = machine_state(m, [1], max_macrostep_rounds: 5, trace: false)
+
+      {_result, effects} = Interpreter.macrostep(ms)
+
+      assert [{:budget_exhausted, _payload}] = budget_exhausted_effects(effects)
+      assert trace_effects(effects) == []
     end
   end
 end
