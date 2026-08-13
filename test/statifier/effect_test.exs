@@ -38,14 +38,33 @@ defmodule Statifier.EffectTest do
     ]
 
     @trace_effects [
-      {:trace, %Trace.EventDequeued{event: nil, from: :external, macrostep: 1, microstep: 1}},
-      {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 1, microstep: 1}},
-      {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1}},
       {:trace,
-       %Trace.ContentExecuted{owner: {:transition, 0}, c_indexes: [], macrostep: 1, microstep: 1}},
-      {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1}},
-      {:trace, %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 1, microstep: 1}},
-      {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 1, microstep: 1}}
+       %Trace.EventDequeued{
+         event: nil,
+         from: :external,
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
+      {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 1, microstep: 1, round: 0}},
+      {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
+      {:trace,
+       %Trace.ContentExecuted{
+         owner: {:transition, 0},
+         c_indexes: [],
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
+      {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
+      {:trace,
+       %Trace.MacrostepStable{
+         configuration: MapSet.new(),
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
+      {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}}
     ]
 
     # sabotage: `trace?/1` returns `true` unconditionally (dropping the

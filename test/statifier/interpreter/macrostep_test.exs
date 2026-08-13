@@ -408,6 +408,26 @@ defmodule Statifier.Interpreter.MacrostepTest do
       assert result.round == 3
     end
 
+    # The engine-level half of the bead's second acceptance criterion (the
+    # livelock describe in `interpreter_acceptance_test.exs` is the
+    # livelock-specific half): `Trace.MacrostepStable`'s own `round` reports
+    # the depth of a *stable* fold, not just the returned `machine_state`'s.
+    # Same three-round depth as the test above, probed against the running
+    # code rather than assumed.
+    #
+    # sabotage: `begin_round/1`'s call is deleted from `microstep/1`'s
+    # general clause -> both the payload's and the machine_state's `round`
+    # stay `0` instead of `3`, reddening the equality assertion.
+    test "Trace.MacrostepStable's round reports the depth of a stable fold" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)])
+
+      {_result, effects} = Interpreter.macrostep(ms)
+
+      assert [%Effect.Trace.MacrostepStable{round: 3}] =
+               for({:trace, %Effect.Trace.MacrostepStable{} = payload} <- effects, do: payload)
+    end
+
     # sabotage: `spend(:infinity)` is changed to return `0` -> the fold
     # exhausts after one round under `:infinity` instead of reaching
     # quiescence at round 3, reddening the equality assertion.

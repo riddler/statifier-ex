@@ -45,13 +45,16 @@ defmodule Statifier.Effect do
 
   ## Trace effects carry indexes and counters, never structs
 
-  Every trace payload carries `macrostep`/`microstep` (constraint 4) and,
-  wherever it names an entity, a constraint-3 *identity* - a state index, a
-  `t_index`, a `c_index` - never a `%Statifier.Machine.State{}`,
+  Every trace payload carries `macrostep`/`microstep`/`round` (constraint 4)
+  and, wherever it names an entity, a constraint-3 *identity* - a state
+  index, a `t_index`, a `c_index` - never a `%Statifier.Machine.State{}`,
   `%Statifier.Machine.Transition{}`, or a compiled content-node struct.
   Tooling resolves an identity back to its node through
   `Statifier.Machine.at/2`, `transition/2`, or `content/2`
-  (`docs/observability.md:73-74`).
+  (`docs/observability.md:73-74`). `round` is the only one of the three that
+  advances in a round that runs no microstep at all - a livelocked or
+  eventless round still stamps a fresh `round` on everything it emits, which
+  is what keeps such a trace ordered (ADR-0020).
 
   ## Trace effects are ordinary list members, never a side channel
 
@@ -87,8 +90,8 @@ defmodule Statifier.Effect do
     expression is never evaluated at all - not even for its side effects.
 
   Every trace payload module defines `new/2`, taking the machine_state (from
-  which it stamps `macrostep`/`microstep`) and a keyword list of its own
-  fields, so no call site ever repeats the counters and no call site can
+  which it stamps `macrostep`/`microstep`/`round`) and a keyword list of its
+  own fields, so no call site ever repeats the counters and no call site can
   forget them.
   """
 

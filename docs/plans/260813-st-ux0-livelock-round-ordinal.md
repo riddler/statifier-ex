@@ -499,12 +499,12 @@ comment.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits only).
-- [ ] `mix test` passes, with `test/support/context_recorder.ex` and
+- [x] Full `mix quality` passes (loop gate between edits only).
+- [x] `mix test` passes, with `test/support/context_recorder.ex` and
       `test/support/test_content.ex` unmodified - their
       `%Effect.Log{macrostep: 0, microstep: 0}` literals must still compile.
-- [ ] `git diff --stat test/support/` is empty for this phase.
-- [ ] Every new or changed test carries a `# sabotage: ... -> red` line;
+- [x] `git diff --stat test/support/` is empty for this phase.
+- [x] Every new or changed test carries a `# sabotage: ... -> red` line;
       suggested mutations beyond the one inlined above: one payload module's
       `new/2` hardcodes `round: 0` (its own `trace_test.exs` describe reddens
       and no other does).
@@ -808,6 +808,27 @@ blocking here.
 - [ ] `docs/observability.md` constraint 4 reads correctly for the code as it
       stands after this phase - three counters, one writer each - with the
       trace and cause bullets still describing the pre-stamp reality.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Spec conformance: no ported procedure changed in this phase; the trace
+      payloads are ADR-0003 effect data, outside the Appendix D pseudocode.
+- [ ] Read a `trace: true` livelock dump by hand at
+      `max_macrostep_rounds: 20`: the rounds are visibly numbered, countable
+      without counting lines, and round *n* diffs against round *n*+1 in
+      exactly one field. This is the bead's acceptance criterion, judged by a
+      reader rather than by an assertion.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while

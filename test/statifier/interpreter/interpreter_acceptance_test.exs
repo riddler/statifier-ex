@@ -630,5 +630,56 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
 
       assert result.round == 20
     end
+
+    # The bead's acceptance criterion, stated directly on the fixture: a
+    # livelocked trace's rounds are ordered and countable.
+    #
+    # sabotage: `MachineState.begin_round/1` returns `machine_state`
+    # unchanged (the pre-st-ux0 behavior) -> every round stamps `round: 0`,
+    # so the list below is twenty zeros instead of 1..20 and the assertion
+    # reddens.
+    test "a livelocked trace orders its rounds and reports how many ran" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      dequeued_rounds =
+        for {:trace, %Effect.Trace.EventDequeued{from: :internal, round: round}} <- effects,
+            do: round
+
+      assert dequeued_rounds == Enum.to_list(1..20)
+    end
+
+    # The "diff one round against another" half of the same criterion: this
+    # fixture's own round emits exactly three trace effects (an eventless
+    # `TransitionsSelected`, the internal `EventDequeued`, and the
+    # re-raised `TransitionsSelected` on that event), and every round's
+    # three share one ordinal that differs from the next round's. The
+    # pre-fold `EntrySet` (stamped `round: 0`, per the counter contract) is
+    # excluded first, since it belongs to no round of the fold.
+    #
+    # sabotage: `MachineState.begin_round/1` returns `machine_state`
+    # unchanged -> every round is stamped `round: 0`, so all twenty rounds'
+    # effects collapse into a single sixty-effect-wide group instead of
+    # twenty three-wide groups with distinct ordinals, reddening the
+    # assertion.
+    test "one round's effects share one ordinal, distinct from the next round's" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      rounds =
+        for {:trace, payload} <- effects, payload.round > 0, do: payload.round
+
+      grouped = Enum.chunk_by(rounds, & &1)
+
+      [first_group, second_group | _rest] = grouped
+
+      assert length(first_group) == 3
+      assert length(second_group) == 3
+      assert hd(first_group) == 1
+      assert hd(second_group) == 2
+      refute hd(first_group) == hd(second_group)
+    end
   end
 end

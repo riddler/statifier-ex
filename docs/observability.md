@@ -111,8 +111,10 @@ them anyway:
   They advance in exactly one place each, and `begin_macrostep/1` resets both
   child counters (`microstep` and `round`) when it advances `macrostep`
   (ADR-0020).
-- Every trace effect is stamped with the counters - the ordering key for any
-  timeline UI or log merge.
+- Every trace effect is stamped with the counters - `(macrostep, round)` is
+  the ordering key for any timeline UI or log merge, and it advances on
+  every round including those that run no microstep, so a fold that never
+  reaches quiescence is still ordered and countable (ADR-0020).
 - Internally raised events carry cause metadata: which transition or
   executable-content node (by constraint-3 identity) raised them, at which
   step. The first consumer is a better `error.execution` - "raised by the

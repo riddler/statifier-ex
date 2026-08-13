@@ -234,6 +234,37 @@ defmodule Statifier.Interpreter.TerminationTest do
       assert done_trace.donedata == "42"
       assert done_trace.donedata == core_donedata
     end
+
+    # This test's other cases in this describe call `exit_interpreter/1`
+    # directly on a hand-built machine_state, so they never run a fold and
+    # would report `round: 0` - which asserts nothing about depth. This one
+    # drives `@document`'s `start` state through the actual fold
+    # (`Interpreter.initialize/2`) to the top-level `<final>` it transitions
+    # to unconditionally, and reads `Trace.Done`'s round off the result.
+    #
+    # Probed against the running code rather than derived: `start`'s
+    # eventless transition to `done` runs in round 1 (TransitionsSelected,
+    # the onexit ExitSet/ContentExecuted, and the EntrySet into `done`); the
+    # microstep that entered `done` returns a plain (non-quiescent) tuple
+    # with `running: false` already set, so the fold calls `microstep/1`
+    # once more, and that `running: false` clause is its own counted round
+    # per this plan's "both microstep/1 clauses count" decision - `round: 2`
+    # is where `exit_interpreter/1` actually runs and `Trace.Done` is
+    # stamped, one more than the round that entered the final state.
+    #
+    # sabotage: `microstep/1`'s `running: false` clause drops its
+    # `begin_round/1` call -> the terminated fold reports one round fewer
+    # than the number of `microstep/1` calls it made (`round: 1` instead of
+    # `2`), reddening this assertion (and nothing else in the suite, since
+    # that clause is the only place a round runs no selection at all).
+    test "Trace.Done's round reports the depth of the terminated fold" do
+      m = machine()
+
+      {_result, effects} = Interpreter.initialize(m, trace: true)
+
+      assert [%Effect.Trace.Done{round: 2}] =
+               for({:trace, %Effect.Trace.Done{} = payload} <- effects, do: payload)
+    end
   end
 
   describe "exit_interpreter/1 - Effect.Done configuration" do
