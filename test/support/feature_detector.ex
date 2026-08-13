@@ -79,7 +79,8 @@ defmodule Statifier.FeatureDetector do
       datamodel: :supported,
       # st-af3.3
       data_elements: :supported,
-      assign_elements: :unsupported,
+      # st-af3.4
+      assign_elements: :supported,
       script_elements: :unsupported,
       # st-wju.5
       onentry_actions: :supported,

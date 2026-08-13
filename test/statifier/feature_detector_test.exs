@@ -198,7 +198,9 @@ defmodule Statifier.FeatureDetectorTest do
                         # st-af3.3
                         :datamodel,
                         # st-af3.3
-                        :data_elements
+                        :data_elements,
+                        # st-af3.4
+                        :assign_elements
                       ])
 
   describe "feature_registry/0" do
@@ -237,9 +239,9 @@ defmodule Statifier.FeatureDetectorTest do
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "reports unsupported features by name" do
       assert {:error, unsupported} =
-               FeatureDetector.validate_features(MapSet.new([:assign_elements, :send_elements]))
+               FeatureDetector.validate_features(MapSet.new([:script_elements, :send_elements]))
 
-      assert unsupported == MapSet.new([:assign_elements, :send_elements])
+      assert unsupported == MapSet.new([:script_elements, :send_elements])
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
