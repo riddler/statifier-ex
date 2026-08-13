@@ -681,5 +681,47 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
       assert hd(second_group) == 2
       refute hd(first_group) == hd(second_group)
     end
+
+    # sabotage: `terminal_effects/2`'s `:exhausted` clause stamps
+    # `round: machine_state.microstep` instead of `machine_state.round` ->
+    # the depth assertion reddens (microstep is 1 here, the depth is 20).
+    test "the exhausted effect reports how deep the fold got" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert %Effect.BudgetExhausted{round: 20, budget: 20} = budget_exhausted(effects)
+    end
+
+    # Verified against the running interpreter rather than assumed from the
+    # plan's prose: for this fixture, the probe's `error.execution` is
+    # raised and dequeued within the *same* round (`internal_round/1`
+    # drains the queue before the round ends), so each cause's round
+    # exactly equals its own dequeue's round - both sequences are `1..20`.
+    # That is not guaranteed in general (ADR-0020's worked example
+    # describes a raise in round *k* dequeued in round *k*+1 when the
+    # queue does not drain in one round), so this test asserts only the
+    # three properties the bead actually needs - ascending, twenty
+    # distinct values, starting at 1 - rather than a fixed offset that
+    # would be fixture-specific.
+    #
+    # sabotage: `MachineState.begin_round/1` returns `machine_state`
+    # unchanged -> every raised cause is stamped `round: 0`, so the
+    # collected list is twenty zeros instead of twenty distinct ascending
+    # values, reddening the assertion.
+    test "the dequeued causes' rounds are strictly ascending, twenty distinct values, starting at 1" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      cause_rounds =
+        for {:trace, %Effect.Trace.EventDequeued{from: :internal, event: event}} <- effects,
+            do: event.cause.round
+
+      assert length(cause_rounds) == 20
+      assert cause_rounds == Enum.uniq(cause_rounds)
+      assert cause_rounds == Enum.sort(cause_rounds)
+      assert hd(cause_rounds) == 1
+    end
   end
 end

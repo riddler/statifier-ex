@@ -117,9 +117,9 @@ them anyway:
   reaches quiescence is still ordered and countable (ADR-0020).
 - Internally raised events carry cause metadata: which transition or
   executable-content node (by constraint-3 identity) raised them, at which
-  step. The first consumer is a better `error.execution` - "raised by the
-  `<assign>` at line 42, transition 7, microstep 3" - which pays for the field
-  before any debugger exists.
+  step and round. The first consumer is a better `error.execution` - "raised
+  by the `<assign>` at line 42, transition 7, microstep 3, round 1" - which
+  pays for the field before any debugger exists.
 
 ## Constraint 5: the pure queries stay callable
 

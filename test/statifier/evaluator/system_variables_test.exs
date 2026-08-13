@@ -88,7 +88,7 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
     # `event.type` -> the internal/platform cases below no longer differ
     # from the external one, reddening the equality assertions.
     test ~s(type is "external", "internal", or "platform" for the three constructors) do
-      cause = Cause.new({:state, 1}, 1, 1)
+      cause = Cause.new({:state, 1}, 1, 1, 1)
 
       assert SystemVariables.event(Event.external("go"))["type"] == "external"
       assert SystemVariables.event(Event.internal("go", cause))["type"] == "internal"

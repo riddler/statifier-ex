@@ -31,7 +31,8 @@ defmodule Statifier.EffectTest do
          budget: 1,
          pending_internal_events: [],
          macrostep: 1,
-         microstep: 1
+         microstep: 1,
+         round: 0
        }},
       {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 1}},
       {:log, %Log{macrostep: 1, microstep: 1}}
