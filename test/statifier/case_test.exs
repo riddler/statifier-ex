@@ -9,19 +9,19 @@ defmodule Statifier.CaseTest do
       xml = """
       <scxml>
         <state id="s1">
-          <onentry><assign location="x" expr="1"/></onentry>
+          <onentry><script>1</script></onentry>
         </state>
       </scxml>
       """
 
       error =
         assert_raise AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "assigns on entry", ["s1"], [])
+          Statifier.Case.test_scxml(xml, "scripts on entry", ["s1"], [])
         end
 
       assert error.message =~ "unsupported SCXML features"
-      assert error.message =~ "assign_elements"
-      assert error.message =~ "assigns on entry"
+      assert error.message =~ "script_elements"
+      assert error.message =~ "scripts on entry"
     end
 
     # sabotage: n/a - asserts the harness fails rather than skips, no lib/ behavior

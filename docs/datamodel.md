@@ -27,7 +27,10 @@ continuity with v1's converted W3C tests).
   that contradiction is named here, not resolved.
 - `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
   auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
-  v1 refused to create intermediates).
+  v1 refused to create intermediates). The root segment of the path must
+  already exist in the datamodel - an undeclared root fails with
+  `error.execution` rather than being created, so vivification only ever
+  extends a path under a name the document already declared.
 - `cond` on transitions and `<if>`/`<elseif>`, `expr` everywhere the spec allows.
 - System variables per spec 5.10: `_event`, `_sessionid` (a UXID, stable for the
   session's lifetime), `_name`, `_ioprocessors`, and the `In(stateId)` predicate.
@@ -51,18 +54,21 @@ Every evaluation goes through one module with one context type:
 - Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
   errors to `error.execution` internal events per spec. Leaves never swallow errors.
 - **An expression that fails to compile is rejected at load time everywhere
-  except `<data expr>`, which defers to runtime.** Spec 5.9.4 permits either
-  ("The SCXML Processor MAY reject documents containing syntactically
-  ill-formed expressions at document load time, or it MAY wait and place
-  'error.execution' in the internal event queue at runtime"), so both halves
-  conform - but the clause frames the choice as one processor-wide policy, and
-  this engine currently makes it per element class. The asymmetry is deliberate,
-  not an oversight: `test/scion_tests/data/data_invalid_test.exs` declares an
-  unparseable `<data expr="{p1: 'v1'"/>` and asserts `pass` by *catching* the
-  resulting `error.execution`, so load-time rejection would make that document
-  unloadable and the test unpassable. A `<data expr>` that will not compile is
-  therefore captured as `{:invalid, error}` on the compiled node and raised at
-  binding time, while `cond` and `<log expr>` still fail `Compiler.compile/1`.
+  except `<data expr>` and `<assign expr>`, which defer to runtime.** Spec
+  5.9.4 permits either ("The SCXML Processor MAY reject documents containing
+  syntactically ill-formed expressions at document load time, or it MAY wait
+  and place 'error.execution' in the internal event queue at runtime"), so
+  both halves conform - but the clause frames the choice as one
+  processor-wide policy, and this engine currently makes it per element class.
+  The asymmetry is deliberate, not an oversight: `test/scion_tests/data/data_invalid_test.exs`
+  declares an unparseable `<data expr="{p1: 'v1'"/>` and asserts `pass` by
+  *catching* the resulting `error.execution`, so load-time rejection would
+  make that document unloadable and the test unpassable.
+  `test/scion_tests/assign/assign_invalid_test.exs` requires the identical
+  treatment for `<assign expr="{p1: 'v1'"/>`. A `<data expr>` or `<assign
+  expr>` that will not compile is therefore captured as `{:invalid, error}`
+  on the compiled node and raised at binding/execution time, while `cond` and
+  `<log expr>` still fail `Compiler.compile/1`.
 
   If this is ever unified, it unifies toward deferral rather than away from it:
   deferral loads strictly more documents, and no corpus file requires load-time
@@ -106,7 +112,12 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is
    ECMAScript-like; a container collision raises `:not_a_container`; list
    assignment past the end pads with `:undefined`; a negative index raises
-   `:invalid_index`.
+   `:invalid_index`. The statifier-side consumer landed in st-af3.4:
+   `Statifier.Machine.Content.Assign` resolves the path with
+   `Predicator.context_location/3` and writes with `ContextLocation.put/3`
+   (split rather than the combined `context_assign/4`, so the resolve reads
+   the normalized context and the write lands on the raw
+   `machine_state.datamodel` - see that plan's Decisions 1 and 2).
 3. **A typed undefined**: predicator's `:undefined` currently leaks into hosts as a
    bare atom that every embedding normalizes ad hoc. Landed in predicator 5.0.0:
    the `undefined` literal (upstream px-ocp). Consumed here by st-unt:
