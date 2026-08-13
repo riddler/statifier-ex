@@ -97,9 +97,10 @@ defmodule Statifier.Interpreter do
     Both `Selection.select_eventless_transitions/1` and
     `Selection.select_transitions/2` return `{machine_state, transitions}`,
     and this module continues with the returned `machine_state` rather than
-    the one it passed in - st-af3.2's real `condition_match/2` landed as a
-    body change in `Selection`, exactly as this was built to absorb, with no
-    signature change here.
+    the one it passed in - st-af3.2's real `cond` evaluation landed inside
+    `Selection`, exactly as this was built to absorb: it reshaped that
+    module's private walk, both entry points kept their signatures, and
+    nothing here changed.
   - **The outer `while running` loop is driven by the caller.** ADR-0003:
     the pure core takes one external event per call, and the session that
     drives it (st-cmq) owns the waiting external events and their queue.
@@ -266,8 +267,11 @@ defmodule Statifier.Interpreter do
   with.
 
   Be precise about which writes that loses, because the obvious candidate
-  is not one of them. `Selection.condition_match/2` enqueues
-  `error.execution` on a failed `cond` (st-af3.2), and that enqueue is
+  is not one of them. The two `Selection` entry points enqueue
+  `error.execution` on a failed `cond` (st-af3.2) - `condition_match/2`
+  itself stays a pure query and never enqueues, so the write happens in
+  `select_transitions/2` and `select_eventless_transitions/1` on the way
+  out - and that enqueue is
   self-rescuing: it leaves the internal queue non-empty, so
   `internal_round/1` takes its dequeue branch instead of the terminal one
   and the write survives even under the old shape - traced end to end and
