@@ -27,7 +27,7 @@ defmodule Statifier.Effect do
   | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
   | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
   | `:invoke` | `Statifier.Effect.Invoke` | not yet produced (`<invoke>`) |
-  | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | not yet produced (ADR-0019 round budget) |
+  | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | `Statifier.Interpreter.macrostep/1` |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
@@ -38,9 +38,9 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | `Statifier.Interpreter.macrostep/1` |
   | `:trace` | `Statifier.Effect.Trace.Done` | `Statifier.Interpreter.exit_interpreter/1` |
 
-  The interpreter now produces `:log`, `:done`, and all seven trace
-  effects. `:send`, `:send_delayed`, `:cancel`, and `:invoke` remain
-  unproduced, because nothing in this core sends, delays, cancels, or
+  The interpreter now produces `:log`, `:done`, `:budget_exhausted`, and all
+  seven trace effects. `:send`, `:send_delayed`, `:cancel`, and `:invoke`
+  remain unproduced, because nothing in this core sends, delays, cancels, or
   invokes yet.
 
   ## Trace effects carry indexes and counters, never structs

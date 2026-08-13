@@ -600,18 +600,18 @@ unreleased.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] The whole existing `test/statifier/interpreter/` suite is green with no
+- [x] Full `mix quality` passes.
+- [x] The whole existing `test/statifier/interpreter/` suite is green with no
       edits to its assertions beyond the new block - the default budget must
       change nothing about any chart already under test.
-- [ ] The new budget block covers exhaustion, resumability, the exact-budget
+- [x] The new budget block covers exhaustion, resumability, the exact-budget
       boundary, `:infinity`, and `trace: false`.
-- [ ] `mix test.regression` is green (the ratchet must not move; see
+- [x] `mix test.regression` is green (the ratchet must not move; see
       Corpus/Ratchet Notes).
-- [ ] `mix test --include scion --include scxml_w3` completes without hanging
+- [x] `mix test --include scion --include scxml_w3` completes without hanging
       - the run that would have hung is exactly the risk ADR-0019 names.
-- [ ] `changelog.d/st-sd1.md` exists and uses only Keep a Changelog headings.
-- [ ] Every new test asserting `lib/` behavior carries a sabotage line whose
+- [x] `changelog.d/st-sd1.md` exists and uses only Keep a Changelog headings.
+- [x] Every new test asserting `lib/` behavior carries a sabotage line whose
       mutation was run red and reverted. **Two of this phase's mutations hang
       rather than fail** - test 1's (removing the `0`-matching head) and test
       3's first (`spend/1` never decrementing). Bound them with a short
@@ -865,6 +865,33 @@ before considering the plan fully landed.
       table row uses the file's own "not yet produced" convention.
 - [ ] `%Statifier.Effect.BudgetExhausted{}` field names read the way ADR-0019
       names them (configuration, counters, budget, pending internal events).
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+      line: `microstep/1`'s body, `internal_round/1`, and `run_selected/3` are
+      untouched, and the fold's condition and body are unchanged apart from
+      the guard - the deviation is the guard alone.
+- [ ] The ADR-0002 deviation comment above `defp macrostep/3` is ADR-0019
+      lines 127-137 **verbatim**, including the quoted REC Termination note.
+- [ ] The three macrostep outcomes are mutually exclusive in practice: a
+      terminating chart emits `Trace.Done` and no `MacrostepStable`; a stable
+      one emits `MacrostepStable` and no `:budget_exhausted`; an exhausted one
+      emits `:budget_exhausted` and neither.
+- [ ] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
+      `trace: true` run in iex, and the repeating `TransitionsSelected` /
+      `EventDequeued` rounds read as the cycle ADR-0019 describes.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
