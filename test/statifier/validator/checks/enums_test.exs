@@ -158,6 +158,68 @@ defmodule Statifier.Validator.Checks.EnumsTest do
     end
   end
 
+  describe "check/2 - scxml_bad_datamodel" do
+    # sabotage: datamodel_errors/2 reads
+    # `document.attribute_locations[:binding]` instead of `[:datamodel]` ->
+    # the sliced text is the binding value rather than the datamodel one, so
+    # the reason no longer carries "cobol", reddening this assertion
+    test "an out-of-range datamodel is reported with the source text" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="cobol">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:scxml_bad_datamodel, "cobol"}} = error]} = validate!(xml)
+
+      assert error.location.start_line == 1
+      assert error.message =~ "cobol"
+    end
+
+    # sabotage: @datamodels drops "ecmascript" -> the 86 SCION ratchet
+    # entries that carry datamodel="ecmascript" would regress, reddening
+    # this assertion (Decision 9,
+    # docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md)
+    test "datamodel=\"ecmascript\" still validates" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+
+    # sabotage: same drop as above, exercised for every allowed value at
+    # once rather than "ecmascript" alone
+    test "every allowed datamodel value reports nothing" do
+      for datamodel <- ["predicator", "elixir", "null", "ecmascript", "xpath"] do
+        xml = """
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="#{datamodel}">
+            <state id="a"/>
+        </scxml>
+        """
+
+        assert {:ok, _document} = validate!(xml)
+      end
+    end
+
+    # sabotage: out_of_range/5's `:error` arm (shared with the other two
+    # enumerated attributes above) reports a zero-width span instead of
+    # returning [], treating an absent attribute as a written empty one ->
+    # a document with no datamodel attribute gains a spurious
+    # :scxml_bad_datamodel, reddening this {:ok, _} assertion
+    test "a document with no datamodel attribute reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+  end
+
   describe "check/2 - the history type attribute stays check 5's" do
     # sabotage: Checks.Enums grows a `:history` arm reporting
     # :transition_bad_type for a <history type="...">, the duplication this

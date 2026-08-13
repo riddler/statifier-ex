@@ -10,7 +10,7 @@ defmodule Statifier.Validator.Checks.Enums do
   argument exists for: the written attribute's span is sliced
   back out and compared against the range.
 
-  Two reasons, one per enumerated attribute this check owns:
+  Three reasons, one per enumerated attribute this check owns:
 
   - `{:transition_bad_type, raw}` - a `<transition type="...">` that is
     neither `"internal"` nor `"external"` (spec 3.5). Covers every
@@ -19,6 +19,21 @@ defmodule Statifier.Validator.Checks.Enums do
     `Statifier.Validator.Context` already walks all three.
   - `{:scxml_bad_binding, raw}` - an `<scxml binding="...">` that is neither
     `"early"` nor `"late"` (spec 3.2.1).
+  - `{:scxml_bad_datamodel, raw}` - an `<scxml datamodel="...">` outside
+    `["predicator", "elixir", "null", "ecmascript", "xpath"]` (spec 3.2.1,
+    Decision 9 in
+    `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`).
+    3.2.1's Valid Values clause is itself open-ended - `"null", "ecmascript",
+    "xpath" or other platform-defined values` - so the allow-list is the
+    spec's three named values plus this platform's two
+    (`docs/datamodel.md:6-7`), not a strict `["predicator", "elixir"]`
+    rejection of everything else. Accepting `"ecmascript"` does **not** mean
+    this engine implements ECMAScript: which datamodel actually runs is
+    ADR-0004's answer and the corpus tooling's, never this attribute's. What
+    this check catches is a typo (`datamodel="predicater"`,
+    `datamodel="javascript"`) - the ordinary job of a validator check on an
+    enumerated NMTOKEN. An absent `datamodel` attribute is `"predicator"`,
+    this platform's documented default (3.2.2), so it is never reported.
 
   The third enumerated attribute lowering maps this way, `<history
   type="...">`, is **not** here: `Statifier.Validator.Checks.History` reports
@@ -39,19 +54,23 @@ defmodule Statifier.Validator.Checks.Enums do
 
   @transition_types ["internal", "external"]
   @bindings ["early", "late"]
+  @datamodels ["predicator", "elixir", "null", "ecmascript", "xpath"]
 
   @doc """
   Returns a `:transition_bad_type` error for every `<transition type="...">`
-  whose written value is neither `"internal"` nor `"external"`, and a
+  whose written value is neither `"internal"` nor `"external"`, a
   `:scxml_bad_binding` error when the root `<scxml binding="...">` is neither
-  `"early"` nor `"late"`. Both checks slice the raw source text rather than
+  `"early"` nor `"late"`, and a `:scxml_bad_datamodel` error when the root
+  `<scxml datamodel="...">` is outside `["predicator", "elixir", "null",
+  "ecmascript", "xpath"]`. All three slice the raw source text rather than
   trusting the lowered atom, since an out-of-range value and a valid one can
-  lower to the same default. Returns `[]` when both enumerated attributes are
-  in range everywhere they were written.
+  lower to the same default. Returns `[]` when all three enumerated
+  attributes are in range everywhere they were written.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{} = document, %Context{} = context) do
-    transition_type_errors(context) ++ binding_errors(document, context)
+    transition_type_errors(context) ++
+      binding_errors(document, context) ++ datamodel_errors(document, context)
   end
 
   defp transition_type_errors(%Context{transitions: transitions} = context) do
@@ -66,6 +85,12 @@ defmodule Statifier.Validator.Checks.Enums do
   defp binding_errors(%Document{attribute_locations: attribute_locations}, context) do
     out_of_range(attribute_locations, :binding, @bindings, context, fn raw, location ->
       Error.scxml_bad_binding(raw, location)
+    end)
+  end
+
+  defp datamodel_errors(%Document{attribute_locations: attribute_locations}, context) do
+    out_of_range(attribute_locations, :datamodel, @datamodels, context, fn raw, location ->
+      Error.scxml_bad_datamodel(raw, location)
     end)
   end
 

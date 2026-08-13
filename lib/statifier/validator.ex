@@ -31,6 +31,7 @@ defmodule Statifier.Validator do
   alias Statifier.Document
   alias Statifier.Validator.Checks.Boilerplate
   alias Statifier.Validator.Checks.Content
+  alias Statifier.Validator.Checks.Data
   alias Statifier.Validator.Checks.DefaultEntry
   alias Statifier.Validator.Checks.Donedata
   alias Statifier.Validator.Checks.Enums
@@ -56,11 +57,12 @@ defmodule Statifier.Validator do
     &Donedata.check/2,
     &Content.check/2,
     &Boilerplate.check/2,
-    &Enums.check/2
+    &Enums.check/2,
+    &Data.check/2
   ]
 
   @doc """
-  Runs all twelve `@checks` against `document`, collecting every error rather
+  Runs all thirteen `@checks` against `document`, collecting every error rather
   than stopping at the first one, and returns `{:ok, document}` when none
   fired or `{:error, errors}` otherwise, with `errors` sorted by
   `location.start_offset` regardless of which check reported them. `document`
