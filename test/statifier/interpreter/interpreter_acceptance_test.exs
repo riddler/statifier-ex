@@ -596,5 +596,39 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
         _other -> false
       end)
     end
+
+    # sabotage: `begin_round/1`'s call is deleted from `microstep/1`'s
+    # general clause -> `result.round` stays `0` instead of `20`, reddening
+    # the equality assertion.
+    test "the exhausted position carries round == 20 at max_macrostep_rounds: 20" do
+      m = livelock_machine()
+
+      {result, _effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert result.round == 20
+    end
+
+    # `begin_macrostep/1`'s reset half of the counter contract, on the one
+    # fixture where it is visible: sending an external event to an already
+    # -exhausted position begins a fresh macrostep, so `round` resets to `0`
+    # before the fold spends the same budget again and exhausts a second
+    # time at `20`.
+    #
+    # sabotage: `begin_macrostep/1`'s `round: 0` reset is deleted -> the
+    # second call's round keeps counting up from the first exhaustion's `20`
+    # instead of resetting, so it reaches `40` instead of `20`, reddening
+    # the equality assertion.
+    test "the round resets on the next macrostep and reaches 20 again" do
+      m = livelock_machine()
+
+      {exhausted, _init_effects} =
+        Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      assert exhausted.round == 20
+
+      assert {:ok, result, _effects} = Interpreter.handle_event(exhausted, Event.external("go"))
+
+      assert result.round == 20
+    end
   end
 end

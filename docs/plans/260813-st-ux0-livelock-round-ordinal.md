@@ -348,10 +348,10 @@ contract, on the one fixture where it is visible).
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits only).
-- [ ] `mix test test/statifier/interpreter/` passes, including the existing
+- [x] Full `mix quality` passes (loop gate between edits only).
+- [x] `mix test test/statifier/interpreter/` passes, including the existing
       budget and livelock tests unchanged in their existing assertions.
-- [ ] Every new test carries a `# sabotage: ... -> red` line; suggested
+- [x] Every new test carries a `# sabotage: ... -> red` line; suggested
       mutations: `begin_round/1`'s call moved from `microstep/1`'s head into
       the private `macrostep/3` fold (the hand-step equivalence test reddens,
       the fold tests do not); the `running: false` clause drops its
@@ -784,6 +784,30 @@ before considering the plan fully landed.
       no ported procedure changed.
 - [ ] The counter contract prose reads as one contract over three counters, not
       two plus an appendix.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec conformance: `microstep/1`'s two clauses still match the pseudocode
+      inner-loop body line for line; the only addition is the counter write,
+      and its mechanical reason is stated inline per ADR-0002.
+- [ ] In iex on the livelock document, `Interpreter.microstep/1` stepped by
+      hand from a fresh position reports `round: 1, 2, 3, ...` and matches what
+      the fold reports at the same depth (ADR-0019's resumable-position
+      payoff).
+- [ ] `docs/observability.md` constraint 4 reads correctly for the code as it
+      stands after this phase - three counters, one writer each - with the
+      trace and cause bullets still describing the pre-stamp reality.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while

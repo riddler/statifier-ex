@@ -387,5 +387,53 @@ defmodule Statifier.Interpreter.MacrostepTest do
       assert [{:budget_exhausted, _payload}] = budget_exhausted_effects(effects)
       assert trace_effects(effects) == []
     end
+
+    # Probed directly against the running code, per the plan's instruction
+    # not to assume it: the `@document` chain from `p1` folds to quiescence
+    # in exactly three rounds - the same three `microstep/1` calls the
+    # "a chain of eventless transitions drains in one call" test's three
+    # `TransitionsSelected` rows already pin (two rounds that each run a
+    # transition, plus the terminal eventless probe) - so `round` at
+    # quiescence is 3.
+    #
+    # sabotage: `begin_round/1`'s call is deleted from `microstep/1`'s
+    # general clause -> `result.round` stays `0` instead of `3`, reddening
+    # the equality assertion.
+    test "the returned round counts how many rounds the fold made to quiescence" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)])
+
+      {result, _effects} = Interpreter.macrostep(ms)
+
+      assert result.round == 3
+    end
+
+    # sabotage: `spend(:infinity)` is changed to return `0` -> the fold
+    # exhausts after one round under `:infinity` instead of reaching
+    # quiescence at round 3, reddening the equality assertion.
+    test "the round ordinal still counts up under max_macrostep_rounds: :infinity" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)], max_macrostep_rounds: :infinity, trace: true)
+
+      {result, _effects} = Interpreter.macrostep(ms)
+
+      assert result.round == 3
+    end
+
+    # sabotage: `begin_round/1`'s call is moved from `microstep/1`'s head
+    # into the private `macrostep/3` fold -> a hand-stepper calling
+    # `microstep/1` directly no longer advances `round` at all, so the
+    # hand-stepped `round` stays `0` while the fold's still reaches `3`,
+    # reddening the equality assertion (the fold's own round tests above do
+    # not catch this mutation, since they only ever call `macrostep/1`).
+    test "hand-stepping microstep/1 the same number of times as the fold yields the same round" do
+      m = machine()
+      ms = machine_state(m, [idx(:p1)])
+
+      {fold_result, _fold_effects} = Interpreter.macrostep(ms)
+      {stepped_result, _stepped_effects} = step_to_quiescence(ms)
+
+      assert stepped_result.round == fold_result.round
+    end
   end
 end
