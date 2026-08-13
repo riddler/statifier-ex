@@ -7,11 +7,16 @@ defmodule Statifier.Validator.Checks.If do
   branch order directly rather than re-parsing `<elseif>`/`<else>` element
   names.
 
-  A branch's `cond` is `nil` for exactly two shapes: the `<else>` branch,
-  and (per `Statifier.Document.If.Branch`'s moduledoc) a branch with no
-  `cond` at all - lowering does not tell those apart, so neither does this
-  check. Once the first `nil`-cond branch in document order is seen, every
-  branch after it is illegal:
+  A branch's `cond` is `nil` only for the `<else>` branch. `cond` is
+  required on both `<if>` (4.3.1) and `<elseif>` (4.4.1), and
+  `Statifier.Lowering.Builders.build_if/2` and `build_elseif/2` report
+  `missing_attribute` and build no node at all when it is absent, so a
+  cond-less non-`<else>` branch never reaches the validator. This check
+  still keys off `cond: nil` rather than an explicit "is an `<else>`" flag,
+  because that is the shape `Statifier.Document.If.Branch` actually carries;
+  it just does not have a second case to distinguish. Once the first
+  `nil`-cond branch in document order is seen, every branch after it is
+  illegal:
 
   - another `nil`-cond branch is a second `<else>`, reported
     `{:if_duplicate_else}` at *that* branch's own `location`

@@ -83,6 +83,16 @@ defmodule Statifier.Validator.Checks.Assign do
   # `<if>` (SCION's `if_else/test0`) is not missed either. `<foreach>` will
   # be the next composite executable-content element; when it lands, it gets
   # a clause here alongside `%DIf{}` rather than a second walk elsewhere.
+  #
+  # Only two checks need this at all, and the boundary is worth stating so
+  # the next composite element does not re-run the audit from scratch: this
+  # one and `Statifier.Validator.Checks.If` are the only checks that walk
+  # executable-content *nodes*. The other checks that reach a state's
+  # transitions - `Checks.InitialElement`, `Checks.InitialTargets`,
+  # `Checks.Targets`, `Checks.Final`, `Checks.DefaultTransition` and
+  # `Checks.History` - read transitions as *structures* (targets,
+  # cardinality, ordering) and never touch their `content` lists, so no
+  # amount of nesting inside a partition can hide anything from them.
   defp descend(%DIf{branches: branches}) do
     branches |> Enum.flat_map(& &1.content) |> Enum.flat_map(&descend/1)
   end

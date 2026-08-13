@@ -97,11 +97,16 @@ defmodule Statifier.Interpreter.Content do
   as queuing it at the moment the cond is evaluated - i.e. before. Getting
   the order right would require either the leaf to raise (ADR-0003) or a
   second protocol round-trip per node; neither is justified by any corpus
-  document today. Spec 4.9's closing sentence is the relevant tolerance:
-  "error events will not be removed from the queue and processed until all
-  events preceding them in the queue have been processed" - so a later
-  processing order for the error event does not change *whether* it is
-  eventually processed, and no corpus file distinguishes this window
+  document today, and no corpus file distinguishes this window.
+
+  Spec 4.9's closing sentence mitigates the consequence without sanctioning
+  the deviation: "error events will not be removed from the queue and
+  processed until all events preceding them in the queue have been
+  processed". That establishes FIFO processing of a queued error event; it
+  says nothing about which queue *position* the error may be inserted at,
+  so it is not license to insert later than 5.9.1 requires. What it does
+  establish is that the event is still eventually processed, which bounds
+  how much the wrong position can cost
   (`docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`,
   Decision 5).
   """
