@@ -31,11 +31,17 @@ defmodule Statifier.Machine do
   set. There is no `index_to_id` map - `elem(states, i).id` is already that
   function, total with `nil`s, exposed here as `id/2`.
 
-  `transitions` and `contents` are dense tuples indexed by `t_index`/`c_index`
-  (ADR-0012 item 3). The compiler's transition pass populates `transitions`
-  (`transition/2` below is its `elem/2` reader, mirroring `at/2`); the
-  compiler's executable-content pass populates `contents` (`content/2`
-  below, the same `elem/2` reader shape).
+  `transitions`, `contents`, and `data_elements` are dense tuples indexed by
+  `t_index`/`c_index`/`d_index` (ADR-0012 item 3). The compiler's transition
+  pass populates `transitions` (`transition/2` below is its `elem/2` reader,
+  mirroring `at/2`); the compiler's executable-content pass populates
+  `contents` (`content/2` below, the same `elem/2` reader shape); the
+  compiler's `<data>` pass populates `data_elements` (`data/2` below, same
+  shape again) - see `Statifier.Machine.Data`'s moduledoc for what a
+  `d_index` names and Decision 4
+  (`docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`) for why
+  it lives both here (document order, dense) and on
+  `Statifier.Machine.State.data` (per-state membership).
 
   ## Expressions
 
@@ -56,16 +62,18 @@ defmodule Statifier.Machine do
   """
 
   alias Statifier.Machine.Content
+  alias Statifier.Machine.Data
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.Parser.Location
 
-  @enforce_keys [:states, :id_to_index, :transitions, :contents, :location]
+  @enforce_keys [:states, :id_to_index, :transitions, :contents, :data_elements, :location]
   defstruct [
     :states,
     :id_to_index,
     :transitions,
     :contents,
+    :data_elements,
     :name,
     :datamodel,
     :binding,
@@ -86,6 +94,7 @@ defmodule Statifier.Machine do
           id_to_index: %{optional(String.t()) => non_neg_integer()},
           transitions: tuple(),
           contents: tuple(),
+          data_elements: tuple(),
           name: String.t() | nil,
           datamodel: String.t() | nil,
           binding: :early | :late,
@@ -117,6 +126,15 @@ defmodule Statifier.Machine do
   """
   @spec content(machine :: t(), c_index :: non_neg_integer()) :: Content.t()
   def content(%__MODULE__{contents: contents}, c_index), do: elem(contents, c_index)
+
+  @doc """
+  The `<data>` element at `d_index`, raised if out of range - every
+  `d_index` this module hands back (via a state's `data`) came from the
+  Machine itself, so an out-of-range index is always a caller bug (mirrors
+  `at/2`, `transition/2`, and `content/2`).
+  """
+  @spec data(machine :: t(), d_index :: non_neg_integer()) :: Data.t()
+  def data(%__MODULE__{data_elements: data_elements}, d_index), do: elem(data_elements, d_index)
 
   @doc """
   Whether `descendant` is one of `ancestor`'s descendants - `isDescendant`
