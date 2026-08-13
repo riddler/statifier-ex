@@ -21,16 +21,16 @@ defmodule Statifier.Lowering.CoverageTest do
   # `lib/` to import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
-    raise log donedata content datamodel data assign if elseif else
+    raise log donedata content datamodel data assign if elseif else foreach
   )
 
-  # The six names `@phase_3_elements` exists to word the unsupported-
+  # The five names `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
   # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
-  # st-af3.5 Phase 2.
+  # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1.
   @phase_3_elements ~w(
-    send param foreach invoke cancel script
+    send param invoke cancel script
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only
@@ -62,7 +62,8 @@ defmodule Statifier.Lowering.CoverageTest do
       ~s(<scxml><state id="s"><onentry><if cond="false"><elseif cond="true"/></if></onentry></state></scxml>),
     "else" =>
       ~s(<scxml><state id="s"><onentry><if cond="false"><else/></if></onentry></state></scxml>),
-    "foreach" => ~s(<scxml><state id="s"><onentry><foreach item="x"/></onentry></state></scxml>),
+    "foreach" =>
+      ~s(<scxml><state id="s"><onentry><foreach array="items" item="x"/></onentry></state></scxml>),
     "invoke" => ~s(<scxml><state id="s"><invoke type="t"/></state></scxml>),
     "cancel" => ~s(<scxml><state id="s"><onexit><cancel sendid="s1"/></onexit></state></scxml>),
     "script" => ~s(<scxml><script>1;</script></scxml>)

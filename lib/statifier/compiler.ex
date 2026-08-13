@@ -88,6 +88,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Data, as: DData
   alias Statifier.Document.Datamodel, as: DDatamodel
   alias Statifier.Document.Donedata, as: DDonedata
+  alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
   alias Statifier.Document.Log, as: DLog
@@ -98,6 +99,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
   alias Statifier.Machine.Content.Assign, as: MAssign
+  alias Statifier.Machine.Content.Foreach, as: MForeach
   alias Statifier.Machine.Content.If, as: MIf
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
@@ -120,11 +122,14 @@ defmodule Statifier.Compiler do
 
   `contents_acc`'s value type is asymmetric on purpose: `<raise>`, `<log>`,
   and `<assign>` are stored raw, since none of the three has children of its
-  own to number - but an `<if>` does, so its entry is
-  `%{if: DIf.t(), branches: [[non_neg_integer()]]}`, carrying the branch
-  `c_index` lists `assign_content_nodes/2`'s own recursion (Decision 2 of
+  own to number - but an `<if>` and a `<foreach>` do, so their entries carry
+  the raw node alongside the `c_index` list(s) `assign_content_nodes/2`'s
+  own recursion (Decision 2 of
   `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`)
-  assigned, alongside the raw `<if>` node itself - mirroring
+  assigned: `%{if: DIf.t(), branches: [[non_neg_integer()]]}` for an `<if>`
+  (one list per branch), `%{foreach: DForeach.t(), content: [non_neg_integer()]}`
+  for a `<foreach>` (one flat list, one nesting level shallower - Decision 8
+  of `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`) - mirroring
   `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
   shape (`:396-408`).
   """
@@ -140,6 +145,7 @@ defmodule Statifier.Compiler do
               | DLog.t()
               | DAssign.t()
               | %{if: DIf.t(), branches: [[non_neg_integer()]]}
+              | %{foreach: DForeach.t(), content: [non_neg_integer()]}
           },
           donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()},
           d_next: non_neg_integer(),
@@ -478,7 +484,7 @@ defmodule Statifier.Compiler do
   # `build_contents/2` to compile later. Returns the assigned `c_index`es in
   # the same order as `nodes`.
   @spec assign_content_nodes(
-          nodes :: [DRaise.t() | DLog.t() | DAssign.t() | DIf.t()],
+          nodes :: [DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t()],
           acc :: acc()
         ) ::
           {[non_neg_integer()], acc()}
@@ -502,7 +508,10 @@ defmodule Statifier.Compiler do
   # which is what keeps `c_index` dense and in document order to arbitrary
   # nesting depth - a nested `<if>` inside a branch recurses again the same
   # way.
-  @spec assign_content_node(node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t(), acc :: acc()) ::
+  @spec assign_content_node(
+          node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t(),
+          acc :: acc()
+        ) ::
           {non_neg_integer(), acc()}
   defp assign_content_node(%DIf{} = if_node, acc) do
     c_index = acc.c_next
@@ -514,6 +523,24 @@ defmodule Statifier.Compiler do
       end)
 
     entry = %{if: if_node, branches: branch_indexes}
+    acc = %{acc | contents_acc: Map.put(acc.contents_acc, c_index, entry)}
+
+    {c_index, acc}
+  end
+
+  # A `<foreach>`'s own `c_index` is assigned first - its open tag precedes
+  # its children in document order, the same rule the `%DIf{}` clause above
+  # follows - then its flat `content` list is walked once through
+  # `assign_content_nodes/2` (Decision 8: one list, not one per branch),
+  # which recurses to arbitrary nesting depth for a nested `<if>` or
+  # `<foreach>` the same way the `%DIf{}` clause does.
+  defp assign_content_node(%DForeach{} = foreach_node, acc) do
+    c_index = acc.c_next
+    acc = %{acc | c_next: c_index + 1}
+
+    {content_indexes, acc} = assign_content_nodes(foreach_node.content, acc)
+
+    entry = %{foreach: foreach_node, content: content_indexes}
     acc = %{acc | contents_acc: Map.put(acc.contents_acc, c_index, entry)}
 
     {c_index, acc}
@@ -715,9 +742,41 @@ defmodule Statifier.Compiler do
   @spec build_content_node(
           c_index :: non_neg_integer(),
           node ::
-            DRaise.t() | DLog.t() | DAssign.t() | %{if: DIf.t(), branches: [[non_neg_integer()]]}
+            DRaise.t()
+            | DLog.t()
+            | DAssign.t()
+            | %{if: DIf.t(), branches: [[non_neg_integer()]]}
+            | %{foreach: DForeach.t(), content: [non_neg_integer()]}
         ) ::
           {:ok, MContent.t()} | {:error, [Error.t()]} | {:error, Error.t()}
+  defp build_content_node(c_index, %{
+         foreach: %DForeach{} = foreach_node,
+         content: content_indexes
+       }) do
+    case Expressions.compile(
+           foreach_node.array,
+           {:content, c_index},
+           array_location(foreach_node)
+         ) do
+      {:ok, array_expr} ->
+        {:ok,
+         %MForeach{
+           c_index: c_index,
+           location: foreach_node.location,
+           array: array_expr,
+           array_location: array_location(foreach_node),
+           item: foreach_node.item,
+           item_location: item_location(foreach_node),
+           index: foreach_node.index,
+           index_location: index_location(foreach_node),
+           content: content_indexes
+         }}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
   defp build_content_node(c_index, %{if: %DIf{} = if_node, branches: branch_indexes}) do
     results =
       if_node.branches
@@ -891,6 +950,36 @@ defmodule Statifier.Compiler do
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # `attribute_locations[:array]`'s value span when the author wrote
+  # `array` and it carries a recorded span, the `<foreach>` node's own
+  # `location` otherwise - mirrors `cond_location/1`. `array` is always
+  # present (a lowering-time required attribute), so this never returns
+  # `nil`, unlike `cond_location/1`.
+  @spec array_location(foreach_node :: DForeach.t()) :: Location.t()
+  defp array_location(%DForeach{attribute_locations: attribute_locations, location: location}) do
+    Map.get(attribute_locations, :array, location)
+  end
+
+  # `attribute_locations[:item]`'s value span, mirroring `array_location/1`
+  # - carried on the compiled `%MForeach{}` for ADR-0012 constraint 4's
+  # benefit (a diagnostic for `{:illegal_item_name, _}` points at the
+  # attribute, not the whole element), even though `item` is never a
+  # compiled expression itself.
+  @spec item_location(foreach_node :: DForeach.t()) :: Location.t()
+  defp item_location(%DForeach{attribute_locations: attribute_locations, location: location}) do
+    Map.get(attribute_locations, :item, location)
+  end
+
+  # `attribute_locations[:index]`'s value span - `nil` when `index` itself
+  # was never written, mirroring `cond_location/1`'s "non-nil together"
+  # contract.
+  @spec index_location(foreach_node :: DForeach.t()) :: Location.t() | nil
+  defp index_location(%DForeach{index: nil}), do: nil
+
+  defp index_location(%DForeach{attribute_locations: attribute_locations, location: location}) do
+    Map.get(attribute_locations, :index, location)
   end
 
   # `attribute_locations[:cond]`'s value span when the branch wrote `cond`

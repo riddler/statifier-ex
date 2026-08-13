@@ -69,7 +69,8 @@ defmodule Statifier.Lowering do
     "assign" => &Builders.build_assign/2,
     "if" => &Builders.build_if/2,
     "elseif" => &Builders.build_elseif/2,
-    "else" => &Builders.build_else/2
+    "else" => &Builders.build_else/2,
+    "foreach" => &Builders.build_foreach/2
   }
 
   @doc """
