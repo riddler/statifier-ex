@@ -20,6 +20,7 @@
 | [0016](0016-wurk-skills-out-of-repo-extensions-gated.md) | The wurk skills live in their own repo; this repo gates its extensions | accepted (amends 0015 in part; amended by 0017) |
 | [0017](0017-judgment-not-scriptable-in-wurk-extensions.md) | Judgment is not scriptable, scoped to the wurk extension surface | accepted (supersedes 0015; amends 0016 in part) |
 | [0018](0018-no-process-jargon-in-code-comments.md) | Process artifacts are not code comments | accepted |
+| [0019](0019-macrostep-round-budget.md) | A round budget bounds the macrostep fold | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

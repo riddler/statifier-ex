@@ -78,19 +78,20 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :status,
     :macrostep,
     :microstep,
-    :trace
+    :trace,
+    :max_macrostep_rounds
   ]
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
   # indexes), FIFO internal queue, history values, datamodel slot, running,
-  # status, macrostep/microstep counters, trace option - nothing loop-local
-  # left unreified"
+  # status, macrostep/microstep counters, trace option, round budget
+  # (ADR-0019) - nothing loop-local left unreified"
   #
   # sabotage: add `states_to_invoke: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex -> the struct grows an eleventh key and
+  # lib/statifier/machine_state.ex -> the struct grows a twelfth key and
   # this equality assertion reddens, which is exactly the "someone adds a
   # field without updating the docs" failure the plan calls out.
-  test "machine_state holds the ten fields, and the struct has no others" do
+  test "machine_state holds the eleven fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)
@@ -138,6 +139,14 @@ defmodule Statifier.MachineStateAcceptanceTest do
     {:send_delayed, %Effect.SendDelayed{event: "e", delay_ms: 1, macrostep: 0, microstep: 0}},
     {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0}},
     {:invoke, %Effect.Invoke{invoke_id: "i", state_index: 0, macrostep: 0, microstep: 0}},
+    {:budget_exhausted,
+     %Effect.BudgetExhausted{
+       configuration: MapSet.new(),
+       budget: 1,
+       pending_internal_events: [],
+       macrostep: 0,
+       microstep: 0
+     }},
     {:done, %Effect.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0}},
     {:log, %Effect.Log{macrostep: 0, microstep: 0}}
   ]
@@ -160,16 +169,17 @@ defmodule Statifier.MachineStateAcceptanceTest do
   ]
 
   # AC: "One @type effect union: core effects + all seven trace effects;
-  # trace effects carry counters and identities"
+  # trace effects carry counters and identities" - the core set is now
+  # seven, ADR-0019's `:budget_exhausted` joining the ADR-0003 six.
   #
   # sabotage: `Effect.trace?/1`'s catch-all clause (`def trace?(_effect),
   # do: false`) becomes `do: true` -> the `refute` below (core effects are
   # not trace effects) reddens because every core effect now reads as a
   # trace effect too.
-  test "the effect union covers the core six plus all seven trace points" do
-    assert length(@core_effects) == 6
+  test "the effect union covers the core seven plus all seven trace points" do
+    assert length(@core_effects) == 7
     assert length(@trace_effects) == 7
-    assert length(@core_effects) + length(@trace_effects) == 13
+    assert length(@core_effects) + length(@trace_effects) == 14
 
     refute Enum.any?(@core_effects, &Effect.trace?/1)
     assert Enum.all?(@trace_effects, &Effect.trace?/1)

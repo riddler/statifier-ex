@@ -149,7 +149,8 @@ defmodule Statifier.MachineState do
     status: :running,
     macrostep: 0,
     microstep: 0,
-    trace: false
+    trace: false,
+    max_macrostep_rounds: 10_000
   ]
 
   @typedoc """
@@ -169,6 +170,16 @@ defmodule Statifier.MachineState do
   """
   @type trace :: boolean()
 
+  @typedoc """
+  The round budget one macrostep's fold may spend - `pos_integer()`, or
+  `:infinity` for the spec's literal unbounded behavior (ADR-0019). Set once
+  in `new/2` and read-only thereafter, like `trace`. One round is one
+  `Statifier.Interpreter.microstep/1` call inside the fold, empty rounds
+  included; it is not a microstep count, because a livelocked fold can run
+  forever without advancing the microstep counter at all.
+  """
+  @type max_macrostep_rounds :: pos_integer() | :infinity
+
   @type t :: %__MODULE__{
           machine: Machine.t(),
           configuration: MapSet.t(non_neg_integer()),
@@ -179,7 +190,8 @@ defmodule Statifier.MachineState do
           status: :running | :done,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
-          trace: trace()
+          trace: trace(),
+          max_macrostep_rounds: max_macrostep_rounds()
         }
 
   @doc """
@@ -189,11 +201,11 @@ defmodule Statifier.MachineState do
   configuration is the not-yet-implemented `initialize/2`'s job, not this
   constructor's.
 
-  Options: `:trace` (default `false`), `:datamodel` (default `%{}`), and
-  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008). All
-  four system variables (`SystemVariables.initial/2`) are merged **over**
-  the `:datamodel` option's map, so author-supplied data can never shadow a
-  system variable.
+  Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
+  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008), and
+  `:max_macrostep_rounds` (default `10_000`). All four system variables
+  (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
+  option's map, so author-supplied data can never shadow a system variable.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
@@ -210,7 +222,8 @@ defmodule Statifier.MachineState do
       status: :running,
       macrostep: 0,
       microstep: 0,
-      trace: Keyword.get(opts, :trace, false)
+      trace: Keyword.get(opts, :trace, false),
+      max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000)
     }
   end
 

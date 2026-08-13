@@ -146,6 +146,15 @@ defmodule Statifier.MachineStateTest do
       assert new_machine_state(trace: true).trace == true
     end
 
+    # sabotage: `MachineState.new/2` hardcodes `max_macrostep_rounds: 10_000`
+    # and ignores the option -> the `:infinity` and explicit-integer
+    # assertions redden.
+    test "max_macrostep_rounds defaults to 10_000, and the option is honored" do
+      assert new_machine_state().max_macrostep_rounds == 10_000
+      assert new_machine_state(max_macrostep_rounds: 25).max_macrostep_rounds == 25
+      assert new_machine_state(max_macrostep_rounds: :infinity).max_macrostep_rounds == :infinity
+    end
+
     # sabotage: `MachineState.new/2` ignores the `:datamodel` option and
     # always stores `%{}` -> this assertion reddens.
     test "the :datamodel option is honored, merged under the seeded system variables" do

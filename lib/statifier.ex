@@ -80,8 +80,9 @@ defmodule Statifier do
   wrapping it in an `{:ok, _, _}` this facade would have to invent: a
   `%Machine{}` is valid by construction, so initialization cannot fail.
   `opts` is `Statifier.MachineState.new/2`'s own option set (`:trace`,
-  `:datamodel`), passed straight through and interpreted by neither this
-  function nor `Interpreter.initialize/2` itself.
+  `:datamodel`, `:max_macrostep_rounds`), passed straight through and
+  interpreted by neither this function nor `Interpreter.initialize/2`
+  itself.
 
   The returned effects are data, never performed here (ADR-0003) - a caller
   that wants the initialization log/trace effects has them; a caller that
