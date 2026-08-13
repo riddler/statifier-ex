@@ -16,20 +16,21 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own sixteen keys (`lib/statifier/lowering.ex`),
+  # The dispatch map's own nineteen keys (`lib/statifier/lowering.ex`),
   # duplicated here as data rather than imported - there is nothing in
   # `lib/` to import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
-    raise log donedata content datamodel data assign
+    raise log donedata content datamodel data assign if elseif else
   )
 
-  # The nine names `@phase_3_elements` exists to word the unsupported-
+  # The six names `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
-  # way in st-af3.4 Phase 1.
+  # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
+  # st-af3.5 Phase 2.
   @phase_3_elements ~w(
-    send param if elseif else foreach invoke cancel script
+    send param foreach invoke cancel script
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only
@@ -57,8 +58,10 @@ defmodule Statifier.Lowering.CoverageTest do
     "send" => ~s(<scxml><state id="s"><onentry><send event="e"/></onentry></state></scxml>),
     "param" => ~s(<scxml><final id="f"><donedata><param name="x"/></donedata></final></scxml>),
     "if" => ~s(<scxml><state id="s"><onentry><if cond="true"/></onentry></state></scxml>),
-    "elseif" => ~s(<scxml><state id="s"><onentry><elseif cond="true"/></onentry></state></scxml>),
-    "else" => ~s(<scxml><state id="s"><onentry><else/></onentry></state></scxml>),
+    "elseif" =>
+      ~s(<scxml><state id="s"><onentry><if cond="false"><elseif cond="true"/></if></onentry></state></scxml>),
+    "else" =>
+      ~s(<scxml><state id="s"><onentry><if cond="false"><else/></if></onentry></state></scxml>),
     "foreach" => ~s(<scxml><state id="s"><onentry><foreach item="x"/></onentry></state></scxml>),
     "invoke" => ~s(<scxml><state id="s"><invoke type="t"/></state></scxml>),
     "cancel" => ~s(<scxml><state id="s"><onexit><cancel sendid="s1"/></onexit></state></scxml>),

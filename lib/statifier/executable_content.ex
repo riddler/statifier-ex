@@ -5,11 +5,17 @@ defprotocol Statifier.ExecutableContent do
   kind (`docs/architecture.md:101-105`'s named v1 mistake); a node's runtime
   behavior lives in exactly one place, this protocol's `defimpl` for that
   node's struct, in the same file as the struct itself
-  (`Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`). A
-  future datamodel element (`<assign>`, `<if>`/`<elseif>`/`<else>`,
-  `<foreach>`, `<script>`) or session element (`<send>`/`<cancel>`/
-  `<invoke>`) adds a struct and a `defimpl`, never a clause here or in the
-  block runner.
+  (`Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
+  `Statifier.Machine.Content.If`). A future datamodel element (`<foreach>`,
+  `<script>`) or session element (`<send>`/`<cancel>`/`<invoke>`) adds a
+  struct and a `defimpl`, never a clause here or in the block runner.
+
+  `Statifier.Machine.Content.If` is the first *composite* node - one that
+  runs child content of its own rather than acting alone - and its own
+  moduledoc (Decision 1 of
+  `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`)
+  is where the reasoning for folding its own children directly, rather than
+  calling back into the block runner, lives.
 
   ## Contract
 

@@ -5,6 +5,7 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Lowering
   alias Statifier.Machine
   alias Statifier.Machine.Content.Assign
+  alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
   alias Statifier.Parser
@@ -350,6 +351,114 @@ defmodule Statifier.Machine.ContentTest do
 
       assert %Machine.Donedata{expr: {:compiled, %Predicator.Compiled{}, "1 + 1"}} = f.donedata
       assert tuple_size(m.contents) == 0
+    end
+  end
+
+  describe "compile/1 - if content" do
+    # Hand-drawn c_index assignment, document order (Decision 2 of
+    # docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md):
+    # the outer <if>'s own c_index is assigned before any of its branches',
+    # and a nested <if>'s own c_index is assigned before *its* branches',
+    # to arbitrary depth.
+    #
+    #  c0  the outer <if>
+    #  c1  <log label="one"/>   - outer branch 0 ("a")
+    #  c2  the inner <if>       - outer branch 1 ("b")'s own content
+    #  c3  <log label="nested"/> - inner branch 0 ("c")
+    #  c4  <log label="three"/> - outer branch 2 (<else>)
+    @if_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <if cond="a">
+                    <log label="one"/>
+                    <elseif cond="b"/>
+                    <if cond="c">
+                        <log label="nested"/>
+                    </if>
+                    <else/>
+                    <log label="three"/>
+                </if>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.assign_content_node/2`'s `%DIf{}` clause
+    # assigns the `<if>`'s own `c_index` *after* recursing into its branches
+    # (moving the `c_index = acc.c_next` / `c_next: c_index + 1` step below
+    # the `Enum.map_reduce/3` call) -> the outer `<if>` would be numbered
+    # after its own first branch's content instead of before it, reddening
+    # this density/order assertion.
+    test "c_indexes are dense and in document order, including across a nested <if>" do
+      m = compile!(@if_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      assert onentry_block.content == [0]
+
+      assert tuple_size(m.contents) == 5
+      assert m.contents |> Tuple.to_list() |> Enum.map(& &1.c_index) == [0, 1, 2, 3, 4]
+
+      outer_if = Machine.content(m, 0)
+      assert %If{c_index: 0} = outer_if
+
+      assert [
+               %If.Branch{content: [1]},
+               %If.Branch{content: [2]},
+               %If.Branch{content: [4]}
+             ] = outer_if.branches
+
+      inner_if = Machine.content(m, 2)
+      assert %If{c_index: 2, branches: [%If.Branch{content: [3]}]} = inner_if
+
+      assert %Log{c_index: 1, label: "one"} = Machine.content(m, 1)
+      assert %Log{c_index: 3, label: "nested"} = Machine.content(m, 3)
+      assert %Log{c_index: 4, label: "three"} = Machine.content(m, 4)
+    end
+
+    # sabotage: `Statifier.Compiler.build_if_branch/3`'s expr-bearing clause
+    # is changed to build `%MIf.Branch{cond: nil, ...}` unconditionally
+    # (dropping the compiled `cond_expr`) instead of compiling `source`
+    # through `Expressions.compile/3` -> this pattern match reddens.
+    test "each branch's cond compiles to a Machine.expr(), nil for <else>" do
+      m = compile!(@if_document)
+      outer_if = Machine.content(m, 0)
+
+      assert [
+               %If.Branch{cond: {:compiled, %Predicator.Compiled{}, "a"}, cond_location: a_loc},
+               %If.Branch{cond: {:compiled, %Predicator.Compiled{}, "b"}, cond_location: b_loc},
+               %If.Branch{cond: nil, cond_location: nil}
+             ] = outer_if.branches
+
+      refute a_loc == nil
+      refute b_loc == nil
+    end
+
+    @bad_cond_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <if cond="{p1: 'v1'">
+                    <log label="unreachable"/>
+                </if>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_if_branch/3`'s expr-bearing clause
+    # captures a compile failure as `{:invalid, error}` on the branch
+    # instead of returning `{:error, error}` (borrowing Decision 6's
+    # `<assign expr>` deferral, which Decision 6 of this plan explicitly
+    # says `<if>`/`<elseif>` do NOT get) -> `Compiler.compile/1` would
+    # return `{:ok, _}` instead of `{:error, _}`, reddening this match.
+    test "a syntactically bad cond fails Compiler.compile/1, never deferred" do
+      {:ok, root} = Parser.parse(@bad_cond_document)
+      {:ok, document} = Lowering.lower(root)
+      {:ok, document} = Validator.validate(document, @bad_cond_document)
+
+      assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end
   end
 end
