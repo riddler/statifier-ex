@@ -14,6 +14,7 @@ defmodule Statifier.Lowering.Builders do
   """
 
   alias Statifier.Document
+  alias Statifier.Document.Assign
   alias Statifier.Document.Block
   alias Statifier.Document.Content
   alias Statifier.Document.Data
@@ -399,6 +400,46 @@ defmodule Statifier.Lowering.Builders do
     end
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Assign{}` from an `<assign>` element, tagged
+  `{:content_node, assign}`.
+
+  Reads `location` (required - spec 5.4.2) and `expr`, both raw strings -
+  neither is resolved or compiled here (`Statifier.Document.Assign`'s
+  moduledoc forbids `Predicator` under `lib/statifier/document/`). A missing
+  `location` means no struct can be built at all (`:location` is
+  `@enforce_keys`'d on `Assign`), following `build_raise/2`'s
+  required-attribute pattern: `{nil, [Error.missing_attribute("assign",
+  "location", element.location)]}`.
+  """
+  @spec build_assign(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Assign.t()} | nil, [Error.t()]}
+  def build_assign(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    case Attributes.value(element, "location") do
+      nil ->
+        {nil, errors ++ [Error.missing_attribute("assign", "location", element.location)]}
+
+      location ->
+        attribute_locations =
+          %{}
+          |> Attributes.put_location(:location, element, "location")
+          |> Attributes.put_location(:expr, element, "expr")
+
+        assign_node = %Assign{
+          node_location: element.location,
+          location: location,
+          expr: Attributes.value(element, "expr"),
+          attribute_locations: attribute_locations
+        }
+
+        {assign_node, place_errors} = place_children(results, assign_node, element.name)
+
+        {{:content_node, assign_node}, errors ++ place_errors}
+    end
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -529,9 +570,21 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | content: [node | parent.content]}, nil}
   end
 
-  # `:content_node` covers two elements (`<raise>`, `<log>`), unlike every
-  # other tag which names exactly one - so its misplaced-element name comes
-  # from the struct itself, not the tag, ahead of the generic catch-all.
+  # `%Assign{}`'s own element span lives under `node_location`, not
+  # `location` - `location` on that struct is the SCXML `location` *attribute*
+  # (a raw path string, not a `Location.t()`), per
+  # `Statifier.Document.Assign`'s moduledoc. This clause must precede the
+  # generic one below so a misplaced `<assign>` reports its element span
+  # rather than crashing `Error.misplaced/3`'s `%Location{}` match on a
+  # binary.
+  defp place({:content_node, %Assign{node_location: node_location} = node}, parent, parent_name) do
+    {parent, Error.misplaced(content_node_name(node), parent_name, node_location)}
+  end
+
+  # `:content_node` covers three elements (`<raise>`, `<log>`, `<assign>`),
+  # unlike every other tag which names exactly one - so its misplaced-element
+  # name comes from the struct itself, not the tag, ahead of the generic
+  # catch-all.
   defp place({:content_node, node}, parent, parent_name) do
     {parent, Error.misplaced(content_node_name(node), parent_name, node.location)}
   end
@@ -540,9 +593,10 @@ defmodule Statifier.Lowering.Builders do
     {parent, Error.misplaced(Atom.to_string(tag), parent_name, Map.fetch!(value, :location))}
   end
 
-  @spec content_node_name(node :: Raise.t() | Log.t()) :: binary()
+  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t()) :: binary()
   defp content_node_name(%Raise{}), do: "raise"
   defp content_node_name(%Log{}), do: "log"
+  defp content_node_name(%Assign{}), do: "assign"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do

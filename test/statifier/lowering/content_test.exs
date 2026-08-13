@@ -1,6 +1,7 @@
 defmodule Statifier.Lowering.ContentTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Document.Assign
   alias Statifier.Document.Block
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
@@ -153,6 +154,64 @@ defmodule Statifier.Lowering.ContentTest do
 
       assert Map.has_key?(empty_locations, :label)
       refute Map.has_key?(absent_locations, :label)
+    end
+  end
+
+  describe "lower/1 - <assign>, happy path" do
+    # sabotage: `build_assign/2` swaps the `location` and `expr` reads ->
+    # this test reddens since the values would land on the wrong fields
+    test "location and expr both lower as raw strings, with both attribute_locations recorded" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><assign location="user.name" expr="'Ada'"/></onentry></state></scxml>)
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %Assign{
+                     location: "user.name",
+                     expr: "'Ada'",
+                     attribute_locations: attribute_locations
+                   }
+                 ]
+               }
+             ] = state.onentry
+
+      assert Map.has_key?(attribute_locations, :location)
+      assert Map.has_key?(attribute_locations, :expr)
+    end
+  end
+
+  describe "lower/1 - <assign>, missing location" do
+    # sabotage: `build_assign/2`'s `nil` branch is dropped in favor of always
+    # building a `%Assign{location: nil}` (bypassing `@enforce_keys`'s
+    # guarantee some other way) -> this test reddens because no
+    # `{:missing_attribute, ...}` error would be produced
+    test "an <assign> with no location attribute produces a missing_attribute error" do
+      xml = ~s(<scxml><state id="s"><onentry><assign/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "assign", "location"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+  end
+
+  describe "lower/1 - misplaced <assign>" do
+    # sabotage: the `%Assign{}`-specific `place/3` clause in
+    # `lib/statifier/lowering/builders.ex` is deleted, so a misplaced
+    # `<assign>` falls into the generic `{:content_node, node}` clause, which
+    # reads `node.location` (the raw path string, not a `%Location{}`) and
+    # crashes `Error.misplaced/3`'s `%Location{}` match instead of returning
+    # a clean error -> this test would raise rather than assert cleanly.
+    test ~s(a <assign> inside a <state> produces {:misplaced_element, "assign", "state"}) do
+      xml = ~s(<scxml><state id="s"><assign location="x" expr="1"/></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "assign", "state"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
     end
   end
 
