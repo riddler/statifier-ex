@@ -195,12 +195,37 @@ defmodule Statifier.Interpreter.MicrostepTest do
     # machine_state), do: {:quiescent, machine_state, []}` clause is deleted,
     # falling through to the general clause -> a stopped machine_state is
     # (wrongly) run through selection instead of short-circuiting, reddening
-    # the pattern match below.
+    # the pattern match below. Also verified as a sabotage of the
+    # `running: false` clause's own `MachineState.begin_round/1` call: with
+    # it removed, `round` stays unadvanced and the equality reddens the same
+    # way.
     test "on running: false reports quiescence with no effects" do
       m = machine()
       ms = %{machine_state(m, [idx(:eventless_holder)]) | running: false}
 
-      assert {:quiescent, ^ms, []} = Interpreter.microstep(ms)
+      assert {:quiescent, %{ms | round: ms.round + 1}, []} == Interpreter.microstep(ms)
+    end
+
+    # sabotage: `begin_round/1`'s call is deleted from the general clause's
+    # head -> `round` stays at its starting value instead of advancing by
+    # one, reddening the equality assertion.
+    test "one call advances round by exactly one" do
+      m = machine()
+      ms = machine_state(m, [idx(:eventless_holder)])
+
+      assert {result, _effects} = Interpreter.microstep(ms)
+      assert result.round == ms.round + 1
+    end
+
+    # sabotage: `begin_round/1`'s call is deleted from the `running: false`
+    # clause -> the exhausted position's own round stays unadvanced on the
+    # next hand-stepped call, reddening the equality assertion.
+    test "a non-running machine_state's :quiescent return also advances round" do
+      m = machine()
+      ms = %{machine_state(m, [idx(:eventless_holder)]) | running: false, round: 5}
+
+      assert {:quiescent, result, []} = Interpreter.microstep(ms)
+      assert result.round == 6
     end
 
     # Decision 2 (revised): quiescence carries the machine_state that

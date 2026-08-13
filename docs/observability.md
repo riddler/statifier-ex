@@ -106,8 +106,11 @@ them anyway:
 
 ## Constraint 4: steps are counted, causes are stamped
 
-- machine_state carries monotonic counters: macrostep number, and microstep
-  number within the macrostep. They advance in exactly one place each.
+- machine_state carries monotonic counters: macrostep number, microstep
+  number within the macrostep, and round number within the macrostep's fold.
+  They advance in exactly one place each, and `begin_macrostep/1` resets both
+  child counters (`microstep` and `round`) when it advances `macrostep`
+  (ADR-0020).
 - Every trace effect is stamped with the counters - the ordering key for any
   timeline UI or log merge.
 - Internally raised events carry cause metadata: which transition or

@@ -79,6 +79,15 @@ defmodule Statifier.Interpreter do
   `microstep/2` runs. The counter cannot be advanced before the selection
   result is known, because an empty result must not advance it.
 
+  `round`'s writer (`begin_round/1`) has exactly one call site in this
+  module: the head of `microstep/1`, both clauses included - so the
+  `running: false` clause counts a round too, and the first round of a
+  macrostep's fold is round 1. `handle_event/2`'s own `Trace.EventDequeued`
+  and `Trace.TransitionsSelected`, and everything `initialize/2` emits
+  before `main_event_loop/1` begins the fold, are stamped `round: 0` for the
+  same reason they are stamped `microstep: 0`: no round of this macrostep's
+  fold has begun yet.
+
   ## Deviations, with their reasons (ADR-0002)
 
   - **`microstep/1` is not a pseudocode function name.** It is
@@ -122,6 +131,11 @@ defmodule Statifier.Interpreter do
     non-terminating macrostep, so the fold spends a round budget and stops
     with a `:budget_exhausted` effect on exhaustion (ADR-0019). See the
     private fold's own comment above `defp macrostep/3`.
+  - **A round ordinal counts `microstep/1` invocations.** Appendix D's inner
+    loop carries `macrostepDone` and no round variable of any kind
+    (ADR-0020); `round` is a hoisting artifact of `microstep/1` itself, like
+    the two counters before it. See the comment above `microstep/1`'s two
+    clauses.
   """
 
   alias Statifier.Event
@@ -274,10 +288,12 @@ defmodule Statifier.Interpreter do
   @doc """
   `mainEventLoop`'s inner `while running and not macrostepDone` loop body,
   hoisted into a named, resumable round (Decision 1) - not a pseudocode
-  function name itself. One call makes exactly one round of progress:
+  function name itself. One call makes exactly one round of progress, and
+  begins it: both clauses call `MachineState.begin_round/1` first, so the
+  returned position's `round` names which round this one was (ADR-0020).
 
-  - Not `running` - returns `{:quiescent, machine_state, []}`, nothing
-    changes.
+  - Not `running` - returns `{:quiescent, machine_state, []}`, with `round`
+    advanced and nothing else changed.
   - An eventless transition is enabled - the round runs it, exactly as
     `microstep/2` above.
   - No eventless transition is enabled - falls to `internal_round/1`,
@@ -319,10 +335,23 @@ defmodule Statifier.Interpreter do
   """
   @spec microstep(machine_state :: MachineState.t()) ::
           {MachineState.t(), [Effect.t()]} | {:quiescent, MachineState.t(), [Effect.t()]}
+  # ADR-0002 mechanical deviation (ADR-0020). Appendix D's inner loop carries
+  # `macrostepDone` and no round variable of any kind - the REC's Termination
+  # note describes a non-terminating macrostep as "an infinitely long sequence
+  # of microsteps", which is this port's rounds, not its microsteps. The
+  # ordinal is therefore a hoisting artifact of `microstep/1` itself, like the
+  # two counters before it: it labels the position a stepper resumes from
+  # (constraint 1) so that a fold whose rounds advance neither counter is still
+  # ordered and countable (ADR-0012 item 4). It decides nothing - the budget,
+  # not the ordinal, ends the fold - and the loop's condition and body are
+  # unchanged. It lives here rather than in the fold so a human hand-stepping
+  # in iex advances it identically to `macrostep/1`; both clauses count,
+  # because both are a round the fold spends.
   def microstep(%MachineState{running: false} = machine_state),
-    do: {:quiescent, machine_state, []}
+    do: {:quiescent, MachineState.begin_round(machine_state), []}
 
   def microstep(%MachineState{} = machine_state) do
+    machine_state = MachineState.begin_round(machine_state)
     {machine_state, eventless_transitions} = Selection.select_eventless_transitions(machine_state)
 
     case eventless_transitions do
