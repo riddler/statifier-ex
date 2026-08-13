@@ -27,6 +27,7 @@ defmodule Statifier.Effect do
   | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
   | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
   | `:invoke` | `Statifier.Effect.Invoke` | not yet produced (`<invoke>`) |
+  | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | not yet produced (ADR-0019 round budget) |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
@@ -91,6 +92,7 @@ defmodule Statifier.Effect do
   forget them.
   """
 
+  alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
@@ -99,12 +101,13 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
 
-  @typedoc "The six core effects - the ADR-0003 set, no more."
+  @typedoc "The seven core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted`."
   @type core ::
           {:send, Send.t()}
           | {:send_delayed, SendDelayed.t()}
           | {:cancel, Cancel.t()}
           | {:invoke, Invoke.t()}
+          | {:budget_exhausted, BudgetExhausted.t()}
           | {:done, Done.t()}
           | {:log, Log.t()}
 
