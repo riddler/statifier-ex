@@ -202,7 +202,7 @@ defmodule Statifier.FeatureDetectorTest do
                       ])
 
   describe "feature_registry/0" do
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), not lib/ behavior
     test "supports exactly the current supported feature set" do
       supported =
         FeatureDetector.feature_registry()
