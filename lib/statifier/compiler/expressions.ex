@@ -32,6 +32,7 @@ defmodule Statifier.Compiler.Expressions do
           {:transition, non_neg_integer()}
           | {:content, non_neg_integer()}
           | {:donedata, non_neg_integer()}
+          | {:data, non_neg_integer()}
 
   @doc """
   Compiles `source` into a `Machine.expr()`.
@@ -78,6 +79,54 @@ defmodule Statifier.Compiler.Expressions do
   """
   @spec static(value :: term()) :: Machine.expr()
   def static(value), do: {:static, value}
+
+  @doc """
+  Constant-folds a `<data>` element's child text into a `{:static, value}`
+  `Machine.expr()` - Decision 8
+  (`docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`). Spec
+  5.3.2 is explicit that `<data>`'s children are "an in-line specification
+  of the **value** of the data object", not an expression that reads the
+  datamodel, and B.2.1 gives the ECMAScript datamodel a
+  parse-then-fall-back-to-string ladder for exactly this reason: "if the
+  content is a valid JSON... create the corresponding ECMAScript object...
+  Otherwise the Processor MUST treat the content as a space-normalized
+  string literal". This is the predicator analogue, one rung shorter than
+  B.2.1's (predicator's own literal syntax stands in for JSON; there is no
+  XML rung under ADR-0004):
+
+  1. trim `text` - `String.trim/1`'s result doubles as this analogue's
+     "space-normalized string literal", the fallback of step 5;
+  2. compile the trimmed text with `Predicator.compile_with_spans/1`;
+  3. on success, evaluate the compiled result **at compile time**, against
+     an *empty* `Predicator.Context.new(%{}, on_unbound: :error)`;
+  4. on `{:ok, value}`, return `{:static, value}`;
+  5. on any failure at either step, return `{:static, trimmed_text}`.
+
+  The empty, `on_unbound: :error` context in step 3 is what makes the fold
+  safe: `<data id="x">hello</data>` compiles to a load of `hello`, which
+  fails against a context that holds nothing and errors rather than
+  defaulting to `:undefined` - so it falls through to the string literal
+  `"hello"` instead of silently becoming a datamodel read. `[1, 2, 3]`
+  compiles and evaluates to the list `[1, 2, 3]` directly, with nothing to
+  fall back to.
+
+  Consequently this function **never** returns a `{:compiled, ...}` arm:
+  child content can never raise `error.execution` at binding time, which is
+  why 5.3.2's "empty data element" failure clause never has a child-content
+  case to apply to under this datamodel.
+  """
+  @spec inline_value(text :: String.t()) :: Machine.expr()
+  def inline_value(text) when is_binary(text) do
+    trimmed = String.trim(text)
+    empty_context = Predicator.Context.new(%{}, on_unbound: :error)
+
+    with {:ok, %Predicator.Compiled{} = compiled} <- Predicator.compile_with_spans(trimmed),
+         {:ok, value} <- Predicator.evaluate(compiled, empty_context) do
+      {:static, value}
+    else
+      _failure -> {:static, trimmed}
+    end
+  end
 
   @spec parse_error(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           Error.t()

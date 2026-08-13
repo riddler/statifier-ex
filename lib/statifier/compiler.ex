@@ -49,19 +49,34 @@ defmodule Statifier.Compiler do
   list into resolved indexes and compiling every expression (a transition's
   `cond`, a `<log expr=...>`, a `<content>`'s folded value) - all of that
   needs either the complete `id_to_index` or nothing but the raw node
-  itself, so `build_transitions/3`, `build_contents/2`, and
-  `build_donedata_map/1` each run once, after `walk_siblings/4` returns.
-  Their errors accumulate together, sorted by `location.start_offset`,
-  mirroring `Statifier.Lowering.finalize/2`
+  itself, so `build_transitions/3`, `build_contents/2`, `build_donedata_map/1`,
+  and `build_data_elements/2` each run once, after `walk_siblings/4` returns.
+  The first three's errors accumulate together, sorted by
+  `location.start_offset`, mirroring `Statifier.Lowering.finalize/2`
   (`lib/statifier/lowering.ex:137-141`) - a document with a bad `cond` on one
   transition and a bad `<log expr=...>` elsewhere reports both.
+  `build_data_elements/2` never joins that merge - a `<data expr>` that
+  fails to compile is captured onto the compiled `Statifier.Machine.Data`
+  node as `{:invalid, error}` rather than failing `compile/1` (Decision 2,
+  `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`), so a
+  document with a bad `cond` *and* a bad `<data expr>` reports only the
+  `cond`'s error.
+
+  `<data>` gets its own dense index space, `d_index`, assigned the same way
+  `t_index`/`c_index` are: a state's own `<datamodel>`'s `<data>` children
+  are assigned the moment the state itself is visited, before the walk
+  descends into its children (`assign_data/3`). The root's own top-level
+  `<datamodel>` is assigned before `walk_siblings/4` is first called, so
+  top-level `<data>` occupy `d_index` 0..n-1, preceding every state-scoped
+  one.
 
   All of the walk's mutable state - `id_to_index`, the states accumulator,
-  the next unused `t_index`/`c_index`, the transitions/contents/donedata
-  accumulators - travels together as one `acc()` map, rather than as seven
-  positional arguments: `Credo.Check.Refactor.FunctionArity`'s limit is 8,
-  and a numbering walk that also assigns `c_index` genuinely needs more
-  independent pieces of state than that once each is its own argument.
+  the next unused `t_index`/`c_index`/`d_index`, the
+  transitions/contents/donedata/data accumulators - travels together as one
+  `acc()` map, rather than as seven-plus positional arguments:
+  `Credo.Check.Refactor.FunctionArity`'s limit is 8, and a numbering walk
+  that also assigns `c_index` and `d_index` genuinely needs more independent
+  pieces of state than that once each is its own argument.
   """
 
   alias Statifier.Compiler.Error
@@ -69,6 +84,8 @@ defmodule Statifier.Compiler do
   alias Statifier.Document
   alias Statifier.Document.Block, as: DBlock
   alias Statifier.Document.Content, as: DContent
+  alias Statifier.Document.Data, as: DData
+  alias Statifier.Document.Datamodel, as: DDatamodel
   alias Statifier.Document.Donedata, as: DDonedata
   alias Statifier.Document.Initial
   alias Statifier.Document.Log, as: DLog
@@ -80,6 +97,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Content, as: MContent
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
+  alias Statifier.Machine.Data, as: MData
   alias Statifier.Machine.Donedata, as: MDonedata
   alias Statifier.Machine.State, as: MState
   alias Statifier.Machine.Transition, as: MTransition
@@ -89,7 +107,12 @@ defmodule Statifier.Compiler do
   The numbering walk's threaded state (see moduledoc). `id_to_index` and
   `states_acc` belong to the interning pass; `t_next`/`transitions_acc` to
   the transition pass; `c_next`/`contents_acc`/`donedata_acc` to the
-  executable-content pass.
+  executable-content pass; `d_next`/`data_acc` to the `<data>` pass -
+  `data_acc` keyed by `d_index`, each entry carrying its raw
+  `%Statifier.Document.Data{}` and the index of the state whose own
+  `<datamodel>` declared it, so `build_data_elements/2` can compile in
+  `d_index` order and `compile/1` can later group entries back by state
+  index for `with_data/2`.
   """
   @type acc :: %{
           id_to_index: %{optional(String.t()) => non_neg_integer()},
@@ -98,7 +121,11 @@ defmodule Statifier.Compiler do
           transitions_acc: %{optional(non_neg_integer()) => map()},
           c_next: non_neg_integer(),
           contents_acc: %{optional(non_neg_integer()) => DRaise.t() | DLog.t()},
-          donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()}
+          donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()},
+          d_next: non_neg_integer(),
+          data_acc: %{
+            optional(non_neg_integer()) => %{data: DData.t(), state_index: non_neg_integer()}
+          }
         }
 
   @doc """
@@ -126,8 +153,15 @@ defmodule Statifier.Compiler do
       transitions_acc: %{},
       c_next: 0,
       contents_acc: %{},
-      donedata_acc: %{}
+      donedata_acc: %{},
+      d_next: 0,
+      data_acc: %{}
     }
+
+    # The root's own top-level <datamodel> is assigned before the walk, so
+    # its <data> occupy d_index 0..n-1 and every state-scoped <data>
+    # follows - see moduledoc.
+    acc0 = assign_data(document.datamodel_element, 0, acc0)
 
     {children, next_index, acc} = walk_siblings(document.states, 1, 0, acc0)
 
@@ -151,6 +185,10 @@ defmodule Statifier.Compiler do
     transitions_result = build_transitions(acc.transitions_acc, acc.t_next, acc.id_to_index)
     contents_result = build_contents(acc.contents_acc, acc.c_next)
     donedata_result = build_donedata_map(acc.donedata_acc)
+    # build_data_elements/2 never fails and never joins the error merge
+    # below - a <data expr> compile failure is captured onto the compiled
+    # node itself (Decision 2), not raised here.
+    {:ok, data_elements} = build_data_elements(acc.data_acc, acc.d_next)
 
     errors =
       [transitions_result, contents_result, donedata_result]
@@ -165,10 +203,15 @@ defmodule Statifier.Compiler do
         {:ok, transitions} = transitions_result
         {:ok, contents} = contents_result
         {:ok, donedata_map} = donedata_result
+        state_data_map = state_data_map(acc.data_acc)
 
         states =
           0..root_last
-          |> Enum.map(fn index -> with_donedata(Map.fetch!(states_acc, index), donedata_map) end)
+          |> Enum.map(fn index ->
+            Map.fetch!(states_acc, index)
+            |> with_donedata(donedata_map)
+            |> with_data(state_data_map)
+          end)
           |> List.to_tuple()
 
         machine = %Machine{
@@ -176,6 +219,7 @@ defmodule Statifier.Compiler do
           id_to_index: acc.id_to_index,
           transitions: transitions,
           contents: contents,
+          data_elements: data_elements,
           name: document.name,
           datamodel: document.datamodel,
           binding: document.binding,
@@ -196,6 +240,37 @@ defmodule Statifier.Compiler do
       {:ok, donedata} -> %{mstate | donedata: donedata}
       :error -> mstate
     end
+  end
+
+  # Folds the per-state d_index list onto the compiled state - mirrors
+  # with_donedata/2 above.
+  @spec with_data(
+          mstate :: MState.t(),
+          state_data_map :: %{optional(non_neg_integer()) => [non_neg_integer()]}
+        ) :: MState.t()
+  defp with_data(%MState{index: index} = mstate, state_data_map) do
+    case Map.fetch(state_data_map, index) do
+      {:ok, d_indexes} -> %{mstate | data: d_indexes}
+      :error -> mstate
+    end
+  end
+
+  # Groups data_acc's d_index-keyed entries back by owning state index, in
+  # ascending d_index order (already the document-order sequence
+  # assign_data/3 assigned), for with_data/2 to fold onto each compiled
+  # state.
+  @spec state_data_map(
+          data_acc :: %{
+            optional(non_neg_integer()) => %{data: DData.t(), state_index: non_neg_integer()}
+          }
+        ) :: %{optional(non_neg_integer()) => [non_neg_integer()]}
+  defp state_data_map(data_acc) do
+    data_acc
+    |> Enum.group_by(
+      fn {_d_index, %{state_index: state_index}} -> state_index end,
+      fn {d_index, _entry} -> d_index end
+    )
+    |> Map.new(fn {state_index, d_indexes} -> {state_index, Enum.sort(d_indexes)} end)
   end
 
   # Depth-first, document order. `next_index` is the next unused state index
@@ -222,6 +297,7 @@ defmodule Statifier.Compiler do
       assign_own_content_and_transitions(dstate, index, acc)
 
     acc = %{acc | donedata_acc: maybe_put_donedata(acc.donedata_acc, index, dstate.donedata)}
+    acc = assign_data(dstate.datamodel_element, index, acc)
 
     {children, next_after_subtree, acc} = walk_siblings(dstate.states, index + 1, index, acc)
 
@@ -330,6 +406,30 @@ defmodule Statifier.Compiler do
       end)
 
     {Enum.reverse(t_indexes), acc}
+  end
+
+  # Assigns dense, ascending `d_index` values to `datamodel`'s `<data>`
+  # children (nil when the container - a state or the root - wrote no
+  # `<datamodel>`), in source order, recording each raw
+  # `%Statifier.Document.Data{}` and its owning state index for
+  # `build_data_elements/2` to compile later. Called at the point the
+  # container itself is visited, before the walk descends into its
+  # children - assign_own_content_and_transitions/3's rule, applied here to
+  # keep every d_index dense and in document order without a second walk.
+  @spec assign_data(
+          datamodel :: DDatamodel.t() | nil,
+          state_index :: non_neg_integer(),
+          acc :: acc()
+        ) :: acc()
+  defp assign_data(nil, _state_index, acc), do: acc
+
+  defp assign_data(%DDatamodel{data: data_list}, state_index, acc) do
+    Enum.reduce(data_list, acc, fn %DData{} = data, acc ->
+      d_index = acc.d_next
+      entry = %{data: data, state_index: state_index}
+
+      %{acc | d_next: d_index + 1, data_acc: Map.put(acc.data_acc, d_index, entry)}
+    end)
   end
 
   # Assigns dense, ascending `c_index` values to `blocks` (a state's own
@@ -661,6 +761,93 @@ defmodule Statifier.Compiler do
          location: location
        }) do
     Map.get(attribute_locations, :expr, location)
+  end
+
+  # Compiles every collected `<data>` node into `Statifier.Machine.Data.t()`,
+  # dense from `d_index` 0. Unlike build_transitions/3, build_contents/2,
+  # and build_donedata_map/1, this pass never fails and never joins their
+  # error merge: a <data expr> that fails to compile is captured as
+  # `{:invalid, error}` on the compiled node itself (Decision 2,
+  # docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md), so
+  # `compile/1` can still return `{:ok, machine}` for a document whose only
+  # defect is a malformed <data expr>.
+  @spec build_data_elements(
+          data_acc :: %{
+            optional(non_neg_integer()) => %{data: DData.t(), state_index: non_neg_integer()}
+          },
+          d_count :: non_neg_integer()
+        ) :: {:ok, tuple()}
+  defp build_data_elements(_data_acc, 0), do: {:ok, {}}
+
+  defp build_data_elements(data_acc, d_count) do
+    elements =
+      Enum.map(0..(d_count - 1), fn d_index ->
+        %{data: data} = Map.fetch!(data_acc, d_index)
+        build_data(d_index, data)
+      end)
+
+    {:ok, List.to_tuple(elements)}
+  end
+
+  @spec build_data(d_index :: non_neg_integer(), data :: DData.t()) :: MData.t()
+  defp build_data(d_index, %DData{id: id, location: location} = data) do
+    {value, value_location} = build_data_value(d_index, data)
+
+    %MData{
+      d_index: d_index,
+      id: id,
+      value: value,
+      location: location,
+      value_location: value_location
+    }
+  end
+
+  # Value selection, per <data>, in spec 5.3.2's own precedence - expr,
+  # then src, then non-blank child text, then none - the validator having
+  # already rejected any two-of-three combination on a document that
+  # reaches this compiler.
+  @spec build_data_value(d_index :: non_neg_integer(), data :: DData.t()) ::
+          {MData.value(), Location.t()}
+  defp build_data_value(d_index, %DData{expr: expr} = data) when is_binary(expr) do
+    location = data_expr_location(data)
+
+    case Expressions.compile(expr, {:data, d_index}, location) do
+      {:ok, compiled} -> {compiled, location}
+      {:error, error} -> {{:invalid, error}, location}
+    end
+  end
+
+  defp build_data_value(_d_index, %DData{src: src} = data) when is_binary(src) do
+    {{:src, src}, data_src_location(data)}
+  end
+
+  defp build_data_value(_d_index, %DData{text: text} = data) when is_binary(text) do
+    if data_text_blank?(text) do
+      {Expressions.static(nil), data.location}
+    else
+      {Expressions.inline_value(text), data.location}
+    end
+  end
+
+  defp build_data_value(_d_index, %DData{} = data), do: {Expressions.static(nil), data.location}
+
+  @spec data_text_blank?(text :: String.t()) :: boolean()
+  defp data_text_blank?(text), do: String.trim(text) == ""
+
+  # `attribute_locations[:expr]`'s value span when the author wrote `expr`,
+  # the `<data>` node's own `location` otherwise (mirrors `cond_location/1`
+  # and `expr_location/1`).
+  @spec data_expr_location(data :: DData.t()) :: Location.t()
+  defp data_expr_location(%DData{attribute_locations: attribute_locations, location: location}) do
+    Map.get(attribute_locations, :expr, location)
+  end
+
+  # `attribute_locations[:src]`'s value span when the author wrote `src`,
+  # the `<data>` node's own `location` otherwise - same shape as
+  # `data_expr_location/1`.
+  @spec data_src_location(data :: DData.t()) :: Location.t()
+  defp data_src_location(%DData{attribute_locations: attribute_locations, location: location}) do
+    Map.get(attribute_locations, :src, location)
   end
 
   # Collects a list of `{:ok, value} | {:error, Error.t()}` results into

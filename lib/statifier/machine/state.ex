@@ -30,6 +30,7 @@ defmodule Statifier.Machine.State do
   | `initial_transition` | `:state`, `:scxml` - the `<initial>` element's transition `t_index`, or `nil` |
   | `history_default` | `:history` - its default transition's `t_index` |
   | `donedata` | `:final` - the compiled `Machine.Donedata.t()`, or `nil` |
+  | `data` | `:state`, `:parallel`, `:scxml` - the `d_index`es this state's own `<datamodel>` declares, `[]` when it has none |
 
   Every field above `donedata` is written in one pass: the compiler's
   state-interning walk builds each `%Statifier.Machine.State{}` whole, index
@@ -60,7 +61,8 @@ defmodule Statifier.Machine.State do
     onexit: [],
     initial_transition: nil,
     history_default: nil,
-    donedata: nil
+    donedata: nil,
+    data: []
   ]
 
   @type t :: %__MODULE__{
@@ -79,6 +81,7 @@ defmodule Statifier.Machine.State do
           initial_transition: non_neg_integer() | nil,
           history_default: non_neg_integer() | nil,
           donedata: Donedata.t() | nil,
+          data: [non_neg_integer()],
           location: Location.t()
         }
 end
