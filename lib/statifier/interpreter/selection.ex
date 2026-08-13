@@ -391,7 +391,7 @@ defmodule Statifier.Interpreter.Selection do
   # The labelled `break loop` in each atomic state's walk: self, then each
   # proper ancestor outward, stopping at the first state that has an enabled
   # transition. `event_tokens` is `nil` for the eventless walk
-  # and a token list for the event-matched walk; `first_matching_transition/6`
+  # and a token list for the event-matched walk; `first_matching_transition/5`
   # reads that to pick the right per-transition predicate.
   #
   # `Enum.reduce_while/3` for the same labelled `break loop` `Enum.find_value/2`
@@ -406,7 +406,7 @@ defmodule Statifier.Interpreter.Selection do
           cond_errors :: [cond_error()]
         ) :: {[Transition.t()], [cond_error()]}
   defp selected_for_atomic_state(
-         %MachineState{machine: machine} = machine_state,
+         %MachineState{machine: machine},
          context,
          state_index,
          event_tokens,
@@ -414,7 +414,7 @@ defmodule Statifier.Interpreter.Selection do
        ) do
     [state_index | Machine.proper_ancestors(machine, state_index)]
     |> Enum.reduce_while({[], cond_errors}, fn s, {[], errors} ->
-      case first_matching_transition(machine_state, context, machine, s, event_tokens, errors) do
+      case first_matching_transition(context, machine, s, event_tokens, errors) do
         {nil, errors} -> {:cont, {[], errors}}
         {transition, errors} -> {:halt, {[transition], errors}}
       end
@@ -426,7 +426,6 @@ defmodule Statifier.Interpreter.Selection do
   # first one whose predicate holds. `Enum.reduce_while/3` in place of
   # `Enum.find/2`, threading the same accumulator (D2).
   @spec first_matching_transition(
-          machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
           machine :: Machine.t(),
           state_index :: non_neg_integer(),
@@ -434,7 +433,6 @@ defmodule Statifier.Interpreter.Selection do
           cond_errors :: [cond_error()]
         ) :: {Transition.t() | nil, [cond_error()]}
   defp first_matching_transition(
-         machine_state,
          context,
          machine,
          state_index,
@@ -446,7 +444,7 @@ defmodule Statifier.Interpreter.Selection do
     |> Map.fetch!(:transitions)
     |> Enum.map(&Machine.transition(machine, &1))
     |> Enum.reduce_while({nil, cond_errors}, fn transition, {nil, errors} ->
-      case transition_enabled(machine_state, context, transition, event_tokens, errors) do
+      case transition_enabled(context, transition, event_tokens, errors) do
         {true, errors} -> {:halt, {transition, errors}}
         {false, errors} -> {:cont, {nil, errors}}
       end
@@ -460,14 +458,12 @@ defmodule Statifier.Interpreter.Selection do
   # calls unconditionally on the last candidate transition it is about to
   # accept.
   @spec transition_enabled(
-          machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
           transition :: Transition.t(),
           event_tokens :: [String.t()] | nil,
           cond_errors :: [cond_error()]
         ) :: {boolean(), [cond_error()]}
   defp transition_enabled(
-         _machine_state,
          context,
          %Transition{events: []} = transition,
          nil,
@@ -477,7 +473,6 @@ defmodule Statifier.Interpreter.Selection do
   end
 
   defp transition_enabled(
-         _machine_state,
          _context,
          %Transition{events: []},
          _event_tokens,
@@ -486,12 +481,11 @@ defmodule Statifier.Interpreter.Selection do
     {false, cond_errors}
   end
 
-  defp transition_enabled(_machine_state, _context, %Transition{}, nil, cond_errors) do
+  defp transition_enabled(_context, %Transition{}, nil, cond_errors) do
     {false, cond_errors}
   end
 
   defp transition_enabled(
-         _machine_state,
          context,
          %Transition{} = transition,
          event_tokens,
