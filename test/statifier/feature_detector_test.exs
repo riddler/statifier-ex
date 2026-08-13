@@ -200,7 +200,9 @@ defmodule Statifier.FeatureDetectorTest do
                         # st-af3.3
                         :data_elements,
                         # st-af3.4
-                        :assign_elements
+                        :assign_elements,
+                        # st-af3.5
+                        :if_elements
                       ])
 
   describe "feature_registry/0" do
