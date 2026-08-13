@@ -59,32 +59,13 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "param")
     end
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "if" entry
-    # dispatching to `build_block/3` (an accidental structural-content
-    # builder) -> this test reddens because `<if>` builds a `Block` instead
-    # of being reported unsupported
-    test "<if> under <onentry>" do
-      xml = ~s(<scxml><state id="s"><onentry><if cond="true"/></onentry></state></scxml>)
-      assert_unsupported(xml, "if")
-    end
-
-    # sabotage: same class of mutation as `<if>`'s, applied to "elseif"
-    test "<elseif> under <onentry>" do
-      xml = ~s(<scxml><state id="s"><onentry><elseif cond="true"/></onentry></state></scxml>)
-      assert_unsupported(xml, "elseif")
-    end
-
-    # sabotage: same class of mutation as `<if>`'s, applied to "else"
-    test "<else> under <onentry>" do
-      xml = ~s(<scxml><state id="s"><onentry><else/></onentry></state></scxml>)
-      assert_unsupported(xml, "else")
-    end
-
     # `<datamodel>` and `<data>` moved from this deferred set to the
     # supported set in st-af3.3 Phase 1 - see
     # `test/statifier/lowering/datamodel_test.exs` for their own coverage.
     # `<assign>` moved the same way in st-af3.4 Phase 1 - see
     # `test/statifier/lowering/content_test.exs` for its own coverage.
+    # `<if>`/`<elseif>`/`<else>` moved the same way in st-af3.5 Phase 2 - see
+    # `test/statifier/lowering/content_test.exs` for their own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
     # dispatching to `state_like/3` with `kind: :invoke` (an invented state

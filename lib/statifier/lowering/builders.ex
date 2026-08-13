@@ -20,6 +20,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Data
   alias Statifier.Document.Datamodel
   alias Statifier.Document.Donedata
+  alias Statifier.Document.If
   alias Statifier.Document.Initial
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
@@ -455,6 +456,138 @@ defmodule Statifier.Lowering.Builders do
     end
   end
 
+  @doc """
+  Builds a `%Statifier.Document.If{}` from an `<if>` element (spec 4.3),
+  tagged `{:content_node, if_node}`.
+
+  Reads the required `cond` (4.3.1: `cond` is `required="true"` on `<if>`) -
+  following `build_raise/2`'s required-attribute pattern: a missing `cond`
+  means no struct can be built at all,
+  `{nil, [Error.missing_attribute("if", "cond", element.location)]}`.
+
+  Otherwise walks children through the shared dispatch, then folds the
+  tagged results through `place/3`'s `%If{}`-specific clauses - spec
+  4.3.2's partition definition, mechanically: one open branch starts,
+  carrying `<if>`'s own `cond` and this element's own `location`; each
+  `{:elseif, branch}` / `{:else, branch}` result closes the currently open
+  branch and opens the next; each `{:content_node, node}` result appends to
+  whichever branch is currently open. `reverse_lists/1`'s `%If{}` clause
+  restores document order once the fold finishes (branches were built
+  newest-first, the same convention every other list-valued builder here
+  follows).
+  """
+  @spec build_if(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, If.t()} | nil, [Error.t()]}
+  def build_if(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    case Attributes.value(element, "cond") do
+      nil ->
+        {nil, errors ++ [Error.missing_attribute("if", "cond", element.location)]}
+
+      cond_source ->
+        attribute_locations = Attributes.put_location(%{}, :cond, element, "cond")
+
+        first_branch = %If.Branch{
+          location: element.location,
+          cond: cond_source,
+          attribute_locations: attribute_locations
+        }
+
+        if_node = %If{location: element.location, branches: [first_branch]}
+        {if_node, place_errors} = place_children(results, if_node, element.name)
+        if_node = reverse_lists(if_node)
+
+        {{:content_node, if_node}, errors ++ place_errors}
+    end
+  end
+
+  @doc """
+  Builds the partitioning tag for an `<elseif>` element (spec 4.4), tagged
+  `{:elseif, branch}` for `build_if/2`'s own fold to consume.
+  `place/3` has no clause accepting this tag for any parent but `%If{}`
+  (Decision 7 of the plan cited on `Statifier.Document.If`) - anywhere else,
+  the generic catch-all reports `{:misplaced_element, "elseif", parent_name}`
+  with no code of its own, reading the branch's own `location` field the
+  same way it reads every other tagged struct's.
+
+  Reads the required `cond` (4.4.1) - following `build_raise/2`'s
+  required-attribute pattern: a missing `cond` means no branch can be built
+  at all. `<elseif>` takes no children of its own (4.4.1 gives it none, the
+  same "empty element" shape `<else>` has); an element child is reported as
+  `{:misplaced_element, name, "elseif"}` rather than built, the same
+  exemption `build_data/2` and `build_content/2` take for their own
+  childless/text-only content models.
+  """
+  @spec build_elseif(element :: Element.t(), ctx :: map()) ::
+          {{:elseif, If.Branch.t()} | nil, [Error.t()]}
+  def build_elseif(%Element{} = element, _ctx) do
+    misplaced_errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "elseif", location)
+      end)
+
+    case Attributes.value(element, "cond") do
+      nil ->
+        {nil, misplaced_errors ++ [Error.missing_attribute("elseif", "cond", element.location)]}
+
+      cond_source ->
+        attribute_locations = Attributes.put_location(%{}, :cond, element, "cond")
+
+        branch = %If.Branch{
+          location: element.location,
+          cond: cond_source,
+          attribute_locations: attribute_locations
+        }
+
+        {{:elseif, branch}, misplaced_errors}
+    end
+  end
+
+  @doc """
+  Builds the partitioning tag for an `<else>` element (spec 4.5), tagged
+  `{:else, branch}`. Same placement rule as `build_elseif/2`'s doc describes
+  - `place/3` accepts this tag only inside an `%If{}`.
+
+  `<else>` takes no attributes at all (4.5.2 gives it none): any attribute
+  written is reported as `{:unexpected_attribute, "else", name}` rather than
+  silently ignored, though the branch (with `cond: nil`) still builds either
+  way - an author who mistyped `cond` on an `<else>` should see both "this
+  attribute is not allowed" and get the `<else>` behavior 4.5.1 defines
+  regardless. Takes no element children either, the same exemption
+  `build_elseif/2` takes.
+  """
+  @spec build_else(element :: Element.t(), ctx :: map()) :: {{:else, If.Branch.t()}, [Error.t()]}
+  def build_else(%Element{} = element, _ctx) do
+    misplaced_errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "else", location)
+      end)
+
+    attribute_errors =
+      case element.attributes do
+        [] ->
+          []
+
+        [attribute | _rest] ->
+          [
+            Error.unexpected_attribute(
+              "else",
+              attribute.name,
+              attribute.location || element.location
+            )
+          ]
+      end
+
+    branch = %If.Branch{location: element.location, cond: nil}
+
+    {{:else, branch}, misplaced_errors ++ attribute_errors}
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -585,6 +718,34 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | content: [node | parent.content]}, nil}
   end
 
+  # The three `%If{}`-specific clauses (Decision 7 of the plan cited on
+  # `Statifier.Document.If`): `branches` is threaded as `[open | closed]`
+  # while the walk is in progress - `open` is the branch currently
+  # accepting content, `closed` are the ones already sealed by a later
+  # `<elseif>`/`<else>`. A `{:elseif, _}`/`{:else, _}` result seals `open`
+  # and opens the new branch; a `{:content_node, _}` result appends to
+  # `open`. `reverse_lists/1`'s `%If{}` clause restores document order
+  # (branches newest-first here, each branch's own content newest-first too)
+  # once the fold finishes - the same two-step every other list-valued
+  # builder in this module takes.
+  #
+  # This clause must precede the `%Assign{}`-specific clause below: that
+  # clause matches `{:content_node, %Assign{}}` against *any* parent
+  # (unconditionally), so an `<assign>` landing inside an `<if>` partition
+  # would otherwise always report misplaced instead of joining its branch.
+  defp place({:content_node, node}, %If{branches: [open | closed]} = parent, _parent_name) do
+    open = %{open | content: [node | open.content]}
+    {%{parent | branches: [open | closed]}, nil}
+  end
+
+  defp place({:elseif, branch}, %If{branches: [open | closed]} = parent, _parent_name) do
+    {%{parent | branches: [branch, open | closed]}, nil}
+  end
+
+  defp place({:else, branch}, %If{branches: [open | closed]} = parent, _parent_name) do
+    {%{parent | branches: [branch, open | closed]}, nil}
+  end
+
   # `%Assign{}`'s own element span lives under `node_location`, not
   # `location` - `location` on that struct is the SCXML `location` *attribute*
   # (a raw path string, not a `Location.t()`), per
@@ -608,10 +769,11 @@ defmodule Statifier.Lowering.Builders do
     {parent, Error.misplaced(Atom.to_string(tag), parent_name, Map.fetch!(value, :location))}
   end
 
-  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t()) :: binary()
+  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t() | If.t()) :: binary()
   defp content_node_name(%Raise{}), do: "raise"
   defp content_node_name(%Log{}), do: "log"
   defp content_node_name(%Assign{}), do: "assign"
+  defp content_node_name(%If{}), do: "if"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
@@ -642,5 +804,20 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Datamodel{} = datamodel) do
     %{datamodel | data: Enum.reverse(datamodel.data)}
+  end
+
+  # `%If{}`'s branches were built newest-first (`place/3`'s `%If{}` clauses
+  # prepend); each branch's own `content` list was built the same way while
+  # it was the open branch. Both need reversing to restore document order -
+  # the branches themselves, and each one's own content.
+  defp reverse_lists(%If{} = if_node) do
+    branches =
+      if_node.branches
+      |> Enum.reverse()
+      |> Enum.map(fn %If.Branch{content: content} = branch ->
+        %{branch | content: Enum.reverse(content)}
+      end)
+
+    %{if_node | branches: branches}
   end
 end

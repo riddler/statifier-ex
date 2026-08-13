@@ -66,7 +66,10 @@ defmodule Statifier.Lowering do
     "content" => &Builders.build_content/2,
     "datamodel" => &Builders.build_datamodel/2,
     "data" => &Builders.build_data/2,
-    "assign" => &Builders.build_assign/2
+    "assign" => &Builders.build_assign/2,
+    "if" => &Builders.build_if/2,
+    "elseif" => &Builders.build_elseif/2,
+    "else" => &Builders.build_else/2
   }
 
   @doc """

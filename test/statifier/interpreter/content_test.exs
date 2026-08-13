@@ -541,4 +541,113 @@ defmodule Statifier.Interpreter.ContentTest do
       refute "two" in names
     end
   end
+
+  describe "<if>, through the real block runner" do
+    @if_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <if cond="true">
+                    <assign location="x" expr="1 + 1"/>
+                </if>
+                <log label="r2"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Machine.Content.If`'s `defimpl`'s `run_partition/2`
+    # is changed to fold with the enclosing block's *own* pre-call `context`
+    # on every step instead of threading `new_context` forward (discarding
+    # the partition's own `<assign>` rebuild) -> the `ContextRecorder`
+    # running after the `</if>` in the same block would still evaluate `x`
+    # against the pre-write snapshot, reddening this test's assertion -
+    # this is Decision 1's mechanical reason (reason 1), pinned end to end.
+    test "an <assign> inside an <if> partition is visible to a later node in the same enclosing block" do
+      m =
+        @if_document
+        |> compile!()
+        |> machine_with_node(2, %ContextRecorder{c_index: 2, label: "r2"})
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "x", nil)}
+      [block] = a_onentry_blocks(m)
+
+      {_result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      assert Evaluator.evaluate(datamodel_context, compiled_expr("x")) == {:ok, 2}
+    end
+
+    @failing_if_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <if cond="true">
+                    <log label="before"/>
+                </if>
+                <log label="never"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Interpreter.Content.run_nodes/2`'s `{:error,
+    # new_context, reason}` arm is changed to halt with `{c_index, {:some,
+    # reason}}` (double-wrapping) instead of passing `reason` through as
+    # `Statifier.Machine.Content.If`'s own `{:nested_content, _, _}` value
+    # unwrapped -> the `data ==` pattern match below reddens.
+    test "a failing partition node halts the enclosing block, raising exactly one error.execution whose data names the inner node" do
+      m =
+        @failing_if_document
+        |> compile!()
+        |> machine_with_node(1, %TestContent{c_index: 1, label: "boom", fail: true})
+
+      ms = machine_state(m)
+      [block] = a_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 0, @owner}
+      assert error_event.data == {:nested_content, 1, {:test_content, "boom"}}
+    end
+
+    @erroring_cond_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <if cond="undefined_var">
+                    <log label="unreachable"/>
+                    <elseif cond="true"/>
+                    <log label="reached"/>
+                </if>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Machine.Content.If`'s `defimpl`'s `select/3`
+    # collapses the `{:error, %Evaluator.Error{}}` arm into `{:ok, false}`
+    # with no reason recorded -> `pending_errors` would come back `[]`, so
+    # `Statifier.Interpreter.Content.drain_pending/2` would never raise, and
+    # this test's error-event assertion reddens.
+    test "an erroring cond raises error.execution and the block continues to the next branch" do
+      m = compile!(@erroring_cond_document)
+      ms = machine_state(m)
+      [block] = a_onentry_blocks(m)
+
+      {result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 0, @owner}
+
+      assert Enum.any?(effects, &match?({:log, %Effect.Log{label: "reached"}}, &1))
+      refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "unreachable"}}, &1))
+    end
+  end
 end

@@ -88,6 +88,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Data, as: DData
   alias Statifier.Document.Datamodel, as: DDatamodel
   alias Statifier.Document.Donedata, as: DDonedata
+  alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
   alias Statifier.Document.Log, as: DLog
   alias Statifier.Document.Raise, as: DRaise
@@ -97,6 +98,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
   alias Statifier.Machine.Content.Assign, as: MAssign
+  alias Statifier.Machine.Content.If, as: MIf
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
   alias Statifier.Machine.Data, as: MData
@@ -115,6 +117,16 @@ defmodule Statifier.Compiler do
   `<datamodel>` declared it, so `build_data_elements/2` can compile in
   `d_index` order and `compile/1` can later group entries back by state
   index for `with_data/2`.
+
+  `contents_acc`'s value type is asymmetric on purpose: `<raise>`, `<log>`,
+  and `<assign>` are stored raw, since none of the three has children of its
+  own to number - but an `<if>` does, so its entry is
+  `%{if: DIf.t(), branches: [[non_neg_integer()]]}`, carrying the branch
+  `c_index` lists `assign_content_nodes/2`'s own recursion (Decision 2 of
+  `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`)
+  assigned, alongside the raw `<if>` node itself - mirroring
+  `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
+  shape (`:396-408`).
   """
   @type acc :: %{
           id_to_index: %{optional(String.t()) => non_neg_integer()},
@@ -122,7 +134,13 @@ defmodule Statifier.Compiler do
           t_next: non_neg_integer(),
           transitions_acc: %{optional(non_neg_integer()) => map()},
           c_next: non_neg_integer(),
-          contents_acc: %{optional(non_neg_integer()) => DRaise.t() | DLog.t() | DAssign.t()},
+          contents_acc: %{
+            optional(non_neg_integer()) =>
+              DRaise.t()
+              | DLog.t()
+              | DAssign.t()
+              | %{if: DIf.t(), branches: [[non_neg_integer()]]}
+          },
           donedata_acc: %{optional(non_neg_integer()) => DDonedata.t()},
           d_next: non_neg_integer(),
           data_acc: %{
@@ -453,27 +471,64 @@ defmodule Statifier.Compiler do
 
   # Assigns dense, ascending `c_index` values to `nodes` (a flat
   # `[Statifier.Document.Raise.t() | Statifier.Document.Log.t() |
-  # Statifier.Document.Assign.t()]`, either a block's own content or a
-  # transition's own content), in source order, recording each raw node for
+  # Statifier.Document.Assign.t() | Statifier.Document.If.t()]`, either a
+  # block's own content, a transition's own content, or an `<if>` branch's
+  # own content), in source order, recording each raw node (or, for an
+  # `<if>`, its branch index lists too - see `assign_content_node/2`) for
   # `build_contents/2` to compile later. Returns the assigned `c_index`es in
   # the same order as `nodes`.
-  @spec assign_content_nodes(nodes :: [DRaise.t() | DLog.t() | DAssign.t()], acc :: acc()) ::
+  @spec assign_content_nodes(
+          nodes :: [DRaise.t() | DLog.t() | DAssign.t() | DIf.t()],
+          acc :: acc()
+        ) ::
           {[non_neg_integer()], acc()}
   defp assign_content_nodes(nodes, acc) do
     {c_indexes, acc} =
       Enum.reduce(nodes, {[], acc}, fn node, {c_indexes, acc} ->
-        c_index = acc.c_next
-
-        acc = %{
-          acc
-          | c_next: c_index + 1,
-            contents_acc: Map.put(acc.contents_acc, c_index, node)
-        }
-
+        {c_index, acc} = assign_content_node(node, acc)
         {[c_index | c_indexes], acc}
       end)
 
     {Enum.reverse(c_indexes), acc}
+  end
+
+  # One content node's own `c_index` assignment (Decision 2): a `<raise>`/
+  # `<log>`/`<assign>` node has no children of its own, so it is assigned its
+  # `c_index` and stored raw, exactly as before this phase. An `<if>` has
+  # children - its own branches' content - so its `c_index` is assigned
+  # *first* (the `<if>` open tag precedes its children in document order),
+  # then each branch's content list is walked in turn through this same
+  # function (`assign_content_nodes/2`, indirectly, via `Enum.map_reduce/3`),
+  # which is what keeps `c_index` dense and in document order to arbitrary
+  # nesting depth - a nested `<if>` inside a branch recurses again the same
+  # way.
+  @spec assign_content_node(node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t(), acc :: acc()) ::
+          {non_neg_integer(), acc()}
+  defp assign_content_node(%DIf{} = if_node, acc) do
+    c_index = acc.c_next
+    acc = %{acc | c_next: c_index + 1}
+
+    {branch_indexes, acc} =
+      Enum.map_reduce(if_node.branches, acc, fn branch, acc ->
+        assign_content_nodes(branch.content, acc)
+      end)
+
+    entry = %{if: if_node, branches: branch_indexes}
+    acc = %{acc | contents_acc: Map.put(acc.contents_acc, c_index, entry)}
+
+    {c_index, acc}
+  end
+
+  defp assign_content_node(node, acc) do
+    c_index = acc.c_next
+
+    acc = %{
+      acc
+      | c_next: c_index + 1,
+        contents_acc: Map.put(acc.contents_acc, c_index, node)
+    }
+
+    {c_index, acc}
   end
 
   @spec maybe_put_donedata(
@@ -659,9 +714,27 @@ defmodule Statifier.Compiler do
 
   @spec build_content_node(
           c_index :: non_neg_integer(),
-          node :: DRaise.t() | DLog.t() | DAssign.t()
+          node ::
+            DRaise.t() | DLog.t() | DAssign.t() | %{if: DIf.t(), branches: [[non_neg_integer()]]}
         ) ::
-          {:ok, MContent.t()} | {:error, Error.t()}
+          {:ok, MContent.t()} | {:error, [Error.t()]} | {:error, Error.t()}
+  defp build_content_node(c_index, %{if: %DIf{} = if_node, branches: branch_indexes}) do
+    results =
+      if_node.branches
+      |> Enum.zip(branch_indexes)
+      |> Enum.map(fn {branch, content_indexes} ->
+        build_if_branch(c_index, branch, content_indexes)
+      end)
+
+    case collect(results) do
+      {:ok, branches} ->
+        {:ok, %MIf{c_index: c_index, location: if_node.location, branches: branches}}
+
+      {:error, errors} ->
+        {:error, errors}
+    end
+  end
+
   defp build_content_node(c_index, %DRaise{event: event, location: location}) do
     {:ok, %MRaise{c_index: c_index, event: event, location: location}}
   end
@@ -785,6 +858,52 @@ defmodule Statifier.Compiler do
   @spec assign_location_location(assign :: DAssign.t()) :: Location.t()
   defp assign_location_location(%DAssign{attribute_locations: attribute_locations} = assign) do
     Map.get(attribute_locations, :location, assign.node_location)
+  end
+
+  # Compiles one `<if>`/`<elseif>`/`<else>` branch's `cond` (Decision 6: same
+  # load-time treatment `<transition cond>` already gets via `build_cond/2` -
+  # a bad `cond` fails `compile/1`, never deferred the way `<assign expr>` is).
+  # `if_c_index` is the *owning* `<if>`'s own `c_index` - `Expressions.compile/3`
+  # only needs an owner ref for its error case, and a branch has no `c_index`
+  # of its own to give it (Decision 8: `Statifier.Machine.Content.If.Branch`
+  # carries no `c_index`, only its compiled `cond`, `cond_location`, and
+  # `content` index list). `cond: nil` (the `<else>` branch, spec 4.5.1) never
+  # reaches `Expressions.compile/3` at all - there is nothing to compile.
+  @spec build_if_branch(
+          if_c_index :: non_neg_integer(),
+          branch :: DIf.Branch.t(),
+          content_indexes :: [non_neg_integer()]
+        ) :: {:ok, MIf.Branch.t()} | {:error, Error.t()}
+  defp build_if_branch(_if_c_index, %DIf.Branch{cond: nil}, content_indexes) do
+    {:ok, %MIf.Branch{cond: nil, cond_location: nil, content: content_indexes}}
+  end
+
+  defp build_if_branch(if_c_index, %DIf.Branch{cond: source} = branch, content_indexes) do
+    case Expressions.compile(source, {:content, if_c_index}, branch_cond_location(branch)) do
+      {:ok, cond_expr} ->
+        {:ok,
+         %MIf.Branch{
+           cond: cond_expr,
+           cond_location: branch_cond_location(branch),
+           content: content_indexes
+         }}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  # `attribute_locations[:cond]`'s value span when the branch wrote `cond`
+  # and it carries a recorded span, the branch's own `location` otherwise -
+  # mirrors `cond_location/1` (a transition's own `cond` span rule).
+  @spec branch_cond_location(branch :: DIf.Branch.t()) :: Location.t() | nil
+  defp branch_cond_location(%DIf.Branch{cond: nil}), do: nil
+
+  defp branch_cond_location(%DIf.Branch{
+         attribute_locations: attribute_locations,
+         location: location
+       }) do
+    Map.get(attribute_locations, :cond, location)
   end
 
   # Compiles every `:final` state's own `<donedata>` into
@@ -947,18 +1066,23 @@ defmodule Statifier.Compiler do
     Map.get(attribute_locations, :src, location)
   end
 
-  # Collects a list of `{:ok, value} | {:error, Error.t()}` results into
-  # `{:ok, [value]} | {:error, [Error.t()]}`, sorted by
+  # Collects a list of `{:ok, value} | {:error, Error.t()} | {:error, [Error.t()]}`
+  # results into `{:ok, [value]} | {:error, [Error.t()]}`, sorted by
   # `location.start_offset` on the error path - the one shape
   # `build_transitions/3`, `build_contents/2`, and `build_donedata_map/1`
-  # all need.
-  @spec collect(results :: [{:ok, term()} | {:error, Error.t()}]) ::
+  # all need. The error side of each result is normally a single `Error.t()`
+  # (one node, one possible defect), but `build_content_node/2`'s `<if>`
+  # clause collects every branch's `cond` error rather than short-circuiting
+  # at the first (Decision 6), so its own `{:error, _}` carries a *list* -
+  # `List.wrap/1` normalizes both shapes to a list before flattening, a
+  # no-op for every existing single-error caller.
+  @spec collect(results :: [{:ok, term()} | {:error, Error.t()} | {:error, [Error.t()]}]) ::
           {:ok, [term()]} | {:error, [Error.t()]}
   defp collect(results) do
     errors =
       results
       |> Enum.filter(&match?({:error, _error}, &1))
-      |> Enum.map(fn {:error, error} -> error end)
+      |> Enum.flat_map(fn {:error, error_or_errors} -> List.wrap(error_or_errors) end)
       |> Enum.sort_by(& &1.location.start_offset)
 
     case errors do

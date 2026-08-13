@@ -25,6 +25,7 @@ defmodule Statifier.Lowering.Error do
           | {:unexpected_root, name :: binary()}
           | {:missing_attribute, element :: binary(), attribute :: binary()}
           | {:foreign_element, name :: binary(), uri :: binary()}
+          | {:unexpected_attribute, element :: binary(), attribute :: binary()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -111,6 +112,24 @@ defmodule Statifier.Lowering.Error do
     %__MODULE__{
       reason: {:missing_attribute, element, attribute},
       message: "element #{inspect(element)} is missing required attribute #{inspect(attribute)}",
+      location: location
+    }
+  end
+
+  @doc """
+  An element that takes no attributes at all (spec 4.5.2's `<else>`) was
+  written with one anyway - unlike `missing_attribute/3`, this never blocks
+  the element's own struct from being built (`<else>` needs no attribute to
+  build its branch), so the caller reports this alongside the struct it
+  still constructs, not instead of it.
+  """
+  @spec unexpected_attribute(element :: binary(), attribute :: binary(), location :: Location.t()) ::
+          t()
+  def unexpected_attribute(element, attribute, %Location{} = location)
+      when is_binary(element) and is_binary(attribute) do
+    %__MODULE__{
+      reason: {:unexpected_attribute, element, attribute},
+      message: "element #{inspect(element)} does not accept attribute #{inspect(attribute)}",
       location: location
     }
   end

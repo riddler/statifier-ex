@@ -3,6 +3,7 @@ defmodule Statifier.Lowering.ContentTest do
 
   alias Statifier.Document.Assign
   alias Statifier.Document.Block
+  alias Statifier.Document.If
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
   alias Statifier.Document.State
@@ -267,6 +268,185 @@ defmodule Statifier.Lowering.ContentTest do
 
       assert {:error, [%Error{reason: {:misplaced_element, "state", "onentry"}}]} =
                xml |> parse!() |> Lowering.lower()
+    end
+  end
+
+  describe "lower/1 - <if>/<elseif>/<else>, happy path" do
+    # sabotage: `place/3`'s `%If{}` clause for `{:elseif, _}`/`{:else, _}`
+    # seals the open branch onto the *front* of `closed` instead of leaving
+    # it as `[branch, open | closed]` (an off-by-one in the fold) -> the
+    # first branch's content would land in the second branch instead,
+    # reddening this test's per-branch content assertions.
+    test "three partitioning tags produce three branches, each with its own cond and content" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <log label="one"/>
+                      <elseif cond="b"/>
+                      <log label="two"/>
+                      <else/>
+                      <log label="three"/>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %If{
+                     branches: [
+                       %If.Branch{
+                         cond: "a",
+                         content: [%Log{label: "one"}],
+                         attribute_locations: al0
+                       },
+                       %If.Branch{
+                         cond: "b",
+                         content: [%Log{label: "two"}],
+                         attribute_locations: al1
+                       },
+                       %If.Branch{
+                         cond: nil,
+                         content: [%Log{label: "three"}],
+                         attribute_locations: al2
+                       }
+                     ]
+                   }
+                 ]
+               }
+             ] = state.onentry
+
+      assert Map.has_key?(al0, :cond)
+      assert Map.has_key?(al1, :cond)
+      refute Map.has_key?(al2, :cond)
+    end
+  end
+
+  describe "lower/1 - <else/> as the first child, an empty first partition" do
+    # sabotage: `build_if/2` builds the first branch's `content` field with
+    # a hardcoded non-empty default instead of `[]` -> this test's empty-list
+    # match on the first branch reddens.
+    test "the first partition is empty when <else/> is the <if>'s first child" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <else/>
+                      <log label="fallback"/>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %If{
+                     branches: [
+                       %If.Branch{cond: "a", content: []},
+                       %If.Branch{cond: nil, content: [%Log{label: "fallback"}]}
+                     ]
+                   }
+                 ]
+               }
+             ] = state.onentry
+    end
+  end
+
+  describe "lower/1 - <if>/<elseif>, missing cond" do
+    # sabotage: `build_if/2`'s `nil` branch is dropped in favor of always
+    # building an `%If{}` with a `nil`-cond first branch (bypassing the
+    # required-attribute rule) -> this test reddens because no
+    # `{:missing_attribute, ...}` error would be produced
+    test "an <if> with no cond attribute produces a missing_attribute error" do
+      xml = ~s(<scxml><state id="s"><onentry><if/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "if", "cond"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+
+    # sabotage: `build_elseif/2`'s `nil` branch is dropped the same way ->
+    # no `{:missing_attribute, "elseif", "cond"}` error would be produced
+    test "an <elseif> with no cond attribute produces a missing_attribute error" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><if cond="a"><elseif/></if></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:missing_attribute, "elseif", "cond"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+  end
+
+  describe "lower/1 - a stray <elseif> outside any <if>" do
+    # sabotage: a `place/3` clause is added that accepts `{:elseif, _}` into
+    # any `%State{}` (dropping Decision 7's restriction to `%If{}` parents
+    # only) -> this test reddens because `lower/1` would return `{:ok, _}`
+    # instead of reporting the misplaced element.
+    test ~s(a stray <elseif> directly under <state> produces {:misplaced_element, "elseif", "state"}) do
+      xml = ~s(<scxml><state id="s"><elseif cond="true"/></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "elseif", "state"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.location != nil
+    end
+  end
+
+  describe "lower/1 - a nested <if>" do
+    # sabotage: `place/3`'s `%If{}` clause for `{:content_node, node}`
+    # appends to `closed` instead of the currently `open` branch -> the
+    # nested `%If{}` would land in the outer `<if>`'s wrong branch (or be
+    # lost from the branch this test asserts against), reddening this match.
+    test "an <if> nested inside another <if>'s branch lowers to a nested %If{}" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <if cond="a">
+                      <if cond="b">
+                          <log label="inner"/>
+                      </if>
+                  </if>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert [
+               %Block{
+                 content: [
+                   %If{
+                     branches: [
+                       %If.Branch{
+                         cond: "a",
+                         content: [
+                           %If{
+                             branches: [
+                               %If.Branch{cond: "b", content: [%Log{label: "inner"}]}
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 ]
+               }
+             ] = state.onentry
     end
   end
 end

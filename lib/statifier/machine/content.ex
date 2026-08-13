@@ -2,28 +2,33 @@ defmodule Statifier.Machine.Content do
   @moduledoc """
   Namespace for the compiled executable-content node family: one struct per
   node kind, `Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
-  and `Statifier.Machine.Content.Assign`, the interned counterpart to
-  `Statifier.Document.Raise` / `Statifier.Document.Log` /
-  `Statifier.Document.Assign`. This module owns the family's shared
-  vocabulary - `owner/0` and the `t()` union - and no longer a struct itself:
-  an Elixir protocol dispatches on the struct module, so each node kind needs
-  its own struct for `Statifier.ExecutableContent` to implement without a
-  central `case` on a `kind` field. Each future executable-content node
-  (`<if>`/`<elseif>`/`<else>`, `<foreach>`, `<script>`, `<send>`, `<cancel>`,
+  `Statifier.Machine.Content.Assign`, and `Statifier.Machine.Content.If`, the
+  interned counterpart to `Statifier.Document.Raise` / `Statifier.Document.Log`
+  / `Statifier.Document.Assign` / `Statifier.Document.If`. This module owns
+  the family's shared vocabulary - `owner/0` and the `t()` union - and no
+  longer a struct itself: an Elixir protocol dispatches on the struct module,
+  so each node kind needs its own struct for `Statifier.ExecutableContent` to
+  implement without a central `case` on a `kind` field. Each future
+  executable-content node (`<foreach>`, `<script>`, `<send>`, `<cancel>`,
   `<invoke>`) gets its own struct here too, and its own
   `Statifier.ExecutableContent` implementation, never a clause added to this
   module.
 
   `c_index` is a dense document-order identity assigned to **every**
-  `<raise>`/`<log>` node reachable through `onentry`, `onexit`, or a
-  `<transition>`'s own content, across the whole machine (ADR-0012 item 3).
-  `<donedata>`'s own `<content>` child is deliberately excluded: it is not
-  executable content, never appears in a block, and no `execute_block` ever
-  runs it, so giving it a `c_index` would stop `c_index` meaning "the nth
+  `<raise>`/`<log>`/`<assign>`/`<if>` node reachable through `onentry`,
+  `onexit`, or a `<transition>`'s own content, across the whole machine
+  (ADR-0012 item 3) - including a partition node *inside* an `<if>`, numbered
+  in document order relative to the `<if>` that contains it (its own `<if>`
+  open tag numbers first, then each branch's content in turn, to arbitrary
+  nesting depth - `Statifier.Compiler`'s Decision 2). `<donedata>`'s own
+  `<content>` child is deliberately excluded: it is not executable content,
+  never appears in a block, and no block-running pass ever runs it, so
+  giving it a `c_index` would stop `c_index` meaning "the nth
   executable-content node".
   """
 
   alias Statifier.Machine.Content.Assign
+  alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
 
@@ -47,5 +52,5 @@ defmodule Statifier.Machine.Content do
           | {:transition, non_neg_integer()}
 
   @typedoc "Any compiled executable-content node - the family this module maps."
-  @type t :: Raise.t() | Log.t() | Assign.t()
+  @type t :: Raise.t() | Log.t() | Assign.t() | If.t()
 end
