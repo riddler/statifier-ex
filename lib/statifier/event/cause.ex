@@ -2,8 +2,8 @@ defmodule Statifier.Event.Cause do
   @moduledoc """
   Why an internally raised event exists - `docs/observability.md` constraint
   4. `origin` is a constraint-3 identity, never a struct; `macrostep`/
-  `microstep` are the counters as they stood when the event was raised, per
-  `Statifier.MachineState`'s counter contract.
+  `microstep`/`round` are the counters as they stood when the event was
+  raised, per `Statifier.MachineState`'s counter contract.
 
   Cause travels *with* the event so a consumer - `Statifier.Interpreter.Content`'s
   `error.execution` message is the first one - resolves it through
@@ -25,8 +25,8 @@ defmodule Statifier.Event.Cause do
 
   alias Statifier.Machine.Content
 
-  @enforce_keys [:origin, :macrostep, :microstep]
-  defstruct [:origin, :macrostep, :microstep]
+  @enforce_keys [:origin, :macrostep, :microstep, :round]
+  defstruct [:origin, :macrostep, :microstep, :round]
 
   @typedoc """
   Which node raised the event, and where it lives:
@@ -73,7 +73,8 @@ defmodule Statifier.Event.Cause do
   @type t :: %__MODULE__{
           origin: origin(),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 
   @doc """
@@ -81,9 +82,13 @@ defmodule Statifier.Event.Cause do
   stood at the moment of the raise (`Statifier.MachineState`'s counter
   contract - stamped after the step's own `begin_*` call).
   """
-  @spec new(origin :: origin(), macrostep :: non_neg_integer(), microstep :: non_neg_integer()) ::
-          t()
-  def new(origin, macrostep, microstep) do
-    %__MODULE__{origin: origin, macrostep: macrostep, microstep: microstep}
+  @spec new(
+          origin :: origin(),
+          macrostep :: non_neg_integer(),
+          microstep :: non_neg_integer(),
+          round :: non_neg_integer()
+        ) :: t()
+  def new(origin, macrostep, microstep, round) do
+    %__MODULE__{origin: origin, macrostep: macrostep, microstep: microstep, round: round}
   end
 end

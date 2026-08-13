@@ -438,7 +438,8 @@ defmodule Statifier.Interpreter do
          budget: machine_state.max_macrostep_rounds,
          pending_internal_events: MachineState.internal_events(machine_state),
          macrostep: machine_state.macrostep,
-         microstep: machine_state.microstep
+         microstep: machine_state.microstep,
+         round: machine_state.round
        }}
     ]
   end

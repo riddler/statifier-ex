@@ -127,7 +127,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # sabotage: `Event.platform/3` stamps `type: :internal` instead of
   # `type: :platform` -> the platform-type assertion below reddens.
   test "Event carries type in the three spec values and a cause slot" do
-    cause = Cause.new({:state, 0}, 1, 1)
+    cause = Cause.new({:state, 0}, 1, 1, 1)
 
     external = Event.external("ext")
     internal = Event.internal("int", cause)
@@ -153,7 +153,8 @@ defmodule Statifier.MachineStateAcceptanceTest do
        budget: 1,
        pending_internal_events: [],
        macrostep: 0,
-       microstep: 0
+       microstep: 0,
+       round: 0
      }},
     {:done, %Effect.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0}},
     {:log, %Effect.Log{macrostep: 0, microstep: 0}}

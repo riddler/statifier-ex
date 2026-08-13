@@ -650,10 +650,10 @@ the `BudgetExhausted` effect.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits only).
-- [ ] `mix test` passes; `changelog.d/st-ux0.md` exists.
-- [ ] `grep -rn "Cause.new(" lib/ test/` shows no remaining `new/3` call.
-- [ ] Every new or changed test carries a `# sabotage: ... -> red` line.
+- [x] Full `mix quality` passes (loop gate between edits only).
+- [x] `mix test` passes; `changelog.d/st-ux0.md` exists.
+- [x] `grep -rn "Cause.new(" lib/ test/` shows no remaining `new/3` call.
+- [x] Every new or changed test carries a `# sabotage: ... -> red` line.
 
 #### Manual Verification:
 - [ ] Spec conformance: `terminal_effects/2` and the two raise functions still
@@ -829,6 +829,29 @@ blocking here.
       without counting lines, and round *n* diffs against round *n*+1 in
       exactly one field. This is the bead's acceptance criterion, judged by a
       reader rather than by an assertion.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 4
+
+- [ ] Spec conformance: `terminal_effects/2` and the two raise functions still
+      match their pseudocode counterparts - the raise sites are ADR-0002
+      hoists that already existed, and only the stamped field set changed.
+- [ ] An `error.execution` message built from a cause reads correctly with the
+      round included, and constraint 4's exemplar ("raised by the `<assign>` at
+      line 42, transition 7, microstep 3") still parses as a sentence with the
+      round added.
+- [ ] The changelog fragment reads as one line a library user would care about,
+      per `changelog.d/README.md`'s "too much" example.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while

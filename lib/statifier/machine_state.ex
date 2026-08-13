@@ -358,7 +358,8 @@ defmodule Statifier.MachineState do
 
   `origin` is `Cause.origin/0`: `<raise>` passes `{:content, c_index,
   owner}` (the raising node and its owning onentry/onexit/transition
-  block).
+  block). The round is stamped as it stood at the raise - same rule as the
+  counters.
   """
   @spec raise_internal(
           machine_state :: t(),
@@ -367,12 +368,12 @@ defmodule Statifier.MachineState do
           opts :: keyword()
         ) :: t()
   def raise_internal(
-        %__MODULE__{macrostep: macrostep, microstep: microstep} = machine_state,
+        %__MODULE__{macrostep: macrostep, microstep: microstep, round: round} = machine_state,
         name,
         origin,
         opts \\ []
       ) do
-    cause = Cause.new(origin, macrostep, microstep)
+    cause = Cause.new(origin, macrostep, microstep, round)
     event = Event.internal(name, cause, opts)
     enqueue_internal(machine_state, event)
   end
@@ -391,7 +392,8 @@ defmodule Statifier.MachineState do
   dequeue changes between the two.
 
   `origin` is `Cause.origin/0`: `done.state.*` on entering a final state
-  passes `{:state, state_index}` (no content node backs it).
+  passes `{:state, state_index}` (no content node backs it). The round is
+  stamped as it stood at the raise - same rule as the counters.
   """
   @spec raise_platform(
           machine_state :: t(),
@@ -400,12 +402,12 @@ defmodule Statifier.MachineState do
           opts :: keyword()
         ) :: t()
   def raise_platform(
-        %__MODULE__{macrostep: macrostep, microstep: microstep} = machine_state,
+        %__MODULE__{macrostep: macrostep, microstep: microstep, round: round} = machine_state,
         name,
         origin,
         opts \\ []
       ) do
-    cause = Cause.new(origin, macrostep, microstep)
+    cause = Cause.new(origin, macrostep, microstep, round)
     event = Event.platform(name, cause, opts)
     enqueue_internal(machine_state, event)
   end

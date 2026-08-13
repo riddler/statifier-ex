@@ -273,7 +273,7 @@ defmodule Statifier.MachineStateTest do
       result =
         ms
         |> MachineState.put_event(Event.external("go"))
-        |> MachineState.put_event(Event.internal("done", Cause.new({:state, idx(:a)}, 1, 1)))
+        |> MachineState.put_event(Event.internal("done", Cause.new({:state, idx(:a)}, 1, 1, 1)))
 
       assert result.datamodel["_sessionid"] == session_id
       assert result.datamodel["_event"]["name"] == "done"
@@ -376,9 +376,10 @@ defmodule Statifier.MachineStateTest do
   end
 
   describe "raise_internal/4" do
-    # sabotage: `MachineState.raise_internal/4` builds the `Cause` with
-    # `Cause.new(origin, 0, 0)` instead of the machine_state's actual
-    # counters -> this assertion reddens.
+    # sabotage: `MachineState.raise_internal/4` swaps the `microstep`/
+    # `round` arguments in its `Cause.new/4` call -> the cause's
+    # `microstep`/`round` fields land swapped (0/1 here), reddening this
+    # assertion.
     test "stamps the current counters and given origin onto the queued event" do
       ms =
         new_machine_state()
@@ -391,7 +392,7 @@ defmodule Statifier.MachineStateTest do
       assert [%Event{type: :internal, name: "done.state.a", cause: cause}] =
                MachineState.internal_events(ms)
 
-      assert cause == Cause.new(origin, ms.macrostep, ms.microstep)
+      assert cause == Cause.new(origin, ms.macrostep, ms.microstep, ms.round)
     end
   end
 
