@@ -351,15 +351,15 @@ gains `:max_macrostep_rounds`.
       `docs/testing.md`).
 
 #### Manual Verification:
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - this phase touches no ported function, so the check is that
       `MachineState.new/2` gained only a field read and `Effect` gained only a
       union member.
-- [ ] The `@type core` typedoc wording matches ADR-0019 lines 89-92, and the
+- [x] The `@type core` typedoc wording matches ADR-0019 lines 89-92, and the
       table row uses the file's own "not yet produced" convention.
-- [ ] `%Statifier.Effect.BudgetExhausted{}` field names read the way ADR-0019
+- [x] `%Statifier.Effect.BudgetExhausted{}` field names read the way ADR-0019
       names them (configuration, counters, budget, pending internal events).
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -620,20 +620,20 @@ unreleased.
       The mutation is still genuinely run; only the wait is bounded.
 
 #### Manual Verification:
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line: `microstep/1`'s body, `internal_round/1`, and `run_selected/3` are
       untouched, and the fold's condition and body are unchanged apart from
       the guard - the deviation is the guard alone.
-- [ ] The ADR-0002 deviation comment above `defp macrostep/3` is ADR-0019
+- [x] The ADR-0002 deviation comment above `defp macrostep/3` is ADR-0019
       lines 127-137 **verbatim**, including the quoted REC Termination note.
-- [ ] The three macrostep outcomes are mutually exclusive in practice: a
+- [x] The three macrostep outcomes are mutually exclusive in practice: a
       terminating chart emits `Trace.Done` and no `MacrostepStable`; a stable
       one emits `MacrostepStable` and no `:budget_exhausted`; an exhausted one
       emits `:budget_exhausted` and neither.
-- [ ] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
+- [x] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
       `trace: true` run in iex, and the repeating `TransitionsSelected` /
       `EventDequeued` rounds read as the cycle ADR-0019 describes.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -732,17 +732,17 @@ at ADR-0019, so the two blocks read as the pair they are.
       bounded.
 
 #### Manual Verification:
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - this phase adds tests only, so the check is that no `lib/` change
       was needed to make them pass. If one was, the phase boundary was wrong
       and Phase 2 was incomplete.
-- [ ] The reproduction matches the bead's description step for step: eventless
+- [x] The reproduction matches the bead's description step for step: eventless
       probe raises, error is dequeued and selects nothing, queue empties, cycle
       repeats.
-- [ ] Reading the `trace: true` effect list by hand shows the repeating
+- [x] Reading the `trace: true` effect list by hand shows the repeating
       round structure, confirming the returned machine_state is the debugging
       artifact ADR-0019's Consequences promise.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -855,17 +855,35 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**All 13 items confirmed 2026-08-12**, walked with the user rather than read
+off the test suite: the deviation comment was machine-diffed against the ADR
+line by line, the REC Termination quote and the "external entity" premise
+were checked against the local spec cache, the three outcomes were exercised
+under both `trace: true` and `trace: false`, and the livelock's mechanism was
+confirmed at its `selection.ex` clause rather than inferred from the trace.
+Two items carry a qualification, marked inline below. One follow-up was filed:
+**st-ux0** - during a livelock neither counter advances, so the default budget
+yields ~30,000 byte-identical trace effects with no way to order the rounds or
+read how deep the fold got (ADR-0012).
+
 ### Phase 1
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - this phase touches no ported function, so the check is that
       `MachineState.new/2` gained only a field read and `Effect` gained only a
       union member.
-- [ ] The `@type core` typedoc wording matches ADR-0019 lines 89-92, and the
+- [x] The `@type core` typedoc wording matches ADR-0019 lines 89-92, and the
       table row uses the file's own "not yet produced" convention.
-- [ ] `%Statifier.Effect.BudgetExhausted{}` field names read the way ADR-0019
+- [x] `%Statifier.Effect.BudgetExhausted{}` field names read the way ADR-0019
       names them (configuration, counters, budget, pending internal events).
-- [ ] No regressions in related features.
+      All five confirmed, under `@enforce_keys`.
+      **Qualified:** the moduledoc calls `pending_internal_events` "where a
+      livelock's repeatedly-raised events pile up". That is true of what the
+      field is *for*, but it is always empty for this bead's own shape, where
+      each round drains the one event it raises. Accurate, and misleading read
+      cold next to st-sd1; `interpreter_acceptance_test.exs` documents the
+      same divergence at the assertion that found it.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -879,20 +897,30 @@ blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line: `microstep/1`'s body, `internal_round/1`, and `run_selected/3` are
       untouched, and the fold's condition and body are unchanged apart from
-      the guard - the deviation is the guard alone.
-- [ ] The ADR-0002 deviation comment above `defp macrostep/3` is ADR-0019
+      the guard - the deviation is the guard alone. The three functions are
+      confirmed untouched.
+      **Qualified:** "the fold's body is unchanged apart from the guard"
+      overstates what was built. The fold's *return shape* changed too, from
+      `{machine_state, effects}` to a tagged
+      `{:quiescent | :exhausted, machine_state, effects}` - this plan's own
+      "Decisions this plan makes" records why (a budget-exhausted fold is
+      still `running: true`, so `macrostep/1` can no longer infer stability
+      from `running`). The loop's continue condition and per-round semantics
+      are genuinely untouched, so the deviation stays mechanical; the item as
+      written simply claims more than the code does.
+- [x] The ADR-0002 deviation comment above `defp macrostep/3` is ADR-0019
       lines 127-137 **verbatim**, including the quoted REC Termination note.
-- [ ] The three macrostep outcomes are mutually exclusive in practice: a
+- [x] The three macrostep outcomes are mutually exclusive in practice: a
       terminating chart emits `Trace.Done` and no `MacrostepStable`; a stable
       one emits `MacrostepStable` and no `:budget_exhausted`; an exhausted one
       emits `:budget_exhausted` and neither.
-- [ ] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
+- [x] `Trace.MacrostepStable`'s absence on exhaustion is visible in a
       `trace: true` run in iex, and the repeating `TransitionsSelected` /
       `EventDequeued` rounds read as the cycle ADR-0019 describes.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -906,17 +934,17 @@ blocking here.
 
 ### Phase 3
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - this phase adds tests only, so the check is that no `lib/` change
       was needed to make them pass. If one was, the phase boundary was wrong
       and Phase 2 was incomplete.
-- [ ] The reproduction matches the bead's description step for step: eventless
+- [x] The reproduction matches the bead's description step for step: eventless
       probe raises, error is dequeued and selects nothing, queue empties, cycle
       repeats.
-- [ ] Reading the `trace: true` effect list by hand shows the repeating
+- [x] Reading the `trace: true` effect list by hand shows the repeating
       round structure, confirming the returned machine_state is the debugging
       artifact ADR-0019's Consequences promise.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
