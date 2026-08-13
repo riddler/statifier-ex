@@ -79,24 +79,27 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :status,
     :macrostep,
     :microstep,
+    :round,
     :trace,
     :max_macrostep_rounds
   ]
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
   # indexes), FIFO internal queue, history values, first-entry tracking,
-  # datamodel slot, running, status, macrostep/microstep counters, trace
-  # option, round budget (ADR-0019) - nothing loop-local left unreified".
-  # `entered_states` (st-af3.3 Phase 5) is the ADR-0002 substitute for
-  # Appendix D's `s.isFirstEntry`, which cannot live on a compiled, immutable
-  # `%Machine.State{}` in this port - see that field's own moduledoc section.
+  # datamodel slot, running, status, macrostep/microstep/round counters,
+  # trace option, round budget (ADR-0019) - nothing loop-local left
+  # unreified". `entered_states` (st-af3.3 Phase 5) is the ADR-0002
+  # substitute for Appendix D's `s.isFirstEntry`, which cannot live on a
+  # compiled, immutable `%Machine.State{}` in this port - see that field's
+  # own moduledoc section. `round` (st-ux0, ADR-0020) is the third counter,
+  # joining `macrostep`/`microstep`.
   #
   # sabotage: add `states_to_invoke: nil` to `MachineState`'s `defstruct`
   # in lib/statifier/machine_state.ex - the struct then grows a
-  # thirteenth key, and this equality assertion reddens for exactly
+  # fourteenth key, and this equality assertion reddens for exactly
   # the "someone adds a field without updating the docs" failure the
   # plan calls out.
-  test "machine_state holds the twelve fields, and the struct has no others" do
+  test "machine_state holds the thirteen fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)
@@ -219,11 +222,14 @@ defmodule Statifier.MachineStateAcceptanceTest do
   #
   # sabotage: `MachineState.new/2` sets `microstep: 1` instead of `0` ->
   # this assertion reddens; zero must mean "no macrostep has begun yet".
+  # sabotage: `MachineState.new/2` sets `round: 1` instead of `0` -> the
+  # round assertion reddens the same way.
   test "counter fields are present and zero on new/2" do
     ms = MachineState.new(machine())
 
     assert ms.macrostep == 0
     assert ms.microstep == 0
+    assert ms.round == 0
   end
 
   # AC: "Leaf-state derived view implemented and tested against nested

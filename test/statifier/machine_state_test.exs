@@ -68,10 +68,13 @@ defmodule Statifier.MachineStateTest do
   describe "new/2" do
     # sabotage: `MachineState.new/2` sets `macrostep: 1` instead of `0` ->
     # this assertion reddens; zero must mean "no macrostep has begun yet".
+    # sabotage: `MachineState.new/2` sets `round: 1` instead of `0` -> the
+    # round assertion reddens the same way.
     test "counters start at zero" do
       ms = new_machine_state()
       assert ms.macrostep == 0
       assert ms.microstep == 0
+      assert ms.round == 0
     end
 
     # sabotage: `MachineState.new/2` sets `running: false` -> this
@@ -415,6 +418,54 @@ defmodule Statifier.MachineStateTest do
     test "begin_microstep/1 increments microstep and leaves macrostep alone" do
       ms = new_machine_state() |> MachineState.begin_macrostep() |> MachineState.begin_microstep()
 
+      assert ms.macrostep == 1
+      assert ms.microstep == 1
+    end
+
+    # sabotage: `MachineState.begin_microstep/1` also increments `round` ->
+    # this assertion reddens.
+    test "begin_microstep/1 leaves round alone" do
+      ms =
+        new_machine_state()
+        |> MachineState.begin_macrostep()
+        |> MachineState.begin_round()
+        |> MachineState.begin_microstep()
+
+      assert ms.round == 1
+    end
+
+    # sabotage: `MachineState.begin_macrostep/1` drops its `round: 0`
+    # reset -> this assertion reddens.
+    test "begin_macrostep/1 resets a non-zero round to zero" do
+      ms =
+        new_machine_state()
+        |> MachineState.begin_macrostep()
+        |> MachineState.begin_round()
+        |> MachineState.begin_round()
+
+      assert ms.round == 2
+
+      ms = MachineState.begin_macrostep(ms)
+      assert ms.round == 0
+    end
+  end
+
+  describe "begin_round/1" do
+    # sabotage: `MachineState.begin_round/1` returns `machine_state`
+    # unchanged -> this assertion reddens.
+    test "increments round by one and leaves macrostep/microstep alone" do
+      ms =
+        new_machine_state()
+        |> MachineState.begin_macrostep()
+        |> MachineState.begin_microstep()
+
+      ms = MachineState.begin_round(ms)
+      assert ms.round == 1
+      assert ms.macrostep == 1
+      assert ms.microstep == 1
+
+      ms = MachineState.begin_round(ms)
+      assert ms.round == 2
       assert ms.macrostep == 1
       assert ms.microstep == 1
     end

@@ -1,6 +1,18 @@
 # ADR-0019: A round budget bounds the macrostep fold
 
-Status: accepted (2026-08-12)
+Status: accepted (2026-08-12) - amended in part by ADR-0020 (2026-08-13)
+
+**Amendment note.**
+[ADR-0020](0020-round-ordinal-joins-the-step-counters.md) narrows one clause
+of the Decision below: "it does not belong on the struct" covers the budget
+countdown - the fold driver's guard, which stays a fold-local accumulator
+exactly as written - but not a round *ordinal*, which ADR-0020 adds to
+`%MachineState{}` as a third counter under the counter contract. The two
+reasons this record gives (guard, not position; a hand-stepper needs no
+budget) reach only the countdown, and st-ux0 showed that without an ordinal
+the "read the repeating rounds in the effect list" consequence below does not
+hold: during a livelock neither existing counter advances, so every round's
+effects are byte-identical. Everything else in this record stands.
 
 ## Context
 
