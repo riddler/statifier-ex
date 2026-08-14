@@ -186,10 +186,10 @@ defmodule Statifier.Session.EffectsTest do
       assert length(@vocabulary) == 17
     end
 
-    # sabotage: `plan_one/1`'s `{:log, _}` clause is dropped -> the whole
-    # `plan/1` call raises `FunctionClauseError` for the `:log` fixture, and
-    # this test reddens instead of silently planning nothing for it.
     for {{{tag, payload} = effect, expected}, index} <- Enum.with_index(@vocabulary) do
+      # sabotage: `plan_one/1`'s `{:log, _}` clause is dropped -> the whole
+      # `plan/1` call raises `FunctionClauseError` for the `:log` fixture, and
+      # this test reddens instead of silently planning nothing for it.
       test "plans #{tag} carrying #{inspect(payload.__struct__)} (fixture #{index})" do
         assert Effects.plan([unquote(Macro.escape(effect))]) == unquote(Macro.escape(expected))
       end
