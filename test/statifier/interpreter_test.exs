@@ -2,6 +2,8 @@ defmodule Statifier.InterpreterTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.Effect
+  alias Statifier.Event
   alias Statifier.Interpreter
   alias Statifier.Lowering
   alias Statifier.Machine
@@ -204,5 +206,122 @@ defmodule Statifier.InterpreterTest do
 
     assert MachineState.internal_events(result) == []
     assert result.configuration == MapSet.new([0, state_index(machine, "caught")])
+  end
+
+  describe "cancel/1" do
+    defp cancel_document do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="parent">
+          <state id="parent">
+              <onexit>
+                  <log label="parent-exit"/>
+              </onexit>
+              <initial>
+                  <transition target="leaf"/>
+              </initial>
+              <state id="leaf">
+                  <onexit>
+                      <log label="leaf-exit"/>
+                  </onexit>
+              </state>
+          </state>
+      </scxml>
+      """
+    end
+
+    defp log_labels(effects) do
+      for {:log, %Effect.Log{label: label}} <- effects, do: label
+    end
+
+    # sabotage: `cancel/1`'s `%{machine_state | running: false}` update is
+    # dropped so `exit_interpreter/1` runs against the still-`running: true`
+    # machine_state -> `exit_interpreter/1` never touches `running` itself,
+    # so the returned position comes back with `running: true`, reddening
+    # `refute result.running` below. Reverted and confirmed green.
+    test "cancels a running chart mid-configuration: {:done, _} carries the pre-exit configuration, status is :done, running is false" do
+      machine = compile!(cancel_document())
+      {running, _effects} = Interpreter.initialize(machine)
+      pre_exit_configuration = running.configuration
+
+      assert running.running
+
+      assert {:ok, result, effects} = Interpreter.cancel(running)
+
+      assert {:done, %Effect.Done{configuration: done_configuration}} = List.last(effects)
+      assert done_configuration == pre_exit_configuration
+      assert result.status == :done
+      refute result.running
+    end
+
+    # sabotage: `cancel/1`'s returned effect list is built as
+    # `Enum.reverse(effects)` instead of `effects` -> `exit_interpreter/1`'s
+    # own onexit order (leaf, then its compound parent) comes back reversed,
+    # reddening the label-order assertion below. Reverted and confirmed
+    # green.
+    test "runs onexit blocks for every active state in exit order" do
+      machine = compile!(cancel_document())
+      {running, _effects} = Interpreter.initialize(machine)
+
+      assert {:ok, _result, effects} = Interpreter.cancel(running)
+
+      assert log_labels(effects) == ["leaf-exit", "parent-exit"]
+    end
+
+    # sabotage: `cancel/1`'s `%{machine_state | running: false}` update is
+    # dropped (same mutation as the first test above) -> the cancelled
+    # position comes back with `running: true`, so the subsequent
+    # `handle_event/2` no longer hits its `running: false` guard clause and
+    # is accepted instead of rejected, reddening the `{:error,
+    # :not_running}` match below. Reverted and confirmed green.
+    test "a cancelled chart rejects a subsequent handle_event/2 with {:error, :not_running}" do
+      machine = compile!(cancel_document())
+      {running, _effects} = Interpreter.initialize(machine)
+
+      assert {:ok, cancelled, _effects} = Interpreter.cancel(running)
+
+      assert Interpreter.handle_event(cancelled, Event.external("go")) ==
+               {:error, :not_running}
+    end
+
+    # sabotage: `cancel/1`'s `%MachineState{running: false}` head clause is
+    # deleted, leaving only the general clause -> cancelling an
+    # already-terminated machine_state falls through to the general clause,
+    # which re-runs `exit_interpreter/1` over an already-empty configuration
+    # and returns `{:ok, _, _}` instead of `{:error, :not_running}`,
+    # reddening the match below. Reverted and confirmed green.
+    test "cancelling an already-done chart returns {:error, :not_running}" do
+      machine = compile!(cancel_document())
+      {running, _effects} = Interpreter.initialize(machine)
+      assert {:ok, done, _effects} = Interpreter.cancel(running)
+
+      assert Interpreter.cancel(done) == {:error, :not_running}
+    end
+
+    # sabotage: same `Enum.reverse(effects)` mutation as the onexit-order
+    # test above -> `Trace.ExitSet` no longer precedes the onexit logs and
+    # `Trace.Done` no longer precedes the terminal `{:done, _}`, the same
+    # relative positions natural termination (`exit_interpreter/1` itself)
+    # produces, reddening the ordering assertions below. Reverted and
+    # confirmed green.
+    test "with trace: true, ExitSet and Trace.Done appear in the same positions natural termination produces" do
+      machine = compile!(cancel_document())
+      {running, _effects} = Interpreter.initialize(machine, trace: true)
+
+      assert {:ok, _result, effects} = Interpreter.cancel(running)
+
+      exit_set_index =
+        Enum.find_index(effects, &match?({:trace, %Effect.Trace.ExitSet{}}, &1))
+
+      first_log_index = Enum.find_index(effects, &match?({:log, _payload}, &1))
+
+      done_trace_index =
+        Enum.find_index(effects, &match?({:trace, %Effect.Trace.Done{}}, &1))
+
+      done_effect_index = Enum.find_index(effects, &match?({:done, _payload}, &1))
+
+      assert exit_set_index < first_log_index
+      assert done_trace_index < done_effect_index
+      assert done_effect_index == length(effects) - 1
+    end
   end
 end
