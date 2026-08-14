@@ -167,14 +167,20 @@ column) is the recorded shape for exactly this.
 - The feature detector's `script_elements :unsupported` entry
   (test/support/feature_detector.ex) flips to whatever partial-support
   notation the registry uses, per the ceiling in decision 4.
-- st-t3f (rewriting basic script bodies at corpus-generation time) is
-  rescoped to bodies the statement grammar cannot execute, or closed as
-  superseded - its blanket premise is gone.
-- Open question, deliberately not settled here: whether a *top-level*
-  `<script>` evaluation error should ever be escalated to a document
-  rejection rather than a queued `error.execution`. 5.8 mandates
-  rejection only for an undownloadable `src`; this record queues
-  `error.execution` for inline-body failures at load time (decision 3)
-  because that is the executable-content error model and no corpus file
-  demands otherwise. If a mandatory test surfaces that observes
-  rejection, that is an amendment here.
+- st-t3f (rewriting basic script bodies at corpus-generation time) took
+  the supersede branch: closed 2026-08-14 as superseded by st-af3.17,
+  its blanket premise gone.
+- Whether a *top-level* `<script>` evaluation error should ever be
+  escalated to a document rejection rather than a queued
+  `error.execution`. **Resolved 2026-08-14: it should not, and this is
+  a fact rather than a preference.** 5.9.4 sanctions the queued form
+  outright - "The SCXML Processor MAY reject documents containing
+  syntactically ill-formed expressions at document load time, or it MAY
+  wait and place 'error.execution' in the internal event queue at
+  runtime when the expressions are evaluated" - so decision 3 exercises
+  a spec MAY, not a deviation. The amendment trigger this record armed
+  itself with cannot fire: the IRP's whole 5.8 family is tests 301-304,
+  and 301 is the only rejection-observing one, is the undownloadable
+  `src` case decision 2 already handles, and is `manual="true"`
+  (`cases/manifest.xml`). 302/303/304 assert successful evaluation and
+  pass. Reopening this needs a new test to exist, not a re-reading.
