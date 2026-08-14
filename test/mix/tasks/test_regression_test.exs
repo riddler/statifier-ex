@@ -86,11 +86,12 @@ defmodule Mix.Tasks.Test.RegressionTest do
   end
 
   @tag :isolated_tmp_dir
-  # sabotage: n/a - asserts the absence of behavior run_tests/3 never had on
-  #           the failing branch; there is no lib/ code path to break that
-  #           would print a coverage block after a failing run
+  # sabotage: call print_coverage/2 on run_tests/3's failing branch too -> red.
+  #           The corpus file below needs the "test/" prefix suite_dir/1 joins
+  #           onto the root, or the corpus is empty, stats_lines/3 returns []
+  #           and this refute passes whatever the failing branch prints.
   test "a failing run prints no coverage block", %{tmp_dir: tmp_dir} do
-    scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
+    scion = test_file(tmp_dir, "test/scion_tests/basic0_test.exs")
     path = registry(tmp_dir, %{"scion_tests" => [scion]})
 
     output =
