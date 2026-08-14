@@ -12,7 +12,6 @@ defmodule SCXMLTest.Param.Test488 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_param_elements,
          :wildcard_events
        ]
   @tag conformance: "mandatory", spec: "param"

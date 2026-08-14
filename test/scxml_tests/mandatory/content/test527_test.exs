@@ -11,8 +11,7 @@ defmodule SCXMLTest.Content.Test527 do
          :eventless_transitions,
          :final_states,
          :log_elements,
-         :onentry_actions,
-         :send_content_elements
+         :onentry_actions
        ]
   @tag conformance: "mandatory", spec: "content"
   test "test527" do

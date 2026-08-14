@@ -7,21 +7,21 @@ defmodule Statifier.CaseTest do
     # sabotage: n/a - asserts the harness's own flunk path, no lib/ behavior
     test "flunks naming every unsupported feature the document uses" do
       xml = """
-      <scxml>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
         <state id="s1">
-          <onentry><script>1</script></onentry>
+          <onentry><send event="ev"/></onentry>
         </state>
       </scxml>
       """
 
       error =
         assert_raise AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "scripts on entry", ["s1"], [])
+          Statifier.Case.test_scxml(xml, "sends on entry", ["s1"], [])
         end
 
       assert error.message =~ "unsupported SCXML features"
-      assert error.message =~ "script_elements"
-      assert error.message =~ "scripts on entry"
+      assert error.message =~ "send_elements"
+      assert error.message =~ "sends on entry"
     end
 
     # sabotage: n/a - asserts the harness fails rather than skips, no lib/ behavior

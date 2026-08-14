@@ -535,11 +535,18 @@ is the second argument -->
 
 
 
-<!-- scripting.  Stubbed: <script> is permanently out of scope (ADR-0004; test302-304). -->
+<!-- scripting.  <script> is supported per ADR-0026: a body is a predicator
+statement program. conf:script must assign 1 to Var1 (test302-304 all assert
+Var1 == 1 via conf:idVal="1=1"); upstream's `var Var1 = 1` drops `var`, which
+predicator's statement grammar (location "=" expression) does not have. -->
 
 <xsl:template match="conf:script">
+  <script xmlns="http://www.w3.org/2005/07/scxml">Var1 = 1</script>
 </xsl:template>
 
+<!-- <script src>: rejected at load (ADR-0026 decision 2, no external fetch;
+st-322 owns the external-fetch question). Stubbed - no .txml references
+conf:scriptGoodSrc/conf:scriptBadSrc, so there is nothing to build. -->
 <xsl:template match="//@conf:scriptGoodSrc">
 </xsl:template>
 
@@ -611,7 +618,7 @@ currently used for any tests  -->
 
 <!-- this  should create a <foreach> statement that increments the values of the specified array.  Not
 currently used for any tests.
-Stubbed: relies on <script>, permanently out of scope (ADR-0004). -->
+Stubbed: unused by any test. -->
 <xsl:template match="conf:incrementArray">
 </xsl:template>
 
