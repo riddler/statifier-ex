@@ -256,7 +256,7 @@ calls for, in addition to recording Branch B here.
 ## Phase 4 verification, 2026-08-14
 
 Re-run of this same `mix run bench/macrostep.exs` after Phase 4 landed the
-`bind/3`-threading change ADR-0027 records (`<assign>`/`<foreach>` bind
+`bind/3`-threading change ADR-0028 records (`<assign>`/`<foreach>` bind
 into the block's existing context; `<script>` threads the post-run context
 `Predicator.execute/3` already returns - see
 `lib/statifier/evaluator.ex`'s `run_program/2`). Same machine, same
