@@ -429,4 +429,54 @@ defmodule Statifier.EvaluatorTest do
       assert Evaluator.evaluate(bound, compiled_expr("brand_new")) == {:ok, 7}
     end
   end
+
+  describe "context/1 - the provider/host seam (st-l0t)" do
+    # sabotage: `context/1` gains an extra `functions: %{"Sabotage" => {0,
+    # fn _args, _ctx -> {:ok, true} end}}` option alongside `providers:` ->
+    # the `:functions` option merges unvalidated, so a raw `function()`
+    # value lands in the resolved map, and the `is_function/1` check below
+    # finds it, reddening this assertion.
+    test "a built context holds no function() value anywhere in its functions map" do
+      context = Evaluator.context(machine_state_with_s1_active())
+
+      for {_name, {_arity, entry}} <- context.functions do
+        refute is_function(entry),
+               "expected every functions entry to be an {module, atom} pair, got: #{inspect(entry)}"
+      end
+    end
+
+    # sabotage: `context/1` is changed to set `host: machine_state.machine`
+    # (dropping `configuration` from the tuple) instead of
+    # `{machine_state.machine, machine_state.configuration}` -> `context.host`
+    # is a bare `%Statifier.Machine{}` instead of a 2-tuple, and the pattern
+    # match on `{machine, configuration}` below fails to match, reddening
+    # this assertion.
+    test "context.host is {machine, configuration}, matching machine_state" do
+      ms = machine_state_with_s1_active()
+      context = Evaluator.context(ms)
+
+      assert {machine, configuration} = context.host
+      assert machine == ms.machine
+      assert configuration == ms.configuration
+    end
+
+    # sabotage: `Statifier.Evaluator.Functions.in_state/2`'s body is changed
+    # to always return `{:ok, false}` regardless of what `host` says ->
+    # `put_host/2`'s new `s2`-active configuration is never consulted, and
+    # `In('s2')` stays `{:ok, false}` instead of moving to `{:ok, true}`,
+    # reddening the final assertion.
+    test "put_host/2 changes In/1's answer without rebuilding the context" do
+      machine = machine()
+      ms_s1 = %{MachineState.new(machine) | configuration: MapSet.new([idx(machine, "s1")])}
+      context = Evaluator.context(ms_s1)
+      in_s2 = compiled_expr("In('s2')")
+
+      assert Evaluator.evaluate(context, in_s2) == {:ok, false}
+
+      s2_configuration = MapSet.new([idx(machine, "s2")])
+      refreshed = Predicator.Context.put_host(context, {machine, s2_configuration})
+
+      assert Evaluator.evaluate(refreshed, in_s2) == {:ok, true}
+    end
+  end
 end

@@ -107,9 +107,10 @@ defmodule Statifier.Evaluator do
 
   @doc """
   Builds the `Predicator.Context.t()` `evaluate/2` evaluates against, bound
-  to `machine_state`'s datamodel plus the `In(stateId)` host function.
+  to `machine_state`'s datamodel plus `In(stateId)`
+  (`Statifier.Evaluator.Functions`).
 
-  The returned context is a position snapshot: `In/1`'s closure captures
+  The returned context is a position snapshot: `host` is set to
   `machine_state.machine` and `machine_state.configuration` as they stand at
   the moment of this call, so a context built before a configuration change
   keeps answering `In/1` against the old configuration - callers rebuild
@@ -119,7 +120,8 @@ defmodule Statifier.Evaluator do
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
   def context(%MachineState{} = machine_state) do
     Predicator.Context.new(undefine_nils(machine_state.datamodel),
-      functions: %{"In" => {1, in_function(machine_state)}},
+      providers: [Statifier.Evaluator.Functions],
+      host: {machine_state.machine, machine_state.configuration},
       on_unbound: :error
     )
   end
@@ -165,9 +167,9 @@ defmodule Statifier.Evaluator do
   `functions`, `on_unbound`, and `host` over unchanged.
 
   This is safe **within** the executable-content block that already holds
-  `context` and unsafe **across** one: `functions` (and with it `In/1`'s
-  captured configuration) carries over verbatim, which is correct only
-  while the block still runs inside the microstep it started in. A block
+  `context` and unsafe **across** one: `functions` and `host` (and with it
+  `In/1`'s configuration) carry over verbatim, which is correct only while
+  the block still runs inside the microstep it started in. A block
   never outlives that microstep, so binding into its own context is always
   safe there - but reusing a bound context after the block returns would
   answer `In/1` against a configuration the machine has already left, the
@@ -306,9 +308,10 @@ defmodule Statifier.Evaluator do
 
   The returned `post_context` is safe to thread into the rest of the block
   that ran `program` (ADR-0028) and unsafe to keep past it, for the same
-  reason `bind/3`'s own doc gives: `functions` (and `In/1`'s captured
-  configuration) carries over from `predicator_context` unchanged, correct
-  only while the block still runs inside the microstep it started in.
+  reason `bind/3`'s own doc gives: `functions` and `host` (and with it
+  `In/1`'s configuration) carry over from `predicator_context` unchanged,
+  correct only while the block still runs inside the microstep it started
+  in.
   """
   @spec run_program(machine_state :: MachineState.t(), program :: Machine.program()) ::
           {:ok, MachineState.t(), Predicator.Context.t()}
@@ -361,23 +364,5 @@ defmodule Statifier.Evaluator do
           do: {key, value}
 
     Map.split_with(changed, fn {root, _value} -> String.starts_with?(root, "_") end)
-  end
-
-  # The `In(stateId)` host function (spec 5.10): true when `stateId` names a
-  # state currently in `machine_state`'s configuration. `Machine.index/2`
-  # returns `:error` for an id the document never declared - that is not an
-  # evaluation failure, so it becomes `{:ok, false}` rather than an
-  # `{:error, _}` here; a document asking `In()` about a state it does not
-  # have is answered "not active", the same answer it would get for any
-  # other inactive state.
-  @spec in_function(machine_state :: MachineState.t()) ::
-          (list(), Predicator.Context.t() -> {:ok, boolean()})
-  defp in_function(%MachineState{machine: machine, configuration: configuration}) do
-    fn [state_id], _predicator_context ->
-      case Machine.index(machine, state_id) do
-        {:ok, index} -> {:ok, MapSet.member?(configuration, index)}
-        :error -> {:ok, false}
-      end
-    end
   end
 end
