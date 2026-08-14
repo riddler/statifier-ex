@@ -142,11 +142,17 @@ promotion path.
   tooling attaches there; the core is untouched.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, with session timestamps) at
-  the session boundary makes a run reproducible: (machine, initial data,
-  external event log). `Statifier.Session.interpret/2` widens what that
-  recording has to contain - see its own `@doc`. Keep the session's input path
+  the session boundary makes a run reproducible. The recording has four
+  inputs: (machine, initial data, external event log, `interpret/2` batches) -
+  the fourth is each `Statifier.Session.interpret/2` call's effect list at
+  its position in the session's serialized input order, and it is empty for
+  a session never handed such a call, which keeps the familiar three-input
+  tuple as the common case (ADR-0029). Keep the session's input path
   single and capturable - no side doors that inject events without crossing
-  the recordable boundary (`Statifier.Session.Inbox`).
+  the recordable boundary (`Statifier.Session.Inbox`). The recorder itself
+  is unbuilt (st-dtm); note it cannot be a subscriber, because the effect
+  stream does not distinguish core-derived effects (replay re-derives
+  them) from `interpret/2`-injected ones (replay re-injects them).
 
 ## Non-goals (for now)
 
