@@ -91,4 +91,80 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       assert error.location.start_line == 6
     end
   end
+
+  describe "check/2 - donedata_content_and_params" do
+    # sabotage: `content_and_params?/1`'s `%Donedata{content: nil}` clause
+    # is dropped, leaving only the `%Donedata{params: []}` clause and the
+    # catch-all `true` -> a <donedata> with only <param> children (no
+    # <content>) is wrongly reported, reddening this "reports nothing"
+    # assertion
+    test "<donedata> with only <param> children reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="f">
+              <donedata>
+                  <param name="x" expr="1"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+
+    # sabotage: `content_and_params?/1`'s `%Donedata{params: []}` clause is
+    # dropped, leaving only the `%Donedata{content: nil}` clause and the
+    # catch-all `true` -> a <donedata> with only <content> (no <param>) is
+    # wrongly reported, reddening this "reports nothing" assertion
+    test "<donedata> with only <content> reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="f">
+              <donedata>
+                  <content expr="1"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+
+    # sabotage: `content_and_params?/1`'s catch-all `%Donedata{}, do: true`
+    # clause is changed to `false` -> a <donedata> carrying both <content>
+    # and <param> is wrongly treated as legal, reddening this assertion
+    test "<donedata> with both <content> and <param> is reported at the donedata's own line" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="f">
+              <donedata>
+                  <content expr="1"/>
+                  <param name="x" expr="2"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:donedata_content_and_params, "f"}} = error]} =
+               validate!(xml)
+
+      assert error.location.start_line == 3
+      assert error.message =~ "donedata"
+    end
+
+    # sabotage: `donedatas/1`'s `%State{donedata: nil}` clause is dropped,
+    # crashing the `%DDonedata{}` clause's pattern match against `nil`
+    # instead of returning `[]` -> a document with a `<final>` carrying no
+    # `<donedata>` at all would raise instead of validating cleanly,
+    # reddening this assertion
+    test "a <final> with no <donedata> reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="f"/>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+  end
 end

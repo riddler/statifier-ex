@@ -43,22 +43,6 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "script")
     end
 
-    # sabotage: `Lowering.walk_child/4`'s unsupported-element branch reports
-    # the enclosing element's `location` instead of the child's own -> the
-    # location-regex assertion inside `assert_unsupported/2` reddens, since
-    # the slice would start at "<donedata", not "<param"
-    test "<param> under <donedata>" do
-      xml = """
-      <scxml>
-          <final id="f">
-              <donedata><param name="x" expr="1"/></donedata>
-          </final>
-      </scxml>
-      """
-
-      assert_unsupported(xml, "param")
-    end
-
     # `<datamodel>` and `<data>` moved from this deferred set to the
     # supported set in st-af3.3 Phase 1 - see
     # `test/statifier/lowering/datamodel_test.exs` for their own coverage.
@@ -103,6 +87,7 @@ defmodule Statifier.Lowering.UnsupportedTest do
 
     # `<foreach>` moved from this deferred set to the supported set in
     # st-af3.6 Phase 1 - see `test/statifier/lowering/content_test.exs` for
-    # its own coverage.
+    # its own coverage. `<param>` moved the same way in st-af3.7 Phase 3 -
+    # see `test/statifier/lowering/donedata_test.exs` for its own coverage.
   end
 end

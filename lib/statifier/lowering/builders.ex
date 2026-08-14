@@ -24,6 +24,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.If
   alias Statifier.Document.Initial
   alias Statifier.Document.Log
+  alias Statifier.Document.Param
   alias Statifier.Document.Raise
   alias Statifier.Document.State
   alias Statifier.Document.Transition
@@ -269,12 +270,11 @@ defmodule Statifier.Lowering.Builders do
   tagged `{:donedata, donedata}`.
 
   `content` stays `nil` when `<donedata>` has no `<content>` child and
-  becomes a `%Statifier.Document.Content{}` when it does - the only shape
-  lowering currently builds (`Statifier.Document.Donedata`'s moduledoc). A
-  `<param>` child misses the dispatch map entirely and comes back from
-  `Statifier.Lowering.walk_children/2` as `{:unsupported_element, "param"}`
-  at `<param>`'s own location, the same rejection every other unsupported
-  element gets - no special-case code is needed here for it.
+  becomes a `%Statifier.Document.Content{}` when it does. `params` holds
+  however many `<param>` children are present, in document order - both
+  slots are built here regardless of spec 5.5's content-model rule, which is
+  `Statifier.Validator.Checks.Donedata`'s to report
+  (`Statifier.Document.Donedata`'s moduledoc).
   """
   @spec build_donedata(element :: Element.t(), ctx :: map()) ::
           {{:donedata, Donedata.t()}, [Error.t()]}
@@ -283,8 +283,51 @@ defmodule Statifier.Lowering.Builders do
 
     donedata = %Donedata{location: element.location}
     {donedata, place_errors} = place_children(results, donedata, element.name)
+    donedata = reverse_lists(donedata)
 
     {{:donedata, donedata}, errors ++ place_errors}
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Param{}` from a `<param>` element, tagged
+  `{:param, param}`.
+
+  Reads `name` (required - spec 5.7.1), `expr`, and `location`. `expr` and
+  `location` are both read as raw nilable strings - neither is tokenized or
+  compiled here (`Statifier.Document.Param`'s moduledoc forbids `Predicator`
+  under `lib/statifier/document/`, the same rule every other Document node
+  follows). A missing `name` means no struct can be built at all, following
+  `build_raise/2`'s required-attribute pattern:
+  `{nil, [Error.missing_attribute("param", "name", element.location)]}`.
+  """
+  @spec build_param(element :: Element.t(), ctx :: map()) ::
+          {{:param, Param.t()} | nil, [Error.t()]}
+  def build_param(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    case Attributes.value(element, "name") do
+      nil ->
+        {nil, errors ++ [Error.missing_attribute("param", "name", element.location)]}
+
+      name ->
+        attribute_locations =
+          %{}
+          |> Attributes.put_location(:name, element, "name")
+          |> Attributes.put_location(:expr, element, "expr")
+          |> Attributes.put_location(:location, element, "location")
+
+        param = %Param{
+          location: element.location,
+          name: name,
+          expr: Attributes.value(element, "expr"),
+          param_location: Attributes.value(element, "location"),
+          attribute_locations: attribute_locations
+        }
+
+        {param, place_errors} = place_children(results, param, element.name)
+
+        {{:param, param}, errors ++ place_errors}
+    end
   end
 
   @doc """
@@ -773,6 +816,10 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | content: content}, nil}
   end
 
+  defp place({:param, param}, %Donedata{} = parent, _parent_name) do
+    {%{parent | params: [param | parent.params]}, nil}
+  end
+
   defp place({:transition, transition}, %Initial{} = parent, _parent_name) do
     {%{parent | transitions: [transition | parent.transitions]}, nil}
   end
@@ -886,6 +933,10 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Datamodel{} = datamodel) do
     %{datamodel | data: Enum.reverse(datamodel.data)}
+  end
+
+  defp reverse_lists(%Donedata{} = donedata) do
+    %{donedata | params: Enum.reverse(donedata.params)}
   end
 
   # `%If{}`'s branches were built newest-first (`place/3`'s `%If{}` clauses
