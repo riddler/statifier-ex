@@ -15,10 +15,11 @@ defmodule Statifier.FeatureDetector do
   surface landed through st-wju.7 - basic/compound/parallel/final/history
   states, the initial attribute and `<initial>` element, event/eventless/
   targetless/internal/wildcard transitions, `<onentry>`/`<onexit>`,
-  `<raise>`, `<log>`, and static `<donedata>`. Everything datamodel-flavored
-  (`cond`, `<datamodel>`, `<assign>`, `<script>`, `<send>`, `<invoke>`, and so
-  on) stays `:unsupported`. Each later phase flips more features to
-  `:supported` as they land.
+  `<raise>`, `<log>`, and static `<donedata>`. Later phases added
+  `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded transitions (including
+  `<if>`/`<elseif>`/`<else>`), and `<foreach>`. `<script>`, `<send>`,
+  `<invoke>`, `<cancel>`, and their attributes stay `:unsupported`; see
+  `feature_registry/0` for the authoritative, up-to-date list.
   """
 
   @doc """
@@ -66,7 +67,8 @@ defmodule Statifier.FeatureDetector do
       event_transitions: :supported,
       # st-wju.6
       eventless_transitions: :supported,
-      conditional_transitions: :unsupported,
+      # st-af3.8
+      conditional_transitions: :supported,
       # st-wju.3
       targetless_transitions: :supported,
       # st-wju.3
