@@ -25,3 +25,13 @@
   `location` (spec 5.7). Nothing evaluates `<param>` yet - the values are
   inert until a later phase compiles and evaluates them into the done
   event's data.
+- `<param>` under `<donedata>` now compiles and evaluates: each `<param>`'s
+  `expr` or `location` attribute compiles through the same value-expression
+  path, and at done time the params fold in document order into a
+  string-keyed map via `Statifier.EventData.coerce({:params, _})` - a
+  duplicate name takes the last value, and a `<donedata>` with no surviving
+  params carries `nil` data, not `%{}`. A param whose expression fails to
+  evaluate raises its own `error.execution` and is dropped from the result
+  rather than aborting the remaining params (spec 5.7's "MUST ignore the
+  name and value"). The `done.state.*` event and the terminal `Effect.Done`
+  both carry the same folded map.

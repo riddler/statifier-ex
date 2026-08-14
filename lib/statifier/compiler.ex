@@ -92,6 +92,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
   alias Statifier.Document.Log, as: DLog
+  alias Statifier.Document.Param, as: DParam
   alias Statifier.Document.Raise, as: DRaise
   alias Statifier.Document.State, as: DState
   alias Statifier.Document.Transition, as: DTransition
@@ -105,6 +106,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Content.Raise, as: MRaise
   alias Statifier.Machine.Data, as: MData
   alias Statifier.Machine.Donedata, as: MDonedata
+  alias Statifier.Machine.Param, as: MParam
   alias Statifier.Machine.State, as: MState
   alias Statifier.Machine.Transition, as: MTransition
   alias Statifier.Parser.Location
@@ -1019,9 +1021,15 @@ defmodule Statifier.Compiler do
   end
 
   @spec build_donedata(index :: non_neg_integer(), donedata :: DDonedata.t()) ::
-          {:ok, MDonedata.t()} | {:error, Error.t()}
-  defp build_donedata(_index, %DDonedata{location: location, content: nil}) do
-    {:ok, %MDonedata{location: location, expr: nil, expr_location: nil}}
+          {:ok, MDonedata.t()} | {:error, Error.t() | [Error.t()]}
+  defp build_donedata(index, %DDonedata{location: location, content: nil, params: params}) do
+    case build_donedata_params(params, index) do
+      {:ok, mparams} ->
+        {:ok, %MDonedata{location: location, expr: nil, expr_location: nil, params: mparams}}
+
+      {:error, errors} ->
+        {:error, errors}
+    end
   end
 
   defp build_donedata(index, %DDonedata{location: location, content: %DContent{} = content}) do
@@ -1031,12 +1039,83 @@ defmodule Statifier.Compiler do
          %MDonedata{
            location: location,
            expr: expr,
-           expr_location: content_expr_location(content)
+           expr_location: content_expr_location(content),
+           params: []
          }}
 
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # Compiles a `<donedata>`'s `<param>` children in document order. Mutually
+  # exclusive with the `<content>` arm above by validator check
+  # (`Statifier.Validator.Checks.Donedata`), so this clause is only ever
+  # reached with `content: nil`.
+  @spec build_donedata_params(params :: [DParam.t()], index :: non_neg_integer()) ::
+          {:ok, [MParam.t()]} | {:error, [Error.t()]}
+  defp build_donedata_params(params, index) do
+    params
+    |> Enum.map(&build_donedata_param(&1, index))
+    |> collect()
+  end
+
+  # A single `<param>` compiles its `expr` or `location` attribute (exactly
+  # one is present - `Statifier.Validator.Checks.Param`) through the same
+  # value-expression path either way (Decision 4 -
+  # `Statifier.Machine.Param`'s moduledoc). The diagnostic span mirrors
+  # `content_expr_location/1`: the written attribute's value span, or the
+  # `<param>` node's own location as a fallback that a validated document
+  # never actually needs.
+  @spec build_donedata_param(param :: DParam.t(), index :: non_neg_integer()) ::
+          {:ok, MParam.t()} | {:error, Error.t()}
+  defp build_donedata_param(%DParam{expr: source, param_location: nil} = param, index)
+       when not is_nil(source) do
+    build_param(param, :expr, source, index)
+  end
+
+  defp build_donedata_param(%DParam{param_location: source} = param, index)
+       when not is_nil(source) do
+    build_param(param, :location, source, index)
+  end
+
+  @spec build_param(
+          param :: DParam.t(),
+          kind :: MParam.kind(),
+          source :: String.t(),
+          index :: non_neg_integer()
+        ) :: {:ok, MParam.t()} | {:error, Error.t()}
+  defp build_param(%DParam{name: name} = param, kind, source, index) do
+    param_expr_location = param_expr_location(param)
+
+    case Expressions.compile(source, {:donedata, index}, param_expr_location) do
+      {:ok, expr} ->
+        {:ok,
+         %MParam{
+           name: name,
+           kind: kind,
+           expr: expr,
+           expr_location: param_expr_location,
+           location: param.location
+         }}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  # `attribute_locations[:expr]` when `expr` was written,
+  # `attribute_locations[:location]` when `location` was written, the
+  # `<param>` node's own `location` as the fallback `content_expr_location/1`
+  # also falls back to.
+  @spec param_expr_location(param :: DParam.t()) :: Location.t()
+  defp param_expr_location(%DParam{
+         expr: expr,
+         attribute_locations: attribute_locations,
+         location: location
+       }) do
+    key = if is_nil(expr), do: :location, else: :expr
+    Map.get(attribute_locations, key, location)
   end
 
   # `<content>`'s folded value: the compiled arm from a written `expr`

@@ -22,17 +22,27 @@ defmodule Statifier.Machine.Donedata do
 
   `expr` carries no `c_index`: it is not executable content, never appears
   in a block, and no `execute_block` ever runs it.
+
+  `params` is the compiled, document-ordered list of `<param>` children -
+  `[]` when `<donedata>` has none. `expr` (the `<content>` arm) and `params`
+  are mutually exclusive by validator check (`Statifier.Validator.Checks.Donedata`,
+  spec 5.5: "either a single `<content>` element or one or more `<param>`
+  elements ... but not both"), so a `%Donedata{}` with both non-empty never
+  reaches the interpreter fold. Like `expr`, no entry in `params` carries a
+  `c_index`: `<donedata>` is not executable content.
   """
 
   alias Statifier.Machine
+  alias Statifier.Machine.Param
   alias Statifier.Parser.Location
 
   @enforce_keys [:location]
-  defstruct [:location, expr: nil, expr_location: nil]
+  defstruct [:location, expr: nil, expr_location: nil, params: []]
 
   @type t :: %__MODULE__{
           expr: Machine.expr() | nil,
           location: Location.t(),
-          expr_location: Location.t() | nil
+          expr_location: Location.t() | nil,
+          params: [Param.t()]
         }
 end

@@ -62,6 +62,10 @@ defmodule Statifier.Validator.Checks.ParamTest do
   end
 
   describe "check/2 - passing shapes" do
+    # sabotage: `check_param/1`'s final `%DParam{}) -> []` catch-all is
+    # changed to always report `param_no_value` -> this and the
+    # location-only test below both redden, since a passing single-attribute
+    # `<param>` now gets an error where `{:ok, _}` was expected
     test "a <param> with only expr reports nothing" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
@@ -76,6 +80,8 @@ defmodule Statifier.Validator.Checks.ParamTest do
       assert {:ok, _document} = validate!(xml)
     end
 
+    # sabotage: same mutation as the expr-only test above, reddening this
+    # test in the same way for the location-only shape
     test "a <param> with only location reports nothing" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">

@@ -29,6 +29,7 @@ defmodule Statifier.Interpreter.TerminationTest do
   #  7   done_nil        -- top-level <final>; no <donedata>
   #  8   done_compiled   -- top-level <final>; donedata expr="1 + 1", evaluates to 2
   #  9   done_compiled_fail -- top-level <final>; donedata expr fails to evaluate
+  # 10   done_param      -- top-level <final>; donedata <param name="Var" expr="1 + 1"/>
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="start">
       <state id="start">
@@ -67,6 +68,11 @@ defmodule Statifier.Interpreter.TerminationTest do
               <content expr="undeclared_var"/>
           </donedata>
       </final>
+      <final id="done_param">
+          <donedata>
+              <param name="Var" expr="1 + 1"/>
+          </donedata>
+      </final>
   </scxml>
   """
 
@@ -79,7 +85,8 @@ defmodule Statifier.Interpreter.TerminationTest do
     done: 6,
     done_nil: 7,
     done_compiled: 8,
-    done_compiled_fail: 9
+    done_compiled_fail: 9,
+    done_param: 10
   }
 
   defp machine, do: compile!(@document)
@@ -176,6 +183,33 @@ defmodule Statifier.Interpreter.TerminationTest do
       assert {:done, %Effect.Done{donedata: nil}} = List.last(effects)
       assert [event] = MachineState.internal_events(result)
       assert event.name == "error.execution"
+    end
+
+    # AC: "the same param map reaches Effect.Done / Trace.Done at a
+    # top-level final, and the two agree" - `exit_interpreter/1` calls
+    # `ExitEntry.donedata/2` exactly once and threads the same value into
+    # both `Effect.Done.donedata` and `Trace.Done.donedata`
+    # (`docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md`),
+    # so a `<param>`-driven map has to agree the same way the `<content>`
+    # cases above already do.
+    #
+    # sabotage: `exit_interpreter/1`'s `%Effect.Done{}` literal's `donedata:`
+    # field is hardcoded to `nil` instead of the value `ExitEntry.donedata/2`
+    # returned -> `Effect.Done.donedata` would come back `nil` while
+    # `Trace.Done.donedata` still carries the param map, reddening the
+    # agreement assertion below.
+    test "a top-level final's <param> donedata reaches Effect.Done and Trace.Done identically" do
+      m = machine()
+
+      {_result, effects} = Interpreter.exit_interpreter(machine_state(m, [idx(:done_param)]))
+
+      assert {:done, %Effect.Done{donedata: effect_donedata}} = List.last(effects)
+
+      assert [%Effect.Trace.Done{donedata: trace_donedata}] =
+               for({:trace, %Effect.Trace.Done{} = payload} <- effects, do: payload)
+
+      assert effect_donedata == %{"Var" => 2}
+      assert trace_donedata == effect_donedata
     end
   end
 
