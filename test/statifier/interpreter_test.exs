@@ -208,6 +208,124 @@ defmodule Statifier.InterpreterTest do
     assert result.configuration == MapSet.new([0, state_index(machine, "caught")])
   end
 
+  # AC: "a top-level <script> emits a trace effect when tracing is on,
+  # carrying the {:global_script, index} owner" - closes the asymmetry with
+  # `Statifier.Interpreter.Content.execute_block/3`, which already emits
+  # `Trace.ContentExecuted` for the identical script body inside an
+  # <onentry>.
+  #
+  # sabotage: `run_global_script/3`'s compiled-program clause has its
+  # `Effect.trace(...)` call deleted, returning `{machine_state, []}`
+  # unconditionally -> confirmed red: `effects` no longer contains a
+  # `Trace.ContentExecuted` payload, reddening the pattern match below.
+  # Reverted and confirmed green.
+  test "a top-level <script> emits Trace.ContentExecuted with the {:global_script, index} owner when tracing is on" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <script>x = 1;</script>
+          <state id="a"/>
+      </scxml>
+      """)
+
+    {_result, effects} = Interpreter.initialize(machine, trace: true)
+
+    assert %Effect.Trace.ContentExecuted{owner: {:global_script, 0}, c_indexes: []} =
+             Enum.find_value(effects, fn
+               {:trace, %Effect.Trace.ContentExecuted{} = payload} -> payload
+               _other -> nil
+             end)
+  end
+
+  # AC: "an untraced run emits nothing" - the same load-time script, with
+  # `trace: false` (`Interpreter.initialize/2`'s own default), produces no
+  # `Trace.ContentExecuted` effect at all rather than one with an empty
+  # payload.
+  #
+  # sabotage: `Effect.trace/3`'s own `if machine_state.trace do` guard
+  # (`lib/statifier/effect.ex`) is inverted to `if not machine_state.trace
+  # do` -> confirmed red: an untraced `initialize/2` call now emits
+  # `Trace.ContentExecuted` (among every other trace effect in the run),
+  # reddening the refutation below. Reverted and confirmed green.
+  test "an untraced top-level <script> emits no trace effect" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <script>x = 1;</script>
+          <state id="a"/>
+      </scxml>
+      """)
+
+    {_result, effects} = Interpreter.initialize(machine)
+
+    refute Enum.any?(effects, &match?({:trace, %Effect.Trace.ContentExecuted{}}, &1))
+  end
+
+  # AC: "the effect is emitted on the error path too, matching the block
+  # runner's error-path emission" - `execute_block/3`'s error clause still
+  # emits `Trace.ContentExecuted` (with `c_indexes` truncated to what ran);
+  # `run_global_script/3`'s error clause mirrors that rather than skipping
+  # the trace once `error.execution` has been raised.
+  #
+  # sabotage: `run_global_script/3`'s compiled-program clause has its
+  # `Effect.trace(...)` call deleted, returning `{machine_state, []}`
+  # unconditionally (the same mutation the first test above uses, which also
+  # reddens this test since both the success and error arms of that clause
+  # share the one trace call after the `case`) -> confirmed red: `effects`
+  # for the failing script carries no `Trace.ContentExecuted` payload,
+  # reddening the pattern match below. Reverted and confirmed green.
+  test "a failing top-level <script> still emits Trace.ContentExecuted" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <script>x = 1; y = nope + 1;</script>
+          <state id="a">
+              <transition event="error.execution" target="caught"/>
+          </state>
+          <state id="caught"/>
+      </scxml>
+      """)
+
+    {_result, effects} = Interpreter.initialize(machine, trace: true)
+
+    assert %Effect.Trace.ContentExecuted{owner: {:global_script, 0}, c_indexes: []} =
+             Enum.find_value(effects, fn
+               {:trace, %Effect.Trace.ContentExecuted{} = payload} -> payload
+               _other -> nil
+             end)
+  end
+
+  # AC: "the effects order before enterStates' effects in initialize/2's
+  # return" - `run_global_scripts/2`'s own `Trace.ContentExecuted` must
+  # precede `ExitEntry.enter_states/2`'s `Trace.EntrySet` in the flat list
+  # `initialize/2` returns, matching Appendix D's `executeGlobalScriptElement`
+  # running strictly before `enterStates`.
+  #
+  # sabotage: `initialize/2`'s final tuple is changed from `{machine_state,
+  # global_effects ++ enter_effects ++ loop_effects}` to `{machine_state,
+  # enter_effects ++ global_effects ++ loop_effects}` -> confirmed red: the
+  # global script's `Trace.ContentExecuted` now lands after the initial
+  # state's `Trace.EntrySet` instead of before it, reddening the ordering
+  # assertion below. Reverted and confirmed green.
+  test "a top-level <script>'s trace effect orders before enterStates' effects" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <script>x = 1;</script>
+          <state id="a"/>
+      </scxml>
+      """)
+
+    {_result, effects} = Interpreter.initialize(machine, trace: true)
+
+    content_executed_index =
+      Enum.find_index(effects, &match?({:trace, %Effect.Trace.ContentExecuted{}}, &1))
+
+    entry_set_index = Enum.find_index(effects, &match?({:trace, %Effect.Trace.EntrySet{}}, &1))
+
+    assert content_executed_index < entry_set_index
+  end
+
   describe "cancel/1" do
     defp cancel_document do
       """

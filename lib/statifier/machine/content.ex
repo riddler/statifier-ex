@@ -46,9 +46,12 @@ defmodule Statifier.Machine.Content do
   - `{:onexit, state_index, ordinal}` - an `<onexit>` block
   - `{:transition, t_index}` - a transition's own executable content
 
-  The shared home for this concept: `Statifier.Effect.Trace.ContentExecuted`
-  aliases it for its own `owner` field, and `Statifier.Event.Cause.origin`
-  embeds it for a `:content` cause, rather than either redefining it.
+  The shared home for this concept: `Statifier.Event.Cause.origin` embeds
+  this type unwidened for its `:content` cause, rather than redefining it.
+  `Statifier.Effect.Trace.ContentExecuted` widens it instead of aliasing it
+  plainly - a load-time top-level `<script>` needs an `owner` this type
+  cannot carry, since it belongs to no block at all; see that module's own
+  `owner/0` typedoc for why the extra case lives there and not here.
   """
   @type owner ::
           {:onentry, non_neg_integer(), non_neg_integer()}

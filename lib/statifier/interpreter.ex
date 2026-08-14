@@ -219,14 +219,22 @@ defmodule Statifier.Interpreter do
     # below folds over `machine.global_scripts` in document order, which is
     # the plural spec 5.8 actually specifies, not a reordering of anything
     # Appendix D's prose commits to.
-    machine_state = run_global_scripts(machine_state, machine.global_scripts)
+    #
+    # `global_effects` is threaded separately from `enter_effects`/
+    # `loop_effects` below and prepended ahead of both in the function's
+    # final return, rather than folded together with them here, because that
+    # return-site concatenation is the one place this ordering needs to be
+    # readable: `global_effects ++ enter_effects ++ loop_effects` reads as
+    # the same before-enterStates ordering this call site already documents,
+    # with no separate accumulator threading required.
+    {machine_state, global_effects} = run_global_scripts(machine_state, machine.global_scripts)
 
     {machine_state, enter_effects} =
       ExitEntry.enter_states(machine_state, [initial_transition(machine)])
 
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
-    {machine_state, enter_effects ++ loop_effects}
+    {machine_state, global_effects ++ enter_effects ++ loop_effects}
   end
 
   # `expandScxmlSource(doc)` (Appendix D's own normalization step) is what
@@ -260,14 +268,19 @@ defmodule Statifier.Interpreter do
   # threads a `Context.t()` across its own nodes' writes (ADR-0026 decision
   # 3: no block runner and no `ExecutableContent.Context` on this path -
   # there is no block for a top-level script to belong to, so there is
-  # nothing for a `Context.t()` to be built over).
+  # nothing for a `Context.t()` to be built over). The effect list threads
+  # the same way `machine_state` does - accumulated across scripts, in
+  # document order, each script's own effects appended after the previous
+  # script's - the same left-to-right accumulation `execute_block/3` uses
+  # across the nodes *inside* one block, one level up.
   @spec run_global_scripts(machine_state :: MachineState.t(), scripts :: [Machine.program()]) ::
-          MachineState.t()
+          {MachineState.t(), [Effect.t()]}
   defp run_global_scripts(machine_state, scripts) do
     scripts
     |> Enum.with_index()
-    |> Enum.reduce(machine_state, fn {script, index}, ms ->
-      run_global_script(ms, script, index)
+    |> Enum.reduce({machine_state, []}, fn {script, index}, {ms, effects} ->
+      {ms, script_effects} = run_global_script(ms, script, index)
+      {ms, effects ++ script_effects}
     end)
   end
 
@@ -284,6 +297,21 @@ defmodule Statifier.Interpreter do
   # via `MachineState.raise_platform/4`, outside any runner, because
   # `<data>` binding has no runner either.
   #
+  # It also emits a `Trace.ContentExecuted` effect, on both clauses' success
+  # and error paths, reusing the same struct `execute_block/3` emits for an
+  # `<onentry>`/`<onexit>`/transition block rather than minting a
+  # load-time-only trace shape: nothing today (or foreseeably) needs to
+  # distinguish "a block of content ran" from "a top-level script ran" at the
+  # trace-consumer level, and `Effect.Trace.ContentExecuted.owner/0` is
+  # already widened, above, to carry `{:global_script, index}` for exactly
+  # this call. `c_indexes` is always `[]`, never a list of run indices: a
+  # top-level `<script>` has no `c_index` at all (this module's own "why
+  # `global_scripts` is different" moduledoc section), so there is no
+  # per-node identity to report - the same "no indices to give" case
+  # `execute_block/3`'s own empty-block clause already documents, reused
+  # here for the same reason: a trace consumer should never have to infer a
+  # missing entry from an absent effect.
+  #
   # `{:invalid, error}` (Decision 1: a body that never compiled, deferred
   # from load to this reached-at-runtime position) is handled the same
   # way a successfully compiled program's own run-time failure is: no
@@ -291,16 +319,30 @@ defmodule Statifier.Interpreter do
   # through unchanged and `error` is the raised event's `data:` directly -
   # the same two-element short-circuit
   # `Statifier.Machine.Content.Script`'s own `execute/2` clause takes for
-  # the identical shape.
+  # the identical shape. The trace effect is still emitted after the raise,
+  # stamped from the post-raise `machine_state` - `raise_platform/4` does not
+  # touch `macrostep`/`microstep`/`round`, but stamping after it (rather than
+  # before) matches `execute_block/3`'s own error clause, which stamps its
+  # trace from the `machine_state` `raise_execution_error/4` returns, not the
+  # one it received. Keeping both call sites' stamping order identical means
+  # a future counter added to the raise path stays correctly reflected here
+  # too, with no separate reasoning needed at this call site.
   @spec run_global_script(
           machine_state :: MachineState.t(),
           script :: Machine.program() | {:invalid, Compiler.Error.t()},
           index :: non_neg_integer()
-        ) :: MachineState.t()
+        ) :: {MachineState.t(), [Effect.t()]}
   defp run_global_script(machine_state, {:invalid, error}, index) do
-    MachineState.raise_platform(machine_state, "error.execution", {:global_script, index},
-      data: error
-    )
+    machine_state =
+      MachineState.raise_platform(machine_state, "error.execution", {:global_script, index},
+        data: error
+      )
+
+    {machine_state,
+     Effect.trace(machine_state, Effect.Trace.ContentExecuted,
+       owner: {:global_script, index},
+       c_indexes: []
+     )}
   end
 
   defp run_global_script(
@@ -308,15 +350,25 @@ defmodule Statifier.Interpreter do
          {:program, %Predicator.Compiled{}, _source} = program,
          index
        ) do
-    case Evaluator.execute(machine_state, program) do
-      {:ok, new_machine_state} ->
-        new_machine_state
+    machine_state =
+      case Evaluator.execute(machine_state, program) do
+        {:ok, new_machine_state} ->
+          new_machine_state
 
-      {:error, new_machine_state, error} ->
-        MachineState.raise_platform(new_machine_state, "error.execution", {:global_script, index},
-          data: error
-        )
-    end
+        {:error, new_machine_state, error} ->
+          MachineState.raise_platform(
+            new_machine_state,
+            "error.execution",
+            {:global_script, index},
+            data: error
+          )
+      end
+
+    {machine_state,
+     Effect.trace(machine_state, Effect.Trace.ContentExecuted,
+       owner: {:global_script, index},
+       c_indexes: []
+     )}
   end
 
   @doc """
