@@ -82,6 +82,20 @@ defmodule Statifier.Event.Cause do
     expressions differ, and two `<param>` elements may legitimately share
     one expression while differing in `name`.
 
+  - `{:global_script, index}` - the platform raised the event about a
+    top-level `<script>` (spec 5.8) that could not be run at document load
+    time (`Statifier.Interpreter.initialize/2`), with no content node and
+    no block behind it - a top-level script is never in `contents` at all
+    (`Statifier.Machine`'s own "why `global_scripts` is different"
+    moduledoc section), so this is the same shape as the `{:data, d_index}`
+    arm above, one level down, addressed the same way
+    `Statifier.Compiler.Expressions.owner_ref/0`'s own `{:global_script,
+    _}` arm is: `index` is the script's position in `document.scripts` /
+    `machine.global_scripts`, in document order, resolved by rereading that
+    list rather than through any `Statifier.Machine` accessor - there is no
+    `d_index`-style lookup function for a list with no dense-tuple
+    counterpart.
+
   Never a struct - every index resolves through `Statifier.Machine`.
   """
   @type origin ::
@@ -90,6 +104,7 @@ defmodule Statifier.Event.Cause do
           | {:transition, non_neg_integer()}
           | {:data, non_neg_integer()}
           | {:donedata_param, non_neg_integer(), non_neg_integer()}
+          | {:global_script, non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),
