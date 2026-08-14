@@ -11,6 +11,7 @@
         "area:datamodel",
         "area:corpus",
         "area:test-harness",
+        "area:gate-tooling",
         "area:skills",
         "area:docs",
         "area:build"

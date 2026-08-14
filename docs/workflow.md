@@ -164,9 +164,24 @@ of the tree it touches. A bead may carry several.
 | `area:datamodel` | `lib/statifier/datamodel/**` |
 | `area:corpus` | `tools/corpus/**`, `test/scion_tests/**`, `test/scxml_tests/**` |
 | `area:test-harness` | `test/support/**`, `lib/mix/tasks/test.*.ex`, `test/passing_tests.json` |
+| `area:gate-tooling` | `lib/mix/statifier/**`, `lib/mix/tasks/adr.*.ex`, `lib/mix/tasks/gate.*.ex` |
 | `area:skills` | `.claude/wurk.json`, `.claude/wurk/**`, `.claude/settings.json` |
 | `area:docs` | `docs/**`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `changelog.d/**` |
 | `area:build` | `mix.exs`, `mix.lock`, `.quality.exs`, `.credo.exs`, `.gitignore` |
+
+`area:gate-tooling` is a new row rather than a widened `area:test-harness`: the
+two claim different machinery. `area:test-harness` is about running the SCXML
+conformance suite - fixtures, the passing-tests baseline, the `test.*` mix
+tasks that drive it. `Mix.Statifier.AdrGuard`, `AdrJudge`, `GateGuard`,
+`RegressionRegistry` and the `adr.*`/`gate.*` mix tasks that wrap them are the
+gate's own enforcement machinery - they do not touch `test/support/**` or
+`test/passing_tests.json`, so folding them in would predict collisions that do
+not exist. Folding them into `area:build` was also considered, since
+`.quality.exs` sits right next to `gate_guard.ex` conceptually: `area:build`
+is exclusive because it moves `mix.lock` and the credo config that every
+worktree's warmed `_build` depends on, and gate-tooling code does not move
+those files, so forcing it to land alone would block batches for no file-level
+reason. It gets its own row, not exclusive.
 
 **Two beads are batchable iff their area sets are disjoint.** That is the whole
 rule, and it is what lets `/wurk:next` claim several beads at once (`n > 1`)
