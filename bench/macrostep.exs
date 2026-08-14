@@ -251,25 +251,32 @@ end
 
 # --- Run 1: realistic + assign-heavy (constant datamodel size) ----------
 #
-# Build count, per the call-site table (research doc section 1) and
-# execute_block/3's own moduledoc ("once per exited state's <onexit>, once
-# per entered state's <onentry>, once per fired transition's inline
-# content") plus Statifier.Interpreter.handle_event/2 and
-# Statifier.Interpreter.microstep/1's own selection-round builds:
+# Build count, per the current call graph and ADR-0028
+# (docs/adr/0028-executable-content-blocks-thread-one-context.md) plus this
+# plan (docs/plans/260814-st-l0t-provider-host-seam-for-in1.md, Phase 3).
+# ADR-0028 threads one Evaluator.context/1 build through the whole block via
+# Evaluator.bind/3: <assign> (lib/statifier/machine/content/assign.ex),
+# <foreach> (lib/statifier/machine/content/foreach.ex) and <script>'s
+# post-run context all bind into the block's existing context instead of
+# rebuilding it, so there is no longer a rebuild per write inside a block.
+# The surviving builds, confirmed against lib/statifier/interpreter/content.ex
+# (execute_block/3, :140-145 - the empty-c_indexes clause at :136-138 skips
+# the build entirely for an empty block) and
+# lib/statifier/interpreter/selection.ex (:332, :364):
 #
 #   1 (Selection.select_transitions/2, the external-event round)
 # + 1 (Selection.select_eventless_transitions/1, the terminal quiescence
 #      probe every macrostep ends with - lib/statifier/interpreter.ex:521)
 # + one execute_block/3 build per non-empty <onexit>/content/<onentry>
-#   block the macrostep runs
-# + one Evaluator.context/1 rebuild per <assign> in those blocks
-#   (lib/statifier/machine/content/assign.ex:76-91)
+#   block the macrostep runs (regardless of how many nodes are inside it -
+#   ADR-0028 removed the per-write rebuild)
 #
 # realistic: 2 (selection) + 3 (onexit block, transition-content block,
-# onentry block) + 2 (one assign in onexit, one in onentry) = 7.
+# onentry block, each non-empty) = 5.
 #
-# assign_heavy(n): 2 (selection) + 1 (the one transition-content block) +
-# n (one rebuild per assign) = n + 3.
+# assign_heavy(n): 2 (selection) + 1 (the one non-empty transition-content
+# block, which holds all n <assign> nodes and binds each one into that same
+# block context) = 3, constant in n.
 
 realistic_ms = Bench.build(Documents.realistic())
 realistic_build_ms = realistic_ms
@@ -290,22 +297,26 @@ build_suite_1 = Bench.run_build_cost(%{"realistic" => realistic_build_ms})
 
 realistic_macro = Bench.stats(realistic_suite, "realistic")
 realistic_build = Bench.stats(build_suite_1, "realistic")
-{realistic_s_time, realistic_s_mem} = Bench.derive("realistic", 7, realistic_build, realistic_macro)
+{realistic_s_time, realistic_s_mem} = Bench.derive("realistic", 5, realistic_build, realistic_macro)
 
 assign_results =
   for n <- [1, 5, 25, 100] do
     key = "n=#{n}"
     macro = Bench.stats(assign_suite, key)
-    build_count = n + 3
+    build_count = 3
     {s_time, s_mem} = Bench.derive("assign-heavy #{key}", build_count, realistic_build, macro)
     {n, s_time, s_mem}
   end
 
 # --- Run 2: foreach (datamodel size scales with N) -----------------------
 #
-# foreach(n): 2 (selection) + 1 (the transition-content block wrapping the
-# <foreach> node) + 1 (declare/2's pre-loop rebuild) + n (one rebuild per
-# write_iteration/4 call) = n + 4.
+# foreach(n): 2 (selection) + 1 (the one non-empty transition-content block
+# wrapping the <foreach> node) = 3, constant in n. ADR-0028 threads
+# declare/2's item/index declaration and every write_iteration/4 call into
+# that same block context with Evaluator.bind/3
+# (lib/statifier/machine/content/foreach.ex's write_iteration/4 and
+# bind_names/4) instead of rebuilding per iteration, so there is no longer a
+# `+ n` term here.
 #
 # Unlike realistic/assign-heavy, the datamodel itself grows with n (the
 # `items` array), so the per-build cost is measured separately at each n
@@ -329,7 +340,7 @@ foreach_results =
     key = "n=#{n}"
     macro = Bench.stats(foreach_suite, key)
     build = Bench.stats(foreach_build_suite, key)
-    build_count = n + 4
+    build_count = 3
     {s_time, s_mem} = Bench.derive("foreach #{key}", build_count, build, macro)
     {n, s_time, s_mem}
   end
@@ -342,7 +353,11 @@ foreach_results =
 # context per round regardless of how many candidate transitions carry
 # `cond` (lib/statifier/interpreter/selection.ex:332) - plus the terminal
 # eventless probe. No content blocks run (the matching transition is
-# targetless of content and its target states have no onentry), so:
+# targetless of content and its target states have no onentry), so this
+# constant is unaffected by ADR-0028
+# (docs/adr/0028-executable-content-blocks-thread-one-context.md) - it never
+# had a per-write rebuild to remove - and is unchanged from before this plan
+# (docs/plans/260814-st-l0t-provider-host-seam-for-in1.md, Phase 3):
 #
 #   1 (select_transitions, now evaluating 3 cond expressions against the
 #      one context it built) + 1 (eventless probe) = 2.
