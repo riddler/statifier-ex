@@ -35,6 +35,7 @@ defmodule Statifier.FeatureDetector do
   def detect_features(xml) when is_binary(xml) do
     MapSet.new()
     |> detect_elements(xml)
+    |> detect_send_children(xml)
     |> detect_attributes(xml)
   end
 
@@ -153,10 +154,24 @@ defmodule Statifier.FeatureDetector do
     {~r/<invoke(\s|>|\/>)/, :invoke_elements},
     {~r/<finalize(\s|>|\/>)/, :finalize_elements},
     {~r/<cancel(\s|>|\/>)/, :cancel_elements},
-    {~r/<content(\s|>|\/>)/, :send_content_elements},
-    {~r/<param(\s|>|\/>)/, :send_param_elements},
     {~r/<donedata(\s|>|\/>)/, :donedata_elements}
   ]
+
+  # <content> and <param> are legal under <send>, <invoke>, and <donedata>.
+  # Only the <send> flavour is gated on send support - <donedata>'s children
+  # landed with st-af3.7 - so these two run over a copy with the <donedata>
+  # blocks removed. Every other pattern, <donedata> included, still sees the
+  # untouched source.
+  @send_child_features [
+    {~r/<content(\s|>|\/>)/, :send_content_elements},
+    {~r/<param(\s|>|\/>)/, :send_param_elements}
+  ]
+
+  # <donedata> holds only <param> and <content>, so it never nests and the
+  # non-greedy run to the first close tag is exact. The lookbehind keeps a
+  # self-closing <donedata/> - which has no children to strip - from opening a
+  # span that swallows everything up to some later </donedata>.
+  @donedata_block ~r{<donedata\b[^>]*(?<!/)>.*?</donedata\s*>}s
 
   @attribute_features [
     {~r/\bcond\s*=/, :conditional_transitions},
@@ -170,6 +185,10 @@ defmodule Statifier.FeatureDetector do
   ]
 
   defp detect_elements(features, xml), do: add_matches(features, xml, @element_features)
+
+  defp detect_send_children(features, xml) do
+    add_matches(features, String.replace(xml, @donedata_block, ""), @send_child_features)
+  end
 
   defp detect_attributes(features, xml) do
     features

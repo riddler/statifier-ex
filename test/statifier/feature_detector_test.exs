@@ -170,6 +170,76 @@ defmodule Statifier.FeatureDetectorTest do
       refute :eventless_transitions in features
       refute :targetless_transitions in features
     end
+
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    test "attributes donedata's <content> to donedata_elements, not send_content_elements" do
+      xml = ~s(<scxml><final id="f"><donedata><content expr="1"/></donedata></final></scxml>)
+      features = FeatureDetector.detect_features(xml)
+
+      assert :donedata_elements in features
+      refute :send_content_elements in features
+    end
+
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    test "attributes donedata's <param> to donedata_elements, not send_param_elements" do
+      xml =
+        ~s(<scxml><final id="f"><donedata><param name="p" expr="1"/></donedata></final></scxml>)
+
+      features = FeatureDetector.detect_features(xml)
+
+      assert :donedata_elements in features
+      refute :send_param_elements in features
+    end
+
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    test "reports both flavors when a send child and a donedata child both appear" do
+      xml = ~s"""
+      <scxml>
+        <state id="s"><onentry><send><content expr="1"/></send></onentry></state>
+        <final id="f"><donedata><content expr="1"/></donedata></final>
+      </scxml>
+      """
+
+      features = FeatureDetector.detect_features(xml)
+
+      assert :send_content_elements in features
+      assert :donedata_elements in features
+    end
+
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    test "strips two donedata blocks in one document, matching test294's shape" do
+      xml = ~s"""
+      <scxml>
+        <final id="f1"><donedata><param name="p" expr="1"/></donedata></final>
+        <final id="f2"><donedata><content expr="2"/></donedata></final>
+      </scxml>
+      """
+
+      features = FeatureDetector.detect_features(xml)
+
+      assert :donedata_elements in features
+      refute :send_param_elements in features
+      refute :send_content_elements in features
+    end
+
+    # sabotage: drop the `(?<!/)` lookbehind from @donedata_block -> red, since
+    #           the self-closing <donedata/> then opens a span whose opening
+    #           tag match extends to the first `>` (inside the `/>`), and
+    #           `.*?</donedata>` then reaches past the later <send><param/>
+    #           </send> to the next real </donedata>, swallowing both
+    test "a self-closing donedata earlier in the document does not swallow a later send child" do
+      xml = ~s"""
+      <scxml>
+        <final id="f1"><donedata/></final>
+        <state id="s"><onentry><send><param name="p" expr="1"/></send></onentry></state>
+        <final id="f2"><donedata><content expr="1"/></donedata></final>
+      </scxml>
+      """
+
+      features = FeatureDetector.detect_features(xml)
+
+      assert :send_param_elements in features
+    end
   end
 
   # The Phase 1 (st-wju.7) supported set, plus each later bead's registry
