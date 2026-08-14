@@ -142,7 +142,7 @@ defmodule Statifier.Lowering.Error do
   defines it, this engine simply refuses to act on it. `<script src>` is
   the first case (ADR-0026 decision 2: `<script>`'s `src` attribute is
   rejected at load, never fetched - the same unresolved external-fetch
-  question `<data src>` leaves open, st-322). No struct is built when this
+  question `<data src>` leaves open, see ADR-0024). No struct is built when this
   fires; the caller reports this error alone rather than also attempting a
   build.
   """
