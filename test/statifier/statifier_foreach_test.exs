@@ -1,6 +1,7 @@
 defmodule Statifier.StatifierForeachTest do
   @moduledoc """
-  Drives the seven W3C corpus documents named under "Corpus/Ratchet Notes" in
+  Drives the eight corpus documents - seven W3C, one SCION - named under
+  "Corpus/Ratchet Notes" in
   `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md` through the real
   engine, end to end, without going through `Statifier.Case.test_scxml/4`.
 
@@ -10,7 +11,7 @@ defmodule Statifier.StatifierForeachTest do
   `~r/\bcond\s*=/` attribute detector fires on `<transition cond=...>`
   everywhere these documents use it). `Statifier.Case.test_scxml/4` flunks
   rather than skips a document that names an unsupported feature
-  (`test/support/case.ex:41-46`), so these seven flunked before that bead even
+  (`test/support/case.ex:41-46`), so these eight flunked before that bead even
   though `<foreach>` itself was already fully implemented and correct.
 
   st-af3.8 flipped `conditional_transitions` to `:supported`, ran the full

@@ -164,6 +164,12 @@ defmodule Statifier.FeatureDetector do
   # landed with st-af3.7 - so these two run over a copy with the <donedata>
   # blocks removed. Every other pattern, <donedata> included, still sees the
   # untouched source.
+  #
+  # The two atoms keep their `send_`-prefixed names but now mean "outside
+  # <donedata>", which still lumps <invoke>'s children in with <send>'s. That
+  # costs nothing while invoke_elements is :unsupported - such a document
+  # flunks the gate on invoke_elements regardless - but the names will mislead
+  # once invoke lands, so renaming them belongs to that work rather than here.
   @send_child_features [
     {~r/<content(\s|>|\/>)/, :send_content_elements},
     {~r/<param(\s|>|\/>)/, :send_param_elements}
