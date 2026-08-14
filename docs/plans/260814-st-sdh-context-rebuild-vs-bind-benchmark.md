@@ -612,29 +612,29 @@ cross-repo table. Predicator owns that decision; this repo's bead defers to it.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes; `mix gate.verify` confirms a full unscoped run.
-- [ ] The ADR guard stage is green - specifically no ADR-0018 bead-ID finding
+- [x] Full `mix quality` passes; `mix gate.verify` confirms a full unscoped run.
+- [x] The ADR guard stage is green - specifically no ADR-0018 bead-ID finding
       from the `lib/statifier/evaluator.ex` moduledoc edit.
-- [ ] `mix quality --profile merge` is green, which is the only run that
+- [x] `mix quality --profile merge` is green, which is the only run that
       enables the ADR judge (`.quality.exs:34` disables it, `:42` re-enables
       it in the `merge` profile). This phase rewrites the
       exact moduledoc section that encodes ADR-0012's reasoning, and the judge
       scopes to ADR-0012, so it is this plan's highest-risk judge trigger and
       is worth running here rather than discovering at push time.
-- [ ] `grep -n "st-sdh" lib/statifier/evaluator.ex` returns nothing.
-- [ ] `grep -rn "nothing evaluates in a hot path" lib/ docs/` returns nothing.
-- [ ] `docs/adr/0027-*.md` exists and contains `## Context`, `## Decision` and
+- [x] `grep -n "st-sdh" lib/statifier/evaluator.ex` returns nothing.
+- [x] `grep -rn "nothing evaluates in a hot path" lib/ docs/` returns nothing.
+- [x] `docs/adr/0027-*.md` exists and contains `## Context`, `## Decision` and
       `## Consequences` headings.
-- [ ] `grep -c "Branch A\|Branch B" docs/adr/0027-*.md` is non-zero and the
+- [x] `grep -c "Branch A\|Branch B" docs/adr/0027-*.md` is non-zero and the
       Decision section names exactly one of the two. This is Phase 4's entry
       check, so a Decision section that names neither - or both - blocks the
       next phase.
-- [ ] `grep -n "0027" docs/adr/README.md` matches the new table row.
-- [ ] `grep -n "0027" docs/datamodel.md lib/statifier/evaluator.ex` matches
+- [x] `grep -n "0027" docs/adr/README.md` matches the new table row.
+- [x] `grep -n "0027" docs/datamodel.md lib/statifier/evaluator.ex` matches
       both.
-- [ ] `mix test.regression` passes - nothing here should move conformance, and
+- [x] `mix test.regression` passes - nothing here should move conformance, and
       this is the check that it did not.
-- [ ] `bd show st-sdh --json` shows the new note.
+- [x] `bd show st-sdh --json` shows the new note.
 
 #### Manual Verification:
 
@@ -970,5 +970,31 @@ Verification is deferred and surfaced at the end.
 - [ ] No regressions in related features - `lib/` and `test/` are untouched.
 
 **Implementation Note**: Same as Phase 1.
+
+---
+
+### Phase 3
+
+- [ ] The ADR's Decision section states the branch the pre-registered rule
+      selected, and the Context section shows the numbers that selected it.
+      A Decision that does not follow from its own Context is the failure mode
+      this phase exists to avoid.
+- [ ] The moduledoc's two grounds are still true as edited. In particular, if
+      Branch B was taken, confirm ground 2 (staleness) is untouched - within-block
+      threading never outlives a configuration change, because a block runs
+      inside one microstep.
+- [ ] `docs/datamodel.md` seam 1 and the moduledoc do not now contradict each
+      other, and neither contradicts `docs/datamodel.md:54-59`.
+- [ ] Em-dash house style preserved in `lib/statifier/evaluator.ex` and
+      `docs/datamodel.md`; the diff shows no incidental punctuation churn.
+- [ ] The ADR is a direction-level decision a reviewer would accept as such
+      (`docs/workflow.md`), not a note that should have been a comment.
+- [ ] Modifier C fired or did not, on its own measured evidence, and if it
+      fired both halves of the mirror resolve.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Same as Phase 1. Under Branch A the bead's acceptance
+criterion is fully satisfied at the end of this phase and Phase 4 is not
+executed.
 
 ---

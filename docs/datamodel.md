@@ -128,8 +128,17 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `Context.new/2`'s `providers:` and `host:` options, and `Context.put_host/2`
    (an O(1) `%{context | host: host}` refresh). Not taken here yet: `In/1` is
    still an inline `functions:` closure, which 5.0 still supports and
-   dispatches identically to a provider entry. Taking this seam is st-sdh's
-   call, deferred until something evaluates in a hot path worth benchmarking.
+   dispatches identically to a provider entry. Taken in the within-block
+   form only ([ADR-0027](adr/0027-executable-content-blocks-thread-one-context.md)):
+   measurement showed context construction is the majority of one
+   macrostep's cost at realistic datamodel scale, and `<assign>` and
+   `<foreach>` bind into the context an executable-content block already
+   threads rather than rebuilding it per write. The "built once per
+   evaluation site" commitment above (`docs/datamodel.md:54-59`) is
+   unchanged by this - the site is still the whole block, not the
+   individual write - and this seam is not taken across blocks: no context
+   is stored on `MachineState`, and widening the interval that far remains
+   future work.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is

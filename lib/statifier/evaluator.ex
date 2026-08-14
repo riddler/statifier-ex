@@ -64,12 +64,24 @@ defmodule Statifier.Evaluator do
   this module builds a context over it on demand. The cost that buys is
   real - `Predicator.Context.new/2` deep-normalizes the whole datamodel
   every time, where `Predicator.Context.bind/3` is O(1) in the data's size
-  and carries `functions` and `on_unbound` over unchanged. Nothing
-  evaluates in a hot path yet, so there is nothing to measure; st-sdh
-  tracks that question. The upstream seam that would let a context be
-  both cheap to refresh and safe to store landed in predicator 5.0.0
-  (px-8ii): `Predicator.FunctionProvider` plus `Context.new/2`'s `host:`
-  option and `Context.put_host/2`.
+  and carries `functions` and `on_unbound` over unchanged. Measured
+  (ADR-0027, `bench/results/260814-context-build.md` and
+  `bench/results/260814-macrostep.md`): at a realistic corpus-shaped
+  datamodel, context construction is 62.0% of one macrostep's wall time and
+  67.1% of its allocated memory, and rebuilding per write inside a block
+  costs an order of magnitude more than threading one context and
+  `bind/3`-ing each write into it. ADR-0027 answers this within one
+  executable-content block: `<assign>` and `<foreach>` are to bind into the
+  block's existing threaded context instead of calling `context/1` again
+  per write, without storing anything here, so neither ground above is
+  contradicted - the closure in `functions` still cannot outlive one block's
+  own stack frame, and a block still never spans a microstep. The upstream
+  seam that would let a context be both cheap to refresh and safe to store
+  landed in predicator 5.0.0 (px-8ii): `Predicator.FunctionProvider` plus
+  `Context.new/2`'s `host:` option and `Context.put_host/2`. That wider
+  seam - a context surviving *across* blocks, which would need it - is
+  still not taken; ADR-0027 is deliberately scoped to within-block
+  threading only.
 
   ## The membrane
 
