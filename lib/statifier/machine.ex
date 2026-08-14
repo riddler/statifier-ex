@@ -269,6 +269,9 @@ defmodule Statifier.Machine do
   def lcca(%__MODULE__{} = machine, [first | _rest] = indexes) do
     machine
     |> proper_ancestors(first)
+    # A `:parallel` never survives this filter (compound?/2) - spec-literal
+    # per ADR-0022, not a bug to fix even though SCION's more_parallel/test10
+    # and test10b assume otherwise.
     |> Enum.filter(&compound?(machine, &1))
     |> Enum.find(fn candidate ->
       Enum.all?(indexes, &descendant?(machine, &1, candidate))
