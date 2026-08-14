@@ -8,6 +8,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Lowering
   alias Statifier.Machine
+  alias Statifier.Machine.Param
   alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Validator
@@ -620,6 +621,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
             <transition event="go-loc" target="loc_final"/>
             <transition event="go-fail" target="fail_final"/>
             <transition event="go-only-fail" target="only_fail_final"/>
+            <transition event="go-both-fail" target="both_fail_final"/>
         </state>
         <state id="single_holder">
             <final id="single_final">
@@ -663,6 +665,17 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
             <final id="only_fail_final">
                 <donedata>
                     <param name="Bad" expr="undeclared_var"/>
+                </donedata>
+            </final>
+        </state>
+        <!-- Two failing params sharing ONE expression: the case where the
+             raised events' `data.source` strings are identical, so only the
+             cause origin can say which `<param>` failed. -->
+        <state id="both_fail_holder">
+            <final id="both_fail_final">
+                <donedata>
+                    <param name="BadA" expr="undeclared_var"/>
+                    <param name="BadB" expr="undeclared_var"/>
                 </donedata>
             </final>
         </state>
@@ -784,6 +797,68 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert [error_event, done_event] = MachineState.internal_events(result)
       assert error_event.name == "error.execution"
       assert done_event.data == nil
+    end
+
+    # AC: "a failing param's error names the param, not just its state"
+    # (`docs/observability.md` constraint 4, ADR-0012 item 4).
+    #
+    # `fail_holder`'s failing `<param name="Bad">` is the SECOND child, so a
+    # hardcoded `0` fails this just as a state-level origin does.
+    #
+    # sabotage: `evaluate_donedata_params/3`'s raise is reverted to the
+    # `{:state, state_index}` origin it used before -> the assertion below
+    # reddens with `{:state, 9}` against `{:donedata_param, 9, 1}`.
+    test "a failing param's error.execution origin names the param, not the state" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-fail")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [error_event, _done_event] = MachineState.internal_events(result)
+      assert {:donedata_param, state_index, 1} = error_event.cause.origin
+
+      # The origin resolves to the `<param>` that actually failed.
+      assert %Param{name: "Bad"} =
+               m
+               |> Machine.at(state_index)
+               |> Map.fetch!(:donedata)
+               |> Map.fetch!(:params)
+               |> Enum.at(1)
+    end
+
+    # AC: same constraint, at the granularity that makes it load-bearing -
+    # two failing params sharing one expression are indistinguishable by the
+    # error payload's `source` string, so the origin is the only thing that
+    # separates them.
+    #
+    # sabotage: `evaluate_donedata_params/3`'s `Enum.with_index/1` is dropped
+    # and the origin's index hardcoded to `0` -> both origins come back
+    # `{:donedata_param, _, 0}` and the distinctness assertion reddens, while
+    # the `source`-equality assertion above it still passes, which is the
+    # whole point.
+    test "two failing params sharing one expression get distinct origins" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-both-fail")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [first, second, done_event] = MachineState.internal_events(result)
+      assert first.name == "error.execution"
+      assert second.name == "error.execution"
+      assert done_event.data == nil
+
+      # The payloads alone cannot tell these two apart ...
+      assert first.data.source == second.data.source
+
+      # ... so the origin has to, in document order.
+      assert {:donedata_param, state_index, 0} = first.cause.origin
+      assert {:donedata_param, ^state_index, 1} = second.cause.origin
+
+      params = m |> Machine.at(state_index) |> Map.fetch!(:donedata) |> Map.fetch!(:params)
+      assert %Param{name: "BadA"} = Enum.at(params, 0)
+      assert %Param{name: "BadB"} = Enum.at(params, 1)
     end
   end
 
