@@ -1,44 +1,35 @@
-defmodule SCXMLTest.Param.Test298 do
+defmodule SCXMLTest.Script.Test303 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
+         :assign_elements,
          :basic_states,
-         :compound_states,
+         :conditional_transitions,
          :data_elements,
          :datamodel,
-         :donedata_elements,
          :event_transitions,
          :eventless_transitions,
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_delay_expressions,
-         :send_elements,
-         :wildcard_events
+         :script_elements
        ]
-  @tag conformance: "mandatory", spec: "param"
-  test "test298" do
+  @tag conformance: "mandatory", spec: "script"
+  test "test303" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="s0">
         <datamodel>
             <data id="Var1" expr="0" />
         </datamodel>
-        <state id="s0" initial="s01">
+        <state id="s0">
             <onentry>
-                <send event="timeout" delay="1s" />
+                <assign location="Var1" expr="2" />
+                <script>Var1 = 1</script>
             </onentry>
-            <transition event="error.execution" target="pass" />
-            <transition event="*" target="fail" />
-            <state id="s01">
-                <transition target="s02" />
-            </state>
-            <final id="s02">
-                <donedata>
-                    <param name="Var3" location="foo.bar.baz " />
-                </donedata>
-            </final>
+            <transition cond="Var1==1" target="pass" />
+            <transition target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -54,7 +45,7 @@ defmodule SCXMLTest.Param.Test298 do
     """
 
     description =
-      "If the 'location' attribute on a param element does not refer to a valid location in the data model, the processor MUST place the error error.execution on the internal event queue."
+      "The SCXML Processor MUST evaluate all script elements not children of scxml as part of normal executable content evaluation. N.B. This test is valid only for datamodels that support scripting."
 
     test_scxml(xml, description, ["pass"], [])
   end

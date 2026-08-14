@@ -315,9 +315,9 @@ defmodule Statifier.FeatureDetectorTest do
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
     test "reports unsupported features by name" do
       assert {:error, unsupported} =
-               FeatureDetector.validate_features(MapSet.new([:script_elements, :send_elements]))
+               FeatureDetector.validate_features(MapSet.new([:invoke_elements, :send_elements]))
 
-      assert unsupported == MapSet.new([:script_elements, :send_elements])
+      assert unsupported == MapSet.new([:invoke_elements, :send_elements])
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior

@@ -13,9 +13,7 @@ defmodule SCXMLTest.Donedata.Test294 do
          :eventless_transitions,
          :final_states,
          :log_elements,
-         :onentry_actions,
-         :send_content_elements,
-         :send_param_elements
+         :onentry_actions
        ]
   @tag conformance: "mandatory", spec: "donedata"
   test "test294" do

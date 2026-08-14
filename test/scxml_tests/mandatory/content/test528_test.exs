@@ -12,7 +12,6 @@ defmodule SCXMLTest.Content.Test528 do
          :final_states,
          :log_elements,
          :onentry_actions,
-         :send_content_elements,
          :wildcard_events
        ]
   @tag conformance: "mandatory", spec: "content"

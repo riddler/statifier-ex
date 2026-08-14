@@ -1,7 +1,6 @@
 # W3C IRP tests the predicator datamodel cannot run, with the reason.
 #
 # Reasons:
-#   :needs_script            - <script>/statements; permanently out (ADR-0004)
 #   :needs_predicator_feature - blocked on an upstream predicator capability
 #   :needs_basichttp         - BasicHTTP Event I/O Processor, out of scope
 #
@@ -13,9 +12,6 @@
 # names, not on an exclusion here.
 
 %{
-  "test302" => {:needs_script, "conf:script - predicator has no statement layer"},
-  "test303" => {:needs_script, "conf:script"},
-  "test304" => {:needs_script, "conf:script"},
   "test509" => {:needs_basichttp, "BasicHTTP Event I/O Processor MUST accept POST requests"},
   "test510" =>
     {:needs_basichttp, "BasicHTTP Event I/O Processor MUST validate and enqueue the message"},

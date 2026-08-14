@@ -1,34 +1,26 @@
-defmodule SCXMLTest.Content.Test529 do
+defmodule SCXMLTest.Script.Test302 do
   use Statifier.Case
 
   @moduletag :scxml_w3
   @tag required_features: [
          :basic_states,
-         :compound_states,
          :conditional_transitions,
-         :donedata_elements,
          :event_transitions,
          :eventless_transitions,
          :final_states,
          :log_elements,
-         :onentry_actions
+         :onentry_actions,
+         :script_elements
        ]
-  @tag conformance: "mandatory", spec: "content"
-  test "test529" do
+  @tag conformance: "mandatory", spec: "script"
+  test "test302" do
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="s0">
-        <state id="s0" initial="s01">
-            <transition event="done.state.s0" cond="_event.data == 21" target="pass" />
-            <transition event="done.state.s0" target="fail" />
-            <state id="s01">
-                <transition target="s02" />
-            </state>
-            <final id="s02">
-                <donedata>
-                    <content>21</content>
-                </donedata>
-            </final>
+        <script>Var1 = 1</script>
+        <state id="s0">
+            <transition cond="Var1==1" target="pass" />
+            <transition target="fail" />
         </state>
         <final id="pass">
             <onentry>
@@ -44,7 +36,7 @@ defmodule SCXMLTest.Content.Test529 do
     """
 
     description =
-      "If the 'expr' attribute is not present, the Processor MUST use the children of content as the output."
+      "The SCXML Processor MUST evaluate any script element that is a child of scxml at document load time. N.B. This test is valid only for datamodels that support scripting."
 
     test_scxml(xml, description, ["pass"], [])
   end
