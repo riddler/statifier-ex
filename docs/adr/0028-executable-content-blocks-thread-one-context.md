@@ -1,4 +1,4 @@
-# ADR-0027: Executable-content blocks thread one context and bind/3 each write
+# ADR-0028: Executable-content blocks thread one context and bind/3 each write
 
 Status: accepted (2026-08-14)
 

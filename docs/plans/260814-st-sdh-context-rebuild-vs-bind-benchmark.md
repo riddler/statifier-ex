@@ -66,9 +66,9 @@ numbers support - plus, if and only if the numbers support it, the
 
 Verify by: `mix run bench/context_build.exs` and `mix run bench/macrostep.exs`
 both complete and reproduce the committed results within their stated noise
-band; `docs/adr/README.md` lists ADR-0027 as accepted; `docs/datamodel.md` seam
+band; `docs/adr/README.md` lists ADR-0028 as accepted; `docs/datamodel.md` seam
 1 and `Statifier.Evaluator`'s "Why the built context is not a `MachineState`
-field" section both cite ADR-0027 rather than "nothing evaluates in a hot path
+field" section both cite ADR-0028 rather than "nothing evaluates in a hot path
 yet"; a bare `mix quality` is green.
 
 ### Key Discoveries:
@@ -231,7 +231,7 @@ an unclear measurement is not a justification for a change.
   needed to store a context *across* blocks, which D3 puts out of scope.
 - **Not storing a context on `MachineState`.** That is the ADR-0012
   constraint-1 question. Under Branch B this plan's change does not need it,
-  and under Branch A it is moot. A future bead may revisit it; ADR-0027 will
+  and under Branch A it is moot. A future bead may revisit it; ADR-0028 will
   say what would have to change first.
 - **Not widening `docs/datamodel.md`'s "once per evaluation site" commitment**
   (`docs/datamodel.md:54-59`). Both branches leave it standing.
@@ -566,11 +566,11 @@ the outcome without naming the branch leaves Phase 4 unable to start.
 
 **Changes**: The sentence "Nothing evaluates in a hot path yet, so there is
 nothing to measure; st-sdh tracks that question" (`:68-69`) is now false and
-must go. Replace with a citation of ADR-0027 and the measured outcome.
+must go. Replace with a citation of ADR-0028 and the measured outcome.
 
 Two constraints on this edit. First, ADR-0018 forbids bead IDs in new comment
 text and the guard is scoped to `lib/` (`lib/mix/statifier/adr_guard.ex:263-283`)
-- so the replacement cites **ADR-0027**, never `st-sdh`, and the existing
+- so the replacement cites **ADR-0028**, never `st-sdh`, and the existing
 `st-sdh` mention at `:68` is removed rather than preserved. Second, this file's
 moduledoc uses em dashes throughout; match that house style rather than
 converting.
@@ -587,8 +587,8 @@ pointer to what changed.
 
 **Changes**: "Taking this seam is st-sdh's call, deferred until something
 evaluates in a hot path worth benchmarking" is now resolved. Under Branch A:
-measured, not taken, ADR-0027. Under Branch B: taken in the within-block form,
-ADR-0027, with the "once per evaluation site" line at `:54-59` explicitly
+measured, not taken, ADR-0028. Under Branch B: taken in the within-block form,
+ADR-0028, with the "once per evaluation site" line at `:54-59` explicitly
 noted as unchanged. This is a doc file - no ADR-0018 guard - but keep the bead
 ID out anyway and cite the ADR.
 
@@ -678,7 +678,7 @@ memory of the numbers:
 grep -l "Branch B" docs/adr/0027-*.md
 ```
 
-Proceed only if ADR-0027's `## Decision` section names **Branch B**. If it
+Proceed only if ADR-0028's `## Decision` section names **Branch B**. If it
 names Branch A, this phase is complete by not being done - report that and
 stop. If the ADR names neither string verbatim, Phase 3 is not finished
 correctly and the fix belongs there, not here.
@@ -815,7 +815,7 @@ file at `changelog.d/st-sdh.md`.
       started with, which is what it did before; a block does not span a
       microstep, so nothing here can make it stale.
 - [ ] The sabotage mutations were genuinely run and genuinely went red.
-- [ ] ADR-0027's Consequences match what actually shipped, including the
+- [ ] ADR-0028's Consequences match what actually shipped, including the
       `<script>` fallback if it was taken.
 - [ ] No regressions in related features.
 
@@ -853,7 +853,7 @@ wrong thing:
   build per selection round, but no corpus document reaches it today
   (`lib/statifier/interpreter/selection.ex:277-280`). Measured and reported
   separately; explicitly excluded from the realistic share, and named in
-  ADR-0027's Consequences as a reopening trigger.
+  ADR-0028's Consequences as a reopening trigger.
 
 ## Corpus/Ratchet Notes
 
@@ -894,7 +894,7 @@ Phase 4's tests, all with sabotage lines:
    against the research document's call-site table.
 3. Apply the pre-registered rule to the printed numbers and confirm it selects
    a branch with no discretion left over.
-4. Read ADR-0027 cold and confirm its Decision follows from its Context.
+4. Read ADR-0028 cold and confirm its Decision follows from its Context.
 5. Under Branch B: in IEx, build a context by rebuild and by bind after the
    same `<assign>`, and diff the two structs field by field.
 6. Under Branch B: run the full conformance suite before and after and diff the
@@ -1012,7 +1012,7 @@ executed.
       started with, which is what it did before; a block does not span a
       microstep, so nothing here can make it stale.
 - [ ] The sabotage mutations were genuinely run and genuinely went red.
-- [ ] ADR-0027's Consequences match what actually shipped, including the
+- [ ] ADR-0028's Consequences match what actually shipped, including the
       `<script>` fallback if it was taken.
 - [ ] No regressions in related features.
 

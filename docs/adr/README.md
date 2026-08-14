@@ -29,7 +29,7 @@
 | [0025](0025-cross-repo-tracker-authority-and-mirrors.md) | Tracker authority follows the artifact; mirrors pull (adopts predicator ADR-0010) | accepted |
 | [0026](0026-script-as-predicator-statement-programs.md) | `<script>` bodies are predicator statement programs | accepted (amends 0004 in part) |
 | [0027](0027-embedder-placed-session-runtime.md) | Embedder-placed session runtime with a named registry | accepted |
-| [0027](0027-executable-content-blocks-thread-one-context.md) | Executable-content blocks thread one context and `bind/3` each write | accepted |
+| [0028](0028-executable-content-blocks-thread-one-context.md) | Executable-content blocks thread one context and `bind/3` each write | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

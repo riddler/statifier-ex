@@ -66,7 +66,7 @@ defmodule Statifier.Machine.Content.Assign do
     # never creates an undeclared top-level variable), then write into the
     # *raw* `machine_state.datamodel` and bind the written root into the
     # block's existing threaded datamodel context so a later node in the
-    # same block sees the write (ADR-0027 - this is the seam
+    # same block sees the write (ADR-0028 - this is the seam
     # `Statifier.Interpreter.Content`'s moduledoc names as taken here, in the
     # node, never in the runner). Binding just the written root rather than
     # rebuilding the whole context is O(size of that root), not O(size of

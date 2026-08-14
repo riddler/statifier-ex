@@ -129,7 +129,7 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    (an O(1) `%{context | host: host}` refresh). Not taken here yet: `In/1` is
    still an inline `functions:` closure, which 5.0 still supports and
    dispatches identically to a provider entry. Taken in the within-block
-   form only ([ADR-0027](adr/0027-executable-content-blocks-thread-one-context.md)):
+   form only ([ADR-0028](adr/0028-executable-content-blocks-thread-one-context.md)):
    measurement showed context construction is the majority of one
    macrostep's cost at realistic datamodel scale, and `<assign>` and
    `<foreach>` bind into the context an executable-content block already

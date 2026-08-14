@@ -65,12 +65,12 @@ defmodule Statifier.Evaluator do
   real - `Predicator.Context.new/2` deep-normalizes the whole datamodel
   every time, where `Predicator.Context.bind/3` is O(1) in the data's size
   and carries `functions` and `on_unbound` over unchanged. Measured
-  (ADR-0027, `bench/results/260814-context-build.md` and
+  (ADR-0028, `bench/results/260814-context-build.md` and
   `bench/results/260814-macrostep.md`): at a realistic corpus-shaped
   datamodel, context construction is 62.0% of one macrostep's wall time and
   67.1% of its allocated memory, and rebuilding per write inside a block
   costs an order of magnitude more than threading one context and
-  `bind/3`-ing each write into it. ADR-0027 answers this within one
+  `bind/3`-ing each write into it. ADR-0028 answers this within one
   executable-content block: `<assign>` and `<foreach>` are to bind into the
   block's existing threaded context instead of calling `context/1` again
   per write, without storing anything here, so neither ground above is
@@ -80,7 +80,7 @@ defmodule Statifier.Evaluator do
   landed in predicator 5.0.0 (px-8ii): `Predicator.FunctionProvider` plus
   `Context.new/2`'s `host:` option and `Context.put_host/2`. That wider
   seam - a context surviving *across* blocks, which would need it - is
-  still not taken; ADR-0027 is deliberately scoped to within-block
+  still not taken; ADR-0028 is deliberately scoped to within-block
   threading only.
 
   ## The membrane
@@ -305,7 +305,7 @@ defmodule Statifier.Evaluator do
   shape.
 
   The returned `post_context` is safe to thread into the rest of the block
-  that ran `program` (ADR-0027) and unsafe to keep past it, for the same
+  that ran `program` (ADR-0028) and unsafe to keep past it, for the same
   reason `bind/3`'s own doc gives: `functions` (and `In/1`'s captured
   configuration) carries over from `predicator_context` unchanged, correct
   only while the block still runs inside the microstep it started in.

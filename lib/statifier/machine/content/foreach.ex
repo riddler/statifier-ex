@@ -196,7 +196,7 @@ defmodule Statifier.Machine.Content.Foreach do
     # `:undefined` round-trip). This runs even for an empty collection, so
     # `item`/`index` are bound (to `nil`, matching
     # `Statifier.Interpreter.Datamodel.seed/2`'s own `<data>`-with-no-value
-    # shape) whether or not the loop body ever runs. ADR-0027: the block's
+    # shape) whether or not the loop body ever runs. ADR-0028: the block's
     # threaded datamodel context gets the same two names bound into it with
     # `Evaluator.bind/3` rather than a full rebuild - `item`/`index` are
     # each their own datamodel root, so a bind is the canonical shape here
@@ -248,7 +248,7 @@ defmodule Statifier.Machine.Content.Foreach do
       )
     end
 
-    # ADR-0027: `item` and, when declared, `index` are each bound into the
+    # ADR-0028: `item` and, when declared, `index` are each bound into the
     # block's threaded context with `Evaluator.bind/3` - two single-root
     # writes, the canonical `bind/3` shape - instead of a full
     # `Evaluator.context/1` rebuild. This is the multiplicative rebuild site

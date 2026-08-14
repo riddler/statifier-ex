@@ -75,7 +75,7 @@ defmodule Statifier.Machine.Content.Script do
     # `run_program/2` already built back onto this block's `Context.t()`,
     # the same "make the block's context see the write" step
     # `Statifier.Machine.Content.Assign.execute/2` takes for its own single
-    # write, done here for the whole program's writes at once (ADR-0027: a
+    # write, done here for the whole program's writes at once (ADR-0028: a
     # program can write anywhere, so there is no single root to `bind/3` -
     # threading the context `Predicator.execute/3` already returned is the
     # shape that avoids a second full-datamodel walk here instead). A
