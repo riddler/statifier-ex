@@ -126,19 +126,26 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    widen again, once a caller needs to. Landed in predicator 5.0.0:
    `Predicator.FunctionProvider` (a module supplying named functions),
    `Context.new/2`'s `providers:` and `host:` options, and `Context.put_host/2`
-   (an O(1) `%{context | host: host}` refresh). Not taken here yet: `In/1` is
-   still an inline `functions:` closure, which 5.0 still supports and
-   dispatches identically to a provider entry. Taken in the within-block
-   form only ([ADR-0028](adr/0028-executable-content-blocks-thread-one-context.md)):
+   (an O(1) `%{context | host: host}` refresh). Taken in two steps. First, in
+   the within-block form only ([ADR-0028](adr/0028-executable-content-blocks-thread-one-context.md)):
    measurement showed context construction is the majority of one
    macrostep's cost at realistic datamodel scale, and `<assign>` and
    `<foreach>` bind into the context an executable-content block already
-   threads rather than rebuilding it per write. The "built once per
-   evaluation site" commitment above (`docs/datamodel.md:54-59`) is
-   unchanged by this - the site is still the whole block, not the
-   individual write - and this seam is not taken across blocks: no context
-   is stored on `MachineState`, and widening the interval that far remains
-   future work.
+   threads rather than rebuilding it per write. Then, taken for `In/1`
+   itself ([ADR-0029](adr/0029-in1-becomes-a-provider-context-stays-off-machinestate.md)):
+   `In/1` is a `Predicator.FunctionProvider` reading `host` rather than an
+   inline `functions:` closure, so the resolved `functions` map holds no
+   captured configuration and is identical for every context this library
+   ever builds - `Statifier.Evaluator.Functions.base_context/0` resolves it
+   once at compile time, and `context/1` refreshes `host` with `put_host/2`
+   and binds each datamodel root with `bind/3`, never calling
+   `Predicator.Context.new/2` on this path. This is a per-site cost
+   reduction, not a widened interval: the "built once per evaluation site"
+   commitment above (`docs/datamodel.md:54-59`) is unchanged - the site is
+   still the whole block or selection round, not the individual write, and
+   not the whole macrostep - and the seam is still not taken across blocks:
+   no context is stored on `MachineState`, and widening the interval that
+   far remains future work, per ADR-0029's grounds.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is
