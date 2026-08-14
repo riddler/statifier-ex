@@ -138,6 +138,14 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    longer needs an exclusion.
 6. **List concatenation**: landed in predicator 3.7.0 (`concat/2`, and list `+`
    list); `conf:extendArray` (test525) no longer needs an exclusion.
+7. **Numeric-type builtins**: `Math.pow` (and possibly `Math.sqrt`) return
+   floats even for integer-exact results, while `===` stays type-strict, so
+   `Math.pow(2, 3) === 8` is `false` under ECMAScript's single-Number-type
+   assumption. ADR-0023 keeps the fix upstream in predicator rather than
+   coercing numeric types at the statifier boundary; a mirror bead is filed
+   in predicator-ex. Not yet landed: the three
+   `test/scion_tests/targetless_transition` files stay failing until the
+   dependency is bumped.
 
 Each of these gets a beads issue here and a mirrored issue in predicator-ex when we
 hit the seam in implementation.
