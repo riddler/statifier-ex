@@ -298,6 +298,9 @@ defmodule Mix.Statifier.AdrGuardTest do
     # A bead ID added mid-body into a heredoc whose opening `\"\"\"` is unchanged
     # context is invisible to a line-based, --unified=0 diff pass - the guard's
     # documented blind spot rather than a bug.
+    #
+    # sabotage: have doc_context_step/2's fall-through branch keep the entry
+    #           instead of dropping it, so every added line reads as doc text -> red
     test "a bead ID added into a heredoc whose opener is not in the diff is not caught" do
       diff = """
       diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
