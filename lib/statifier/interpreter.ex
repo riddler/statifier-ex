@@ -655,9 +655,17 @@ defmodule Statifier.Interpreter do
      isSCXMLElement(s.parent)`, the same test
      `ExitEntry.raise_completion_events/2` already makes. Since the root is
      compound, at most one child is active, so at most one top-level final
-     is ever in the exit set. Its donedata
-     (`ExitEntry.static_donedata/2`) becomes both `Trace.Done`'s and
-     `Effect.Done`'s `donedata`.
+     is ever in the exit set. Its donedata (`ExitEntry.donedata/2`) becomes
+     both `Trace.Done`'s and `Effect.Done`'s `donedata`. A failed
+     `<content expr>` raises `error.execution` onto the *returned*
+     `machine_state`'s internal queue (Decision 8 of
+     `docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md`)
+     - nothing ever dequeues it, since the event loop has already stopped
+     by the time this function runs, but that is Appendix D's own
+     consequence (5.6/5.7's error rule is unqualified, and `exitInterpreter`
+     runs after the loop) rather than a deviation this port introduces. It
+     is still observable: `MachineState.internal_events/1` on the returned
+     terminal state shows it.
   6. The terminal effects are appended last, `{:done, %Effect.Done{}}` last
      of all - `returnDoneEvent` becomes a returned effect rather than an I/O
      call (ADR-0003), and moving its emission to the end of the list is a
@@ -688,11 +696,11 @@ defmodule Statifier.Interpreter do
 
         ms = %{ms | configuration: MapSet.delete(ms.configuration, state_index)}
 
-        donedata =
+        {ms, donedata} =
           if Machine.final?(machine, state_index) and Machine.at(machine, state_index).parent == 0 do
-            ExitEntry.static_donedata(machine, state_index)
+            ExitEntry.donedata(ms, state_index)
           else
-            donedata
+            {ms, donedata}
           end
 
         {ms, donedata, effects ++ onexit_effects}
