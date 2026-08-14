@@ -52,6 +52,7 @@ defmodule Statifier.MixProject do
       {:excoveralls, "~> 0.18", only: :test},
       {:sobelow, "~> 0.14", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:benchee, "~> 1.3", only: :dev},
       {:doctor, "~> 0.23", only: :dev, runtime: false}
     ]
   end

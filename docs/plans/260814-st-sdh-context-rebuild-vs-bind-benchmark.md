@@ -393,18 +393,18 @@ is the evidence Phase 3's ADR cites.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (use `mix quality --profile loop` while
+- [x] Full `mix quality` passes (use `mix quality --profile loop` while
       iterating; a loop run alone never satisfies this phase).
-- [ ] `mix gate.verify` confirms the run was a full, unprofiled, unscoped gate.
-- [ ] The Gate guard stage does not demand a ledger entry - i.e. `mix quality`
+- [x] `mix gate.verify` confirms the run was a full, unprofiled, unscoped gate.
+- [x] The Gate guard stage does not demand a ledger entry - i.e. `mix quality`
       is green with no `docs/quality-gate-changes.md` change in the diff. If it
       does demand one, the `mix.exs` insertion point was wrong; fix the
       placement rather than writing an entry.
-- [ ] `git diff origin/main -- mix.exs` shows exactly one added line and zero
+- [x] `git diff origin/main -- mix.exs` shows exactly one added line and zero
       removed lines.
-- [ ] `mix run bench/context_build.exs` exits 0 and prints both benchee runs.
-- [ ] `bench/results/260814-context-build.md` exists and is non-empty.
-- [ ] `mix deps.unlock --check-unused` reports nothing (covered by the
+- [x] `mix run bench/context_build.exs` exits 0 and prints both benchee runs.
+- [x] `bench/results/260814-context-build.md` exists and is non-empty.
+- [x] `mix deps.unlock --check-unused` reports nothing (covered by the
       Dependencies stage).
 
 #### Manual Verification:
@@ -922,3 +922,33 @@ Phase 4's tests, all with sabotage lines:
   `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md:768-780`,
   `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md:1005-1023`
 - Bead: st-sdh
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The three derived terms are internally consistent: `T_fixed <= T_new <=
+      T_full` at every size point. An inversion means the scenarios are not
+      measuring what they claim and the decomposition is void.
+- [ ] The `:corpus` size point matches what the scan in §3 actually reported,
+      and is set to the observed maximum rather than the mean. Spot-check it
+      against `test/scxml_tests/mandatory/selecting_transitions/test504_test.exs`
+      and `test/scion_tests/foreach/test1_test.exs`, both at the 5-root
+      maximum.
+- [ ] Benchee's reported deviation is small enough that a 5% difference is
+      distinguishable from noise; if it is not, raise `time:`/`memory_time:`
+      and re-run before trusting anything.
+- [ ] No regressions in related features - nothing in `lib/` or `test/` changed,
+      so this is a diff review confirming that.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full gate is the phase gate. In interactive execution, pause here for the human
+to confirm the manual testing. In looped (`--loop`) execution, Automated
+Verification gates advancement via `/wurk:commit --auto` and Manual
+Verification is deferred and surfaced at the end.
+
+---
