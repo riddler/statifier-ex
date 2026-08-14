@@ -13,6 +13,47 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-14 - st-wjg
+
+Approved-by: JohnnyT (in session)
+
+- lib/mix/statifier/adr_guard.ex: adds the `adr-0018-bead-id` check, flagging
+  a bead ID added in a comment, `@moduledoc`, `@doc`, `@typedoc` or test
+  description under `lib/` or `test/`
+- lib/mix/tasks/adr.check.ex: names ADR-0018 in the task's advice text and
+  states that the new check clears only with `ADR-0018-exempt`
+
+Reason: ADR-0018's Consequences ask for this check by name and say it does not
+wait for the st-a89 cleanup sweep. The guard reads added diff lines only, so
+the check holds the line on new code while 73 pre-existing files still carry
+bead IDs in their comments. Both of the record's constraints are honored as
+stated: the pattern matches bead IDs only, because a numbered phase or decision
+reference is ordinary English before it is a process reference and point 2
+deliberately keeps the unnumbered word "phase"; and the check carries its own
+escape marker rather than the guard's shared `ADR-0\d{3}|deviation` hatch,
+because here the violation and the escape sit on the same axis and ADR-0018
+documents four real lines at `e2524fc` that would exempt themselves by
+accident.
+
+**This entry is voluntary**, in the same sense as st-6f7's. `mix gate.check`
+does not guard `lib/mix/statifier/adr_guard.ex`, so the Gate guard stage was
+green with or without it, and no agent was blocked waiting on it. It is
+recorded because ADR-0018 says adding a gate check is gate-relevant and asks
+for an ADR-0011 entry, and because what a check *catches* is as much a human's
+call as what it stops catching. Adds a check; loosens nothing, skips no
+existing check, and lowers no threshold. The new escape marker is not a
+widening of the existing one - it is narrower, and deliberately does not accept
+the citation the shared hatch does.
+
+Two known limits, both documented in the moduledoc rather than left for a
+reader to discover. The check is line-based rather than an AST pass, so a bead
+ID added mid-body into a doc heredoc whose opening delimiter is unchanged
+context is invisible to a `--unified=0` diff and is not caught; and the test
+description shape it recognizes is the plain `test "..." do` form, so
+`test "...", ctx do` falls through as ordinary code. Neither is a threshold
+being lowered - they are the cost of the guard's existing shape, which
+ADR-0018 chose knowingly.
+
 ## 2026-08-12 - st-1xz
 
 Approved-by: JohnnyT (in session)
