@@ -112,7 +112,10 @@
     "test/scion_tests/scxml_prefix_event_name_matching/star0_test.exs",
     "test/scion_tests/scxml_prefix_event_name_matching/test0_test.exs",
     "test/scion_tests/scxml_prefix_event_name_matching/test1_test.exs",
-    "test/scion_tests/targetless_transition/test0_test.exs"
+    "test/scion_tests/targetless_transition/test0_test.exs",
+    "test/scion_tests/targetless_transition/test1_test.exs",
+    "test/scion_tests/targetless_transition/test2_test.exs",
+    "test/scion_tests/targetless_transition/test3_test.exs"
   ],
   "w3c_tests": [
     "test/scxml_tests/mandatory/assign/test286_test.exs",

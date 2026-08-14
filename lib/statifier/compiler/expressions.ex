@@ -51,7 +51,7 @@ defmodule Statifier.Compiler.Expressions do
   keyword (item 2: passing both to `evaluate/3` raises).
 
   On failure, `compile_with_spans/1` reports only a formatted string
-  (verified against the installed predicator 4.0.0 dependency:
+  (verified against the installed predicator 7.0.0 dependency:
   `deps/predicator/lib/predicator.ex`'s `build_compiled_result/1` private
   clause), so the structured `{line, column}` predicator actually failed at
   is recovered by a second, failure-path-only call to `Predicator.parse/2` -
