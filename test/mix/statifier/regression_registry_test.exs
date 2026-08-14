@@ -273,6 +273,79 @@ defmodule Mix.Statifier.RegressionRegistryTest do
     end
   end
 
+  describe "corpus_stats/3" do
+    @tag :isolated_tmp_dir
+    # sabotage: have corpus_stats/3's hit computation use length(passing)
+    #           instead of the MapSet intersection -> red
+    test "the numerator is the intersection with the emitted corpus", %{tmp_dir: tmp_dir} do
+      inside = touch(tmp_dir, "test/scion_tests/basic0_test.exs")
+      touch(tmp_dir, "test/scion_tests/basic1_test.exs")
+      outside = Path.join(tmp_dir, "test/scion_tests_extra/basic2_test.exs")
+
+      assert RegressionRegistry.corpus_stats([inside, outside], :scion, tmp_dir) == %{
+               passing: 1,
+               total: 2,
+               percent: 50.0
+             }
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: have percent/2's zero-total clause return 0.0 instead of nil -> red
+    test "percent is nil when the corpus is empty", %{tmp_dir: tmp_dir} do
+      assert RegressionRegistry.corpus_stats([], :scion, tmp_dir) == %{
+               passing: 0,
+               total: 0,
+               percent: nil
+             }
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: have percent/2 round to 2 decimals instead of 1 -> red
+    test "percent rounds to one decimal", %{tmp_dir: tmp_dir} do
+      touch(tmp_dir, "test/scion_tests/a_test.exs")
+      passing = touch(tmp_dir, "test/scion_tests/b_test.exs")
+      touch(tmp_dir, "test/scion_tests/c_test.exs")
+
+      assert %{percent: 33.3} = RegressionRegistry.corpus_stats([passing], :scion, tmp_dir)
+    end
+  end
+
+  describe "stats_lines/3" do
+    @tag :isolated_tmp_dir
+    # sabotage: have stats_lines/3 keep a category whose total is 0 instead of
+    #           rejecting it -> red
+    test "omits a category with no emitted files", %{tmp_dir: tmp_dir} do
+      scion = touch(tmp_dir, "test/scion_tests/a_test.exs")
+
+      lines = RegressionRegistry.stats_lines([scion], [:scion, :w3c], tmp_dir)
+
+      assert Enum.any?(lines, &(&1 =~ "SCION"))
+      refute Enum.any?(lines, &(&1 =~ "W3C"))
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: have stats_lines/3 return the per-category lines with no
+    #           caveat appended -> red
+    test "returns [] when no category has any emitted files", %{tmp_dir: tmp_dir} do
+      assert RegressionRegistry.stats_lines([], [:scion, :w3c], tmp_dir) == []
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: have stats_line/2 pad to a fixed width of 3 instead of the
+    #           computed max label width -> red
+    test "pads labels so counts line up", %{tmp_dir: tmp_dir} do
+      scion = touch(tmp_dir, "test/scion_tests/a_test.exs")
+      w3c = touch(tmp_dir, "test/scxml_tests/a_test.exs")
+
+      [scion_line, w3c_line, caveat] =
+        RegressionRegistry.stats_lines([scion, w3c], [:scion, :w3c], tmp_dir)
+
+      assert scion_line == "  SCION: 1/1 (100.0%)"
+      assert w3c_line == "  W3C:   1/1 (100.0%)"
+      assert caveat =~ "tools/corpus/README.md"
+    end
+  end
+
   defp write(tmp_dir, content) do
     path = Path.join(tmp_dir, "passing_tests.json")
     File.write!(path, content)

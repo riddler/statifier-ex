@@ -155,6 +155,64 @@ defmodule Mix.Tasks.Test.BaselineTest do
       assert output =~ "Nothing to add."
       assert reload(path) == %{}
     end
+
+    # sabotage: have scan/4's coverage numerator use only `passing`, dropping
+    #           `tracked` -> red
+    @tag :isolated_tmp_dir
+    test "the coverage block counts ratcheted files plus newly passing ones",
+         %{tmp_dir: tmp_dir} do
+      tracked = corpus(tmp_dir, "scion_tests/already_test.exs")
+      _newly_passing = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      still_failing = corpus(tmp_dir, "scion_tests/basic1_test.exs")
+      path = registry(tmp_dir, %{"scion_tests" => [tracked]})
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Baseline.execute(
+                     ["--registry", path],
+                     opts(tmp_dir, runner: runner([still_failing]))
+                   )
+        end)
+
+      assert output =~ "Corpus coverage (ratcheted + newly passing / emitted corpus files):"
+      assert output =~ "SCION: 2/3 (66.7%)"
+      assert output =~ "tools/corpus/README.md"
+    end
+
+    # sabotage: have scan/4 print the coverage block only on the non-empty
+    #           candidates branch, not the "nothing untracked" one -> red
+    @tag :isolated_tmp_dir
+    test "the nothing-untracked path still prints the coverage block", %{tmp_dir: tmp_dir} do
+      tracked = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      path = registry(tmp_dir, %{"scion_tests" => [tracked]})
+
+      output =
+        capture_io(fn -> assert :ok = Baseline.execute(["--registry", path], opts(tmp_dir)) end)
+
+      assert output =~ "No untracked conformance tests found"
+      assert output =~ "Corpus coverage (ratcheted + newly passing / emitted corpus files):"
+      assert output =~ "SCION: 1/1 (100.0%)"
+    end
+
+    # sabotage: have print_coverage/3's scan call pass
+    #           RegressionRegistry.conformance_categories() instead of the
+    #           `--only`-filtered `categories` -> red
+    @tag :isolated_tmp_dir
+    test "--only scion prints only the SCION coverage line", %{tmp_dir: tmp_dir} do
+      scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      corpus(tmp_dir, "scxml_tests/test144_test.exs")
+      path = registry(tmp_dir)
+
+      output =
+        capture_io(fn ->
+          assert :ok = Baseline.execute(["--only", "scion", "--registry", path], opts(tmp_dir))
+        end)
+
+      assert output =~ "SCION:"
+      refute output =~ "W3C:"
+      assert_received {:ran, ^scion}
+    end
   end
 
   describe "add" do
@@ -227,6 +285,22 @@ defmodule Mix.Tasks.Test.BaselineTest do
 
       assert {:error, message} = Baseline.execute(["drop", "--registry", path], opts(tmp_dir))
       assert message =~ "unknown command"
+    end
+
+    # sabotage: n/a - asserts the absence of behavior add_named/4 never had;
+    #           there is no lib/ code path to break that would print a
+    #           coverage block from `add`
+    @tag :isolated_tmp_dir
+    test "add prints no coverage block", %{tmp_dir: tmp_dir} do
+      scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      path = registry(tmp_dir)
+
+      output =
+        capture_io(fn ->
+          assert :ok = Baseline.execute(["add", scion, "--registry", path], opts(tmp_dir))
+        end)
+
+      refute output =~ "Corpus coverage"
     end
   end
 
