@@ -4,24 +4,25 @@ defmodule Statifier.StatifierForeachTest do
   `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md` through the real
   engine, end to end, without going through `Statifier.Case.test_scxml/4`.
 
-  That is deliberate, not an oversight: all eight `foreach_elements` corpus
-  files also trip `conditional_transitions` (`test/support/feature_detector.ex`,
-  still `:unsupported` - the `~r/\bcond\s*=/` attribute detector fires on
-  `<transition cond=...>` everywhere these documents use it).
-  `Statifier.Case.test_scxml/4` flunks rather than skips a document that names
-  an unsupported feature (`test/support/case.ex:41-46`), so these seven would
-  flunk today even though `<foreach>` itself is fully implemented and correct.
+  That was deliberate, not an oversight: until bead **st-af3.8**, all eight
+  `foreach_elements` corpus files also tripped `conditional_transitions`
+  (`test/support/feature_detector.ex`, then `:unsupported` - the
+  `~r/\bcond\s*=/` attribute detector fires on `<transition cond=...>`
+  everywhere these documents use it). `Statifier.Case.test_scxml/4` flunks
+  rather than skips a document that names an unsupported feature
+  (`test/support/case.ex:41-46`), so these seven flunked before that bead even
+  though `<foreach>` itself was already fully implemented and correct.
 
-  Bead **st-af3.8** owns flipping `conditional_transitions`, running the full
-  conformance suites, and ratcheting `test/passing_tests.json`
-  (`mix test.baseline add`) - at which point
+  st-af3.8 flipped `conditional_transitions` to `:supported`, ran the full
+  conformance suites, and ratcheted `test/passing_tests.json`
+  (`mix test.baseline add`), so
   `test/scxml_tests/mandatory/foreach/test150_test.exs`, `test151_test.exs`,
   `test152_test.exs`, `test153_test.exs`, `test155_test.exs`,
   `test156_test.exs`, `test525_test.exs`, and
-  `test/scion_tests/foreach/test1_test.exs` become feature-clean and start
-  passing through the generated harness too.
+  `test/scion_tests/foreach/test1_test.exs` are now feature-clean and run
+  through the generated harness too.
 
-  This file is **not** a duplicate to delete once that lands: it drives the
+  This file is **not** a duplicate to delete now that that has landed: it drives the
   exact same documents through `Statifier.compile/1`, `Statifier.initialize/2`,
   `Statifier.send_event/2`, and `Statifier.active_leaf_states/1` - the same
   four-function public API `Statifier.Case`'s own private helpers use
