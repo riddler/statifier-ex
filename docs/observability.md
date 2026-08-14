@@ -132,19 +132,21 @@ not inlined or fused in a way that makes exposing them later a refactor. They
 may start private; `defdelegate` from a debug module later is the intended
 promotion path.
 
-## Constraint 6 (session layer, later): observe and record at the boundary
+## Constraint 6: observe and record at the boundary
 
-Nothing to build until `Statifier.Session` lands, but two properties to
-preserve when it does:
+`Statifier.Session` is the session boundary. Two properties it preserves:
 
-- **Observation**: the session forwards its effect/trace stream to
-  `:telemetry` or a subscriber pid. Live tooling attaches there; the core is
-  untouched.
+- **Observation**: the session forwards its effect/trace stream to every
+  subscriber pid as `{:statifier, session_id, {:effect, effect}}` - a
+  `:telemetry` bridge attaches at that same boundary once it exists. Live
+  tooling attaches there; the core is untouched.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, with session timestamps) at
   the session boundary makes a run reproducible: (machine, initial data,
-  external event log). Keep the session's input path single and capturable -
-  no side doors that inject events without crossing the recordable boundary.
+  external event log). `Statifier.Session.interpret/2` widens what that
+  recording has to contain - see its own `@doc`. Keep the session's input path
+  single and capturable - no side doors that inject events without crossing
+  the recordable boundary (`Statifier.Session.Inbox`).
 
 ## Non-goals (for now)
 

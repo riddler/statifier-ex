@@ -2,8 +2,8 @@ defmodule Statifier.Effect.Cancel do
   @moduledoc """
   Payload for `{:cancel, %__MODULE__{}}` - spec 6.3's `<cancel>`. `send_id`
   is the `sendid`/`sendidexpr` attribute naming the delayed send to cancel;
-  resolving it against the pending `SendDelayed` timers is the
-  not-yet-implemented session's job.
+  resolving it against the pending `SendDelayed` timers is
+  `Statifier.Session`'s job.
 
   `c_index` identifies the `<cancel>` content node (constraint 3, never a
   compiled content-node struct); `macrostep`/`microstep` are the counters
