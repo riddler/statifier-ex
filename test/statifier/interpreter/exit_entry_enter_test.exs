@@ -75,8 +75,12 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
   # 26       noid_par_reg2      (compound; no <initial> -> default child)
   # 27         noid_par_reg2_active
   # 28         noid_par_reg2_final (final)
-  # 29     trigger             (go-* transitions)
-  # 30   top_final              (final; parent 0 - top-level)
+  # 29     ce_holder           (compound)
+  # 30       ce_final           (final; donedata content expr="1 + 1", succeeds)
+  # 31     ce_fail_holder      (compound)
+  # 32       ce_fail_final      (final; donedata content expr="undeclared_var", fails)
+  # 33     trigger             (go-* transitions)
+  # 34   top_final              (final; parent 0 - top-level)
   #
   # `reg1`/`reg2` each carry a non-final default child so that sweeping an
   # "uncovered region" of the parallel (`enter_uncovered_regions/3`, pulled
@@ -148,6 +152,20 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
                   <final id="noid_par_reg2_final"/>
               </state>
           </parallel>
+          <state id="ce_holder">
+              <final id="ce_final">
+                  <donedata>
+                      <content expr="1 + 1"/>
+                  </donedata>
+              </final>
+          </state>
+          <state id="ce_fail_holder">
+              <final id="ce_fail_final">
+                  <donedata>
+                      <content expr="undeclared_var"/>
+                  </donedata>
+              </final>
+          </state>
           <state id="trigger">
               <transition event="go-combo" target="combo"/>
               <transition event="go-combo-hist" target="combo_hist"/>
@@ -160,6 +178,8 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
               <transition event="go-noid-final" target="noid_final"/>
               <transition event="go-noid-par-reg1-final" target="noid_par_reg1_final"/>
               <transition event="go-noid-par-reg2-final" target="noid_par_reg2_final"/>
+              <transition event="go-ce-final" target="ce_final"/>
+              <transition event="go-ce-fail-final" target="ce_fail_final"/>
               <transition event="go-top-final" target="top_final"/>
           </state>
       </state>
@@ -195,8 +215,12 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     noid_par_reg2: 26,
     noid_par_reg2_active: 27,
     noid_par_reg2_final: 28,
-    trigger: 29,
-    top_final: 30
+    ce_holder: 29,
+    ce_final: 30,
+    ce_fail_holder: 31,
+    ce_fail_final: 32,
+    trigger: 33,
+    top_final: 34
   }
 
   defp machine, do: compile_unvalidated!(@document)
@@ -418,9 +442,11 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
     # AC: "raised done.state.* events carry their static donedata"
     #
-    # sabotage: `static_donedata/2`'s `{:static, term}` clause is changed to
-    # return `nil` instead of `term` -> the donedata's actual text ("42")
-    # would be lost, reddening this assertion.
+    # sabotage: `donedata/2`'s `{:static, text}` clause is changed to
+    # return `{machine_state, text}` instead of coercing through
+    # `EventData.coerce({:text, text})` -> the donedata would come back as
+    # the string "42" instead of the coerced integer 42, reddening this
+    # assertion.
     test "a final with static donedata carries it as the raised event's data" do
       m = machine()
       ms = machine_state(m)
@@ -430,7 +456,44 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
       assert [event] = MachineState.internal_events(result)
       assert event.name == "done.state.donedata_holder"
-      assert event.data == "42"
+      assert event.data == 42
+    end
+
+    # AC: "a <content expr> donedata evaluates and carries the value"
+    #
+    # sabotage: `evaluate_donedata/3`'s `{:ok, value}` clause is changed to
+    # `EventData.coerce({:value, value + 1})` -> the evaluated `1 + 1`
+    # would carry `3` instead of `2`, reddening this assertion.
+    test "a compiled <content expr> donedata carries the evaluated value" do
+      m = machine()
+      ms = machine_state(m)
+      transition = transition_named(m, "go-ce-final")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.name == "done.state.ce_holder"
+      assert event.data == 2
+    end
+
+    # AC: "a failing <content expr> donedata yields nil data plus exactly
+    # one error.execution, error enqueued before the done event"
+    #
+    # sabotage: `evaluate_donedata/3`'s `{:error, reason}` clause is
+    # changed to skip the `MachineState.raise_platform/4` call and just
+    # return `{machine_state, nil}` -> the `error.execution` event would
+    # never be enqueued, reddening the two-event assertion below.
+    test "a failing compiled <content expr> donedata yields nil data and one error.execution first" do
+      m = machine()
+      ms = machine_state(m)
+      transition = transition_named(m, "go-ce-fail-final")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [error_event, done_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert done_event.name == "done.state.ce_fail_holder"
+      assert done_event.data == nil
     end
 
     # AC: "done.state.{grandparent} when a parallel completes"

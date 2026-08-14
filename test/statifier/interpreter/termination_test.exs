@@ -25,9 +25,10 @@ defmodule Statifier.Interpreter.TerminationTest do
   #  3   parent          -- compound; onexit log
   #  4     leaf          -- onexit log
   #  5     h             -- history, shallow, default -> leaf
-  #  6   done            -- top-level <final>; static donedata "42"
+  #  6   done            -- top-level <final>; static donedata "42" -> 42
   #  7   done_nil        -- top-level <final>; no <donedata>
-  #  8   done_compiled   -- top-level <final>; donedata with an expr (deferred to nil)
+  #  8   done_compiled   -- top-level <final>; donedata expr="1 + 1", evaluates to 2
+  #  9   done_compiled_fail -- top-level <final>; donedata expr fails to evaluate
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="start">
       <state id="start">
@@ -61,6 +62,11 @@ defmodule Statifier.Interpreter.TerminationTest do
               <content expr="1 + 1"/>
           </donedata>
       </final>
+      <final id="done_compiled_fail">
+          <donedata>
+              <content expr="undeclared_var"/>
+          </donedata>
+      </final>
   </scxml>
   """
 
@@ -72,7 +78,8 @@ defmodule Statifier.Interpreter.TerminationTest do
     h: 5,
     done: 6,
     done_nil: 7,
-    done_compiled: 8
+    done_compiled: 8,
+    done_compiled_fail: 9
   }
 
   defp machine, do: compile!(@document)
@@ -124,17 +131,17 @@ defmodule Statifier.Interpreter.TerminationTest do
   end
 
   describe "exit_interpreter/1 - donedata" do
-    # sabotage: `exit_interpreter/1`'s `ExitEntry.static_donedata(machine,
-    # state_index)` call is replaced with a hardcoded `nil` -> the static
-    # "42" case below reddens while the already-nil cases stay green,
-    # pointing at exactly the wiring this mutation broke.
-    test "static donedata rides the terminal effect; absent and compiled donedata are nil" do
+    # sabotage: `exit_interpreter/1`'s `ExitEntry.donedata(ms, state_index)`
+    # call is replaced with `{ms, nil}` -> the static `42` and evaluated `2`
+    # cases below both redden while the already-nil `done_nil` case stays
+    # green, pointing at exactly the wiring this mutation broke.
+    test "static and evaluated donedata ride the terminal effect; absent donedata is nil" do
       m = machine()
 
       {static_result, static_effects} =
         Interpreter.exit_interpreter(machine_state(m, [idx(:done)]))
 
-      assert {:done, %Effect.Done{donedata: "42"}} = List.last(static_effects)
+      assert {:done, %Effect.Done{donedata: 42}} = List.last(static_effects)
       assert static_result.status == :done
 
       {_result, absent_effects} = Interpreter.exit_interpreter(machine_state(m, [idx(:done_nil)]))
@@ -143,7 +150,32 @@ defmodule Statifier.Interpreter.TerminationTest do
       {_result, compiled_effects} =
         Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled)]))
 
-      assert {:done, %Effect.Done{donedata: nil}} = List.last(compiled_effects)
+      assert {:done, %Effect.Done{donedata: 2}} = List.last(compiled_effects)
+    end
+
+    # AC: "a failing top-level <content expr> donedata leaves Effect.Done's
+    # donedata nil, plus one error.execution visible on the returned
+    # terminal MachineState" (Decision 8 of
+    # docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md
+    # - the error is enqueued on the internal queue but never dequeued,
+    # since the event loop has already stopped by the time
+    # exit_interpreter/1 runs; that is Appendix D's own consequence, not a
+    # deviation).
+    #
+    # sabotage: `evaluate_donedata/3`'s `{:error, reason}` clause is
+    # changed to skip the `MachineState.raise_platform/4` call -> the
+    # `error.execution` would never be enqueued, reddening the
+    # `internal_events/1` assertion below while `Effect.Done`'s `donedata`
+    # stays `nil` regardless (a false-green risk this sabotage rules out).
+    test "a failing top-level <content expr> donedata leaves donedata nil and enqueues one error.execution" do
+      m = machine()
+
+      {result, effects} =
+        Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled_fail)]))
+
+      assert {:done, %Effect.Done{donedata: nil}} = List.last(effects)
+      assert [event] = MachineState.internal_events(result)
+      assert event.name == "error.execution"
     end
   end
 
@@ -231,7 +263,7 @@ defmodule Statifier.Interpreter.TerminationTest do
       assert {:done, %Effect.Done{donedata: core_donedata}} = List.last(effects)
 
       assert done_trace.configuration == MapSet.new([idx(:done)])
-      assert done_trace.donedata == "42"
+      assert done_trace.donedata == 42
       assert done_trace.donedata == core_donedata
     end
 

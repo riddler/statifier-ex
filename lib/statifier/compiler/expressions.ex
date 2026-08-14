@@ -114,6 +114,14 @@ defmodule Statifier.Compiler.Expressions do
   child content can never raise `error.execution` at binding time, which is
   why 5.3.2's "empty data element" failure clause never has a child-content
   case to apply to under this datamodel.
+
+  `Statifier.EventData.coerce/1` runs a near-identical parse-or-string
+  ladder, and the two are deliberately not merged: this function implements
+  B.2.1 (datamodel initialization from `<data>` inline content) at compile
+  time, because a `<data>` body is static by construction, while
+  `EventData.coerce/1` implements B.2.8.1 (`_event.data` population) at
+  event time, because a `<param expr>`'s value is only known then. Same
+  shape, different clause, different time - see that module's moduledoc.
   """
   @spec inline_value(text :: String.t()) :: Machine.expr()
   def inline_value(text) when is_binary(text) do

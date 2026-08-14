@@ -76,7 +76,11 @@ Every evaluation goes through one module with one context type:
   `cond` plus an `error.execution` handler - none exists today, and test344 is
   not one (its `cond="1"` compiles, then fails boolean coercion at evaluation).
 - Type coercion to/from event data has one normalization function with defined rules,
-  shared by `<param>`, `<content>`, `namelist`, and `<donedata>`.
+  `Statifier.EventData.coerce/1`, shared by `<param>`, `<content>`, `namelist`, and
+  `<donedata>`. It implements B.2.8.1's key-value-pairs and space-normalized-string
+  rungs, plus a predicator-literal rung standing in for the JSON rung; it does not
+  implement the indicated-format or XML-DOM rungs (`Statifier.EventData`'s moduledoc
+  states why for each).
 
 ## Statement sequences and `<script>`
 

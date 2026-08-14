@@ -20,12 +20,12 @@ defmodule Statifier.Interpreter.ExitEntry do
   list is emission order: the trace effect first, then each block's effects
   in the order the blocks ran.
 
-  `run_onexit_blocks/2` and `static_donedata/2` are public for a second
-  caller: `Statifier.Interpreter.exit_interpreter/1`'s termination walk
-  needs exactly the same per-state onexit body and the same `<donedata>`
-  folding rule that `depart/2` and `raise_parent_completion/3` already use
-  here, so this module owns both rather than the interpreter carrying a
-  second copy.
+  `run_onexit_blocks/2` and `donedata/2` are public for a second caller:
+  `Statifier.Interpreter.exit_interpreter/1`'s termination walk needs
+  exactly the same per-state onexit body and the same `<donedata>` folding
+  rule that `depart/2` and `raise_parent_completion/3` already use here, so
+  this module owns both rather than the interpreter carrying a second
+  copy.
 
   ## Ordering
 
@@ -77,6 +77,8 @@ defmodule Statifier.Interpreter.ExitEntry do
   build a `Content.owner()`.
   """
 
+  alias Statifier.Evaluator
+  alias Statifier.EventData
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.Datamodel
   alias Statifier.Interpreter.Selection
@@ -791,12 +793,21 @@ defmodule Statifier.Interpreter.ExitEntry do
        ) do
     case Machine.id(machine, parent) do
       parent_id when is_binary(parent_id) and parent_id != "" ->
+        # `donedata/2` is called before the `done.state.*` raise, and its
+        # returned `machine_state` (which may already carry a queued
+        # `error.execution`) is what the raise below builds on - not the
+        # `machine_state` this function was called with. 5.6/5.7 place
+        # `error.execution` "in the internal event queue" at evaluation
+        # time, and evaluation completes before the done event is raised,
+        # so the error is enqueued first.
+        {machine_state, donedata} = donedata(machine_state, state_index)
+
         machine_state =
           MachineState.raise_platform(
             machine_state,
             "done.state." <> parent_id,
             {:state, state_index},
-            data: static_donedata(machine, state_index)
+            data: donedata
           )
 
         maybe_raise_grandparent_completion(machine_state, state_index, parent)
@@ -856,24 +867,83 @@ defmodule Statifier.Interpreter.ExitEntry do
   @doc """
   `returnDoneEvent`'s `s.donedata` argument (Appendix D) - `state_index`'s
   `<donedata>`, folded to the value a raised or returned `done.*` event
-  carries as `data`. `{:static, term}` rides directly; `{:compiled, _, _}`
-  becomes `nil` - not a rescue-to-default, the value simply has not been
-  evaluated yet and the corpus cannot reach it (`FeatureDetector` flunks any
-  document with a datamodel expression). A `nil` donedata, or a donedata
-  with no `<content>` child at all (`expr: nil`), both become `nil` data.
+  carries as `data`.
+
+  - A `nil` donedata, or a `%Donedata{expr: nil}` (no `<content>` child at
+    all) - `{machine_state, nil}`, unchanged.
+  - `{:static, text}` - `<content>`'s text body, which can only originate
+    there (`Statifier.Compiler.build_content_expr/2`). Coerced through
+    `Statifier.EventData.coerce({:text, text})` (Decision 3 of the plan on
+    this module) so `<content>21</content>` becomes the integer `21`
+    (W3C test529), not the string `"21"`.
+  - `{:compiled, _, _}` - `<content expr>`. Evaluated against a fresh
+    `Statifier.Evaluator.context/1`; success is coerced through
+    `EventData.coerce({:value, v})` (identity - an evaluated expression
+    already produced a legal data value, so it is never re-run through the
+    text ladder). Failure raises `error.execution` via
+    `MachineState.raise_platform/4` and returns `nil` donedata - **not**
+    the empty string spec 5.6 names for `<content>` generally. Spec 5.10.1
+    states the opposite for `_event.data` specifically ("leave the field
+    blank"), and `test/scxml_tests/mandatory/content/test528_test.exs`
+    (`conf:emptyEventData`, `cond="_event.data === undefined"`) is
+    mandatory and only passes with `nil` - see the plan's Decision 1 for
+    the full argument.
 
   Two callers: `raise_parent_completion/3` (a non-top-level final's
   `done.state.*`) and `Statifier.Interpreter.exit_interpreter/1` (a
   top-level final's terminal `{:done, _}` effect) - the same folding rule
-  either way.
+  either way. `<donedata>` carries no `c_index`
+  (`lib/statifier/machine/content.ex:25-28`), so
+  `Statifier.Interpreter.Content.raise_execution_error/4`'s `{:content,
+  c_index, owner}` origin shape does not apply here; the raise below uses
+  `{:state, state_index}` instead, the same origin shape
+  `raise_parent_completion/3` already stamps on the `done.state.*` event
+  itself.
   """
-  @spec static_donedata(machine :: Machine.t(), state_index :: non_neg_integer()) :: term()
-  def static_donedata(machine, state_index) do
+  @spec donedata(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
+          {MachineState.t(), term() | nil}
+  def donedata(%MachineState{machine: machine} = machine_state, state_index) do
     case Machine.at(machine, state_index).donedata do
-      nil -> nil
-      %Donedata{expr: nil} -> nil
-      %Donedata{expr: {:static, term}} -> term
-      %Donedata{expr: {:compiled, _predicator_compiled, _source}} -> nil
+      nil ->
+        {machine_state, nil}
+
+      %Donedata{expr: nil} ->
+        {machine_state, nil}
+
+      %Donedata{expr: {:static, text}} ->
+        {machine_state, EventData.coerce({:text, text})}
+
+      %Donedata{expr: {:compiled, _predicator_compiled, _source} = expr} ->
+        evaluate_donedata(machine_state, state_index, expr)
+    end
+  end
+
+  # The `{:compiled, ...}` arm of `donedata/2`: evaluate against a fresh
+  # context, coerce a success through the `{:value, _}` identity rung, or
+  # raise `error.execution` and return `nil` on failure (Decision 1 - see
+  # `donedata/2`'s own doc for the full 5.6-vs-5.10.1 argument).
+  @spec evaluate_donedata(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          expr :: Machine.expr()
+        ) :: {MachineState.t(), term() | nil}
+  defp evaluate_donedata(machine_state, state_index, expr) do
+    context = Evaluator.context(machine_state)
+
+    case Evaluator.evaluate(context, expr) do
+      {:ok, value} ->
+        {machine_state, EventData.coerce({:value, value})}
+
+      {:error, reason} ->
+        machine_state =
+          MachineState.raise_platform(
+            machine_state,
+            "error.execution",
+            {:state, state_index},
+            data: reason
+          )
+
+        {machine_state, nil}
     end
   end
 
