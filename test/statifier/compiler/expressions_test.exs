@@ -70,4 +70,42 @@ defmodule Statifier.Compiler.ExpressionsTest do
     assert {:error, %Error{reason: {:expression_compile_error, {:donedata, 5}, _source, _err}}} =
              Expressions.compile("1 +", {:donedata, 5}, loc(2))
   end
+
+  # sabotage: swap `{:program, compiled, source}` for `{:compiled, compiled,
+  # source}` in compile_program/3's success clause -> the tag no longer
+  # matches `Machine.program()`'s `:program` arm, and this pattern match
+  # fails
+  test "compile_program/3 compiles a valid statement program" do
+    assert {:ok, {:program, %Predicator.Compiled{} = compiled, "x = 1; y = x + 1;"}} =
+             Expressions.compile_program("x = 1; y = x + 1;", {:content, 0}, loc(0))
+
+    refute compiled.instructions == []
+  end
+
+  # sabotage: in compile_program/3's failure path, hardcode the recovered
+  # `{line, column}` to `{1, 1}` instead of using `Predicator.parse_program/2`'s
+  # own structured result -> the recovered position stops matching predicator's
+  # actual failure site, and this test goes red on a source whose failure is
+  # not at line 1, column 1.
+  test "compile_program/3 reports a failing statement program with a recovered line/column" do
+    location = loc(9)
+
+    assert {:error, %Error{} = error} =
+             Expressions.compile_program("x = 1;\ny =", {:content, 1}, location)
+
+    assert error.location == location
+
+    assert {:expression_compile_error, {:content, 1}, "x = 1;\ny =",
+            %ParseError{position: {line, column}}} = error.reason
+
+    assert {line, column} == {2, 4}
+  end
+
+  # sabotage: swap compile_with_spans/1 for compile_program_with_positions/1
+  # in Expressions.compile/3's success clause -> compile/3 starts accepting a
+  # statement program too, the sibling-not-arm property this test exists to
+  # pin down, and this test goes red
+  test "compile/3 rejects a statement program - the sibling-not-arm property" do
+    assert {:error, %Error{}} = Expressions.compile("x = 1;", {:content, 2}, loc(4))
+  end
 end

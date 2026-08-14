@@ -89,6 +89,18 @@ defmodule Statifier.Machine do
   """
   @type expr :: {:static, term()} | {:compiled, Predicator.Compiled.t(), source :: String.t()}
 
+  @typedoc """
+  A compiled predicator *statement program* - a `<script>` body
+  (ADR-0026). This is a **sibling** of `expr()`, never one of its arms:
+  `Predicator.evaluate/3` rejects a statement program outright
+  (`deps/predicator/lib/predicator.ex:213-217`), so a program has no path
+  through `Statifier.Evaluator.evaluate/2` and is run instead through
+  `Statifier.Evaluator.execute/2`. `source` is carried alongside the
+  compiled instructions for the same reason `expr()`'s `{:compiled, ...}`
+  arm carries it - diagnostics on a run-time failure.
+  """
+  @type program :: {:program, Predicator.Compiled.t(), source :: String.t()}
+
   @type t :: %__MODULE__{
           states: tuple(),
           id_to_index: %{optional(String.t()) => non_neg_integer()},

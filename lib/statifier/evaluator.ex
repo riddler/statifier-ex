@@ -77,6 +77,16 @@ defmodule Statifier.Evaluator do
   and never raises (`docs/architecture.md` principle 3). Only the
   interpreter turns an `{:error, _}` into an `error.execution` platform
   event; this module is a leaf and never rescues-to-default.
+
+  ## `evaluate/2` reads, `execute/2` writes
+
+  `evaluate/2` is the read side: a `Machine.expr()` over a context, no
+  datamodel write possible. `execute/2` is the write side: a
+  `Machine.program()` (ADR-0026) run against the same kind of context,
+  producing a mutated `MachineState.t()`. Both build their context the same
+  way, through `context/1` - a program is not a second evaluation
+  mechanism, only a second thing this module's one context shape can be
+  run against.
   """
 
   alias Statifier.Evaluator.Error
@@ -160,6 +170,120 @@ defmodule Statifier.Evaluator do
       {:ok, value} -> {:ok, value}
       {:error, error} -> {:error, Error.new(source, error)}
     end
+  end
+
+  @doc """
+  Runs `program` (a `Machine.program()`, ADR-0026) against `machine_state`'s
+  datamodel and merges its writes back.
+
+  Builds the same `context/1` `evaluate/2` uses, keeps a copy of its
+  pre-run `data`, then hands the compiled program to `Predicator.execute/3`.
+  `Predicator.execute/3` returns `{:ok, %Predicator.Context{}}` on success
+  or `{:error, error, %Predicator.Context{}}` on a mid-program failure -
+  either way the returned context's `data` is the whole post-run datamodel,
+  normalized (`undefine_nils/1`), so it is never written back wholesale
+  (that would permanently rewrite every untouched `nil` root to
+  `:undefined` - see `undefine_nils/1`'s own note).
+
+  Instead this diffs `data` against the pre-run copy at the **top level
+  only** - `store` (`deps/predicator/lib/predicator/evaluator.ex:1491-1523`)
+  always writes through a root segment, so any nested write already changes
+  its root's value and is caught by a top-level compare - and merges just
+  the changed and newly-created roots into the *raw*
+  `machine_state.datamodel` map, the same "write through the raw map"
+  property `Statifier.Machine.Content.Assign`'s moduledoc protects, reached
+  differently here because a program returns a whole context rather than
+  one resolved path. A root the program never touches keeps its raw value
+  untouched, so a seeded-but-unbound `<data>` id still reads `nil` after a
+  run that never mentioned it. `store` never deletes a root, so there is no
+  removal case here to handle.
+
+  Unlike `Statifier.Machine.Content.Assign`'s `check_root/3`, a program
+  writing a root no `<datamodel>` declared is not rejected: `<assign>`'s
+  `location` is a *reference* to a location the document must already have
+  (spec 5.9.2), while a predicator assignment *statement* is a declaration
+  and a write in one, which is what W3C test302/test304 assert (ADR-0026
+  decision 2, `Statifier.Machine.Content.Script`'s moduledoc once that
+  module lands).
+
+  A changed root beginning with `_` is a system-variable write (spec
+  5.10) and is never merged; if the diff finds one, this returns
+  `{:error, machine_state, {:system_variable, root}}` - the same reason
+  tuple `Statifier.Machine.Content.Assign.check_system_variable/1`
+  produces, so `error.execution`'s `data:` reads identically whichever
+  element attempted the write - with every non-system changed root from
+  the *same* program still merged into the returned `machine_state` (spec
+  4.9's stop-and-keep model, applied to the one statement that failed this
+  check). When several changed roots are system roots, the one reported is
+  the alphabetically first - the diff makes no claim about which
+  assignment statement ran first, only about which roots differ.
+
+  Known and accepted gap: a program that writes a system root and then
+  writes it back to its original value is unobservable to this diff and
+  is not caught. A pre-execution scan of assignment targets was rejected
+  because it cannot see a computed bracket key, which would make the
+  protection *look* complete while remaining bypassable; this diff is
+  bypassable only by a write with no net effect.
+
+  A `Predicator.execute/3` failure (a bad statement mid-program, or a
+  program that never parsed - `Statifier.Compiler.Expressions.
+  compile_program/3`'s deferred `{:invalid, _}` shape reaches here only
+  through its caller, never through this function directly) is wrapped
+  with `Statifier.Evaluator.Error.new(source, error)` (ADR-0026 decision
+  6) so a consumer never has to branch on whether the expression path or
+  the program path failed - both land in the same `Evaluator.Error.t()`
+  shape.
+  """
+  @spec execute(machine_state :: MachineState.t(), program :: Machine.program()) ::
+          {:ok, MachineState.t()}
+          | {:error, MachineState.t(), Error.t() | {:system_variable, String.t()}}
+  def execute(
+        %MachineState{} = machine_state,
+        {:program, %Predicator.Compiled{} = compiled, source}
+      ) do
+    predicator_context = context(machine_state)
+    before_data = predicator_context.data
+
+    {after_data, run_error} =
+      case Predicator.execute(compiled, predicator_context) do
+        {:ok, %Predicator.Context{data: after_data}} -> {after_data, nil}
+        {:error, error, %Predicator.Context{data: after_data}} -> {after_data, error}
+      end
+
+    {system_changed, non_system_changed} = partition_changed_roots(before_data, after_data)
+
+    new_machine_state = %{
+      machine_state
+      | datamodel: Map.merge(machine_state.datamodel, non_system_changed)
+    }
+
+    cond do
+      run_error != nil ->
+        {:error, new_machine_state, Error.new(source, run_error)}
+
+      map_size(system_changed) > 0 ->
+        [{root, _value} | _rest] = Enum.sort(system_changed)
+        {:error, new_machine_state, {:system_variable, root}}
+
+      true ->
+        {:ok, new_machine_state}
+    end
+  end
+
+  # Decisions 3 and 4: the top-level diff `execute/2` builds its merge and
+  # its system-variable check from, in one pass. `before` and `after_data`
+  # are both `context/1`-normalized maps, so a root absent from `before`
+  # (a program-created root, ADR-0026 decision 2) diffs against the
+  # `:__absent__` sentinel and is treated as changed like any other.
+  @spec partition_changed_roots(before :: map(), after_data :: map()) :: {map(), map()}
+  defp partition_changed_roots(before, after_data) do
+    changed =
+      for {key, value} <- after_data,
+          Map.get(before, key, :__absent__) !== value,
+          into: %{},
+          do: {key, value}
+
+    Map.split_with(changed, fn {root, _value} -> String.starts_with?(root, "_") end)
   end
 
   # The `In(stateId)` host function (spec 5.10): true when `stateId` names a

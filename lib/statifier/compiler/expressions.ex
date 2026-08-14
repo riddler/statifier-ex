@@ -136,10 +136,51 @@ defmodule Statifier.Compiler.Expressions do
     end
   end
 
+  @doc """
+  Compiles a predicator *statement program* - a `<script>` body - into a
+  `Machine.program()`, the sibling type `Machine.program()`'s typedoc
+  describes: a program is never an arm of `Machine.expr()`, because
+  `Predicator.evaluate/3` rejects statement programs outright
+  (`deps/predicator/lib/predicator.ex:213-217`), so this function is a
+  parallel entry point rather than a third clause of `compile/3`.
+
+  `owner` and `location` carry the same meaning `compile/3`'s docs give
+  them - the owning node for the error case, and the `Location` a failure
+  is reported against.
+
+  On success, `Predicator.compile_program_with_positions/1`'s
+  `%Predicator.Compiled{}` is stored whole, exactly as `compile/3` stores
+  `compile_with_spans/1`'s result.
+
+  On failure, the structured `{line, column}` is recovered with a second
+  call to `Predicator.parse_program/2`, which - unlike `compile/3`'s
+  `Predicator.parse/2` detour through a `spans:` option - already returns
+  the structured `{:error, message, line, column}` 4-tuple directly
+  (`deps/predicator/lib/predicator.ex:865-871`). The asymmetry with
+  `compile/3`'s recovery path is deliberate, not an oversight: a program
+  parse failure never carries a span to ask for in the first place.
+  """
+  @spec compile_program(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
+          {:ok, Machine.program()} | {:error, Error.t()}
+  def compile_program(source, owner, %Location{} = location)
+      when is_binary(source) and is_tuple(owner) do
+    case Predicator.compile_program_with_positions(source) do
+      {:ok, %Predicator.Compiled{} = compiled} -> {:ok, {:program, compiled, source}}
+      {:error, _formatted_message} -> {:error, program_parse_error(source, owner, location)}
+    end
+  end
+
   @spec parse_error(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           Error.t()
   defp parse_error(source, owner, location) do
     {:error, message, line, column} = Predicator.parse(source, spans: true)
+    Error.expression_compile_error(owner, source, ParseError.new(message, line, column), location)
+  end
+
+  @spec program_parse_error(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
+          Error.t()
+  defp program_parse_error(source, owner, location) do
+    {:error, message, line, column} = Predicator.parse_program(source)
     Error.expression_compile_error(owner, source, ParseError.new(message, line, column), location)
   end
 end

@@ -54,6 +54,11 @@ defmodule Statifier.EvaluatorTest do
     {:compiled, compiled, source}
   end
 
+  defp program(source) do
+    {:ok, compiled} = Predicator.compile_program_with_positions(source)
+    {:program, compiled, source}
+  end
+
   describe "evaluate/2 - {:static, v}" do
     # sabotage: `evaluate/2`'s static clause routes the value through
     # `Predicator.evaluate/3` instead of returning it untouched -> a static
@@ -231,6 +236,82 @@ defmodule Statifier.EvaluatorTest do
       # Absent event data stays undefined rather than becoming `%{}` - the
       # property `tools/corpus/scxml_w3/exclusions.exs:7-11` depends on.
       assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
+    end
+  end
+
+  describe "execute/2" do
+    # sabotage: in execute/2, merge `machine_state.datamodel` unchanged
+    # instead of `Map.merge(machine_state.datamodel, non_system_changed)` ->
+    # a successful program's own write never reaches the returned
+    # machine_state, and this assertion reddens.
+    test "a successful program merges its write into the returned machine_state" do
+      ms = new_machine_state(datamodel: %{"x" => nil})
+
+      assert {:ok, new_ms} = Evaluator.execute(ms, program("x = 1;"))
+      assert new_ms.datamodel["x"] == 1
+    end
+
+    # sabotage: on the error branch, return the original `machine_state`
+    # instead of `new_machine_state` (the one with the partial merge already
+    # applied) -> the write `x = 1;` made before `nope` failed is discarded,
+    # and this assertion reddens.
+    test "a mid-program failure keeps the earlier write and reports the error" do
+      ms = new_machine_state(datamodel: %{"x" => nil, "y" => nil})
+
+      assert {:error, new_ms, %Error{error: %UndefinedVariableError{variable: "nope"}}} =
+               Evaluator.execute(ms, program("x = 1; y = nope + 1;"))
+
+      assert new_ms.datamodel["x"] == 1
+      assert new_ms.datamodel["y"] == nil
+    end
+
+    # sabotage: in partition_changed_roots/2, require `Map.has_key?(before,
+    # key)` before a root counts as changed -> a root the program creates
+    # (absent from `before`) is filtered out of the diff entirely, and this
+    # assertion reddens.
+    test "a program may create a new top-level root no <datamodel> declared" do
+      ms = new_machine_state(datamodel: %{})
+
+      assert {:ok, new_ms} = Evaluator.execute(ms, program("newvar = 42;"))
+      assert new_ms.datamodel["newvar"] == 42
+    end
+
+    # sabotage: swap partition_changed_roots/2's `String.starts_with?(root,
+    # "_")` predicate for its negation -> a system root merges while a
+    # non-system root from the same program is rejected instead, and this
+    # test's shape inverts.
+    test "a system-variable write is rejected, keeping the same program's other writes" do
+      ms = new_machine_state(datamodel: %{"x" => nil})
+
+      assert {:error, new_ms, {:system_variable, "_event"}} =
+               Evaluator.execute(ms, program("_event = 1; x = 2;"))
+
+      assert new_ms.datamodel["x"] == 2
+      assert new_ms.datamodel["_event"] == nil
+    end
+
+    # sabotage: in execute/2, merge `after_data` wholesale instead of just
+    # `non_system_changed` -> `z`, never mentioned by the program, comes back
+    # `:undefined` (context/1's normalization) instead of staying `nil`, and
+    # this assertion reddens.
+    test "an untouched nil root stays nil after a successful program" do
+      ms = new_machine_state(datamodel: %{"z" => nil, "x" => nil})
+
+      assert {:ok, new_ms} = Evaluator.execute(ms, program("x = 1;"))
+      assert new_ms.datamodel["z"] == nil
+    end
+
+    # sabotage: in `context/1`, drop the `functions: %{"In" => ...}` option
+    # from the `Predicator.Context.new/2` call it makes on `execute/2`'s
+    # behalf -> a fresh context built from the post-run machine_state can no
+    # longer resolve `In/1`, and this assertion reddens.
+    test "In/1 still answers after a program run, against a freshly built context" do
+      ms = machine_state_with_s1_active()
+
+      assert {:ok, new_ms} = Evaluator.execute(ms, program("x = 1;"))
+
+      context = Evaluator.context(new_ms)
+      assert Evaluator.evaluate(context, compiled_expr("In('s1')")) == {:ok, true}
     end
   end
 end

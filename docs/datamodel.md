@@ -1,7 +1,7 @@
 # Datamodel
 
 Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
-`~> 5.0`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
+`~> 7.0`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
 we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
 a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
 continuity with v1's converted W3C tests).
@@ -90,17 +90,30 @@ Every evaluation goes through one module with one context type:
 
 ## Statement sequences and `<script>`
 
-`<script>` (ECMAScript statements) stays unsupported. The direction we want instead:
-a small, safe statement layer in predicator itself - sequences of assignments and
-expression statements over the existing expression language, upstreamed as a
-predicator feature so every predicator embedding gets it. Until that exists,
-multi-step mutation is expressed as a sequence of `<assign>` elements, which covers
-most real `<script>` usage in the corpora.
+`<script>` is supported
+([ADR-0026](adr/0026-script-as-predicator-statement-programs.md), amending
+ADR-0004 in part): the statement layer this section once asked for landed in
+predicator 5.0.0 - `parse_program/2` parses sequences of assignments and
+expression statements over the existing expression language, and
+`Predicator.execute/3` runs the program and returns the resulting context. A
+`<script>` body is a predicator statement program, not ECMAScript, and the
+no-eval security posture is unchanged.
 
-A possible follow-on (tracked as an issue, not promised): a converter that rewrites
-the *basic* `<script>` bodies found in the SCION corpus (assignments, increments)
-into `<assign>` sequences or the predicator statement form, so those tests can join
-the ratchet.
+- A body that fails mid-program keeps every write up to the failing statement
+  (`{:error, error, %Context{}}`'s third element is the partial context) and
+  raises `error.execution` - spec 4.9's stop-and-keep error model, the shape
+  IRP test156 observes. All-or-nothing rollback is a decided non-option.
+- A `<script>` child of `<scxml>` is evaluated at document load time, before
+  the initial state is entered (spec 5.8) - a separate interpreter path from
+  executable content.
+- `<script src>` is rejected at load with a named unsupported error; external
+  fetch stays the unresolved question st-322 owns (see ADR-0024 on
+  `<data src>`).
+- The ceiling: corpus script bodies are ECMAScript and predicator's statement
+  grammar is not - object literals, `typeof`, and function definitions do not
+  parse, and `if`/`else`/`while`/`undefined`/`null` are reserved words - so
+  only a subset of the once-excluded `:needs_script` corpus files joins the
+  ratchet.
 
 ## Upstreaming to predicator
 
@@ -138,7 +151,11 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `test/passing_tests.json`. The literal does not rescue a genuinely unbound
    root, so a `Var<n>` boundness cond still waits on st-af3.3 seeding the
    declared `<data>` it names.
-4. **Statement sequences** (above).
+4. **Statement sequences** (above). Landed in predicator 5.0.0:
+   `parse_program/2`, the `store`/`pop` instructions, and
+   `Predicator.execute/1,2,3` returning the resulting context (with the
+   partial context on error). Consumed here per ADR-0026; the statifier-side
+   `<script>` implementation is st-af3.17.
 5. **String prefix/substring**: landed in predicator 3.7.0 (`starts_with/2`,
    `ends_with/2`, `substring/2,3`, `index_of/2`); `conf:varPrefix` (test224) no
    longer needs an exclusion.
