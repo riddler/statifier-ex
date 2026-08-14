@@ -621,12 +621,12 @@ baseline. Content:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green, verified through `mix gate.verify` (a `bench/`
+- [x] Full `mix quality` green, verified through `mix gate.verify` (a `bench/`
       edit is outside every stage, so this confirms the phase introduced no
       unrelated change)
-- [ ] `mix run bench/macrostep.exs` completes and prints a summary
-- [ ] `mix run bench/context_build.exs` completes and prints all size points
-- [ ] `bench/results/260814-st-l0t-provider-host-seam.md` contains both a
+- [x] `mix run bench/macrostep.exs` completes and prints a summary
+- [x] `mix run bench/context_build.exs` completes and prints all size points
+- [x] `bench/results/260814-st-l0t-provider-host-seam.md` contains both a
       Before and an After table over all four document families
 
 #### Manual Verification:
@@ -922,5 +922,24 @@ surfaced once at the end.
 - [ ] No Appendix D procedure was edited; no deviation comment is owed.
 
 **Implementation Note**: same as Phase 1.
+
+---
+
+### Phase 3
+
+- [ ] The after figures actually beat the before figures on the corpus-shaped
+      documents. If they do not, stop and report - Phase 4's ADR must not be
+      written against numbers that did not appear.
+- [ ] The repaired build counts match the call graph as the implementer reads
+      it, not as this plan asserts it; a disagreement is a finding to record.
+- [ ] Benchee's own noise warnings were read, not skipped, and any figure
+      inside noise is reported as noise rather than as a win.
+- [ ] The cost-not-count reading of the acceptance criterion is stated in this
+      phase's commit body in the plan's own words, so it reaches the human
+      closing the bead as a decision to affirm rather than as prose to find.
+
+**Implementation Note**: same as Phase 1. `bench/` is ungated by design
+(`bench/README.md`), so the gate confirms cleanliness rather than correctness
+here; the manual criteria carry this phase.
 
 ---

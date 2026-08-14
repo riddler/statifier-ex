@@ -21,6 +21,37 @@ alias Statifier.Evaluator
 # T_fixed = Context.new/2 over an empty datamodel - isolates
 #           resolve_functions/1, the fixed per-call cost.
 # T_bind  = Context.bind/3, one root - the alternative.
+#
+# Three scenarios added in st-l0t Phase 3
+# (docs/plans/260814-st-l0t-provider-host-seam-for-in1.md), evidence for two
+# claims from that plan's research: a provider swap by itself moves no
+# number (T_resolve_provider vs. T_resolve_closure), and put_host/2 is the
+# cheap per-site refresh Phase 2 built context/1 around.
+#
+# T_put_host          = Context.put_host/2 on a built context - the
+#                        per-site refresh cost Phase 2 replaced rebuilding
+#                        with.
+# T_resolve_provider   = Context.resolve_functions/1 with a
+#                        Predicator.FunctionProvider module (In/1's current
+#                        shape, Statifier.Evaluator.Functions).
+# T_resolve_closure    = Context.resolve_functions/1 with an inline
+#                        function-literal closure (In/1's pre-Phase-1
+#                        shape) - the same term, so this and the provider
+#                        row above should land within noise of each other.
+
+defmodule ClosureFunctions do
+  @moduledoc false
+
+  @spec build(machine :: term(), configuration :: term()) :: (list() -> {:ok, boolean()})
+  def build(machine, configuration) do
+    fn [state_id] ->
+      case Statifier.Machine.index(machine, state_id) do
+        {:ok, index} -> {:ok, MapSet.member?(configuration, index)}
+        :error -> {:ok, false}
+      end
+    end
+  end
+end
 
 Benchee.run(
   %{
@@ -33,6 +64,16 @@ Benchee.run(
     end,
     "T_bind  Context.bind/3 one root" => fn %{ctx: ctx, root: r, val: v} ->
       Context.bind(ctx, r, v)
+    end,
+    "T_put_host  Context.put_host/2" => fn %{ctx: ctx, ms: ms} ->
+      Context.put_host(ctx, {ms.machine, ms.configuration})
+    end,
+    "T_resolve_provider  resolve_functions/1, provider" => fn _ ->
+      Context.resolve_functions(providers: [Statifier.Evaluator.Functions])
+    end,
+    "T_resolve_closure  resolve_functions/1, inline closure" => fn %{ms: ms} ->
+      in_fn = ClosureFunctions.build(ms.machine, ms.configuration)
+      Context.resolve_functions(functions: %{"In" => {1, in_fn}})
     end
   },
   inputs: Workload.size_points(),
