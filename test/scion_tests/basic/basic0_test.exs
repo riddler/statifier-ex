@@ -1,5 +1,5 @@
 defmodule SCIONTest.Basic.Basic0Test do
-  use Statifier.Case
+  use Statifier.Case, async: true
 
   @moduletag :scion
   @tag required_features: [:basic_states]

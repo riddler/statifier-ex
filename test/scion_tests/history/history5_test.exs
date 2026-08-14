@@ -1,5 +1,5 @@
 defmodule SCIONTest.History.History5Test do
-  use Statifier.Case
+  use Statifier.Case, async: true
 
   @moduletag :scion
   @tag required_features: [
