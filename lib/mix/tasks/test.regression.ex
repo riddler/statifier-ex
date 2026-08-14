@@ -23,6 +23,13 @@ defmodule Mix.Tasks.Test.Regression do
   A registry entry that matches no file on disk fails the run. Skipping it
   would silently shrink the ratchet, which is the one thing it exists to
   prevent.
+
+  A passing run also prints a per-corpus coverage block: for each conformance
+  suite, `ratcheted/total (percent%)` against the suite's emitted corpus
+  files. The numerator is exactly the registry entries this run verified -
+  unlike `mix test.baseline`'s scan, there are no newly-passing files to add
+  in. A failing run prints no such block; ExUnit's own output is the whole
+  story then.
   """
 
   use Mix.Task
@@ -44,18 +51,20 @@ defmodule Mix.Tasks.Test.Regression do
   Runs the ratchet and reports the outcome instead of halting.
 
   `opts[:runner]` replaces the `mix test` shell-out with a function of the
-  argument list returning an exit status, which is how the tests drive this
-  without spawning a nested `mix test`.
+  argument list returning an exit status, `opts[:root]` moves the corpus scan
+  behind the coverage block to a fixture tree. Both exist so the tests can
+  drive this without spawning a nested `mix test`.
   """
   @spec execute(argv :: [String.t()], opts :: keyword()) :: :ok | {:error, String.t()}
   def execute(argv, opts \\ []) do
     {parsed, _rest} = OptionParser.parse!(argv, strict: @switches)
     path = parsed[:registry] || RegressionRegistry.default_path()
     runner = Keyword.get(opts, :runner, &mix_test/1)
+    root = Keyword.get(opts, :root, ".")
 
     with {:ok, registry} <- RegressionRegistry.load(path),
          {:ok, files} <- resolve(registry, path) do
-      run_tests(files, runner)
+      run_tests(files, runner, root)
     end
   end
 
@@ -74,19 +83,31 @@ defmodule Mix.Tasks.Test.Regression do
     end
   end
 
-  defp run_tests(files, runner) do
+  defp run_tests(files, runner, root) do
     count = length(files)
     Mix.shell().info("Running #{count} regression test file#{plural(files, "", "s")}...")
 
     case runner.(files ++ RegressionRegistry.test_args(files)) do
       0 ->
         Mix.shell().info("All #{count} regression test files passed.")
+        print_coverage(files, root)
         :ok
 
       status ->
         {:error,
          "regression failure (mix test exited #{status}). " <>
            "Fix the code, or run `mix test.baseline` if the registry is wrong."}
+    end
+  end
+
+  defp print_coverage(files, root) do
+    case RegressionRegistry.stats_lines(files, RegressionRegistry.conformance_categories(), root) do
+      [] ->
+        :ok
+
+      lines ->
+        Mix.shell().info("Corpus coverage (ratcheted / emitted corpus files):")
+        Enum.each(lines, &Mix.shell().info/1)
     end
   end
 
