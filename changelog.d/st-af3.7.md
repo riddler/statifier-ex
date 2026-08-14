@@ -34,4 +34,7 @@
   evaluate raises its own `error.execution` and is dropped from the result
   rather than aborting the remaining params (spec 5.7's "MUST ignore the
   name and value"). The `done.state.*` event and the terminal `Effect.Done`
-  both carry the same folded map.
+  both carry the same folded map. Each such `error.execution` carries a
+  `{:donedata_param, state_index, param_index}` cause origin naming the
+  individual `<param>` that failed, so sibling failures in one `<donedata>`
+  stay distinguishable even when they share an expression.

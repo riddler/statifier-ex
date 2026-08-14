@@ -944,6 +944,17 @@ defmodule Statifier.Interpreter.ExitEntry do
   # context, coerce a success through the `{:value, _}` identity rung, or
   # raise `error.execution` and return `nil` on failure (Decision 1 - see
   # `donedata/2`'s own doc for the full 5.6-vs-5.10.1 argument).
+  #
+  # ADR-0014 item 4's four committed fields are all present across the two
+  # arguments, none of them duplicated into a new struct: the owning node's
+  # constraint-3 identity is the `{:state, state_index}` origin, and the
+  # expression source string, predicator's own error struct, and its span
+  # are the three fields of the `%Statifier.Evaluator.Error{}` that
+  # `Evaluator.evaluate/2` returns as `reason` (see that struct's moduledoc,
+  # which states it carries no `owner` precisely because the raise site
+  # stamps one). This mirrors `Statifier.Interpreter.Selection`'s failed-`cond`
+  # raise, which passes the same `data: reason` alongside a
+  # `{:transition, t_index}` origin for the same reason.
   @spec evaluate_donedata(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -986,18 +997,29 @@ defmodule Statifier.Interpreter.ExitEntry do
     context = Evaluator.context(machine_state)
 
     {machine_state, pairs} =
-      Enum.reduce(params, {machine_state, []}, fn %Param{name: name, expr: expr},
-                                                  {machine_state, pairs} ->
+      params
+      |> Enum.with_index()
+      |> Enum.reduce({machine_state, []}, fn {%Param{name: name, expr: expr}, param_index},
+                                             {machine_state, pairs} ->
         case Evaluator.evaluate(context, expr) do
           {:ok, value} ->
             {machine_state, [{name, value} | pairs]}
 
           {:error, reason} ->
+            # `{:donedata_param, state_index, param_index}`, not the
+            # `{:state, state_index}` the `<content>` arm uses: 5.7 fails
+            # each `<param>` independently, so several siblings can raise in
+            # one step and a state-level origin would stamp all of them
+            # identically (`docs/observability.md` constraint 4 - see
+            # `Statifier.Event.Cause`'s own arm for the full argument).
+            # `param_index` is the document-order position in this state's
+            # `donedata.params`, which is how a diagnostic reaches the
+            # failing `<param>`'s `name` and `expr_location`.
             machine_state =
               MachineState.raise_platform(
                 machine_state,
                 "error.execution",
-                {:state, state_index},
+                {:donedata_param, state_index, param_index},
                 data: reason
               )
 

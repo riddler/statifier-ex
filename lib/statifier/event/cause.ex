@@ -62,6 +62,26 @@ defmodule Statifier.Event.Cause do
     never duplicates the location itself (ADR-0014 item 4's committed field
     set, reached with no new struct).
 
+  - `{:donedata_param, state_index, param_index}` - the platform raised the
+    event about one `<param>` under a `<final>`'s `<donedata>` that could not
+    be evaluated, with no content node behind it. `state_index` resolves
+    through `Statifier.Machine.at/2` and `param_index` indexes that state's
+    `donedata.params` in document order, so the resolved
+    `%Statifier.Machine.Param{}` carries `name`, `kind`, `expr` and
+    `expr_location` - ADR-0014 item 4's committed field set, reached with no
+    new struct, the same way the `{:data, d_index}` arm reaches a `<data>`.
+
+    **Why this is not `{:state, state_index}`.** Spec 5.7 makes each
+    `<param>` fail independently ("MUST ignore the name and value" - one
+    failure does not abort its siblings), so a `<donedata>` with several
+    `<param>` children can raise several `error.execution` events in one
+    step. A bare `{:state, state_index}` is identical across all of them,
+    which leaves `docs/observability.md` constraint 4's "identity of what
+    raised them" unsatisfied at the granularity the failure actually has:
+    the reason's `source` string narrows it only when the siblings'
+    expressions differ, and two `<param>` elements may legitimately share
+    one expression while differing in `name`.
+
   Never a struct - every index resolves through `Statifier.Machine`.
   """
   @type origin ::
@@ -69,6 +89,7 @@ defmodule Statifier.Event.Cause do
           | {:state, non_neg_integer()}
           | {:transition, non_neg_integer()}
           | {:data, non_neg_integer()}
+          | {:donedata_param, non_neg_integer(), non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),
