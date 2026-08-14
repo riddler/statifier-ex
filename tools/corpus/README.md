@@ -114,6 +114,12 @@ case-insensitive filesystem; `test/corpus/emitted_paths_test.exs` asserts the
 path-shape invariant directly so that class of drift fails a gate instead of
 waiting for a case-sensitive filesystem to surface it.
 
+`mix test.regression` and `mix test.baseline` report per-corpus coverage
+against these emitted counts (118 SCION, 159 W3C), not the upstream suite
+sizes above - see `docs/testing.md`'s regression ratchet section - so an edit
+to either exclusions file that changes what emits also changes what those
+tasks report as the denominator.
+
 Remaining work, tracked in beads:
 
 1. **st-00p.10** - wire the regression ratchet into `mix quality`.

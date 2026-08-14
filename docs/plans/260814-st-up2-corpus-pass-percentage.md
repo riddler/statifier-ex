@@ -477,9 +477,9 @@ what reads them.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (this phase touches no Elixir, so the gate is a
+- [x] Full `mix quality` passes (this phase touches no Elixir, so the gate is a
       no-change confirmation, but it still runs).
-- [ ] `mix gate.verify` confirms a full, unscoped green run.
+- [x] `mix gate.verify` confirms a full, unscoped green run.
 
 #### Manual Verification:
 
@@ -621,6 +621,31 @@ items are deferred and surfaced once at the end instead of blocking here.
       registry naming a failing file) prints no coverage block and the same
       error text as before; revert afterwards.
 - [ ] Each new test was sabotaged red and reverted, with the mutation noted.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The counts written into the docs match what the corpus actually holds,
+      checked by running `find test/scion_tests -name '*_test.exs' | wc -l` and
+      the same for `test/scxml_tests` and reading the prose against them. This
+      is a manual item on purpose: nothing compares a number in prose to a shell
+      count, and labeling it automated would let a green gate stand in for a
+      check no command performed.
+- [ ] A reader of `docs/testing.md` alone can tell why the SCION figure is over
+      118 and not 127.
+- [ ] The docs say the figures come from running `mix test.regression` or
+      `mix test.baseline` directly, and do not promise them in `mix quality`'s
+      stage summary.
+- [ ] The v1-target sentence no longer invites an apples-to-oranges reading.
+- [ ] No stray typographic characters introduced into an ASCII file.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

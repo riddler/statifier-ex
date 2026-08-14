@@ -62,13 +62,13 @@ defmodule Mix.Tasks.Test.RegressionTest do
     end)
   end
 
+  @tag :isolated_tmp_dir
   # sabotage: have print_coverage/2 build its stats_lines call from the
   #           registry's raw entries instead of `files` (the resolved,
   #           expanded set) -> the SCION count in the assertion below stays
   #           wrong even though the run passes, since a glob or a
   #           non-existent path would no longer intersect the corpus files on
   #           disk the same way -> red
-  @tag :isolated_tmp_dir
   test "a passing run prints the ratcheted coverage block", %{tmp_dir: tmp_dir} do
     scion = test_file(tmp_dir, "test/scion_tests/basic0_test.exs")
     test_file(tmp_dir, "test/scion_tests/basic1_test.exs")
@@ -85,10 +85,10 @@ defmodule Mix.Tasks.Test.RegressionTest do
     assert output =~ "Emitted files only; cases excluded at generation time are not counted"
   end
 
+  @tag :isolated_tmp_dir
   # sabotage: n/a - asserts the absence of behavior run_tests/3 never had on
   #           the failing branch; there is no lib/ code path to break that
   #           would print a coverage block after a failing run
-  @tag :isolated_tmp_dir
   test "a failing run prints no coverage block", %{tmp_dir: tmp_dir} do
     scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
     path = registry(tmp_dir, %{"scion_tests" => [scion]})
