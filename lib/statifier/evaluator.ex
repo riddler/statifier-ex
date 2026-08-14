@@ -220,10 +220,18 @@ defmodule Statifier.Evaluator do
 
   Known and accepted gap: a program that writes a system root and then
   writes it back to its original value is unobservable to this diff and
-  is not caught. A pre-execution scan of assignment targets was rejected
-  because it cannot see a computed bracket key, which would make the
-  protection *look* complete while remaining bypassable; this diff is
-  bypassable only by a write with no net effect.
+  is not caught, and 5.10 wants the write to fail *at the attempt* so
+  later statements never observe it - this diff only refuses to merge
+  it. Two things a pre-execution scan of assignment targets would not
+  fix. It would fire on an assignment inside an `if` branch that never
+  runs, while 5.10 owes the error only "when such an attempt is made";
+  and it cannot make the write fail, only report it after the fact.
+  (The scan itself would be complete, not bypassable: predicator's
+  `location` grammar roots every target in a literal IDENTIFIER, and
+  this check is root-only, so a computed bracket key never hides a
+  root.) Closing the gap exactly needs a hook inside predicator's
+  `store` - a protected-roots option on `Predicator.execute/3` - which
+  is upstream work, not a shape this diff can reach.
 
   A `Predicator.execute/3` failure (a bad statement mid-program, or a
   program that never parsed - `Statifier.Compiler.Expressions.
