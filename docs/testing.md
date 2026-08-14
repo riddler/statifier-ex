@@ -154,6 +154,35 @@ been trusted for a year.
   `mix test.baseline add <files>` verifies specific files and is all-or-nothing.
   Nothing enters the registry without passing first.
 
+### Per-corpus coverage figures
+
+Both tasks report per-corpus coverage - SCION and W3C separately, passing/total
+and a percentage - but each uses a different numerator. `mix test.baseline`'s
+figure is the measured one: ratcheted tests plus every newly-passing candidate
+found in that scan. `mix test.regression`'s figure is the floor: ratcheted
+tests only, since that task never runs a file outside the registry. Both are
+computed by `Mix.Statifier.RegressionRegistry.corpus_stats/3`.
+
+These figures print when the tasks are run directly - `mix test.baseline` or
+`mix test.regression` from the shell - not in `mix quality`'s stage summary.
+The `Regression ratchet` stage shells out to `mix test.regression` and reports
+only pass/fail for the stage as a whole; a passing command stage renders as
+one line in the gate's output regardless of what the underlying command
+printed. Surfacing the figures there would need a JSON summary mode for the
+task plus a guarded `.quality.exs` edit with its own ledger entry (see the
+"Which skipped stages" discipline in `CLAUDE.md`) - both out of scope here.
+
+The denominator behind both figures is the emitted corpus: 118 SCION and 159
+W3C files on disk today (`test/scion_tests/`, `test/scxml_tests/`), not the
+upstream suites (127 native SCION cases, 193 W3C cases). The emitted count is
+the only one 100% is reachable against - some upstream cases have no
+predicator equivalent and are excluded at generation time (script tags, list
+concatenation, the BasicHTTP Event I/O Processor tree, and more), so no build
+of this engine could ever pass every upstream case under the predicator
+datamodel commitment (docs/datamodel.md). `tools/corpus/README.md` documents
+the exclusion counts and reasons; a future edit to those exclusions changes
+what these tasks read as the denominator.
+
 Both tasks are thin wrappers over `Mix.Statifier.RegressionRegistry`, which holds the
 load/expand/categorize/add logic and writes the JSON back with sorted keys and one
 entry per line, so ratcheting a test in is a one-line diff.
@@ -163,7 +192,12 @@ same PR; a test that used to pass and now does not is a regression to fix, never
 line to delete.
 
 v2 starts from zero because it has no engine yet. v1's final baseline - **90/127
-SCION, 27/59 W3C** - is the reference target to beat, not a seed to copy in.
+SCION, 27/59 W3C** - is the reference target to beat, not a seed to copy in. Both
+denominators there are v1's own *emitted* corpus (`../statifier/test/scion_tests`
+holds 127 `_test.exs` files, `../statifier/test/scxml_tests` holds 59), the same
+kind of figure this section describes above, not the upstream suite sizes - so
+the comparison to v2's figures is like-for-like, emitted corpus against emitted
+corpus.
 
 ### Scratch directories in tests
 
