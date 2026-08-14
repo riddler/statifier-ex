@@ -1,5 +1,5 @@
 defmodule SCIONTest.ActionSend.Send4bTest do
-  use Statifier.Case
+  use Statifier.Case, async: true
 
   @moduletag :scion
   @tag required_features: [

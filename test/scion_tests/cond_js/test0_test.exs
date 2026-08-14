@@ -1,5 +1,5 @@
 defmodule SCIONTest.CondJs.Test0Test do
-  use Statifier.Case
+  use Statifier.Case, async: true
 
   @moduletag :scion
   @tag required_features: [

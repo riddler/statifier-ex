@@ -150,7 +150,7 @@ defmodule Cases.Emit do
 
       source = """
       defmodule #{inspect(module)} do
-        use Statifier.Case
+        use Statifier.Case, async: true
 
         @moduletag :scxml_w3
         @tag required_features: [#{features}]

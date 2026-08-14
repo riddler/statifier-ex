@@ -50,7 +50,7 @@ defmodule Statifier.Case do
   grow the coupling surface this module exists to hold flat.
   """
 
-  use ExUnit.CaseTemplate, async: true
+  use ExUnit.CaseTemplate
 
   alias Statifier.FeatureDetector
   alias Statifier.MachineState

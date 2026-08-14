@@ -1,5 +1,5 @@
 defmodule SCIONTest.Misc.DeepInitialTest do
-  use Statifier.Case
+  use Statifier.Case, async: true
 
   @moduletag :scion
   @tag required_features: [
