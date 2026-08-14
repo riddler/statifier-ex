@@ -34,6 +34,10 @@ defmodule Statifier.EventDataTest do
       assert EventData.coerce({:text, "foo"}) == "foo"
     end
 
+    # sabotage: `from_text/1`'s success branch is changed to
+    # `if is_boolean(value), do: trimmed, else: value` (keep the raw text
+    # for a boolean parse instead of the parsed value) -> this reddens,
+    # since "true" would stay the string "true" instead of becoming `true`.
     test "a literal-parseable boolean becomes the boolean" do
       assert EventData.coerce({:text, "true"}) == true
     end

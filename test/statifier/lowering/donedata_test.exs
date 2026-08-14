@@ -3,6 +3,7 @@ defmodule Statifier.Lowering.DonedataTest do
 
   alias Statifier.Document.Content
   alias Statifier.Document.Donedata
+  alias Statifier.Document.Param
   alias Statifier.Document.State
   alias Statifier.Lowering
   alias Statifier.Lowering.Error
@@ -102,12 +103,11 @@ defmodule Statifier.Lowering.DonedataTest do
     end
   end
 
-  describe "lower/1 - <param> inside <donedata> is refused" do
-    # sabotage: `Lowering`'s dispatch map grows a `"param" => &Builders.build_param/2`
-    # entry (a stray hand-written builder) -> this test reddens because the
-    # document lowers successfully instead of reporting an unsupported
-    # element error
-    test "a <param> child produces exactly one error naming param, at param's own location" do
+  describe "lower/1 - <param> inside <donedata>" do
+    # sabotage: `build_param/2`'s `name` case reads `Attributes.value(element,
+    # "expr")` into the `name` field instead of the matched `name` variable
+    # -> this assertion's `name: "x"` reddens
+    test "a <param> child lowers into donedata.params with its name, expr and location attributes" do
       xml = """
       <scxml>
           <final id="f">
@@ -118,13 +118,81 @@ defmodule Statifier.Lowering.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unsupported_element, "param"}} = error]} =
+      state = lower!(xml) |> only_state()
+
+      assert %Donedata{params: [%Param{name: "x", expr: "1", param_location: nil} = param]} =
+               state.donedata
+
+      assert Map.has_key?(param.attribute_locations, :name)
+      assert Map.has_key?(param.attribute_locations, :expr)
+      refute Map.has_key?(param.attribute_locations, :location)
+    end
+
+    # sabotage: `build_param/2` reads `Attributes.value(element, "expr")`
+    # into `param_location` instead of `Attributes.value(element,
+    # "location")` -> this assertion's `param_location: "foo.bar"` reddens
+    test "a <param location> child lowers its location attribute into param_location" do
+      xml = """
+      <scxml>
+          <final id="f">
+              <donedata>
+                  <param name="x" location="foo.bar"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert %Donedata{params: [%Param{name: "x", expr: nil, param_location: "foo.bar"}]} =
+               state.donedata
+    end
+
+    # sabotage: `build_donedata/2` drops its `reverse_lists/1` call ->
+    # `place/3`'s `{:param, param}` clause builds `params` newest-first
+    # (prepending), so without the reversal the two params below come back
+    # as `[b, a]` instead of `[a, b]`, reddening this document-order
+    # assertion
+    test "multiple <param> children land in donedata.params in document order" do
+      xml = """
+      <scxml>
+          <final id="f">
+              <donedata>
+                  <param name="a" expr="1"/>
+                  <param name="b" expr="2"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      state = lower!(xml) |> only_state()
+
+      assert %Donedata{
+               params: [
+                 %Param{name: "a", expr: "1"},
+                 %Param{name: "b", expr: "2"}
+               ]
+             } = state.donedata
+    end
+
+    # sabotage: `build_param/2`'s `nil` case is dropped, falling through to
+    # the `name` case with `name` bound to `nil` -> this test reddens
+    # because lowering would succeed (with `name: nil`) instead of reporting
+    # a missing-attribute error
+    test "a <param> with no name reports missing_attribute at its own location" do
+      xml = """
+      <scxml>
+          <final id="f">
+              <donedata>
+                  <param expr="1"/>
+              </donedata>
+          </final>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:missing_attribute, "param", "name"}} = error]} =
                xml |> parse!() |> Lowering.lower()
 
-      # sabotage confirms the location is param's own, not donedata's: swap
-      # `walk_child/4`'s `Error.unsupported(name, location)` call to use the
-      # parent element's location instead -> this assertion reddens because
-      # the reported line would move from <param>'s line to <donedata>'s
       assert %Parser.Location{start_line: 4} = error.location
     end
   end
@@ -159,19 +227,19 @@ defmodule Statifier.Lowering.DonedataTest do
     # own errors instead of prepending them (`{[result | results], errors}`
     # instead of `{[result | results], Enum.reverse(child_errors) ++
     # errors}`) -> this test reddens because only the top-level walk's own
-    # errors would surface, losing both the <param> error nested inside
-    # <donedata> and the <script> error nested inside the sibling <state>,
-    # so the assertion's two-element list comes back empty
-    test "a <param> in one <donedata> and a <script> in a sibling state report two errors, in document order" do
+    # errors would surface, losing both the <script> error nested inside
+    # <donedata> and the <send> error nested inside the sibling <state>, so
+    # the assertion's two-element list comes back empty
+    test "a <script> in one <donedata> and a <send> in a sibling state report two errors, in document order" do
       xml = """
       <scxml>
           <final id="f">
               <donedata>
-                  <param name="x" expr="1"/>
+                  <script>1;</script>
               </donedata>
           </final>
           <state id="s">
-              <script>1;</script>
+              <send/>
           </state>
       </scxml>
       """
@@ -179,8 +247,8 @@ defmodule Statifier.Lowering.DonedataTest do
       assert {:error, errors} = xml |> parse!() |> Lowering.lower()
 
       assert [
-               %Error{reason: {:unsupported_element, "param"}},
-               %Error{reason: {:unsupported_element, "script"}}
+               %Error{reason: {:unsupported_element, "script"}},
+               %Error{reason: {:unsupported_element, "send"}}
              ] = errors
 
       assert Enum.map(errors, & &1.location.start_offset) ==

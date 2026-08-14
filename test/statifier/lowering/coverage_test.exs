@@ -16,21 +16,23 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own nineteen keys (`lib/statifier/lowering.ex`),
+  # The dispatch map's own twenty-one keys (`lib/statifier/lowering.ex`),
   # duplicated here as data rather than imported - there is nothing in
   # `lib/` to import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
-    raise log donedata content datamodel data assign if elseif else foreach
+    raise log donedata content param datamodel data assign if elseif else
+    foreach
   )
 
-  # The five names `@phase_3_elements` exists to word the unsupported-
+  # The four names `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
   # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
-  # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1.
+  # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1;
+  # `param` moved the same way in st-af3.7 Phase 3.
   @phase_3_elements ~w(
-    send param invoke cancel script
+    send invoke cancel script
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only
@@ -103,9 +105,9 @@ defmodule Statifier.Lowering.CoverageTest do
   end
 
   # sabotage: `Lowering`'s dispatch map grows a stray
-  # `"param" => &Builders.build_state/2` entry (an accidental extra
-  # dispatch) -> `<param>`'s fixture now builds instead of producing
-  # `{:unsupported_element, "param"}`, and the assertion below reddens
+  # `"send" => &Builders.build_state/2` entry (an accidental extra
+  # dispatch) -> `<send>`'s fixture now builds instead of producing
+  # `{:unsupported_element, "send"}`, and the assertion below reddens
   test "every deferred element name is rejected, naming itself" do
     for name <- @phase_3_elements do
       xml = Map.fetch!(@fixtures, name)

@@ -50,7 +50,10 @@ defmodule Statifier.Validator.Error do
           | {:final_parent_missing_id, final_id :: binary() | nil}
           | {:default_entry_not_enterable, id :: binary(), child_kind :: atom()}
           | {:donedata_not_on_final, id :: binary()}
+          | {:donedata_content_and_params, id :: binary() | nil}
           | {:content_expr_and_text, expr :: binary()}
+          | {:param_expr_and_location, name :: binary()}
+          | {:param_no_value, name :: binary()}
           | {:bad_namespace, uri :: binary() | nil}
           | {:bad_version, version :: binary() | nil}
           | {:scxml_bad_datamodel, raw :: binary()}
@@ -397,6 +400,25 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
+  Spec 5.5: a `<donedata>` carries both a `<content>` child and one or more
+  `<param>` children - "either a single `<content>` element or one or more
+  `<param>` elements as children of `<donedata>`, but not both". `id` is the
+  owning `:final` state's own id (`nil` when unwritten, the same shape
+  `final_parent_missing_id/2` allows). Reported at the `<donedata>`'s own
+  `location`, the only span covering both halves of the conflict.
+  """
+  @spec donedata_content_and_params(id :: binary() | nil, location :: Location.t()) :: t()
+  def donedata_content_and_params(id, %Location{} = location) do
+    %__MODULE__{
+      reason: {:donedata_content_and_params, id},
+      message:
+        "<donedata> on #{inspect(id)} must not specify both a <content> child and one or " <>
+          "more <param> children",
+      location: location
+    }
+  end
+
+  @doc """
   Spec 5.6: a `<content>` element carries both an `expr` attribute
   and inline text - the spec's "MUST NOT specify both" that
   `lib/statifier/document/content.ex` deliberately leaves representable so
@@ -412,6 +434,40 @@ defmodule Statifier.Validator.Error do
       reason: {:content_expr_and_text, expr},
       message:
         "<content> must not specify both an expr attribute (#{inspect(expr)}) and inline text",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 5.7: a `<param>` element carries both an `expr` attribute and a
+  `location` attribute - "A conformant SCXML document MUST specify either
+  the 'expr' attribute of `<param>` or the 'location' attribute, but MUST
+  NOT specify both." `name` is the offending `<param>`'s own `name`
+  attribute. Reported at the `<param>` element's own `location`.
+  """
+  @spec param_expr_and_location(name :: binary(), location :: Location.t()) :: t()
+  def param_expr_and_location(name, %Location{} = location) when is_binary(name) do
+    %__MODULE__{
+      reason: {:param_expr_and_location, name},
+      message:
+        "<param> #{inspect(name)} must not specify both an expr attribute and a location attribute",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 5.7: a `<param>` element carries neither an `expr` attribute nor a
+  `location` attribute - the same "MUST specify either ... but MUST NOT
+  specify both" rule as `param_expr_and_location/2`, its other half. `name`
+  is the offending `<param>`'s own `name` attribute. Reported at the
+  `<param>` element's own `location`.
+  """
+  @spec param_no_value(name :: binary(), location :: Location.t()) :: t()
+  def param_no_value(name, %Location{} = location) when is_binary(name) do
+    %__MODULE__{
+      reason: {:param_no_value, name},
+      message:
+        "<param> #{inspect(name)} must specify either an expr attribute or a location attribute",
       location: location
     }
   end
