@@ -266,9 +266,10 @@ defmodule Statifier.Machine.Content.AssignTest do
 
   # sabotage: `Assign`'s `execute/2` returns the original `context` unchanged
   # instead of `%{context | machine_state: ms, datamodel_context:
-  # Evaluator.context(ms)}` -> the returned context's `datamodel_context`
-  # would still be the pre-write snapshot, so evaluating the newly written
-  # variable against it would fail as unbound, reddening this test.
+  # Evaluator.bind(context.datamodel_context, root, ...)}` -> the returned
+  # context's `datamodel_context` would still be the pre-write snapshot, so
+  # evaluating the newly written variable against it would fail as unbound,
+  # reddening this test.
   test "the returned context's datamodel_context evaluates the newly written variable" do
     ctx = context(%{"x" => nil})
     node = assign("x", compiled_expr("42"))

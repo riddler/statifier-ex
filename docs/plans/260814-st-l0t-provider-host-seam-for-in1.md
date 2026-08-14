@@ -368,13 +368,13 @@ prose in a test file, and it changes no assertion.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating (never as the phase gate)
-- [ ] Full `mix quality` green, verified through `mix gate.verify`
-- [ ] `mix test.regression` at 1522/0
-- [ ] `mix test --include scion --include scxml_w3` at exactly 1661 tests, 107 failures
-- [ ] `grep -rn "in_function" lib/` returns nothing
-- [ ] `bench/results/260814-st-l0t-provider-host-seam.md` exists with a Before section
-- [ ] `mix run bench/context_build.exs` completes after the swap
+- [x] `mix quality --profile loop` green while iterating (never as the phase gate)
+- [x] Full `mix quality` green, verified through `mix gate.verify`
+- [x] `mix test.regression` at 1522/0
+- [x] `mix test --include scion --include scxml_w3` at exactly 1661 tests, 107 failures
+- [x] `grep -rn "in_function" lib/` returns nothing
+- [x] `bench/results/260814-st-l0t-provider-host-seam.md` exists with a Before section
+- [x] `mix run bench/context_build.exs` completes after the swap
 
 #### Manual Verification:
 - [ ] The post-swap `T_full` reproduces the Before `T_full` **within noise**,
@@ -871,3 +871,36 @@ be temporary in a future predicator, not a reason to skip it now.
   `deps/predicator/lib/predicator/context.ex:128-136,158-207,240-260`,
   `deps/predicator/lib/predicator/evaluator.ex:1289-1325`
 - Bead: `st-l0t` (mirrors `px-10u`; complements, not blocks)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The post-swap `T_full` reproduces the Before `T_full` **within noise**,
+      confirming the research's central correction that a provider swap by
+      itself moves no number. This is a judgment about benchee's variance, not
+      a threshold a script can decide, so it is deliberately not an automated
+      criterion - if the two differ by more than noise, stop and report rather
+      than proceeding to Phase 2 on an unexplained delta.
+- [ ] The `In(stateId)` semantics still match spec 5.10: true exactly when
+      `stateId` names a state in the current configuration, and an undeclared
+      id answers "not active" rather than raising. Read the clause locally
+      from the spec cache, do not recall it.
+- [ ] No Appendix D procedure was edited, so no ADR-0002 deviation comment is
+      owed (ADR-0002 applies to the interpreter ports; `Statifier.Evaluator`
+      is not one).
+- [ ] The moved `:error` -> `{:ok, false}` comment still reads as the reason
+      for the answer, not as a description of the code below it (ADR-0018).
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving on. In looped (`--loop`)
+execution, the Automated Verification list gates advancement via
+`/wurk:commit --auto`, and Manual Verification items are deferred and
+surfaced once at the end.
+
+---
