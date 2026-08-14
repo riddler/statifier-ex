@@ -3,12 +3,31 @@ defmodule Mix.Statifier.AdrGuard do
   Flags likely violations of the mechanically-checkable ADRs in `docs/adr/`.
 
   Covers ADR-0002 (Appendix D naming), ADR-0003 (pure core with effects),
-  ADR-0004 (predicator as the datamodel, so no `Code.eval_*`), and ADR-0008
-  (UXIDs for identifiers). Each check is a name or call-site pattern over the
-  lines a diff adds - deliberately not an AST pass - so a false positive is
-  cleared the way this project already clears an Appendix D deviation: an
-  inline comment on or above the flagged line naming an ADR or the word
-  "deviation".
+  ADR-0004 (predicator as the datamodel, so no `Code.eval_*`), ADR-0008
+  (UXIDs for identifiers), and ADR-0018 (process artifacts are not code
+  comments). Each check is a name or call-site pattern over the lines a diff
+  adds - deliberately not an AST pass - so a false positive is cleared the way
+  this project already clears an Appendix D deviation: an inline comment on or
+  above the flagged line naming an ADR or the word "deviation".
+
+  The ADR-0018 check is the exception to that escape hatch, on purpose. It
+  flags a bead ID (`st-` plus the id, including a dotted child suffix) added
+  in a comment, `@moduledoc`, `@doc`, `@typedoc` or test description under
+  `lib/` or `test/`. It does not look for phase numbers,
+  decision numbers, or plan filenames - ADR-0018 point 2 keeps the unnumbered
+  word "phase" legal and a regex cannot separate a numbered process reference
+  from ordinary English, so those stay a review matter. It also does not clear
+  on `@escape_pattern`: an ADR-number or "deviation" citation is exactly the
+  kind of line ADR-0018's Consequences show clearing itself by accident (a
+  legitimate ADR citation that happens to sit beside an unrelated bead
+  mention), so this check has its own marker, `ADR-0018-exempt`, and nothing
+  else clears it. Being line-based rather than AST-based, it can only tell a
+  comment/doc line from a code line by shape: a `#` line, a single-line
+  `@moduledoc`/`@doc`/`@typedoc "..."`, a `test "..." do` description, or a
+  line inside a `\"""` doc heredoc whose opening and closing delimiters are
+  both in the same diff hunk. A bead ID added mid-body into a heredoc whose
+  opening delimiter is unchanged context (invisible to a `--unified=0` diff)
+  is a known blind spot, not a design goal.
 
   Deliberately not covered: ADR-0015's banned-operation list for
   `.claude/scripts/`. That rule was an absolute whole-tree ban, and this
@@ -41,6 +60,7 @@ defmodule Mix.Statifier.AdrGuard do
 
   @lib_prefix "lib/"
   @core_prefix "lib/statifier/"
+  @test_prefix "test/"
 
   # ADR-0003 names `Statifier.Session` as *the* production effect interpreter,
   # so it is the one core module allowed to do I/O. Excluding it is the design,
@@ -80,6 +100,19 @@ defmodule Mix.Statifier.AdrGuard do
 
   @escape_pattern ~r/ADR-0\d{3}|deviation/i
 
+  # `st-` plus the id, including a dotted child suffix. The lookaround pair
+  # stands in for a word boundary on the hyphen side: without it, "cost-
+  # effective" and "21st-century" would both read as bead IDs, since neither
+  # side of a `\b` sees the hyphen as a boundary.
+  @bead_id_pattern ~r/(?<![a-zA-Z0-9])st-[a-z0-9]+(?:\.[a-z0-9]+)*(?![a-zA-Z0-9])/
+
+  # Deliberately not @escape_pattern - see the moduledoc.
+  @bead_escape_pattern ~r/ADR-0018-exempt/i
+
+  @doc_heredoc_open_pattern ~r/^@(?:moduledoc|doc|typedoc)\s+"""$/
+  @doc_single_line_pattern ~r/^@(?:moduledoc|doc|typedoc)\s+"(.*)"$/
+  @test_description_pattern ~r/^test\s+"(.*)"\s+do$/
+
   # Pinned because `diff.mnemonicPrefix` in a developer's git config would
   # otherwise rename the prefixes out from under the parser.
   @diff_flags ["--unified=0", "--src-prefix=a/", "--dst-prefix=b/"]
@@ -102,7 +135,8 @@ defmodule Mix.Statifier.AdrGuard do
     naming_findings(files) ++
       effects_findings(files) ++
       eval_findings(files) ++
-      uxid_findings(files)
+      uxid_findings(files) ++
+      bead_id_findings(files)
   end
 
   @doc """
@@ -223,6 +257,96 @@ defmodule Mix.Statifier.AdrGuard do
       &String.starts_with?(&1, @core_prefix),
       "identifier generated ad hoc; ADR-0008 makes generated IDs UXIDs"
     )
+  end
+
+  # ADR-0018: a bead ID is a process artifact, not a fact about the code, so it
+  # does not belong in a comment or doc string. Scoped to lib/ and test/ only -
+  # docs/adr, docs/plans, docs/research, the gate ledger and changelog
+  # fragments are exempt by construction, since none of them start with either
+  # prefix.
+  defp bead_id_findings(files) do
+    for {path, entries} <- files,
+        bead_id_in_scope?(path),
+        {entry, text} <- doc_context_texts(entries),
+        not bead_cited?(entry),
+        Regex.match?(@bead_id_pattern, text) do
+      finding(
+        path,
+        entry.line,
+        "adr-0018-bead-id",
+        "bead ID in a comment or doc string; ADR-0018 routes that to the commit message, " <>
+          "not the code"
+      )
+    end
+  end
+
+  defp bead_id_in_scope?(path) do
+    String.starts_with?(path, @lib_prefix) or String.starts_with?(path, @test_prefix)
+  end
+
+  # Walks a file's added entries in line order, pairing each one that reads as
+  # comment/doc text with the substring to check - the whole line for a `#`
+  # comment or a heredoc body line, just the quoted content for a single-line
+  # doc attribute or a test description. An entry that is plain code is
+  # dropped. `in_heredoc?` only turns on when this same diff hunk carries the
+  # opening `"""`, which is the line-based check's known blind spot: a body
+  # line added into an already-existing heredoc is invisible to it. `previous`
+  # is nil exactly at the first added line of each hunk (`parse_line/2` resets
+  # it on every `@@` header), so it doubles as the hunk boundary: an heredoc
+  # left open by a hunk whose closing `"""` was not itself added does not leak
+  # "still inside a doc string" into the next, unrelated hunk.
+  defp doc_context_texts(entries) do
+    entries
+    |> Enum.reduce({false, []}, fn entry, {in_heredoc?, acc} ->
+      doc_context_step(entry, {in_heredoc? and entry.previous != nil, acc})
+    end)
+    |> elem(1)
+    |> Enum.reverse()
+  end
+
+  defp doc_context_step(entry, {true = _in_heredoc?, acc}) do
+    trimmed = String.trim(entry.text)
+    {trimmed != "\"\"\"", [{entry, entry.text} | acc]}
+  end
+
+  defp doc_context_step(entry, {false, acc}) do
+    trimmed = String.trim(entry.text)
+
+    cond do
+      Regex.match?(@doc_heredoc_open_pattern, trimmed) ->
+        {true, acc}
+
+      String.starts_with?(trimmed, "#") ->
+        {false, [{entry, entry.text} | acc]}
+
+      text = quoted_doc_text(trimmed) ->
+        {false, [{entry, text} | acc]}
+
+      text = quoted_test_description(trimmed) ->
+        {false, [{entry, text} | acc]}
+
+      true ->
+        {false, acc}
+    end
+  end
+
+  defp quoted_doc_text(trimmed) do
+    case Regex.run(@doc_single_line_pattern, trimmed) do
+      [_all, text] -> text
+      nil -> nil
+    end
+  end
+
+  defp quoted_test_description(trimmed) do
+    case Regex.run(@test_description_pattern, trimmed) do
+      [_all, text] -> text
+      nil -> nil
+    end
+  end
+
+  defp bead_cited?(entry) do
+    Regex.match?(@bead_escape_pattern, entry.text) or
+      (entry.previous != nil and Regex.match?(@bead_escape_pattern, entry.previous))
   end
 
   defp pattern_findings(files, pattern, check, in_scope?, message) do

@@ -241,6 +241,156 @@ defmodule Mix.Statifier.AdrGuardTest do
     assert AdrGuard.analyze(%{diff: diff}) == []
   end
 
+  describe "ADR-0018 - process artifacts are not code comments" do
+    # sabotage: drop the `#` clause from doc_context_step/2 -> red
+    test "a bead ID in a line comment fires" do
+      for id <- ["st-af3", "st-wju.4", "st-l5k.5"] do
+        assert [%{check: "adr-0018-bead-id", line: 10}] =
+                 analyze("lib/statifier/document.ex", [
+                   "    # #{id} replaces this function's body"
+                 ])
+      end
+    end
+
+    # A dotted child is optional, not required: making the dot mandatory would
+    # break a bare parent id, the shape the loop above already covers.
+    # sabotage: change @bead_id_pattern's `(?:\.[a-z0-9]+)*` to
+    #           `(?:\.[a-z0-9]+)` (mandatory instead of optional) -> red on the
+    #           un-dotted id
+    test "a bead ID's dotted child is optional" do
+      assert [%{check: "adr-0018-bead-id"}] =
+               analyze("lib/statifier/document.ex", ["    # see st-af3 for context"])
+    end
+
+    # sabotage: replace @doc_single_line_pattern's capture with the literal
+    #           attribute keyword only, so no doc content is ever checked -> red
+    test "a bead ID in a single-line moduledoc, doc or typedoc fires" do
+      for attr <- ~w(moduledoc doc typedoc) do
+        assert [%{check: "adr-0018-bead-id"}] =
+                 analyze("lib/statifier/document.ex", [~s(  @#{attr} "st-af3 explains this")])
+      end
+    end
+
+    # sabotage: drop the test-description clause from doc_context_step/2 -> red
+    test "a bead ID in a test description fires" do
+      assert [%{check: "adr-0018-bead-id"}] =
+               analyze("test/statifier/document_test.exs", [
+                 ~s(  test "st-af3 handles the empty document" do)
+               ])
+    end
+
+    # sabotage: drop the heredoc-open clause from doc_context_step/2, so a doc
+    #           heredoc body is never treated as comment text -> red
+    test "a bead ID inside a doc heredoc added in the same hunk fires" do
+      diff = """
+      diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
+      --- a/lib/statifier/document.ex
+      +++ b/lib/statifier/document.ex
+      @@ -10,0 +10,3 @@
+      +  @moduledoc \"\"\"
+      +  st-af3 explains why this module exists.
+      +  \"\"\"
+      """
+
+      assert [%{check: "adr-0018-bead-id", line: 11}] = AdrGuard.analyze(%{diff: diff})
+    end
+
+    # A bead ID added mid-body into a heredoc whose opening `\"\"\"` is unchanged
+    # context is invisible to a line-based, --unified=0 diff pass - the guard's
+    # documented blind spot rather than a bug.
+    test "a bead ID added into a heredoc whose opener is not in the diff is not caught" do
+      diff = """
+      diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
+      --- a/lib/statifier/document.ex
+      +++ b/lib/statifier/document.ex
+      @@ -11,0 +11,1 @@
+      +  st-af3 explains why this module exists.
+      """
+
+      assert AdrGuard.analyze(%{diff: diff}) == []
+    end
+
+    # sabotage: have doc_context_texts/1 carry in_heredoc? across a hunk
+    #           boundary instead of resetting on entry.previous == nil -> red
+    #           (fires a second time on the unrelated later hunk's plain code)
+    test "an unclosed heredoc in one hunk does not swallow a later, unrelated hunk" do
+      diff = """
+      diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
+      --- a/lib/statifier/document.ex
+      +++ b/lib/statifier/document.ex
+      @@ -10,0 +10,1 @@
+      +  @moduledoc \"\"\"
+      @@ -40,0 +41,1 @@
+      +    id = "st-af3"
+      """
+
+      assert AdrGuard.analyze(%{diff: diff}) == []
+    end
+
+    # The check is about comment/doc text, not code: a bead-ID-shaped string
+    # literal used as ordinary data is none of this check's business.
+    # sabotage: check entry.text instead of the doc_context_texts/1 pairing in
+    #           bead_id_findings/1, so every added line is checked regardless
+    #           of context -> red
+    test "a bead ID inside ordinary code is not a comment or doc string" do
+      assert analyze("lib/statifier/document.ex", ["    id = \"st-af3\""]) == []
+    end
+
+    # sabotage: drop the lookbehind/lookahead pair from @bead_id_pattern -> red
+    #           (fires on "cost-effective" and "21st-century")
+    test "a hyphenated word that merely contains st- is not a bead ID" do
+      assert analyze("lib/statifier/document.ex", [
+               "    # the cost-effective, 21st-century approach"
+             ]) == []
+    end
+
+    # sabotage: have bead_id_in_scope?/1 return true unconditionally, so
+    #           docs/adr/ is in scope too -> red
+    test "a bead ID outside lib/ and test/ is not flagged" do
+      assert analyze("docs/adr/0013-something.md", ["# st-af3 is discussed here"]) == []
+    end
+
+    # sabotage: drop @bead_escape_pattern's entry.text clause from
+    #           bead_cited?/1 -> red
+    test "the ADR-0018-exempt marker on the line itself clears the finding" do
+      assert analyze("lib/statifier/document.ex", [
+               "    # st-af3 named for git blame, ADR-0018-exempt"
+             ]) == []
+    end
+
+    # sabotage: drop @bead_escape_pattern's entry.previous clause from
+    #           bead_cited?/1 -> red
+    test "the ADR-0018-exempt marker on the line above clears the finding" do
+      assert analyze("lib/statifier/document.ex", [
+               "    # ADR-0018-exempt: named for git blame",
+               "    # st-af3 replaces this function's body"
+             ]) == []
+    end
+
+    # This is the exact accident ADR-0018's Consequences document at e2524fc:
+    # a correct, unrelated ADR citation must not clear a bead-ID finding.
+    # sabotage: have bead_cited?/1 call the shared cited?/1 (@escape_pattern)
+    #           instead of its own @bead_escape_pattern -> red (this becomes
+    #           [] instead of a finding)
+    test "an ordinary ADR citation does not clear the finding" do
+      assert [%{check: "adr-0018-bead-id"}] =
+               analyze("lib/statifier/document.ex", [
+                 "    # see ADR-0012 item 3, added under st-af3"
+               ])
+    end
+
+    # sabotage: have bead_cited?/1 call the shared cited?/1 (@escape_pattern)
+    #           instead of its own @bead_escape_pattern -> red (this is the
+    #           same mutation as the test above; it also happens to be the
+    #           one that lets the bare word "deviation" clear this check too)
+    test "the word deviation does not clear the finding either" do
+      assert [%{check: "adr-0018-bead-id"}] =
+               analyze("lib/statifier/document.ex", [
+                 "    # deviation from the plan, tracked as st-af3"
+               ])
+    end
+  end
+
   # Keyed by git subcommand, except `rev-parse`, which is keyed by the ref it is
   # asked to resolve - that is the call whose answer decides the base.
   defp runner(responses) do
