@@ -22,6 +22,7 @@
 | [0018](0018-no-process-jargon-in-code-comments.md) | Process artifacts are not code comments | accepted |
 | [0019](0019-macrostep-round-budget.md) | A round budget bounds the macrostep fold | accepted (amended in part by 0020: round ordinal) |
 | [0020](0020-round-ordinal-joins-the-step-counters.md) | A round ordinal joins the step counters | accepted (amends 0019 in part) |
+| [0021](0021-donedata-content-expr-failure-yields-no-data.md) | A failed donedata content expr yields no data | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

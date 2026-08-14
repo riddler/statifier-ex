@@ -884,12 +884,8 @@ defmodule Statifier.Interpreter.ExitEntry do
     already produced a legal data value, so it is never re-run through the
     text ladder). Failure raises `error.execution` via
     `MachineState.raise_platform/4` and returns `nil` donedata - **not**
-    the empty string spec 5.6 names for `<content>` generally. Spec 5.10.1
-    states the opposite for `_event.data` specifically ("leave the field
-    blank"), and `test/scxml_tests/mandatory/content/test528_test.exs`
-    (`conf:emptyEventData`, `cond="_event.data === undefined"`) is
-    mandatory and only passes with `nil` - see the plan's Decision 1 for
-    the full argument.
+    the empty string spec 5.6 names for `<content>` generally. ADR-0021
+    records that deviation and its scope.
   - `expr: nil` with a non-empty `params` list - `<param>` children, folded
     against one `Statifier.Evaluator.context/1` built once for the whole
     fold. Each param is evaluated in document order; a failure raises its
@@ -942,8 +938,7 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # The `{:compiled, ...}` arm of `donedata/2`: evaluate against a fresh
   # context, coerce a success through the `{:value, _}` identity rung, or
-  # raise `error.execution` and return `nil` on failure (Decision 1 - see
-  # `donedata/2`'s own doc for the full 5.6-vs-5.10.1 argument).
+  # raise `error.execution` and return `nil` on failure (ADR-0021).
   #
   # ADR-0014 item 4's four committed fields are all present across the two
   # arguments, none of them duplicated into a new struct: the owning node's
