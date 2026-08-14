@@ -351,6 +351,34 @@ defmodule Statifier.Interpreter do
   end
 
   @doc """
+  `mainEventLoop`'s cancel path (Appendix D) - `running = false`, then
+  `continue`, which ends the `while running` loop and reaches
+  `exitInterpreter()`.
+
+  ADR-0002 mechanical deviation: the outer loop is driven by the caller
+  (`handle_event/2`), so there is no loop here to fall out of; the two steps
+  the pseudocode reaches by falling out are performed directly, in the same
+  order. Nothing about the exit itself changes - the states exited, the
+  `<onexit>` blocks run, the `<donedata>` collected, and the `{:done, _}`
+  effect produced are all `exit_interpreter/1`'s.
+
+  Rejects an already-terminated machine_state with `{:error, :not_running}`,
+  matching `handle_event/2`: Appendix D would not be inside the loop to check
+  `isCancelEvent` at all.
+  """
+  @spec cancel(machine_state :: MachineState.t()) ::
+          {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
+  def cancel(%MachineState{running: false}), do: {:error, :not_running}
+
+  def cancel(%MachineState{} = machine_state) do
+    {machine_state, effects} =
+      %{machine_state | running: false}
+      |> exit_interpreter()
+
+    {:ok, machine_state, effects}
+  end
+
+  @doc """
   `microstep(enabledTransitions)` (Appendix D) - exit the states
   `enabled_transitions` leave, run each transition's own content in
   document order, then enter the states they reach. The three calls run in
@@ -697,9 +725,10 @@ defmodule Statifier.Interpreter do
       # `isCancelEvent/1` on what it dequeues. This core takes one external
       # event per call, so the outer `while running` loop is driven by the
       # caller (`handle_event/2`), and the waiting external events live in
-      # the session, not this struct (st-cmq). The semantics of processing
-      # one external event are unchanged; only the storage of the waiting
-      # ones moves outward. `isCancelEvent/1` moves out with them.
+      # the session, not this struct. The semantics of processing one
+      # external event are unchanged; only the storage of the waiting ones
+      # moves outward. `isCancelEvent/1` is `Statifier.Session.Inbox.cancel_event?/1`;
+      # its effect is `cancel/1` above.
       {machine_state, macrostep_effects}
     else
       {machine_state, exit_effects} = exit_interpreter(machine_state)
