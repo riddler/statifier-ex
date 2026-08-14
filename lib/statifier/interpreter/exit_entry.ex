@@ -84,6 +84,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
   alias Statifier.Machine.Donedata
+  alias Statifier.Machine.Param
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.MachineState
@@ -869,8 +870,9 @@ defmodule Statifier.Interpreter.ExitEntry do
   `<donedata>`, folded to the value a raised or returned `done.*` event
   carries as `data`.
 
-  - A `nil` donedata, or a `%Donedata{expr: nil}` (no `<content>` child at
-    all) - `{machine_state, nil}`, unchanged.
+  - A `nil` donedata, or a `%Donedata{expr: nil, params: []}` (no
+    `<content>` or `<param>` child at all) - `{machine_state, nil}`,
+    unchanged.
   - `{:static, text}` - `<content>`'s text body, which can only originate
     there (`Statifier.Compiler.build_content_expr/2`). Coerced through
     `Statifier.EventData.coerce({:text, text})` (Decision 3 of the plan on
@@ -888,6 +890,23 @@ defmodule Statifier.Interpreter.ExitEntry do
     (`conf:emptyEventData`, `cond="_event.data === undefined"`) is
     mandatory and only passes with `nil` - see the plan's Decision 1 for
     the full argument.
+  - `expr: nil` with a non-empty `params` list - `<param>` children, folded
+    against one `Statifier.Evaluator.context/1` built once for the whole
+    fold. Each param is evaluated in document order; a failure raises its
+    own `error.execution` (spec 5.7: "If the evaluation of 'expr' produces
+    an error, or if neither 'location' nor 'expr' is present, or if the
+    value of 'location' is not a valid location for a data value in the
+    underlying data model, the SCXML Processor MUST place the error
+    'error.execution' in the internal event queue and MUST ignore the name
+    and value") and is dropped rather than aborting the remaining params.
+    The surviving `{name, value}` pairs, still in document order, go
+    through `EventData.coerce({:params, pairs})`, which returns `nil` for
+    an empty result (`Statifier.EventData`'s own moduledoc, Decision 5) -
+    so a `<donedata>` whose only param fails produces `nil` data, the same
+    shape as no donedata at all, not `%{}`. The `<content>` arm above and
+    this params arm are mutually exclusive by validator check
+    (`Statifier.Validator.Checks.Donedata`), so there is no case where both
+    are non-empty.
 
   Two callers: `raise_parent_completion/3` (a non-top-level final's
   `done.state.*`) and `Statifier.Interpreter.exit_interpreter/1` (a
@@ -898,7 +917,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   c_index, owner}` origin shape does not apply here; the raise below uses
   `{:state, state_index}` instead, the same origin shape
   `raise_parent_completion/3` already stamps on the `done.state.*` event
-  itself.
+  itself - for both the `<content>` arm and each failing `<param>`.
   """
   @spec donedata(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           {MachineState.t(), term() | nil}
@@ -907,8 +926,11 @@ defmodule Statifier.Interpreter.ExitEntry do
       nil ->
         {machine_state, nil}
 
-      %Donedata{expr: nil} ->
+      %Donedata{expr: nil, params: []} ->
         {machine_state, nil}
+
+      %Donedata{expr: nil, params: params} ->
+        evaluate_donedata_params(machine_state, state_index, params)
 
       %Donedata{expr: {:static, text}} ->
         {machine_state, EventData.coerce({:text, text})}
@@ -945,6 +967,45 @@ defmodule Statifier.Interpreter.ExitEntry do
 
         {machine_state, nil}
     end
+  end
+
+  # The params arm of `donedata/2`: one context for the whole fold (per
+  # `docs/datamodel.md`'s "evaluate once, not per param" guidance), each
+  # `<param>` evaluated in document order against it. A failure raises its
+  # own `error.execution` and is dropped from the result rather than
+  # aborting the fold (spec 5.7's "MUST ignore the name and value" - see
+  # `donedata/2`'s own doc for the full quote). The surviving pairs, still
+  # in document order, are handed to `EventData.coerce({:params, _})`
+  # (Decision 5).
+  @spec evaluate_donedata_params(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          params :: [Param.t()]
+        ) :: {MachineState.t(), term() | nil}
+  defp evaluate_donedata_params(machine_state, state_index, params) do
+    context = Evaluator.context(machine_state)
+
+    {machine_state, pairs} =
+      Enum.reduce(params, {machine_state, []}, fn %Param{name: name, expr: expr},
+                                                  {machine_state, pairs} ->
+        case Evaluator.evaluate(context, expr) do
+          {:ok, value} ->
+            {machine_state, [{name, value} | pairs]}
+
+          {:error, reason} ->
+            machine_state =
+              MachineState.raise_platform(
+                machine_state,
+                "error.execution",
+                {:state, state_index},
+                data: reason
+              )
+
+            {machine_state, pairs}
+        end
+      end)
+
+    {machine_state, EventData.coerce({:params, Enum.reverse(pairs)})}
   end
 
   @doc """

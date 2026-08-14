@@ -604,6 +604,189 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     end
   end
 
+  describe "donedata <param>" do
+    # A standalone document, compiled and machine-state-populated
+    # independently of `@document`/`@indexes` above: `<param>` reading a
+    # bound datamodel value needs `machine_state.datamodel` populated, which
+    # none of the other tests in this file need, so this describe block
+    # builds its own fixture and its own machine_state rather than growing
+    # the shared indexed one.
+    @param_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="trigger">
+        <state id="trigger">
+            <transition event="go-single" target="single_final"/>
+            <transition event="go-multi" target="multi_final"/>
+            <transition event="go-dup" target="dup_final"/>
+            <transition event="go-loc" target="loc_final"/>
+            <transition event="go-fail" target="fail_final"/>
+            <transition event="go-only-fail" target="only_fail_final"/>
+        </state>
+        <state id="single_holder">
+            <final id="single_final">
+                <donedata>
+                    <param name="Var1" expr="Var1"/>
+                </donedata>
+            </final>
+        </state>
+        <state id="multi_holder">
+            <final id="multi_final">
+                <donedata>
+                    <param name="Var1" expr="Var1"/>
+                    <param name="Var2" expr="Var2"/>
+                </donedata>
+            </final>
+        </state>
+        <state id="dup_holder">
+            <final id="dup_final">
+                <donedata>
+                    <param name="Var1" expr="Var1"/>
+                    <param name="Var1" expr="Var2"/>
+                </donedata>
+            </final>
+        </state>
+        <state id="loc_holder">
+            <final id="loc_final">
+                <donedata>
+                    <param name="Var1" location="Var1"/>
+                </donedata>
+            </final>
+        </state>
+        <state id="fail_holder">
+            <final id="fail_final">
+                <donedata>
+                    <param name="Var1" expr="Var1"/>
+                    <param name="Bad" expr="undeclared_var"/>
+                </donedata>
+            </final>
+        </state>
+        <state id="only_fail_holder">
+            <final id="only_fail_final">
+                <donedata>
+                    <param name="Bad" expr="undeclared_var"/>
+                </donedata>
+            </final>
+        </state>
+    </scxml>
+    """
+
+    defp param_machine, do: compile!(@param_document)
+
+    defp param_machine_state(machine) do
+      %{machine_state(machine) | datamodel: %{"Var1" => 1, "Var2" => 2}}
+    end
+
+    # AC: "a single <param expr> produces event.data == %{"Var1" => 1}"
+    #
+    # sabotage: `evaluate_donedata_params/3`'s `{:ok, value}` clause is
+    # changed to `{machine_state, pairs}` (dropping the pair) -> the params
+    # arm would fold to `[]`, `EventData.coerce({:params, []})` returns
+    # `nil` (Decision 5), reddening this assertion.
+    test "a single <param expr> produces event.data == %{\"Var1\" => 1}" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-single")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.data == %{"Var1" => 1}
+    end
+
+    # AC: "multiple params merge in document order"
+    #
+    # sabotage: `evaluate_donedata_params/3`'s `Enum.reduce/3` call is
+    # changed to fold over `Enum.take(params, 1)` instead of `params` ->
+    # only the first `<param>` would survive, reddening this
+    # two-key assertion (`event.data` comes back `%{"Var1" => 1}` instead
+    # of `%{"Var1" => 1, "Var2" => 2}`).
+    test "multiple params merge in document order" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-multi")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.data == %{"Var1" => 1, "Var2" => 2}
+    end
+
+    # AC: "a duplicate name takes the last value"
+    #
+    # `dup_final`'s `<param>` children are `name="Var1" expr="Var1"` (value
+    # 1) then `name="Var1" expr="Var2"` (value 2) - document order.
+    #
+    # sabotage: `evaluate_donedata_params/3`'s final `Enum.reverse/1` call
+    # is dropped -> the accumulated pairs stay in reverse-document order,
+    # so `EventData.coerce/1`'s `Map.put/3` fold applies `Var1`'s own value
+    # last instead of `Var2`'s, reddening this assertion (`%{"Var1" => 2}`
+    # expected, `%{"Var1" => 1}` produced).
+    test "a duplicate name takes the last value in document order" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-dup")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.data == %{"Var1" => 2}
+    end
+
+    # AC: "a <param location> over a bound datamodel path reads its value"
+    #
+    # sabotage: `Statifier.Compiler.build_donedata_param/2`'s
+    # `param_location`-bearing clause is changed to compile the literal
+    # string `"\"unbound\""` instead of `source` -> the param would read a
+    # literal string instead of the bound `Var1`, reddening this assertion.
+    test "a <param location> over a bound datamodel path reads its value" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-loc")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [event] = MachineState.internal_events(result)
+      assert event.data == %{"Var1" => 1}
+    end
+
+    # AC: "a failing param is omitted and produces one error.execution"
+    #
+    # sabotage: `evaluate_donedata_params/3`'s `{:error, reason}` clause is
+    # changed to still add the pair with a `nil` value instead of dropping
+    # it -> `event.data` would come back `%{"Var1" => 1, "Bad" => nil}`
+    # instead of omitting `"Bad"` entirely, reddening the exact-match
+    # assertion below.
+    test "a failing param is omitted and produces exactly one error.execution" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-fail")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [error_event, done_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert done_event.data == %{"Var1" => 1}
+    end
+
+    # AC: "a <donedata> whose only param fails produces event.data == nil,
+    # not %{}"
+    #
+    # sabotage: `Statifier.EventData.from_params/1`'s `[]` clause is
+    # changed to `%{}` -> an all-failing param fold would carry `%{}` as
+    # the done event's data instead of `nil`, reddening this assertion
+    # (Decision 5).
+    test "a donedata whose only param fails produces event.data == nil, not %{}" do
+      m = param_machine()
+      ms = param_machine_state(m)
+      transition = transition_named(m, "go-only-fail")
+
+      {result, _effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [error_event, done_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert done_event.data == nil
+    end
+  end
+
   describe "in_final_state?/2" do
     # sabotage: `in_final_state?/2`'s compound branch's `Machine.final?/2`
     # check is dropped (any active child counts, final or not) ->

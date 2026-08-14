@@ -9,6 +9,7 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
+  alias Statifier.Machine.Param
   alias Statifier.Parser
   alias Statifier.Validator
 
@@ -563,6 +564,71 @@ defmodule Statifier.Machine.ContentTest do
       {:ok, root} = Parser.parse(@bad_array_document)
       {:ok, document} = Lowering.lower(root)
       {:ok, document} = Validator.validate(document, @bad_array_document)
+
+      assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
+    end
+  end
+
+  describe "compile/1 - <param> under donedata" do
+    @param_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="g">
+        <final id="g">
+            <donedata>
+                <param name="first" expr="1 + 1"/>
+                <param name="second" location="second"/>
+            </donedata>
+        </final>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_donedata_param/2`'s clauses are
+    # swapped, matching `location` set on the `param_location: nil` head
+    # instead of `expr` -> `first`'s param compiles with `kind: :location`
+    # instead of `:expr`, reddening the first assertion below.
+    test "compiles into Machine.Param structs in document order, kind set from the written attribute" do
+      m = compile!(@param_document)
+      g = state_of(m, "g")
+
+      assert %Machine.Donedata{
+               expr: nil,
+               params: [
+                 %Param{
+                   name: "first",
+                   kind: :expr,
+                   expr: {:compiled, %Predicator.Compiled{}, "1 + 1"}
+                 },
+                 %Param{
+                   name: "second",
+                   kind: :location,
+                   expr: {:compiled, %Predicator.Compiled{}, "second"}
+                 }
+               ]
+             } = g.donedata
+
+      [first, second] = g.donedata.params
+      refute first.expr_location == nil
+      refute second.expr_location == nil
+      refute first.location == nil
+    end
+
+    @bad_param_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="h">
+        <final id="h">
+            <donedata>
+                <param name="bad" expr="1 +"/>
+            </donedata>
+        </final>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_param/4` returns `{:ok, ...}`
+    # unconditionally instead of matching `Expressions.compile/3`'s result
+    # -> a syntactically invalid `<param expr>` would compile successfully
+    # instead of failing, reddening this assertion.
+    test "a syntactically bad <param expr> fails Compiler.compile/1" do
+      {:ok, root} = Parser.parse(@bad_param_document)
+      {:ok, document} = Lowering.lower(root)
+      {:ok, document} = Validator.validate(document, @bad_param_document)
 
       assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end
