@@ -96,11 +96,41 @@ defmodule Statifier.Evaluator do
   """
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
   def context(%MachineState{} = machine_state) do
-    Predicator.Context.new(machine_state.datamodel,
+    Predicator.Context.new(undefine_nils(machine_state.datamodel),
       functions: %{"In" => {1, in_function(machine_state)}},
       on_unbound: :error
     )
   end
+
+  # `Predicator.Context.new/2` deep-normalized `nil` to `:undefined` through
+  # predicator 5.x (`deps/predicator/lib/predicator/context.ex` on that
+  # version: `normalize_value(nil), do: Undefined.value()`). predicator 6.0
+  # (px-o9v) made `nil` the null literal's own value, distinct from
+  # `:undefined`, and dropped that clause - `nil` now survives `Context.new/2`
+  # unchanged. `machine_state.datamodel` still spells "declared but no value
+  # yet" as a raw `nil` (`SystemVariables.initial/2`'s `_event`, a seeded
+  # `<data>` with no child, `<foreach>`'s declared `item`/`index` - see
+  # `Statifier.Evaluator.SystemVariables`'s and `Statifier.Machine.Content.
+  # Foreach.declare/2`'s moduledocs), a convention this function's callers
+  # never revisited because it used to be predicator's job to translate that
+  # `nil` into the spec's "undefined" answer. This mirrors predicator 5.x's
+  # own normalization, recursively, so every existing "seeded-but-unbound
+  # reads as undefined" test (W3C test319/335/337/339, this module's own
+  # `_event`/`_event.data` tests) keeps its predicator-5.x answer under
+  # predicator 7.x. It does not (and, per the corpus, does not need to)
+  # distinguish a genuine assigned `null` from an unbound datamodel entry -
+  # no corpus document assigns one, and `docs/research/260812-st-unt-*` and
+  # `docs/research/260812-st-af3.3-*` already record that gap as latent
+  # rather than something this bump is asked to close.
+  @spec undefine_nils(value :: term()) :: term()
+  defp undefine_nils(nil), do: :undefined
+  defp undefine_nils(list) when is_list(list), do: Enum.map(list, &undefine_nils/1)
+
+  defp undefine_nils(map) when is_map(map) and not is_struct(map) do
+    Map.new(map, fn {key, value} -> {key, undefine_nils(value)} end)
+  end
+
+  defp undefine_nils(other), do: other
 
   @doc """
   Evaluates `expr` against `context`.
