@@ -589,16 +589,30 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+All items below were walked through and confirmed on 2026-08-14, against the
+branch at `1b4da9b`. One item did not hold on the first pass; it is annotated
+in place and fixed by `d32fd54`.
+
 ### Phase 1
 
-- [ ] `mix test.baseline --only scion` prints a SCION line whose numbers match
+- [x] `mix test.baseline --only scion` prints a SCION line whose numbers match
       `find test/scion_tests -name '*_test.exs' | wc -l` and the registry's
       `scion_tests` length, and prints no W3C line.
-- [ ] Each new test was sabotaged red and reverted, with the mutation noted in
+      Confirmed: `SCION: 107/118 (90.7%)`, no W3C line; 118 from `find`, 107
+      from the registry's `scion_tests` length.
+- [x] Each new test was sabotaged red and reverted, with the mutation noted in
       one line above it.
-- [ ] The wording distinguishes "ratcheted + newly passing" from a claim that
+      Confirmed: the gate's sabotage scan reports no `missing` and no
+      `unverifiable` entries. Two mutations were re-run by hand during this
+      walkthrough - see the Phase 2 annotation.
+- [x] The wording distinguishes "ratcheted + newly passing" from a claim that
       every counted file ran in this invocation.
-- [ ] No regressions in `mix test.baseline add <file>` behavior.
+      Confirmed: the header reads `Corpus coverage (ratcheted + newly passing
+      / emitted corpus files):`, and the task's moduledoc states that tracked
+      files the invocation skipped re-running are still counted.
+- [x] No regressions in `mix test.baseline add <file>` behavior.
+      Confirmed: the diff leaves `add_named/3` untouched, changing only
+      `scan/4` and `candidates/3`; all 20 tests in the file pass.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -611,16 +625,43 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] A direct `mix test.regression` run shows both suite lines with correct
+- [x] A direct `mix test.regression` run shows both suite lines with correct
       numbers, after the "All N regression test files passed." line.
-- [ ] A bare `mix quality` still renders the `Regression ratchet` stage as its
+      Confirmed: `SCION: 107/118 (90.7%)` and `W3C: 58/159 (36.5%)`.
+- [x] A bare `mix quality` still renders the `Regression ratchet` stage as its
       usual one-line pass summary, and its total runtime is unchanged. This
       confirms the plan added no output the gate has to swallow, and is the
       expected result, not a shortfall.
-- [ ] A deliberately failing ratchet (temporarily point `--registry` at a
+      Confirmed across two runs: `Regression ratchet: Passed (6.1s)` and
+      `(6.7s)`, one line, no coverage output. Runtime was not benchmarked
+      against `main`; the work added to the stage is one `Path.wildcard` per
+      suite, which is below the run-to-run spread those two numbers show.
+- [x] A deliberately failing ratchet (temporarily point `--registry` at a
       registry naming a failing file) prints no coverage block and the same
       error text as before; revert afterwards.
-- [ ] Each new test was sabotaged red and reverted, with the mutation noted.
+      Confirmed against a scratch registry naming an untracked, failing SCION
+      file: no coverage block, and the unchanged "regression failure (mix test
+      exited 2)" text.
+- [x] Each new test was sabotaged red and reverted, with the mutation noted.
+      **Did not hold on the first pass.** Both new tests here carried a
+      `sabotage: n/a` note claiming no `lib/` code path could print a coverage
+      block on the branch they assert about. Both claims were wrong - the
+      mutation is to call `print_coverage` from that branch - and running it
+      split them:
+
+      - `add prints no coverage block` (baseline) went red. Sound test, wrong
+        note; the note now names the mutation that was run.
+      - `a failing run prints no coverage block` (regression) stayed green.
+        It was vacuous: it built its corpus file as `scion_tests/...`, but
+        `corpus_files/2` globs `<root>/test/scion_tests/**`, so the corpus was
+        empty, `stats_lines/3` returned `[]`, and the `refute` held whatever
+        the failing branch printed. The trap is that the two files' tmp-tree
+        helpers differ - the baseline file's `corpus/2` joins `[tmp_dir,
+        "test", relative]` while the regression file's `test_file/2` does not
+        add `test/`.
+
+      Fixed in `d32fd54`: the path gains its `test/` prefix, the mutation now
+      goes red, and both notes name a mutation that was actually run.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -633,19 +674,30 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] The counts written into the docs match what the corpus actually holds,
+- [x] The counts written into the docs match what the corpus actually holds,
       checked by running `find test/scion_tests -name '*_test.exs' | wc -l` and
       the same for `test/scxml_tests` and reading the prose against them. This
       is a manual item on purpose: nothing compares a number in prose to a shell
       count, and labeling it automated would let a green gate stand in for a
       check no command performed.
-- [ ] A reader of `docs/testing.md` alone can tell why the SCION figure is over
+      Confirmed: 118 and 159, matching the prose in both files.
+- [x] A reader of `docs/testing.md` alone can tell why the SCION figure is over
       118 and not 127.
-- [ ] The docs say the figures come from running `mix test.regression` or
+      Confirmed: the section names the upstream 127, says the excluded cases
+      have no predicator equivalent, and points at `tools/corpus/README.md`
+      for the per-exclusion detail.
+- [x] The docs say the figures come from running `mix test.regression` or
       `mix test.baseline` directly, and do not promise them in `mix quality`'s
       stage summary.
-- [ ] The v1-target sentence no longer invites an apples-to-oranges reading.
-- [ ] No stray typographic characters introduced into an ASCII file.
+      Confirmed, and it matches the gate runs observed above.
+- [x] The v1-target sentence no longer invites an apples-to-oranges reading.
+      Confirmed, and the claim it now makes was checked against the v1 tree:
+      `../statifier/test/scion_tests` holds 127 `_test.exs` files and
+      `../statifier/test/scxml_tests` holds 59, so 90/127 and 27/59 are indeed
+      emitted-corpus figures.
+- [x] No stray typographic characters introduced into an ASCII file.
+      Confirmed: no added line anywhere on the branch contains a non-ASCII
+      character.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
