@@ -120,11 +120,14 @@ Decision 5, for why it was widened once).
 
 ### Sessions and invoke
 
-`Statifier.Session` is the GenServer effect-interpreter: it owns timers for delayed
-sends, processes `<cancel>`, and supervises child sessions. `<invoke type="scxml">`
-(v1 never implemented it) spawns a real child session with `#_parent` routing,
-`autoforward`, and `<finalize>`. v1's handler-registry invoke is kept as an explicit
-extension type - a useful, safe escape hatch, but not the definition of `<invoke>`.
+`Statifier.Session` is the GenServer effect interpreter (ADR-0003): it owns the
+outer `while running` loop, the waiting external events, the delayed-send
+timers, `<cancel>`'s effect, and the fan-out of the effect stream to
+subscribers. Child sessions, `#_parent` routing, `autoforward`, and
+`<finalize>` are not built yet; `<invoke type="scxml">` (v1 never implemented
+it) will eventually spawn a real child session with that routing once they
+land. v1's handler-registry invoke is kept as an explicit extension type - a
+useful, safe escape hatch, but not the definition of `<invoke>`.
 
 Session, send, and invoke IDs are UXIDs ([ADR-0008](adr/0008-uxid-for-identifiers.md)):
 sortable, prefixed (`sess_`, `send_`, `inv_`), and stable per session (v1 regenerated
