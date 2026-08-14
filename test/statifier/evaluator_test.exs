@@ -478,5 +478,80 @@ defmodule Statifier.EvaluatorTest do
 
       assert Evaluator.evaluate(refreshed, in_s2) == {:ok, true}
     end
+
+    # sabotage: `context/1` is changed to fold `bind/3` starting from
+    # `Predicator.Context.new(%{}, ...)` instead of
+    # `Statifier.Evaluator.Functions.base_context()` -> `on_unbound` reverts
+    # to its `:undefined` default (`new/2`'s own default, never overridden by
+    # this alternate construction), so `data` and `functions` still agree
+    # but `on_unbound` diverges, reddening the third assertion below. This is
+    # "the test to write first": the whole safety argument for bypassing
+    # `new/2` is that folding `bind/3` over a compile-time base produces the
+    # identical context `new/2` would have, for every shape `undefine_nils/1`
+    # and `normalize_value/1` disagree about - nested maps, lists, a nil
+    # root, a nested nil, a non-string scalar, and `_event`.
+    test "context/1 builds a context equivalent to a direct new/2 call, for a representative datamodel" do
+      datamodel = %{
+        "score" => 85,
+        "tags" => ["a", "b", nil],
+        "profile" => %{"name" => "ok", "note" => nil, "nested" => %{"deep" => nil}},
+        "root_nil" => nil,
+        "flag" => true,
+        "_event" => nil
+      }
+
+      ms = new_machine_state(datamodel: datamodel)
+      built = Evaluator.context(ms)
+
+      reference =
+        Predicator.Context.new(
+          deep_undefine_nils(ms.datamodel),
+          providers: [Statifier.Evaluator.Functions],
+          host: {ms.machine, ms.configuration},
+          on_unbound: :error
+        )
+
+      assert built.data == reference.data
+      assert built.on_unbound == reference.on_unbound
+      assert built.functions == reference.functions
+      assert built.host == reference.host
+    end
+  end
+
+  # Mirrors `Statifier.Evaluator`'s own private `undefine_nils/1`, so the
+  # equivalence test above can build the same "nil -> :undefined,
+  # recursively" reference shape `Predicator.Context.new/2` would receive
+  # through `Evaluator.context/1`, without reaching into a private function.
+  defp deep_undefine_nils(nil), do: :undefined
+  defp deep_undefine_nils(list) when is_list(list), do: Enum.map(list, &deep_undefine_nils/1)
+
+  defp deep_undefine_nils(map) when is_map(map) and not is_struct(map) do
+    Map.new(map, fn {key, value} -> {key, deep_undefine_nils(value)} end)
+  end
+
+  defp deep_undefine_nils(other), do: other
+
+  describe "put_configuration/2" do
+    # sabotage: `put_configuration/2` is changed to call
+    # `Predicator.Context.put_host(context, machine_state.machine)` (dropping
+    # `configuration` from the tuple) -> `context.host` becomes a bare
+    # `%Statifier.Machine{}` instead of `{machine, configuration}`, and
+    # evaluating `In('s2')` against it errors instead of answering `true`,
+    # reddening the second assertion.
+    test "changes In/1's answer and leaves data, functions, and on_unbound untouched" do
+      machine = machine()
+      ms_s1 = %{MachineState.new(machine) | configuration: MapSet.new([idx(machine, "s1")])}
+      context = Evaluator.context(ms_s1)
+
+      assert Evaluator.evaluate(context, compiled_expr("In('s2')")) == {:ok, false}
+
+      ms_s2 = %{ms_s1 | configuration: MapSet.new([idx(machine, "s2")])}
+      refreshed = Evaluator.put_configuration(context, ms_s2)
+
+      assert Evaluator.evaluate(refreshed, compiled_expr("In('s2')")) == {:ok, true}
+      assert refreshed.data == context.data
+      assert refreshed.functions == context.functions
+      assert refreshed.on_unbound == context.on_unbound
+    end
   end
 end
