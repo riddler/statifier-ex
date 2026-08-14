@@ -542,6 +542,47 @@ defmodule Statifier.Interpreter.ContentTest do
     end
   end
 
+  describe "<log expr>, through the real block runner" do
+    @failing_log_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <log expr="undeclared_identifier"/>
+                <raise event="never"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Machine.Content.Log`'s `defimpl`'s `value/2`
+    # general clause is changed to return `{:ok, nil}` unconditionally
+    # instead of delegating to `Evaluator.evaluate/2` -> no `error.execution`
+    # would be raised, the block would run to completion, and
+    # `<raise event="never"/>` would queue its event, reddening every
+    # assertion below.
+    test "a failing <log expr> raises exactly one error.execution naming its c_index, halts the block, and is still traced as executed" do
+      m = compile!(@failing_log_document)
+      ms = machine_state(m, trace: true)
+      [block] = a_onentry_blocks(m)
+      [log_c, _raise_c] = block.content
+
+      {result, effects} = Content.execute_block(ms, @owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, log_c, @owner}
+
+      names = result |> MachineState.internal_events() |> Enum.map(& &1.name)
+      refute "never" in names
+
+      refute Enum.any?(effects, &match?({:log, _}, &1))
+
+      assert [{:trace, %Effect.Trace.ContentExecuted{owner: @owner, c_indexes: [^log_c]}}] =
+               effects
+    end
+  end
+
   describe "<if>, through the real block runner" do
     @if_document """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
