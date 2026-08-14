@@ -36,7 +36,6 @@ defmodule Statifier.Validator.Error do
           | {:unresolved_target, id :: binary()}
           | {:unresolved_initial, id :: binary()}
           | {:initial_not_descendant, id :: binary(), parent_id :: binary()}
-          | {:initial_not_top_level, id :: binary()}
           | {:initial_on_atomic_state, id :: binary()}
           | {:initial_attribute_and_element, id :: binary()}
           | {:transition_count, owner :: owner(), count :: non_neg_integer()}
@@ -154,20 +153,6 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:initial_not_descendant, id, parent_id},
       message: "initial state #{inspect(id)} is not a descendant of #{inspect(parent_id)}",
-      location: location
-    }
-  end
-
-  @doc """
-  Check 3 (spec 3.3): a resolved `Document.initial` id names a state that
-  exists but is not itself a top-level state - the root's own substitute
-  for the descendancy check a named state gets.
-  """
-  @spec initial_not_top_level(id :: binary(), location :: Location.t()) :: t()
-  def initial_not_top_level(id, %Location{} = location) when is_binary(id) do
-    %__MODULE__{
-      reason: {:initial_not_top_level, id},
-      message: "document initial #{inspect(id)} does not resolve to a top-level state",
       location: location
     }
   end
