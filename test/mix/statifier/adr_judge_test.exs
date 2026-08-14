@@ -599,6 +599,38 @@ defmodule Mix.Statifier.AdrJudgeTest do
     refute AdrJudge.in_scope?(".claude/skills/commit/SKILL.md", @adr_0015.scope)
   end
 
+  # lib/statifier.ex is the public facade module (created by st-wju.7),
+  # sitting beside the lib/statifier/ directory rather than inside it. The
+  # registry's prefix used to carry a trailing slash ("lib/statifier/"),
+  # which a plain String.starts_with?/2 never matches against
+  # "lib/statifier.ex" - the facade was invisible to both judged ADRs no
+  # matter what a branch did to it. Asserted through the real registry
+  # entries (AdrJudge.judged/0) and the public in_scope?/scoped_chunks
+  # functions rather than a re-typed "lib/statifier" string, per the bead.
+  # sabotage: restore the trailing slash on the ADR-0012 entry's
+  #           scope.prefix ("lib/statifier/") -> red on both assertions below
+  test "adr-0012's and adr-0014's scope matches the lib/statifier.ex facade, not just lib/statifier/**" do
+    assert AdrJudge.in_scope?("lib/statifier.ex", @adr_0012.scope)
+    assert AdrJudge.in_scope?("lib/statifier.ex", @adr_0014.scope)
+    assert AdrJudge.in_scope?("lib/statifier/interpreter.ex", @adr_0012.scope)
+  end
+
+  # sabotage: restore the trailing slash on the ADR-0012 entry's
+  #           scope.prefix ("lib/statifier/") -> red (scoped_chunks/2 would
+  #           return [] for a facade-only diff)
+  test "a facade-only diff produces scoped chunks via scoped_chunks/2, not an empty list" do
+    diff = """
+    diff --git a/lib/statifier.ex b/lib/statifier.ex
+    --- a/lib/statifier.ex
+    +++ b/lib/statifier.ex
+    @@ -1,0 +1,1 @@
+    +  # facade change
+    """
+
+    assert [{"lib/statifier.ex", _chunk}] = AdrJudge.scoped_chunks(diff, @adr_0012.scope)
+    assert [{"lib/statifier.ex", _chunk}] = AdrJudge.scoped_chunks(diff, @adr_0014.scope)
+  end
+
   # The task's skip reason for "nothing to judge" is built by joining these,
   # so every registered scope has to actually show up here - a registry
   # entry a maintainer adds without a scope.describe would otherwise vanish
@@ -613,7 +645,7 @@ defmodule Mix.Statifier.AdrJudgeTest do
     descriptions = AdrJudge.scope_descriptions()
 
     assert descriptions == Enum.uniq(descriptions)
-    assert Enum.count(descriptions, &(&1 == "lib/statifier/")) == 1
+    assert Enum.count(descriptions, &(&1 == "lib/statifier")) == 1
   end
 
   describe "parse_cli_response/1 (the pure half of call_claude_cli/1)" do
@@ -710,6 +742,33 @@ defmodule Mix.Statifier.AdrJudgeTest do
 
       assert AdrJudge.collect(cli_available: true, runner: runner(responses)) ==
                :no_scoped_changes
+    end
+
+    # lib/statifier.ex is the public facade module, sitting beside (not
+    # inside) lib/statifier/ - a diff touching only it must run the judge,
+    # not fall through to :no_scoped_changes as it did while the registry's
+    # prefix carried a trailing slash.
+    # sabotage: restore the trailing slash on the ADR-0012 entry's
+    #           scope.prefix ("lib/statifier/") -> red (collect/1 would
+    #           return :no_scoped_changes instead of {:ok, _})
+    test "a diff touching only lib/statifier.ex runs the judge instead of skipping it" do
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff",
+         {"""
+          diff --git a/lib/statifier.ex b/lib/statifier.ex
+          --- a/lib/statifier.ex
+          +++ b/lib/statifier.ex
+          @@ -1,0 +1,1 @@
+          +  # facade change
+          """, 0}}
+      ]
+
+      assert {:ok, sourced} = AdrJudge.collect(cli_available: true, runner: runner(responses))
+      assert [adr_0012, adr_0014] = sourced.adrs
+      assert [{"lib/statifier.ex", _chunk}] = adr_0012.chunks
+      assert [{"lib/statifier.ex", _chunk}] = adr_0014.chunks
     end
 
     # sabotage: drop `opts[:base]` from the candidate list -> red

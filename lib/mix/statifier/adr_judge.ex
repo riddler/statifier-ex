@@ -175,7 +175,7 @@ defmodule Mix.Statifier.AdrJudge do
       key: "adr-0012-debuggability",
       label: "ADR-0012 (debuggability designed into the core)",
       adr_path: "docs/adr/0012-debuggability-designed-into-the-core.md",
-      scope: %{prefix: "lib/statifier/", suffix: nil, describe: "lib/statifier/"},
+      scope: %{prefix: "lib/statifier", suffix: nil, describe: "lib/statifier"},
       focus:
         "a microstep-resumability regression, a dropped trace effect at a " <>
           "phase boundary, a lost source location, or an uncounted or unstamped step"
@@ -184,7 +184,7 @@ defmodule Mix.Statifier.AdrJudge do
       key: "adr-0014-expression-spans",
       label: "ADR-0014 (expression-level spans are part of the retained-location constraint)",
       adr_path: "docs/adr/0014-expression-spans-in-cond-diagnostics.md",
-      scope: %{prefix: "lib/statifier/", suffix: nil, describe: "lib/statifier/"},
+      scope: %{prefix: "lib/statifier", suffix: nil, describe: "lib/statifier"},
       focus:
         "cond or expression wiring that compiles without spans, drops the span " <>
           "table from the compiled-expression value, gates spans behind an option, " <>
