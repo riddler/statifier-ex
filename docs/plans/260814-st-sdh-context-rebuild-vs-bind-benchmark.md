@@ -489,12 +489,12 @@ judgment.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating).
-- [ ] `mix gate.verify` confirms a full unscoped run.
-- [ ] `mix run bench/macrostep.exs` exits 0.
-- [ ] `bench/results/260814-macrostep.md` exists and states `S_time`, `S_mem`,
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating).
+- [x] `mix gate.verify` confirms a full unscoped run.
+- [x] `mix run bench/macrostep.exs` exits 0.
+- [x] `bench/results/260814-macrostep.md` exists and states `S_time`, `S_mem`,
       the `<foreach>` curve, and the selected branch.
-- [ ] `git diff origin/main --stat` shows changes confined to `bench/`.
+- [x] `git diff origin/main --stat` shows changes confined to `bench/`.
 
 #### Manual Verification:
 
@@ -950,5 +950,25 @@ full gate is the phase gate. In interactive execution, pause here for the human
 to confirm the manual testing. In looped (`--loop`) execution, Automated
 Verification gates advancement via `/wurk:commit --auto` and Manual
 Verification is deferred and surfaced at the end.
+
+---
+
+### Phase 2
+
+- [ ] The build-count derivation is right: hand-check one document against the
+      call-site table in `docs/research/260814-st-sdh-context-rebuild-vs-bind-benchmark.md`
+      section 1, in particular that `execute_block/3` runs once per exited
+      state's `<onexit>`, once per entered state's `<onentry>`, and once per
+      fired transition's inline content.
+- [ ] The `<assign>`-heavy share grows about linearly in `n` and the
+      `<foreach>` share about linearly in N; a flat or erratic curve means the
+      documents are not exercising what they are meant to.
+- [ ] The realistic document is one a reviewer agrees is realistic - this is
+      the judgment D1 makes and the one most likely to be argued with.
+- [ ] The branch named in the results file follows from the quoted rule
+      mechanically, with no discretion exercised.
+- [ ] No regressions in related features - `lib/` and `test/` are untouched.
+
+**Implementation Note**: Same as Phase 1.
 
 ---
