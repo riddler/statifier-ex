@@ -26,6 +26,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Log
   alias Statifier.Document.Param
   alias Statifier.Document.Raise
+  alias Statifier.Document.Script
   alias Statifier.Document.State
   alias Statifier.Document.Transition
   alias Statifier.Lowering
@@ -702,6 +703,57 @@ defmodule Statifier.Lowering.Builders do
     end
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Script{}` from a `<script>` element (spec
+  5.8), tagged `{:content_node, script}`.
+
+  On a written `src`, no struct is built at all: this reports
+  `{:unsupported_attribute, "script", "src"}` (Decision 5, ADR-0026 decision
+  2 - no external fetch) and stops there, following `build_raise/2`'s
+  "cannot build" pattern. `src` plus child text is deliberately **not** a
+  second error - spec 5.8.2 forbids the pair, but the document is already
+  rejected on `src` alone, so a second error would add noise without adding
+  information.
+
+  Otherwise `text` is set to `Statifier.Parser.DOM.text/1`'s verbatim,
+  untrimmed concatenation of `<script>`'s direct text children - the
+  predicator program body (5.8.2). This builder reads `element.children`
+  directly rather than calling `Statifier.Lowering.walk_children/2`, the
+  same exemption `build_data/2`/`build_content/2`/`build_assign/2` take for
+  their own text-only content models. An element child is not silently
+  dropped: each one produces `{:misplaced_element, name, "script"}` instead
+  of a build attempt of its own - `<script>` does not hold a markup
+  subtree.
+  """
+  @spec build_script(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Script.t()} | nil, [Error.t()]}
+  def build_script(%Element{} = element, _ctx) do
+    misplaced_errors =
+      element
+      |> DOM.elements()
+      |> Enum.map(fn %Element{name: name, location: location} ->
+        Error.misplaced(name, "script", location)
+      end)
+
+    case Attributes.value(element, "src") do
+      nil ->
+        attribute_locations = Attributes.put_location(%{}, :src, element, "src")
+
+        script_node = %Script{
+          location: element.location,
+          text: DOM.text(element),
+          attribute_locations: attribute_locations
+        }
+
+        {{:content_node, script_node}, misplaced_errors}
+
+      _src ->
+        {nil,
+         misplaced_errors ++
+           [Error.unsupported_attribute("script", "src", element.location)]}
+    end
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -884,10 +936,25 @@ defmodule Statifier.Lowering.Builders do
     {parent, Error.misplaced(content_node_name(node), parent_name, node_location)}
   end
 
-  # `:content_node` covers three elements (`<raise>`, `<log>`, `<assign>`),
-  # unlike every other tag which names exactly one - so its misplaced-element
-  # name comes from the struct itself, not the tag, ahead of the generic
-  # catch-all.
+  # A `<script>` that is a direct child of `<scxml>` (spec 5.8) has its own
+  # slot, `Document.scripts` (ADR-0026 Decision 7) - unlike `<assign>`, a
+  # top-level `<script>` is not misplaced. This clause must precede the
+  # generic catch-all below, for the same ordering reason
+  # `%Block{}`/`%Transition{}`/`%If{}`/`%Foreach{}`'s own generic
+  # `{:content_node, node}` clauses precede `%Assign{}`'s: a more specific
+  # parent match must be tried first. Unlike `%Assign{}`, `%Script{}` needs
+  # no misplaced-elsewhere clause of its own: `Statifier.Document.Script`
+  # carries a plain `location` field (it has no competing SCXML attribute
+  # named `location` the way `<assign>` does), so the generic catch-all
+  # below already reads its span correctly.
+  defp place({:content_node, %Script{} = node}, %Document{} = parent, _parent_name) do
+    {%{parent | scripts: [node | parent.scripts]}, nil}
+  end
+
+  # `:content_node` covers four elements (`<raise>`, `<log>`, `<assign>`,
+  # `<script>`), unlike every other tag which names exactly one - so its
+  # misplaced-element name comes from the struct itself, not the tag, ahead
+  # of the generic catch-all.
   defp place({:content_node, node}, parent, parent_name) do
     {parent, Error.misplaced(content_node_name(node), parent_name, node.location)}
   end
@@ -896,13 +963,15 @@ defmodule Statifier.Lowering.Builders do
     {parent, Error.misplaced(Atom.to_string(tag), parent_name, Map.fetch!(value, :location))}
   end
 
-  @spec content_node_name(node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t()) ::
-          binary()
+  @spec content_node_name(
+          node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t()
+        ) :: binary()
   defp content_node_name(%Raise{}), do: "raise"
   defp content_node_name(%Log{}), do: "log"
   defp content_node_name(%Assign{}), do: "assign"
   defp content_node_name(%If{}), do: "if"
   defp content_node_name(%Foreach{}), do: "foreach"
+  defp content_node_name(%Script{}), do: "script"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
@@ -920,7 +989,7 @@ defmodule Statifier.Lowering.Builders do
   end
 
   defp reverse_lists(%Document{} = document) do
-    %{document | states: Enum.reverse(document.states)}
+    %{document | states: Enum.reverse(document.states), scripts: Enum.reverse(document.scripts)}
   end
 
   defp reverse_lists(%Block{} = block) do

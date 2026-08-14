@@ -64,6 +64,7 @@ defmodule Statifier.Validator.Error do
           | {:assign_expr_and_text, expr :: binary()}
           | {:if_elseif_after_else}
           | {:if_duplicate_else}
+          | {:script_no_src_or_text}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -650,6 +651,26 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:if_duplicate_else},
       message: "<if> must not carry more than one <else> branch",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 5.8.2: "A conformant SCXML document MUST specify either the 'src'
+  attribute or child content, but not both." `src` is unreachable in a
+  struct lowering ever builds (`Statifier.Lowering.Builders.build_script/2`
+  already refuses to build one when `src` is written - ADR-0026 decision
+  2), so the only way this document-layer check can still observe the
+  MUST's violation is the other missing half: a `<script>` with neither.
+  The reason carries no payload - a `<script>` has no id and no
+  attribute-value to name it by, matching `{:empty_id}` and
+  `{:if_duplicate_else}`'s own nullary shape.
+  """
+  @spec script_no_src_or_text(location :: Location.t()) :: t()
+  def script_no_src_or_text(%Location{} = location) do
+    %__MODULE__{
+      reason: {:script_no_src_or_text},
+      message: "<script> must specify either the src attribute or child content",
       location: location
     }
   end

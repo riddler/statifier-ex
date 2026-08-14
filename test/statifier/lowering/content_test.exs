@@ -7,6 +7,7 @@ defmodule Statifier.Lowering.ContentTest do
   alias Statifier.Document.If
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
+  alias Statifier.Document.Script
   alias Statifier.Document.State
   alias Statifier.Document.Transition
   alias Statifier.Lowering
@@ -654,6 +655,111 @@ defmodule Statifier.Lowering.ContentTest do
                  ]
                }
              ] = state.onentry
+    end
+  end
+
+  describe "lower/1 - <script>, happy path" do
+    # sabotage: `build_script/2` sets `text: nil` unconditionally instead of
+    # `DOM.text(element)` -> the text assertion below reddens
+    test "text is DOM.text/1's verbatim body" do
+      xml = ~s(<scxml><state id="s"><onentry><script>x = 1;</script></onentry></state></scxml>)
+
+      state = lower!(xml) |> only_state()
+
+      assert [%Block{content: [%Script{text: "x = 1;"}]}] = state.onentry
+    end
+
+    # sabotage: `build_script/2`'s `misplaced_errors` binding is replaced
+    # with `[]` (dropping the `DOM.elements/1` scan entirely) -> this test
+    # reddens because no `{:misplaced_element, ...}` error would be produced
+    test "an element child inside <script> is a misplaced_element error" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><script><log label="hi"/></script></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "log", "script"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.message =~ "log"
+      assert error.message =~ "script"
+    end
+  end
+
+  describe "lower/1 - <script src>, unsupported" do
+    # sabotage: `build_script/2`'s `case Attributes.value(element, "src")`
+    # clauses are swapped (the `src` branch builds a struct, the `nil`
+    # branch reports the error) -> a written `src` would build a struct
+    # instead of reporting `{:unsupported_attribute, "script", "src"}`,
+    # reddening this test
+    test "a written src produces an unsupported_attribute error and builds no struct" do
+      xml = ~s(<scxml><state id="s"><onentry><script src="foo.js"/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:unsupported_attribute, "script", "src"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.message =~ "src"
+    end
+
+    # sabotage: `build_script/2` reports both the `unsupported_attribute`
+    # error and, on `src`, still attempts a build with the child text
+    # anyway (dropping the "second error" restraint) -> a second error (an
+    # `assign_expr_and_text`-shaped conflict) would appear alongside the
+    # `unsupported_attribute` one, growing this list past one element and
+    # reddening the exact-one-error match.
+    test "src plus child text is not a second error" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><script src="foo.js">x = 1;</script></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:unsupported_attribute, "script", "src"}}]} =
+               xml |> parse!() |> Lowering.lower()
+    end
+  end
+
+  describe "lower/1 - misplaced <script>" do
+    # sabotage: `content_node_name/1`'s `%Script{}` clause is dropped ->
+    # this `<script>` (misplaced, so it reaches `content_node_name/1` via
+    # the generic `{:content_node, node}` catch-all) crashes with a
+    # `FunctionClauseError` instead of naming itself "script" in the
+    # reported reason.
+    test ~s(a <script> inside a <state> produces {:misplaced_element, "script", "state"}) do
+      xml = ~s(<scxml><state id="s"><script>x = 1;</script></state></scxml>)
+
+      assert {:error, [%Error{reason: {:misplaced_element, "script", "state"}} = error]} =
+               xml |> parse!() |> Lowering.lower()
+
+      assert error.message =~ "script"
+      assert error.message =~ "state"
+    end
+  end
+
+  describe "lower/1 - a top-level <script>" do
+    # sabotage: the `%Script{}`/`%Document{}` `place/3` clause is deleted,
+    # leaving only the generic misplaced fallback -> a top-level `<script>`
+    # would report `{:misplaced_element, "script", "scxml"}` instead of
+    # landing in `document.scripts`, reddening this test.
+    test "a <script> that is a direct child of <scxml> lands in document.scripts, not misplaced" do
+      xml = ~s(<scxml><script>x = 1;</script><state id="s"/></scxml>)
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+
+      assert [%Script{text: "x = 1;"}] = document.scripts
+    end
+
+    # sabotage: `reverse_lists/1`'s `%Document{}` clause drops the
+    # `scripts: Enum.reverse(document.scripts)` piece -> `document.scripts`
+    # would still hold the two elements in the newest-first order `place/3`
+    # built them in, reddening the order assertion below.
+    test "two top-level <script> elements stay in document order" do
+      xml = """
+      <scxml>
+          <script>x = 1;</script>
+          <script>y = 2;</script>
+          <state id="s"/>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+
+      assert [%Script{text: "x = 1;"}, %Script{text: "y = 2;"}] = document.scripts
     end
   end
 end

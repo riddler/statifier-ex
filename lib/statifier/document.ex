@@ -86,7 +86,7 @@ defmodule Statifier.Document do
   rather than copying a `%State{}` that never existed at this layer.
   """
 
-  alias Statifier.Document.{Assign, Datamodel, Foreach, If, Log, Raise, State}
+  alias Statifier.Document.{Assign, Datamodel, Foreach, If, Log, Raise, Script, State}
   alias Statifier.Parser.Location
 
   @typedoc """
@@ -97,7 +97,7 @@ defmodule Statifier.Document do
   @type attribute_locations :: %{optional(atom()) => Location.t()}
 
   @typedoc "The executable-content node types lowering currently supports."
-  @type content_node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t()
+  @type content_node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t()
 
   @typedoc """
   The kinds a `Statifier.Document.State` can have. Equal to the element
@@ -119,6 +119,13 @@ defmodule Statifier.Document do
     initial: [],
     states: [],
     datamodel_element: nil,
+    # `scripts` holds every `<script>` that is a direct child of `<scxml>`
+    # (spec 5.8), in document order - `datamodel_element` above is the exact
+    # precedent for a document-level, non-block slot: a load-time construct
+    # with nowhere in `states` to live. A list rather than a single slot,
+    # because spec 5.8 says "any <script> element that is a child of
+    # <scxml>" without limiting the count (ADR-0026 Decision 7).
+    scripts: [],
     attribute_locations: %{}
   ]
 
@@ -132,6 +139,7 @@ defmodule Statifier.Document do
           initial: [String.t()],
           states: [State.t()],
           datamodel_element: Datamodel.t() | nil,
+          scripts: [Script.t()],
           location: Location.t(),
           attribute_locations: attribute_locations()
         }

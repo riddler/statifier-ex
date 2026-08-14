@@ -63,6 +63,20 @@ defmodule Statifier.Lowering.ErrorTest do
     end
   end
 
+  describe "unsupported_attribute/3" do
+    # sabotage: `unsupported_attribute/3` builds `{:unsupported_attribute,
+    # "?", attribute}` instead of tagging the reason with the given `element`
+    # -> the reason assertion below reddens
+    test "carries the element name, the attribute name, and the given location" do
+      error = Error.unsupported_attribute("script", "src", location())
+
+      assert %Error{reason: {:unsupported_attribute, "script", "src"}, location: loc} = error
+      assert loc == location()
+      assert error.message =~ "script"
+      assert error.message =~ "src"
+    end
+  end
+
   describe "unexpected_root/2" do
     # sabotage: `unexpected_root/2` hardcodes `"scxml"` as the reason's name
     # instead of using the given `name` -> the reason assertion below

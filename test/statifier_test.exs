@@ -85,6 +85,29 @@ defmodule StatifierTest do
     assert [%Statifier.Compiler.Error{}] = errors
   end
 
+  # sabotage: in `Statifier.Lowering.Builders.build_script/2`, the `case
+  # Attributes.value(element, "src")` clauses are swapped -> `<script src>`
+  # would build a struct instead of reporting
+  # `{:unsupported_attribute, "script", "src"}`, and this pipeline would
+  # return `{:ok, %Machine{}}` instead of the expected error list.
+  test "<script src> fails Statifier.compile/1 with the named unsupported_attribute error" do
+    xml = """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <script src="foo.js"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    assert {:error, errors} = Statifier.compile(xml)
+    assert is_list(errors)
+
+    assert [%Statifier.Lowering.Error{reason: {:unsupported_attribute, "script", "src"}}] =
+             errors
+  end
+
   describe "initialize/2" do
     @compound_doc """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
