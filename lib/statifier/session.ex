@@ -91,7 +91,8 @@ defmodule Statifier.Session do
 
   ## `interpret/2` is a public seam, not a test hook
 
-  See its own `@doc` for what that widens.
+  Decided by ADR-0029; see its own `@doc` for the recording contract it
+  carries.
   """
 
   use GenServer, restart: :transient
@@ -211,14 +212,17 @@ defmodule Statifier.Session do
   produce them, and it funnels through the same internal cast path
   `send_event/2` uses, so it opens no side door around the inbox.
 
-  **This widens what a recording has to contain.** `docs/observability.md`
-  constraint 6's replay tuple - `(machine, initial data, external event
+  **This widens what a recording has to contain** (ADR-0029). The
+  three-input replay tuple - `(machine, initial data, external event
   log)` - reconstructs a run only when every effect this session
   interpreted came from `Statifier.Interpreter.initialize/2` or
   `handle_event/2`. An `interpret/2` call hands the session effects that no
-  such call produced, so replaying a run that used it needs the
-  `interpret/2` calls recorded alongside the event log too. That is a
-  statement about the recording's contents, not a leak in the boundary -
+  such call produced, so replaying a run that used it needs a fourth
+  input: each `interpret/2` batch, recorded at its position in this
+  session's serialized input order alongside the event log
+  (`docs/observability.md` constraint 6). Calling this function does not
+  void the replay guarantee - it obligates the recording. That is a
+  statement about the recording's contents, not a leak in the boundary:
   the calls are still ordered, still observable, still on the one input
   path.
   """

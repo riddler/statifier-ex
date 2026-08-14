@@ -30,6 +30,7 @@
 | [0026](0026-script-as-predicator-statement-programs.md) | `<script>` bodies are predicator statement programs | accepted (amends 0004 in part) |
 | [0027](0027-embedder-placed-session-runtime.md) | Embedder-placed session runtime with a named registry | accepted |
 | [0028](0028-executable-content-blocks-thread-one-context.md) | Executable-content blocks thread one context and `bind/3` each write | accepted |
+| [0029](0029-session-interpret-stays-public.md) | `Session.interpret/2` stays public; replay records four inputs | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
