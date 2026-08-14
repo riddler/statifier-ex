@@ -247,6 +247,40 @@ defmodule Statifier.Machine.Content.ForeachTest do
       assert ctx.machine_state.datamodel["i"] == 2
       assert ctx.machine_state.datamodel["Var1"] == []
     end
+
+    # sabotage: `bind_names/4` is changed to leave `context.datamodel_context`
+    # untouched (dropping both `Evaluator.bind/3` calls, keeping only the
+    # `machine_state` swap) -> the raw datamodel still ends up correct, so a
+    # test asserting only `ctx.machine_state.datamodel` would not catch
+    # this, but the block's threaded context never sees `item`/`index`'s
+    # final values, and evaluating "v"/"i" against it answers
+    # `{:error, %UndefinedVariableError{}}` instead of the final values,
+    # reddening both assertions.
+    test "the threaded datamodel_context matches the final item/index after N iterations" do
+      node = foreach_node(array: {:static, [10, 20, 30]}, item: "v", index: "i", content: [])
+
+      assert {:ok, ctx, []} = ExecutableContent.execute(node, context(machine()))
+
+      assert Evaluator.evaluate(ctx.datamodel_context, compiled_expr("v")) == {:ok, 30}
+      assert Evaluator.evaluate(ctx.datamodel_context, compiled_expr("i")) == {:ok, 2}
+    end
+
+    # sabotage: `bind_names/4` is changed to build a fresh
+    # `Predicator.Context.new(%{item => ...}, ...)` over only the just-
+    # written names instead of binding into `context.datamodel_context` ->
+    # every other key the loop never touches, like "keep", is lost from the
+    # context, and evaluating "keep" against it answers
+    # `{:error, %UndefinedVariableError{}}` instead of `{:ok, "untouched"}`,
+    # reddening this assertion.
+    test "a datamodel root untouched by the loop stays readable in the context throughout" do
+      node = foreach_node(array: {:static, [1, 2]}, item: "v", content: [])
+      ctx = context(machine(), %{"keep" => "untouched"})
+
+      assert {:ok, ctx, []} = ExecutableContent.execute(node, ctx)
+
+      assert Evaluator.evaluate(ctx.datamodel_context, compiled_expr("keep")) ==
+               {:ok, "untouched"}
+    end
   end
 
   describe "a failing body (Decision 4)" do

@@ -68,38 +68,40 @@ defmodule Statifier.Machine.Content.Script do
             {:ok, Context.t(), []} | {:error, term()}
     def execute(%Script{program: {:invalid, error}}, %Context{}), do: {:error, error}
 
-    # `Statifier.Evaluator.execute/2` runs `program` against the block's
+    # `Statifier.Evaluator.run_program/2` runs `program` against the block's
     # machine state, merging its writes into the raw datamodel (Decisions
-    # 3/4 there) - `rebind/2` below is what carries the mutated
-    # `machine_state` and a freshly rebuilt `datamodel_context` back onto
-    # this block's `Context.t()`, the same "rebuild the block's context so a
-    # later node in the same block sees the write" step
+    # 3/4 there) - `rebind/3` below is what carries the mutated
+    # `machine_state` and the post-run `datamodel_context`
+    # `run_program/2` already built back onto this block's `Context.t()`,
+    # the same "make the block's context see the write" step
     # `Statifier.Machine.Content.Assign.execute/2` takes for its own single
-    # write, done here for the whole program's writes at once. A mid-program
-    # failure still returns the three-element `{:error, context, error}`
-    # form (ADR-0026 decision 1: keep the partial context), which
-    # `Statifier.Interpreter.Content`'s runner already treats as "keep
-    # `new_context`, then convert the failure into the runner's usual
-    # execution-failure platform notification" with no protocol change
-    # (this plan's Key Discoveries).
+    # write, done here for the whole program's writes at once (ADR-0027: a
+    # program can write anywhere, so there is no single root to `bind/3` -
+    # threading the context `Predicator.execute/3` already returned is the
+    # shape that avoids a second full-datamodel walk here instead). A
+    # mid-program failure still returns the three-element
+    # `{:error, context, error}` form (ADR-0026 decision 1: keep the partial
+    # context), which `Statifier.Interpreter.Content`'s runner already
+    # treats as "keep `new_context`, then convert the failure into the
+    # runner's usual execution-failure platform notification" with no
+    # protocol change (this plan's Key Discoveries).
     def execute(%Script{program: program}, %Context{} = context) do
-      case Evaluator.execute(context.machine_state, program) do
-        {:ok, machine_state} ->
-          {:ok, rebind(context, machine_state), []}
+      case Evaluator.run_program(context.machine_state, program) do
+        {:ok, machine_state, post_context} ->
+          {:ok, rebind(context, machine_state, post_context), []}
 
-        {:error, machine_state, error} ->
-          {:error, rebind(context, machine_state), error}
+        {:error, machine_state, error, post_context} ->
+          {:error, rebind(context, machine_state, post_context), error}
       end
     end
 
-    @spec rebind(context :: Context.t(), machine_state :: Statifier.MachineState.t()) ::
-            Context.t()
-    defp rebind(%Context{} = context, machine_state) do
-      %{
-        context
-        | machine_state: machine_state,
-          datamodel_context: Evaluator.context(machine_state)
-      }
+    @spec rebind(
+            context :: Context.t(),
+            machine_state :: Statifier.MachineState.t(),
+            post_context :: Predicator.Context.t()
+          ) :: Context.t()
+    defp rebind(%Context{} = context, machine_state, %Predicator.Context{} = post_context) do
+      %{context | machine_state: machine_state, datamodel_context: post_context}
     end
   end
 end

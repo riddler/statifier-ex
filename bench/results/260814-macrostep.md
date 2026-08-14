@@ -252,3 +252,48 @@ it does not change which of A or B is taken" - it is independent of, and
 does not itself decide, the branch selection above. Phase 3 files the
 predicator-ex bead for `resolve_functions/1` memoization that Modifier C
 calls for, in addition to recording Branch B here.
+
+## Phase 4 verification, 2026-08-14
+
+Re-run of this same `mix run bench/macrostep.exs` after Phase 4 landed the
+`bind/3`-threading change ADR-0027 records (`<assign>`/`<foreach>` bind
+into the block's existing context; `<script>` threads the post-run context
+`Predicator.execute/3` already returns - see
+`lib/statifier/evaluator.ex`'s `run_program/2`). Same machine, same
+`benchee` version, same documents; only `lib/` changed between the two
+runs.
+
+This script's own `S_time`/`S_mem` figures are no longer meaningful after
+Phase 4 and are not reported below: the "estimated build cost" they divide
+by is `build count * Evaluator.context/1`'s per-build cost - a model of
+the *old* per-write-rebuild behavior. Once `<assign>`/`<foreach>`/`<script>`
+stop rebuilding, that estimate no longer describes what the measured
+macrostep actually spends, and the ratio exceeds 100% at every point
+(e.g. `foreach n=1000`: 5195%) - not a regression, just a metric whose
+denominator assumption Phase 4 invalidated by construction. The number
+that still means the same thing before and after is `measured macrostep`
+itself - Benchee's direct timing of `Statifier.send_event/2` - so before
+vs. after is reported as that.
+
+| Document | Before (μs / KB) | After (μs / KB) | Time reduction | Memory reduction |
+|---|---|---|---|---|
+| realistic | 24.035 / 98.896 | 17.558 / 75.968 | 27.0% | 23.2% |
+| assign-heavy n=1 | 12.462 / 55.672 | 10.198 / 44.640 | 18.2% | 19.8% |
+| assign-heavy n=5 | 26.243 / 115.672 | 14.620 / 58.192 | 44.3% | 49.7% |
+| assign-heavy n=25 | 95.387 / 417.496 | 36.264 / 133.024 | 62.0% | 68.1% |
+| assign-heavy n=100 | 364.992 / 1610.208 | 120.305 / 466.872 | 67.0% | 71.0% |
+| foreach n=1 | 17.054 / 68.256 | 12.474 / 44.704 | 26.9% | 34.5% |
+| foreach n=10 | 40.897 / 186.352 | 15.194 / 51.440 | 62.9% | 72.4% |
+| foreach n=100 | 496.337 / 1655.360 | 47.912 / 119.352 | 90.3% | 92.8% |
+| foreach n=1000 | 23123.502 / 44855.576 | 359.539 / 804.416 | 98.4% | 98.2% |
+| cond-bearing selection (not corpus-reachable) | 8.657 / 35.400 | 9.007 / 35.400 | -4.0% (noise) | 0.0% |
+
+Every corpus-reachable document is faster and lighter after Phase 4, and
+the win grows with block/iteration count exactly as predicted: the
+additive `<assign>` sweep goes from a ~1.2x-2.8x reduction (n=1 to n=100)
+and the multiplicative `<foreach>` sweep goes from ~1.4x at N=1 to ~64x at
+N=1000, consistent with rebuilding being replaced by an O(1)-in-datamodel-
+size `bind/3` at each write. `cond`-bearing selection is unchanged (within
+noise) as expected - Branch B is scoped to executable content, and the
+selection round still calls `Evaluator.context/1` directly
+(`lib/statifier/interpreter/selection.ex`, untouched by this phase).

@@ -64,13 +64,17 @@ defmodule Statifier.Machine.Content.Assign do
     # root that begins with "_" (Decision 5, spec 5.10 - a system variable),
     # verify the resolved root already exists (Decision 4 - vivification
     # never creates an undeclared top-level variable), then write into the
-    # *raw* `machine_state.datamodel` and rebuild the block's datamodel
-    # context so a later node in the same block sees the write (Decision 3 -
-    # this is the seam `Statifier.Interpreter.Content`'s moduledoc names as
-    # taken here, in the node, never in the runner). Every predicator
-    # failure becomes `{:error, reason}`, never a raise and never a platform
-    # notification of its own - the runner is the sole conversion site for
-    # that (ADR-0003).
+    # *raw* `machine_state.datamodel` and bind the written root into the
+    # block's existing threaded datamodel context so a later node in the
+    # same block sees the write (ADR-0027 - this is the seam
+    # `Statifier.Interpreter.Content`'s moduledoc names as taken here, in the
+    # node, never in the runner). Binding just the written root rather than
+    # rebuilding the whole context is O(size of that root), not O(size of
+    # the datamodel) - the root is the first segment of `path`, so a deep
+    # vivifying write still binds the whole root it landed in. Every
+    # predicator failure becomes `{:error, reason}`, never a raise and never
+    # a platform notification of its own - the runner is the sole
+    # conversion site for that (ADR-0003).
     @spec execute(node :: Assign.t(), context :: Context.t()) ::
             {:ok, Context.t(), []} | {:error, term()}
     def execute(%Assign{} = node, %Context{} = context) do
@@ -80,12 +84,14 @@ defmodule Statifier.Machine.Content.Assign do
            :ok <- check_root(node, context, path),
            {:ok, new_datamodel} <- write(node, context, path, value) do
         machine_state = %{context.machine_state | datamodel: new_datamodel}
+        [root | _rest] = path
 
         {:ok,
          %{
            context
            | machine_state: machine_state,
-             datamodel_context: Evaluator.context(machine_state)
+             datamodel_context:
+               Evaluator.bind(context.datamodel_context, root, Map.fetch!(new_datamodel, root))
          }, []}
       end
     end

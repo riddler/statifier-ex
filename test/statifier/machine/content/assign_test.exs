@@ -276,4 +276,21 @@ defmodule Statifier.Machine.Content.AssignTest do
     assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
     assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("x")) == {:ok, 42}
   end
+
+  # sabotage: `Assign`'s `execute/2` binds `List.last(path)` into the
+  # block's context instead of the resolved root (`List.first(path)`) -> for
+  # a deep write `path` is `["a", "b"]`, so the bind lands under a
+  # brand-new top-level `"b"` key instead of updating `"a"`; the context's
+  # `"a"` root is never touched, so `a.b` still reads the pre-write value
+  # (`1`) instead of `99`, reddening the first assertion.
+  test "a deep write binds the whole root, and read-back sees the new nested value" do
+    ctx = context(%{"a" => %{"b" => 1}, "other" => "untouched"})
+    node = assign("a.b", compiled_expr("99"))
+
+    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("a.b")) == {:ok, 99}
+
+    assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("other")) ==
+             {:ok, "untouched"}
+  end
 end

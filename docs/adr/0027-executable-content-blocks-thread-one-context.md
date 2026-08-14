@@ -106,6 +106,37 @@ shape the memoization takes, per ADR-0025's rule 1.
   it proves safe) replaced to bind rather than rebuild. Phase 4 is
   executed because this record names Branch B; had it named Branch A,
   Phase 4 would not run.
+- Phase 4 shipped, and `<script>` threading proved safe: it did not go the
+  rebuild-fallback route this record left open. `Evaluator.run_program/2`
+  (a new function alongside the unchanged `execute/2`) returns the
+  post-run `Predicator.Context.t()` `Predicator.execute/3` already builds,
+  and `Statifier.Machine.Content.Script` threads it straight onto the
+  block's `datamodel_context` instead of calling `context/1` again -
+  `execute/2` itself, and its one other caller
+  (`Statifier.Interpreter.run_global_script/3`, Appendix D's global-script
+  step, untouched by this phase), keep their original two/three-element
+  shape. `mix test --include scion --include scxml_w3` passed at exactly
+  the same counts before and after (1661 tests, 107 failures, both runs;
+  `mix test.regression` at 1522/0 both times), so the threaded context is
+  observationally identical to a rebuilt one across the whole corpus. One
+  difference *was* found outside the corpus, by direct construction: a
+  script assigning the null literal (`x = null;`) and reading `x` back
+  later in the *same* block now sees `nil`, where a fresh rebuild would
+  have round-tripped that `nil` through `undefine_nils/1` a second time and
+  flipped it to `:undefined` - the exact gap `Statifier.Evaluator`'s own
+  `undefine_nils/1` note already names as latent and not something any
+  corpus document exercises. Threading fixes that gap for `<script>`
+  writes as a side effect rather than introducing a new one; it is
+  recorded here because it is the one place this phase's behavior is not
+  bit-for-bit identical to the rebuild it replaced.
+- `bench/results/260814-macrostep.md`'s "Phase 4 verification" section has
+  the before/after numbers: every corpus-reachable document is faster and
+  lighter, from ~1.2x at `assign-heavy n=1` to ~64x at `foreach n=1000`,
+  consistent with an O(1)-in-datamodel-size `bind/3` replacing an
+  O(datamodel size) rebuild at each write. `cond`-bearing selection is
+  unchanged within noise, as expected - Branch B is scoped to executable
+  content and the selection round still calls `Evaluator.context/1`
+  directly.
 - Widening the threaded interval *across* blocks - so a context could
   survive a whole macrostep or live on `MachineState` - remains future
   work, gated on the same two grounds `Statifier.Evaluator`'s moduledoc
