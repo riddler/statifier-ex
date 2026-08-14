@@ -59,8 +59,24 @@ defmodule Statifier.Machine do
   special case here - so a second, Machine-level `initial` field would
   duplicate that fact the same way storing both ends of a self-inclusive
   descendant range would. `initial/1` reads it off index 0.
+
+  ## Why `global_scripts` is different: not derivable from `contents`
+
+  `global_scripts` (below) looks like it should be the same kind of
+  redundancy this section just ruled out, and it is not, for a structural
+  reason rather than a policy one. Every `contents` entry is addressed by a
+  `c_index` that names its owning block or transition (`Content.owner/0`) -
+  that address space is the block runner's, built for a node some
+  `<onentry>`/`<onexit>`/transition/`<if>`-branch/`<foreach>`-body walks
+  and executes. A top-level `<script>` (spec 5.8) is a child of `<scxml>`
+  itself, run once at load time by `Statifier.Interpreter.initialize/2`
+  directly (Phase 3, ADR-0026) - no block ever runs it, so it has no
+  `c_index`, no block, and no owner to be derived *from*. `global_scripts`
+  is not a cache of a fact `contents` already states; it is the only place
+  the fact is stated at all.
   """
 
+  alias Statifier.Compiler.Error, as: CompilerError
   alias Statifier.Machine.Content
   alias Statifier.Machine.Data
   alias Statifier.Machine.State
@@ -77,7 +93,8 @@ defmodule Statifier.Machine do
     :name,
     :datamodel,
     :binding,
-    :location
+    :location,
+    global_scripts: []
   ]
 
   @typedoc """
@@ -110,7 +127,8 @@ defmodule Statifier.Machine do
           name: String.t() | nil,
           datamodel: String.t() | nil,
           binding: :early | :late,
-          location: Location.t()
+          location: Location.t(),
+          global_scripts: [program() | {:invalid, CompilerError.t()}]
         }
 
   @doc """

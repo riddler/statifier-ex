@@ -22,17 +22,30 @@ defmodule Statifier.Compiler.Expressions do
   @typedoc """
   Identifies the node a compiled expression belongs to, in the same
   ADR-0012 constraint-3 index space `Statifier.Compiler.Error` names an
-  owner by: a transition's `t_index`, a content node's `c_index`, or a
-  final state's own index for its `<donedata>`. Nothing calls `compile/3`
-  with a real index yet - the transition pass wires transitions, the
-  executable-content pass wires content and donedata - so this phase's own
-  tests exercise the type directly with placeholder indexes.
+  owner by: a transition's `t_index`, a content node's `c_index`, a final
+  state's own index for its `<donedata>`, or a top-level `<script>`'s
+  document-order position. Nothing calls `compile/3` with a real index
+  yet - the transition pass wires transitions, the executable-content pass
+  wires content and donedata - so this phase's own tests exercise the type
+  directly with placeholder indexes.
+
+  `{:global_script, non_neg_integer()}` (Phase 3,
+  `docs/plans/260814-st-af3.17-script-statement-bodies.md`, Decision 7) is
+  a top-level `<script>` compiled via `compile_program/3` into
+  `Machine.global_scripts` - it has no `c_index`, `t_index`, or state index
+  to name it by, since it is not addressed through the block runner's
+  `contents` tuple at all (`Machine`'s own "why `global_scripts` is
+  different" moduledoc section). Reusing `{:content, c_index}` for it would
+  put a false index into the ADR-0012 index space, naming a block-runner
+  slot that does not exist for this node; the integer here is instead the
+  script's own position among `document.scripts`, in document order.
   """
   @type owner_ref ::
           {:transition, non_neg_integer()}
           | {:content, non_neg_integer()}
           | {:donedata, non_neg_integer()}
           | {:data, non_neg_integer()}
+          | {:global_script, non_neg_integer()}
 
   @doc """
   Compiles `source` into a `Machine.expr()`.

@@ -138,6 +138,8 @@ defmodule Statifier.Interpreter do
     clauses.
   """
 
+  alias Statifier.Compiler
+  alias Statifier.Evaluator
   alias Statifier.Event
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.Datamodel
@@ -197,9 +199,27 @@ defmodule Statifier.Interpreter do
     #      bound.
     # `Datamodel.initialize/1` seeds every declared id unconditionally and
     # binds every d_index under :early, only the root's own under :late -
-    # see its own moduledoc. `executeGlobalScriptElement(doc)` stays
-    # skipped: st-af3's, no <script> support exists in this core yet.
+    # see its own moduledoc.
     machine_state = Datamodel.initialize(machine_state)
+
+    # `executeGlobalScriptElement(doc)` (Appendix D `interpret`, prose
+    # quoted below - the procedure has no body of its own in Appendix D,
+    # the same "no procedure body to port" situation
+    # `Statifier.Interpreter.Datamodel`'s moduledoc documents for
+    # `initializeDatamodel`): "Initialize the global data structures,
+    # including the data model. If binding is set to 'early', initialize
+    # the data model. Then execute the global <script> element, if any.
+    # Finally call enterStates on the initial configuration...". This call
+    # lands exactly at that position - after the data model, before
+    # enterStates - with no ADR-0002 deviation: the pseudocode's own
+    # ordering is what is ported here, unchanged. The one departure from a
+    # literal reading is that Appendix D's prose says "the global <script>
+    # element" (singular) while spec 5.8 says "any <script> element that
+    # is a child of <scxml>" (plural, no count limit) - run_global_scripts/1
+    # below folds over `machine.global_scripts` in document order, which is
+    # the plural spec 5.8 actually specifies, not a reordering of anything
+    # Appendix D's prose commits to.
+    machine_state = run_global_scripts(machine_state, machine.global_scripts)
 
     {machine_state, enter_effects} =
       ExitEntry.enter_states(machine_state, [initial_transition(machine)])
@@ -230,6 +250,72 @@ defmodule Statifier.Interpreter do
 
       t_index ->
         Machine.transition(machine, t_index)
+    end
+  end
+
+  # `executeGlobalScriptElement(doc)` (Appendix D), the actual fold
+  # `initialize/2`'s call site above names - one `Evaluator.execute/2` call
+  # per top-level `<script>`, in document order, threading the mutated
+  # `machine_state` from each into the next exactly the way a block runner
+  # threads a `Context.t()` across its own nodes' writes (ADR-0026 decision
+  # 3: no block runner and no `ExecutableContent.Context` on this path -
+  # there is no block for a top-level script to belong to, so there is
+  # nothing for a `Context.t()` to be built over).
+  @spec run_global_scripts(machine_state :: MachineState.t(), scripts :: [Machine.program()]) ::
+          MachineState.t()
+  defp run_global_scripts(machine_state, scripts) do
+    scripts
+    |> Enum.with_index()
+    |> Enum.reduce(machine_state, fn {script, index}, ms ->
+      run_global_script(ms, script, index)
+    end)
+  end
+
+  # One top-level `<script>`'s load-time run. This is the one place outside
+  # `Statifier.Interpreter.Content` that converts an evaluation error into
+  # `error.execution` (ADR-0003) - it needs its own conversion, rather than
+  # reusing the block runner's, because there *is* no block runner on this
+  # path: a top-level script is never in `contents`, never owned by an
+  # `<onentry>`/`<onexit>`/transition block, and never reaches
+  # `Statifier.Interpreter.Content.run_nodes/2` at all (see `Machine`'s own
+  # "why `global_scripts` is different" moduledoc section).
+  # `Statifier.Interpreter.Datamodel.bind_value/4`'s `raise_binding_error/3`
+  # is the existing precedent for exactly this shape: a load-time raise,
+  # via `MachineState.raise_platform/4`, outside any runner, because
+  # `<data>` binding has no runner either.
+  #
+  # `{:invalid, error}` (Decision 1: a body that never compiled, deferred
+  # from load to this reached-at-runtime position) is handled the same
+  # way a successfully compiled program's own run-time failure is: no
+  # partial context exists to keep (nothing ran), so `machine_state` passes
+  # through unchanged and `error` is the raised event's `data:` directly -
+  # the same two-element short-circuit
+  # `Statifier.Machine.Content.Script`'s own `execute/2` clause takes for
+  # the identical shape.
+  @spec run_global_script(
+          machine_state :: MachineState.t(),
+          script :: Machine.program() | {:invalid, Compiler.Error.t()},
+          index :: non_neg_integer()
+        ) :: MachineState.t()
+  defp run_global_script(machine_state, {:invalid, error}, index) do
+    MachineState.raise_platform(machine_state, "error.execution", {:global_script, index},
+      data: error
+    )
+  end
+
+  defp run_global_script(
+         machine_state,
+         {:program, %Predicator.Compiled{}, _source} = program,
+         index
+       ) do
+    case Evaluator.execute(machine_state, program) do
+      {:ok, new_machine_state} ->
+        new_machine_state
+
+      {:error, new_machine_state, error} ->
+        MachineState.raise_platform(new_machine_state, "error.execution", {:global_script, index},
+          data: error
+        )
     end
   end
 

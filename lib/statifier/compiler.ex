@@ -221,6 +221,17 @@ defmodule Statifier.Compiler do
     # node itself (Decision 2), not raised here.
     {:ok, data_elements} = build_data_elements(acc.data_acc, acc.d_next)
 
+    # `document.scripts` (Decision 7, Phase 3) is a separate compilation
+    # pass, not routed through walk_siblings/4's numbering: a top-level
+    # <script> is not in the contents tuple's c_index address space (see
+    # Machine's own "why global_scripts is different" moduledoc section),
+    # so it never enters assign_content_nodes/2 and needs no dense index
+    # of its own to be numbered alongside - build_global_scripts/1 never
+    # fails and never joins the error merge below either, for the same
+    # deferral reason build_data_elements/2 does not: a compile failure is
+    # captured as {:invalid, error} on the list entry itself (Decision 1).
+    global_scripts = build_global_scripts(document.scripts)
+
     errors =
       [transitions_result, contents_result, donedata_result]
       |> Enum.flat_map(fn
@@ -254,7 +265,8 @@ defmodule Statifier.Compiler do
           name: document.name,
           datamodel: document.datamodel,
           binding: document.binding,
-          location: document.location
+          location: document.location,
+          global_scripts: global_scripts
         }
 
         {:ok, machine}
@@ -904,6 +916,34 @@ defmodule Statifier.Compiler do
        program: program,
        node_location: script.location
      }}
+  end
+
+  # `document.scripts` (Decision 7, Phase 3) compiled to
+  # `Machine.global_scripts`, in document order - the separate pass this
+  # module's own `compile/1` calls before building `%Machine{}`. Each entry
+  # is compiled with `compile_program/3` exactly as `build_content_node/2`'s
+  # `%DScript{}` clause above compiles executable-content `<script>`, and a
+  # compile failure is captured the same way: `{:invalid, error}` on the
+  # list entry rather than failing `compile/1` (Decision 1) - an
+  # ECMAScript-bodied top-level `<script>` should not make an otherwise
+  # fully-supported document unloadable, any more than one nested in
+  # `<onentry>` does. The owner is `{:global_script, index}` - `index` is
+  # the script's position in `document.scripts`, not a `c_index`: a
+  # top-level script is compiled outside `assign_content_nodes/2`'s walk
+  # entirely, so it was never assigned one (`Statifier.Compiler.Expressions
+  # .owner_ref/0`'s own typedoc).
+  @spec build_global_scripts(scripts :: [DScript.t()]) :: [
+          Machine.program() | {:invalid, Error.t()}
+        ]
+  defp build_global_scripts(scripts) do
+    scripts
+    |> Enum.with_index()
+    |> Enum.map(fn {%DScript{text: source} = script, index} ->
+      case Expressions.compile_program(source || "", {:global_script, index}, script.location) do
+        {:ok, program} -> program
+        {:error, error} -> {:invalid, error}
+      end
+    end)
   end
 
   # `attribute_locations[:expr]`'s value span when the author wrote `expr`
