@@ -160,10 +160,13 @@ defmodule Statifier.ExecutableContentTest do
                ExecutableContent.execute(log_static, context(ms, @owner))
     end
 
-    # sabotage: the <log> impl's `value/1` returns the compiled struct
-    # itself instead of `nil` for the `{:compiled, _, _}` clause -> this
-    # assertion reddens.
-    test "compiled expr <log> carries nil (evaluation not yet implemented)" do
+    # sabotage: `value/2`'s general clause returns `{:ok, nil}`
+    # unconditionally instead of delegating to `Evaluator.evaluate/2` ->
+    # this assertion reddens, since "1 + 1" evaluates to `2`, not `nil`.
+    # (verified: also reddens "static expr <log> carries the static value"
+    # above and the failing-expr test below, since all three share this
+    # clause.)
+    test "compiled expr <log> carries the evaluated value" do
       m = machine()
       [_raise0_c, _raise1_c, _log_x_c, log_compiled_c] = state_a_content(m)
       log_compiled = Machine.content(m, log_compiled_c)
@@ -172,8 +175,28 @@ defmodule Statifier.ExecutableContentTest do
 
       ms = MachineState.new(m)
 
-      assert {:ok, _ctx, [{:log, %Statifier.Effect.Log{value: nil}}]} =
+      assert {:ok, _ctx, [{:log, %Statifier.Effect.Log{value: 2}}]} =
                ExecutableContent.execute(log_compiled, context(ms, @owner))
+    end
+
+    # sabotage: `value/2`'s general clause returns `{:ok, nil}`
+    # unconditionally instead of delegating to `Evaluator.evaluate/2` ->
+    # this assertion reddens, since `execute/2` would then see `{:ok, nil}`
+    # and build a `%Effect.Log{}` instead of short-circuiting to
+    # `{:error, reason}`.
+    test "a failing compiled expr <log> returns {:error, _} with no :log effect" do
+      {:ok, compiled} = Predicator.compile_with_spans("undeclared_identifier")
+
+      log_failing = %Log{
+        c_index: 42,
+        location: location(),
+        label: nil,
+        expr: {:compiled, compiled, "undeclared_identifier"}
+      }
+
+      ms = MachineState.new(machine())
+
+      assert {:error, _reason} = ExecutableContent.execute(log_failing, context(ms, @owner))
     end
 
     # sabotage: the <log> impl returns `{:ok, %{context | machine_state:

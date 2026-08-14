@@ -12,6 +12,7 @@ defmodule Statifier.Machine.Content.Log do
   """
 
   alias Statifier.Effect
+  alias Statifier.Evaluator
   alias Statifier.ExecutableContent.Context
   alias Statifier.Machine
   alias Statifier.Machine.Content.Log
@@ -34,34 +35,47 @@ defmodule Statifier.Machine.Content.Log do
     # spec 4.7's <log>: "log the label and the value of expr". `machine_state`
     # is untouched - <log> has an effect and nothing else, ADR-0003's whole
     # point being that the core does not log, it returns log entries.
+    #
+    # spec 5.9.3/5.9.4: a value expression that fails to evaluate is a
+    # platform-reported execution error at the point of evaluation. 4.7's
+    # "<log> MUST have no side-effects on document interpretation" governs
+    # the logging mechanism (how the message is displayed), not the error
+    # model - an unevaluatable expression is an error wherever it sits, and
+    # the block runner is the only place that names the execution-failure
+    # event (ADR-0003). See `content_acceptance_test.exs`'s AC3, which
+    # structurally forbids this file from spelling the event name out.
     @spec execute(node :: Log.t(), context :: Context.t()) ::
-            {:ok, Context.t(), [{:log, Effect.Log.t()}]}
+            {:ok, Context.t(), [{:log, Effect.Log.t()}]} | {:error, term()}
     def execute(%Log{} = node, %Context{} = context) do
       %{machine_state: machine_state, owner: owner} = context
 
-      log_effect = %Effect.Log{
-        label: node.label,
-        value: value(node),
-        c_index: node.c_index,
-        owner: owner,
-        macrostep: machine_state.macrostep,
-        microstep: machine_state.microstep
-      }
+      case value(node, context) do
+        {:ok, value} ->
+          log_effect = %Effect.Log{
+            label: node.label,
+            value: value,
+            c_index: node.c_index,
+            owner: owner,
+            macrostep: machine_state.macrostep,
+            microstep: machine_state.microstep
+          }
 
-      {:ok, context, [{:log, log_effect}]}
+          {:ok, context, [{:log, log_effect}]}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
 
-    # `value`'s expr slot is compiled but not yet evaluated: evaluating a
-    # compiled expr against the datamodel is not yet implemented, so `value`
-    # is the static value or `nil` - not a rescue-to-default, nothing
-    # failed, the expression simply has not been evaluated yet
-    # (`docs/datamodel.md`). Exactly the shape and reasoning
-    # `static_donedata/2` used (`lib/statifier/interpreter/exit_entry.ex`),
-    # so the two places carrying an unevaluated expression look the same
-    # and are found by the same grep.
-    @spec value(node :: Log.t()) :: term()
-    defp value(%Log{expr: nil}), do: nil
-    defp value(%Log{expr: {:static, term}}), do: term
-    defp value(%Log{expr: {:compiled, _compiled, _source}}), do: nil
+    # `{:static, _}` folds into `Evaluator.evaluate/2` (which returns
+    # `{:ok, v}` for it) rather than staying a separate clause here - one
+    # fewer place that knows about `Machine.expr()`'s arms. No coercion: a
+    # `<log>` value is displayed, not placed in event data, so B.2.8.1 does
+    # not apply.
+    @spec value(node :: Log.t(), context :: Context.t()) :: {:ok, term()} | {:error, term()}
+    defp value(%Log{expr: nil}, _context), do: {:ok, nil}
+
+    defp value(%Log{expr: expr}, %Context{datamodel_context: datamodel_context}),
+      do: Evaluator.evaluate(datamodel_context, expr)
   end
 end
