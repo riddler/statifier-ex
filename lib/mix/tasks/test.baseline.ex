@@ -28,6 +28,14 @@ defmodule Mix.Tasks.Test.Baseline do
 
   The ratchet only moves forward. Nothing here removes an entry - a test that
   used to pass and now does not is a regression to fix, not a line to delete.
+
+  A scan also prints a per-corpus coverage block: for each suite the scan
+  covered, `passing/total (percent%)` against the suite's emitted corpus
+  files. The numerator is every registry-tracked file plus whatever this scan
+  found newly passing - tracked files this invocation skipped re-running are
+  still counted, because `mix test.regression` is what guarantees them. `add`
+  prints no such block: it verifies named files and never scans, so it has no
+  denominator in hand.
   """
 
   use Mix.Task
@@ -92,24 +100,39 @@ defmodule Mix.Tasks.Test.Baseline do
   defp categories(other), do: {:error, "unknown suite #{inspect(other)} - use scion or w3c"}
 
   defp scan(registry, categories, add?, context) do
-    case candidates(registry, categories, context.root) do
+    {candidates, tracked} = candidates(registry, categories, context.root)
+
+    case candidates do
       [] ->
         Mix.shell().info("No untracked conformance tests found - nothing to check.")
+        print_coverage(tracked, categories, context.root)
         :ok
 
       candidates ->
         Mix.shell().info("Checking #{length(candidates)} untracked conformance test files...")
         {passing, failing} = partition(candidates, context.runner)
         report(passing, failing)
+        print_coverage(tracked ++ passing, categories, context.root)
         maybe_ratchet(registry, passing, add?, context)
     end
   end
 
   defp candidates(registry, categories, root) do
-    Enum.flat_map(categories, fn category ->
-      {tracked, _missing} = RegressionRegistry.expand(registry, category)
-      RegressionRegistry.corpus_files(category, root) -- tracked
+    Enum.reduce(categories, {[], []}, fn category, {candidates, tracked} ->
+      {found, _missing} = RegressionRegistry.expand(registry, category)
+      {candidates ++ (RegressionRegistry.corpus_files(category, root) -- found), tracked ++ found}
     end)
+  end
+
+  defp print_coverage(passing, categories, root) do
+    case RegressionRegistry.stats_lines(passing, categories, root) do
+      [] ->
+        :ok
+
+      lines ->
+        Mix.shell().info("Corpus coverage (ratcheted + newly passing / emitted corpus files):")
+        Enum.each(lines, &Mix.shell().info/1)
+    end
   end
 
   defp partition(files, runner) do

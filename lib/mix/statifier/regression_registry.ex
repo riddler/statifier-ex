@@ -30,9 +30,11 @@ defmodule Mix.Statifier.RegressionRegistry do
 
   @suite_dirs %{scion: "test/scion_tests", w3c: "test/scxml_tests"}
   @suite_tags %{scion: "scion", w3c: "scxml_w3"}
+  @suite_labels %{scion: "SCION", w3c: "W3C"}
 
   @type category :: :internal | :scion | :w3c
   @type t :: %{String.t() => term()}
+  @type stats :: %{passing: non_neg_integer(), total: non_neg_integer(), percent: float() | nil}
 
   @doc "Path of the registry file, relative to the project root."
   @spec default_path() :: String.t()
@@ -295,5 +297,83 @@ defmodule Mix.Statifier.RegressionRegistry do
         |> Path.wildcard()
         |> Enum.sort()
     end
+  end
+
+  @doc """
+  Human-readable name of a conformance suite.
+
+  ## Examples
+
+      iex> Mix.Statifier.RegressionRegistry.suite_label(:scion)
+      "SCION"
+
+      iex> Mix.Statifier.RegressionRegistry.suite_label(:internal)
+      nil
+
+  """
+  @spec suite_label(category :: category()) :: String.t() | nil
+  def suite_label(category), do: Map.get(@suite_labels, category)
+
+  @doc """
+  How much of `category`'s emitted corpus `passing` covers.
+
+  `total` counts the test files on disk under the suite directory, which is the
+  only denominator the ratchet can reach 100% of - cases excluded at generation
+  time (`tools/corpus/*/exclusions.exs`) never emit a file. The numerator is the
+  intersection of `passing` with those files, never a plain length, because a
+  registry entry may be a glob or may name a path outside the suite directory.
+  `percent` is `nil` when the corpus is empty, so callers report "no files"
+  rather than dividing by zero.
+  """
+  @spec corpus_stats(passing :: [String.t()], category :: category(), root :: String.t()) ::
+          stats()
+  def corpus_stats(passing, category, root \\ ".") do
+    total = corpus_files(category, root)
+    hit = passing |> MapSet.new() |> MapSet.intersection(MapSet.new(total)) |> MapSet.size()
+    %{passing: hit, total: length(total), percent: percent(hit, length(total))}
+  end
+
+  defp percent(_hit, 0), do: nil
+  defp percent(hit, total), do: Float.round(hit * 100 / total, 1)
+
+  @caveat "Emitted files only; cases excluded at generation time are not counted " <>
+            "(tools/corpus/README.md)."
+
+  @doc """
+  One report line per conformance category, plus the denominator caveat.
+
+  Each per-category line reads `"  LABEL: passing/total (percent%)"`, with
+  labels padded so the counts line up. A category whose `total` is `0` is
+  omitted entirely. Callers prefix these lines with their own header (the
+  numerator's meaning differs between a scan and a ratchet run, so the header
+  text is not this function's job) and print the block as-is otherwise.
+  Returns `[]` - no lines, no caveat - when no category has any emitted files,
+  so a fixture tree with no corpus prints nothing at all.
+  """
+  @spec stats_lines(passing :: [String.t()], categories :: [category()], root :: String.t()) ::
+          [String.t()]
+  def stats_lines(passing, categories, root \\ ".") do
+    entries =
+      categories
+      |> Enum.map(&{&1, corpus_stats(passing, &1, root)})
+      |> Enum.reject(fn {_category, stats} -> stats.total == 0 end)
+
+    case entries do
+      [] ->
+        []
+
+      entries ->
+        width =
+          entries
+          |> Enum.map(fn {category, _stats} -> String.length(suite_label(category)) end)
+          |> Enum.max()
+
+        Enum.map(entries, &stats_line(&1, width)) ++ [@caveat]
+    end
+  end
+
+  defp stats_line({category, stats}, width) do
+    label = String.pad_trailing(suite_label(category) <> ":", width + 1)
+    "  #{label} #{stats.passing}/#{stats.total} (#{stats.percent}%)"
   end
 end
