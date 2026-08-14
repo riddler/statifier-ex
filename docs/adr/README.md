@@ -26,6 +26,7 @@
 | [0022](0022-parallel-is-never-the-lcca.md) | A parallel is never the LCCA; SCION's contrary tests leave the corpus | accepted |
 | [0023](0023-numeric-type-fixes-upstream-not-boundary-coercion.md) | Numeric-type gaps are fixed in predicator, never coerced at the boundary | accepted |
 | [0024](0024-data-src-is-never-fetched.md) | `<data src>` is never fetched | accepted |
+| [0025](0025-cross-repo-tracker-authority-and-mirrors.md) | Tracker authority follows the artifact; mirrors pull (adopts predicator ADR-0010) | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

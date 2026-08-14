@@ -14,6 +14,23 @@ a stub; the authority rules below are the part that is specific to this repo.
 Note for `bd` maintainers: `bd integrate --update` will want to re-expand this
 into the full managed block. It is redundant here - keep the stub.
 
+### Beads that span repositories
+
+Three trackers touch this project: `st-` here, `px-` in predicator-ex, and none
+at all in the `riddler/predicator` monorepo. The reasoning behind the rules
+below is recorded in
+[ADR-0025](docs/adr/0025-cross-repo-tracker-authority-and-mirrors.md), which
+adopts predicator-ex's ADR-0010; this is their enforcement.
+
+| Situation | Rule |
+|---|---|
+| A decision is recorded in two trackers and they disagree | The repository whose files change owns the decision, and its bead is authoritative. For the SCXML mapping, which corpus tests join the regression ratchet, and when the `~>` predicator pin moves, that is this repo; for the language, the grammar, the ISA, the compiled format, the conformance corpus, and predicator's release schedule, predicator's bead is authoritative and this one defers |
+| A bead pairs with one in predicator-ex | Both halves carry `mirrors: <id>` as the first line of the description |
+| A dated `mirrors:` reconciliation note is old | Not a defect. Age alone is never a defect, and neither side owes the other an update on any schedule |
+| You are about to schedule, claim, plan against, add or drop a dependency on, or cite the status of a mirrored bead | Re-read the other tracker first and write a new dated note above the old one, then act. Acting on an unrefreshed note is the defect |
+| A `mirrors:` line names an id that no longer resolves | Broken immediately, not stale - it makes the pull unperformable. Fix it with one `bd update` the moment you notice, in whichever repo you are standing in. Closed beads are out of scope and left alone |
+| Work happens in the `riddler/predicator` monorepo | Held by an `upstream` bead here, with the GitHub issue in `bd update <id> --external-ref <url>` once a human has opened it. `--external-ref` is a handle, not an index - single-valued, absent from `bd list --json`, unsearchable - so the searchable `mirrors:` line and any prose stay in the description. An empty `external_ref` means the issue has not been raised; opening it is a human ask no agent may make |
+
 ## Agent authority in this repo
 
 **This repository opts into the team-maintainer profile** described by `bd prime`.
