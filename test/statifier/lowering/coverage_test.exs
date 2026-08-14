@@ -30,8 +30,7 @@ defmodule Statifier.Lowering.CoverageTest do
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
   # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
   # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1;
-  # `param` moved the same way in st-af3.7 Phase 3; `script` moved the same
-  # way in st-af3.17 Phase 2.
+  # `param` and `script` moved the same way.
   @phase_3_elements ~w(
     send invoke cancel
   )

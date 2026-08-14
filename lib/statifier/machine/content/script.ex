@@ -7,8 +7,7 @@ defmodule Statifier.Machine.Content.Script do
   *statement* program, `Machine.expr()`'s sibling and never one of its
   arms - or `{:invalid, Compiler.Error.t()}` when the body failed to
   compile (`Statifier.Compiler.build_content_node/2`'s `%Document.Script{}`
-  clause, Decision 1 of
-  `docs/plans/260814-st-af3.17-script-statement-bodies.md`): compilation
+  clause): compilation
   happens once at load, but a body outside predicator's statement grammar
   (an ECMAScript body this engine cannot parse) defers its failure to
   `execute/2`, exactly the way `Statifier.Machine.Content.Assign`'s

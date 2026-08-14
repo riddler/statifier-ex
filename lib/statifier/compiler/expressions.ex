@@ -29,8 +29,7 @@ defmodule Statifier.Compiler.Expressions do
   wires content and donedata - so this phase's own tests exercise the type
   directly with placeholder indexes.
 
-  `{:global_script, non_neg_integer()}` (Phase 3,
-  `docs/plans/260814-st-af3.17-script-statement-bodies.md`, Decision 7) is
+  `{:global_script, non_neg_integer()}` (ADR-0026 Decision 7) is
   a top-level `<script>` compiled via `compile_program/3` into
   `Machine.global_scripts` - it has no `c_index`, `t_index`, or state index
   to name it by, since it is not addressed through the block runner's

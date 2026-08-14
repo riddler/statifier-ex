@@ -17,8 +17,8 @@ defmodule Statifier.FeatureDetector do
   targetless/internal/wildcard transitions, `<onentry>`/`<onexit>`,
   `<raise>`, `<log>`, and static `<donedata>`. Later phases added
   `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded transitions (including
-  `<if>`/`<elseif>`/`<else>`), `<foreach>`, and `<script>` (st-af3.17,
-  `:partial` - see the registry entry). `<send>`, `<invoke>`, `<cancel>`, and
+  `<if>`/`<elseif>`/`<else>`), `<foreach>`, and `<script>`
+  (`:partial` - see the registry entry). `<send>`, `<invoke>`, `<cancel>`, and
   their attributes stay `:unsupported`; see `feature_registry/0` for the
   authoritative, up-to-date list.
   """
@@ -85,7 +85,7 @@ defmodule Statifier.FeatureDetector do
       data_elements: :supported,
       # st-af3.4
       assign_elements: :supported,
-      # st-af3.17. :partial, not :supported: the element is implemented, but
+      # :partial, not :supported: the element is implemented, but
       # bodies outside predicator's statement grammar (var, compound
       # assignment, object literals, typeof, function definitions) are kept
       # out of the corpus at generation time (tools/corpus/*/exclusions.exs),

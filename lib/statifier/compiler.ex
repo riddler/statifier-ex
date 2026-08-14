@@ -897,8 +897,7 @@ defmodule Statifier.Compiler do
   # `compile/3` - a program is a `Machine.program()`, `expr()`'s sibling,
   # never one of its arms (`Statifier.Machine`'s own `program()` typedoc).
   # A compile failure is captured as `{:invalid, error}` on the compiled
-  # node rather than returned as `{:error, error}` (Decision 1 of
-  # `docs/plans/260814-st-af3.17-script-statement-bodies.md`) - the same
+  # node rather than returned as `{:error, error}` - the same
   # deferral `<assign expr>` and `<data expr>` already take, and for the
   # same reason: an ECMAScript-bodied `<script>` this engine cannot compile
   # should not make an otherwise-fully-supported document unloadable. This

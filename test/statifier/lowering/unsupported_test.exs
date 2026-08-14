@@ -33,7 +33,7 @@ defmodule Statifier.Lowering.UnsupportedTest do
     # `test/statifier/lowering/content_test.exs` for its own coverage.
     # `<if>`/`<elseif>`/`<else>` moved the same way in st-af3.5 Phase 2 - see
     # `test/statifier/lowering/content_test.exs` for their own coverage.
-    # `<script>` moved the same way in st-af3.17 Phase 2 - see
+    # `<script>` moved the same way - see
     # `test/statifier/lowering/content_test.exs` for its own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
