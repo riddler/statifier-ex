@@ -95,7 +95,7 @@ The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
 derived via `Statifier.FeatureDetector`, inline XML heredoc (4-space base
 indent, raw source unmodified - no xmerl re-serialization), and a single
-`test_scxml/4` call. 118 of the 127 native SCION cases emit; the rest are
+`test_scxml/4` call. 116 of the 127 native SCION cases emit; the rest are
 excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
 is populated.
 
@@ -140,6 +140,9 @@ One filter applies before a SCION case is emitted, in `scion/cases.exs`:
 - **exclusions.exs**: cases with no predicator equivalent (`<script>`,
   `<script src>`), and the `w3c-ecma` tree - SCION's own untransformed
   duplicate of the W3C IRP suite - recorded with a reason atom per ADR-0004.
+  `more-parallel/test10` and `test10b` are excluded too, for a different
+  reason: they assume a `<parallel>` can be the LCCA, which the REC forbids
+  (ADR-0022).
 
 v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.

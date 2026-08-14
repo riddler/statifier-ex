@@ -10,6 +10,9 @@
 #                            suite (datamodel="ecmascript", no predicator XSL
 #                            applied); tools/corpus/scxml_w3 generates the
 #                            real W3C corpus from the primary IRP source
+#   :contradicts_w3c_semantics - asserts behavior the REC normatively
+#                            forbids, rather than a gap in predicator support;
+#                            permanently out (ADR-0022)
 
 %{
   "w3c-ecma" =>
@@ -20,5 +23,11 @@
     {:needs_script, "external <script src> - same statement-layer gap as inline <script>"},
   "error" => {:needs_script, "conf:script - predicator has no statement layer"},
   "assign-current-small-step/test0" =>
-    {:needs_script, "onentry <script> assignment - predicator has no statement layer"}
+    {:needs_script, "onentry <script> assignment - predicator has no statement layer"},
+  "more-parallel/test10" =>
+    {:contradicts_w3c_semantics,
+     "assumes a <parallel> can be the LCCA; the REC's compound-state definition, 3.1.5, and Appendix D's findLCCA prose all exclude <parallel> from LCCA candidacy (ADR-0022)"},
+  "more-parallel/test10b" =>
+    {:contradicts_w3c_semantics,
+     "assumes a <parallel> can be the LCCA; the REC's compound-state definition, 3.1.5, and Appendix D's findLCCA prose all exclude <parallel> from LCCA candidacy (ADR-0022)"}
 }
