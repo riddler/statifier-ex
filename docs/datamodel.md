@@ -21,10 +21,16 @@ continuity with v1's converted W3C tests).
 
 - `<datamodel>` / `<data>` with `expr`, child content, and `src` - `binding="early"`
   and `late` both supported. `src` is lowered, validated, and compiled like any
-  other attribute, but it is never fetched: a `<data>` with an `src` raises
-  `error.execution` per spec 5.3.2 rather than loading the named document. The
-  fetch's correct timing is unsettled between this paragraph and spec 5.3.2 -
-  that contradiction is named here, not resolved.
+  other attribute, but it is **never fetched, at any binding time** - a decided,
+  permanent deviation from spec 5.3.2's fetch MUST
+  ([ADR-0024](adr/0024-data-src-is-never-fetched.md)): a binding-time fetch is
+  I/O inside the pure core (ADR-0003), and dereferencing document-named URIs
+  contradicts the security posture above (ADR-0004). A `<data>` with an `src`
+  raises `error.execution` and leaves the id as an empty (nil) data element,
+  the shape of 5.3.2's failure clause. Embedders that need the data fetch it
+  themselves and supply it via environment-provided values for top-level
+  `<data>` ids. test552 is the one corpus file this reddens, kept failing and
+  visible by design.
 - `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
   auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
   v1 refused to create intermediates). The root segment of the path must
