@@ -1,9 +1,9 @@
 defmodule Statifier.Validator.Checks.InitialTargets do
   @moduledoc """
-  Check 3 (spec 3.3, 3.6): every `initial` reference - a state's `initial`
-  attribute, a state's `<initial>` element, and the document's own root
-  `initial` attribute - resolves and lands on a legal target. Four reasons,
-  in this precedence:
+  Check 3 (spec 3.2, 3.3, 3.6): every `initial` reference - a state's
+  `initial` attribute, a state's `<initial>` element, and the document's own
+  root `initial` attribute - resolves and lands on a legal target. Three
+  reasons, in this precedence:
 
   1. `{:initial_on_atomic_state, id}`: a state carrying
      `initial` or `initial_element` that has nothing to default into - an
@@ -23,11 +23,21 @@ defmodule Statifier.Validator.Checks.InitialTargets do
      not among the containing state's named descendants
      (`Context.descendant?/3`, ancestry all the way up, not direct-child
      membership - spec 3.3/3.6 both say "descendants", which is where v1 is
-     wrong).
-  4. `{:initial_not_top_level, id}`: a resolved `Document.initial` id that
-     is not itself a member of `document.states` - the root has no id of
-     its own to run `Context.descendant?/3` against, so "is a top-level
-     state" is the substitute spec 3.3's descendancy rule reduces to here.
+     wrong). This check has **no analog** for `Document.initial`: spec 3.11's
+     "additional requirement" ("all the states MUST be descendants of the
+     containing `<state>` or `<parallel>` element") is written for `<state>`
+     `initial` and for a `<transition>` inside `<initial>`/`<history>` only -
+     `<scxml>` is named in neither. The root's own `initial` (spec 3.2.1) is
+     typed only as "a legal state specification" (spec 3.11), which for a
+     single resolved id demands nothing beyond existing - `enterStates`
+     (Appendix D) walks up from any resolved target and adds its ancestors
+     regardless of how deep it sits, so a document-level `initial` naming a
+     descendant several levels down is legal and enters that descendant with
+     every ancestor auto-added. There used to be a fourth reason here,
+     `{:initial_not_top_level, id}`, requiring a resolved `Document.initial`
+     id to be a direct child of `<scxml>`; it is gone because the spec never
+     asked for that restriction - `check_document_initial/2` below now stops
+     at existence.
   """
 
   alias Statifier.Document
@@ -39,10 +49,10 @@ defmodule Statifier.Validator.Checks.InitialTargets do
   Returns, per state and for the document's own root `initial` attribute, one
   of `:initial_on_atomic_state` (the initial reference has nothing to default
   into and suppresses every other reason for that state),
-  `:unresolved_initial` (the id does not resolve in `Context.states`),
+  `:unresolved_initial` (the id does not resolve in `Context.states`), or
   `:initial_not_descendant` (a resolved target is not a descendant of the
-  containing state), or `:initial_not_top_level` (a resolved document-root
-  initial is not itself a top-level state). Returns `[]` when every `initial`
+  containing state - never fired for `Document.initial`, which has no
+  containing state to be a descendant of). Returns `[]` when every `initial`
   reference in the document resolves and lands on a legal target.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
@@ -123,18 +133,12 @@ defmodule Statifier.Validator.Checks.InitialTargets do
 
   defp check_document_initial(%Document{initial: initial} = document, context) do
     location = Map.get(document.attribute_locations, :initial, document.location)
-    top_level_ids = document.states |> Enum.map(& &1.id) |> MapSet.new()
 
     Enum.flat_map(initial, fn id ->
-      cond do
-        not Map.has_key?(context.states, id) ->
-          [Error.unresolved_initial(id, location)]
-
-        id not in top_level_ids ->
-          [Error.initial_not_top_level(id, location)]
-
-        true ->
-          []
+      if Map.has_key?(context.states, id) do
+        []
+      else
+        [Error.unresolved_initial(id, location)]
       end
     end)
   end

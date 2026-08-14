@@ -142,6 +142,29 @@ defmodule Statifier.Interpreter.EntryTest do
   </scxml>
   """
 
+  # A root `initial` naming a descendant nested under a wrapper state - st-ynu:
+  # spec 3.11's "additional requirement" restricting an `initial` target to
+  # descendants of the *containing* state is written for a <state>'s own
+  # `initial`/<initial> only, never for <scxml>'s, so this is a legal state
+  # specification (spec 3.2.1, 3.11) even though "nested" is not a top-level
+  # child of the root. `enterStates` (Appendix D) must add "wrapper" as an
+  # ancestor even though the root's `initial` never names it.
+  #
+  #  0 scxml (root; initial="nested")
+  #  1   wrapper
+  #  2     nested
+  @root_initial_descendant_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="nested">
+      <state id="wrapper">
+          <state id="nested"/>
+      </state>
+  </scxml>
+  """
+
+  defp root_initial_descendant_indexes, do: %{wrapper: 1, nested: 2}
+
+  defp root_initial_descendant_machine, do: compile!(@root_initial_descendant_document)
+
   defp shapes_indexes, do: %{a: 1, b: 2}
 
   defp plant_root_initial_transition(machine, target_index) do
@@ -179,6 +202,25 @@ defmodule Statifier.Interpreter.EntryTest do
       assert result.configuration == MapSet.new([0, chain_idx(:a), chain_idx(:a1)])
       assert result.macrostep == 1
       assert result.running
+    end
+  end
+
+  describe "initialize/2 - a root initial naming a descendant, not a top-level child" do
+    # sabotage: `add_ancestor_states_to_enter/4`'s
+    # `Enum.take_while(&(&1 != ancestor))` changed to
+    # `Enum.take_while(fn _ -> false end)` -> no ancestor is ever added for
+    # any transition's target, so "wrapper" (and the root itself, and every
+    # other ancestor-carrying test in this file) drops out of the
+    # configuration, reddening this assertion
+    test "enters the descendant and every ancestor between it and the root" do
+      m = root_initial_descendant_machine()
+
+      {result, _effects} = Interpreter.initialize(m)
+
+      indexes = root_initial_descendant_indexes()
+
+      assert result.configuration ==
+               MapSet.new([0, indexes.wrapper, indexes.nested])
     end
   end
 

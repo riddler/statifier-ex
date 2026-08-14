@@ -38,9 +38,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       assert error.location.start_line == 2
     end
 
-    # sabotage: check_document_initial/2's cond tests top-level membership
-    # before existence -> a nonexistent id (also not top-level) reports
-    # :initial_not_top_level instead, reddening this
+    # sabotage: check_document_initial/2's `if` inverts
+    # `Map.has_key?(context.states, id)` -> a nonexistent id is (wrongly)
+    # treated as resolved and reports nothing, reddening this
     test "the document's own initial naming a nonexistent state is reported" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="missing">
@@ -131,11 +131,18 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     end
   end
 
-  describe "check/2 - initial_not_top_level" do
-    # sabotage: same `id not in top_level_ids` inversion as the "reports
-    # nothing" test below -> a nested (non-top-level) id no longer reports,
-    # reddening this assertion (one mutation, two doors)
-    test "a document initial resolving to a nested state is reported" do
+  describe "check/2 - a document initial naming a descendant" do
+    # spec 3.11's "additional requirement" restricting an `initial` target to
+    # descendants of the *containing* state is written for a <state>'s
+    # `initial`/<initial> only, never for <scxml>'s - <scxml> has no
+    # containing state to be a descendant of, so a document-level `initial`
+    # naming a state several levels deep is a legal state specification
+    # (spec 3.2.1, 3.11) and reports nothing.
+    # sabotage: check_document_initial/2's `if` inverts
+    # `Map.has_key?(context.states, id)` -> a resolved-but-nested id is
+    # (wrongly) treated as unresolved and reports :unresolved_initial,
+    # reddening this assertion
+    test "a document initial resolving to a nested state reports nothing" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="nested">
           <state id="a">
@@ -144,15 +151,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_not_top_level, "nested"}} = error]} =
-               validate!(xml)
-
-      assert error.location.start_line == 1
+      assert {:ok, _document} = validate!(xml)
     end
 
-    # sabotage: check_document_initial/2 inverts `id not in top_level_ids`
-    # to `id in top_level_ids` -> a genuinely top-level id is (wrongly)
-    # reported not-top-level, reddening this
     test "a document initial resolving to a top-level state reports nothing" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
