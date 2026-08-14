@@ -102,6 +102,7 @@ defmodule Statifier.Evaluator do
   """
 
   alias Statifier.Evaluator.Error
+  alias Statifier.Evaluator.Functions
   alias Statifier.Machine
   alias Statifier.MachineState
 
@@ -110,20 +111,51 @@ defmodule Statifier.Evaluator do
   to `machine_state`'s datamodel plus `In(stateId)`
   (`Statifier.Evaluator.Functions`).
 
-  The returned context is a position snapshot: `host` is set to
-  `machine_state.machine` and `machine_state.configuration` as they stand at
-  the moment of this call, so a context built before a configuration change
+  Starts from `Statifier.Evaluator.Functions.base_context/0` - the compile-time
+  constant carrying the resolved `functions` map and `on_unbound: :error` -
+  and layers in this call's two moving parts: `host` via
+  `Predicator.Context.put_host/2`, set to `machine_state.machine` and
+  `machine_state.configuration` as they stand right now, and `data` via a
+  `bind/3` fold over each of `machine_state.datamodel`'s top-level roots. No
+  whole-map `Predicator.Context` construction, and therefore no function
+  resolution pass, happens here - see `Statifier.Evaluator.Functions`'s
+  moduledoc for why that resolution is a compile-time constant instead.
+
+  The returned context is a position snapshot: `host` is fixed at the
+  moment of this call, so a context built before a configuration change
   keeps answering `In/1` against the old configuration - callers rebuild
   per evaluation site rather than caching across one, which is the "never
   scoped to a whole macrostep" property above made concrete.
+
+  Every top-level key in `machine_state.datamodel` must be a binary:
+  `Predicator.Context.bind/3` (unlike `new/2`) guards `is_binary(name)` and
+  raises a `FunctionClauseError` rather than stringifying an atom key. Every
+  writer of `machine_state.datamodel` produces binary keys today (the seed
+  in `MachineState.new/2`, `MachineState.put_event/2`'s `"_event"`,
+  `<data id>` binding, a program's own writes, `<assign>`'s declared
+  `location` root, and `<foreach>`'s declared `item`/`index`), so this is a
+  louder failure for a case no writer can produce today, not a behavior
+  change for any document this library can build a `MachineState` from.
   """
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
-  def context(%MachineState{} = machine_state) do
-    Predicator.Context.new(undefine_nils(machine_state.datamodel),
-      providers: [Statifier.Evaluator.Functions],
-      host: {machine_state.machine, machine_state.configuration},
-      on_unbound: :error
-    )
+  def context(%MachineState{machine: machine, configuration: configuration} = machine_state) do
+    Functions.base_context()
+    |> Predicator.Context.put_host({machine, configuration})
+    |> bind_roots(machine_state.datamodel)
+  end
+
+  # Folds `bind/3` over `datamodel`'s top-level roots. `bind/3` applies
+  # `undefine_nils/1` per root and hands off to `Predicator.Context.bind/3`,
+  # which applies `normalize_value/1` - so this produces exactly the `data`
+  # a whole-map construction would have produced for the same map, since
+  # that whole-map path is `normalize_value(whole_map)` and `normalize_value`
+  # on a map recurses per entry. `context/1`'s equivalence test
+  # (`test/statifier/evaluator_test.exs`) is the mechanical check that this
+  # claim holds.
+  @spec bind_roots(context :: Predicator.Context.t(), datamodel :: map()) ::
+          Predicator.Context.t()
+  defp bind_roots(context, datamodel) do
+    Enum.reduce(datamodel, context, fn {root, value}, acc -> bind(acc, root, value) end)
   end
 
   # `Predicator.Context.new/2` deep-normalized `nil` to `:undefined` through
@@ -184,6 +216,35 @@ defmodule Statifier.Evaluator do
           Predicator.Context.t()
   def bind(%Predicator.Context{} = context, root, value) when is_binary(root) do
     Predicator.Context.bind(context, root, undefine_nils(value))
+  end
+
+  @doc """
+  Refreshes `context`'s `host` to `machine_state`'s current
+  `{machine, configuration}`, leaving `data`, `functions`, and `on_unbound`
+  untouched. A thin wrapper over `Predicator.Context.put_host/2`, named and
+  documented the same way `bind/3` is a named wrapper over
+  `Predicator.Context.bind/3` rather than a call site reaching into
+  predicator directly.
+
+  No `lib/` caller holds a `Predicator.Context.t()` across a configuration
+  change today - every caller of `context/1` builds fresh, per evaluation
+  site, and `bind/3`'s own `@doc` already says why holding one across a
+  block boundary is unsafe. This is the seam such a caller would reach for
+  if one existed: refresh `host` in place instead of rebuilding.
+
+  **This does not address `data` staleness.** `host` is the only thing this
+  function moves; `context`'s `data` still answers against whatever
+  datamodel was bound in at construction (or the last `bind/3`), and a
+  configuration change carries no promise that the datamodel agrees with
+  it. A caller that needs both current would still need to re-bind every
+  changed root itself - the same "ground 2" gap `context/1`'s own moduledoc
+  section describes, restated here at the one other place a caller might
+  reach for a shortcut around it.
+  """
+  @spec put_configuration(context :: Predicator.Context.t(), machine_state :: MachineState.t()) ::
+          Predicator.Context.t()
+  def put_configuration(%Predicator.Context{} = context, %MachineState{} = machine_state) do
+    Predicator.Context.put_host(context, {machine_state.machine, machine_state.configuration})
   end
 
   @doc """

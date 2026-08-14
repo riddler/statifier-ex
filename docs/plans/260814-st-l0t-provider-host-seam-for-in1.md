@@ -540,12 +540,12 @@ Sabotage line on every one of them.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating
-- [ ] Full `mix quality` green, verified through `mix gate.verify`
-- [ ] `mix test.regression` at 1522/0
-- [ ] `mix test --include scion --include scxml_w3` at exactly 1661 tests, 107 failures
-- [ ] `grep -n "Predicator.Context.new" lib/statifier/evaluator.ex` returns nothing
-- [ ] `mix run bench/context_build.exs` completes at every size point
+- [x] `mix quality --profile loop` green while iterating
+- [x] Full `mix quality` green, verified through `mix gate.verify`
+- [x] `mix test.regression` at 1522/0
+- [x] `mix test --include scion --include scxml_w3` at exactly 1661 tests, 107 failures
+- [x] `grep -n "Predicator.Context.new" lib/statifier/evaluator.ex` returns nothing
+- [x] `mix run bench/context_build.exs` completes at every size point
 
 #### Manual Verification:
 - [ ] `T_full` is below the Phase 1 baseline by roughly the recorded `T_fixed`
@@ -902,5 +902,25 @@ human to confirm the manual testing before moving on. In looped (`--loop`)
 execution, the Automated Verification list gates advancement via
 `/wurk:commit --auto`, and Manual Verification items are deferred and
 surfaced once at the end.
+
+---
+
+### Phase 2
+
+- [ ] `T_full` is below the Phase 1 baseline by roughly the recorded `T_fixed`
+      share (`T_fixed/T_full` was 56.6%, so expect a drop near half). "Roughly"
+      is a judgment about magnitude against benchee's variance, which is why
+      this is not an automated criterion: a drop far smaller than the fixed
+      term means the hoist did not do what this plan claims, and is a finding
+      to report rather than a number to accept.
+- [ ] The seven datamodel writers were each checked for binary roots and the
+      finding is in the commit body.
+- [ ] `In(stateId)` still matches spec 5.10, read from the local spec cache.
+- [ ] The equivalence test's datamodel genuinely covers the shapes
+      `undefine_nils/1` and `normalize_value/1` disagree about, not just flat
+      scalars.
+- [ ] No Appendix D procedure was edited; no deviation comment is owed.
+
+**Implementation Note**: same as Phase 1.
 
 ---
