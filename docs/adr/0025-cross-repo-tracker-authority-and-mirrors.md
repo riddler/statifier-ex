@@ -15,11 +15,14 @@ what a `mirrors:` note obliges and in which direction, and how trackerless
 monorepo work is held - and it verifies `bd`'s `--external-ref` behavior
 rather than assuming it. This ADR cites that argument; it does not re-make it.
 
-Predicator's decision is explicitly half a decision. Its Consequences say the
-rule "is only half-recorded until that repo carries the same rule and points at
-this ADR", and its first open question - does statifier adopt the same rule, or
-a different one? - is one "nothing in this repo can ask": rule 2's symmetry was
-an assumption predicator could not verify from its side. Meanwhile this repo
+Predicator's decision was explicitly half a decision, and was drafted
+`proposed` for that reason. Its Consequences said the rule "is only
+half-recorded until that repo carries the same rule and points at this ADR",
+and its first open question - does statifier adopt the same rule, or a
+different one? - was one "nothing in this repo can ask": rule 2's symmetry was
+an assumption predicator could not verify from its side. This record is the
+answer, which is why predicator's ADR-0010 could be accepted the day this one
+was written; the Consequences below say what moved there. Meanwhile this repo
 already lives the rules without recording them. Its beads carry `mirrors:`
 first lines (st-c07 <-> px-xsk); a 2026-08-14 triage session pulled on two
 mirrored pairs (st-qey/px-ucu, st-7ft/px-o9v) and closed them against the
@@ -149,14 +152,21 @@ directly, which is rare but takes the same mechanism unchanged.
   quotes.
 - **Reciprocation already holds.** st-c07 carries `mirrors: px-xsk` and px-xsk
   carries `mirrors: st-c07`; no tracker write is owed for it.
-- **Predicator's ADR-0010 is made whole, not superseded.** Its open question
-  about this repo is answered "same rule"; its status (`proposed`, per that
-  repo's convention - this repo writes ADRs directly as accepted, per
-  `docs/workflow.md`) is its maintainer's to advance. If its decision text
-  changes materially at acceptance, or either repo later changes rule 2's
-  obligation, the two records must move together: predicator's ADR says it is
-  superseded rather than quietly half-true in that case, and this ADR is
-  amended in the same breath.
+- **Predicator's ADR-0010 is made whole, not superseded, and is now accepted.**
+  Its one blocking open question - does statifier adopt the same rule? - is
+  answered "same rule" by this record, and that answer is what moved it from
+  `proposed` to `accepted (2026-08-14)` on its side, along with the Consequences
+  bullet that called the decision half-recorded until this repo carried it.
+  Both records now state the same obligation with neither assuming the other.
+  If either repo later changes rule 2's obligation, the two move together:
+  predicator's ADR says it is superseded rather than quietly half-true in that
+  case, and this ADR is amended in the same breath.
+
+  The status convention differs and that is not a disagreement. Predicator
+  drafts an ADR `proposed` and its maintainer accepts on review; this repo
+  writes ADRs directly as accepted, per `docs/workflow.md`. Both records ended
+  up accepted on the same day by different routes, which is the expected
+  outcome rather than a coincidence to reconcile.
 - **Nothing here detects a rule 2 violation**, exactly as on the predicator
   side: an agent that acts on an unrefreshed note produces a plan built on
   stale status and no gate catches it. The mitigation is inherited - the
