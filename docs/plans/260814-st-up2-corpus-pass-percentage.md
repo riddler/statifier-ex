@@ -407,11 +407,11 @@ the block is absent and the error is unchanged. Sabotage line on each.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (loop gate while iterating only).
-- [ ] `mix gate.verify` confirms a full, unscoped green run.
-- [ ] `mix test test/mix/tasks/test_regression_test.exs` passes.
-- [ ] Doctor stays at 100%.
-- [ ] `test/passing_tests.json` is unchanged by this branch.
+- [x] Full `mix quality` passes (loop gate while iterating only).
+- [x] `mix gate.verify` confirms a full, unscoped green run.
+- [x] `mix test test/mix/tasks/test_regression_test.exs` passes.
+- [x] Doctor stays at 100%.
+- [x] `test/passing_tests.json` is unchanged by this branch.
 
 #### Manual Verification:
 
@@ -599,6 +599,28 @@ before considering the plan fully landed.
 - [ ] The wording distinguishes "ratcheted + newly passing" from a claim that
       every counted file ran in this invocation.
 - [ ] No regressions in `mix test.baseline add <file>` behavior.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] A direct `mix test.regression` run shows both suite lines with correct
+      numbers, after the "All N regression test files passed." line.
+- [ ] A bare `mix quality` still renders the `Regression ratchet` stage as its
+      usual one-line pass summary, and its total runtime is unchanged. This
+      confirms the plan added no output the gate has to swallow, and is the
+      expected result, not a shortfall.
+- [ ] A deliberately failing ratchet (temporarily point `--registry` at a
+      registry naming a failing file) prints no coverage block and the same
+      error text as before; revert afterwards.
+- [ ] Each new test was sabotaged red and reverted, with the mutation noted.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

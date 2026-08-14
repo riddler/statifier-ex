@@ -62,6 +62,46 @@ defmodule Mix.Tasks.Test.RegressionTest do
     end)
   end
 
+  # sabotage: have print_coverage/2 build its stats_lines call from the
+  #           registry's raw entries instead of `files` (the resolved,
+  #           expanded set) -> the SCION count in the assertion below stays
+  #           wrong even though the run passes, since a glob or a
+  #           non-existent path would no longer intersect the corpus files on
+  #           disk the same way -> red
+  @tag :isolated_tmp_dir
+  test "a passing run prints the ratcheted coverage block", %{tmp_dir: tmp_dir} do
+    scion = test_file(tmp_dir, "test/scion_tests/basic0_test.exs")
+    test_file(tmp_dir, "test/scion_tests/basic1_test.exs")
+    path = registry(tmp_dir, %{"scion_tests" => [scion]})
+
+    output =
+      capture_io(fn ->
+        assert :ok = Regression.execute(["--registry", path], runner: runner(0), root: tmp_dir)
+      end)
+
+    assert output =~ "All 1 regression test files passed."
+    assert output =~ "Corpus coverage (ratcheted / emitted corpus files):"
+    assert output =~ "SCION: 1/2 (50.0%)"
+    assert output =~ "Emitted files only; cases excluded at generation time are not counted"
+  end
+
+  # sabotage: n/a - asserts the absence of behavior run_tests/3 never had on
+  #           the failing branch; there is no lib/ code path to break that
+  #           would print a coverage block after a failing run
+  @tag :isolated_tmp_dir
+  test "a failing run prints no coverage block", %{tmp_dir: tmp_dir} do
+    scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
+    path = registry(tmp_dir, %{"scion_tests" => [scion]})
+
+    output =
+      capture_io(fn ->
+        assert {:error, _message} =
+                 Regression.execute(["--registry", path], runner: runner(1), root: tmp_dir)
+      end)
+
+    refute output =~ "Corpus coverage"
+  end
+
   @tag :isolated_tmp_dir
   test "an entry matching no file fails instead of silently shrinking the ratchet", %{
     tmp_dir: tmp_dir
