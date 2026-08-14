@@ -288,9 +288,7 @@ defmodule Mix.Tasks.Test.BaselineTest do
     end
 
     @tag :isolated_tmp_dir
-    # sabotage: n/a - asserts the absence of behavior add_named/4 never had;
-    #           there is no lib/ code path to break that would print a
-    #           coverage block from `add`
+    # sabotage: call print_coverage/3 from add_named/3's all-passed branch -> red
     test "add prints no coverage block", %{tmp_dir: tmp_dir} do
       scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       path = registry(tmp_dir)
