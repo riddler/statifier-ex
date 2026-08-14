@@ -1,6 +1,18 @@
 # ADR-0004: Predicator is the datamodel; no ECMAScript, no Elixir eval
 
-Status: accepted (2026-08-02)
+Status: accepted (2026-08-02) - amended in part by ADR-0026 (2026-08-14)
+
+**Amendment note.**
+[ADR-0026](0026-script-as-predicator-statement-programs.md) discharges the
+conditional final consequence below on its own stated condition: predicator
+(5.0.0, pinned `~> 7.0` since st-5ma) grew the safe statement layer -
+`parse_program/2`, `store`/`pop`, `execute/1,2,3` - so `<script>` is now
+supported, with predicator statement programs as bodies. Everything else in
+this record stands unchanged: predicator is still the sole datamodel, no
+ECMAScript engine is embedded, and no Elixir code is ever evaluated from a
+document. The statement layer is the same non-evaluative instruction set the
+expression language already runs on, extended with writes, so the security
+posture this record stakes out is unaffected.
 
 ## Context
 
@@ -30,4 +42,4 @@ rather than papered over in statifier - see `docs/datamodel.md`.
 - Predicator gains features that benefit all its embeddings; statifier's glue
   stays thin.
 - `<script>` remains unsupported unless/until predicator grows a safe statement
-  layer.
+  layer. *(Condition met: see the amendment note above and ADR-0026.)*

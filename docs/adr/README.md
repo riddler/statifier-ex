@@ -5,7 +5,7 @@
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | accepted |
 | [0002](0002-literal-w3c-appendix-d-port.md) | Port the W3C SCXML algorithm literally (Appendix D) | accepted (amended 2026-08-09: predicate naming) |
 | [0003](0003-pure-core-with-effects.md) | Pure functional core returning effects | accepted |
-| [0004](0004-predicator-as-the-datamodel.md) | Predicator is the datamodel; no ECMAScript, no Elixir eval | accepted |
+| [0004](0004-predicator-as-the-datamodel.md) | Predicator is the datamodel; no ECMAScript, no Elixir eval | accepted (amended in part by 0026: `<script>`) |
 | [0005](0005-full-configuration-and-interned-state-indexes.md) | Full configuration; interned state indexes | accepted |
 | [0006](0006-reuse-conformance-corpus-and-regression-ratchet.md) | Reuse conformance corpus and ratchet; commit a generator | accepted |
 | [0007](0007-beads-for-issue-tracking.md) | Beads for issue tracking | accepted |
@@ -27,6 +27,7 @@
 | [0023](0023-numeric-type-fixes-upstream-not-boundary-coercion.md) | Numeric-type gaps are fixed in predicator, never coerced at the boundary | accepted |
 | [0024](0024-data-src-is-never-fetched.md) | `<data src>` is never fetched | accepted |
 | [0025](0025-cross-repo-tracker-authority-and-mirrors.md) | Tracker authority follows the artifact; mirrors pull (adopts predicator ADR-0010) | accepted |
+| [0026](0026-script-as-predicator-statement-programs.md) | `<script>` bodies are predicator statement programs | accepted (amends 0004 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
