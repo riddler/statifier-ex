@@ -748,13 +748,13 @@ with it on the record.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green, verified through `mix gate.verify`
-- [ ] `mix quality --profile merge` green - this is the profile that enables
+- [x] Full `mix quality` green, verified through `mix gate.verify`
+- [x] `mix quality --profile merge` green - this is the profile that enables
       the ADR judge stage, and a new ADR is exactly what it exists to read
-- [ ] `mix adr.check` clean
-- [ ] `mix test.regression` at 1522/0 (the moduledoc edit touches a compiled
+- [x] `mix adr.check` clean
+- [x] `mix test.regression` at 1522/0 (the moduledoc edit touches a compiled
       file, so the suite still runs)
-- [ ] `grep -n "px-8ii" lib/ docs/` returns only references that still make
+- [x] `grep -n "px-8ii" lib/ docs/` returns only references that still make
       sense after the rewrite
 
 #### Manual Verification:
@@ -941,5 +941,22 @@ surfaced once at the end.
 **Implementation Note**: same as Phase 1. `bench/` is ungated by design
 (`bench/README.md`), so the gate confirms cleanliness rather than correctness
 here; the manual criteria carry this phase.
+
+---
+
+### Phase 4
+
+- [ ] The `mirrors: px-10u` / `px-rnc` reconciliation notes were re-read in
+      predicator-ex and a new dated note was written on `st-l0t` before the
+      ADR cited either.
+- [ ] ADR-0029 does not re-argue ADR-0028 or ADR-0012; it cites them.
+- [ ] The moduledoc's rewritten section would let a reader who has never seen
+      this plan answer "why is there no context on `MachineState`" correctly.
+- [ ] House style: `docs/adr/` and `docs/datamodel.md` are hyphen-only ASCII
+      prose today; the new ADR matches its neighbors.
+
+**Implementation Note**: same as Phase 1. This phase touches `lib/` only in
+`@moduledoc` prose, so the spec-conformance manual criterion is satisfied by
+inspection: no function body changes.
 
 ---

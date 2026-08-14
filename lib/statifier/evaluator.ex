@@ -12,13 +12,16 @@ defmodule Statifier.Evaluator do
   them is the mistake this section exists to head off:
 
   - `Predicator.Context.t()` - the value `context/1` below builds and
-    `evaluate/2` consumes: bound datamodel data, the `In/1` host function,
-    and the `on_unbound: :error` policy. This is the "context" this module's
-    own name refers to.
+    `evaluate/2` consumes: bound datamodel data, `In/1` resolved as a
+    `Predicator.FunctionProvider` entry (`Statifier.Evaluator.Functions`),
+    the `host` value `In/1` reads (`{machine, configuration}`), and the
+    `on_unbound: :error` policy. "The `In/1` host function" described this
+    struct's `functions` entry accurately by accident before ADR-0029; it is
+    accurate on purpose now that `In/1` reads `host` rather than closing
+    over anything. This is the "context" this module's own name refers to.
   - `Statifier.ExecutableContent.Context.t()` - the second argument every
     `Statifier.ExecutableContent.execute/2` call receives. It carries a
-    built `Predicator.Context.t()` as a field (once a later phase adds that
-    field); it is not one itself.
+    built `Predicator.Context.t()` as a field; it is not one itself.
   - `Statifier.Validator.Context.t()` - unrelated: a validation-time
     accumulator, nothing to do with expression evaluation.
 
@@ -34,54 +37,71 @@ defmodule Statifier.Evaluator do
   commitment - never once per expression - while staying fresh where a
   snapshot spanning the whole macrostep could not be.
 
-  ## Why the built context is not a `MachineState` field
+  ## What a context costs, and why it is still not a `MachineState` field
 
   Caching the context on `Statifier.MachineState` reads like the obvious
-  optimization, and it is ruled out on two grounds of different weight:
+  optimization. `In/1` used to be a closure over `machine_state.machine` and
+  `machine_state.configuration`, which made that optimization impossible
+  outright: a struct field cannot outlive the closure it carries in any
+  sense `docs/observability.md` constraint 1 (ADR-0012) would accept. `In/1`
+  is a `Predicator.FunctionProvider` now
+  (`Statifier.Evaluator.Functions`, below), so that particular impossibility
+  is gone - and the decision not to store a context is still the decision,
+  on three grounds recorded in full in ADR-0029
+  (`docs/adr/0029-in1-becomes-a-provider-context-stays-off-machinestate.md`):
 
-  - **It would not be a resumable position, today.** `docs/observability.md`
-    constraint 1 (ADR-0012) commits to any `%MachineState{}` value being a
-    complete, inspectable, resumable position. `context/1` puts a closure
-    in `functions` (`In/1`, below), and a local fun is a reference to a
-    specific module and code version: a struct carrying one does not
-    survive a node boundary, a code reload, or being written to disk and
-    read back later, and it cannot be meaningfully diffed. A step debugger
-    being `microstep/1` in a REPL is the property that field would cost.
-    This ground is contingent on the closure: taking the px-8ii seam below
-    (a `FunctionProvider` bound by name instead of a captured fun) would
-    dissolve it.
-  - **It would be stale by construction.** That closure captures the
-    configuration, which moves at every microstep, so a stored context
-    would keep answering `In/1` against a configuration the machine has
-    already left. Rebuilding per evaluation site is not a missed
-    optimization here; it is the correctness property, and the
-    position-snapshot note on `context/1` says so at the call site. This
-    ground is structural and survives the px-8ii seam entirely: whatever
-    builds `functions`, a stored context still answers against a
-    configuration the machine has moved past.
+  - **Non-resumability dissolved.** A closure in `functions` could not
+    survive a node boundary, a code reload, or a round-trip through storage,
+    so a `%MachineState{}` carrying one could never be the complete,
+    inspectable, resumable position constraint 1 requires. Every resolved
+    `functions` entry is now a `{module, atom}` pair - the only shape that
+    can escape into a compile-time module attribute at all, since a
+    `function()` value fails that escape at compile time - and
+    `test/statifier/evaluator/functions_test.exs` and
+    `test/statifier/evaluator_test.exs` assert mechanically that no built
+    context's `functions` map ever holds one. This ground no longer blocks
+    anything.
+  - **Staleness survives, narrower.** A stored context's `host` can now be
+    refreshed in O(1) with `Predicator.Context.put_host/2` instead of a
+    whole rebuild - but `data` still needs a `bind/3` at every site the
+    datamodel changes, and nothing added that refresh where none existed.
+    Storage would turn "rebuild per evaluation site" from the correctness
+    property it is today into an exhaustiveness obligation over every
+    datamodel write site, some of which bind into no context today. A missed
+    site answers stale silently rather than raising - a worse failure shape
+    than the closure's outright non-resumability, and still enough to block
+    storage on its own.
+  - **A stored context would duplicate state `%MachineState{}` already
+    holds** - its `data` against `machine_state.datamodel`, its `host`
+    against `machine`/`configuration` - two representations of the same fact
+    that must agree and can silently disagree, a different constraint-1
+    failure mode from a closure's, related to the sharp edge
+    `lib/statifier/machine_state.ex` already documents about `internal_queue`
+    equality.
 
   The plain map on `MachineState.datamodel` stays the resumable truth, and
   this module builds a context over it on demand. The cost that buys is
-  real - `Predicator.Context.new/2` deep-normalizes the whole datamodel
-  every time, where `Predicator.Context.bind/3` is O(1) in the data's size
-  and carries `functions` and `on_unbound` over unchanged. Measured
-  (ADR-0028, `bench/results/260814-context-build.md` and
-  `bench/results/260814-macrostep.md`): at a realistic corpus-shaped
-  datamodel, context construction is 62.0% of one macrostep's wall time and
-  67.1% of its allocated memory, and rebuilding per write inside a block
-  costs an order of magnitude more than threading one context and
-  `bind/3`-ing each write into it. ADR-0028 answers this within one
-  executable-content block: `<assign>` and `<foreach>` are to bind into the
-  block's existing threaded context instead of calling `context/1` again
-  per write, without storing anything here, so neither ground above is
-  contradicted - the closure in `functions` still cannot outlive one block's
-  own stack frame, and a block still never spans a microstep. The upstream
-  seam that would let a context be both cheap to refresh and safe to store
-  landed in predicator 5.0.0 (px-8ii): `Predicator.FunctionProvider` plus
-  `Context.new/2`'s `host:` option and `Context.put_host/2`. That wider
-  seam - a context surviving *across* blocks, which would need it - is
-  still not taken; ADR-0028 is deliberately scoped to within-block
-  threading only.
+  real - `Predicator.Context.new/2` deep-normalizes the whole datamodel and
+  resolves the whole `functions` map every time, where
+  `Predicator.Context.bind/3` is O(1) in the data's size and
+  `Predicator.Context.put_host/2` is O(1) in `host`'s size. `context/1`
+  never calls `Predicator.Context.new/2` on this hot path: it starts from
+  `Statifier.Evaluator.Functions.base_context/0`, a compile-time constant
+  holding the already-resolved `functions` map and `on_unbound: :error`,
+  refreshes `host` with `put_host/2`, and binds each datamodel root with
+  `bind/3`. Measured (ADR-0029,
+  `bench/results/260814-st-l0t-provider-host-seam.md`): at a realistic
+  corpus-shaped datamodel, this hoist drops one context build from 2.30 us /
+  10.92 KB to 1.13 us / 4.77 KB, and the corpus-representative `realistic`
+  macrostep from 17.39 us / 74.19 KB to 13.58 us / 43.18 KB. ADR-0028
+  answers the within-block write case the same way at a finer grain:
+  `<assign>`, `<foreach>`, and `<script>` bind each write into the block's
+  already-threaded context instead of calling `context/1` again per write,
+  without storing anything on `MachineState` - a block still never outlives
+  the microstep it runs inside, so neither ground above is contradicted.
+  Widening the threaded interval *across* blocks or microsteps - which would
+  need a stored context - remains future work, still gated on staleness and
+  duplication exactly as ADR-0029 leaves it.
 
   ## The membrane
 
