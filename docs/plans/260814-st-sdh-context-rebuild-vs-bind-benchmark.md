@@ -783,23 +783,23 @@ file at `changelog.d/st-sdh.md`.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes; `mix gate.verify` confirms a full unscoped run.
-- [ ] `mix test.regression` passes - the ratchet is the check that conformance
+- [x] Full `mix quality` passes; `mix gate.verify` confirms a full unscoped run.
+- [x] `mix test.regression` passes - the ratchet is the check that conformance
       did not move.
-- [ ] `mix test --include scion --include scxml_w3` passes at exactly the same
+- [x] `mix test --include scion --include scxml_w3` passes at exactly the same
       counts as before the change; no `mix test.baseline add` is expected,
       and if a test newly passes that is a signal something semantic changed,
       not a win to ratchet.
-- [ ] `grep -rn "Evaluator.context(machine_state)" lib/statifier/machine/content/`
+- [x] `grep -rn "Evaluator.context(machine_state)" lib/statifier/machine/content/`
       returns nothing (or only `script.ex`, if #4 was left rebuilding).
-- [ ] Every new `test "` in the diff has a sabotage line above it.
-- [ ] The Doctor stage stays at 100% - `.doctor.exs` holds 100% on every axis
+- [x] Every new `test "` in the diff has a sabotage line above it.
+- [x] The Doctor stage stays at 100% - `.doctor.exs` holds 100% on every axis
       with empty `ignore_paths`, so the new public `Evaluator.bind/3` needs
       both a `@doc` and a `@spec` or the gate goes red. `.doctor.exs` is a
       guarded path and is never edited to accommodate this.
-- [ ] Coverage stays at or above `coveralls.json`'s minimum; the new public
+- [x] Coverage stays at or above `coveralls.json`'s minimum; the new public
       function must be exercised by the Phase 4 tests, not merely documented.
-- [ ] `mix run bench/macrostep.exs` reproduces the predicted improvement; the
+- [x] `mix run bench/macrostep.exs` reproduces the predicted improvement; the
       new numbers land in `bench/results/` beside the originals.
 
 #### Manual Verification:
@@ -996,5 +996,27 @@ Verification is deferred and surfaced at the end.
 **Implementation Note**: Same as Phase 1. Under Branch A the bead's acceptance
 criterion is fully satisfied at the end of this phase and Phase 4 is not
 executed.
+
+---
+
+### Phase 4
+
+- [ ] Spec-conformance judgment, per this project's plan extension: the touched
+      code is spec section 4 executable content, **not** Appendix D - no
+      Appendix D function is modified by this phase, and confirming that is the
+      check. `git diff --stat lib/statifier/interpreter/` should be empty.
+- [ ] A bound context is observationally identical to a rebuilt one at every
+      touched site - the change is allocation, never semantics. Walk one
+      `<assign>` and one `<foreach>` by hand in IEx and diff the two contexts.
+- [ ] `In/1` inside a block still answers against the configuration the block
+      started with, which is what it did before; a block does not span a
+      microstep, so nothing here can make it stale.
+- [ ] The sabotage mutations were genuinely run and genuinely went red.
+- [ ] ADR-0027's Consequences match what actually shipped, including the
+      `<script>` fallback if it was taken.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Same as Phase 1. This phase is the one that touches
+`lib/`, so its full gate and the ratchet are both load-bearing.
 
 ---

@@ -155,6 +155,36 @@ defmodule Statifier.Evaluator do
   defp undefine_nils(other), do: other
 
   @doc """
+  Binds `root`'s value into `context`, replacing whatever it held there and
+  applying the same `nil` -> `:undefined` normalization `context/1` applies
+  through `undefine_nils/1` - a bound `nil` has to read the same as a
+  rebuilt one, or W3C test319/335/337/339 answer differently depending on
+  which path built the context. `Predicator.Context.bind/3` does the write:
+  a single `Map.put/3` plus normalizing `value` itself, O(size of `value`)
+  rather than O(size of the whole datamodel), carrying `context`'s
+  `functions`, `on_unbound`, and `host` over unchanged.
+
+  This is safe **within** the executable-content block that already holds
+  `context` and unsafe **across** one: `functions` (and with it `In/1`'s
+  captured configuration) carries over verbatim, which is correct only
+  while the block still runs inside the microstep it started in. A block
+  never outlives that microstep, so binding into its own context is always
+  safe there - but reusing a bound context after the block returns would
+  answer `In/1` against a configuration the machine has already left, the
+  same staleness `context/1`'s own moduledoc note warns about.
+
+  `Predicator.Context.assign/3` is deliberately not used here: it writes at
+  a path but skips `normalize_value/1` (`deps/predicator/lib/predicator/
+  context.ex:313-318`), so a bound `nil` would stay `nil` instead of
+  reading `:undefined`.
+  """
+  @spec bind(context :: Predicator.Context.t(), root :: String.t(), value :: term()) ::
+          Predicator.Context.t()
+  def bind(%Predicator.Context{} = context, root, value) when is_binary(root) do
+    Predicator.Context.bind(context, root, undefine_nils(value))
+  end
+
+  @doc """
   Evaluates `expr` against `context`.
 
   `{:static, value}` returns `value` untouched - a static value came from
@@ -186,7 +216,28 @@ defmodule Statifier.Evaluator do
 
   @doc """
   Runs `program` (a `Machine.program()`, ADR-0026) against `machine_state`'s
-  datamodel and merges its writes back.
+  datamodel and merges its writes back. A thin wrapper over `run_program/2`
+  that drops the post-run `Predicator.Context.t()` it also returns - this
+  function's own two/three-element shape is kept exactly as it was before
+  `run_program/2` existed, since `Statifier.Interpreter`'s
+  `run_global_script/3` (Appendix D's global-script step) is a caller with
+  no block to thread a context into and no reason to change. See
+  `run_program/2` for the full merge/diff contract both functions share.
+  """
+  @spec execute(machine_state :: MachineState.t(), program :: Machine.program()) ::
+          {:ok, MachineState.t()}
+          | {:error, MachineState.t(), Error.t() | {:system_variable, String.t()}}
+  def execute(%MachineState{} = machine_state, program) do
+    case run_program(machine_state, program) do
+      {:ok, new_machine_state, _post_context} -> {:ok, new_machine_state}
+      {:error, new_machine_state, error, _post_context} -> {:error, new_machine_state, error}
+    end
+  end
+
+  @doc """
+  Runs `program` (a `Machine.program()`, ADR-0026) against `machine_state`'s
+  datamodel, merges its writes back, and also returns the post-run
+  `Predicator.Context.t()` `Predicator.execute/3` built along the way.
 
   Builds the same `context/1` `evaluate/2` uses, keeps a copy of its
   pre-run `data`, then hands the compiled program to `Predicator.execute/3`.
@@ -215,13 +266,12 @@ defmodule Statifier.Evaluator do
   `location` is a *reference* to a location the document must already have
   (spec 5.9.2), while a predicator assignment *statement* is a declaration
   and a write in one, which is what W3C test302/test304 assert (ADR-0026
-  decision 2, `Statifier.Machine.Content.Script`'s moduledoc once that
-  module lands).
+  decision 2, `Statifier.Machine.Content.Script`'s moduledoc).
 
   A changed root beginning with `_` is a system-variable write (spec
   5.10) and is never merged; if the diff finds one, this returns
-  `{:error, machine_state, {:system_variable, root}}` - the same reason
-  tuple `Statifier.Machine.Content.Assign.check_system_variable/1`
+  `{:error, machine_state, {:system_variable, root}, post_context}` - the
+  same reason tuple `Statifier.Machine.Content.Assign.check_system_variable/1`
   produces, so `error.execution`'s `data:` reads identically whichever
   element attempted the write - with every non-system changed root from
   the *same* program still merged into the returned `machine_state` (spec
@@ -253,24 +303,31 @@ defmodule Statifier.Evaluator do
   6) so a consumer never has to branch on whether the expression path or
   the program path failed - both land in the same `Evaluator.Error.t()`
   shape.
+
+  The returned `post_context` is safe to thread into the rest of the block
+  that ran `program` (ADR-0027) and unsafe to keep past it, for the same
+  reason `bind/3`'s own doc gives: `functions` (and `In/1`'s captured
+  configuration) carries over from `predicator_context` unchanged, correct
+  only while the block still runs inside the microstep it started in.
   """
-  @spec execute(machine_state :: MachineState.t(), program :: Machine.program()) ::
-          {:ok, MachineState.t()}
-          | {:error, MachineState.t(), Error.t() | {:system_variable, String.t()}}
-  def execute(
+  @spec run_program(machine_state :: MachineState.t(), program :: Machine.program()) ::
+          {:ok, MachineState.t(), Predicator.Context.t()}
+          | {:error, MachineState.t(), Error.t() | {:system_variable, String.t()},
+             Predicator.Context.t()}
+  def run_program(
         %MachineState{} = machine_state,
         {:program, %Predicator.Compiled{} = compiled, source}
       ) do
     predicator_context = context(machine_state)
     before_data = predicator_context.data
 
-    {after_data, run_error} =
+    {post_context, run_error} =
       case Predicator.execute(compiled, predicator_context) do
-        {:ok, %Predicator.Context{data: after_data}} -> {after_data, nil}
-        {:error, error, %Predicator.Context{data: after_data}} -> {after_data, error}
+        {:ok, %Predicator.Context{} = post_context} -> {post_context, nil}
+        {:error, error, %Predicator.Context{} = post_context} -> {post_context, error}
       end
 
-    {system_changed, non_system_changed} = partition_changed_roots(before_data, after_data)
+    {system_changed, non_system_changed} = partition_changed_roots(before_data, post_context.data)
 
     new_machine_state = %{
       machine_state
@@ -279,14 +336,14 @@ defmodule Statifier.Evaluator do
 
     cond do
       run_error != nil ->
-        {:error, new_machine_state, Error.new(source, run_error)}
+        {:error, new_machine_state, Error.new(source, run_error), post_context}
 
       map_size(system_changed) > 0 ->
         [{root, _value} | _rest] = Enum.sort(system_changed)
-        {:error, new_machine_state, {:system_variable, root}}
+        {:error, new_machine_state, {:system_variable, root}, post_context}
 
       true ->
-        {:ok, new_machine_state}
+        {:ok, new_machine_state, post_context}
     end
   end
 

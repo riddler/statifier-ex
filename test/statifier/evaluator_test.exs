@@ -314,4 +314,119 @@ defmodule Statifier.EvaluatorTest do
       assert Evaluator.evaluate(context, compiled_expr("In('s1')")) == {:ok, true}
     end
   end
+
+  describe "run_program/2" do
+    # sabotage: `run_program/2`'s success clause returns
+    # `{:ok, new_machine_state, predicator_context}` (the pre-run context)
+    # instead of `post_context` -> `post_context`'s caller-facing promise
+    # (the run's own writes are visible on it) breaks, and evaluating "x"
+    # against it answers `:undefined` (its pre-run, declared-but-unbound
+    # value) instead of `1`, reddening the second assertion.
+    test "returns the post-run context alongside the merged machine_state" do
+      ms = new_machine_state(datamodel: %{"x" => nil})
+
+      assert {:ok, new_ms, post_context} = Evaluator.run_program(ms, program("x = 1;"))
+      assert new_ms.datamodel["x"] == 1
+      assert Evaluator.evaluate(post_context, compiled_expr("x")) == {:ok, 1}
+    end
+  end
+
+  describe "bind/3" do
+    # sabotage: `bind/3` calls `Predicator.Context.bind(context, root, value)`
+    # without `undefine_nils/1` -> the bound `nil` stays predicator 6.x's
+    # own null literal instead of normalizing to `:undefined`, and
+    # evaluating `y` returns `{:ok, nil}` instead of `{:ok, :undefined}`,
+    # reddening this assertion.
+    test "normalizes a bound nil to :undefined, matching context/1" do
+      context = Evaluator.context(new_machine_state())
+
+      bound = Evaluator.bind(context, "y", nil)
+
+      assert Evaluator.evaluate(bound, compiled_expr("y")) == {:ok, :undefined}
+    end
+
+    # sabotage: `bind/3` is changed to build a brand-new
+    # `Predicator.Context.new(%{root => undefine_nils(value)}, ...)` instead
+    # of calling `Predicator.Context.bind/3` on the existing context -> every
+    # key but the just-bound one is lost, and evaluating "b" or "c.d"
+    # against the bound context answers `{:error, %UndefinedVariableError{}}`
+    # instead of matching the rebuilt context's answer, reddening the last
+    # two assertions.
+    test "a bound context answers identically to a rebuilt one for every key, not just the bound one" do
+      ms = new_machine_state(datamodel: %{"a" => 1, "b" => nil, "c" => %{"d" => 2}})
+      context = Evaluator.context(ms)
+
+      bound = Evaluator.bind(context, "a", 42)
+
+      rebuilt =
+        Evaluator.context(%{ms | datamodel: %{"a" => 42, "b" => nil, "c" => %{"d" => 2}}})
+
+      assert Evaluator.evaluate(bound, compiled_expr("a")) ==
+               Evaluator.evaluate(rebuilt, compiled_expr("a"))
+
+      assert Evaluator.evaluate(bound, compiled_expr("b")) ==
+               Evaluator.evaluate(rebuilt, compiled_expr("b"))
+
+      assert Evaluator.evaluate(bound, compiled_expr("c.d")) ==
+               Evaluator.evaluate(rebuilt, compiled_expr("c.d"))
+    end
+
+    # sabotage: `bind/3` is changed to build a fresh
+    # `Predicator.Context.new(%{root => undefine_nils(value)}, ...)` with no
+    # `functions:` option instead of calling `Predicator.Context.bind/3` on
+    # the existing context -> `In/1` is no longer resolvable on the bound
+    # context, and evaluating `In('s1')` returns an `{:error, _}` (an
+    # undefined-function failure) instead of `{:ok, true}`, reddening this
+    # assertion.
+    test "In/1 still resolves against the block's configuration after a bind" do
+      context = Evaluator.context(machine_state_with_s1_active())
+
+      bound = Evaluator.bind(context, "x", 1)
+
+      assert Evaluator.evaluate(bound, compiled_expr("In('s1')")) == {:ok, true}
+    end
+
+    # sabotage: `bind/3` is changed to build a fresh
+    # `Predicator.Context.new(%{root => undefine_nils(value)}, on_unbound:
+    # :undefined)` instead of calling `Predicator.Context.bind/3`, which
+    # would have carried the existing context's `on_unbound: :error` policy
+    # over unchanged -> an unbound load of "nope" answers `{:ok, :undefined}`
+    # instead of failing, reddening this pattern match.
+    test "on_unbound: :error survives a bind, still failing an unbound load" do
+      context = Evaluator.context(new_machine_state())
+
+      bound = Evaluator.bind(context, "x", 1)
+
+      assert {:error, %Error{error: %UndefinedVariableError{variable: "nope"}}} =
+               Evaluator.evaluate(bound, compiled_expr("nope"))
+    end
+
+    # sabotage: `bind/3` is changed to call `undefine_nils/1` only on
+    # `value` itself, bypassing its recursive map clause (as if it were
+    # `if is_nil(value), do: :undefined, else: value` instead of a full
+    # deep walk) -> the nested `nil` inside `%{"inner" => nil}` is never
+    # normalized, and evaluating `obj.inner` returns `{:ok, nil}` instead of
+    # `{:ok, :undefined}`, reddening this assertion.
+    test "binding a value with a nested nil normalizes the nested nil too" do
+      context = Evaluator.context(new_machine_state())
+
+      bound = Evaluator.bind(context, "obj", %{"inner" => nil})
+
+      assert Evaluator.evaluate(bound, compiled_expr("obj.inner")) == {:ok, :undefined}
+    end
+
+    # sabotage: `bind/3`'s `is_binary(root)` guard is dropped along with the
+    # whole clause head, replaced with a catch-all that ignores `root` and
+    # always binds under the literal name `"root"` -> a genuinely new root
+    # name like "brand_new" is never actually written, and evaluating it
+    # answers `{:error, %UndefinedVariableError{}}` instead of `{:ok, 7}`,
+    # reddening this assertion.
+    test "binding a root not present in the context adds it, readable afterward" do
+      context = Evaluator.context(new_machine_state())
+
+      bound = Evaluator.bind(context, "brand_new", 7)
+
+      assert Evaluator.evaluate(bound, compiled_expr("brand_new")) == {:ok, 7}
+    end
+  end
 end

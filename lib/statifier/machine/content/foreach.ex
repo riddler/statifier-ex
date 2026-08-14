@@ -196,7 +196,11 @@ defmodule Statifier.Machine.Content.Foreach do
     # `:undefined` round-trip). This runs even for an empty collection, so
     # `item`/`index` are bound (to `nil`, matching
     # `Statifier.Interpreter.Datamodel.seed/2`'s own `<data>`-with-no-value
-    # shape) whether or not the loop body ever runs.
+    # shape) whether or not the loop body ever runs. ADR-0027: the block's
+    # threaded datamodel context gets the same two names bound into it with
+    # `Evaluator.bind/3` rather than a full rebuild - `item`/`index` are
+    # each their own datamodel root, so a bind is the canonical shape here
+    # too.
     @spec declare(node :: Foreach.t(), context :: Context.t()) :: Context.t()
     defp declare(%Foreach{item: item, index: index}, %Context{} = context) do
       datamodel =
@@ -204,7 +208,7 @@ defmodule Statifier.Machine.Content.Foreach do
         |> Map.put_new(item, nil)
         |> maybe_put_new(index)
 
-      rebuild(context, datamodel)
+      bind_names(context, datamodel, item, index)
     end
 
     @spec maybe_put_new(datamodel :: map(), index :: String.t() | nil) :: map()
@@ -244,6 +248,12 @@ defmodule Statifier.Machine.Content.Foreach do
       )
     end
 
+    # ADR-0027: `item` and, when declared, `index` are each bound into the
+    # block's threaded context with `Evaluator.bind/3` - two single-root
+    # writes, the canonical `bind/3` shape - instead of a full
+    # `Evaluator.context/1` rebuild. This is the multiplicative rebuild site
+    # the benchmark measured (`bench/results/260814-macrostep.md`'s
+    # `<foreach>` sweep), so it is also the largest share of the win.
     @spec write_iteration(
             node :: Foreach.t(),
             value :: term(),
@@ -261,7 +271,7 @@ defmodule Statifier.Machine.Content.Foreach do
         |> Map.put(item, value)
         |> maybe_put_index(index_name, index)
 
-      rebuild(context, datamodel)
+      bind_names(context, datamodel, item, index_name)
     end
 
     @spec maybe_put_index(
@@ -273,16 +283,41 @@ defmodule Statifier.Machine.Content.Foreach do
     defp maybe_put_index(datamodel, nil, _index), do: datamodel
     defp maybe_put_index(datamodel, index_name, index), do: Map.put(datamodel, index_name, index)
 
-    @spec rebuild(context :: Context.t(), datamodel :: map()) :: Context.t()
-    defp rebuild(%Context{} = context, datamodel) do
+    # Shared by `declare/2` and `write_iteration/4`: swaps in the new raw
+    # `datamodel` and binds `item`'s (and, when present, `index_name`'s)
+    # freshly written value into the block's existing threaded
+    # `datamodel_context`, rather than rebuilding it from the whole
+    # datamodel. Each bind reads its value back off `datamodel` - not off
+    # the caller's already-normalized value - so `declare/2`'s `nil` default
+    # and `write_iteration/4`'s real value both go through
+    # `Evaluator.bind/3`'s own `nil` -> `:undefined` normalization
+    # identically.
+    @spec bind_names(
+            context :: Context.t(),
+            datamodel :: map(),
+            item :: String.t(),
+            index_name :: String.t() | nil
+          ) :: Context.t()
+    defp bind_names(%Context{} = context, datamodel, item, index_name) do
       machine_state = %{context.machine_state | datamodel: datamodel}
 
-      %{
-        context
-        | machine_state: machine_state,
-          datamodel_context: Evaluator.context(machine_state)
-      }
+      datamodel_context =
+        context.datamodel_context
+        |> Evaluator.bind(item, Map.fetch!(datamodel, item))
+        |> maybe_bind_index(index_name, datamodel)
+
+      %{context | machine_state: machine_state, datamodel_context: datamodel_context}
     end
+
+    @spec maybe_bind_index(
+            datamodel_context :: Predicator.Context.t(),
+            index_name :: String.t() | nil,
+            datamodel :: map()
+          ) :: Predicator.Context.t()
+    defp maybe_bind_index(datamodel_context, nil, _datamodel), do: datamodel_context
+
+    defp maybe_bind_index(datamodel_context, index_name, datamodel),
+      do: Evaluator.bind(datamodel_context, index_name, Map.fetch!(datamodel, index_name))
 
     # The body's own fold - see the moduledoc's "why this node does not
     # recurse through the block runner" section. `{:error, new_context,
