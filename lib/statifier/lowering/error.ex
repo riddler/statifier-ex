@@ -26,6 +26,7 @@ defmodule Statifier.Lowering.Error do
           | {:missing_attribute, element :: binary(), attribute :: binary()}
           | {:foreign_element, name :: binary(), uri :: binary()}
           | {:unexpected_attribute, element :: binary(), attribute :: binary()}
+          | {:unsupported_attribute, element :: binary(), attribute :: binary()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -130,6 +131,34 @@ defmodule Statifier.Lowering.Error do
     %__MODULE__{
       reason: {:unexpected_attribute, element, attribute},
       message: "element #{inspect(element)} does not accept attribute #{inspect(attribute)}",
+      location: location
+    }
+  end
+
+  @doc """
+  The spec defines `attribute` on `element`, but this engine does not
+  implement it - deliberately distinct from `unexpected_attribute/3`, whose
+  "does not accept attribute" message would be false here: the spec
+  defines it, this engine simply refuses to act on it. `<script src>` is
+  the first case (ADR-0026 decision 2: `<script>`'s `src` attribute is
+  rejected at load, never fetched - the same unresolved external-fetch
+  question `<data src>` leaves open, st-322). No struct is built when this
+  fires; the caller reports this error alone rather than also attempting a
+  build.
+  """
+  @spec unsupported_attribute(
+          element :: binary(),
+          attribute :: binary(),
+          location :: Location.t()
+        ) ::
+          t()
+  def unsupported_attribute(element, attribute, %Location{} = location)
+      when is_binary(element) and is_binary(attribute) do
+    %__MODULE__{
+      reason: {:unsupported_attribute, element, attribute},
+      message:
+        "element #{inspect(element)}'s #{inspect(attribute)} attribute is defined by the " <>
+          "spec but not implemented by this engine (ADR-0026)",
       location: location
     }
   end

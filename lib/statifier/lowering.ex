@@ -71,7 +71,8 @@ defmodule Statifier.Lowering do
     "if" => &Builders.build_if/2,
     "elseif" => &Builders.build_elseif/2,
     "else" => &Builders.build_else/2,
-    "foreach" => &Builders.build_foreach/2
+    "foreach" => &Builders.build_foreach/2,
+    "script" => &Builders.build_script/2
   }
 
   @doc """

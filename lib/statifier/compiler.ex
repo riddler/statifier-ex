@@ -94,6 +94,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Log, as: DLog
   alias Statifier.Document.Param, as: DParam
   alias Statifier.Document.Raise, as: DRaise
+  alias Statifier.Document.Script, as: DScript
   alias Statifier.Document.State, as: DState
   alias Statifier.Document.Transition, as: DTransition
   alias Statifier.Machine
@@ -104,6 +105,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Content.If, as: MIf
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
+  alias Statifier.Machine.Content.Script, as: MScript
   alias Statifier.Machine.Data, as: MData
   alias Statifier.Machine.Donedata, as: MDonedata
   alias Statifier.Machine.Param, as: MParam
@@ -146,6 +148,7 @@ defmodule Statifier.Compiler do
               DRaise.t()
               | DLog.t()
               | DAssign.t()
+              | DScript.t()
               | %{if: DIf.t(), branches: [[non_neg_integer()]]}
               | %{foreach: DForeach.t(), content: [non_neg_integer()]}
           },
@@ -486,7 +489,9 @@ defmodule Statifier.Compiler do
   # `build_contents/2` to compile later. Returns the assigned `c_index`es in
   # the same order as `nodes`.
   @spec assign_content_nodes(
-          nodes :: [DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t()],
+          nodes :: [
+            DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t() | DScript.t()
+          ],
           acc :: acc()
         ) ::
           {[non_neg_integer()], acc()}
@@ -511,7 +516,7 @@ defmodule Statifier.Compiler do
   # nesting depth - a nested `<if>` inside a branch recurses again the same
   # way.
   @spec assign_content_node(
-          node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t(),
+          node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t() | DScript.t(),
           acc :: acc()
         ) ::
           {non_neg_integer(), acc()}
@@ -747,6 +752,7 @@ defmodule Statifier.Compiler do
             DRaise.t()
             | DLog.t()
             | DAssign.t()
+            | DScript.t()
             | %{if: DIf.t(), branches: [[non_neg_integer()]]}
             | %{foreach: DForeach.t(), content: [non_neg_integer()]}
         ) ::
@@ -872,6 +878,31 @@ defmodule Statifier.Compiler do
        value: value,
        location_location: assign_location_location(assign),
        expr_location: assign_expr_location(assign)
+     }}
+  end
+
+  # `<script>` (ADR-0026, Phase 2): compiled with `compile_program/3`, not
+  # `compile/3` - a program is a `Machine.program()`, `expr()`'s sibling,
+  # never one of its arms (`Statifier.Machine`'s own `program()` typedoc).
+  # A compile failure is captured as `{:invalid, error}` on the compiled
+  # node rather than returned as `{:error, error}` (Decision 1 of
+  # `docs/plans/260814-st-af3.17-script-statement-bodies.md`) - the same
+  # deferral `<assign expr>` and `<data expr>` already take, and for the
+  # same reason: an ECMAScript-bodied `<script>` this engine cannot compile
+  # should not make an otherwise-fully-supported document unloadable. This
+  # clause never fails `build_contents/2`'s `collect/1` merge either.
+  defp build_content_node(c_index, %DScript{text: source} = script) do
+    program =
+      case Expressions.compile_program(source || "", {:content, c_index}, script.location) do
+        {:ok, program} -> program
+        {:error, error} -> {:invalid, error}
+      end
+
+    {:ok,
+     %MScript{
+       c_index: c_index,
+       program: program,
+       node_location: script.location
      }}
   end
 

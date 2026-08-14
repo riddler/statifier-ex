@@ -26,23 +26,6 @@ defmodule Statifier.Lowering.UnsupportedTest do
   end
 
   describe "elements outside the supported set are rejected by name, at their own location" do
-    # sabotage: `Lowering`'s dispatch map grows a stray
-    # `"script" => &Builders.build_state/2` entry -> this test reddens
-    # because the document lowers successfully instead of reporting
-    # `{:unsupported_element, "script"}`
-    test "<script> under <scxml>" do
-      xml = ~s(<scxml><script>1;</script></scxml>)
-      assert_unsupported(xml, "script")
-    end
-
-    # sabotage: same dispatch-map addition as above, checked from a
-    # different legal position - confirms the rejection is not
-    # scxml-root-specific
-    test "<script> under <state>" do
-      xml = ~s(<scxml><state id="s"><script>1;</script></state></scxml>)
-      assert_unsupported(xml, "script")
-    end
-
     # `<datamodel>` and `<data>` moved from this deferred set to the
     # supported set in st-af3.3 Phase 1 - see
     # `test/statifier/lowering/datamodel_test.exs` for their own coverage.
@@ -50,6 +33,8 @@ defmodule Statifier.Lowering.UnsupportedTest do
     # `test/statifier/lowering/content_test.exs` for its own coverage.
     # `<if>`/`<elseif>`/`<else>` moved the same way in st-af3.5 Phase 2 - see
     # `test/statifier/lowering/content_test.exs` for their own coverage.
+    # `<script>` moved the same way in st-af3.17 Phase 2 - see
+    # `test/statifier/lowering/content_test.exs` for its own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
     # dispatching to `state_like/3` with `kind: :invoke` (an invented state

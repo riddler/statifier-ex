@@ -2,18 +2,19 @@ defmodule Statifier.Machine.Content do
   @moduledoc """
   Namespace for the compiled executable-content node family: one struct per
   node kind, `Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
-  `Statifier.Machine.Content.Assign`, `Statifier.Machine.Content.If`, and
-  `Statifier.Machine.Content.Foreach`, the interned counterpart to
-  `Statifier.Document.Raise` / `Statifier.Document.Log` /
-  `Statifier.Document.Assign` / `Statifier.Document.If` /
-  `Statifier.Document.Foreach`. This module owns the family's shared
+  `Statifier.Machine.Content.Assign`, `Statifier.Machine.Content.If`,
+  `Statifier.Machine.Content.Foreach`, and `Statifier.Machine.Content.Script`,
+  the interned counterpart to `Statifier.Document.Raise` /
+  `Statifier.Document.Log` / `Statifier.Document.Assign` /
+  `Statifier.Document.If` / `Statifier.Document.Foreach` /
+  `Statifier.Document.Script`. This module owns the family's shared
   vocabulary - `owner/0` and the `t()` union - and no longer a struct
   itself: an Elixir protocol dispatches on the struct module, so each node
   kind needs its own struct for `Statifier.ExecutableContent` to implement
   without a central `case` on a `kind` field. Each future executable-content
-  node (`<script>`, `<send>`, `<cancel>`, `<invoke>`) gets its own struct
-  here too, and its own `Statifier.ExecutableContent` implementation, never
-  a clause added to this module.
+  node (`<send>`, `<cancel>`, `<invoke>`) gets its own struct here too, and
+  its own `Statifier.ExecutableContent` implementation, never a clause
+  added to this module.
 
   `c_index` is a dense document-order identity assigned to **every**
   `<raise>`/`<log>`/`<assign>`/`<if>`/`<foreach>` node reachable through
@@ -33,6 +34,7 @@ defmodule Statifier.Machine.Content do
   alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
+  alias Statifier.Machine.Content.Script
 
   @typedoc """
   Which block of executable content a node lives in - the block identity a
@@ -54,5 +56,5 @@ defmodule Statifier.Machine.Content do
           | {:transition, non_neg_integer()}
 
   @typedoc "Any compiled executable-content node - the family this module maps."
-  @type t :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t()
+  @type t :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t()
 end

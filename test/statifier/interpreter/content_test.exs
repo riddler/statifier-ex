@@ -10,6 +10,7 @@ defmodule Statifier.Interpreter.ContentTest do
   alias Statifier.Lowering
   alias Statifier.Machine
   alias Statifier.Machine.Content.Assign
+  alias Statifier.Machine.Content.Script
   alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Parser.Location
@@ -443,6 +444,93 @@ defmodule Statifier.Interpreter.ContentTest do
       assert error_event.type == :platform
       assert error_event.cause.origin == {:content, 1, @owner}
       assert error_event.data == {:system_variable, "_sessionid"}
+    end
+  end
+
+  describe "<script>, through the real block runner" do
+    defp script_node(c_index, source) do
+      {:ok, compiled} = Predicator.compile_program_with_positions(source)
+
+      %Script{
+        c_index: c_index,
+        program: {:program, compiled, source},
+        node_location: Location.at_offset("", 0)
+      }
+    end
+
+    defp invalid_script_node(c_index) do
+      compiler_error = %Statifier.Compiler.Error{
+        reason: :fake,
+        message: "boom",
+        location: Location.at_offset("", 0)
+      }
+
+      %Script{
+        c_index: c_index,
+        program: {:invalid, compiler_error},
+        node_location: Location.at_offset("", 0)
+      }
+    end
+
+    # sabotage: `Statifier.Machine.Content.Script`'s `execute/2` returns the
+    # unchanged `context` instead of `rebind(context, machine_state)` after a
+    # successful run -> the real `<assign>` running right after it in the
+    # same block would evaluate `x + 1` against the pre-write snapshot
+    # (`x` still unbound), reddening the `y` assertion below.
+    test "a real <script> earlier in a block is visible to a real <assign> later in the same block" do
+      m =
+        machine()
+        |> machine_with_node(5, script_node(5, "x = 1;"))
+        |> machine_with_node(6, assign_node(6, "y", "x + 1"))
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: ms.datamodel |> Map.put("x", nil) |> Map.put("y", nil)}
+      [block] = b_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert result.datamodel["x"] == 1
+      assert result.datamodel["y"] == 2
+    end
+
+    # sabotage: `Statifier.Evaluator.execute/2`'s `run_error != nil` branch
+    # (in its `cond`) is dropped, falling through to the `true -> {:ok,
+    # new_machine_state}` clause even when a statement failed mid-program ->
+    # no `error.execution` would be raised for this test's failing second
+    # statement, and the successful-run assertion count below reddens.
+    test "a script whose statement program fails partway keeps the earlier write and raises exactly one error.execution" do
+      m = machine() |> machine_with_node(5, script_node(5, "x = 1; y = nope + 1;"))
+      ms = machine_state(m)
+      ms = %{ms | datamodel: ms.datamodel |> Map.put("x", nil) |> Map.put("y", nil)}
+      [block] = b_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert result.datamodel["x"] == 1
+      assert result.datamodel["y"] == nil
+
+      events = MachineState.internal_events(result)
+      assert Enum.count(events, &(&1.name == "error.execution")) == 1
+    end
+
+    # sabotage: `Statifier.Machine.Content.Script`'s `execute/2` drops its
+    # `%Script{program: {:invalid, error}}` clause, letting the general
+    # clause hand `{:invalid, error}` straight to `Statifier.Evaluator.execute/2`
+    # (which has no clause for that shape) -> this test reddens with a
+    # FunctionClauseError instead of a clean `error.execution` event, proving
+    # a body that never compiled defers its failure to execution time rather
+    # than being rejected at load (Decision 1) - `machine()` above already
+    # compiled successfully with this invalid node substituted in.
+    test "a script body that does not parse raises error.execution at execution time, not at load" do
+      m = machine() |> machine_with_node(5, invalid_script_node(5))
+      ms = machine_state(m)
+      [block] = b_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
     end
   end
 
