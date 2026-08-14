@@ -138,9 +138,17 @@ defmodule Statifier.Machine.Content.Foreach do
       end
     end
 
-    # Step 1/2 (Decision 1): `item` is always checked (spec 4.6.2 requires
-    # it); `index` only when the author wrote one. Both share the same
-    # legality regex and the same `_`-prefix system-variable rejection
+    # Step 1/2 (Decision 1): `item` is always checked - 4.6.3 names an
+    # illegal `item` name as a termination-and-error condition in as many
+    # words. `index` is checked only when the author wrote one, and failing
+    # on it is this engine's own strictness rather than something the spec
+    # demands: 4.6.3's error sentence names only `item`, and 4.6.2's
+    # attribute table constrains `index` to "Any variable name that is
+    # valid in the specified data model" without saying what a processor
+    # does when it is not. No corpus document exercises an illegal `index`.
+    #
+    # Both share the same legality regex and the same `_`-prefix
+    # system-variable rejection
     # `Statifier.Machine.Content.Assign.check_system_variable/1` performs
     # for the same spec-5.10 reason, reported with the same
     # `{:system_variable, name}` tag so a diagnostic consumer sees one
