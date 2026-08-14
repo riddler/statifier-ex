@@ -4,13 +4,17 @@ defmodule Mix.Tasks.Adr.Check do
   @moduledoc """
   Reports lines the branch adds that look like violations of ADR-0002 (Appendix
   D naming), ADR-0003 (pure core with effects), ADR-0004 (predicator as the
-  datamodel) or ADR-0008 (UXIDs for identifiers).
+  datamodel), ADR-0008 (UXIDs for identifiers), or ADR-0018 (process artifacts
+  are not code comments).
 
   It runs as the `ADR guard` custom stage of `mix quality`, so drift from an
   accepted decision is a named gate failure rather than something review has to
-  catch. Every finding names the ADR it is about, and every finding is cleared
-  by an inline comment on or above the line citing that ADR or the word
-  "deviation" - the same justification CLAUDE.md already asks for.
+  catch. Every finding names the ADR it is about. The ADR-0002/0003/0004/0008
+  findings clear with an inline comment on or above the line citing that ADR or
+  the word "deviation" - the same justification CLAUDE.md already asks for. The
+  ADR-0018 bead-ID finding does not: an ADR citation is exactly what it is
+  checking against, so it clears only with its own marker, `ADR-0018-exempt`,
+  placed on or above the line.
 
   ## Usage
 
@@ -40,9 +44,12 @@ defmodule Mix.Tasks.Adr.Check do
 
   @advice """
   Each finding names the ADR it is about; docs/adr/ has the reasoning. If the
-  line is right anyway, say why on it or above it - a comment naming the ADR or
-  the word "deviation" clears the finding, and leaves the reason where the next
-  reader will find it.\
+  line is right anyway, say why on it or above it: for an ADR-0002/0003/0004/0008
+  finding, a comment naming the ADR or the word "deviation" clears it, and
+  leaves the reason where the next reader will find it. An ADR-0018 bead-ID
+  finding does not clear on an ADR citation - write `ADR-0018-exempt` on or
+  above the line instead, since that finding is checking whether the line cites
+  a bead, and an ADR citation would clear it by accident.\
   """
 
   @impl Mix.Task
