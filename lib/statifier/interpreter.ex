@@ -16,7 +16,7 @@ defmodule Statifier.Interpreter do
   | `microstep/2` | `microstep(enabledTransitions)` verbatim |
   | `microstep/1` | `mainEventLoop`'s inner `while running and not macrostepDone` loop body, hoisted into a value so a paused position is data, not a stack frame |
   | `macrostep/1` | that same inner loop, folded to quiescence |
-  | `main_event_loop/1` | one outer-loop iteration plus the trailing `exitInterpreter()` |
+  | `main_event_loop/1` | the outer-loop iteration(s) one call of `initialize/2` or `handle_event/2` performs - the invoke pass, its re-entry `continue`, and the trailing `exitInterpreter()` |
   | `exit_interpreter/1` | `exitInterpreter` |
   | `initialize/2`, `handle_event/2` | `interpret`'s two entry seams |
 
@@ -116,10 +116,22 @@ defmodule Statifier.Interpreter do
     `main_event_loop/1` is the loop's tail - fold to quiescence, then
     `exit_interpreter/1` when `running` went false - not the loop itself.
     See `main_event_loop/1`'s own `@doc` for the exact port-site comment.
-  - **The invoke passes are skipped.** Nothing in this core can invoke yet,
-    so `statesToInvoke`'s two loops, its `clear()`, and the post-invoke
-    internal-queue re-check are all commented seams naming st-cmq, in the
-    pseudocode's own position inside `main_event_loop/1`.
+  - **The invoke pass runs at the end of every fold, inside `main_event_loop/3`.**
+    `run_invoke_pass/1` walks `states_to_invoke` sorted into entry order via
+    `Machine.document_order/2` (the same sort `enter_states/2` already
+    performs, and one the pseudocode itself specifies -
+    `statesToInvoke.sort(entryOrder)` - so this is not a deviation), and
+    within each state walks its compiled `invoke` list in document order.
+    Each invocation's arguments are resolved against one threaded
+    `Evaluator.context/1`; any evaluation failure raises `error.execution`
+    and yields no `Effect.Invoke` for that invocation, siblings unaffected
+    (ADR-0031), and otherwise the invocation is recorded in
+    `machine_state.active_invocations` and emits one `{:invoke, _}` effect.
+    `states_to_invoke` is cleared once the pass finishes. When invoking left
+    the internal queue non-empty, Appendix D's `continue` re-enters the
+    outer loop - a self-call of the private `main_event_loop/3` - which is
+    why the round budget has to span it (ADR-0032; see the deviation
+    comment above `defp main_event_loop/3`).
   - **`returnDoneEvent` becomes a returned effect, appended last.**
     `exit_interpreter/1` builds `{:done, %Effect.Done{}}` instead of
     performing an I/O call (ADR-0003), and appends it after `Trace.Done`
@@ -131,6 +143,14 @@ defmodule Statifier.Interpreter do
     non-terminating macrostep, so the fold spends a round budget and stops
     with a `:budget_exhausted` effect on exhaustion (ADR-0019). See the
     private fold's own comment above `defp macrostep/3`.
+  - **The round budget spans an invoke re-entry.** `continue` (Appendix D)
+    is a self-call of `main_event_loop/3` in this port, and a self-call
+    that started a fresh budget every time would reopen the same livelock
+    ADR-0019 closed, one loop further out - two states whose `<invoke>`
+    arguments deterministically error could hand each other control
+    forever. The budget is therefore threaded across every re-entry of one
+    `main_event_loop/1` call instead of restarted per fold (ADR-0032). See
+    the deviation comment above `defp main_event_loop/3`.
   - **A round ordinal counts `microstep/1` invocations.** Appendix D's inner
     loop carries `macrostepDone` and no round variable of any kind
     (ADR-0020); `round` is a hoisting artifact of `microstep/1` itself, like
@@ -141,11 +161,14 @@ defmodule Statifier.Interpreter do
   alias Statifier.Compiler
   alias Statifier.Evaluator
   alias Statifier.Event
+  alias Statifier.EventData
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.Datamodel
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
+  alias Statifier.Machine.Invoke, as: MInvoke
+  alias Statifier.Machine.Param
   alias Statifier.Machine.Transition
   alias Statifier.MachineState
 
@@ -571,7 +594,7 @@ defmodule Statifier.Interpreter do
   # rather than a stack frame (constraint 1). Mechanical, not semantic: the
   # loop's condition and body are unchanged. ADR-0002.
   def macrostep(%MachineState{} = machine_state) do
-    {outcome, machine_state, effects} =
+    {outcome, machine_state, effects, _rounds_left} =
       macrostep(machine_state, [], machine_state.max_macrostep_rounds)
 
     {machine_state, effects ++ terminal_effects(machine_state, outcome)}
@@ -614,7 +637,9 @@ defmodule Statifier.Interpreter do
           machine_state :: MachineState.t(),
           effects :: [Effect.t()],
           rounds_left :: MachineState.max_macrostep_rounds() | 0
-        ) :: {:quiescent | :exhausted, MachineState.t(), [Effect.t()]}
+        ) ::
+          {:quiescent | :exhausted, MachineState.t(), [Effect.t()],
+           MachineState.max_macrostep_rounds() | 0}
   # ADR-0002 mechanical deviation (ADR-0019). Appendix D's inner loop is
   # unbounded, and the REC allows that ("A macrostep may not [terminate].
   # ... This is currently allowed.") because it presumes an interpreter
@@ -631,14 +656,21 @@ defmodule Statifier.Interpreter do
   # `microstep/1` until it returns `:quiescent`, threading the machine_state
   # and appending each round's effects in order. Not an Appendix D function
   # name; see `macrostep/1`'s own comment. ADR-0002.
-  defp macrostep(machine_state, effects, 0), do: {:exhausted, machine_state, effects}
+  #
+  # Exhausted base case: `rounds_left` reached `0` before the fold quiesced,
+  # so the fourth element returned is `0` too - the exact budget
+  # `main_event_loop/3` sees when it decides whether to `continue` (ADR-0032).
+  defp macrostep(machine_state, effects, 0), do: {:exhausted, machine_state, effects, 0}
 
   # The ordinary round, charged against the budget by `spend/1`; the name
-  # carries the same ADR-0002 caveat as the clause above.
+  # carries the same ADR-0002 caveat as the clause above. The quiescent
+  # clause returns `rounds_left` unspent - reaching quiescence costs no
+  # round beyond the ones already charged - so ADR-0032's re-entry resumes
+  # with exactly the budget this fold had left, not a fresh one.
   defp macrostep(machine_state, effects, rounds_left) do
     case microstep(machine_state) do
       {:quiescent, machine_state, round_effects} ->
-        {:quiescent, machine_state, effects ++ round_effects}
+        {:quiescent, machine_state, effects ++ round_effects, rounds_left}
 
       {machine_state, round_effects} ->
         macrostep(machine_state, effects ++ round_effects, spend(rounds_left))
@@ -745,32 +777,77 @@ defmodule Statifier.Interpreter do
   end
 
   @doc """
-  `mainEventLoop`'s outer `while running` loop (Appendix D), one
-  iteration's tail (Decision 6). The loop itself is driven by the caller -
-  one call of `initialize/2` or `handle_event/2` performs one iteration,
-  each having already run its own selection round before calling here - so
-  this function is what is left of the pseudocode's loop body after that:
-  fold to quiescence with `macrostep/1`, then run `exit_interpreter/1` when
-  the fold left `running` false.
+  `mainEventLoop`'s outer `while running` loop (Appendix D), one call's
+  worth of iterations (Decision 6, amended by ADR-0032). The loop itself is
+  driven by the caller - one call of `initialize/2` or `handle_event/2`
+  reaches here having already run its own selection round - so this
+  function is what is left of the pseudocode's loop body after that: fold
+  to quiescence with the private `macrostep/3`, run the invoke pass, clear
+  `states_to_invoke`, and `continue` (a self-call of the private
+  `main_event_loop/3`) when invoking left the internal queue non-empty;
+  otherwise run `exit_interpreter/1` when the fold left `running` false, or
+  stop and emit the one terminal effect this call produces.
+
+  Delegates immediately to the private `main_event_loop/3`, which carries
+  the round budget across every re-entry (ADR-0032) exactly as the private
+  `macrostep/3` already carries it across rounds of one fold.
   """
   @spec main_event_loop(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
   def main_event_loop(%MachineState{} = machine_state) do
-    {machine_state, macrostep_effects} = macrostep(machine_state)
+    main_event_loop(machine_state, [], machine_state.max_macrostep_rounds)
+  end
 
-    # for state in statesToInvoke: invoke(state) (Appendix D) - skipped: no
-    # <invoke> support exists yet, so there is nothing in statesToInvoke to
-    # walk. st-cmq.
-    #
-    # statesToInvoke.clear() (Appendix D) - skipped alongside the invoke
-    # pass above; `states_to_invoke` is deliberately absent from
-    # `MachineState` until <invoke> support adds it with its own caller.
-    # st-cmq.
-    #
-    # if not internalQueue.isEmpty(): continue (Appendix D) - skipped: this
-    # guard exists only because invoking can raise internal events mid-loop,
-    # and nothing invokes yet. st-cmq.
+  @spec main_event_loop(
+          machine_state :: MachineState.t(),
+          effects :: [Effect.t()],
+          budget :: MachineState.max_macrostep_rounds() | 0
+        ) :: {MachineState.t(), [Effect.t()]}
+  # ADR-0002 mechanical deviation (ADR-0032). Appendix D's `continue` after
+  # the invoke pass re-enters `mainEventLoop`'s own outer body with no
+  # notion of a budget at all. In this port that outer body is
+  # `main_event_loop/3` itself, so `continue` is a self-call - and every
+  # self-call re-enters the private `macrostep/3`, which would otherwise
+  # start a fresh `max_macrostep_rounds` budget on every re-entry, reopening
+  # the livelock ADR-0019 closed one loop further out (two states whose
+  # <invoke> arguments deterministically error can hand each other control
+  # forever). So the budget is threaded through this function exactly as it
+  # is already threaded through `macrostep/3`: each re-entry starts with the
+  # `rounds_left` the previous fold returned, not a fresh budget, and
+  # `terminal_effects/2` is called exactly once here - when the loop stops,
+  # not once per fold - so ADR-0019's three-outcome exclusivity survives a
+  # re-entry. `main_event_loop/1` still hands this function a fresh budget
+  # exactly once per external event, and public `macrostep/1` is unaffected:
+  # it calls `macrostep/3` directly and keeps its own single-fold behavior.
+  defp main_event_loop(machine_state, effects, budget) do
+    {outcome, machine_state, macrostep_effects, budget} =
+      macrostep(machine_state, [], budget)
 
     if machine_state.running do
+      # for state in statesToInvoke.sort(entryOrder): for inv in
+      # state.invoke.sort(documentOrder): invoke(inv) (Appendix D) -
+      # `run_invoke_pass/1` below, in the pseudocode's own position: after
+      # the fold reaches this point (running), before the internal-queue
+      # re-check. `statesToInvoke.clear()` is the pass's own last step.
+      {machine_state, invoke_effects} = run_invoke_pass(machine_state)
+      effects = effects ++ macrostep_effects ++ invoke_effects
+
+      # if not internalQueue.isEmpty(): continue (Appendix D). Invoking may
+      # have raised internal error events (ADR-0031) and this is the check
+      # that iterates to handle them, inside the same `main_event_loop/1`
+      # call rather than waiting for the next external event.
+      cond do
+        MachineState.internal_queue_empty?(machine_state) ->
+          {machine_state, effects ++ terminal_effects(machine_state, outcome)}
+
+        budget == 0 ->
+          {machine_state, effects ++ terminal_effects(machine_state, :exhausted)}
+
+        true ->
+          # `continue` (Appendix D) - the self-call ADR-0032 threads the
+          # budget across.
+          main_event_loop(machine_state, effects, budget)
+      end
+    else
       # ADR-0002 mechanical deviation, ADR-0003. Appendix D's
       # `mainEventLoop` owns both queues and blocks on
       # `externalQueue.dequeue()` at the end of every iteration, then checks
@@ -780,12 +857,233 @@ defmodule Statifier.Interpreter do
       # the session, not this struct. The semantics of processing one
       # external event are unchanged; only the storage of the waiting ones
       # moves outward. `isCancelEvent/1` is `Statifier.Session.Inbox.cancel_event?/1`;
-      # its effect is `cancel/1` above.
-      {machine_state, macrostep_effects}
-    else
+      # its effect is `cancel/1` above. `if not running: break` (Appendix D)
+      # precedes the invoke pass, so no invoke pass runs and no re-entry
+      # check happens on this path - `exit_interpreter/1` is the loop's
+      # only remaining tail.
       {machine_state, exit_effects} = exit_interpreter(machine_state)
-      {machine_state, macrostep_effects ++ exit_effects}
+
+      {machine_state,
+       effects ++ macrostep_effects ++ terminal_effects(machine_state, outcome) ++ exit_effects}
     end
+  end
+
+  # `for state in statesToInvoke.sort(entryOrder): for inv in
+  # state.invoke.sort(documentOrder): invoke(inv)` then `statesToInvoke.clear()`
+  # (Appendix D) - the invoke pass. `states_to_invoke` sorts into entry order
+  # through `Machine.document_order/2`, the same sort `enter_states/2` uses
+  # for the same reason (the pseudocode itself calls for it, so this is not
+  # an ADR-0002 deviation); each state's compiled `invoke` list is already in
+  # document order, so no sort is needed within a state. One
+  # `Evaluator.context/1` is built for the whole pass and threaded through -
+  # `ExitEntry.evaluate_donedata_params/3`'s idiom - re-bound after each
+  # `idlocation` write (`Datamodel.write_location/4` returns the updated
+  # context) so a later invocation's arguments can see an earlier one's
+  # written id, exactly as any other threaded-context fold in this codebase
+  # can see an earlier write in the same fold.
+  @spec run_invoke_pass(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
+  defp run_invoke_pass(%MachineState{machine: machine} = machine_state) do
+    state_order = Machine.document_order(machine, machine_state.states_to_invoke)
+    context = Evaluator.context(machine_state)
+
+    {machine_state, _context, effects} =
+      Enum.reduce(state_order, {machine_state, context, []}, fn state_index,
+                                                                {ms, context, effects} ->
+        {ms, context, state_effects} = invoke_state(ms, context, state_index)
+        {ms, context, effects ++ state_effects}
+      end)
+
+    {%{machine_state | states_to_invoke: MapSet.new()}, effects}
+  end
+
+  # One state's own `for inv in state.invoke.sort(documentOrder): invoke(inv)`
+  # (Appendix D) - `state.invoke` is already compiled in document order
+  # (`Statifier.Machine.Invoke.index`), so no sort happens here.
+  @spec invoke_state(
+          machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
+          state_index :: non_neg_integer()
+        ) :: {MachineState.t(), Predicator.Context.t(), [Effect.t()]}
+  defp invoke_state(%MachineState{machine: machine} = machine_state, context, state_index) do
+    state = Machine.at(machine, state_index)
+
+    state.invoke
+    |> Enum.with_index()
+    |> Enum.reduce({machine_state, context, []}, fn {invoke, invoke_index},
+                                                    {ms, context, effects} ->
+      {ms, context, new_effects} =
+        invoke_one(ms, context, state, state_index, invoke, invoke_index)
+
+      {ms, context, effects ++ new_effects}
+    end)
+  end
+
+  # `invoke(inv)` (Appendix D 6.4) - one invocation's own body. Every
+  # argument (`type`/`typeexpr`, `src`/`srcexpr`, `namelist` and `<param>`
+  # locations/exprs, `<content expr>`) is resolved against the threaded
+  # context; the first failure among them raises `error.execution` and
+  # aborts *this* invocation only (ADR-0031, "the element", not the state's
+  # whole `invoke` list) - siblings already invoked or invoked afterward are
+  # unaffected, since each invocation is independent work threaded through
+  # the same accumulator rather than a fold that stops on first error.
+  #
+  # On success: `invoke_id` is the author's literal `id`, or `state.id <>
+  # "." <> UXID(inv)`, or the bare UXID when the state has no `id` (Decision
+  # 1, ADR-0008 as amended). `idlocation`, when set, is written through
+  # `Datamodel.write_location/4` - a write failure is a step-4-shaped
+  # failure, same abort, no effect. Otherwise the invocation is recorded in
+  # `active_invocations` and one `{:invoke, %Effect.Invoke{}}` is emitted.
+  @spec invoke_one(
+          machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
+          state :: Machine.State.t(),
+          state_index :: non_neg_integer(),
+          invoke :: MInvoke.t(),
+          invoke_index :: non_neg_integer()
+        ) :: {MachineState.t(), Predicator.Context.t(), [Effect.t()]}
+  defp invoke_one(machine_state, context, state, state_index, invoke, invoke_index) do
+    with {:ok, type} <- resolve_expr(context, invoke.type),
+         {:ok, src} <- resolve_expr(context, invoke.src),
+         {:ok, raw_params} <- resolve_params(context, invoke.namelist ++ invoke.params),
+         {:ok, content} <- resolve_content(context, invoke.content) do
+      invoke_id = generate_invoke_id(state, invoke)
+
+      case maybe_write_idlocation(machine_state, context, invoke.idlocation, invoke_id) do
+        {:ok, machine_state, context} ->
+          machine_state =
+            record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
+
+          effect =
+            {:invoke,
+             %Effect.Invoke{
+               invoke_id: invoke_id,
+               type: type,
+               src: src,
+               params: EventData.coerce({:params, raw_params}),
+               content: content,
+               autoforward: invoke.autoforward,
+               state_index: state_index,
+               macrostep: machine_state.macrostep,
+               microstep: machine_state.microstep
+             }}
+
+          {machine_state, context, [effect]}
+
+        {:error, reason} ->
+          {abort_invocation(machine_state, state_index, invoke_index, reason), context, []}
+      end
+    else
+      {:error, reason} ->
+        {abort_invocation(machine_state, state_index, invoke_index, reason), context, []}
+    end
+  end
+
+  # `type`/`typeexpr` and `src`/`srcexpr` - `nil` when the author wrote
+  # neither, `Evaluator.evaluate/2` (which already handles both `{:static,
+  # _}` and `{:compiled, _, _}`) otherwise.
+  @spec resolve_expr(context :: Predicator.Context.t(), expr :: Machine.expr() | nil) ::
+          {:ok, term()} | {:error, term()}
+  defp resolve_expr(_context, nil), do: {:ok, nil}
+  defp resolve_expr(context, expr), do: Evaluator.evaluate(context, expr)
+
+  # `namelist` and `<param>` locations/exprs, already merged in document
+  # order by the caller. Unlike `ExitEntry.evaluate_donedata_params/3`
+  # (spec 5.7's "MUST ignore the name and value" - each `<param>` fails
+  # independently), 6.4's MUST terminates the whole element on the first
+  # failure, so this stops at the first error instead of dropping it and
+  # continuing.
+  @spec resolve_params(context :: Predicator.Context.t(), params :: [Param.t()]) ::
+          {:ok, [{String.t(), term()}]} | {:error, term()}
+  defp resolve_params(context, params) do
+    Enum.reduce_while(params, {:ok, []}, fn %Param{name: name, expr: expr}, {:ok, pairs} ->
+      case Evaluator.evaluate(context, expr) do
+        {:ok, value} -> {:cont, {:ok, [{name, value} | pairs]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, pairs} -> {:ok, Enum.reverse(pairs)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # `<content>` under `<invoke>` - `nil` when absent, `<content>`'s text
+  # body coerced through `EventData.coerce({:text, _})` when static, or
+  # `<content expr>` evaluated and coerced through `{:value, _}` when
+  # compiled. Success only: a failed `<content expr>` is this function's
+  # caller's `with` failure, not this function's own.
+  @spec resolve_content(context :: Predicator.Context.t(), content :: Machine.expr() | nil) ::
+          {:ok, term()} | {:error, term()}
+  defp resolve_content(_context, nil), do: {:ok, nil}
+  defp resolve_content(_context, {:static, text}), do: {:ok, EventData.coerce({:text, text})}
+
+  defp resolve_content(context, {:compiled, _predicator_compiled, _source} = expr) do
+    case Evaluator.evaluate(context, expr) do
+      {:ok, value} -> {:ok, EventData.coerce({:value, value})}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Decision 1 / ADR-0008 as amended: the author's literal `id`, used
+  # verbatim, or the generated `state.id <> "." <> UXID(inv)` / bare UXID
+  # composite - generated fresh for *this* invocation, not memoized on the
+  # `<invoke>` element (3.14: "not at load time but each time the element
+  # is executed").
+  @spec generate_invoke_id(state :: Machine.State.t(), invoke :: MInvoke.t()) :: String.t()
+  defp generate_invoke_id(_state, %MInvoke{id: id}) when is_binary(id), do: id
+  defp generate_invoke_id(%{id: nil}, %MInvoke{id: nil}), do: UXID.generate!(prefix: "inv")
+
+  defp generate_invoke_id(%{id: state_id}, %MInvoke{id: nil}),
+    do: state_id <> "." <> UXID.generate!(prefix: "inv")
+
+  # `idlocation`'s write (6.4.1) - a no-op tuple shaped like
+  # `Datamodel.write_location/4`'s own success return when the attribute is
+  # absent, so the caller's `case` needs only one shape regardless.
+  @spec maybe_write_idlocation(
+          machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
+          idlocation :: String.t() | nil,
+          invoke_id :: String.t()
+        ) :: {:ok, MachineState.t(), Predicator.Context.t()} | {:error, term()}
+  defp maybe_write_idlocation(machine_state, context, nil, _invoke_id),
+    do: {:ok, machine_state, context}
+
+  defp maybe_write_idlocation(machine_state, context, idlocation, invoke_id),
+    do: Datamodel.write_location(machine_state, context, idlocation, invoke_id)
+
+  # `active_invocations[{state_index, invoke_index}] = inv.invokeid`
+  # (Appendix D stores this on `inv` itself; see `MachineState`'s own
+  # moduledoc section on why it is hoisted here instead).
+  @spec record_active_invocation(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          invoke_id :: String.t()
+        ) :: MachineState.t()
+  defp record_active_invocation(machine_state, state_index, invoke_index, invoke_id) do
+    %{
+      machine_state
+      | active_invocations:
+          Map.put(machine_state.active_invocations, {state_index, invoke_index}, invoke_id)
+    }
+  end
+
+  # ADR-0031: any failed argument raises `error.execution` with origin
+  # `{:invoke, state_index, invoke_index}` and produces no `Effect.Invoke`
+  # for this invocation.
+  @spec abort_invocation(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          reason :: term()
+        ) :: MachineState.t()
+  defp abort_invocation(machine_state, state_index, invoke_index, reason) do
+    MachineState.raise_platform(
+      machine_state,
+      "error.execution",
+      {:invoke, state_index, invoke_index},
+      data: reason
+    )
   end
 
   @doc """
