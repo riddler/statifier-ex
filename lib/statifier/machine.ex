@@ -38,9 +38,7 @@ defmodule Statifier.Machine do
   `contents` (`content/2` below, the same `elem/2` reader shape); the
   compiler's `<data>` pass populates `data_elements` (`data/2` below, same
   shape again) - see `Statifier.Machine.Data`'s moduledoc for what a
-  `d_index` names and Decision 4
-  (`docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`) for why
-  it lives both here (document order, dense) and on
+  `d_index` names; it lives both here (document order, dense) and on
   `Statifier.Machine.State.data` (per-state membership).
 
   ## Expressions

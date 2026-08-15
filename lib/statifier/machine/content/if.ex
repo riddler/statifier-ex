@@ -13,9 +13,7 @@ defmodule Statifier.Machine.Content.If do
   ## Why this node's `execute/2` does not recurse through the block runner
 
   `Statifier.Interpreter.Content`'s block-running function is not called
-  from here, for four reasons (Decision 1 of
-  `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`,
-  where the full accounting lives):
+  from here, for four reasons:
 
   1. That function returns a bare `Statifier.MachineState.t()`, not a
      `Statifier.ExecutableContent.Context.t()` - it builds a *fresh*

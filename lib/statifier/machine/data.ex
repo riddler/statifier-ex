@@ -11,8 +11,7 @@ defmodule Statifier.Machine.Data do
   - `expr` compiles through `Statifier.Compiler.Expressions.compile/3` like
     any other expression - **except** a compile failure is captured as
     `{:invalid, error}` on this struct rather than failing
-    `Statifier.Compiler.compile/1` (Decision 2,
-    `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`): spec
+    `Statifier.Compiler.compile/1`: spec
     5.9.4 permits either load-time rejection or a runtime `error.execution`,
     and `data_invalid_test.exs` in the corpus needs the latter.
   - `src` never resolves in this pure core (ADR-0003) - it is carried as

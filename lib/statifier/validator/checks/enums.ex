@@ -20,9 +20,7 @@ defmodule Statifier.Validator.Checks.Enums do
   - `{:scxml_bad_binding, raw}` - an `<scxml binding="...">` that is neither
     `"early"` nor `"late"` (spec 3.2.1).
   - `{:scxml_bad_datamodel, raw}` - an `<scxml datamodel="...">` outside
-    `["predicator", "elixir", "null", "ecmascript", "xpath"]` (spec 3.2.1,
-    Decision 9 in
-    `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`).
+    `["predicator", "elixir", "null", "ecmascript", "xpath"]` (spec 3.2.1).
     3.2.1's Valid Values clause is itself open-ended - `"null", "ecmascript",
     "xpath" or other platform-defined values` - so the allow-list is the
     spec's three named values plus this platform's two

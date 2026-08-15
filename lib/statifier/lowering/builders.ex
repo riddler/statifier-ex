@@ -646,8 +646,7 @@ defmodule Statifier.Lowering.Builders do
   `{:missing_attribute, "foreach", _}` errors rather than stopping at the
   first, since neither attribute's presence depends on the other and two
   errors is strictly more useful to a document author fixing both at once.
-  `item`'s *legality* as a variable name is a runtime check (Decision 1 of
-  `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`), not
+  `item`'s *legality* as a variable name is a runtime check, not
   lowering's concern - only its presence is checked here.
 
   The optional `index` (4.6.2) is read unconditionally and defaults to

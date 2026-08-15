@@ -3,8 +3,7 @@ defmodule Statifier.Validator.Checks.Ids do
   Check 1 (spec 3.14): an `ID`-typed attribute's value is unique across the
   document - not only a state's `id`, but a `<data>`'s too. 3.14: "all
   attributes of type \"ID\" MUST have unique values within an SCXML
-  document", and `<data>`'s `id` is type `ID` (5.3.1, Decision 5 in
-  `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`) - so a
+  document", and `<data>`'s `id` is type `ID` (5.3.1) - so a
   `<data id="s1">` colliding with a `<state id="s1">` is exactly as much a
   violation as two states sharing one id, and both join **one** uniqueness
   set rather than two separate ones. `nil` ids are excluded
