@@ -53,6 +53,10 @@ session-layer fetch replaces it is the fork st-322 was filed to decide.
 `docs/datamodel.md` has carried the contradiction as "named here, not
 resolved" since st-af3.3 declined to decide it.
 
+The "seeded to `nil`" wording above names that literal's shape, not its
+current spelling: ADR-0037 respells this repo's unbound seeds from `nil` to
+`:undefined`, this one included.
+
 Demand, with st-bnr's corrected fact: exactly one file in the generated
 corpus uses `<data src>` - `test/scxml_tests/mandatory/data/test552_test.exs`,
 which fails on full conformance runs for exactly this reason - and there
@@ -89,6 +93,10 @@ with ADR-0003's I/O boundary as the reason.** The shipped behavior is
 the decided behavior: `src` compiles to `{:src, uri}`, binding raises
 `error.execution` and leaves the id as an empty (nil) data element -
 the failure clause's shape, applied unconditionally.
+
+ADR-0037 later respells that seed `:undefined` rather than `nil`; the "empty
+(nil) data element" phrasing above describes the failure clause's shape, not
+the seed's current literal value.
 
 Three reasons, in order of weight:
 
