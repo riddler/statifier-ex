@@ -160,11 +160,13 @@ promotion path.
   handed such a call, which keeps the familiar three-input tuple as the
   common case (ADR-0029). Keep the session's input path single and
   capturable - no side doors that inject events without crossing the
-  recordable boundary (`Statifier.Session.Inbox`). The recorder itself is
-  unbuilt (st-dtm); note it cannot be a subscriber, because the effect
-  stream does not distinguish core-derived effects (replay re-derives them)
-  from `interpret/2`-injected ones (replay re-injects them). Replay drives
-  the pure core directly rather than a live session, and the recording
+  recordable boundary (`Statifier.Session.Inbox`). The recorder is
+  `Statifier.Session.Recording`, built when `Statifier.Session.start_link/2`
+  is given `record: true` and read back with `Statifier.Session.recording/1`;
+  note it cannot be a subscriber, because the effect stream does not
+  distinguish core-derived effects (replay re-derives them) from
+  `interpret/2`-injected ones (replay re-injects them). `Statifier.Replay`
+  drives the pure core directly rather than a live session, and the recording
   carries ordinal order with no clock reading (ADR-0033).
 
 ## Non-goals (for now)
