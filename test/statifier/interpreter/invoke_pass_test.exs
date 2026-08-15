@@ -36,7 +36,7 @@ defmodule Statifier.Interpreter.InvokePassTest do
   # document order here since neither is reached via history - and `beta`
   # carries two invocations in document order. `p` (index 1) itself carries
   # no `<invoke>` children, which is the point: it still lands in
-  # `states_to_invoke` (Phase 5) but contributes no effect.
+  # `states_to_invoke` during entry but contributes no effect.
   #
   #  0 scxml (root)
   #  1   p       (parallel)

@@ -99,9 +99,8 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # section. `states_to_invoke` is Appendix D's `statesToInvoke` global,
   # added to unconditionally by `enter_states/2` and deleted from by
   # `exit_states/2` - see that field's own moduledoc section.
-  # `active_invocations` is `inv.invokeid` hoisted off compiled data
-  # (Decision 7 of the plan this bead's Phase 6 implements) - see that
-  # field's own moduledoc section. `round` (ADR-0020) is the third
+  # `active_invocations` is `inv.invokeid` hoisted off compiled data - see
+  # that field's own moduledoc section for why. `round` (ADR-0020) is the third
   # counter, joining `macrostep`/`microstep`. `invoke_counter` is a fourth,
   # unrelated to that trio's per-macrostep reset - it is the pure,
   # session-global source `Statifier.Interpreter.generate_invoke_id/3`

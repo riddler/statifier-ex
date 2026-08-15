@@ -140,8 +140,9 @@ defmodule Statifier.Interpreter do
     runs in the pure core (`Statifier.Machine.Invoke.finalize`'s
     absent/empty/populated split, spec 6.5); when it autoforwards, one
     `{:autoforward, %Effect.Autoforward{}}` carries the event on, verbatim,
-    for the session to deliver (Decision 6 - not `Effect.Send`, since 6.4
-    requires an exact copy of every 5.10.1 field). Neither `if` is inside
+    for the session to deliver - not `Effect.Send`, since 6.4 requires an
+    exact copy of every 5.10.1 field and ADR-0003 keeps effect construction
+    pure. Neither `if` is inside
     the other's `else`: a matching, autoforwarding invocation does both,
     exactly as Appendix D's own two separate `if`s read. The walk
     short-circuits to a no-op when `active_invocations == %{}`.
@@ -549,10 +550,9 @@ defmodule Statifier.Interpreter do
   end
 
   # `if inv.autoforward: send(inv.id, externalEvent)` (Appendix D) - one
-  # `{:autoforward, %Effect.Autoforward{}}` carrying `event` verbatim
-  # (Decision 6: not `Effect.Send`, since 6.4 requires an exact copy of
-  # every 5.10.1 field and `Effect.Send` only ever *builds* an event from
-  # `<send>` attributes).
+  # `{:autoforward, %Effect.Autoforward{}}` carrying `event` verbatim - not
+  # `Effect.Send`, since 6.4 requires an exact copy of every 5.10.1 field and
+  # `Effect.Send` only ever *builds* an event from `<send>` attributes.
   @spec autoforward_effect(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -662,7 +662,8 @@ defmodule Statifier.Interpreter do
     do: machine_state
 
   # The write itself, through the same `Datamodel.write_location/4` an
-  # `<assign>` uses (Phase 4's extraction). `param.expr` for a `kind:
+  # `<assign>` uses, factored out of `Statifier.Machine.Content.Assign` so
+  # both call sites share it. `param.expr` for a `kind:
   # :location` entry is always `{:compiled, _compiled, source}` -
   # `Statifier.Compiler.Expressions.compile/3` is the only builder either a
   # namelist entry or a `<param location>` ever goes through
@@ -1061,7 +1062,7 @@ defmodule Statifier.Interpreter do
 
   @doc """
   `mainEventLoop`'s outer `while running` loop (Appendix D), one call's
-  worth of iterations (Decision 6, amended by ADR-0032). The loop itself is
+  worth of iterations (ADR-0032). The loop itself is
   driven by the caller - one call of `initialize/2` or `handle_event/2`
   reaches here having already run its own selection round - so this
   function is what is left of the pseudocode's loop body after that: fold
@@ -1212,7 +1213,7 @@ defmodule Statifier.Interpreter do
   #
   # On success: `invoke_id` is the author's literal `id`, or `state.id <>
   # "." <> "inv_" <> counter`, or bare `inv_<counter>` when the state has
-  # no `id` (Decision 1, ADR-0008 as amended 2026-08-15). `idlocation`, when set, is written through
+  # no `id` (ADR-0008 as amended 2026-08-15). `idlocation`, when set, is written through
   # `Datamodel.write_location/4` - a write failure is a step-4-shaped
   # failure, same abort, no effect. Otherwise the invocation is recorded in
   # `active_invocations` and one `{:invoke, %Effect.Invoke{}}` is emitted.
@@ -1307,7 +1308,7 @@ defmodule Statifier.Interpreter do
     end
   end
 
-  # Decision 1 / ADR-0008 as amended (2026-08-15): the author's literal
+  # ADR-0008 as amended (2026-08-15): the author's literal
   # `id`, used verbatim and never composed, or the generated
   # `state.id <> "." <> "inv_" <> counter` / bare `inv_<counter>` when the
   # state has no `id` - generated fresh for *this* invocation, not memoized

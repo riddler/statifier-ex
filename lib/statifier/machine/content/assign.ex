@@ -66,8 +66,8 @@ defmodule Statifier.Machine.Content.Assign do
 
     # spec 5.4.2/5.9.2's <assign>: evaluate the value, then delegate
     # `location`'s resolution, the "_"-rooted system-variable rejection
-    # (Decision 5, spec 5.10), the root-existence check (Decision 4 -
-    # vivification never creates an undeclared top-level variable), the
+    # (spec 5.10), the root-existence check - vivification never creates an
+    # undeclared top-level variable - the
     # write into the *raw* `machine_state.datamodel`, and the rebind of the
     # written root into the block's threaded datamodel context (ADR-0028) to
     # `Statifier.Interpreter.Datamodel.write_location/4` - the seam

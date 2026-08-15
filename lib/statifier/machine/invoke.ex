@@ -41,8 +41,7 @@ defmodule Statifier.Machine.Invoke do
   `Statifier.Document.Invoke`'s moduledoc describes, carried through
   compilation structurally. Unlike every other field here, its `c_index`es
   come from the same dense, whole-machine counter every `<onentry>`/`<onexit>`
-  block uses (`Statifier.Compiler`'s Decision 4) - `<finalize>` is executable
-  content, the other fields are not.
+  block uses - `<finalize>` is executable content, the other fields are not.
 
   `attribute_locations` is `Statifier.Document.Invoke`'s own map, carried
   through unchanged rather than distilled into individual `*_location`
