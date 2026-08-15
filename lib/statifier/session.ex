@@ -100,15 +100,23 @@ defmodule Statifier.Session do
   empty lookup - the id never existed, named a bare unregistered session,
   or named a session that has since died - takes C.1's mandated
   `error.communication` path on the *sending* session's own internal queue,
-  through the private `communication_error/4` resolver. `#_parent` and
-  `#_<invokeid>` still resolve to `error.communication` the same way - the
-  invocation table this module now holds (`Statifier.Session.Invocations`)
-  answers "which child does `<invoke>` start", not yet "where does
-  `#_parent`/`#_<invokeid>` deliver"; a later bead changes each resolver in
-  turn, not this module's `{:deliver, ...}` clause. An unsupported `type` or
-  an unparseable `target` raises `error.execution` the same way, at plan
-  time. `:cancel_invoke` and `:autoforward` still plan as
-  `{:unroutable, effect}`, pending later routing work. See
+  through the private `communication_error/4` resolver. `#_parent`/`_parent`
+  (6.4.4/C.1's spelling disagreement, decision 8) resolves through
+  `state.invoked_by`: a live invocation's child stamps `invokeid` (5.10.1)
+  and delivers straight to the parent's external queue; a session that was
+  never invoked has no parent and takes the same `communication_error/4`
+  path as any other unreachable route. `#_<invokeid>` still resolves to
+  `error.communication` unconditionally - the invocation table this module
+  holds (`Statifier.Session.Invocations`) answers "which child does
+  `<invoke>` start", not yet "where does `#_<invokeid>` deliver"; a
+  follow-up bead (C.1's `#_invokeid` delivery) changes that one resolver,
+  not this module's `{:deliver, ...}` clause. An
+  unsupported `type` or an unparseable `target` raises `error.execution` the
+  same way, at plan time. `:cancel_invoke` and `:autoforward` still plan as
+  `{:unroutable, effect}`, pending later routing work. A child reaching a
+  top-level final returns `done.invoke.<invokeid>` to its parent's external
+  queue the same direct way ("Starting an invocation's child session" below
+  names the reciprocal obligation this halt-time delivery completes). See
   `Statifier.Session.Effects` and `Statifier.Session.Target`.
 
   ## Starting an invocation's child session
@@ -171,6 +179,7 @@ defmodule Statifier.Session do
   alias Statifier.Effect
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Interpreter
@@ -745,9 +754,42 @@ defmodule Statifier.Session do
   defp perform_instruction({:halt, reason}, state, override) do
     reason = override || reason
     state = %{state | halted: reason}
+    return_done_event(reason, state)
     notify(state, {:halted, reason})
     state
   end
+
+  # `exitInterpreter`'s own `returnDoneEvent` (Appendix D declares it
+  # platform-specific and gives it no pseudocode): 6.4.3's
+  # `done.invoke.<invokeid>`, carrying the child's own `<donedata>`, reaches
+  # the parent's **external** queue directly through `send_event/2` - not
+  # through ADR-0037's `deliver_internal/5` door, which is for routing
+  # failures on the *sending* session's own queue, not for this session
+  # telling its parent it finished. Only a `:done` halt with a live
+  # `invoked_by` qualifies: `:cancelled` is 6.4.3's own "MUST NOT generate
+  # the done.invoke.id event" (a cancelled child halts `:cancelled`, never
+  # `:done`, so this clause never matches it), `:budget_exhausted` has not
+  # finished processing in 6.4.2's sense either, and `invoked_by: nil` (an
+  # ordinary, uninvoked session) has no parent to tell. `state.done_effect`
+  # is populated here because `{:notify, {:done, %Done{}}}` always precedes
+  # `{:halt, :done}` in `Statifier.Session.Effects.plan_one/2`'s own output
+  # for the `{:done, _}` effect - an existing ordering guarantee this clause
+  # leans on, not a new one.
+  @spec return_done_event(reason :: :done | :cancelled | :budget_exhausted, state :: State.t()) ::
+          :ok
+  defp return_done_event(:done, %State{invoked_by: {parent_pid, invoke_id}} = state) do
+    event =
+      Event.external("done.invoke." <> invoke_id,
+        data: state.done_effect.donedata,
+        invokeid: invoke_id,
+        origin: SystemVariables.scxml_location(state.session_id),
+        origintype: SystemVariables.scxml_event_processor()
+      )
+
+    send_event(parent_pid, event)
+  end
+
+  defp return_done_event(_reason, _state), do: :ok
 
   # -- <invoke> starting -----------------------------------------------
 
@@ -878,6 +920,28 @@ defmodule Statifier.Session do
       [] ->
         communication_error(event, effect, state, override)
     end
+  end
+
+  # `#_parent`/`_parent` (6.4.4/C.1's disagreement, Decision 8): with
+  # `invoked_by` set, this session is a live invocation's child, so the
+  # event reaches its parent's external queue with `invokeid` stamped
+  # (5.10.1: "If this event is generated from an invoked child process, the
+  # SCXML Processor MUST set this field to the invoke id of the invocation
+  # that triggered the child process") - `origin`/`origintype`/`sendid` ride
+  # along unchanged, already this child's own address
+  # (`Statifier.Session.Effects.delivered_event/2`). With `invoked_by: nil`,
+  # this session was never invoked and has no parent - C.1's "does not exist
+  # or is inaccessible", the same `communication_error/4` path as any other
+  # unreachable route.
+  defp deliver(
+         :parent,
+         event,
+         _effect,
+         %State{invoked_by: {parent_pid, invoke_id}} = state,
+         _override
+       ) do
+    send_event(parent_pid, %{event | invokeid: invoke_id})
+    state
   end
 
   defp deliver(:parent, event, effect, state, override) do

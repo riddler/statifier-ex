@@ -52,6 +52,13 @@ defmodule Statifier.Session.Target do
   # both is a superset that fails no test; the corpus writes the `#_` form.
   def parse("_internal"), do: :internal
   def parse("#_parent"), do: :parent
+
+  # C.1 spells the parent target `#_parent`; 6.4.4's prose spells it
+  # `'_parent'` ("it can use `<send>` with the special target '_parent' and
+  # type 'scxml'"). Same self-contradiction as `_internal`/`#_internal`
+  # above, resolved the same way: accepting both is a superset that fails no
+  # test, and the corpus writes the `#_` form either way (plan Decision 8).
+  def parse("_parent"), do: :parent
   def parse("#_scxml_" <> session_id) when session_id != "", do: {:session, session_id}
 
   # C.1's `#_invokeid`. An id naming no live invocation is "a session that
