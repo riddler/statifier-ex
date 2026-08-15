@@ -32,7 +32,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}} = error]} =
+      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 2
@@ -48,7 +48,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}} = error]} =
+      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 1
@@ -69,7 +69,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [error]} = validate!(xml)
+      assert {:error, [error], _warnings} = validate!(xml)
       assert error.reason == {:unresolved_initial, "missing"}
     end
   end
@@ -90,7 +90,8 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_not_descendant, "sibling", "a"}} = error]} =
+      assert {:error, [%Error{reason: {:initial_not_descendant, "sibling", "a"}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 2
@@ -105,7 +106,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml_grandchild)
+      assert {:ok, _document, _warnings} = validate!(xml_grandchild)
     end
 
     # sabotage: check_initial_element/2's Enum.reject(&Context.descendant?/3)
@@ -124,7 +125,8 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_not_descendant, "sibling", "a"}} = error]} =
+      assert {:error, [%Error{reason: {:initial_not_descendant, "sibling", "a"}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 4
@@ -151,7 +153,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     test "a document initial resolving to a top-level state reports nothing" do
@@ -161,7 +163,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -181,7 +183,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 2
     end
 
@@ -199,7 +203,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 2
     end
 
@@ -218,7 +224,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, "a"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
     end
 
@@ -236,7 +244,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:error, [error]} = validate!(xml)
+      assert {:error, [error], _warnings} = validate!(xml)
       assert error.reason == {:initial_on_atomic_state, "a"}
     end
   end
@@ -261,7 +269,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 end

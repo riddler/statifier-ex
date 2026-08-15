@@ -30,7 +30,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 3
     end
 
@@ -47,7 +47,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert length(errors) == 2
 
       lines = Enum.map(errors, & &1.location.start_line)
@@ -69,7 +69,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:ok, %Document{}} = validate!(xml)
+      assert {:ok, %Document{}, _warnings} = validate!(xml)
     end
   end
 
@@ -84,7 +84,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:empty_id}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 2
       assert error.message =~ "empty"
     end
@@ -101,7 +101,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [first, second]} = validate!(xml)
+      assert {:error, [first, second], _warnings} = validate!(xml)
       assert %Error{reason: {:empty_id}} = first
       assert %Error{reason: {:empty_id}} = second
       assert first.location.start_line == 2
@@ -120,7 +120,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:empty_id}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 3
     end
   end
@@ -140,7 +140,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:duplicate_id, "a"}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 4
     end
 
@@ -162,7 +162,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 8
     end
 
@@ -179,7 +179,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:empty_id}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:empty_id}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 3
     end
 
@@ -205,7 +205,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:duplicate_id, "x"}} = error], _warnings} = validate!(xml)
       assert error.location.start_line == 8
     end
   end
@@ -225,7 +225,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert length(errors) == 2
 
       offsets = Enum.map(errors, & &1.location.start_offset)
@@ -247,7 +247,7 @@ defmodule Statifier.Validator.Checks.IdsTest do
 
       document = lower!(xml)
 
-      assert {:ok, ^document} = Validator.validate(document, xml)
+      assert {:ok, ^document, _warnings} = Validator.validate(document, xml)
     end
   end
 end

@@ -16,7 +16,7 @@ defmodule Statifier.Machine.ContentTest do
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root)
-    {:ok, document} = Validator.validate(document, xml)
+    {:ok, document, _warnings} = Validator.validate(document, xml)
     {:ok, machine} = Compiler.compile(document)
     machine
   end
@@ -458,7 +458,7 @@ defmodule Statifier.Machine.ContentTest do
     test "a syntactically bad cond fails Compiler.compile/1, never deferred" do
       {:ok, root} = Parser.parse(@bad_cond_document)
       {:ok, document} = Lowering.lower(root)
-      {:ok, document} = Validator.validate(document, @bad_cond_document)
+      {:ok, document, _warnings} = Validator.validate(document, @bad_cond_document)
 
       assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end
@@ -563,7 +563,7 @@ defmodule Statifier.Machine.ContentTest do
     test "a syntactically bad array expression fails Compiler.compile/1, never deferred" do
       {:ok, root} = Parser.parse(@bad_array_document)
       {:ok, document} = Lowering.lower(root)
-      {:ok, document} = Validator.validate(document, @bad_array_document)
+      {:ok, document, _warnings} = Validator.validate(document, @bad_array_document)
 
       assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end
@@ -628,7 +628,7 @@ defmodule Statifier.Machine.ContentTest do
     test "a syntactically bad <param expr> fails Compiler.compile/1" do
       {:ok, root} = Parser.parse(@bad_param_document)
       {:ok, document} = Lowering.lower(root)
-      {:ok, document} = Validator.validate(document, @bad_param_document)
+      {:ok, document, _warnings} = Validator.validate(document, @bad_param_document)
 
       assert {:error, [%Statifier.Compiler.Error{}]} = Compiler.compile(document)
     end

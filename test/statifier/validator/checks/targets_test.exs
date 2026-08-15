@@ -30,7 +30,9 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
     end
 
@@ -47,7 +49,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: Context.own_transitions/1 (Context.build/2) drops the
@@ -65,7 +67,9 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
     end
 
@@ -84,7 +88,9 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:unresolved_target, "missing"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 5
     end
 
@@ -101,7 +107,7 @@ defmodule Statifier.Validator.Checks.TargetsTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert length(errors) == 2
 
       reasons = Enum.map(errors, & &1.reason)

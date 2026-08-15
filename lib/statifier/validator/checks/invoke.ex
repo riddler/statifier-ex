@@ -20,12 +20,33 @@ defmodule Statifier.Validator.Checks.Invoke do
   `Checks.Donedata`, `Checks.Content`, and `Checks.Param` already have for
   their own mutually exclusive pairs. Collect-all: an `<invoke>` that trips
   more than one of the five reports every one it trips, not just the first.
+
+  ## The 6.5.2 warning: forbidden content inside `<finalize>`
+
+  `warn/2` walks each `<invoke>`'s `finalize` block and reports spec 6.5.2's
+  rule: "the executable content inside `<finalize>` MUST NOT raise events or
+  invoke external actions. In particular, the `<send>` and `<raise>`
+  elements MUST NOT occur." The forbidden set today is `%Document.Raise{}`
+  alone - one member - because `<send>` is not representable in a lowered
+  `Document` at all, so a `<send>` anywhere in a document, `<finalize>`
+  included, is already a hard lowering error before this check ever runs.
+  When `Statifier.Document.Send` exists, a `%Document.Send{}` clause joins
+  `forbidden/1` here; that is this check's obligation, not a new reason tag.
+  This is a warning, not an error: the engine has a defined behavior for the
+  content 6.5.2 forbids (it executes like any other executable content
+  inside `<finalize>`), so the document is told about the violation rather
+  than refused.
   """
 
   alias Statifier.Document
+  alias Statifier.Document.Block
+  alias Statifier.Document.Foreach, as: DForeach
+  alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Invoke, as: DInvoke
+  alias Statifier.Document.Raise, as: DRaise
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
+  alias Statifier.Validator.Warning
 
   @doc """
   Walks every `<invoke>` in the document and returns one error per 6.4.1
@@ -86,4 +107,43 @@ defmodule Statifier.Validator.Checks.Invoke do
   end
 
   defp namelist_and_param(%DInvoke{}, _location), do: []
+
+  @doc """
+  Walks every `<invoke>`'s `finalize` block and returns one warning per
+  6.5.2 forbidden node found, at that node's own location. Returns `[]`
+  when no `<invoke>` in the document carries forbidden content inside
+  `<finalize>` - including when `finalize` is `nil` (no `<finalize>` child)
+  or `%Block{content: []}` (a written but childless one).
+  """
+  @spec warn(document :: Document.t(), context :: Context.t()) :: [Warning.t()]
+  def warn(%Document{states: states}, %Context{}) do
+    states
+    |> flatten()
+    |> Enum.flat_map(& &1.invoke)
+    |> Enum.flat_map(&warn_finalize/1)
+  end
+
+  defp warn_finalize(%DInvoke{finalize: nil}), do: []
+
+  defp warn_finalize(%DInvoke{finalize: %Block{content: content}}) do
+    content
+    |> Enum.flat_map(&descend/1)
+    |> Enum.flat_map(&forbidden/1)
+  end
+
+  # Mirrors `Checks.Script.descend/1`: a `%DIf{}`/`%DForeach{}` carries no
+  # forbidden content itself, only branches/content that might, so the walk
+  # must descend into both to reach a nested one.
+  defp descend(%DIf{branches: branches}) do
+    branches |> Enum.flat_map(& &1.content) |> Enum.flat_map(&descend/1)
+  end
+
+  defp descend(%DForeach{content: content}), do: Enum.flat_map(content, &descend/1)
+
+  defp descend(other), do: [other]
+
+  defp forbidden(%DRaise{location: location}),
+    do: [Warning.finalize_forbidden_content("raise", location)]
+
+  defp forbidden(_other), do: []
 end

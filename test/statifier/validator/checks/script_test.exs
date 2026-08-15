@@ -32,7 +32,8 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 4
       assert error.message =~ "src"
@@ -54,7 +55,7 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}}], _warnings} = validate!(xml)
     end
 
     # sabotage: `check_script/1`'s `if blank?(text) do [...] else [] end`
@@ -71,7 +72,7 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: `scripts_of/1` covers only `state.onentry` and drops the
@@ -89,7 +90,7 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}}], _warnings} = validate!(xml)
     end
 
     # sabotage: `flatten/1` stops at the document's top-level states instead
@@ -108,7 +109,8 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -131,7 +133,8 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -153,7 +156,8 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -170,7 +174,8 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:script_no_src_or_text}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 2
     end
@@ -189,7 +194,7 @@ defmodule Statifier.Validator.Checks.ScriptTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 end

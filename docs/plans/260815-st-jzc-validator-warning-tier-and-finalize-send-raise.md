@@ -610,6 +610,32 @@ are discarded in this phase and threaded in Phase 3; the underscore prefix is
 what keeps the compile stage's `warnings_as_errors: true` green in between.
 `compile/1`'s `@spec` and moduledoc do not change in this phase.
 
+**Implementation note (found during Phase 2, not anticipated above)**: the
+one-line `with` clause change by itself is not sufficient. `Validator.validate/2`'s
+error arm is now `{:error, errors, warnings}` (three elements), which does not
+match the success pattern `{:ok, document, _warnings}` - so on a validation
+failure the bare `with` (no `else`) returns the *unmatched* three-element error
+tuple as `compile/1`'s own return value, silently widening `compile/1`'s
+documented `{:error, [error()]}` shape to a three-element tuple. This broke two
+existing tests (`test/statifier_test.exs:55`, `test/statifier/case_test.exs:28`)
+the moment the change landed. The fix is an explicit `else` clause that
+collapses the validator's three-element error arm back to `compile/1`'s own
+two-element shape and passes every other stage's error through unchanged:
+
+```elixir
+with {:ok, root} <- parse(source),
+     {:ok, document} <- Lowering.lower(root),
+     {:ok, document, _warnings} <- Validator.validate(document, source) do
+  Compiler.compile(document)
+else
+  {:error, errors, _warnings} -> {:error, errors}
+  other -> other
+end
+```
+
+This keeps `compile/1`'s `@spec` unchanged as the plan requires, but the
+one-line description above understates the work.
+
 #### 5. Every test call site
 
 **Files**: 60 files under `test/` (`grep -rl "Validator.validate" test/`)
@@ -675,16 +701,16 @@ bare `String.t()` warnings), so the "while v2 is unreleased" rule in
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is green - format, compile with `warnings_as_errors`,
+- [x] `mix quality` is green - format, compile with `warnings_as_errors`,
       credo `--strict`, dialyzer (the new `@spec`s must typecheck against the
       new return shape), doctor at 100% on every axis, coverage, the ADR guard,
       the gate guard, and the regression ratchet.
-- [ ] `mix quality --profile loop` is the command to use between edits; it does
+- [x] `mix quality --profile loop` is the command to use between edits; it does
       not satisfy this phase on its own.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `mix test.regression` passes - the ratchet's `internal_tests` globs pick
+- [x] `mix gate.verify` exits zero.
+- [x] `mix test.regression` passes - the ratchet's `internal_tests` globs pick
       up the new test files automatically.
-- [ ] `grep -rn "Validator.validate" lib/ test/` shows no remaining
+- [x] `grep -rn "Validator.validate" lib/ test/` shows no remaining
       two-element pattern match at a *direct* call site. This grep is a
       convenience, not the guarantee: several test files reach `validate/2`
       through a local `validate!/1` wrapper
@@ -693,8 +719,8 @@ bare `String.t()` warnings), so the "while v2 is unreleased" rule in
       on a wrapper's result is invisible to it. The full test suite inside
       `mix quality` is what actually decides this - a missed site is a
       `MatchError` at run time.
-- [ ] `grep -rn "st-jzc" lib/ test/` returns nothing (ADR-0018's guard).
-- [ ] Every new `test` block in the three test files above is preceded by a
+- [x] `grep -rn "st-jzc" lib/ test/` returns nothing (ADR-0018's guard).
+- [x] Every new `test` block in the three test files above is preceded by a
       `# sabotage:` line.
 
 #### Manual Verification:
@@ -1002,6 +1028,39 @@ before considering the plan fully landed.
 - [ ] The ADR reads as a decision record, not as a summary of this plan: it
       argues from the spec and from the existing struct shapes, not from phase
       numbers.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before moving
+to the next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Each sabotage note names a mutation actually performed, and each
+      mutation reddened the test it sits above and no more than it should have.
+- [ ] Spec-conformance judgment: the check's forbidden set and its message
+      match 6.5.2's clause as quoted from the local spec cache, and the
+      `@doc` on `finalize_forbidden_content/2` quotes it rather than
+      paraphrasing. This is a document-conformance clause, not Appendix D
+      pseudocode, so no Appendix D function is touched and ADR-0002's
+      line-for-line rule has nothing to bind here.
+- [ ] The 74-site test migration changed no assertion's meaning - spot-check
+      ten of the mechanical edits and confirm each only widened a pattern. The
+      sample is not free: it must include every file whose call sites do not
+      literally read `{:ok, document} = Validator.validate` or
+      `{:error, errors} = Validator.validate`, because those are the ones a
+      grep cannot find. `test/statifier/validator/checks/invoke_test.exs`,
+      which pattern-matches the result of a local `validate!/1` wrapper, is one
+      of them; find the rest with
+      `grep -rln "defp validate!\|defp validate(" test/`.
+- [ ] `Checks.Invoke.check/2`'s five 6.4.1 arms and their tests are byte-for-byte
+      unchanged, confirming the acceptance criterion that existing pass/reject
+      behavior did not move.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive

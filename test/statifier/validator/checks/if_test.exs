@@ -38,7 +38,8 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:if_elseif_after_else}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:if_elseif_after_else}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 8
     end
@@ -63,7 +64,7 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:if_duplicate_else}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:if_duplicate_else}} = error], _warnings} = validate!(xml)
 
       assert error.location.start_line == 8
     end
@@ -90,7 +91,7 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: classify_branch/3's `%Branch{}, false, errors -> {errors,
@@ -113,7 +114,7 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: transition_ifs/1 is dropped from ifs/1 (only block_ifs and
@@ -136,7 +137,7 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:if_elseif_after_else}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:if_elseif_after_else}}], _warnings} = validate!(xml)
     end
 
     # sabotage: collect_ifs/1's %DIf{} clause drops the `nested` accumulation
@@ -161,7 +162,7 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:if_elseif_after_else}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:if_elseif_after_else}}], _warnings} = validate!(xml)
     end
 
     # sabotage: collect_ifs/1's `%DForeach{content: content}` clause is
@@ -188,7 +189,8 @@ defmodule Statifier.Validator.Checks.IfTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:if_elseif_after_else}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:if_elseif_after_else}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 9
     end

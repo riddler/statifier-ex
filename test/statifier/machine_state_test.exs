@@ -12,7 +12,7 @@ defmodule Statifier.MachineStateTest do
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root)
-    {:ok, document} = Validator.validate(document, xml)
+    {:ok, document, _warnings} = Validator.validate(document, xml)
     {:ok, machine} = Compiler.compile(document)
     machine
   end
@@ -298,7 +298,7 @@ defmodule Statifier.MachineStateTest do
         """)
 
       {:ok, document} = Lowering.lower(root)
-      {:ok, document} = Validator.validate(document, "")
+      {:ok, document, _warnings} = Validator.validate(document, "")
       {:ok, named_machine} = Compiler.compile(document)
 
       ms = MachineState.new(named_machine)

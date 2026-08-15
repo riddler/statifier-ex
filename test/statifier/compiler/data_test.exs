@@ -12,7 +12,7 @@ defmodule Statifier.Compiler.DataTest do
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root)
-    {:ok, document} = Validator.validate(document, xml)
+    {:ok, document, _warnings} = Validator.validate(document, xml)
     {:ok, machine} = Compiler.compile(document)
     machine
   end
@@ -171,7 +171,7 @@ defmodule Statifier.Compiler.DataTest do
 
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root)
-    {:ok, document} = Validator.validate(document, xml)
+    {:ok, document, _warnings} = Validator.validate(document, xml)
 
     assert {:error, [error]} = Compiler.compile(document)
 

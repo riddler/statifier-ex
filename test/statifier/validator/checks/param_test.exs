@@ -33,7 +33,9 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:param_expr_and_location, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:param_expr_and_location, "x"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
       assert error.message =~ "x"
     end
@@ -55,7 +57,9 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
       assert error.message =~ "x"
     end
@@ -77,7 +81,7 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same mutation as the expr-only test above, reddening this
@@ -93,7 +97,7 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: `params/1`'s `%State{donedata: %Donedata{params: params}}`
@@ -116,7 +120,7 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:error, [first, second]} = validate!(xml)
+      assert {:error, [first, second], _warnings} = validate!(xml)
       assert %Error{reason: {:param_expr_and_location, "a"}} = first
       assert %Error{reason: {:param_no_value, "b"}} = second
       assert first.location.start_line == 4
@@ -139,7 +143,9 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 5
     end
 
@@ -157,7 +163,9 @@ defmodule Statifier.Validator.Checks.ParamTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
     end
   end
