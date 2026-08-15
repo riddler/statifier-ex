@@ -315,6 +315,16 @@ defmodule Statifier.MachineTest do
     end
   end
 
+  describe "warnings" do
+    # sabotage: `Statifier.Machine`'s `defstruct` default for `warnings`
+    # changes from `[]` to `nil` -> this assertion reddens because a machine
+    # compiled from a warning-free document carries `nil` instead of `[]`
+    test "defaults to [] on a machine built from a document with no warnings" do
+      m = machine()
+      assert m.warnings == []
+    end
+  end
+
   describe "initial/1" do
     # sabotage: `Machine.initial/1` reads `at(machine, 1)` instead of
     # `at(machine, 0)` -> reddens whenever the root's resolved initial

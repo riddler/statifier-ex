@@ -55,9 +55,12 @@ defmodule Statifier do
   single error rather than a list; this function wraps it so every failure
   from every stage has one shape: `{:error, [error()]}`.
 
-  `Validator.validate/2` returns three elements on both arms (ADR-0033); its
-  warnings are discarded here rather than threaded onto the result, and its
-  error arm's extra element is collapsed back to this function's own
+  `Validator.validate/2` returns three elements on both arms (ADR-0033). On
+  success its warnings ride onto the returned `Machine.t()`'s `warnings`
+  field rather than a third element of this function's own return, so a
+  document with warnings still compiles and the caller finds the findings on
+  the machine (`Statifier.Machine`'s moduledoc explains why they live there).
+  Its error arm's extra element is collapsed back to this function's own
   `{:error, [error()]}` shape so this stage's failure looks like every other
   stage's.
   """
@@ -65,8 +68,9 @@ defmodule Statifier do
   def compile(source) when is_binary(source) do
     with {:ok, root} <- parse(source),
          {:ok, document} <- Lowering.lower(root),
-         {:ok, document, _warnings} <- Validator.validate(document, source) do
-      Compiler.compile(document)
+         {:ok, document, warnings} <- Validator.validate(document, source),
+         {:ok, machine} <- Compiler.compile(document) do
+      {:ok, %Machine{machine | warnings: warnings}}
     else
       {:error, errors, _warnings} -> {:error, errors}
       other -> other

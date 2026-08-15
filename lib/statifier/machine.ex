@@ -74,6 +74,32 @@ defmodule Statifier.Machine do
   `c_index`, no block, and no owner to be derived *from*. `global_scripts`
   is not a cache of a fact `contents` already states; it is the only place
   the fact is stated at all.
+
+  ## `warnings`: a document-conformance finding, not a validity finding
+
+  `warnings` (ADR-0033) is a list of `Statifier.Validator.Warning.t()` the
+  validator produced while checking the source document, stamped onto the
+  Machine by `Statifier.compile/1`. It defaults to `[]` and is not in
+  `@enforce_keys`, the same way `global_scripts` is not: a Machine with no
+  warnings is exactly as valid as one with some.
+
+  This is deliberately **not** a second validity axis. Design principle 4
+  ("make invalid states unrepresentable") is about the `Document` ->
+  `Machine` boundary: a `Machine` only exists because the validator's error
+  checks all passed, and that boundary is untouched by this field. A warning
+  is a statement about the *document's* conformance to a spec MUST the engine
+  nonetheless has defined behavior for either way (ADR-0033's own rationale
+  for why the finding does not gate compilation) - it says nothing about
+  whether this `Machine` is well-formed. A `%Machine{}` with a non-empty
+  `warnings` list is just as valid-by-construction as one with `warnings: []`.
+
+  The field exists here rather than as a third element on `compile/1`'s
+  return because ADR-0012 item 3 already puts every other retained diagnostic
+  - locations on states, transitions, and executable content, span tables on
+  compiled expressions - on the Machine, and a warning with a location is the
+  same kind of thing. It is also, per ADR-0033, the *only* surfacing seam: no
+  trace effect, no logger, no telemetry - a caller (or a debugger) that wants
+  a warning finds it here or nowhere.
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
@@ -82,6 +108,7 @@ defmodule Statifier.Machine do
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.Parser.Location
+  alias Statifier.Validator.Warning
 
   @enforce_keys [:states, :id_to_index, :transitions, :contents, :data_elements, :location]
   defstruct [
@@ -94,7 +121,8 @@ defmodule Statifier.Machine do
     :datamodel,
     :binding,
     :location,
-    global_scripts: []
+    global_scripts: [],
+    warnings: []
   ]
 
   @typedoc """
@@ -128,7 +156,8 @@ defmodule Statifier.Machine do
           datamodel: String.t() | nil,
           binding: :early | :late,
           location: Location.t(),
-          global_scripts: [program() | {:invalid, CompilerError.t()}]
+          global_scripts: [program() | {:invalid, CompilerError.t()}],
+          warnings: [Warning.t()]
         }
 
   @doc """
