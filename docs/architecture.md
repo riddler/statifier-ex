@@ -136,11 +136,17 @@ that is st-cmq.7. v1's handler-registry invoke is kept as an explicit
 extension type - a useful, safe escape hatch, but not the definition of
 `<invoke>`.
 
-Session, send, and invoke IDs are UXIDs ([ADR-0008](adr/0008-uxid-for-identifiers.md)):
-sortable, prefixed (`sess_`, `send_`, `inv_`), and stable per session (v1 regenerated
-`_sessionid` on every expression evaluation). An invoke's generated id is a
-narrow amendment to that scheme (spec 6.4.1): the invoking state's id, a dot,
-then the `inv_` UXID - or the bare `inv_` UXID when the state has no id.
+Generated identifiers split on the pure core's boundary
+([ADR-0008](adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the
+session id is a UXID: sortable, prefixed (`sess_`), and stable per session (v1
+regenerated `_sessionid` on every expression evaluation). Minted *inside* it, an
+id is a deterministic value derived from `%MachineState{}` alone - UXID reads the
+wall clock and a CSPRNG, and the core's contract
+([ADR-0003](adr/0003-pure-core-with-effects.md)) admits neither. The invoke id is
+the only one minted inside the core today, and spec 6.4.1 fixes its shape: the
+invoking state's id, a dot, then `inv_` and a session-global counter - or bare
+`inv_<counter>` when the state has no id. A future `<send idlocation>` generator
+sits inside the core too, so the same no-entropy rule governs it.
 
 ## What is deliberately out of scope
 
