@@ -129,6 +129,16 @@ stated, not silent:
 # sabotage: n/a - asserts the sample table matches the registry, no lib/ behavior
 ```
 
+**Stale beam after revert.** If step 4's "confirm green again" comes back red on a
+tree with correct source and a clean `git status`, do not read it as a failed
+revert. `mix`'s staleness check is mtime-based, so a mutate -> compile -> revert
+cycle that finishes inside one second can leave the *mutated* beam loaded instead
+of recompiling. Left uninvestigated, every later mutation in the session gets
+judged against that stale module, and its reds prove nothing. Run
+`MIX_ENV=test mix compile --force` after the mutation and again after the
+revert; treat a red that survives a forced recompile on clean source as the real
+signal.
+
 **Cost.** This makes writing a test meaningfully slower, and that is the trade being
 made deliberately: the conformance corpus tells us whether the engine is right, and
 the internal suite only earns its keep if each test can fail. Spending a minute per
