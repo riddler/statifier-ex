@@ -57,6 +57,40 @@ defmodule Statifier.MachineState do
   it. Neither is a counter function - unlike `macrostep`/`microstep`/`round`
   above, membership here is not monotonic within a macrostep.
 
+  ## `active_invocations` is `inv.invokeid` hoisted off compiled data
+
+  Appendix D stores an invocation's generated identifier on the invocation
+  object itself (`inv.invokeid`), read back by the cancel walks
+  (`cancelInvoke(inv)`) and the finalize pass
+  (`if inv.invokeid == externalEvent.invokeid: applyFinalize(...)`).
+  `Statifier.Machine.Invoke` is immutable compiled data - the same "nowhere
+  on the state to flip a mutable flag" situation `entered_states` above
+  describes for `s.isFirstEntry` - so the live invokeid is hoisted onto this
+  struct instead, keyed to match the pseudocode's own access pattern:
+
+      active_invocations: %{{state_index, invoke_index} => invoke_id}
+
+  `state_index` and `invoke_index` together name one compiled `<invoke>`
+  element (`Statifier.Compiler.Expressions.owner_ref/0`'s `{:invoke, _, _}`
+  shape); document order for a walk over one state's invocations always
+  comes from the compiled `invoke` list itself, never from iterating this
+  map. This is the same ADR-0002 mechanical deviation `entered_states`
+  already declares: the semantics are unchanged (an invocation's id is still
+  readable by exactly the same lookups Appendix D performs), only the
+  storage moves off the immutable compiled document.
+
+  **This is not ADR-0027 decision 3's parent-held session table.** That
+  table maps an invokeid to `{child_session_id, pid, monitor_ref}` - process
+  identity the session layer owns. `active_invocations` holds none of that:
+  no pid, no monitor ref, no child session id, only the generated or
+  author-written invokeid string. The session's own table is built on top of
+  this one, not in place of it, by later work this struct does not depend on.
+
+  Entries are written by the invoke pass (one entry per invocation that
+  successfully started) and deleted by the cancel walks (a later phase's
+  `depart/2`/`exit_interpreter/1` seams) when the owning invocation is
+  cancelled.
+
   ## `entered_states` is `s.isFirstEntry` moved off the state
 
   Appendix D tracks first entry as a mutable flag on the state itself,
@@ -225,6 +259,7 @@ defmodule Statifier.MachineState do
     history_values: %{},
     entered_states: MapSet.new(),
     states_to_invoke: MapSet.new(),
+    active_invocations: %{},
     datamodel: %{},
     running: true,
     status: :running,
@@ -271,6 +306,7 @@ defmodule Statifier.MachineState do
           history_values: %{optional(non_neg_integer()) => MapSet.t(non_neg_integer())},
           entered_states: MapSet.t(non_neg_integer()),
           states_to_invoke: MapSet.t(non_neg_integer()),
+          active_invocations: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()},
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -314,6 +350,7 @@ defmodule Statifier.MachineState do
       history_values: %{},
       entered_states: MapSet.new(),
       states_to_invoke: MapSet.new(),
+      active_invocations: %{},
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,
@@ -427,6 +464,16 @@ defmodule Statifier.MachineState do
   """
   @spec internal_events(machine_state :: t()) :: [Event.t()]
   def internal_events(%__MODULE__{internal_queue: queue}), do: :queue.to_list(queue)
+
+  @doc """
+  Whether the internal queue holds no pending events - `internalQueue.isEmpty()`
+  (Appendix D), the post-invoke re-check's own test. Cheaper than
+  `internal_events/1 == []`: `:queue.is_empty/1` never materializes the
+  queue into a list, so this is the predicate the interpreter's hot path
+  uses, and `internal_events/1` stays the inspection-and-assertion view.
+  """
+  @spec internal_queue_empty?(machine_state :: t()) :: boolean()
+  def internal_queue_empty?(%__MODULE__{internal_queue: queue}), do: :queue.is_empty(queue)
 
   @doc """
   `datamodel["_event"] = event` (Appendix D) - the one and only writer of

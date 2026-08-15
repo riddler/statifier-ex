@@ -243,9 +243,9 @@ defmodule Statifier.Interpreter.MicrostepTest do
     #
     # sabotage: `macrostep/3`'s quiescent clause is changed to
     # `{:quiescent, _ms, round_effects} -> {:quiescent, machine_state,
-    # effects ++ round_effects}`, falling back to the parameter instead of
-    # the returned position -> the source no longer contains the rebind,
-    # reddening the `=~` assertion.
+    # effects ++ round_effects, rounds_left}`, falling back to the parameter
+    # instead of the returned position -> the source no longer contains the
+    # rebind, reddening the `=~` assertion.
     test "the quiescent round's machine_state is carried out, not discarded" do
       source = File.read!(Path.join(File.cwd!(), "lib/statifier/interpreter.ex"))
 
@@ -254,7 +254,7 @@ defmodule Statifier.Interpreter.MicrostepTest do
 
       assert source =~
                "{:quiescent, machine_state, round_effects} ->\n" <>
-                 "        {:quiescent, machine_state, effects ++ round_effects}"
+                 "        {:quiescent, machine_state, effects ++ round_effects, rounds_left}"
     end
 
     # sabotage: `run_selected/3`'s `Enum.map(transitions, & &1.t_index)` is

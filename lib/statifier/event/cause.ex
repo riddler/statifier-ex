@@ -96,6 +96,22 @@ defmodule Statifier.Event.Cause do
     `d_index`-style lookup function for a list with no dense-tuple
     counterpart.
 
+  - `{:invoke, state_index, invoke_index}` - the platform raised the event
+    about one of an `<invoke>` element's own arguments (`type`/`typeexpr`,
+    `src`/`srcexpr`, `id`/`idlocation`, a `<param>`'s `expr`/`location`, a
+    `namelist` location, or `<content expr>`) that could not be evaluated
+    (ADR-0031), with no content node behind it - the same
+    `{owning_element, sub_index}` shape the `{:donedata_param, _, _}` arm
+    above uses, for the same reason: 6.4's failure is per-element, so a
+    state with several `<invoke>` children can raise several
+    `error.execution` events in one pass, and a bare `{:state, state_index}`
+    would stamp all of them identically. `state_index` resolves through
+    `Statifier.Machine.at/2` and `invoke_index` indexes that state's
+    `invoke` list in document order, so the resolved
+    `%Statifier.Machine.Invoke{}` carries every attribute and its own
+    `attribute_locations` - ADR-0014 item 4's committed field set, reached
+    with no new struct.
+
   Never a struct - every index resolves through `Statifier.Machine`.
   """
   @type origin ::
@@ -105,6 +121,7 @@ defmodule Statifier.Event.Cause do
           | {:data, non_neg_integer()}
           | {:donedata_param, non_neg_integer(), non_neg_integer()}
           | {:global_script, non_neg_integer()}
+          | {:invoke, non_neg_integer(), non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),
