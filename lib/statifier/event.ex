@@ -30,15 +30,19 @@ defmodule Statifier.Event do
     is datamodel content and lands in the datamodel slot once that
     evaluation work exists. It is not a field here.
   - `origin` and `sendid` (spec 5.10.1's remaining event fields) are left
-    out rather than carried dead: they matter to `<send>`/`<invoke>`
-    round-tripping, which the not-yet-implemented session support handles.
-    They get added once that caller exists.
+    out rather than carried dead: they matter to `<send>` round-tripping,
+    which the not-yet-implemented session support handles. They get added
+    once that caller exists. `invokeid` was in the same position until
+    `Statifier.Interpreter`'s finalize/autoforward pass became its first
+    reader (spec 6.4/6.5): the pass needs an external event's `invokeid` to
+    select which invocation's `<finalize>` runs and, once populated on
+    `_event`, spec 5.10.1's own system-variable reading of it.
   """
 
   alias Statifier.Event.Cause
 
   @enforce_keys [:name, :type]
-  defstruct [:name, :type, data: nil, cause: nil]
+  defstruct [:name, :type, data: nil, cause: nil, invokeid: nil]
 
   @typedoc "Spec 5.10.1's three event types - provenance, not queue routing."
   @type type :: :external | :internal | :platform
@@ -47,17 +51,25 @@ defmodule Statifier.Event do
           name: String.t(),
           data: term(),
           type: type(),
-          cause: Cause.t() | nil
+          cause: Cause.t() | nil,
+          invokeid: String.t() | nil
         }
 
   @doc """
   An externally received event - always `cause: nil`, since nothing in this
   engine raised it. `data` defaults to `nil` ("no data"), distinct from
-  `%{}` ("data, empty").
+  `%{}` ("data, empty"). `invokeid` (spec 5.10.1) defaults to `nil` - most
+  external events arrive from outside any invocation; a caller delivering an
+  event from an invoked child's session passes `invokeid: invoke_id`.
   """
   @spec external(name :: String.t(), opts :: keyword()) :: t()
   def external(name, opts \\ []) do
-    %__MODULE__{name: name, type: :external, data: Keyword.get(opts, :data)}
+    %__MODULE__{
+      name: name,
+      type: :external,
+      data: Keyword.get(opts, :data),
+      invokeid: Keyword.get(opts, :invokeid)
+    }
   end
 
   @doc """

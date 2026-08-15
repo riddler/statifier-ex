@@ -1,6 +1,7 @@
 defmodule Statifier.EffectTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Effect.Autoforward
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
@@ -10,6 +11,7 @@ defmodule Statifier.EffectTest do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
+  alias Statifier.Event
   alias Statifier.MachineState
 
   require Statifier.Effect, as: Effect
@@ -28,6 +30,14 @@ defmodule Statifier.EffectTest do
       {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
       {:cancel_invoke,
        %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
+      {:autoforward,
+       %Autoforward{
+         invoke_id: "i1",
+         state_index: 0,
+         event: Event.external("e"),
+         macrostep: 1,
+         microstep: 1
+       }},
       {:budget_exhausted,
        %BudgetExhausted{
          configuration: MapSet.new(),
@@ -91,8 +101,8 @@ defmodule Statifier.EffectTest do
 
     # sabotage: n/a - this test only checks that the fixture tables above
     # are complete, not any lib/ behavior.
-    test "the table covers all fifteen effects" do
-      assert length(@core_effects) + length(@trace_effects) == 15
+    test "the table covers all sixteen effects" do
+      assert length(@core_effects) + length(@trace_effects) == 16
     end
   end
 

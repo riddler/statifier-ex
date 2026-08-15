@@ -1,6 +1,7 @@
 defmodule Statifier.Session.EffectsTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Effect.Autoforward
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
@@ -13,7 +14,7 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Event
   alias Statifier.Session.Effects
 
-  # Table-driven over the whole `Effect.t()` vocabulary (fifteen tags: eight
+  # Table-driven over the whole `Effect.t()` vocabulary (sixteen tags: nine
   # core plus seven trace), mirroring `test/statifier/effect_test.exs`'s
   # shape - a vocabulary member with no matching clause here falls through to
   # `plan_one/1`'s lack of a catch-all and raises a `FunctionClauseError`
@@ -106,6 +107,34 @@ defmodule Statifier.Session.EffectsTest do
         {:cancel_invoke,
          %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}}
      ]},
+    {{:autoforward,
+      %Autoforward{
+        invoke_id: "i1",
+        state_index: 0,
+        event: Event.external("e"),
+        macrostep: 1,
+        microstep: 1
+      }},
+     [
+       {:notify,
+        {:autoforward,
+         %Autoforward{
+           invoke_id: "i1",
+           state_index: 0,
+           event: Event.external("e"),
+           macrostep: 1,
+           microstep: 1
+         }}},
+       {:unroutable,
+        {:autoforward,
+         %Autoforward{
+           invoke_id: "i1",
+           state_index: 0,
+           event: Event.external("e"),
+           macrostep: 1,
+           microstep: 1
+         }}}
+     ]},
     {{:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}},
      [
        {:notify, {:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}}},
@@ -192,8 +221,8 @@ defmodule Statifier.Session.EffectsTest do
   describe "plan/1 over the whole vocabulary" do
     # sabotage: n/a - this test only checks that the fixture table above is
     # complete, not any lib/ behavior.
-    test "the table covers all eighteen fixtures across the fifteen-tag vocabulary" do
-      assert length(@vocabulary) == 18
+    test "the table covers all nineteen fixtures across the sixteen-tag vocabulary" do
+      assert length(@vocabulary) == 19
     end
 
     for {{{tag, payload} = effect, expected}, index} <- Enum.with_index(@vocabulary) do

@@ -112,6 +112,22 @@ defmodule Statifier.Event.Cause do
     `attribute_locations` - ADR-0014 item 4's committed field set, reached
     with no new struct.
 
+  - `{:finalize, state_index, invoke_index}` - the platform raised the event
+    about an **empty** `<finalize>`'s own auto-assign write (spec 6.5), which
+    fails outside any block and so has no content node behind it either -
+    the same `{owning_element, sub_index}` shape the `{:invoke, _, _}` arm
+    above uses, one level down: a failed write for one namelist entry or
+    `<param location>` does not abort the others (each is an independent
+    `<assign>`-as-if write, 6.5's own wording), so a state whose invocation's
+    empty finalize has several targets can raise several `error.execution`
+    events from one applyFinalize call. `state_index`/`invoke_index` resolve
+    exactly as the `{:invoke, _, _}` arm's do; a **populated** `<finalize>`'s
+    own failures go through the ordinary `{:content, c_index, owner}` arm
+    instead, `owner` being `Statifier.Machine.Content.owner/0`'s own
+    `{:finalize, state_index, invoke_index}` shape - that block runs through
+    `Statifier.Interpreter.Content.execute_block/3` like any other block, and
+    this arm exists only for the empty case's block-less write.
+
   Never a struct - every index resolves through `Statifier.Machine`.
   """
   @type origin ::
@@ -122,6 +138,7 @@ defmodule Statifier.Event.Cause do
           | {:donedata_param, non_neg_integer(), non_neg_integer()}
           | {:global_script, non_neg_integer()}
           | {:invoke, non_neg_integer(), non_neg_integer()}
+          | {:finalize, non_neg_integer(), non_neg_integer()}
 
   @type t :: %__MODULE__{
           origin: origin(),

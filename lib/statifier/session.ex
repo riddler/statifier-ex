@@ -50,8 +50,8 @@ defmodule Statifier.Session do
       caller) hands this session, trace effects included, in order. Trace
       effects are ordinary list members here too, never a side channel.
     - `{:unroutable, effect}` - a `:send`/`:send_delayed`/`:invoke`/
-      `:cancel_invoke` effect this session cannot route yet (see
-      `Statifier.Session.Effects`'s own moduledoc for exactly which).
+      `:cancel_invoke`/`:autoforward` effect this session cannot route yet
+      (see `Statifier.Session.Effects`'s own moduledoc for exactly which).
     - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
       message, following the effects that caused it.
 
@@ -74,11 +74,11 @@ defmodule Statifier.Session do
   A `<send>`/`<send_delayed>` with no `target` lands on this session's own
   external queue, per `Statifier.Event.internal/3`'s own `@doc`. Every
   other target - `#_internal` included - plans as `{:unroutable, effect}`
-  and is forwarded, never guessed and never a crash. `:invoke` and
-  `:cancel_invoke` plan the same way today: there is no child session to
-  route either one to yet. `#_internal` resolution, `#_parent`,
-  `#_scxml_<sessionid>`, and external URI targets are a later bead's work;
-  see `Statifier.Session.Effects`.
+  and is forwarded, never guessed and never a crash. `:invoke`,
+  `:cancel_invoke`, and `:autoforward` plan the same way today: there is no
+  child session to route any of them to yet. `#_internal` resolution,
+  `#_parent`, `#_scxml_<sessionid>`, and external URI targets are a later
+  bead's work; see `Statifier.Session.Effects`.
 
   ## Two snapshot shapes
 
