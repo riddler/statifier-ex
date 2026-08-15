@@ -559,6 +559,31 @@ defmodule Statifier.SessionTest do
       assert Session.status(session).queued_events == 0
       assert Session.status(session).configuration == MapSet.new(["a"])
     end
+
+    # sabotage: `Statifier.Session.Effects.plan_one/1`'s
+    # `{:cancel_invoke, %CancelInvoke{}}` clause drops its `{:unroutable,
+    # effect}` instruction, returning only `[{:notify, effect}]` -> the
+    # second `assert_receive` below (for `{:unroutable, _}`) never arrives
+    # and reddens. Confirmed red and reverted.
+    test "a cancel_invoke effect notifies subscribers without crashing the session" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      cancel_effect = %Effect.CancelInvoke{
+        invoke_id: "a.inv_1",
+        state_index: 1,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      Session.interpret(session, [{:cancel_invoke, cancel_effect}])
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:effect, {:cancel_invoke, ^cancel_effect}}}
+      assert_receive {:statifier, ^session_id, {:unroutable, {:cancel_invoke, ^cancel_effect}}}
+
+      assert Session.status(session).configuration == MapSet.new(["a"])
+    end
   end
 
   # -- helpers ----------------------------------------------------------------

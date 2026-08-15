@@ -27,6 +27,7 @@ defmodule Statifier.Effect do
   | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
   | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
   | `:invoke` | `Statifier.Effect.Invoke` | `Statifier.Interpreter`'s invoke pass (`main_event_loop/3`'s `run_invoke_pass/1`, spec 6.4) |
+  | `:cancel_invoke` | `Statifier.Effect.CancelInvoke` | `Statifier.Interpreter.ExitEntry.cancel_invocations_for_state/2`, called from both `depart/2` and `Statifier.Interpreter.exit_interpreter/1` (spec 6.4) |
   | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | `Statifier.Interpreter.macrostep/1` |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
@@ -39,9 +40,9 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.Done` | `Statifier.Interpreter.exit_interpreter/1` |
 
   The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
-  `:invoke`, and all seven trace effects. `:send`, `:send_delayed`, and
-  `:cancel` remain unproduced, because nothing in this core sends, delays,
-  or cancels yet.
+  `:invoke`, `:cancel_invoke`, and all seven trace effects. `:send`,
+  `:send_delayed`, and `:cancel` remain unproduced, because nothing in this
+  core sends, delays, or cancels a delayed send yet.
 
   ## Trace effects carry indexes and counters, never structs
 
@@ -97,6 +98,7 @@ defmodule Statifier.Effect do
 
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
+  alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -104,12 +106,13 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
 
-  @typedoc "The seven core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted`."
+  @typedoc "The eight core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted` and this bead's `:cancel_invoke`."
   @type core ::
           {:send, Send.t()}
           | {:send_delayed, SendDelayed.t()}
           | {:cancel, Cancel.t()}
           | {:invoke, Invoke.t()}
+          | {:cancel_invoke, CancelInvoke.t()}
           | {:budget_exhausted, BudgetExhausted.t()}
           | {:done, Done.t()}
           | {:log, Log.t()}

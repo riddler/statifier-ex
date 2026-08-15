@@ -77,6 +77,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   build a `Content.owner()`.
   """
 
+  alias Statifier.Effect.CancelInvoke
   alias Statifier.Evaluator
   alias Statifier.EventData
   alias Statifier.Interpreter.Content
@@ -214,20 +215,23 @@ defmodule Statifier.Interpreter.ExitEntry do
     end
   end
 
-  # `exitStates`'s per-state exit body: run its onexit blocks, skip
-  # `cancelInvoke` (no `<invoke>` support exists yet; nothing to cancel),
-  # then remove it from the configuration.
+  # `exitStates`'s per-state exit body: run its onexit blocks, then
+  # `cancelInvoke(inv)` for each of its live invocations - spec 6.4's "the
+  # cancel operation MUST act as if it were the final `<onexit>` handler in
+  # the invoking state" - then remove it from the configuration.
   @spec depart(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
           {MachineState.t(), [Effect.t()]}
   defp depart(machine_state, state_index) do
-    {machine_state, effects} = run_onexit_blocks(machine_state, state_index)
+    {machine_state, onexit_effects} = run_onexit_blocks(machine_state, state_index)
+
+    {machine_state, cancel_effects} = cancel_invocations_for_state(machine_state, state_index)
 
     machine_state = %{
       machine_state
       | configuration: MapSet.delete(machine_state.configuration, state_index)
     }
 
-    {machine_state, effects}
+    {machine_state, onexit_effects ++ cancel_effects}
   end
 
   @doc """
@@ -254,6 +258,70 @@ defmodule Statifier.Interpreter.ExitEntry do
       {ms, new_effects} = execute_block(ms, {:onexit, state_index, ordinal}, block.content)
       {ms, effects ++ new_effects}
     end)
+  end
+
+  @doc """
+  `for inv in s.invoke: cancelInvoke(inv)` (Appendix D) - one
+  `{:cancel_invoke, %Effect.CancelInvoke{}}` per live invocation of
+  `state_index`: walk its compiled `invoke` list in document order, and for
+  each `{state_index, invoke_index}` found in `machine_state.active_invocations`
+  emit a cancel and delete the entry. An invocation whose arguments failed
+  (ADR-0031) never reached `active_invocations`, so it produces no cancel.
+
+  Two callers, both after that state's own `onexit` blocks and before it
+  leaves the configuration - both the pseudocode's own order in `exitStates`
+  and `exitInterpreter`, and spec 6.4's "the cancel operation MUST act as if
+  it were the final `<onexit>` handler in the invoking state": `depart/2`
+  (this module's own `exit_states/2` path) and
+  `Statifier.Interpreter.exit_interpreter/1` (the termination walk), the
+  same second-caller shape `run_onexit_blocks/2` above already has.
+  """
+  @spec cancel_invocations_for_state(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer()
+        ) :: {MachineState.t(), [Effect.t()]}
+  def cancel_invocations_for_state(%MachineState{machine: machine} = machine_state, state_index) do
+    machine
+    |> Machine.at(state_index)
+    |> Map.fetch!(:invoke)
+    |> Enum.with_index()
+    |> Enum.reduce({machine_state, []}, fn {_invoke, invoke_index}, {ms, effects} ->
+      cancel_one_invocation(ms, state_index, invoke_index, effects)
+    end)
+  end
+
+  # One invocation's own `cancelInvoke(inv)`: emit and forget it when it is
+  # still live (present in `active_invocations`), or leave `ms`/`effects`
+  # untouched when it never started.
+  @spec cancel_one_invocation(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          effects :: [Effect.t()]
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp cancel_one_invocation(machine_state, state_index, invoke_index, effects) do
+    case Map.fetch(machine_state.active_invocations, {state_index, invoke_index}) do
+      {:ok, invoke_id} ->
+        effect =
+          {:cancel_invoke,
+           %CancelInvoke{
+             invoke_id: invoke_id,
+             state_index: state_index,
+             macrostep: machine_state.macrostep,
+             microstep: machine_state.microstep
+           }}
+
+        machine_state = %{
+          machine_state
+          | active_invocations:
+              Map.delete(machine_state.active_invocations, {state_index, invoke_index})
+        }
+
+        {machine_state, effects ++ [effect]}
+
+      :error ->
+        {machine_state, effects}
+    end
   end
 
   # ADR-0002: the pseudocode's `executeContent(content)`. See

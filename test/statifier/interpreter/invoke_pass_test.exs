@@ -241,6 +241,7 @@ defmodule Statifier.Interpreter.InvokePassTest do
   </scxml>
   """
 
+  @tag timeout: 2_000
   # ADR-0032's own scenario: two states whose <invoke> arguments
   # deterministically fail hand each other control forever via
   # error.execution, unless the round budget spans the invoke re-entry
@@ -252,10 +253,9 @@ defmodule Statifier.Interpreter.InvokePassTest do
   # `main_event_loop/3`'s own recursive `continue` call too (i.e. the
   # re-entry ignores the threaded `budget` and restarts from
   # `machine_state.max_macrostep_rounds` every time) -> the fold never
-  # exhausts and the test hangs. Bounded with `@tag timeout: 2_000` while
-  # confirming red, so the mutation costs about two seconds instead of
-  # ExUnit's 60-second default.
-  @tag timeout: 2_000
+  # exhausts and the test hangs. Bounded with `@tag timeout: 2_000` above
+  # while confirming red, so the mutation costs about two seconds instead
+  # of ExUnit's 60-second default.
   test "the round budget spans invoke re-entries and exhausts rather than looping forever" do
     m = compile!(@livelock_document)
 
