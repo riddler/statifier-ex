@@ -895,13 +895,19 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+All items below were walked through and verified on 2026-08-15, after the
+last phase landed. Three of them did not pass as written; what changed in
+response is recorded beside each.
+
 ### Phase 1
 
-- [ ] The ADR's Decision section states the position, not the plan's summary
+- [x] The ADR's Decision section states the position, not the plan's summary
       of it: a reader who has never seen this plan can tell why replay is not
       a live session.
-- [ ] `docs/observability.md` no longer promises anything the code will not
-      deliver at the end of this plan.
+- [x] `docs/observability.md` no longer promises anything the code will not
+      deliver at the end of this plan. Every artifact the Replay bullet names
+      exists; the one forward-looking phrase left is the `:telemetry` bridge,
+      hedged as "once it exists".
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and the
 full gate as the phase gate. This phase touches no Elixir, so per CLAUDE.md it
@@ -912,11 +918,15 @@ judge is the point of the phase.
 
 ### Phase 2
 
-- [ ] The moduledoc answers, without the plan in hand, why a batch is one
-      entry and why the timer ref is absent.
-- [ ] Each sabotage line names a mutation that would actually redden the test
+- [x] The moduledoc answers, without the plan in hand, why a batch is one
+      entry and why the timer ref is absent - it carries a named section for
+      each.
+- [x] Each sabotage line names a mutation that would actually redden the test
       beside it (this phase touches no interpreter function, so the Appendix D
-      line-for-line criterion does not apply).
+      line-for-line criterion does not apply). All seven traced through. The
+      one `# sabotage: n/a` is on the term round-trip test, and the exemption
+      holds: `term_to_binary/1` and `binary_to_term/1` there are Erlang's, not
+      `Recording`'s, so no `lib/` mutation reddens it.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate. Under `--loop`, the automated list gates advancement and the
@@ -926,14 +936,27 @@ manual items are deferred.
 
 ### Phase 3
 
-- [ ] A session started without `record: true` is unchanged in behavior and
-      pays only a `nil` check per input.
-- [ ] The recorded entry order for a run mixing all four input kinds matches
+- [x] A session started without `record: true` is unchanged in behavior and
+      pays only a `nil` check per input. Behavior is unchanged - `record/2`'s
+      `nil` clause returns the state untouched. The cost is a shade more than
+      the check, though: each call site also allocates its closure before the
+      clause match decides to discard it. The comment above `record/2` said
+      "only this one check" and now says what is actually paid.
+- [x] The recorded entry order for a run mixing all four input kinds matches
       the order the inputs were actually issued in, read by eye off the test.
-- [ ] Spec conformance: this phase adds no interpreter logic - the drain loop,
+      **Did not pass as written.** No single session-level run mixed all four:
+      the interleave existed only as a `Recording` unit test
+      (`test/statifier/session/recording_test.exs`), with the round-trip cases
+      each covering a slice (interpret + timer + event, or events + cancel).
+      Case 5 of `test/statifier/replay_round_trip_test.exs` was added to drive
+      all four through a live session in one run, and its entry-order
+      assertion is what this item now reads off.
+- [x] Spec conformance: this phase adds no interpreter logic - the drain loop,
       `drain_event/2`, and `drain_cancel/1` are untouched, so Appendix D's
-      `mainEventLoop` port is line-for-line what it was. Confirm by diff that
-      no line inside those functions changed.
+      `mainEventLoop` port is line-for-line what it was. Confirmed by
+      extracting all three functions from `origin/main` and from the branch
+      head and comparing: byte-identical, 17/12/9 lines. No hunk on
+      `lib/statifier/session.ex` falls inside any of them.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate.
@@ -942,18 +965,28 @@ as the phase gate.
 
 ### Phase 4
 
-- [ ] Read `Replay`'s `perform` clauses against `Session`'s
-      `perform_instruction/3` clauses side by side: the four non-process
-      clauses agree, and the three replaced ones are replaced for the reason
-      the moduledoc gives.
-- [ ] Read `Replay`'s `drain` against `handle_continue(:drain, _)` at
+- [x] Read `Replay`'s `perform` clauses against `Session`'s
+      `perform_instruction/3` clauses side by side: every divergence is one
+      ADR-0033 licenses, and each replaced clause is replaced for the reason
+      the moduledoc gives. **The item's own count was wrong** and is corrected
+      here: it said "the four non-process clauses agree, and the three
+      replaced ones are replaced". In fact only `{:enqueue_event, _}` is
+      process-free and byte-identical. Six clauses diverge, each licensed:
+      `{:notify, _}` (both arms) and `{:unroutable, _}` and `{:halt, _}` swap
+      `notify/2` for `append/2`; `{:schedule, _, _, _}` swaps a real
+      `Process.send_after/3` for a `pending` credit; `{:cancel_timers, _}`
+      swaps `Process.cancel_timer/1` for the `pending` -> `raced` move that
+      models the cancel/fire race.
+- [x] Read `Replay`'s `drain` against `handle_continue(:drain, _)` at
       `lib/statifier/session.ex:317-333`: the halted rules agree, including
-      that a cancel is always drained.
-- [ ] Spec conformance: `Replay` calls the Appendix D functions rather than
-      reimplementing any of them - confirm no pseudocode-named function is
-      duplicated in the new module. The drain loop it does mirror is the
-      session's port of `mainEventLoop`'s dequeue tail, and the criterion is
-      that it matches that port line for line.
+      that a cancel is always drained. Same four clauses in the same order;
+      `{:event, _}` returns early when `halted != nil` on both sides.
+- [x] Spec conformance: `Replay` calls the Appendix D functions rather than
+      reimplementing any of them - confirmed, no pseudocode-named function is
+      defined in the module, which calls `Interpreter.initialize/2`,
+      `Interpreter.handle_event/2`, and `Interpreter.cancel/1`. The drain loop
+      it does mirror matches the session's port of `mainEventLoop`'s dequeue
+      tail clause for clause.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate.
@@ -962,16 +995,29 @@ as the phase gate.
 
 ### Phase 5
 
-- [ ] Case 2's assertion actually distinguishes single from double delivery -
-      confirm by reading the expected stream that the event's effects appear
-      exactly once.
-- [ ] `docs/observability.md` constraint 6 now describes something that
-      exists, end to end.
-- [ ] The compared streams are non-trivial: each case's expected stream has
+- [x] Case 2's assertion actually distinguishes single from double delivery.
+      **Did not pass as written**, twice over: the assertion counted the batch
+      log in `stream`, the *live* run's stream, where it is 1 by construction
+      whatever replay does, and the comment above it described checking the
+      event's own `b -> c` transition effects, which it did not. A count
+      cannot make this distinction at all - a doubled delivery still ends at
+      "c" with two transitions, and only the *position* of those effects
+      relative to the batch's `:log` moves. The full ordered
+      `result.stream == stream` comparison in `round_trip/3` is what catches
+      it, which is also what the case's sabotage note already pointed at. The
+      local assertion now reads off `result.stream` and the comment says what
+      it is for.
+- [x] `docs/observability.md` constraint 6 now describes something that
+      exists, end to end: record -> `Recording.entries/1` -> `Replay.run/1` ->
+      stream and snapshot equality, proven across the round-trip cases.
+- [x] The compared streams are non-trivial: each case's expected stream has
       more than a `{:halted, _}` in it, so equality is a real assertion rather
-      than two empty lists.
-- [ ] Spec conformance: no interpreter function changed in this phase, so the
-      Appendix D port is untouched - confirm by diff.
+      than two empty lists. Case 3 pins an exact four-message non-trace
+      stream; the others assert `length(stream) > 1` beside their halt.
+- [x] Spec conformance: no interpreter function changed in this phase, so the
+      Appendix D port is untouched - confirmed by diff, the phase's commit
+      touches `changelog.d/`, `docs/`, and one test file, with no `lib/` diff
+      at all.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate. This is the last phase; the deferred manual items from
