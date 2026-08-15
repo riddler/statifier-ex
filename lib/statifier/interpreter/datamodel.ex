@@ -50,8 +50,7 @@ defmodule Statifier.Interpreter.Datamodel do
      `datamodel` at this point are the `:datamodel` option and
      `SystemVariables.initial/2`, so key presence here is definitionally
      "provided by the environment at instantiation time" (5.3.2's own
-     phrase; Decision 1,
-     `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`).
+     phrase).
   2. Seed: `Map.put_new(datamodel, id, nil)` for every `%Machine.Data{}` in
      `machine.data_elements`, regardless of binding - 5.3.3 makes *creation*
      unconditional under both bindings, and `Predicator.Context.new/2`
@@ -213,8 +212,7 @@ defmodule Statifier.Interpreter.Datamodel do
   `interpret`'s datamodel preamble (Appendix D `:101-102`, prose above), plus
   the top-level half of `enterStates`' per-state binding (`:312`) that late
   binding would otherwise defer forever - see the moduledoc's "no Appendix D
-  procedure body" section and Decision 7
-  (`docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`) for why
+  procedure body" section and spec 5.3.3's binding rule for why
   the `if doc.binding == "early":` guard that wraps the `interpret` call site
   in the pseudocode moves off that call site and into this function instead:
   a top-level `<data>` is contained in no state, so under `binding="late"` it

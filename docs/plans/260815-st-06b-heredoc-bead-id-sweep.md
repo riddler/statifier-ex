@@ -346,13 +346,13 @@ already present twice - name the documents, drop the plan reference.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] The enumerator, scoped to this phase's 7 files, returns zero
+- [x] The enumerator, scoped to this phase's 7 files, returns zero
       `adr-0018-bead-id` heredoc findings.
-- [ ] `mix adr.check --base origin/main` exits 0.
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating).
-- [ ] `mix test` passes with the internal suite - the two conformance driver
+- [x] `mix adr.check --base origin/main` exits 0.
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating).
+- [x] `mix test` passes with the internal suite - the two conformance driver
       files are real tests and must still run.
-- [ ] `git diff origin/main --stat` names only this phase's 7 files, Phase 1's
+- [x] `git diff origin/main --stat` names only this phase's 7 files, Phase 1's
       12 files, and this plan document.
 
 #### Manual Verification:
@@ -670,6 +670,28 @@ before considering the plan fully landed.
       sits inside a `"""` doc body, and no executable line moved. (This is the
       manual half of the check `git diff --stat` above can only bound by
       filename.)
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Every quoted spec clause, section number and Appendix D procedure name in
+      the touched interpreter paragraphs is byte-identical to before.
+- [ ] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
+      touched interpreter moduledocs still describe the ported functions
+      accurately against the W3C Appendix D pseudocode. No function bodies
+      change, so no new deviation is introduced.
+- [ ] The two conformance-driver moduledocs still explain why the file exists
+      alongside the generated harness.
+- [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
+      sits inside a `"""` doc body, and no executable line moved.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

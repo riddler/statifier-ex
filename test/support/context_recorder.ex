@@ -14,8 +14,7 @@ defmodule Statifier.ContextRecorder do
   `execute/2` merges it into `machine_state.datamodel` and returns a
   `Context` carrying that updated `machine_state` - but *not* a rebuilt
   `datamodel_context`, unlike `Statifier.Machine.Content.Assign`, which does
-  rebuild it in its own `execute/2` (Decision 3,
-  `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`;
+  rebuild it in its own `execute/2` -
   `execute_block/3` itself still builds `datamodel_context` exactly once,
   before the block's nodes run at all - the rebuild, when one happens, is
   always a node's own doing, never the runner's). This struct's *not*

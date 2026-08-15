@@ -49,10 +49,9 @@ defmodule Statifier.Interpreter.Content do
   why per-block rather than per-macrostep). This module builds that context
   exactly once, before any node in the block runs, and never rebuilds it
   itself - the seam named here is taken in
-  `Statifier.Machine.Content.Assign`'s own `execute/2` (Decision 3,
-  `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`), never in
-  this runner (`docs/architecture.md:112-114`'s "never a change to the
-  runner"). A node that does *not* rebuild the context - every node but
+  `Statifier.Machine.Content.Assign`'s own `execute/2`, never in this runner
+  (`docs/architecture.md:112-114`'s "never a change to the runner"). A node
+  that does *not* rebuild the context - every node but
   `<assign>` today - still sees the block's original snapshot for the rest of
   the block, datamodel writes included.
 
@@ -106,9 +105,7 @@ defmodule Statifier.Interpreter.Content do
   says nothing about which queue *position* the error may be inserted at,
   so it is not license to insert later than 5.9.1 requires. What it does
   establish is that the event is still eventually processed, which bounds
-  how much the wrong position can cost
-  (`docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`,
-  Decision 5).
+  how much the wrong position can cost.
   """
 
   alias Statifier.Effect
