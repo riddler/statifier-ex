@@ -83,6 +83,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document
   alias Statifier.Document.Assign, as: DAssign
   alias Statifier.Document.Block, as: DBlock
+  alias Statifier.Document.Cancel, as: DCancel
   alias Statifier.Document.Content, as: DContent
   alias Statifier.Document.Data, as: DData
   alias Statifier.Document.Datamodel, as: DDatamodel
@@ -102,6 +103,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
   alias Statifier.Machine.Content.Assign, as: MAssign
+  alias Statifier.Machine.Content.Cancel, as: MCancel
   alias Statifier.Machine.Content.Foreach, as: MForeach
   alias Statifier.Machine.Content.If, as: MIf
   alias Statifier.Machine.Content.Log, as: MLog
@@ -168,6 +170,7 @@ defmodule Statifier.Compiler do
               | DAssign.t()
               | DScript.t()
               | DSend.t()
+              | DCancel.t()
               | %{if: DIf.t(), branches: [[non_neg_integer()]]}
               | %{foreach: DForeach.t(), content: [non_neg_integer()]}
           },
@@ -575,7 +578,8 @@ defmodule Statifier.Compiler do
             | DIf.t()
             | DForeach.t()
             | DScript.t()
-            | DSend.t(),
+            | DSend.t()
+            | DCancel.t(),
           acc :: acc()
         ) ::
           {non_neg_integer(), acc()}
@@ -827,6 +831,7 @@ defmodule Statifier.Compiler do
             | DAssign.t()
             | DScript.t()
             | DSend.t()
+            | DCancel.t()
             | %{if: DIf.t(), branches: [[non_neg_integer()]]}
             | %{foreach: DForeach.t(), content: [non_neg_integer()]}
         ) ::
@@ -1026,6 +1031,57 @@ defmodule Statifier.Compiler do
        }}
     end
   end
+
+  # `<cancel>` (spec 6.3), the minimal sibling of `<send>`'s own clause
+  # above: one leaf executable-content node, one expression to resolve.
+  defp build_content_node(c_index, %DCancel{} = cancel_node) do
+    case build_cancel_sendid(cancel_node, {:content, c_index}) do
+      {:ok, sendid_expr} ->
+        {:ok,
+         %MCancel{
+           c_index: c_index,
+           location: cancel_node.location,
+           sendid: sendid_expr,
+           attribute_locations: cancel_node.attribute_locations
+         }}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  # `sendid` wins when both are somehow present on an unvalidated struct
+  # (6.3.1's mutual exclusion is the validator's, not this pass's, to
+  # enforce) and folds to `{:static, s}`; `sendidexpr` compiles through
+  # `Expressions.compile/3` with owner `{:content, c_index}` - the same
+  # owner every content node at this `c_index` uses; `nil` when neither was
+  # written - the validator's `Checks.Cancel` rejects that shape before
+  # this pass ever sees a real document, but `build_content_node/2` stays
+  # total regardless. Shares no helper with `%DSend{}`'s clause above:
+  # `<cancel>`'s own attribute-location shape is a different struct
+  # (`%DCancel{}`, not `%DSend{}`), so `cancel_attr_location/2` is its own
+  # two-line function rather than a reused one.
+  @spec build_cancel_sendid(cancel_node :: DCancel.t(), owner :: Expressions.owner_ref()) ::
+          {:ok, Machine.expr() | nil} | {:error, Error.t()}
+  defp build_cancel_sendid(%DCancel{sendid: sendid}, _owner) when not is_nil(sendid) do
+    {:ok, Expressions.static(sendid)}
+  end
+
+  defp build_cancel_sendid(%DCancel{sendid: nil, sendidexpr: nil}, _owner), do: {:ok, nil}
+
+  defp build_cancel_sendid(%DCancel{sendid: nil, sendidexpr: source} = cancel_node, owner) do
+    Expressions.compile(source, owner, cancel_attr_location(cancel_node))
+  end
+
+  # `cancel_node.attribute_locations[:sendidexpr]`'s value span when the
+  # author wrote it, the `<cancel>` node's own `location` otherwise - mirrors
+  # `send_attr_location/2`.
+  @spec cancel_attr_location(cancel_node :: DCancel.t()) :: Location.t()
+  defp cancel_attr_location(%DCancel{
+         attribute_locations: attribute_locations,
+         location: location
+       }),
+       do: Map.get(attribute_locations, :sendidexpr, location)
 
   # `event`/`target`/`type`/`delay`: the static attribute wins when both are
   # somehow present on an unvalidated struct (6.2.1's mutual exclusion is

@@ -75,7 +75,8 @@ defmodule Statifier.Lowering do
     "script" => &Builders.build_script/2,
     "invoke" => &Builders.build_invoke/2,
     "finalize" => &Builders.build_finalize/2,
-    "send" => &Builders.build_send/2
+    "send" => &Builders.build_send/2,
+    "cancel" => &Builders.build_cancel/2
   }
 
   @doc """

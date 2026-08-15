@@ -16,6 +16,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document
   alias Statifier.Document.Assign
   alias Statifier.Document.Block
+  alias Statifier.Document.Cancel
   alias Statifier.Document.Content
   alias Statifier.Document.Data
   alias Statifier.Document.Datamodel
@@ -863,6 +864,45 @@ defmodule Statifier.Lowering.Builders do
   end
 
   @doc """
+  Builds a `%Statifier.Document.Cancel{}` from a `<cancel>` element (spec
+  6.3), tagged `{:content_node, cancel}` - `<cancel>` is executable content
+  exactly as `<send>` is, so it lands in a block's `content` list through
+  the existing `{:content_node, _}` placement clauses.
+
+  Reads both of 6.3.1's own attributes, each raw and nilable
+  (`Statifier.Document.Cancel`'s moduledoc: `sendid`/`sendidexpr` are
+  simultaneously representable so the validator can report the shape).
+  `<cancel>` has no slot for any child - unlike `build_send/2` it owns no
+  `place/3`/`reverse_lists/1` clause of its own, so any child it is given
+  falls through to `place/3`'s catch-all and comes back a
+  `{:misplaced_element, _, "cancel"}` error, the same way a `<log>` or
+  `<raise>` child does. `walk_children/2` and `place_children/3` are still
+  called, purely to surface that error - `<cancel>` reads no child result
+  of its own.
+  """
+  @spec build_cancel(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Cancel.t()}, [Error.t()]}
+  def build_cancel(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    attribute_locations =
+      %{}
+      |> Attributes.put_location(:sendid, element, "sendid")
+      |> Attributes.put_location(:sendidexpr, element, "sendidexpr")
+
+    cancel_node = %Cancel{
+      location: element.location,
+      sendid: Attributes.value(element, "sendid"),
+      sendidexpr: Attributes.value(element, "sendidexpr"),
+      attribute_locations: attribute_locations
+    }
+
+    {cancel_node, place_errors} = place_children(results, cancel_node, element.name)
+
+    {{:content_node, cancel_node}, errors ++ place_errors}
+  end
+
+  @doc """
   Builds a `%Statifier.Document.Block{}` from a `<finalize>` element (spec
   6.5), tagged `{:finalize, block}`.
 
@@ -1130,6 +1170,7 @@ defmodule Statifier.Lowering.Builders do
   defp content_node_name(%Foreach{}), do: "foreach"
   defp content_node_name(%Script{}), do: "script"
   defp content_node_name(%Send{}), do: "send"
+  defp content_node_name(%Cancel{}), do: "cancel"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
