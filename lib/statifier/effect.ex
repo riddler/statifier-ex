@@ -1,6 +1,6 @@
 defmodule Statifier.Effect do
   @moduledoc """
-  The effect vocabulary (ADR-0003) plus the seven trace effects
+  The effect vocabulary (ADR-0003) plus the nine trace effects
   (`docs/observability.md` constraint 2) - one `@type t()` union, in this
   one module, that every interpreter function emits from and every
   consumer pattern-matches against, including the not-yet-built session
@@ -39,9 +39,11 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.EntrySet` | `enter_states/2` (`compute_entry_set` result) |
   | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | `Statifier.Interpreter.macrostep/1` |
   | `:trace` | `Statifier.Effect.Trace.Done` | `Statifier.Interpreter.exit_interpreter/1` |
+  | `:trace` | `Statifier.Effect.Trace.InvokePass` | `Statifier.Interpreter`'s invoke pass (`run_invoke_pass/1`, spec 6.4) |
+  | `:trace` | `Statifier.Effect.Trace.FinalizeAutoforward` | `Statifier.Interpreter.handle_event/2`'s finalize/autoforward pass (`apply_invoke_passes/2`, spec 6.4/6.5) |
 
   The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
-  `:invoke`, `:cancel_invoke`, `:autoforward`, and all seven trace effects.
+  `:invoke`, `:cancel_invoke`, `:autoforward`, and all nine trace effects.
   `:send`, `:send_delayed`, and `:cancel` remain unproduced, because nothing
   in this core sends, delays, or cancels a delayed send yet.
 
@@ -120,7 +122,7 @@ defmodule Statifier.Effect do
           | {:done, Done.t()}
           | {:log, Log.t()}
 
-  @typedoc "The seven trace effects, one per `docs/observability.md` constraint-2 row."
+  @typedoc "The nine trace effects - the seven `docs/observability.md` constraint-2 rows plus `InvokePass`/`FinalizeAutoforward` for the two Appendix-D-named phase boundaries `<invoke>` (this bead) added."
   @type trace ::
           {:trace, Trace.EventDequeued.t()}
           | {:trace, Trace.TransitionsSelected.t()}
@@ -129,6 +131,8 @@ defmodule Statifier.Effect do
           | {:trace, Trace.EntrySet.t()}
           | {:trace, Trace.MacrostepStable.t()}
           | {:trace, Trace.Done.t()}
+          | {:trace, Trace.InvokePass.t()}
+          | {:trace, Trace.FinalizeAutoforward.t()}
 
   @typedoc "Every effect this interpreter can emit - the single source of truth for the vocabulary."
   @type t :: core() | trace()

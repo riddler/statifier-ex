@@ -28,6 +28,10 @@ defmodule Statifier.Interpreter.InvokePassTest do
     for {:invoke, %Effect.Invoke{} = payload} <- effects, do: payload
   end
 
+  defp invoke_pass_traces(effects) do
+    for {:trace, %Effect.Trace.InvokePass{} = payload} <- effects, do: payload
+  end
+
   defp budget_exhausted_effects(effects) do
     Enum.filter(effects, &match?({:budget_exhausted, _}, &1))
   end
@@ -76,6 +80,56 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert beta2_effect.type == "t.beta.2"
 
     assert MapSet.new() == result.states_to_invoke
+  end
+
+  # sabotage: `run_invoke_pass/1`'s `invoke_ids = for {:invoke,
+  # %Effect.Invoke{invoke_id: invoke_id}} <- effects, do: invoke_id` line is
+  # changed to always produce `[]` -> `beta.inv_1`/`beta.inv_2` disappear
+  # from `trace.invoke_ids` even though the pass started them, reddening the
+  # equality assertion below. Confirmed red and reverted.
+  test "the invoke pass emits Trace.InvokePass with the states walked and the invocations started" do
+    m = compile!(@parallel_document)
+    {result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.state_indexes == [0, idx(m, "p"), idx(m, "alpha"), idx(m, "beta")]
+
+    assert [alpha_effect, beta1_effect, beta2_effect] = invoke_effects(effects)
+
+    assert trace.invoke_ids == [
+             alpha_effect.invoke_id,
+             beta1_effect.invoke_id,
+             beta2_effect.invoke_id
+           ]
+
+    assert MapSet.new() == result.states_to_invoke
+  end
+
+  #  0 scxml (root)
+  #  1   p       (no <invoke> children at all)
+  @no_invoke_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+      <state id="p"/>
+  </scxml>
+  """
+
+  # `states_to_invoke` gains every entered state unconditionally
+  # (`ExitEntry`'s own comment above its `states_to_invoke: MapSet.put/2`
+  # call), root included, so the walk still names both states even though
+  # neither owns an `<invoke>` - `invoke_ids` is what stays empty here.
+  #
+  # sabotage: `run_invoke_pass/1`'s final `{%{machine_state |
+  # states_to_invoke: MapSet.new()}, effects ++ trace}` is changed to drop
+  # `++ trace` -> no `Trace.InvokePass` is ever appended, reddening the
+  # length-one assertion below (and the entry-order test above it, since it
+  # relies on the same trace). Confirmed red and reverted.
+  test "the invoke pass still emits Trace.InvokePass when nothing was invoked" do
+    m = compile!(@no_invoke_document)
+    {_result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.state_indexes == [0, idx(m, "p")]
+    assert trace.invoke_ids == []
   end
 
   # sabotage: `generate_invoke_id/3`'s first clause (`%MInvoke{id: id} when

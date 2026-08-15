@@ -36,12 +36,30 @@ defmodule Statifier.Interpreter.EntryTest do
   # microstep's own exit/execute/enter round produces) and about a raised
   # event's own `cause` (always stamped from inside a step body) - not
   # about the pre-round selection trace's own stamp.
+  #
+  # `FinalizeAutoforward` joins them for the identical reason: it is
+  # stamped in `apply_invoke_passes/2`, which `handle_event/2` runs right
+  # after `begin_macrostep/1` and before any transition selection - "no
+  # microstep has run yet this macrostep" is its normal case, not an
+  # exception. `InvokePass` joins them too: `run_invoke_pass/1` is stamped
+  # after that macrostep's fold, and a fold whose eventless probe finds
+  # nothing to select and whose internal queue is already empty reaches
+  # quiescence in zero microsteps (`internal_round/1`'s own `:empty`
+  # branch) - the invoke pass still runs (`main_event_loop/3` gates it on
+  # `running`, not on any microstep having happened), still legitimately
+  # reporting zero.
   defp microsteps_on(effects) do
     Enum.flat_map(effects, fn
       {:trace, %Effect.Trace.EventDequeued{event: event}} ->
         cause_microsteps(event)
 
       {:trace, %Effect.Trace.TransitionsSelected{}} ->
+        []
+
+      {:trace, %Effect.Trace.FinalizeAutoforward{}} ->
+        []
+
+      {:trace, %Effect.Trace.InvokePass{}} ->
         []
 
       {:trace, payload} ->
