@@ -16,6 +16,15 @@ defmodule Statifier.Effect.Invoke do
   `macrostep`/`microstep` are the counters as they stand when the invoke is
   produced.
 
+  `invoke_index` is the invoking state's `invoke` list position (document
+  order) - the second half of `Statifier.Event.Cause.origin()`'s
+  `{:invoke, state_index, invoke_index}` identity, which the session needs
+  to name the failing element in an `error.communication` raised when it
+  cannot start the child (spec 3.12.2). `invoke_one/6` already has the value
+  in scope when it builds this struct; it was dropped rather than carried
+  until this payload had a caller for it, the same "no dead field"
+  discipline `origin`/`sendid` on `Statifier.Event` followed.
+
   ## `src` and `content` are two fields, not one
 
   Spec 6.4 collapses the data channels an invoked service can receive to two
@@ -34,7 +43,7 @@ defmodule Statifier.Effect.Invoke do
   effect payload treats identically, not one field that already has.
   """
 
-  @enforce_keys [:invoke_id, :state_index, :macrostep, :microstep]
+  @enforce_keys [:invoke_id, :state_index, :invoke_index, :macrostep, :microstep]
   defstruct [
     :invoke_id,
     :type,
@@ -43,6 +52,7 @@ defmodule Statifier.Effect.Invoke do
     :content,
     :autoforward,
     :state_index,
+    :invoke_index,
     :macrostep,
     :microstep
   ]
@@ -55,6 +65,7 @@ defmodule Statifier.Effect.Invoke do
           content: term(),
           autoforward: boolean() | nil,
           state_index: non_neg_integer(),
+          invoke_index: non_neg_integer(),
           macrostep: non_neg_integer(),
           microstep: non_neg_integer()
         }

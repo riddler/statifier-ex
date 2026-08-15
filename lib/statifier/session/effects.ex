@@ -39,15 +39,30 @@ defmodule Statifier.Session.Effects do
   the message is dispatched), but the route itself is only resolved when the
   timer fires.
 
-  `{:unroutable, effect}` survives for `:invoke`, `:cancel_invoke` and
-  `:autoforward` only - later, separate work, not this vocabulary's - since
-  there is still no child session to route any of them to.
+  ## `<invoke>` routing
+
+  `plan_invoke/2` checks `type` first, mirroring `<send>`'s own order
+  (6.2.5's unsupported-`type` check ahead of target resolution): an
+  unsupported `type` (`Statifier.Session.Target.supported_invoke_type?/1`)
+  plans `{:raise, :platform, "error.execution", {:invoke, state_index,
+  invoke_index}, []}` and nothing else - 3.12.2 puts an unsupported `type`
+  in `error.execution`'s class ("errors internal to the execution of the
+  document"), the same class `<send>`'s own unsupported-type check uses,
+  because no communication is attempted at all. Everything else still plans
+  `{:unroutable, effect}`, pending the child-start work a later phase adds
+  (ADR-0027 decision 3, ADR-0038).
+
+  `{:unroutable, effect}` survives for `:cancel_invoke` and `:autoforward`
+  unconditionally, and for `:invoke` with a supported `type` - later,
+  separate work, not this vocabulary's - since there is still no child
+  session to route any of them to.
   """
 
   alias Statifier.Effect
   alias Statifier.Effect.Autoforward
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.Invoke
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Evaluator.SystemVariables
@@ -95,8 +110,8 @@ defmodule Statifier.Session.Effects do
     [{:notify, effect}, {:cancel_timers, send_id}]
   end
 
-  defp plan_one({:invoke, _invoke} = effect, _session_id) do
-    [{:notify, effect}, {:unroutable, effect}]
+  defp plan_one({:invoke, %Invoke{} = invoke} = effect, _session_id) do
+    [{:notify, effect} | plan_invoke(invoke, effect)]
   end
 
   defp plan_one({:cancel_invoke, %CancelInvoke{}} = effect, _session_id) do
@@ -166,6 +181,21 @@ defmodule Statifier.Session.Effects do
       end
     else
       [execution_error(send)]
+    end
+  end
+
+  # An `<invoke>`'s own routing (see moduledoc's "`<invoke>` routing"
+  # section). Unlike `plan_send/3`, there is no target to check - `<invoke>`
+  # has none - so `type` is the only gate.
+  @spec plan_invoke(invoke :: Invoke.t(), effect :: Effect.t()) :: [instruction()]
+  defp plan_invoke(invoke, effect) do
+    if Target.supported_invoke_type?(invoke.type) do
+      [{:unroutable, effect}]
+    else
+      [
+        {:raise, :platform, "error.execution", {:invoke, invoke.state_index, invoke.invoke_index},
+         []}
+      ]
     end
   end
 

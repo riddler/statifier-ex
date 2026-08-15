@@ -137,11 +137,15 @@ defmodule Statifier.Session.EffectsTest do
        {:notify, {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}}},
        {:cancel_timers, "s1"}
      ]},
-    {{:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
+    {{:invoke,
+      %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}},
      [
-       {:notify, {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}},
+       {:notify,
+        {:invoke,
+         %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}},
        {:unroutable,
-        {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}}
+        {:invoke,
+         %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}}
      ]},
     {{:cancel_invoke, %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
      [
@@ -382,6 +386,48 @@ defmodule Statifier.Session.EffectsTest do
 
       assert [_notify, {:schedule, nil, 30, :self, %Event{name: "e"}, ^effect}] =
                Effects.plan([effect], @session_id)
+    end
+  end
+
+  describe "an unsupported <invoke type> raises error.execution instead of :unroutable" do
+    # sabotage: `plan_invoke/2`'s `else` branch drops the `invoke_index` from
+    # the raised origin, hardcoding `0` -> this assertion reddens for a
+    # non-zero `invoke_index` fixture
+    test "plans {:raise, :platform, \"error.execution\", {:invoke, state_index, invoke_index}, []}" do
+      effect =
+        {:invoke,
+         %Invoke{
+           invoke_id: "i1",
+           type: "http://example.com/BasicHTTPEventProcessor",
+           state_index: 2,
+           invoke_index: 3,
+           macrostep: 1,
+           microstep: 1
+         }}
+
+      assert [_notify, {:raise, :platform, "error.execution", {:invoke, 2, 3}, []}] =
+               Effects.plan([effect], @session_id)
+    end
+
+    # sabotage: `plan_invoke/2`'s `if Target.supported_invoke_type?(...)` is
+    # inverted to `unless` -> a supported (`nil`) invoke type would raise
+    # instead of planning `:unroutable`, and this refute reddens
+    test "no :raise instruction appears for a supported (nil) invoke type" do
+      effect =
+        {:invoke,
+         %Invoke{
+           invoke_id: "i1",
+           type: nil,
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1
+         }}
+
+      instructions = Effects.plan([effect], @session_id)
+
+      refute Enum.any?(instructions, &match?({:raise, _, _, _, _}, &1))
+      assert Enum.any?(instructions, &match?({:unroutable, ^effect}, &1))
     end
   end
 end

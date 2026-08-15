@@ -1345,6 +1345,7 @@ defmodule Statifier.Interpreter do
                content: content,
                autoforward: invoke.autoforward,
                state_index: state_index,
+               invoke_index: invoke_index,
                macrostep: machine_state.macrostep,
                microstep: machine_state.microstep
              }}
