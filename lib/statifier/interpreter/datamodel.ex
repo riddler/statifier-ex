@@ -367,7 +367,9 @@ defmodule Statifier.Interpreter.Datamodel do
   corpus file catches it. Spec 6.4.3 makes it reachable in practice: an
   invoked session's `<param>`/`namelist` values arrive as exactly this
   environment seed, so without this guard a late-bound invoked child would
-  silently discard the values its parent passed it (st-cmq).
+  silently discard the values its parent passed it - the child-session half
+  of `<invoke>` that would deliver them does not exist yet, per
+  `docs/architecture.md`'s "Sessions and invoke" section.
 
   Otherwise: one `Evaluator.context/1` for `state_index`'s whole `data` list
   (B.2.2's "no ordering dependencies" licenses this exactly as it does in

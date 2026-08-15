@@ -106,13 +106,12 @@ defmodule Statifier.Interpreter do
     Both `Selection.select_eventless_transitions/1` and
     `Selection.select_transitions/2` return `{machine_state, transitions}`,
     and this module continues with the returned `machine_state` rather than
-    the one it passed in - st-af3.2's real `cond` evaluation landed inside
-    `Selection`, exactly as this was built to absorb: it reshaped that
-    module's private walk, both entry points kept their signatures, and
-    nothing here changed.
+    the one it passed in - the `cond` evaluation lives inside `Selection`,
+    which reshaped that module's private walk while both entry points kept
+    their signatures and this module did not change.
   - **The outer `while running` loop is driven by the caller.** ADR-0003:
     the pure core takes one external event per call, and the session that
-    drives it (st-cmq) owns the waiting external events and their queue.
+    drives it owns the waiting external events and their queue.
     `main_event_loop/1` is the loop's tail - fold to quiescence, then
     `exit_interpreter/1` when `running` went false - not the loop itself.
     See `main_event_loop/1`'s own `@doc` for the exact port-site comment.
@@ -829,7 +828,7 @@ defmodule Statifier.Interpreter do
 
   Be precise about which writes that loses, because the obvious candidate
   is not one of them. The two `Selection` entry points enqueue
-  `error.execution` on a failed `cond` (st-af3.2) - `condition_match/2`
+  `error.execution` on a failed `cond` - `condition_match/2`
   itself stays a pure query and never enqueues, so the write happens in
   `select_transitions/2` and `select_eventless_transitions/1` on the way
   out - and that enqueue is

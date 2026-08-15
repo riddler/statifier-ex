@@ -443,20 +443,20 @@ and stay, per "What We're NOT Doing".
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] The enumerator, scoped to `lib/statifier/interpreter.ex`,
+- [x] The enumerator, scoped to `lib/statifier/interpreter.ex`,
       `lib/statifier/interpreter/datamodel.ex` and
       `lib/statifier/validator/checks/donedata.ex`, returns zero
       `adr-0018-bead-id` heredoc findings.
-- [ ] `mix adr.check --base origin/main` exits 0.
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating).
-- [ ] The enumerator run above is the authority for this phase and is already
+- [x] `mix adr.check --base origin/main` exits 0.
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating).
+- [x] The enumerator run above is the authority for this phase and is already
       listed; no `grep` stands in for it. A plain `grep -n "st-"` over these
       files is *not* a gate - `st-` is a substring of ordinary English
       (`test-`, `first-`, `context-`), so a non-empty result means "lines to
       eyeball", never "phase failed". Use `grep -nP '(?<![a-zA-Z0-9])st-[a-z0-9]+(?:\.[a-z0-9]+)*(?![a-zA-Z0-9])'`
       - `AdrGuard`'s own `@bead_id_pattern` - if a cross-read is wanted, and
       expect legitimate hits in `#` comments, which are out of scope.
-- [ ] `git diff origin/main --stat` names only this phase's 3 files, the files
+- [x] `git diff origin/main --stat` names only this phase's 3 files, the files
       Phases 1 and 2 touched, and this plan document.
 
 #### Manual Verification:
@@ -690,6 +690,30 @@ items are deferred and surfaced once at the end instead of blocking here.
       change, so no new deviation is introduced.
 - [ ] The two conformance-driver moduledocs still explain why the file exists
       alongside the generated harness.
+- [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
+      sits inside a `"""` doc body, and no executable line moved.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Each of the three forward-looking passages still tells a reader the thing
+      is not implemented yet, and names *what* is missing rather than *who* will
+      add it.
+- [ ] Neither rewritten `st-af3.2` passage now claims something is unimplemented
+      that in fact landed.
+- [ ] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
+      touched `Statifier.Interpreter` moduledoc bullets still describe
+      `main_event_loop/1`, `microstep/1` and the `Selection` entry points
+      accurately against the W3C Appendix D pseudocode, including the existing
+      "not a deviation" note on `statesToInvoke.sort(entryOrder)`.
 - [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
       sits inside a `"""` doc body, and no executable line moved.
 
