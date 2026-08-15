@@ -494,9 +494,9 @@ option contains a non-string key at any level."
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (the phase gate), including the docs stages.
-- [ ] `mix gate.verify` exits zero.
-- [ ] No `changelog.d/st-e7w.md` exists, and `git status` shows only the two
+- [x] Full `mix quality` passes (the phase gate), including the docs stages.
+- [x] `mix gate.verify` exits zero.
+- [x] No `changelog.d/st-e7w.md` exists, and `git status` shows only the two
       documentation files changed in this phase.
 
 #### Manual Verification:
@@ -616,5 +616,20 @@ the full `mix quality` as the phase gate. In interactive execution, pause here
 for the human to confirm the manual items before Phase 2. In looped
 execution, the Automated Verification list gates advancement and the manual
 items are surfaced at the end.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment for the `lib/statifier/` file touched:
+      `evaluator.ex`'s change is prose only, and `context/1`'s behavior
+      description still matches what the function does.
+- [ ] The amended `context/1` doc does not claim the `bind/3` guard is now
+      unreachable - a hand-built `%MachineState{}` in a test can still reach
+      it.
+- [ ] `docs/datamodel.md`'s new sentence reads as a pointer, not a second
+      copy of the argument.
+
+**Implementation Note**: Same gate rules as Phase 1.
 
 ---
