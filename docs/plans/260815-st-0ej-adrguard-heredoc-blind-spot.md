@@ -96,8 +96,17 @@ origin/main` exits 0 against the branch's own diff.
 
 ## What We're NOT Doing
 
-- **Not amending ADR-0018**, not writing a `docs/quality-gate-changes.md` entry,
-  and not adding any `ADR-0018-exempt` marker. Settled by the direction stage.
+- **Not amending ADR-0018** and not adding any `ADR-0018-exempt` marker. Settled
+  by the direction stage.
+  *(Amended during Phase 2: this bullet also said "not writing a
+  `docs/quality-gate-changes.md` entry", which held for ADR-0018's sake but was
+  overtaken by the mechanism. `collect/1`'s new `File.read/1` default reader
+  trips Sobelow's `Traversal.FileModule`, which blocks under this project's
+  deliberate `exit: "low"`, and no code-level fix clears it. `.sobelow-conf` is
+  a guarded path, so `adr_guard.ex` joining the two dev-only Mix support modules
+  already excluded there needed a human-approved ledger entry - written and
+  approved on 2026-08-15. It excludes one path with its reason stated and moves
+  no threshold.)*
 - **Not touching `lib/statifier/machine/content/foreach.ex:255`.** Its
   `bench/results/260814-macrostep.md` citation carries no bead id, so it is legal
   before and after this change. The research note's recorded open question about
@@ -226,12 +235,12 @@ stays.
 
 #### Manual Verification:
 
-- [ ] The paragraphs still read as prose after rewrapping, and no measured number,
+- [x] The paragraphs still read as prose after rewrapping, and no measured number,
       unit, or comparison was lost or altered.
-- [ ] `docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md` and
+- [x] `docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md` and
       `bench/README.md` genuinely name the captures the reworded text points at,
       so a reader can still reach the numbers' provenance in one hop.
-- [ ] Doc text only: no function body in `lib/statifier/` changed, so no Appendix D
+- [x] Doc text only: no function body in `lib/statifier/` changed, so no Appendix D
       function's correspondence to the pseudocode is affected by this phase.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run full
@@ -375,34 +384,34 @@ its `@spec` is unchanged because `source` already carries the new key.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating).
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate.
-- [ ] `mix test test/mix/statifier/adr_guard_test.exs` passes.
-- [ ] `mix adr.check --base origin/main` exits 0 on the branch's own diff - the
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating).
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate.
+- [x] `mix test test/mix/statifier/adr_guard_test.exs` passes.
+- [x] `mix adr.check --base origin/main` exits 0 on the branch's own diff - the
       guard, now able to see mid-heredoc additions, is clean against the very
       change that gave it sight (this covers the reworded evaluator lines from
       Phase 1, the guard's own rewritten moduledoc, and the new test names).
 
 #### Manual Verification:
 
-- [ ] `git diff` over `test/mix/statifier/adr_guard_test.exs` shows every
+- [x] `git diff` over `test/mix/statifier/adr_guard_test.exs` shows every
       pre-existing assertion unchanged except the deliberately replaced
       blind-spot test at `:298-313` - the suite passing does not by itself prove
       no other test body moved.
-- [ ] Each new test's sabotage note is verified the way CLAUDE.md's convention
+- [x] Each new test's sabotage note is verified the way CLAUDE.md's convention
       asks: apply the mutation it names, confirm red, revert. This is an
       implementer action with eyes on the result, not something a single command
       decides.
-- [ ] The moduledoc no longer claims a blind spot anywhere, and what replaces it
+- [x] The moduledoc no longer claims a blind spot anywhere, and what replaces it
       describes the mechanism that now exists rather than the one that was
       planned.
-- [ ] The comment above `doc_context_texts/2` and the moduledoc agree with each
+- [x] The comment above `doc_context_texts/2` and the moduledoc agree with each
       other and with the code.
-- [ ] Spot-check on a real repository state: stage a scratch edit that adds a
+- [x] Spot-check on a real repository state: stage a scratch edit that adds a
       bead-id-bearing line into the middle of an existing `@moduledoc` in
       `lib/`, run `mix adr.check`, confirm it fires at the right file and line,
       then revert the scratch edit.
-- [ ] Doc text and gate tooling only: nothing under `lib/statifier/` changes in
+- [x] Doc text and gate tooling only: nothing under `lib/statifier/` changes in
       this phase, so no Appendix D function's correspondence to the pseudocode is
       affected.
 
@@ -495,12 +504,17 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The paragraphs still read as prose after rewrapping, and no measured number,
+- [x] The paragraphs still read as prose after rewrapping, and no measured number,
       unit, or comparison was lost or altered.
-- [ ] `docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md` and
+- [x] `docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md` and
       `bench/README.md` genuinely name the captures the reworded text points at,
       so a reader can still reach the numbers' provenance in one hop.
-- [ ] Doc text only: no function body in `lib/statifier/` changed, so no Appendix D
+      *(Found a defect and fixed it: the phase-1 wording pointed at ADR-0030's
+      amendment note, which cites `evaluator/functions.ex` rather than the 8.0
+      capture. ADR-0030 does name that capture, but in its Context section at
+      `:28`, not the amendment note, and not in its References. Reworded to cite
+      `bench/README.md` alone, which names it at `:35` as the current capture.)*
+- [x] Doc text only: no function body in `lib/statifier/` changed, so no Appendix D
       function's correspondence to the pseudocode is affected by this phase.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run full

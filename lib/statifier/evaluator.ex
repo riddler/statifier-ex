@@ -111,7 +111,7 @@ defmodule Statifier.Evaluator do
   whole context per site with `new/2` to get one walk instead of two -
   trading a size-scaling term for `new/2`'s per-call stamp-and-allocate work,
   and giving up the compile-time constant. Measured (the predicator 8.0
-  capture ADR-0030's amendment note and `bench/README.md` cite): at
+  capture `bench/README.md` names as the current one): at
   `:corpus`, `Context.new(data, normalize: false)` (`T_new_nf`) costs 0.3788
   us / 0.867 KB, essentially flat across all four size points because it
   skips the size-scaling walk entirely - but the shipped path (`T_full`,

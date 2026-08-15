@@ -24,10 +24,10 @@ defmodule Mix.Statifier.AdrGuard do
   else clears it. Being line-based rather than AST-based, it can only tell a
   comment/doc line from a code line by shape: a `#` line, a single-line
   `@moduledoc`/`@doc`/`@typedoc "..."`, a `test "..." do` description, or a
-  line inside a `\"""` doc heredoc whose opening and closing delimiters are
-  both in the same diff hunk. A bead ID added mid-body into a heredoc whose
-  opening delimiter is unchanged context (invisible to a `--unified=0` diff)
-  is a known blind spot, not a design goal.
+  line inside a `\"""` doc heredoc. A doc heredoc's extent is read from the
+  file's post-image text carried on `source` (populated by `collect/1`), not
+  only from the diff hunk itself, so a body line added below an unchanged
+  opening delimiter is still classified as doc text.
 
   Deliberately not covered: ADR-0015's banned-operation list for
   `.claude/scripts/`. That rule was an absolute whole-tree ban, and this
@@ -43,9 +43,12 @@ defmodule Mix.Statifier.AdrGuard do
   independently re-derived under a heuristic name - close to a canonical name
   without being it.
 
-  `analyze/1` is pure - it takes a diff and returns findings. `collect/1` is the
-  part that talks to git, and takes an `opts[:runner]` so tests never need a
-  fixture repository.
+  `analyze/1` is pure - it takes a diff and returns findings. For the ADR-0018
+  check, the file text a heredoc's extent is read from also arrives as plain
+  data on `source`, rather than being fetched by `analyze/1` itself.
+  `collect/1` is the part that talks to git and the filesystem, and takes
+  `opts[:runner]` and `opts[:reader]` so tests never need a fixture
+  repository.
   """
 
   @type finding :: %{
@@ -56,7 +59,10 @@ defmodule Mix.Statifier.AdrGuard do
           message: String.t()
         }
 
-  @type source :: %{diff: String.t()}
+  @type source :: %{
+          :diff => String.t(),
+          optional(:files) => %{String.t() => String.t()}
+        }
 
   @lib_prefix "lib/"
   @core_prefix "lib/statifier/"
@@ -131,12 +137,13 @@ defmodule Mix.Statifier.AdrGuard do
   @spec analyze(source :: source()) :: [finding()]
   def analyze(source) do
     files = parse_diff(source.diff)
+    texts = Map.get(source, :files, %{})
 
     naming_findings(files) ++
       effects_findings(files) ++
       eval_findings(files) ++
       uxid_findings(files) ++
-      bead_id_findings(files)
+      bead_id_findings(files, texts)
   end
 
   @doc """
@@ -149,24 +156,50 @@ defmodule Mix.Statifier.AdrGuard do
 
   `opts[:runner]` replaces the `git` shell-out with a function of an argument
   list returning `{output, status}`, mirroring `Mix.Statifier.GateGuard`.
+  `opts[:reader]` replaces the `File.read/1` call used to populate `:files`
+  with a function of a path returning `{:ok, content} | {:error, reason}`,
+  the same shape as `File.read/1` itself.
   """
   @spec collect(opts :: keyword()) :: {:ok, source()} | {:error, String.t()} | :no_base_ref
   def collect(opts) do
     runner = Keyword.get(opts, :runner, &git/1)
+    reader = Keyword.get(opts, :reader, &File.read/1)
     candidates = Enum.reject([opts[:base], "origin/main", "main"], &is_nil/1)
 
     case Enum.find(candidates, &resolves?(&1, runner)) do
       nil -> :no_base_ref
-      ref -> collect_from(ref, runner)
+      ref -> collect_from(ref, runner, reader)
     end
   end
 
-  defp collect_from(ref, runner) do
+  defp collect_from(ref, runner, reader) do
     with {:ok, base} <- run(runner, ["merge-base", ref, "HEAD"]),
          base = String.trim(base),
          {:ok, diff} <- run(runner, ["diff", base | @diff_flags]) do
-      {:ok, %{diff: diff <> untracked_diff(runner)}}
+      full_diff = diff <> untracked_diff(runner)
+      {:ok, %{diff: full_diff, files: file_texts(full_diff, reader)}}
     end
+  end
+
+  # Reads the post-image content of every `lib/` or `test/` path the assembled
+  # diff names, so `analyze/1` can see inside a doc heredoc whose opener is
+  # unchanged context. A path the reader cannot read (deleted between the diff
+  # and the read, a race) is dropped rather than raised.
+  defp file_texts(diff, reader) do
+    diff
+    |> String.split("\n")
+    |> Enum.flat_map(fn
+      "+++ /dev/null" -> []
+      "+++ b/" <> path -> [path]
+      _other -> []
+    end)
+    |> Enum.filter(&bead_id_in_scope?/1)
+    |> Enum.reduce(%{}, fn path, acc ->
+      case reader.(path) do
+        {:ok, content} -> Map.put(acc, path, content)
+        {:error, _reason} -> acc
+      end
+    end)
   end
 
   # A file git has never seen is absent from `git diff` entirely, so a brand-new
@@ -264,10 +297,10 @@ defmodule Mix.Statifier.AdrGuard do
   # docs/adr, docs/plans, docs/research, the gate ledger and changelog
   # fragments are exempt by construction, since none of them start with either
   # prefix.
-  defp bead_id_findings(files) do
+  defp bead_id_findings(files, texts) do
     for {path, entries} <- files,
         bead_id_in_scope?(path),
-        {entry, text} <- doc_context_texts(entries),
+        {entry, text} <- doc_context_texts(entries, Map.get(texts, path)),
         not bead_cited?(entry),
         Regex.match?(@bead_id_pattern, text) do
       finding(
@@ -288,20 +321,54 @@ defmodule Mix.Statifier.AdrGuard do
   # comment/doc text with the substring to check - the whole line for a `#`
   # comment or a heredoc body line, just the quoted content for a single-line
   # doc attribute or a test description. An entry that is plain code is
-  # dropped. `in_heredoc?` only turns on when this same diff hunk carries the
-  # opening `"""`, which is the line-based check's known blind spot: a body
-  # line added into an already-existing heredoc is invisible to it. `previous`
-  # is nil exactly at the first added line of each hunk (`parse_line/2` resets
-  # it on every `@@` header), so it doubles as the hunk boundary: an heredoc
-  # left open by a hunk whose closing `"""` was not itself added does not leak
-  # "still inside a doc string" into the next, unrelated hunk.
-  defp doc_context_texts(entries) do
+  # dropped. The seed flag going into `doc_context_step/2` is an OR of two
+  # halves: the hunk-local half, `in_heredoc? and entry.previous != nil`, which
+  # is true only when this same diff hunk carries the opening `"""`; and the
+  # file-derived half, `MapSet.member?(body_lines, entry.line)`, which is true
+  # when the entry's line falls inside `doc_heredoc_body_lines/1`'s span for
+  # the file's post-image text (absent when `file_text` is `nil`, e.g. a
+  # hand-built source with no `:files` map). `previous` is nil exactly at the
+  # first added line of each hunk (`parse_line/2` resets it on every `@@`
+  # header), so it still bounds the hunk-local half: a heredoc left open by a
+  # hunk whose closing `"""` was not itself added does not leak "still inside
+  # a doc string" into the next, unrelated hunk. The file-derived half has no
+  # such boundary to bound - it is keyed by line number in the file, not by
+  # hunk.
+  defp doc_context_texts(entries, file_text) do
+    body_lines = doc_heredoc_body_lines(file_text)
+
     entries
     |> Enum.reduce({false, []}, fn entry, {in_heredoc?, acc} ->
-      doc_context_step(entry, {in_heredoc? and entry.previous != nil, acc})
+      carried? = in_heredoc? and entry.previous != nil
+      seed? = carried? or MapSet.member?(body_lines, entry.line)
+      doc_context_step(entry, {seed?, acc})
     end)
     |> elem(1)
     |> Enum.reverse()
+  end
+
+  # Empty for a source with no post-image text (the fallback path). Otherwise
+  # walks the file's lines with a 1-based index, opening a heredoc-body span on
+  # `@doc_heredoc_open_pattern` and closing it on a trimmed `"""`, collecting
+  # every line number strictly between the delimiters. A moduledoc that never
+  # closes simply runs the span to end of file, which the reduce tolerates.
+  defp doc_heredoc_body_lines(nil), do: MapSet.new()
+
+  defp doc_heredoc_body_lines(file_text) do
+    file_text
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reduce({false, MapSet.new()}, fn {line, index}, {in_heredoc?, acc} ->
+      trimmed = String.trim(line)
+
+      cond do
+        in_heredoc? and trimmed == "\"\"\"" -> {false, acc}
+        in_heredoc? -> {true, MapSet.put(acc, index)}
+        Regex.match?(@doc_heredoc_open_pattern, trimmed) -> {true, acc}
+        true -> {false, acc}
+      end
+    end)
+    |> elem(1)
   end
 
   defp doc_context_step(entry, {true = _in_heredoc?, acc}) do
