@@ -1,6 +1,6 @@
 # ADR-0014: Expression-level spans are part of the retained-location constraint
 
-Status: accepted (2026-08-06)
+Status: accepted (2026-08-06) - amended 2026-08-15 (item 4 stops at the predicator seam; engine policy checks are not expression failures)
 
 ## Context
 
@@ -91,6 +91,34 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
    source string, the predicator error struct, and its `:span` (nil when
    predicator cannot attribute one). Exact payload shape is settled at
    implementation; the fields are the commitment.
+
+   *(Amended 2026-08-15: where this item stops.)* "Fails to evaluate" is the
+   boundary, and it sits at the predicator seam: this item reaches an
+   `error.execution` exactly when a predicator call itself returned
+   `{:error, error}` - `Statifier.Evaluator.evaluate/2`,
+   `Predicator.context_location/2`, `Predicator.ContextLocation.put/3` -
+   and the payload then wraps that struct verbatim via
+   `Statifier.Evaluator.Error`. An engine policy check applied *after*
+   predicator succeeded is not an expression failure, and this item does
+   not reach it. The two members today are
+   `Statifier.Interpreter.Datamodel.write_location/4`'s post-resolution
+   checks: the spec 5.10 rejection of a write to a `_`-rooted system
+   variable (`{:error, {:system_variable, root}}`) and the
+   no-undeclared-root half of 5.9.2's valid-location requirement
+   (`{:error, {:unbound_location, path_source}}`). On both paths predicator
+   resolved the whole location successfully, so there is no predicator
+   error struct in existence to carry and no failing *subexpression* for a
+   span to underline - the culprit is the resolved root or the whole path,
+   and the tuple names it directly, which is the whole diagnostic. The
+   parenthetical above ("nil when predicator cannot attribute one") covers
+   a predicator error that lacks a span, such as `ParseError`; it is not
+   license to ship a span-less payload built around a fabricated predicator
+   error, which would misattribute an engine decision to the expression
+   layer and break `Evaluator.Error`'s error-carried-verbatim contract. The
+   owning-node identity this item names still arrives on these paths, as on
+   every `error.execution` alike, from the raise site's origin stamp
+   (`docs/observability.md` constraint 4) - the same division of labor that
+   keeps `Evaluator.Error` itself owner-free.
 5. **Unbound variables are errors, not sentinels.** Cond evaluation passes
    `on_unbound: :error`, so a cond referencing a missing datamodel location
    fails with a `UndefinedVariableError` naming the variable and carrying its
@@ -121,3 +149,10 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
   shape settled per item 2's 2026-08-08 amendment (the upstream px-35i.5
   envelope, not a statifier-side wrapper). The exact `error.execution`
   payload shape remains an implementation-time decision bounded by item 4.
+- Open question recorded, not blocking (2026-08-15 amendment):
+  `{:system_variable, root}` carries the resolved root but not the raw
+  `path_source` the author wrote, unlike `{:unbound_location, path_source}`.
+  Nothing in this record obliges it to - the policy tuples are outside item
+  4 - but adding the source string would cost nothing and read better when
+  the offending root was reached through a longer path. An ergonomic
+  improvement for whoever next touches `write_location/4`, not a defect.
