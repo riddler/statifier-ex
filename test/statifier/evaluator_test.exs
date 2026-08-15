@@ -229,12 +229,17 @@ defmodule Statifier.EvaluatorTest do
     test "put_event/2 replaces the seeded undefined with the event's own fields" do
       context =
         new_machine_state()
-        |> MachineState.put_event(Statifier.Event.external("go", data: nil))
+        |> MachineState.put_event(Statifier.Event.external("go"))
         |> Evaluator.context()
 
       assert Evaluator.evaluate(context, compiled_expr("_event.name")) == {:ok, "go"}
       # Absent event data stays undefined rather than becoming `%{}` - the
       # property `tools/corpus/scxml_w3/exclusions.exs:7-11` depends on.
+      # `Event.external/2` itself now spells "no data" as `:undefined`
+      # (ADR-0037, docs/adr/0037-unbound-spelled-undefined-at-the-writer.md);
+      # a caller that means a genuinely null payload passes `data: nil`
+      # explicitly (see Phase 3's sibling test once `undefine_nils/1` is
+      # retired, which reads that case's `=== null` answer).
       assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
     end
   end

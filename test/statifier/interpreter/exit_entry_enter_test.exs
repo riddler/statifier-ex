@@ -504,6 +504,11 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     # own `done.state.*` -> the internal queue would hold `done.state.par`
     # first and `done.state.reg2` second, reddening the ordered-match
     # assertion below.
+    #
+    # sabotage: `Event.platform/3` reads `Keyword.get(opts, :data)` (default
+    # `nil`) instead of `Keyword.get(opts, :data, :undefined)` -> par_event's
+    # data, which arrives via no `:data` opt at all, reddens against
+    # `:undefined`.
     test "completing the second region of a parallel raises done.state.{grandparent} after the parent's" do
       m = machine()
       ms = machine_state(m, [idx(:region), idx(:par), idx(:reg1), idx(:reg1_final)])
@@ -513,9 +518,15 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
       assert [reg_event, par_event] = MachineState.internal_events(result)
       assert reg_event.name == "done.state.reg2"
+      # reg_event's data comes from `donedata/2`'s own no-donedata clause,
+      # which explicitly passes `data: nil` through `raise_platform/4` - an
+      # explicit `nil` opt is not the same as an absent one, so it stays nil.
       assert reg_event.data == nil
       assert par_event.name == "done.state.par"
-      assert par_event.data == nil
+      # par_event, unlike reg_event, comes from
+      # `maybe_raise_grandparent_completion/3`, which passes no `:data` opt
+      # at all - `Event.platform/3`'s own `:undefined` default applies.
+      assert par_event.data == :undefined
     end
 
     # sabotage: `maybe_raise_grandparent_completion/3`'s `Enum.all?/2` call
@@ -780,14 +791,14 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert done_event.data == %{"Var1" => 1}
     end
 
-    # AC: "a <donedata> whose only param fails produces event.data == nil,
-    # not %{}"
+    # AC: "a <donedata> whose only param fails produces event.data ==
+    # :undefined, not %{}"
     #
     # sabotage: `Statifier.EventData.from_params/1`'s `[]` clause is
     # changed to `%{}` -> an all-failing param fold would carry `%{}` as
-    # the done event's data instead of `nil`, reddening this assertion
-    # (Decision 5).
-    test "a donedata whose only param fails produces event.data == nil, not %{}" do
+    # the done event's data instead of `:undefined`, reddening this
+    # assertion (Decision 5).
+    test "a donedata whose only param fails produces event.data == :undefined, not %{}" do
       m = param_machine()
       ms = param_machine_state(m)
       transition = transition_named(m, "go-only-fail")
@@ -796,7 +807,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
       assert [error_event, done_event] = MachineState.internal_events(result)
       assert error_event.name == "error.execution"
-      assert done_event.data == nil
+      assert done_event.data == :undefined
     end
 
     # AC: "a failing param's error names the param, not just its state"
@@ -847,7 +858,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert [first, second, done_event] = MachineState.internal_events(result)
       assert first.name == "error.execution"
       assert second.name == "error.execution"
-      assert done_event.data == nil
+      assert done_event.data == :undefined
 
       # The payloads alone cannot tell these two apart ...
       assert first.data.source == second.data.source

@@ -14,20 +14,34 @@ defmodule Statifier.EventTest do
       assert %Event{type: :external, cause: nil} = Event.external("go")
     end
 
-    # sabotage: `Event.external/2` defaults `data` to `%{}` instead of `nil`
-    # -> this assertion reddens because `nil` is distinguishable from an
-    # empty map.
-    test "data defaults to nil, distinct from %{}" do
+    # sabotage: `Event.external/2` defaults `data` to `nil` instead of
+    # `:undefined` -> this assertion reddens because `:undefined` ("no
+    # data") is distinguishable from `nil` ("data, present, null") and from
+    # an empty map.
+    test "data defaults to :undefined, distinct from nil and from %{}" do
       event = Event.external("go")
 
-      assert event.data == nil
+      assert event.data == :undefined
+      refute event.data == nil
       refute event.data == %{}
     end
 
     # sabotage: `Event.external/2` ignores the `:data` option and always
-    # stores `nil` -> this assertion reddens.
+    # stores `:undefined` -> this assertion reddens.
     test "data option is carried through" do
       assert Event.external("go", data: %{value: 1}).data == %{value: 1}
+    end
+
+    # sabotage: `Event.external/2` reads `Keyword.get(opts, :data,
+    # :undefined)` is changed to `Keyword.get(opts, :data)` (default `nil`)
+    # -> the first assertion reddens, since absent `data` would come back
+    # `nil` instead of `:undefined`; the second assertion, which passes
+    # `data: nil` explicitly, stays green either way and pins that an
+    # explicit null payload is still distinguishable from an absent one -
+    # open question 2's pin (ADR-0037).
+    test "absent data is :undefined; an explicit nil payload stays nil" do
+      assert Event.external("go").data == :undefined
+      assert Event.external("go", data: nil).data == nil
     end
   end
 
@@ -45,7 +59,7 @@ defmodule Statifier.EventTest do
     end
 
     # sabotage: `Event.internal/3` ignores the `:data` option and always
-    # stores `nil` -> this assertion reddens.
+    # stores the `:undefined` default -> this assertion reddens.
     test "data option is carried through" do
       assert Event.internal("done.state.a", @cause, data: %{value: 1}).data == %{value: 1}
     end
@@ -76,7 +90,7 @@ defmodule Statifier.EventTest do
     end
 
     # sabotage: `Event.platform/3` ignores the `:data` option and always
-    # stores `nil` -> this assertion reddens.
+    # stores the `:undefined` default -> this assertion reddens.
     test "data option is carried through" do
       assert Event.platform("error.execution", @cause, data: %{value: 1}).data == %{value: 1}
     end

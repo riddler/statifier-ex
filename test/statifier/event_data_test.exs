@@ -51,21 +51,21 @@ defmodule Statifier.EventDataTest do
       assert EventData.coerce({:text, "  a   b  "}) == "a b"
     end
 
-    # sabotage: `from_text/1`'s `"" -> nil` clause is changed to `"" ->
+    # sabotage: `from_text/1`'s `"" -> :undefined` clause is changed to `"" ->
     # ""` -> this reddens, since whitespace-only text would come back as
-    # the empty string instead of `nil`.
-    test "whitespace-only text is nil, not the empty string" do
-      assert EventData.coerce({:text, "  "}) == nil
+    # the empty string instead of `:undefined`.
+    test "whitespace-only text is undefined, not the empty string" do
+      assert EventData.coerce({:text, "  "}) == :undefined
     end
   end
 
   describe "coerce/1 - {:params, pairs}" do
-    # sabotage: `from_params/1`'s `[] -> nil` clause is changed to `[] ->
-    # %{}` -> this reddens, since an empty param list would produce `%{}`
-    # instead of `nil` (conf:emptyEventData requires `nil`/`undefined`, not
-    # an empty map).
-    test "an empty list is nil, not an empty map" do
-      assert EventData.coerce({:params, []}) == nil
+    # sabotage: `from_params/1`'s `[] -> :undefined` clause is changed to
+    # `[] -> %{}` -> this reddens, since an empty param list would produce
+    # `%{}` instead of `:undefined` (conf:emptyEventData requires
+    # `undefined`, not an empty map).
+    test "an empty list is undefined, not an empty map" do
+      assert EventData.coerce({:params, []}) == :undefined
     end
 
     # sabotage: `from_params/1`'s `Enum.reduce/3` is changed to
@@ -75,6 +75,16 @@ defmodule Statifier.EventDataTest do
       pairs = [{"a", 1}, {"b", 2}, {"a", 3}]
 
       assert EventData.coerce({:params, pairs}) == %{"a" => 3, "b" => 2}
+    end
+  end
+
+  describe "coerce/1 - undefined versus null, side by side" do
+    # sabotage: `from_params/1`'s `[] -> :undefined` clause is changed to
+    # `[] -> nil` -> this reddens, since an empty param list ("no data")
+    # would come back indistinguishable from an explicit null value.
+    test "an empty rung is undefined; a genuinely null value stays nil" do
+      assert EventData.coerce({:params, []}) == :undefined
+      assert EventData.coerce({:value, nil}) == nil
     end
   end
 end

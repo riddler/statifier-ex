@@ -36,6 +36,21 @@ defmodule Statifier.Event do
   same way `Statifier.Interpreter`'s finalize/autoforward pass became
   `invokeid`'s. `origintype` was never named on this list at all before -
   it simply had no field yet.
+
+  ## `data` carries `:undefined`; the other four stay `nil`
+
+  `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`'s open question
+  2, answered: `data` defaults to `:undefined` ("no data") rather than `nil`,
+  because `data` can also legitimately hold a *null payload*
+  (`<content>null</content>`, `<param expr="null"/>`, coerced by
+  `Statifier.EventData.coerce/1`) - if both states were spelled `nil` on this
+  struct, the struct would be the new site of the exact collapse ADR-0037
+  retires, and nothing downstream could tell them apart. `sendid`, `origin`,
+  `origintype`, and `invokeid` are `String.t() | nil`: a datamodel null can
+  never be one of them, so `nil` is unambiguous there and stays. Translating
+  those four to `:undefined` happens one layer out, in
+  `Statifier.Evaluator.SystemVariables.event/1`, where `_event`'s fields are
+  built.
   """
 
   alias Statifier.Event.Cause
@@ -44,7 +59,7 @@ defmodule Statifier.Event do
   defstruct [
     :name,
     :type,
-    data: nil,
+    data: :undefined,
     cause: nil,
     invokeid: nil,
     origin: nil,
@@ -68,20 +83,21 @@ defmodule Statifier.Event do
 
   @doc """
   An externally received event - always `cause: nil`, since nothing in this
-  engine raised it. `data` defaults to `nil` ("no data"), distinct from
-  `%{}` ("data, empty"). `invokeid` (spec 5.10.1) defaults to `nil` - most
-  external events arrive from outside any invocation; a caller delivering an
-  event from an invoked child's session passes `invokeid: invoke_id`.
-  `origin`, `origintype` and `sendid` (spec 5.10.1 / C.1) default to `nil`
-  too; `Statifier.Session.Effects`' delivery path is the caller that passes
-  them for a `<send>` with no `target`.
+  engine raised it. `data` defaults to `:undefined` ("no data"), distinct
+  from `nil` ("data, present, and null") and from `%{}` ("data, empty").
+  `invokeid` (spec 5.10.1) defaults to `nil` - most external events arrive
+  from outside any invocation; a caller delivering an event from an invoked
+  child's session passes `invokeid: invoke_id`. `origin`, `origintype` and
+  `sendid` (spec 5.10.1 / C.1) default to `nil` too; `Statifier.Session.Effects`'
+  delivery path is the caller that passes them for a `<send>` with no
+  `target`.
   """
   @spec external(name :: String.t(), opts :: keyword()) :: t()
   def external(name, opts \\ []) do
     %__MODULE__{
       name: name,
       type: :external,
-      data: Keyword.get(opts, :data),
+      data: Keyword.get(opts, :data, :undefined),
       invokeid: Keyword.get(opts, :invokeid),
       origin: Keyword.get(opts, :origin),
       origintype: Keyword.get(opts, :origintype),
@@ -109,7 +125,7 @@ defmodule Statifier.Event do
       name: name,
       type: :internal,
       cause: cause,
-      data: Keyword.get(opts, :data),
+      data: Keyword.get(opts, :data, :undefined),
       sendid: Keyword.get(opts, :sendid)
     }
   end
@@ -129,7 +145,7 @@ defmodule Statifier.Event do
       name: name,
       type: :platform,
       cause: cause,
-      data: Keyword.get(opts, :data),
+      data: Keyword.get(opts, :data, :undefined),
       sendid: Keyword.get(opts, :sendid)
     }
   end

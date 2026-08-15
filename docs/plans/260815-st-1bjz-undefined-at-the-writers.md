@@ -588,12 +588,12 @@ break/red/revert cycle; every reworded one gets its cycle re-run.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run).
-- [ ] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly.
-- [ ] `mix test.regression` is green.
-- [ ] The new namelist-over-unbound-root test asserts `%{"Var1" => :undefined}` in `Effect.Send.data` and passes.
-- [ ] The new session round-trip test asserts `_event.data.Var1 === undefined` true and `=== null` false and passes.
-- [ ] `Event.external("go").data == :undefined` and `Event.external("go", data: nil).data == nil` both pass.
+- [x] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run).
+- [x] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly.
+- [x] `mix test.regression` is green.
+- [x] The new namelist-over-unbound-root test asserts `%{"Var1" => :undefined}` in `Effect.Send.data` and passes.
+- [x] The new session round-trip test asserts `_event.data.Var1 === undefined` true and `=== null` false and passes.
+- [x] `Event.external("go").data == :undefined` and `Event.external("go", data: nil).data == nil` both pass.
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: `coerce/1` still implements B.2.8.1's ladder as its moduledoc table claims, and `event/1` still writes spec 5.10.1's field set. No Appendix D procedure body is touched, so no Appendix D deviation is introduced.
@@ -970,6 +970,23 @@ before considering the plan fully landed.
 - [ ] Every changed test's sabotage line was actually re-run (break -> red -> revert), not just reworded.
 - [ ] The failure branches in `Interpreter.Datamodel` still write nothing, and their prose still quotes 5.3.2's "MUST create an empty data element".
 - [ ] No regressions in related features.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment: `coerce/1` still implements B.2.8.1's ladder as its moduledoc table claims, and `event/1` still writes spec 5.10.1's field set. No Appendix D procedure body is touched, so no Appendix D deviation is introduced.
+- [ ] The two answers are readable from the code alone - a reader of `lib/statifier/effect/send.ex` and `lib/statifier/event.ex` finds both decisions and their reasons without opening the ADR.
+- [ ] Every changed and new test's sabotage was actually run.
+- [ ] No regressions in `<send>`, `<invoke>`, `<donedata>`, or session delivery behavior.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
