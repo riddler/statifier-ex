@@ -766,15 +766,15 @@ the reason for the design, not a status note.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] `mix test test/statifier/replay_round_trip_test.exs` passes, and all
+- [x] Full `mix quality` passes.
+- [x] `mix test test/statifier/replay_round_trip_test.exs` passes, and all
       four cases assert both stream equality and terminal-snapshot equality.
-- [ ] `mix quality --format json --report -` is green (see Phase 1's note on
+- [x] `mix quality --format json --report -` is green (see Phase 1's note on
       why this is a per-phase criterion).
-- [ ] `mix test.regression` unchanged.
-- [ ] `mix quality --profile merge` passes before the branch is published, so
+- [x] `mix test.regression` unchanged.
+- [x] `mix quality --profile merge` passes before the branch is published, so
       the ADR judge sees the whole change including Phase 1's record.
-- [ ] `mix gate.verify` exits zero, proving the reported green was a full,
+- [x] `mix gate.verify` exits zero, proving the reported green was a full,
       unscoped, un-`--skip`-ed run.
 
 #### Manual Verification:
@@ -957,5 +957,24 @@ as the phase gate.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate.
+
+---
+
+### Phase 5
+
+- [ ] Case 2's assertion actually distinguishes single from double delivery -
+      confirm by reading the expected stream that the event's effects appear
+      exactly once.
+- [ ] `docs/observability.md` constraint 6 now describes something that
+      exists, end to end.
+- [ ] The compared streams are non-trivial: each case's expected stream has
+      more than a `{:halted, _}` in it, so equality is a real assertion rather
+      than two empty lists.
+- [ ] Spec conformance: no interpreter function changed in this phase, so the
+      Appendix D port is untouched - confirm by diff.
+
+**Implementation Note**: `mix quality --profile loop` between edits, full gate
+as the phase gate. This is the last phase; the deferred manual items from
+Phases 1-4 surface here under `--loop`.
 
 ---
