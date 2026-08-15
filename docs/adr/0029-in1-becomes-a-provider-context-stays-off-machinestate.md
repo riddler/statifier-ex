@@ -32,8 +32,9 @@ Three measured facts bound the decision, all from
 - `Context.resolve_functions/1` costs the same whether `In/1` is a provider
   entry or an inline closure - 1.36 us / 5.80 KB versus 1.40 us / 5.41 KB at
   `:corpus`, both within the run's own deviation band. **A provider swap by
-  itself moves no benchmark number**; Phase 1's before/after `T_full` rows
-  confirm this directly.
+  itself moves no benchmark number**; these two scenarios are the committed
+  evidence for that claim, and they isolate the swap itself rather than
+  inferring it from a whole-build figure.
 - That fixed resolution term is 56.6% of one context build at `:corpus`
   (`T_fixed / T_full`, ADR-0028's own Modifier C finding). Hoisting it to a
   compile-time constant - possible only once the functions map holds no

@@ -1,6 +1,6 @@
 defmodule Statifier.Evaluator.Functions do
   @moduledoc """
-  The `Predicator.FunctionProvider` carrying `In/1` (spec 5.10), replacing
+  The `Predicator.FunctionProvider` carrying `In/1` (spec 5.9.1), replacing
   `Statifier.Evaluator`'s former private closure-building helper.
 
   A provider entry is named by `{module, atom}` rather than by a captured
@@ -63,8 +63,15 @@ defmodule Statifier.Evaluator.Functions do
   @spec base_context() :: Predicator.Context.t()
   def base_context, do: @base_context
 
-  # The `In(stateId)` host function (spec 5.10): true when `stateId` names a
-  # state currently in the context's host configuration. `Machine.index/2`
+  # The `In(stateId)` host function: true when `stateId` names a state
+  # currently in the context's host configuration. Spec 5.9.1 is the clause
+  # that requires it ("all data models MUST support the 'In()' predicate,
+  # which takes a state ID as its argument and returns true if the state
+  # machine is in that state"); B.1.2 states the same rule as an iff, which
+  # is what makes the `:error` arm below an answer rather than a failure.
+  # Not 5.10 - that clause is System Variables, and this comment cited it
+  # for the whole life of the closure this provider replaced.
+  # `Machine.index/2`
   # returns `:error` for an id the document never declared - that is not an
   # evaluation failure, so it becomes `{:ok, false}` rather than an
   # `{:error, _}` here; a document asking `In()` about a state it does not

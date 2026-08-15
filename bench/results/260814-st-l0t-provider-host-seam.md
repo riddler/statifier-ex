@@ -24,6 +24,20 @@ constants that make them meaningful again. Only `measured macrostep` and the
 `context_build.exs` timing/memory figures are recorded in this Phase 1
 capture.
 
+Note on the Phase 1 claim, added 2026-08-15 during the deferred manual
+verification: **no Phase-1-only after capture was taken**, so this file has
+no post-swap `T_full` row to sit beside the Before rows below, and Phase 1's
+commit body overstates the file when it cites a before/after here. The claim
+that commit makes - that converting `In/1` from a closure to a provider
+moves no benchmark number - is evidenced instead by the `T_resolve_provider`
+and `T_resolve_closure` scenarios Phase 3 added to
+`bench/context_build.exs`, recorded in the After table below: 1.36 us /
+5.80 KB against 1.40 us / 5.41 KB at `:corpus`, and within 1.30-1.43 us at
+every one of the four size points. Those two scenarios isolate the swap
+directly, which a `T_full` comparison could only do by inference, so the
+claim is better supported here than the missing rows would have supported
+it.
+
 ## Before (baseline, this machine)
 
 ### `mix run bench/macrostep.exs` - measured macrostep
