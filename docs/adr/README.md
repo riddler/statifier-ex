@@ -38,6 +38,7 @@
 | [0034](0034-replay-re-drives-the-core-not-a-live-session.md) | Replay re-drives the core, not a live session; recording carries ordinal order, no clock | accepted |
 | [0035](0035-send-id-is-a-machinestate-counter.md) | The send id is `send_<n>` off a new `machine_state.send_counter` | accepted |
 | [0036](0036-send-argument-failure-discards-the-message.md) | A failed `<send>` argument discards the message (amends 0021 in part) | accepted |
+| [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
