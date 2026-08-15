@@ -95,6 +95,19 @@ defmodule Statifier.Session do
 
   Decided by ADR-0029; see its own `@doc` for the recording contract it
   carries.
+
+  ## Recording taps the input clauses, never the inbox
+
+  `:record` (`start_link/2`) builds a `Statifier.Session.Recording.t()` that
+  each of the five input-handling clauses appends one entry to, before that
+  entry's effects are ever planned or performed - the same "one recordable
+  input path" the converging-paths comment above `handle_info/2`'s fired-timer
+  clause already describes. ADR-0029 named the
+  four inputs a sound recording needs; ADR-0033 decided replay re-derives core
+  effects and re-injects `interpret/2` batches rather than replaying against a
+  live session, which is why the tap sits on the input side and not on the
+  effect stream `notify/2` fans out. `recording/1` reads the value back; see
+  its own `@doc` for the ordering caveat on when it is safe to call.
   """
 
   use GenServer, restart: :transient
@@ -107,6 +120,7 @@ defmodule Statifier.Session do
   alias Statifier.MachineState
   alias Statifier.Session.Effects
   alias Statifier.Session.Inbox
+  alias Statifier.Session.Recording
   alias Statifier.Session.Timers
 
   defmodule State do
@@ -121,7 +135,8 @@ defmodule Statifier.Session do
       :timers,
       timer_refs: %{},
       subscribers: %{},
-      halted: nil
+      halted: nil,
+      recording: nil
     ]
 
     @type t :: %__MODULE__{
@@ -132,7 +147,8 @@ defmodule Statifier.Session do
             timers: Statifier.Session.Timers.t(),
             timer_refs: %{reference() => reference()},
             subscribers: %{pid() => reference()},
-            halted: :done | :cancelled | :budget_exhausted | nil
+            halted: :done | :cancelled | :budget_exhausted | nil,
+            recording: Statifier.Session.Recording.t() | nil
           }
   end
 
@@ -176,6 +192,10 @@ defmodule Statifier.Session do
       since there is no `session_id` field on `%MachineState{}`.
     - `:subscribers` - pids to monitor and forward the effect stream to
       from the start (default `[]`); `subscribe/2` adds more afterward.
+    - `:record` - when `true` (default `false`), builds a
+      `Statifier.Session.Recording.t()` that captures every delivered event,
+      timer firing, cancel marker, and `interpret/2` batch this session
+      handles, in input order (ADR-0029). Read it back with `recording/1`.
   """
   @spec start_link(machine :: Machine.t(), opts :: keyword()) :: GenServer.on_start()
   def start_link(%Machine{} = machine, opts \\ []) do
@@ -186,6 +206,19 @@ defmodule Statifier.Session do
   @doc "This session's `sess_` UXID - `datamodel[\"_sessionid\"]`, held apart for routing."
   @spec session_id(server :: server()) :: String.t()
   def session_id(server), do: GenServer.call(server, :session_id)
+
+  @doc """
+  The `Statifier.Session.Recording.t()` this session has captured so far, or
+  `{:error, :not_recording}` if it was not started with `record: true`.
+
+  Call this only after the run has quiesced relative to whatever this caller
+  is waiting on - a timer firing arrives as a message with no ordering
+  guarantee against this call, so a `recording/1` issued before an
+  `assert_receive` on the effect it produced (or a `wait_for_status/3`-style
+  poll) can race the entry it is meant to observe.
+  """
+  @spec recording(server :: server()) :: {:ok, Recording.t()} | {:error, :not_recording}
+  def recording(server), do: GenServer.call(server, :recording)
 
   @doc """
   Delivers `event` to this session's external inbox (asynchronously - `:ok`
@@ -295,12 +328,20 @@ defmodule Statifier.Session do
       |> Keyword.get(:subscribers, [])
       |> Enum.reduce(%{}, fn pid, acc -> Map.put(acc, pid, Process.monitor(pid)) end)
 
+    session_id = machine_state.datamodel["_sessionid"]
+
+    recording =
+      if Keyword.get(opts, :record, false) do
+        Recording.new(machine, Keyword.put(machine_opts, :session_id, session_id))
+      end
+
     state = %State{
       machine_state: machine_state,
-      session_id: machine_state.datamodel["_sessionid"],
+      session_id: session_id,
       inbox: Inbox.new(),
       timers: Timers.new(),
-      subscribers: subscribers
+      subscribers: subscribers,
+      recording: recording
     }
 
     {:ok, perform(state, effects), {:continue, :drain}}
@@ -337,6 +378,14 @@ defmodule Statifier.Session do
   def handle_call(:snapshot, _from, state), do: {:reply, state.machine_state, state}
   def handle_call(:status, _from, state), do: {:reply, build_status(state), state}
 
+  def handle_call(:recording, _from, %State{recording: nil} = state) do
+    {:reply, {:error, :not_recording}, state}
+  end
+
+  def handle_call(:recording, _from, %State{recording: recording} = state) do
+    {:reply, {:ok, recording}, state}
+  end
+
   def handle_call({:subscribe, pid}, _from, state) do
     subscribers =
       if Map.has_key?(state.subscribers, pid) do
@@ -361,14 +410,17 @@ defmodule Statifier.Session do
 
   @impl GenServer
   def handle_cast({:enqueue_event, event}, state) do
+    state = record(state, &Recording.put_event(&1, event))
     {:noreply, %{state | inbox: Inbox.enqueue_event(state.inbox, event)}, {:continue, :drain}}
   end
 
   def handle_cast(:enqueue_cancel, state) do
+    state = record(state, &Recording.put_cancel/1)
     {:noreply, %{state | inbox: Inbox.enqueue_cancel(state.inbox)}, {:continue, :drain}}
   end
 
   def handle_cast({:interpret, effects}, state) do
+    state = record(state, &Recording.put_interpret(&1, effects))
     {:noreply, perform(state, effects), {:continue, :drain}}
   end
 
@@ -380,7 +432,9 @@ defmodule Statifier.Session do
   # input path (`docs/observability.md` constraint 6). `handle_continue/2`'s
   # own halted check decides whether it is drained now or stays queued.
   @impl GenServer
-  def handle_info({:statifier_delayed_send, ref, _send_id, event}, state) do
+  def handle_info({:statifier_delayed_send, ref, send_id, event}, state) do
+    state = record(state, &Recording.put_timer(&1, send_id, event))
+
     state = %{
       state
       | timers: Timers.forget(state.timers, ref),
@@ -529,6 +583,16 @@ defmodule Statifier.Session do
     payload = {:statifier, state.session_id, message}
     Enum.each(state.subscribers, fn {pid, _ref} -> send(pid, payload) end)
     :ok
+  end
+
+  # A session started without `record: true` carries `recording: nil` and
+  # pays only this one check per input; a recording session hands its
+  # current value through `append` and keeps the result.
+  @spec record(state :: State.t(), append :: (Recording.t() -> Recording.t())) :: State.t()
+  defp record(%State{recording: nil} = state, _append), do: state
+
+  defp record(%State{recording: recording} = state, append) do
+    %{state | recording: append.(recording)}
   end
 
   # -- status/1 -------------------------------------------------------------
