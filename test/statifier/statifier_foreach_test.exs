@@ -1,9 +1,8 @@
 defmodule Statifier.StatifierForeachTest do
   @moduledoc """
-  Drives the eight corpus documents - seven W3C, one SCION - named under
-  "Corpus/Ratchet Notes" in
-  `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md` through the real
-  engine, end to end, without going through `Statifier.Case.test_scxml/4`.
+  Drives the eight `<foreach>` corpus documents listed below - seven W3C, one
+  SCION - through the real engine, end to end, without going through
+  `Statifier.Case.test_scxml/4`.
 
   That was deliberate, not an oversight: until bead **st-af3.8**, all eight
   `foreach_elements` corpus files also tripped `conditional_transitions`

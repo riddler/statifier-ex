@@ -1494,12 +1494,11 @@ defmodule Statifier.Interpreter do
      is ever in the exit set. Its donedata (`ExitEntry.donedata/2`) becomes
      both `Trace.Done`'s and `Effect.Done`'s `donedata`. A failed
      `<content expr>` raises `error.execution` onto the *returned*
-     `machine_state`'s internal queue (Decision 8 of
-     `docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md`)
-     - nothing ever dequeues it, since the event loop has already stopped
-     by the time this function runs, but that is Appendix D's own
-     consequence (5.6/5.7's error rule is unqualified, and `exitInterpreter`
-     runs after the loop) rather than a deviation this port introduces. It
+     `machine_state`'s internal queue - nothing ever dequeues it, since the
+     event loop has already stopped by the time this function runs, but that
+     is Appendix D's own consequence (5.6/5.7's error rule is unqualified,
+     and `exitInterpreter` runs after the loop) rather than a deviation this
+     port introduces. It
      is still observable: `MachineState.internal_events/1` on the returned
      terminal state shows it.
   6. The terminal effects are appended last, `{:done, %Effect.Done{}}` last

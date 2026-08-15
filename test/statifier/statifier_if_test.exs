@@ -1,7 +1,6 @@
 defmodule Statifier.StatifierIfTest do
   @moduledoc """
-  Drives the five corpus documents named under "Corpus/Ratchet Notes" in
-  `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`
+  Drives the five `<if>`/`<elseif>`/`<else>` corpus documents listed below
   through the real engine, end to end, without going through
   `Statifier.Case.test_scxml/4`.
 

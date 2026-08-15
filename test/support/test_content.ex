@@ -11,9 +11,8 @@ defmodule Statifier.TestContent do
      instance stands in for a node that returns `{:error, _}`, which is how
      the stop-on-error contract stays tested despite neither real node ever
      erroring.
-  3. It is the non-fatal-error-channel node Phase 1 of
-     `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`
-     needs: `pending: [reason, ...]` returns those reasons in
+  3. It is the non-fatal-error-channel node spec 5.9.1's pending-errors
+     mechanism needs: `pending: [reason, ...]` returns those reasons in
      `context.pending_errors` alongside a normal `{:ok, ...}`, and
      `fail_with_context: true` returns the three-element
      `{:error, context, reason}` form (honoring `pending` too), standing in
