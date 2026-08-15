@@ -3,6 +3,7 @@ defmodule Statifier.Session.EffectsTest do
 
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
+  alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -12,7 +13,7 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Event
   alias Statifier.Session.Effects
 
-  # Table-driven over the whole `Effect.t()` vocabulary (fourteen tags: seven
+  # Table-driven over the whole `Effect.t()` vocabulary (fifteen tags: eight
   # core plus seven trace), mirroring `test/statifier/effect_test.exs`'s
   # shape - a vocabulary member with no matching clause here falls through to
   # `plan_one/1`'s lack of a catch-all and raises a `FunctionClauseError`
@@ -95,6 +96,15 @@ defmodule Statifier.Session.EffectsTest do
        {:notify, {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}},
        {:unroutable,
         {:invoke, %Invoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}}
+     ]},
+    {{:cancel_invoke, %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
+     [
+       {:notify,
+        {:cancel_invoke,
+         %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}},
+       {:unroutable,
+        {:cancel_invoke,
+         %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}}
      ]},
     {{:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}},
      [
@@ -182,8 +192,8 @@ defmodule Statifier.Session.EffectsTest do
   describe "plan/1 over the whole vocabulary" do
     # sabotage: n/a - this test only checks that the fixture table above is
     # complete, not any lib/ behavior.
-    test "the table covers all seventeen fixtures across the fourteen-tag vocabulary" do
-      assert length(@vocabulary) == 17
+    test "the table covers all eighteen fixtures across the fifteen-tag vocabulary" do
+      assert length(@vocabulary) == 18
     end
 
     for {{{tag, payload} = effect, expected}, index} <- Enum.with_index(@vocabulary) do

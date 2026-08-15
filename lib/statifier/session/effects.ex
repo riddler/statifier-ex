@@ -21,6 +21,7 @@ defmodule Statifier.Session.Effects do
 
   alias Statifier.Effect
   alias Statifier.Effect.Cancel
+  alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Event
@@ -67,6 +68,10 @@ defmodule Statifier.Session.Effects do
   end
 
   defp plan_one({:invoke, _invoke} = effect) do
+    [{:notify, effect}, {:unroutable, effect}]
+  end
+
+  defp plan_one({:cancel_invoke, %CancelInvoke{}} = effect) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 

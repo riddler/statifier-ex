@@ -1108,8 +1108,10 @@ defmodule Statifier.Interpreter do
      that means "these are about to be exited".
   3. Each state, in exit order, runs its `onexit` blocks
      (`ExitEntry.run_onexit_blocks/2` - the same per-state body
-     `exit_states/2`'s `depart/2` runs), then leaves the configuration.
-     `cancelInvoke` is skipped: no `<invoke>` support exists yet. st-cmq.
+     `exit_states/2`'s `depart/2` runs), then each of its live invocations
+     is cancelled (`ExitEntry.cancel_invocations_for_state/2` - the same
+     shared walk `depart/2` runs, so the two exit paths cannot drift),
+     before it leaves the configuration.
   4. **No history recording.** Appendix D's `exitInterpreter` has no
      history-recording loop at all - unlike `exitStates`, which has two
      consecutive `for s in statesToExit` loops for exactly that reason.
@@ -1156,8 +1158,10 @@ defmodule Statifier.Interpreter do
                                                                {ms, donedata, effects} ->
         {ms, onexit_effects} = ExitEntry.run_onexit_blocks(ms, state_index)
 
-        # cancelInvoke(inv) for inv in s.invoke (Appendix D) - skipped: no
-        # <invoke> support exists yet, so there is nothing to cancel. st-cmq.
+        # `for inv in s.invoke: cancelInvoke(inv)` (Appendix D) - the same
+        # shared walk `ExitEntry.depart/2` runs on the ordinary exit path,
+        # so the two never drift.
+        {ms, cancel_effects} = ExitEntry.cancel_invocations_for_state(ms, state_index)
 
         ms = %{ms | configuration: MapSet.delete(ms.configuration, state_index)}
 
@@ -1168,7 +1172,7 @@ defmodule Statifier.Interpreter do
             {ms, donedata}
           end
 
-        {ms, donedata, effects ++ onexit_effects}
+        {ms, donedata, effects ++ onexit_effects ++ cancel_effects}
       end)
 
     done_trace =
