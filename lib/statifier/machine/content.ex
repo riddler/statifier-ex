@@ -4,22 +4,22 @@ defmodule Statifier.Machine.Content do
   node kind, `Statifier.Machine.Content.Raise`, `Statifier.Machine.Content.Log`,
   `Statifier.Machine.Content.Assign`, `Statifier.Machine.Content.If`,
   `Statifier.Machine.Content.Foreach`, `Statifier.Machine.Content.Script`,
-  and `Statifier.Machine.Content.Send`, the interned counterpart to
-  `Statifier.Document.Raise` / `Statifier.Document.Log` /
-  `Statifier.Document.Assign` / `Statifier.Document.If` /
-  `Statifier.Document.Foreach` / `Statifier.Document.Script` /
-  `Statifier.Document.Send`. This module owns the family's shared
+  `Statifier.Machine.Content.Send`, and `Statifier.Machine.Content.Cancel`,
+  the interned counterpart to `Statifier.Document.Raise` /
+  `Statifier.Document.Log` / `Statifier.Document.Assign` /
+  `Statifier.Document.If` / `Statifier.Document.Foreach` /
+  `Statifier.Document.Script` / `Statifier.Document.Send` /
+  `Statifier.Document.Cancel`. This module owns the family's shared
   vocabulary - `owner/0` and the `t()` union - and no longer a struct
   itself: an Elixir protocol dispatches on the struct module, so each node
   kind needs its own struct for `Statifier.ExecutableContent` to implement
   without a central `case` on a `kind` field. Each future executable-content
-  node (`<cancel>`) gets its own struct here too, and its own
-  `Statifier.ExecutableContent` implementation, never a clause added to
-  this module.
+  node gets its own struct here too, and its own `Statifier.ExecutableContent`
+  implementation, never a clause added to this module.
 
   `c_index` is a dense document-order identity assigned to **every**
-  `<raise>`/`<log>`/`<assign>`/`<if>`/`<foreach>`/`<send>` node reachable
-  through `onentry`, `onexit`, or a `<transition>`'s own content, across the
+  `<raise>`/`<log>`/`<assign>`/`<if>`/`<foreach>`/`<send>`/`<cancel>` node
+  reachable through `onentry`, `onexit`, or a `<transition>`'s own content, across the
   whole machine (ADR-0012 item 3) - including a partition node *inside* an
   `<if>` or a body node *inside* a `<foreach>`, numbered in document order
   relative to the composite node that contains it (its own open tag numbers
@@ -31,6 +31,7 @@ defmodule Statifier.Machine.Content do
   """
 
   alias Statifier.Machine.Content.Assign
+  alias Statifier.Machine.Content.Cancel
   alias Statifier.Machine.Content.Foreach
   alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
@@ -67,5 +68,13 @@ defmodule Statifier.Machine.Content do
           | {:finalize, non_neg_integer(), non_neg_integer()}
 
   @typedoc "Any compiled executable-content node - the family this module maps."
-  @type t :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t() | Send.t()
+  @type t ::
+          Raise.t()
+          | Log.t()
+          | Assign.t()
+          | If.t()
+          | Foreach.t()
+          | Script.t()
+          | Send.t()
+          | Cancel.t()
 end

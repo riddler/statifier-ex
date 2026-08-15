@@ -38,17 +38,10 @@ defmodule Statifier.Lowering.UnsupportedTest do
     # `<invoke>` moved the same way - see
     # `test/statifier/lowering/invoke_test.exs` for its own coverage.
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "cancel" entry
-    # dispatching to `build_raise/2` (an accidental content-node builder) ->
-    # this test reddens because `<cancel>` builds a `Raise` instead of being
-    # reported unsupported
-    test "<cancel> under <onexit>" do
-      xml = ~s(<scxml><state id="s"><onexit><cancel sendid="s1"/></onexit></state></scxml>)
-      assert_unsupported(xml, "cancel")
-    end
-
     # `<send>` moved the same way - see
     # `test/statifier/lowering/send_test.exs` for its own coverage.
+    # `<cancel>` moved the same way - see
+    # `test/statifier/lowering/cancel_test.exs` for its own coverage.
 
     # `<foreach>` moved from this deferred set to the supported set in
     # st-af3.6 Phase 1 - see `test/statifier/lowering/content_test.exs` for

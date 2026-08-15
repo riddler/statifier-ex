@@ -26,7 +26,7 @@ defmodule Statifier.Lowering.CoverageTest do
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
     raise log donedata content param datamodel data assign if elseif else
-    foreach script invoke send
+    foreach script invoke send cancel
   )
 
   # The one name `@phase_3_elements` exists to word the unsupported-
@@ -37,9 +37,12 @@ defmodule Statifier.Lowering.CoverageTest do
   # `param`, `script`, and `invoke` moved the same way since; `send` moved
   # the same way too - see `test/statifier/lowering/send_test.exs` for its
   # own coverage.
-  @phase_3_elements ~w(
-    cancel
-  )
+  #
+  # `cancel` was the last deferred element, and moved the same way - see
+  # `test/statifier/lowering/cancel_test.exs` for its own coverage. The list
+  # itself stays, empty, as a running attribute rather than being deleted,
+  # so the next deferred element has a home.
+  @phase_3_elements ~w()
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only
   # spec-legal parent is `<datamodel>` (both supported as of st-af3.3 Phase
@@ -110,10 +113,22 @@ defmodule Statifier.Lowering.CoverageTest do
     end
   end
 
+  # sabotage: n/a - `@phase_3_elements` is empty now that `<cancel>` (the
+  # last deferred element) is supported; this is a completeness check on
+  # the module attribute itself, not lib/ behavior
+  test "no element name is deferred - @phase_3_elements is empty" do
+    assert @phase_3_elements == []
+  end
+
   # sabotage: `Lowering`'s dispatch map grows a stray
   # `"send" => &Builders.build_state/2` entry (an accidental extra
   # dispatch) -> `<send>`'s fixture now builds instead of producing
   # `{:unsupported_element, "send"}`, and the assertion below reddens
+  #
+  # Kept even though `@phase_3_elements` is currently empty: the loop is a
+  # no-op today, but the assertion inside stays exercised the moment a
+  # future element is added to the list, rather than needing to be
+  # rewritten from scratch.
   test "every deferred element name is rejected, naming itself" do
     for name <- @phase_3_elements do
       xml = Map.fetch!(@fixtures, name)
