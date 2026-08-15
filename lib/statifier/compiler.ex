@@ -139,10 +139,9 @@ defmodule Statifier.Compiler do
   `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
   shape (`:396-408`).
 
-  `invoke_acc`/`invoke_errors` belong to the `<invoke>` pass (Decision 4 of
-  `docs/plans/260815-st-cmq.6-invoke-lowering-and-states-to-invoke.md`) - the
-  one pass that does not fit the "numbered during the walk, compiled in a
-  deferred pass" split every other field above follows. A `Machine.Invoke`'s
+  `invoke_acc`/`invoke_errors` belong to the `<invoke>` pass - the one pass
+  that does not fit the "numbered during the walk, compiled in a deferred
+  pass" split every other field above follows. A `Machine.Invoke`'s
   `<finalize>` is executable content, so its `Machine.Block` needs the same
   `c_next` counter every `<onentry>`/`<onexit>` block draws from
   (`assign_blocks/2`), which only exists while the walk is threading `acc`
@@ -323,8 +322,8 @@ defmodule Statifier.Compiler do
   end
 
   # Attaches each state's own already-compiled `<invoke>` list, built during
-  # the walk into `invoke_acc` (Decision 4, unlike `donedata_map`'s deferred
-  # pass) - mirrors `with_donedata/2`.
+  # the walk into `invoke_acc`, unlike `donedata_map`'s deferred pass -
+  # mirrors `with_donedata/2`.
   @spec with_invoke(mstate :: MState.t(), invoke_acc :: %{non_neg_integer() => [MInvoke.t()]}) ::
           MState.t()
   defp with_invoke(%MState{index: index} = mstate, invoke_acc) do
@@ -1202,10 +1201,9 @@ defmodule Statifier.Compiler do
     build_dparam(param, :location, source, {:donedata, index})
   end
 
-  # Shared by `build_donedata_param/2` and `build_invoke_param/2` (Decision
-  # 4, Phase 3) - the only difference between a `<donedata>`'s own `<param>`
-  # and an `<invoke>`'s own `<param>` is which `owner_ref` a compile failure
-  # is reported against.
+  # Shared by `build_donedata_param/2` and `build_invoke_param/2` - the only
+  # difference between a `<donedata>`'s own `<param>` and an `<invoke>`'s own
+  # `<param>` is which `owner_ref` a compile failure is reported against.
   @spec build_dparam(
           param :: DParam.t(),
           kind :: MParam.kind(),
@@ -1260,7 +1258,7 @@ defmodule Statifier.Compiler do
   end
 
   # Builds one state's own `<invoke>` list, complete - unlike `<donedata>`,
-  # not deferred (Decision 4, moduledoc's `invoke_acc`/`invoke_errors`
+  # not deferred (see this module's moduledoc, `invoke_acc`/`invoke_errors`
   # section): `<finalize>` is executable content, so its `Machine.Block`
   # must be built through `assign_blocks/2` while `acc.c_next` is still live,
   # which only holds true during `walk_siblings/4` itself. Every other field
@@ -1313,7 +1311,7 @@ defmodule Statifier.Compiler do
     end)
   end
 
-  # `type`/`src` (Decision 4): the static attribute wins when both are
+  # `type`/`src`: the static attribute wins when both are
   # somehow present on an unvalidated struct (6.4.1's mutual exclusion is the
   # validator's, not this pass's, to enforce), compiled from the `expr`
   # sibling attribute otherwise, `nil` when neither was written.
