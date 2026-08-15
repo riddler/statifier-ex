@@ -631,16 +631,16 @@ matching the convention rows 0002, 0004, 0016, 0019 and 0026 already use.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` used between edits while iterating.
-- [ ] Full `mix quality` is green, and `mix gate.verify` exits zero. This
+- [x] `mix quality --profile loop` used between edits while iterating.
+- [x] Full `mix quality` is green, and `mix gate.verify` exits zero. This
       phase's ADR edits put `mix adr.check` on the critical path, so its
       passing is a real check here rather than a formality.
-- [ ] `grep -rn "Context.new(" lib` shows the same three call sites as before
+- [x] `grep -rn "Context.new(" lib` shows the same three call sites as before
       this plan, all over an empty map and none passing `:normalize` - the
       option is declined in code, whatever the prose says about it.
-- [ ] `grep -rn "base_context" lib docs` shows the hoist still present and
+- [x] `grep -rn "base_context" lib docs` shows the hoist still present and
       described consistently in both places.
-- [ ] `grep -rn "context.ex:190-237" lib` returns nothing - the dead citation
+- [x] `grep -rn "context.ex:190-237" lib` returns nothing - the dead citation
       in `system_variables.ex` is gone.
 
 #### Manual Verification:
@@ -827,6 +827,37 @@ of blocking here.
       regression.
 - [ ] `T_new_nf` is present at all four size points, so Phase 3's refusal has
       a corpus-scale number and a stress-scale one.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Every number quoted in the new comments and doc paragraphs matches the
+      Phase 2 results file exactly.
+- [ ] The ADR-0030 amendment adds and dates; it does not rewrite the 7.0
+      figures or reopen the Decision.
+- [ ] The new comments carry no process jargon (ADR-0018): no bead ids, no
+      phase numbers, no plan references in `lib/`.
+- [ ] `lib/statifier/evaluator/functions.ex`'s `in_state/2` and
+      `lib/statifier/evaluator.ex`'s `context/1` still read as the ADR-0030
+      shape they document, with no behavior edit smuggled into a comment
+      phase.
+- [ ] `system_variables.ex`'s repaired paragraph and `undefine_nils/1`'s own
+      comment now say the same thing about where `nil` becomes `:undefined`,
+      and neither claims `Predicator.Context.new/2` does it.
+- [ ] The Appendix D spec-conformance criterion is declined for this phase for
+      the reason given under "Implementation Approach": this phase changes no
+      behavior, and none of the three modules it comments is an Appendix D
+      procedure. `git diff` showing only comment, moduledoc, and `docs/` lines
+      is what makes that declination true rather than assumed.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

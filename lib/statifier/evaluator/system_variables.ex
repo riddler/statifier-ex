@@ -7,9 +7,9 @@ defmodule Statifier.Evaluator.SystemVariables do
   and `MachineState.put_event/2` calls `event/1` on every write.
 
   `nil` for an absent field is deliberate everywhere it appears here, not an
-  oversight: `Predicator.Context.new/2` normalizes `nil` to `:undefined`
-  recursively (`deps/predicator/lib/predicator/context.ex:190-237`), so a
-  `nil` written here becomes the spec-correct "not bound" answer once a
+  oversight: `Statifier.Evaluator`'s own `undefine_nils/1`
+  (`lib/statifier/evaluator.ex`) normalizes `nil` to `:undefined` recursively,
+  so a `nil` written here becomes the spec-correct "not bound" answer once a
   `Statifier.Evaluator.context/1` wraps it, rather than the `%{}` a naive
   default would produce.
   """

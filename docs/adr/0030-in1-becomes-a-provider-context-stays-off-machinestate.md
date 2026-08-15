@@ -24,7 +24,9 @@ landed in predicator 5.0.0 specifically for this profile - and this record is
 the re-answer ADR-0028 deferred.
 
 Three measured facts bound the decision, all from
-`bench/results/260814-st-l0t-provider-host-seam.md`:
+`bench/results/260814-st-l0t-provider-host-seam.md`. *(These are predicator
+7.0 measurements; `bench/results/260815-st-59d-predicator-8-0.md` restates
+them against 8.0.)*
 
 - `Context.put_host/2` costs 0.0330 us / 0.0859 KB against `T_full`'s 2.30 us
   / 10.92 KB at `:corpus` before this change - roughly 70x faster and 127x
@@ -151,6 +153,18 @@ built it, same as before this record.
   compute the same constant, just no longer be the only cheap way to get it.
   Predicator owns the shape of its own memoization (ADR-0025 rule 1); this
   record does not pre-empt or wait on that decision.
+
+  *(Amended 2026-08-15: the memo shipped in predicator 8.0.0. `st-59d` kept
+  the hoist rather than removing it - "redundant" turned out to be too
+  strong. The memo removes re-validation of a provider list already seen in
+  this process; it does not remove the per-call cost `Context.new/2` still
+  pays to compute the cache stamp (`Code.ensure_loaded?/1` and
+  `module_info(:md5)` per provider module), look it up in
+  `:persistent_term`, and allocate the struct. A module attribute is a
+  compile-time literal read and pays none of that, so the constant is still
+  the cheaper way to get the value. See
+  `lib/statifier/evaluator/functions.ex`'s comment above `@base_context` for
+  the mechanism in full.)*
 - The build-*count* reduction - collapsing the two selection-round builds
   into build-once-plus-refresh, which ADR-0028's within-block threading did
   not reach and this record does not reach either - remains future work. It

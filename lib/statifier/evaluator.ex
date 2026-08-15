@@ -103,6 +103,23 @@ defmodule Statifier.Evaluator do
   need a stored context - remains future work, still gated on staleness and
   duplication exactly as ADR-0030 leaves it.
 
+  predicator 8.0 offers a `normalize: false` option on `Context.new/2` that
+  skips the deep `normalize_value/1` walk on a caller's vouch that `data` is
+  string-keyed at every level. It buys this path nothing, because this path
+  does not call `new/2`: the constant `context/1` starts from holds an empty
+  `data`, and each root arrives through `bind/3`, which normalizes its value
+  unconditionally with no opt-out. Taking the vouch would mean rebuilding the
+  whole context per site with `new/2` to get one walk instead of two -
+  trading a size-scaling term for `new/2`'s per-call stamp-and-allocate work,
+  and giving up the compile-time constant. Measured
+  (`bench/results/260815-st-59d-predicator-8-0.md`): at `:corpus`,
+  `Context.new(data, normalize: false)` (`T_new_nf`) costs 0.3788 us / 0.867
+  KB, essentially flat across all four size points because it skips the
+  size-scaling walk entirely - but the shipped path (`T_full`, this module's
+  `context/1`) already costs 1.0755 us / 4.773 KB at `:corpus` without ever
+  calling `new/2`, so `T_new_nf`'s flatness is not a number this path could
+  collect.
+
   ## The membrane
 
   `evaluate/2` returns `{:ok, term()} | {:error, Statifier.Evaluator.Error.t()}`

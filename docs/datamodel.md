@@ -145,7 +145,14 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    still the whole block or selection round, not the individual write, and
    not the whole macrostep - and the seam is still not taken across blocks:
    no context is stored on `MachineState`, and widening the interval that
-   far remains future work, per ADR-0030's grounds.
+   far remains future work, per ADR-0030's grounds. The fixed term
+   `base_context/0` hoists is memoized upstream as of predicator 8.0, and the
+   compile-time hoist is kept anyway - the memo removes re-validation, not
+   the per-call stamp-and-allocate cost `new/2` still pays, so the constant
+   stays cheaper (ADR-0030's amendment). The `normalize: false` seam that
+   memoization sits beside also exists as of 8.0 but is not taken here: it
+   would help a whole-map `new/2` call, and this path binds per root rather
+   than constructing per build.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is
