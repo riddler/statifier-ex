@@ -5,7 +5,7 @@ Status: accepted (2026-08-02) - amended in part by ADR-0026 (2026-08-14)
 **Amendment note.**
 [ADR-0026](0026-script-as-predicator-statement-programs.md) discharges the
 conditional final consequence below on its own stated condition: predicator
-(5.0.0, pinned `~> 7.0` since st-5ma) grew the safe statement layer -
+(5.0.0, pinned `~> 8.0` since st-59d) grew the safe statement layer -
 `parse_program/2`, `store`/`pop`, `execute/1,2,3` - so `<script>` is now
 supported, with predicator statement programs as bodies. Everything else in
 this record stands unchanged: predicator is still the sole datamodel, no

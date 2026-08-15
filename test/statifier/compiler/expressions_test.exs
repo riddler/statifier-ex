@@ -82,11 +82,10 @@ defmodule Statifier.Compiler.ExpressionsTest do
     refute compiled.instructions == []
   end
 
-  # sabotage: in compile_program/3's failure path, hardcode the recovered
-  # `{line, column}` to `{1, 1}` instead of using `Predicator.parse_program/2`'s
-  # own structured result -> the recovered position stops matching predicator's
-  # actual failure site, and this test goes red on a source whose failure is
-  # not at line 1, column 1.
+  # sabotage: in compile_program/3's failure arm, replace parse_error with
+  # ParseError.new("x", 1, 1) -> the reported position stops matching
+  # predicator's actual failure site, and this test goes red on a source
+  # whose failure is not at line 1, column 1.
   test "compile_program/3 reports a failing statement program with a recovered line/column" do
     location = loc(9)
 
@@ -99,6 +98,30 @@ defmodule Statifier.Compiler.ExpressionsTest do
             %ParseError{position: {line, column}}} = error.reason
 
     assert {line, column} == {2, 4}
+  end
+
+  # sabotage: in compile/3's and compile_program/3's failure arms, rebuild the
+  # error with `ParseError.new(parse_error.message, line, column)` (the
+  # 3-arity constructor, which always sets `:span` to nil) instead of passing
+  # `parse_error` straight through -> `:span` goes back to nil, and this test
+  # goes red
+  test "compile/3 and compile_program/3 both carry predicator's own non-nil :span, not a hand-built error" do
+    assert {:error, %Error{reason: {:expression_compile_error, _owner, _source, expr_error}}} =
+             Expressions.compile("score >", {:content, 0}, loc(0))
+
+    assert %ParseError{position: position, span: {start, stop}} = expr_error
+    assert {{start_line, start_column}, {end_line, end_column}} = {start, stop}
+    assert is_integer(start_line) and is_integer(start_column)
+    assert is_integer(end_line) and is_integer(end_column)
+    assert position == start
+
+    assert {:error, %Error{reason: {:expression_compile_error, _owner, _source, program_error}}} =
+             Expressions.compile_program("x = 1;\ny =", {:content, 1}, loc(9))
+
+    assert %ParseError{position: program_position, span: {program_start, _program_stop}} =
+             program_error
+
+    assert program_position == program_start
   end
 
   # sabotage: swap compile_with_spans/1 for compile_program_with_positions/1

@@ -13,7 +13,7 @@ condition being met, and `docs/datamodel.md` carried the same posture
 statement layer in predicator itself").
 
 Predicator 5.0.0 grew exactly that layer, and the pin has since moved to
-`~> 7.0` (mix.exs:41, st-5ma): `parse_program/2` parses a statement
+`~> 8.0` (mix.exs:41, st-59d): `parse_program/2` parses a statement
 grammar (sequences of assignments and expression statements over the
 existing expression language), the ISA gained `store`/`pop`, and
 `Predicator.execute/1,2,3` runs a program and returns the resulting

@@ -62,14 +62,15 @@ defmodule Statifier.Compiler.Expressions do
   reduced to point positions and never re-supplied via a `:positions`
   keyword (item 2: passing both to `evaluate/3` raises).
 
-  On failure, `compile_with_spans/1` reports only a formatted string
-  (verified against the installed predicator 7.0.0 dependency:
-  `deps/predicator/lib/predicator.ex`'s `build_compiled_result/1` private
-  clause), so the structured `{line, column}` predicator actually failed at
-  is recovered by a second, failure-path-only call to `Predicator.parse/2` -
-  `Predicator.parse/2` always returns `{:error, message, line, column}` on
-  failure regardless of the `spans:` option, since spans are a property of
-  successfully parsed AST nodes, not of the error tuple.
+  On failure, `compile_with_spans/1` returns
+  `{:error, %Predicator.Errors.ParseError{}}` directly (verified against the
+  installed predicator 8.0.0 dependency:
+  `deps/predicator/lib/predicator.ex:902-915`'s `build_compiled_result/1`
+  private clause, and `deps/predicator/lib/predicator/errors/parse_error.ex`).
+  The struct carries the parser's bare `:message` with no location text
+  appended, `{line, column}` in `:position`, and the failing token's extent in
+  `:span` - present in every compile mode, not only `_with_spans`, since the
+  span comes from the token stream rather than from the `spans:` option.
   """
   @spec compile(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           {:ok, Machine.expr()} | {:error, Error.t()}
@@ -79,8 +80,8 @@ defmodule Statifier.Compiler.Expressions do
       {:ok, %Predicator.Compiled{} = compiled} ->
         {:ok, {:compiled, compiled, source}}
 
-      {:error, _formatted_message} ->
-        {:error, parse_error(source, owner, location)}
+      {:error, %ParseError{} = parse_error} ->
+        {:error, Error.expression_compile_error(owner, source, parse_error, location)}
     end
   end
 
@@ -164,35 +165,24 @@ defmodule Statifier.Compiler.Expressions do
   `%Predicator.Compiled{}` is stored whole, exactly as `compile/3` stores
   `compile_with_spans/1`'s result.
 
-  On failure, the structured `{line, column}` is recovered with a second
-  call to `Predicator.parse_program/2`, which - unlike `compile/3`'s
-  `Predicator.parse/2` detour through a `spans:` option - already returns
-  the structured `{:error, message, line, column}` 4-tuple directly
-  (`deps/predicator/lib/predicator.ex:865-871`). The asymmetry with
-  `compile/3`'s recovery path is deliberate, not an oversight: a program
-  parse failure never carries a span to ask for in the first place.
+  On failure, the error is the same `%Predicator.Errors.ParseError{}` shape
+  `compile/3` returns, handed straight through with no re-parse. A program
+  parse failure still carries a `:span`: it comes from the token stream that
+  `compile_program_with_positions/1` shares with every other compile entry
+  point (`deps/predicator/lib/predicator.ex:902-915`'s `build_compiled_result/1`
+  private clause), not from the `spans:` option - so a span is present here
+  even though this function compiles with positions rather than spans.
   """
   @spec compile_program(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           {:ok, Machine.program()} | {:error, Error.t()}
   def compile_program(source, owner, %Location{} = location)
       when is_binary(source) and is_tuple(owner) do
     case Predicator.compile_program_with_positions(source) do
-      {:ok, %Predicator.Compiled{} = compiled} -> {:ok, {:program, compiled, source}}
-      {:error, _formatted_message} -> {:error, program_parse_error(source, owner, location)}
+      {:ok, %Predicator.Compiled{} = compiled} ->
+        {:ok, {:program, compiled, source}}
+
+      {:error, %ParseError{} = parse_error} ->
+        {:error, Error.expression_compile_error(owner, source, parse_error, location)}
     end
-  end
-
-  @spec parse_error(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
-          Error.t()
-  defp parse_error(source, owner, location) do
-    {:error, message, line, column} = Predicator.parse(source, spans: true)
-    Error.expression_compile_error(owner, source, ParseError.new(message, line, column), location)
-  end
-
-  @spec program_parse_error(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
-          Error.t()
-  defp program_parse_error(source, owner, location) do
-    {:error, message, line, column} = Predicator.parse_program(source)
-    Error.expression_compile_error(owner, source, ParseError.new(message, line, column), location)
   end
 end
