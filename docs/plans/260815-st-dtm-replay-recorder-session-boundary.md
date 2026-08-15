@@ -456,13 +456,13 @@ mutation, e.g.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] `mix quality --format json --report -` is green (see Phase 1's note on
+- [x] Full `mix quality` passes.
+- [x] `mix quality --format json --report -` is green (see Phase 1's note on
       why this is a per-phase criterion).
-- [ ] `mix test test/statifier/session/recording_test.exs` passes.
-- [ ] Doctor's 100% thresholds hold - every public function has `@doc` and
+- [x] `mix test test/statifier/session/recording_test.exs` passes.
+- [x] Doctor's 100% thresholds hold - every public function has `@doc` and
       `@spec`, the module has a `@moduledoc`.
-- [ ] `mix adr.check` reports no finding on the new file (it is pure; a
+- [x] `mix adr.check` reports no finding on the new file (it is pure; a
       finding here means something process-shaped got in).
 
 #### Manual Verification:
@@ -907,5 +907,19 @@ before considering the plan fully landed.
 full gate as the phase gate. This phase touches no Elixir, so per CLAUDE.md it
 could commit on review of the diff alone; run the gate anyway, since the ADR
 judge is the point of the phase.
+
+---
+
+### Phase 2
+
+- [ ] The moduledoc answers, without the plan in hand, why a batch is one
+      entry and why the timer ref is absent.
+- [ ] Each sabotage line names a mutation that would actually redden the test
+      beside it (this phase touches no interpreter function, so the Appendix D
+      line-for-line criterion does not apply).
+
+**Implementation Note**: `mix quality --profile loop` between edits, full gate
+as the phase gate. Under `--loop`, the automated list gates advancement and the
+manual items are deferred.
 
 ---
