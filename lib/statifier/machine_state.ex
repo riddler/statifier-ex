@@ -159,6 +159,19 @@ defmodule Statifier.MachineState do
     contract above states for `macrostep`/`microstep` applies to that second
     half.
 
+  Every key in `datamodel` is a string, at every level, for every reachable
+  `%MachineState{}` value - not merely "in practice today" but by
+  construction. Every writer except the `:datamodel` option produces string
+  keys because every other key this codebase ever writes comes from an SCXML
+  id, which is a string by construction; the `:datamodel` option is the one
+  source whose keys a caller chooses, and `new/2` checks it (`checked_datamodel!/1`
+  below) before it ever reaches the struct. The invariant exists because the
+  expression context built over this map (`Statifier.Evaluator.context/1`)
+  binds each root by string name - a map that failed the invariant would
+  either crash at the first evaluation site or be silently rewritten under a
+  precedence rule the caller never saw, neither of which this module lets
+  happen.
+
   Seeding the system variables in `new/2` rather than at
   `interpret`'s own datamodel-initialization step is a mechanical deviation
   from Appendix D's ordering, not a semantic one (ADR-0002):
@@ -261,11 +274,19 @@ defmodule Statifier.MachineState do
   `:max_macrostep_rounds` (default `10_000`). All four system variables
   (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
   option's map, so author-supplied data can never shadow a system variable.
+
+  `:datamodel` must be string-keyed at every level: raises `ArgumentError`
+  if any key, in the map itself or in a map nested inside it (directly or
+  inside a list, at any depth), is an atom other than `true`/`false` -
+  exactly the keys `Predicator.Context`'s own normalization would rewrite.
+  Boolean keys and non-atom keys (integers, for one) are accepted, and a
+  struct value's fields are never inspected, since predicator's walk does
+  not descend into one either.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
     session_id = Keyword.get_lazy(opts, :session_id, fn -> UXID.generate!(prefix: "sess") end)
-    author_datamodel = Keyword.get(opts, :datamodel, %{})
+    author_datamodel = opts |> Keyword.get(:datamodel, %{}) |> checked_datamodel!()
 
     %__MODULE__{
       machine: machine,
@@ -282,6 +303,59 @@ defmodule Statifier.MachineState do
       trace: Keyword.get(opts, :trace, false),
       max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000)
     }
+  end
+
+  # Mirrors `Predicator.Context`'s own `normalize_value/1` walk
+  # (`deps/predicator/lib/predicator/context.ex`): lists and non-struct maps
+  # are descended, structs pass through whole, scalars are ignored. Inside a
+  # map, `normalize_map/1` rewrites exactly the atom keys that are not
+  # `true`/`false` - `config[true]` is a literal atom-key lookup upstream, so
+  # boolean keys are data, not variable names - and those are exactly the keys
+  # refused here. What that buys: a caller-supplied datamodel that reaches the
+  # struct is one predicator's normalization would not change, at any depth, so
+  # the map stored here and the map every expression evaluates against are the
+  # same map. The refusal is deliberate rather than a silent stringification:
+  # coercing would duplicate upstream's precedence rules here, and would drop
+  # one of `%{"x" => 1, x: 2}`'s two entries by a rule the caller never stated.
+  @spec checked_datamodel!(datamodel :: map()) :: map()
+  defp checked_datamodel!(datamodel) when is_map(datamodel) do
+    check_keys!(datamodel, [])
+    datamodel
+  end
+
+  @spec check_keys!(value :: term(), path :: [term()]) :: :ok
+  defp check_keys!(list, path) when is_list(list) do
+    list
+    |> Enum.with_index()
+    |> Enum.each(fn {element, index} -> check_keys!(element, [index | path]) end)
+  end
+
+  defp check_keys!(%_struct{}, _path), do: :ok
+
+  defp check_keys!(map, path) when is_map(map) do
+    Enum.each(map, fn {key, value} ->
+      if offending_key?(key), do: raise(ArgumentError, key_message(key, path))
+      check_keys!(value, [key | path])
+    end)
+  end
+
+  defp check_keys!(_scalar, _path), do: :ok
+
+  @spec offending_key?(key :: term()) :: boolean()
+  defp offending_key?(key), do: is_atom(key) and not is_boolean(key)
+
+  @spec key_message(key :: term(), path :: [term()]) :: String.t()
+  defp key_message(key, path) do
+    location =
+      case Enum.reverse(path) do
+        [] -> "the top level"
+        segments -> Enum.map_join(segments, " -> ", &inspect/1)
+      end
+
+    "the :datamodel option must not contain the key #{inspect(key)} at #{location}: " <>
+      "datamodel keys must be strings at every level, and an atom key would be " <>
+      "rewritten (or dropped, if a string key of the same name is present) by the " <>
+      "expression context this datamodel is evaluated against"
   end
 
   @doc """

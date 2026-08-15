@@ -185,6 +185,86 @@ defmodule Statifier.MachineStateTest do
       refute ms.datamodel["_sessionid"] == "author-supplied"
     end
 
+    # sabotage: `checked_datamodel!/1` returns `datamodel` without calling
+    # `check_keys!/2` at all -> the option is read and merged unchecked,
+    # exactly the pre-change behavior, and this assertion reddens (no raise).
+    test "a top-level atom key in :datamodel raises ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        new_machine_state(datamodel: %{x: 1})
+      end
+    end
+
+    # sabotage: `check_keys!/2`'s map clause stops recursing (the
+    # `check_keys!(value, [key | path])` call is dropped) -> the top-level
+    # test above stays green, but this test and the two below it redden
+    # together, since none of the three offending keys sits at the top level.
+    test "an atom key inside a nested map raises ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        new_machine_state(datamodel: %{"user" => %{name: "Ada"}})
+      end
+    end
+
+    # sabotage: same recursion-stop mutation as above (`check_keys!/2`'s map
+    # clause dropping its recursive call) -> reddens together with the other
+    # two nested-level tests, since a map inside a list is a nesting level
+    # the same recursion is responsible for reaching.
+    test "an atom key inside a map held in a list raises ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        new_machine_state(datamodel: %{"rows" => [%{id: 1}]})
+      end
+    end
+
+    # sabotage: same recursion-stop mutation again -> reddens together with
+    # the other two nested-level tests; this one proves the walk is
+    # recursive rather than stopping two levels deep, since the offending
+    # key sits three levels down through a mixed map/list/map nest.
+    test "an atom key at a deep mixed map/list nest raises ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        new_machine_state(datamodel: %{"a" => %{"b" => [%{"c" => %{d: 1}}]}})
+      end
+    end
+
+    # sabotage: `key_message/2` drops the path from the message and names
+    # only the key -> this assertion reddens, since the message would no
+    # longer mention "user".
+    test "the raised message names the offending key and its path" do
+      error =
+        assert_raise ArgumentError, fn ->
+          new_machine_state(datamodel: %{"user" => %{name: "Ada"}})
+        end
+
+      assert error.message =~ ":name"
+      assert error.message =~ "user"
+    end
+
+    # sabotage: `offending_key?/1` inverts to `is_binary(key)` -> a
+    # well-formed string-keyed map is refused, reddening this assertion
+    # (a raise where none is expected).
+    test "a well-formed string-keyed nested :datamodel is accepted" do
+      ms = new_machine_state(datamodel: %{"ok" => %{"nested" => [%{"deep" => 1}]}})
+      assert ms.datamodel["ok"] == %{"nested" => [%{"deep" => 1}]}
+    end
+
+    # sabotage: `offending_key?/1` drops its `not is_boolean(key)` term,
+    # reddening the boolean-key half of this assertion; separately,
+    # widening it to `not is_binary(key)` reddens the integer-key half.
+    # Both were run, each against its own half.
+    test "boolean and integer keys in :datamodel are accepted" do
+      ms = new_machine_state(datamodel: %{"flags" => %{true => 1}, "lookup" => %{1 => "a"}})
+      assert ms.datamodel["flags"] == %{true => 1}
+      assert ms.datamodel["lookup"] == %{1 => "a"}
+    end
+
+    # sabotage: `check_keys!/2`'s `%_struct{}` clause is removed, so the walk
+    # falls through to the map clause and tries to `Enum.each/2` over the
+    # struct -> this assertion reddens (`Protocol.UndefinedError`, since
+    # `Date` has no `Enumerable` impl), because a struct is no longer stopped
+    # at rather than walked.
+    test "a struct value in :datamodel is not walked" do
+      ms = new_machine_state(datamodel: %{"d" => ~D[2026-08-15]})
+      assert ms.datamodel["d"] == ~D[2026-08-15]
+    end
+
     # sabotage: `MachineState.new/2`'s `Keyword.get_lazy(opts, :session_id,
     # ...)` is changed to `Keyword.get(opts, :session_id, "ignored")` ->
     # the caller-supplied `:session_id` value is dropped in favor of the
