@@ -69,6 +69,28 @@ defmodule Statifier.Replay do
   which `run/1` reports as `{:error, {:unscheduled_timer_firing, send_id}}`
   rather than silently proceeding.
 
+  ## `{:deliver, ...}`/`{:raise, ...}` defer to the recorded `{:internal, ...}` entry
+
+  A live session's `{:raise, ...}` instruction and every `{:deliver, ...}`
+  route except a self-addressed `{:session, sid}` reach
+  `Statifier.Interpreter.deliver_internal/5` through
+  `Statifier.Session`'s own private seam, and every one of those calls is
+  recorded as an `{:internal, kind, name, origin, opts}` entry
+  (ADR-0037, ADR-0029) at its own position in the session's serialized
+  input order - interleaved with, not nested inside, the entry that
+  triggered it. Performing the delivery again while re-deriving that
+  triggering entry's own effects would raise the same internal event twice,
+  so this module's `perform_instruction/3` clauses for `{:raise, ...}` and
+  `{:deliver, ...}` (other than the self-match) are no-ops: the *only*
+  place `Interpreter.deliver_internal/5` is called from this module is
+  `apply_entry/2`'s own `{:internal, ...}` clause, walking the recording's
+  flat entry list. A self-addressed `{:session, sid}` needs no recorded
+  entry at all and resolves locally by plain equality against
+  `state.machine_state.datamodel["_sessionid"]`, deterministically, with no
+  registry involved live or in replay (decision 10) - the same reason
+  `Statifier.Session`'s own resolver never calls `deliver_internal/5` for
+  that one route either.
+
   ## No Appendix D function is reimplemented
 
   Every state transition this module performs is a call into
@@ -182,6 +204,16 @@ defmodule Statifier.Replay do
     {:ok, state |> perform(effects) |> drain()}
   end
 
+  # Mirrors the `{:event, _}` clause above: re-enter through the ADR-0037
+  # seam, then drain to quiescence. Not an error-only path - Phase 4 routes
+  # ordinary `<send target="#_internal">` through the same seam, so an
+  # entirely successful run produces these entries too (see the moduledoc's
+  # "defer to the recorded entry" section for why this is the *only* place
+  # `Interpreter.deliver_internal/5` is called from this module).
+  defp apply_entry({:internal, kind, name, origin, opts}, state) do
+    {:ok, state |> perform_internal(kind, name, origin, opts) |> drain()}
+  end
+
   defp apply_entry({:timer, send_id, %Event{} = event}, state) do
     case draw_credit(state, send_id) do
       {:ok, state} ->
@@ -255,6 +287,26 @@ defmodule Statifier.Replay do
     end
   end
 
+  # `apply_entry/2`'s `{:internal, ...}` clause's own body - the one call
+  # site of `Interpreter.deliver_internal/5` in this module (see the
+  # moduledoc's "defer to the recorded entry" section).
+  @spec perform_internal(
+          state :: State.t(),
+          kind :: :internal | :platform,
+          name :: String.t(),
+          origin :: term(),
+          opts :: keyword()
+        ) :: State.t()
+  defp perform_internal(state, kind, name, origin, opts) do
+    case Interpreter.deliver_internal(state.machine_state, kind, name, origin, opts) do
+      {:ok, machine_state, effects} ->
+        %{state | machine_state: machine_state} |> perform(effects)
+
+      {:error, :not_running} ->
+        state
+    end
+  end
+
   # -- performing (Statifier.Session.Effects plans; this records instead of
   # performing - see the moduledoc's reuse-boundary section) --------------
 
@@ -285,7 +337,38 @@ defmodule Statifier.Replay do
     %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
   end
 
-  defp perform_instruction({:schedule, send_id, _delay_ms, _event}, state, _override) do
+  # Deferred to the corresponding recorded `{:internal, ...}` entry - see the
+  # moduledoc's "defer to the recorded entry" section. Performing it here too
+  # would raise the same internal event twice.
+  defp perform_instruction({:raise, _kind, _name, _origin, _opts}, state, _override) do
+    state
+  end
+
+  # The one route that needs no recorded entry: a session addressing
+  # *itself* resolves by plain equality, deterministically, with no registry
+  # involved live or in replay (decision 10) - the same reason
+  # `Statifier.Session`'s own resolver never calls `deliver_internal/5` for
+  # this route either.
+  defp perform_instruction({:deliver, {:session, sid}, event, _effect}, state, _override) do
+    if sid == state.machine_state.datamodel["_sessionid"] do
+      %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
+    else
+      state
+    end
+  end
+
+  # `:internal`, `:parent`, and `{:invoke, _}` - deferred to the
+  # corresponding recorded `{:internal, ...}` entry, same reason as the
+  # `{:raise, ...}` clause above.
+  defp perform_instruction({:deliver, _route, _event, _effect}, state, _override) do
+    state
+  end
+
+  defp perform_instruction(
+         {:schedule, send_id, _delay_ms, _route, _event, _effect},
+         state,
+         _override
+       ) do
     %{state | pending: Map.update(state.pending, send_id, 1, &(&1 + 1))}
   end
 

@@ -11,12 +11,37 @@ defmodule Statifier.Session.Effects do
   Effects that also mean something to the session emit their action
   immediately after their own `:notify`.
 
-  The event a `:send` becomes is `type: :external` and `cause: nil`, per
-  `Statifier.Event.external/2` and the reasoning in `Statifier.Event.internal/3`'s
-  `@doc`: a `<send>` with no `target` lands on the sending session's own
-  external queue, not on the internal one. Every other target - `#_internal`
-  included - plans as `{:unroutable, effect}`, since target routing beyond
-  the absent target is not this bead's work.
+  ## `<send>` routing
+
+  Every `<send>`/`<send_delayed>` effect is planned in this order (6.2.4,
+  6.2.5, C.1):
+
+  1. An unsupported `type` (`Statifier.Session.Target.supported_type?/1`) ->
+     `{:raise, :platform, "error.execution", ...}` on the sender's own
+     internal queue. No delivery, no timer.
+  2. An unparseable `target` (`Statifier.Session.Target.parse/1` returns
+     `{:invalid, _}`) -> the same `error.execution` (6.2.4's "not supported
+     or invalid").
+  3. `:self` (no `target`) -> `{:enqueue_event, event}`, delivered straight
+     to the sending session's own external queue.
+  4. `:internal` (`#_internal`/`_internal`) -> `{:deliver, :internal, event,
+     effect}`, resolved by `Statifier.Session` through
+     `Statifier.Interpreter.deliver_internal/5` (ADR-0037).
+  5. `{:session, _}`, `:parent`, `{:invoke, _}` -> `{:deliver, route, event,
+     effect}`; `Statifier.Session` resolves the route (self-addressing needs
+     no registry, decision 10; everything else is `error.communication`
+     until a later bead adds one).
+
+  A delayed send takes the same route through `{:schedule, send_id,
+  delay_ms, route, event, effect}` instead of `{:enqueue_event, _}` /
+  `{:deliver, _, _, _}` - the type/target checks above still run at *plan*
+  time (6.2.3: arguments are evaluated when `<send>` is evaluated, not when
+  the message is dispatched), but the route itself is only resolved when the
+  timer fires.
+
+  `{:unroutable, effect}` survives for `:invoke`, `:cancel_invoke` and
+  `:autoforward` only - later, separate work, not this vocabulary's - since
+  there is still no child session to route any of them to.
   """
 
   alias Statifier.Effect
@@ -27,12 +52,20 @@ defmodule Statifier.Session.Effects do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
+  alias Statifier.Event.Cause
+  alias Statifier.Session.Target
+
+  @typedoc "Which internal-queue writer `{:raise, ...}` should use - `Statifier.Interpreter.deliver_internal/5`'s own `kind`."
+  @type raise_kind :: :internal | :platform
 
   @typedoc "One instruction for `Statifier.Session` to perform."
   @type instruction ::
           {:notify, Effect.t()}
           | {:enqueue_event, Event.t()}
-          | {:schedule, send_id :: String.t() | nil, delay_ms :: non_neg_integer(), Event.t()}
+          | {:deliver, Target.route(), Event.t(), Effect.t()}
+          | {:raise, raise_kind(), name :: String.t(), Cause.origin(), keyword()}
+          | {:schedule, send_id :: String.t() | nil, delay_ms :: non_neg_integer(),
+             Target.route(), Event.t(), Effect.t()}
           | {:cancel_timers, send_id :: String.t()}
           | {:unroutable, Effect.t()}
           | {:halt, :done | :budget_exhausted}
@@ -50,21 +83,12 @@ defmodule Statifier.Session.Effects do
   end
 
   @spec plan_one(effect :: Effect.t(), session_id :: String.t()) :: [instruction()]
-  defp plan_one({:send, %Send{target: nil} = send} = effect, session_id) do
-    [{:notify, effect}, {:enqueue_event, delivered_event(send, session_id)}]
+  defp plan_one({:send, %Send{} = send} = effect, session_id) do
+    [{:notify, effect} | plan_send(send, effect, session_id)]
   end
 
-  defp plan_one({:send, %Send{}} = effect, _session_id) do
-    [{:notify, effect}, {:unroutable, effect}]
-  end
-
-  defp plan_one({:send_delayed, %SendDelayed{target: nil} = send} = effect, session_id) do
-    event = delivered_event(send, session_id)
-    [{:notify, effect}, {:schedule, send.send_id, send.delay_ms, event}]
-  end
-
-  defp plan_one({:send_delayed, %SendDelayed{}} = effect, _session_id) do
-    [{:notify, effect}, {:unroutable, effect}]
+  defp plan_one({:send_delayed, %SendDelayed{} = send} = effect, session_id) do
+    [{:notify, effect} | plan_send_delayed(send, effect, session_id)]
   end
 
   defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect, _session_id) do
@@ -94,13 +118,79 @@ defmodule Statifier.Session.Effects do
   defp plan_one({:log, _log} = effect, _session_id), do: [{:notify, effect}]
   defp plan_one({:trace, _payload} = effect, _session_id), do: [{:notify, effect}]
 
+  # An immediate `<send>`'s own routing (see moduledoc's numbered list).
+  @spec plan_send(send :: Send.t(), effect :: Effect.t(), session_id :: String.t()) :: [
+          instruction()
+        ]
+  defp plan_send(send, effect, session_id) do
+    if Target.supported_type?(send.type) do
+      case Target.parse(send.target) do
+        {:invalid, _target} ->
+          [execution_error(send)]
+
+        :self ->
+          [{:enqueue_event, delivered_event(send, session_id)}]
+
+        :internal ->
+          [{:deliver, :internal, internal_event(send), effect}]
+
+        route ->
+          [{:deliver, route, delivered_event(send, session_id), effect}]
+      end
+    else
+      [execution_error(send)]
+    end
+  end
+
+  # A `<send delay="...">`'s own routing - the same type/target checks as
+  # `plan_send/3`, run at plan (evaluation) time per 6.2.3, but the resolved
+  # route travels with the `{:schedule, ...}` instruction instead of
+  # resolving now, since the destination is only reached once the timer
+  # fires.
+  @spec plan_send_delayed(send :: SendDelayed.t(), effect :: Effect.t(), session_id :: String.t()) ::
+          [instruction()]
+  defp plan_send_delayed(send, effect, session_id) do
+    if Target.supported_type?(send.type) do
+      case Target.parse(send.target) do
+        {:invalid, _target} ->
+          [execution_error(send)]
+
+        :internal ->
+          [{:schedule, send.send_id, send.delay_ms, :internal, internal_event(send), effect}]
+
+        route ->
+          [
+            {:schedule, send.send_id, send.delay_ms, route, delivered_event(send, session_id),
+             effect}
+          ]
+      end
+    else
+      [execution_error(send)]
+    end
+  end
+
+  # 6.2.5's unsupported-`type` error and 6.2.4's unsupported-or-invalid
+  # `target` error are the same shape: `error.execution` on the sending
+  # session's own internal queue, carrying the failing `<send>`'s `sendid`
+  # unconditionally (5.10.1's "the Processor MUST set this field to the send
+  # id of the triggering `<send>` element" carries no "if the author
+  # specified id", unlike C.1's rule for a *delivered* event's `sendid` -
+  # decision 3). No delivery, no timer, for either.
+  @spec execution_error(send :: Send.t() | SendDelayed.t()) :: instruction()
+  defp execution_error(send) do
+    {:raise, :platform, "error.execution", {:content, send.c_index, send.owner},
+     sendid: send.send_id}
+  end
+
   # C.1's four mappings for a `<send>` with no target, delivered to the
-  # sending session's own external queue: `origin` is this session's own
-  # `_ioprocessors` location, `origintype` is the processor's type **URI**
-  # rather than the short alias `"scxml"` - plan decision 11 argues the
-  # C.1-prose-versus-test352 conflict and picks the URI - and `sendid` is
-  # blank unless the author actually named this `<send>` (`id`/`idlocation`),
-  # per `id_from_author?`.
+  # sending session's own external queue - and, per decision 10/step 5 above,
+  # for every other reachable route too, since `origin`/`origintype`/`sendid`
+  # are the *sending* session's own address regardless of where the event
+  # ends up: `origin` is this session's own `_ioprocessors` location,
+  # `origintype` is the processor's type **URI** rather than the short alias
+  # `"scxml"` - plan decision 11 argues the C.1-prose-versus-test352
+  # conflict and picks the URI - and `sendid` is blank unless the author
+  # actually named this `<send>` (`id`/`idlocation`), per `id_from_author?`.
   @spec delivered_event(send :: Send.t() | SendDelayed.t(), session_id :: String.t()) ::
           Event.t()
   defp delivered_event(send, session_id) do
@@ -108,6 +198,28 @@ defmodule Statifier.Session.Effects do
       data: send.data,
       origin: SystemVariables.scxml_location(session_id),
       origintype: SystemVariables.scxml_event_processor(),
+      sendid: if(send.id_from_author?, do: send.send_id)
+    )
+  end
+
+  # `<send target="#_internal">`'s own delivered event (5.10.1: "For
+  # internal and platform events, the Processor MUST leave [origin and
+  # origintype] blank" - `Event.internal/3` never reads them). `sendid` is
+  # the same `id_from_author?`-gated rule `delivered_event/2` uses (C.1
+  # still requires it on an internally-delivered send). This is only a
+  # *carrier* for `Statifier.Session` to read `name`/`data`/`sendid` back off
+  # - the actual delivery re-raises through
+  # `Statifier.Interpreter.deliver_internal/5`, which builds its own
+  # `Cause` from the machine's *current* counters at delivery time (ADR-0037,
+  # decision 2), so this event's own `cause` is never read and its
+  # macrostep/microstep/round are placeholders, not the delivered event's
+  # real provenance.
+  @spec internal_event(send :: Send.t() | SendDelayed.t()) :: Event.t()
+  defp internal_event(send) do
+    cause = Cause.new({:content, send.c_index, send.owner}, send.macrostep, send.microstep, 0)
+
+    Event.internal(send.event, cause,
+      data: send.data,
       sendid: if(send.id_from_author?, do: send.send_id)
     )
   end

@@ -14,9 +14,10 @@ defmodule Statifier.Validator.Checks.Send do
     - the `delay`/`delayexpr` half of that constraint.
   - `{:send_delay_and_internal_target}` - the other half of the same
     constraint: `delay` or `delayexpr` alongside a literal
-    `target="_internal"`. Detectable only when `target` is a literal
-    attribute - with `targetexpr` the value is not known until execute
-    time, so this check stays silent there rather than guessing.
+    `target="_internal"` (or `target="#_internal"`, decision 6). Detectable
+    only when `target` is a literal attribute - with `targetexpr` the value
+    is not known until execute time, so this check stays silent there
+    rather than guessing.
   - `{:send_namelist_and_content}` / `{:send_param_and_content}` - 6.2.3:
     "A conformant document MUST NOT specify 'namelist' or `<param>` with
     `<content>`."
@@ -205,13 +206,17 @@ defmodule Statifier.Validator.Checks.Send do
   # Detectable only when `target` is a **literal** attribute - a `<send
   # delayexpr="..." targetexpr="who">` cannot be checked until execute time,
   # so this clause's guard only ever matches a literal `target: "_internal"`
-  # and stays silent whenever `targetexpr` was written instead (see
-  # moduledoc).
+  # (or `"#_internal"`) and stays silent whenever `targetexpr` was written
+  # instead (see moduledoc). Both spellings match for decision 6's reason:
+  # 6.2.2's attribute table spells it `_internal`, C.1 spells it
+  # `#_internal`, and the two clauses of the spec disagree with each other -
+  # accepting both here is the same superset `Statifier.Session.Target.parse/1`
+  # accepts.
   defp delay_and_internal_target(
-         %DSend{delay: delay, delayexpr: delayexpr, target: "_internal"},
+         %DSend{delay: delay, delayexpr: delayexpr, target: target},
          location
        )
-       when not is_nil(delay) or not is_nil(delayexpr) do
+       when target in ["_internal", "#_internal"] and (not is_nil(delay) or not is_nil(delayexpr)) do
     [Error.send_delay_and_internal_target(location)]
   end
 

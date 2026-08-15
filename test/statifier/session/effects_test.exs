@@ -13,7 +13,12 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Effect.Trace
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
+  alias Statifier.Event.Cause
   alias Statifier.Session.Effects
+
+  # `internal_event/1`'s own placeholder cause - round 0 is never read back
+  # (`Statifier.Session.Effects.internal_event/1`'s own `@doc`), but has to
+  # match exactly for these table-driven equality assertions.
 
   @session_id "sess_test"
   @origin SystemVariables.scxml_location(@session_id)
@@ -40,7 +45,9 @@ defmodule Statifier.Session.EffectsTest do
     {{:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}},
      [
        {:notify, {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}},
-       {:unroutable, {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}}
+       {:deliver, :internal,
+        Event.internal("e", Cause.new({:content, nil, nil}, 1, 1, 0), data: nil, sendid: nil),
+        {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}}
      ]},
     {{:send_delayed,
       %SendDelayed{
@@ -64,13 +71,23 @@ defmodule Statifier.Session.EffectsTest do
            macrostep: 1,
            microstep: 1
          }}},
-       {:schedule, "s1", 30,
+       {:schedule, "s1", 30, :self,
         Event.external("e",
           data: %{k: 1},
           origin: @origin,
           origintype: @origintype,
           sendid: nil
-        )}
+        ),
+        {:send_delayed,
+         %SendDelayed{
+           event: "e",
+           target: nil,
+           data: %{k: 1},
+           send_id: "s1",
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1
+         }}}
      ]},
     {{:send_delayed,
       %SendDelayed{
@@ -92,8 +109,17 @@ defmodule Statifier.Session.EffectsTest do
            macrostep: 1,
            microstep: 1
          }}},
-       {:schedule, nil, 30,
-        Event.external("e", origin: @origin, origintype: @origintype, sendid: nil)}
+       {:schedule, nil, 30, :self,
+        Event.external("e", origin: @origin, origintype: @origintype, sendid: nil),
+        {:send_delayed,
+         %SendDelayed{
+           event: "e",
+           target: nil,
+           send_id: nil,
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1
+         }}}
      ]},
     {{:send_delayed,
       %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}},
@@ -101,7 +127,8 @@ defmodule Statifier.Session.EffectsTest do
        {:notify,
         {:send_delayed,
          %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}}},
-       {:unroutable,
+       {:schedule, nil, 30, :internal,
+        Event.internal("e", Cause.new({:content, nil, nil}, 1, 1, 0), data: nil, sendid: nil),
         {:send_delayed,
          %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}}}
      ]},
@@ -309,17 +336,18 @@ defmodule Statifier.Session.EffectsTest do
     end
   end
 
-  describe "a targeted send plans as unroutable, not an enqueue" do
-    # sabotage: the `{:send, %Send{target: _}}` clause is merged into the
-    # `target: nil` clause (dropping the `target: nil` guard) -> a targeted
-    # send now plans an `:enqueue_event` instruction, and this refute reddens
+  describe "a targeted send plans as a delivery, not an enqueue" do
+    # sabotage: `plan_send/3`'s `:internal ->` clause is merged into the
+    # `:self ->` clause (dropping the target check) -> a targeted send now
+    # plans an `:enqueue_event` instruction instead of `:deliver`, and this
+    # refute reddens
     test "no :enqueue_event instruction appears for a targeted send" do
       effect = {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}
 
       instructions = Effects.plan([effect], @session_id)
 
       refute Enum.any?(instructions, &match?({:enqueue_event, _}, &1))
-      assert Enum.any?(instructions, &match?({:unroutable, ^effect}, &1))
+      assert Enum.any?(instructions, &match?({:deliver, :internal, _event, ^effect}, &1))
     end
   end
 
@@ -352,7 +380,7 @@ defmodule Statifier.Session.EffectsTest do
            microstep: 1
          }}
 
-      assert [_notify, {:schedule, nil, 30, %Event{name: "e"}}] =
+      assert [_notify, {:schedule, nil, 30, :self, %Event{name: "e"}, ^effect}] =
                Effects.plan([effect], @session_id)
     end
   end

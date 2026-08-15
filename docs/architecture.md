@@ -133,11 +133,15 @@ runs Appendix D's `statesToInvoke` and cancel-invoke passes
 round budget across a post-invoke re-entry), runs `<finalize>` before
 transition selection, and emits `{:invoke, _}`, `{:cancel_invoke, _}`, and
 `{:autoforward, _}` effects for the session to act on. What is still missing
-is the child-session half: no process is spawned, no `done.invoke.<id>` is
-generated, and `#_parent`/`#_invokeid` routing and delivery do not exist yet -
-that is st-cmq.7. v1's handler-registry invoke is kept as an explicit
-extension type - a useful, safe escape hatch, but not the definition of
-`<invoke>`.
+is the child-session half: no process is spawned and no `done.invoke.<id>`
+is generated - that is st-cmq.7. The `<send>` target vocabulary and its
+router exist (st-cmq.5): `#_internal` and a self-addressed
+`#_scxml_<sessionid>` deliver with no registry at all, and `#_parent` and
+`#_<invokeid>` already parse to routes, but both resolve to nothing
+(`error.communication`) until an invocation table exists to resolve them
+against - delivering to a live child or parent is st-cmq.7's. v1's
+handler-registry invoke is kept as an explicit extension type - a useful,
+safe escape hatch, but not the definition of `<invoke>`.
 
 Generated identifiers split on the pure core's boundary
 ([ADR-0008](adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the

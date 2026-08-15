@@ -182,6 +182,7 @@ defmodule Statifier.Interpreter do
   alias Statifier.Compiler
   alias Statifier.Evaluator
   alias Statifier.Event
+  alias Statifier.Event.Cause
   alias Statifier.EventData
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.Datamodel
@@ -450,6 +451,46 @@ defmodule Statifier.Interpreter do
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
     {:ok, machine_state, dequeued ++ invoke_pass_effects ++ selected_effects ++ loop_effects}
+  end
+
+  @doc """
+  ADR-0037's re-entry seam: the sole path `Statifier.Session` uses to write
+  a session-detected `<send>` failure (6.2.4's unsupported/invalid target,
+  6.2.5's unsupported `type`) - or a `<send target="#_internal">` delivery -
+  onto `%MachineState{}`'s own internal queue.
+
+  Appendix D discovers a routing failure inside `mainEventLoop` and writes
+  the internal queue in place. ADR-0003 puts routing in the effect
+  interpreter, which is outside that loop by construction, so ADR-0037
+  gives the session one way back in: enqueue on the internal queue exactly
+  as an in-loop `raise` would, then run to quiescence. No selection or
+  entry/exit procedure changes.
+
+  Delegates to `MachineState.raise_internal/4` or `raise_platform/4` by
+  `kind` - the same two functions the core's own executable content already
+  uses, so no third internal-queue writer is introduced - then folds
+  `main_event_loop/1` to quiescence, returning exactly `handle_event/2`'s own
+  shape.
+  """
+  @spec deliver_internal(
+          machine_state :: MachineState.t(),
+          kind :: :internal | :platform,
+          name :: String.t(),
+          origin :: Cause.origin(),
+          opts :: keyword()
+        ) :: {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
+  def deliver_internal(%MachineState{running: false}, _kind, _name, _origin, _opts),
+    do: {:error, :not_running}
+
+  def deliver_internal(%MachineState{} = machine_state, kind, name, origin, opts) do
+    machine_state =
+      case kind do
+        :internal -> MachineState.raise_internal(machine_state, name, origin, opts)
+        :platform -> MachineState.raise_platform(machine_state, name, origin, opts)
+      end
+
+    {machine_state, effects} = main_event_loop(machine_state)
+    {:ok, machine_state, effects}
   end
 
   # `for state in configuration: for inv in state.invoke: if inv.invokeid
