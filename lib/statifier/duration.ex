@@ -5,6 +5,13 @@ defmodule Statifier.Duration do
   Wraps `Predicator.Duration` rather than reimplementing CSS2-style duration
   parsing.
 
+  The delegation is deliberate rather than incidental: one duration vocabulary
+  across the platform, with `Predicator.Duration.parse/1` (whole-string, no
+  partial consumption, `:error` on junk) and `to_milliseconds/1` as its only
+  implementation, so a duration means the same thing in a `<send delay>` as in
+  any expression predicator evaluates. Everything below is a consequence of
+  that, not a second look at it.
+
   ## The unit set is a superset, delegated as-is
 
   The SCXML schema's `delay`/`delayexpr` pattern
@@ -26,10 +33,13 @@ defmodule Statifier.Duration do
   `parse(".5s")` is `:error` while `parse("1.5s")` is `{:ok, ...}` (verified
   against `deps/predicator/lib/predicator/duration.ex`'s own doctests).
   `normalize_leading_dot/1` is the one-line concession this schema pattern
-  requires and predicator 8.0 deliberately does not make: it rewrites a
-  leading `.` to `0.` before parsing, so `".5s"` and `"0.5s"` parse
-  identically. This is the only rewrite this module performs; every other
-  character reaches `Predicator.Duration.parse/1` untouched.
+  requires and predicator 8.0 deliberately does not make. The split is by
+  agreement rather than by omission: `".5s"` is schema-valid SCXML but not a
+  duration predicator means to accept, so pre-normalizing it stays this
+  engine's job and does not become a widening of predicator's own grammar.
+  So it rewrites a leading `.` to `0.` before parsing, and `".5s"` and
+  `"0.5s"` parse identically. This is the only rewrite this module performs;
+  every other character reaches `Predicator.Duration.parse/1` untouched.
   """
 
   alias Predicator.Duration, as: PredicatorDuration
