@@ -418,10 +418,10 @@ what the seed means, which survives Phase 2 and Phase 3 unchanged.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix gate.verify` confirms the run was a full, unscoped gate).
-- [ ] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly.
-- [ ] `mix test.regression` is green.
-- [ ] `grep -rnE '=> nil[,)]|, nil\)' lib/statifier/evaluator/system_variables.ex lib/statifier/interpreter/datamodel.ex lib/statifier/machine/content/foreach.ex` finds no remaining seed/declare write of `nil` in any of the three writers this phase respells (the pattern must cover `"_event" => nil,` as well as `Map.put_new(datamodel, item, nil)`).
+- [x] Full `mix quality` is green (`mix gate.verify` confirms the run was a full, unscoped gate).
+- [x] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly.
+- [x] `mix test.regression` is green.
+- [x] `grep -rnE '=> nil[,)]|, nil\)' lib/statifier/evaluator/system_variables.ex lib/statifier/interpreter/datamodel.ex lib/statifier/machine/content/foreach.ex` finds no remaining seed/declare write of `nil` in any of the three writers this phase respells (the pattern must cover `"_event" => nil,` as well as `Map.put_new(datamodel, item, nil)`).
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: the touched functions still match their W3C basis - 5.3.2/5.3.3 for `seed/2` (no Appendix D pseudocode body exists to diff against, per the module's own moduledoc), 4.6.3 for `<foreach>`'s declarations, 5.10/B.2.1 for `_event`'s seed. No Appendix D deviation is introduced.
@@ -957,3 +957,26 @@ is added anywhere.
 - Design docs: `docs/datamodel.md` seam 3, `docs/testing.md` (sabotage rule), `docs/architecture.md` principle 3
 - Predicator behavior probed this session against the pinned 8.x, output quoted under "Current State Analysis"
 - Bead: st-1bjz
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Spec-conformance judgment: the touched functions still match their W3C basis - 5.3.2/5.3.3 for `seed/2` (no Appendix D pseudocode body exists to diff against, per the module's own moduledoc), 4.6.3 for `<foreach>`'s declarations, 5.10/B.2.1 for `_event`'s seed. No Appendix D deviation is introduced.
+- [ ] Every changed test's sabotage line was actually re-run (break -> red -> revert), not just reworded.
+- [ ] The failure branches in `Interpreter.Datamodel` still write nothing, and their prose still quotes 5.3.2's "MUST create an empty data element".
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---

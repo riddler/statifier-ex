@@ -54,9 +54,9 @@ defmodule Statifier.Machine.Content.AssignTest do
   # the raw `machine_state.datamodel` -> this test's own assertion would
   # still pass (nothing here reads `:undefined`), so the sabotage that
   # actually reddens *this* invariant is recorded on the datamodel_test.exs
-  # regression test instead, which has an unrelated seeded-nil id to observe
-  # the difference against; this test's own sabotage below covers the write
-  # itself landing at the right key.
+  # regression test instead, which has an unrelated seeded-but-unbound id to
+  # observe the difference against; this test's own sabotage below covers the
+  # write itself landing at the right key.
   test "a flat write lands the evaluated value at the top-level key" do
     ctx = context(%{"x" => nil})
     node = assign("x", compiled_expr("1 + 1"))

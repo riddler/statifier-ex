@@ -168,9 +168,9 @@ defmodule Statifier.Machine.Content.ForeachTest do
 
       assert {:ok, ctx, []} = ExecutableContent.execute(node, context(machine()))
       assert Map.has_key?(ctx.machine_state.datamodel, "newvar")
-      assert ctx.machine_state.datamodel["newvar"] == nil
+      assert ctx.machine_state.datamodel["newvar"] == :undefined
       assert Map.has_key?(ctx.machine_state.datamodel, "newidx")
-      assert ctx.machine_state.datamodel["newidx"] == nil
+      assert ctx.machine_state.datamodel["newidx"] == :undefined
     end
 
     # sabotage: `maybe_put_index/3`'s non-nil clause is deleted (the `nil`
