@@ -184,3 +184,10 @@ promotion path.
 | compiler assigns document-order indexes to transitions and executable-content nodes (`t_index`/`c_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
 | Appendix D query functions take/return plain values, unfused | `Statifier.Interpreter.Selection`, `Statifier.Interpreter.ExitEntry`, `Statifier.Interpreter.Content` |
+| validator warnings retained on the compiled Machine (ADR-0033) | `Statifier.Validator.Warning`, `Statifier.Machine.warnings` |
+
+The last row is a seam of one link, not an omission: a validator finding is
+produced before a `Machine` exists, so none of the trace vocabulary above
+reaches it. There is no trace effect, no `Logger` call, and no `:telemetry`
+event for a validator finding - the return value `validate/2` hands back and
+the field `compile/1` stamps it onto *are* the channel, end to end.
