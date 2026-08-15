@@ -322,9 +322,9 @@ were taken at. `test/passing_tests.json` is the ratchet's own record and is
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix test --include scion --include scxml_w3` completes and its counts are recorded on the bead.
-- [ ] `mix test.regression` is green.
-- [ ] Full `mix quality` is green on an unmodified tree (confirms the baseline is a clean one).
+- [x] `mix test --include scion --include scxml_w3` completes and its counts are recorded on the bead.
+- [x] `mix test.regression` is green.
+- [x] Full `mix quality` is green on an unmodified tree (confirms the baseline is a clean one).
 
 #### Manual Verification:
 - [ ] The recorded counts name the commit SHA they were taken at.
