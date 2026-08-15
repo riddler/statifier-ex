@@ -13,10 +13,9 @@ defmodule Statifier.Validator.Checks.Donedata do
   the `<donedata>`'s own `location`. `lib/statifier/document/donedata.ex`
   makes `content` and `params` both representable at once precisely so this
   arm can report the shape rather than lowering refusing to build it - the
-  same division of labour the first rule above already has. This arm
-  discharges bead **st-hyx**, whose own description settles that it becomes
-  live "the moment `<param>` is supported" and "should land with it rather
-  than being rediscovered then."
+  same division of labour the first rule above already has. This arm is
+  inert until `<param>` is supported, and it is written now so it lands with
+  `<param>` rather than being rediscovered then.
   """
 
   alias Statifier.Document
