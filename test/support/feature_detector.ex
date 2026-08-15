@@ -13,12 +13,12 @@ defmodule Statifier.FeatureDetector do
 
   The registry reflects what v2 actually supports today:
   basic/compound/parallel/final/history states, the initial attribute and
-  `<initial>` element, event/eventless/
-  targetless/internal/wildcard transitions, `<onentry>`/`<onexit>`,
-  `<raise>`, `<log>`, and static `<donedata>`. Later phases added
-  `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded transitions (including
-  `<if>`/`<elseif>`/`<else>`), `<foreach>`, and `<script>`
-  (`:partial` - see the registry entry). `<send>`, `<invoke>`, `<cancel>`, and
+  `<initial>` element, event/eventless/targetless/internal/wildcard
+  transitions, `<onentry>`/`<onexit>`, `<raise>`, `<log>`, static
+  `<donedata>`, `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded
+  transitions (including `<if>`/`<elseif>`/`<else>`), `<foreach>`, and
+  `<script>` (`:partial` - see the registry entry).
+  `<send>`, `<invoke>`, `<cancel>`, and
   their attributes stay `:unsupported`; see `feature_registry/0` for the
   authoritative, up-to-date list.
   """
