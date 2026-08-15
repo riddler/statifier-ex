@@ -430,15 +430,15 @@ paths, and ADR numbers.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is green (this phase touches no Elixir, so the ADR guard,
+- [x] `mix quality` is green (this phase touches no Elixir, so the ADR guard,
       format, compile, credo, dialyzer, doctor, and test stages are all
       unaffected; running it confirms that).
-- [ ] `mix gate.verify` exits zero, attesting the run was a full, unprofiled,
+- [x] `mix gate.verify` exits zero, attesting the run was a full, unprofiled,
       unscoped gate.
-- [ ] `docs/adr/0033-validator-warning-tier.md` exists and contains the three
+- [x] `docs/adr/0033-validator-warning-tier.md` exists and contains the three
       headings `## Context`, `## Decision`, `## Consequences`.
-- [ ] `grep -c "0033" docs/adr/README.md` returns at least 1.
-- [ ] `grep -r "st-jzc" docs/adr/` returns nothing.
+- [x] `grep -c "0033" docs/adr/README.md` returns at least 1.
+- [x] `grep -r "st-jzc" docs/adr/` returns nothing.
 
 #### Manual Verification:
 - [ ] The Context section's 6.5.2 quotation matches the local spec cache
@@ -983,3 +983,32 @@ none moves here.
 - Spec: 6.5.2 Children, local cache
   `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html:4418-4429`
 - Bead: `st-jzc`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The Context section's 6.5.2 quotation matches the local spec cache
+      verbatim, checked against
+      `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`
+      rather than from memory.
+- [ ] Each of the seven decisions above appears in the ADR, and the Consequences
+      section states the two things this ADR deliberately leaves undone
+      (`:strict`, and the `<send>` half).
+- [ ] The ADR reads as a decision record, not as a summary of this plan: it
+      argues from the spec and from the existing struct shapes, not from phase
+      numbers.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before moving
+to the next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
