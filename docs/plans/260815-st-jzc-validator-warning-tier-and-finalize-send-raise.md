@@ -899,11 +899,11 @@ describes the validator's return shape; if it does, correct it.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is green.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `grep -n "0033" docs/architecture.md docs/observability.md` matches in
+- [x] `mix quality` is green.
+- [x] `mix gate.verify` exits zero.
+- [x] `grep -n "0033" docs/architecture.md docs/observability.md` matches in
       both files.
-- [ ] `grep -rn "{:ok, document}" docs/` returns no stale description of
+- [x] `grep -rn "{:ok, document}" docs/` returns no stale description of
       `validate/2`'s old two-element shape.
 
 #### Manual Verification:
@@ -1085,6 +1085,25 @@ blocking here.
       `%Machine{}`'s field count.
 - [ ] The sabotage mutations were performed and reverted, and each note names
       the mutation it describes.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before moving
+to the next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The observability seam table reads as complete again: a reader looking
+      for "where does a validator finding surface" finds the row and stops.
+- [ ] `docs/architecture.md` principle 4 still reads as a statement about the
+      Machine type rather than about diagnostics, with the warning sentence
+      subordinate to it.
+- [ ] No document names a bead id or a phase number (ADR-0018).
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive

@@ -36,7 +36,9 @@ each major decision lives in `docs/adr/`.
 4. **Make invalid states unrepresentable.** Parsing produces a `Document`; validation
    produces a distinct `Machine` type (interned, optimized, guaranteed valid). The
    interpreter only accepts a `Machine`, so "validate if not already validated"
-   fallback branches do not exist.
+   fallback branches do not exist. A finding that gates this boundary is an
+   error; a finding that does not is a warning, which rides on the `Machine`
+   instead and never blocks compilation ([ADR-0033](adr/0033-validator-warning-tier.md)).
 
 ## Layers
 
@@ -48,7 +50,8 @@ DOM (element name, attrs, children, location)
    |  Lowering (typed per-element builders)
    v
 Document (typed structs, source locations, uncompiled expressions)
-   |  Validator (structural + semantic checks)
+   |  Validator (structural + semantic checks; two channels - errors gate
+   |  compilation, warnings ride on the Machine instead, ADR-0033)
    |  Compiler (intern IDs, index hierarchy, compile expressions)
    v
 Machine (valid by construction, integer state indexes, compiled Expr values)
