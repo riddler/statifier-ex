@@ -89,19 +89,18 @@ defmodule Statifier.Evaluator do
   `Statifier.Evaluator.Functions.base_context/0`, a compile-time constant
   holding the already-resolved `functions` map and `on_unbound: :error`,
   refreshes `host` with `put_host/2`, and binds each datamodel root with
-  `bind/3`. Measured (ADR-0030,
-  `bench/results/260814-st-l0t-provider-host-seam.md`): at a realistic
-  corpus-shaped datamodel, this hoist drops one context build from 2.30 us /
-  10.92 KB to 1.13 us / 4.77 KB, and the corpus-representative `realistic`
-  macrostep from 17.39 us / 74.19 KB to 13.58 us / 43.18 KB. ADR-0028
-  answers the within-block write case the same way at a finer grain:
-  `<assign>`, `<foreach>`, and `<script>` bind each write into the block's
-  already-threaded context instead of calling `context/1` again per write,
-  without storing anything on `MachineState` - a block still never outlives
-  the microstep it runs inside, so neither ground above is contradicted.
-  Widening the threaded interval *across* blocks or microsteps - which would
-  need a stored context - remains future work, still gated on staleness and
-  duplication exactly as ADR-0030 leaves it.
+  `bind/3`. Measured (ADR-0030): at a realistic corpus-shaped datamodel, this
+  hoist drops one context build from 2.30 us / 10.92 KB to 1.13 us / 4.77 KB,
+  and the corpus-representative `realistic` macrostep from 17.39 us / 74.19
+  KB to 13.58 us / 43.18 KB. ADR-0028 answers the within-block write case the
+  same way at a finer grain: `<assign>`, `<foreach>`, and `<script>` bind
+  each write into the block's already-threaded context instead of calling
+  `context/1` again per write, without storing anything on `MachineState` -
+  a block still never outlives the microstep it runs inside, so neither
+  ground above is contradicted. Widening the threaded interval *across*
+  blocks or microsteps - which would need a stored context - remains future
+  work, still gated on staleness and duplication exactly as ADR-0030 leaves
+  it.
 
   predicator 8.0 offers a `normalize: false` option on `Context.new/2` that
   skips the deep `normalize_value/1` walk on a caller's vouch that `data` is
@@ -111,14 +110,14 @@ defmodule Statifier.Evaluator do
   unconditionally with no opt-out. Taking the vouch would mean rebuilding the
   whole context per site with `new/2` to get one walk instead of two -
   trading a size-scaling term for `new/2`'s per-call stamp-and-allocate work,
-  and giving up the compile-time constant. Measured
-  (`bench/results/260815-st-59d-predicator-8-0.md`): at `:corpus`,
-  `Context.new(data, normalize: false)` (`T_new_nf`) costs 0.3788 us / 0.867
-  KB, essentially flat across all four size points because it skips the
-  size-scaling walk entirely - but the shipped path (`T_full`, this module's
-  `context/1`) already costs 1.0755 us / 4.773 KB at `:corpus` without ever
-  calling `new/2`, so `T_new_nf`'s flatness is not a number this path could
-  collect.
+  and giving up the compile-time constant. Measured (the predicator 8.0
+  capture ADR-0030's amendment note and `bench/README.md` cite): at
+  `:corpus`, `Context.new(data, normalize: false)` (`T_new_nf`) costs 0.3788
+  us / 0.867 KB, essentially flat across all four size points because it
+  skips the size-scaling walk entirely - but the shipped path (`T_full`,
+  this module's `context/1`) already costs 1.0755 us / 4.773 KB at `:corpus`
+  without ever calling `new/2`, so `T_new_nf`'s flatness is not a number
+  this path could collect.
 
   ## The membrane
 
