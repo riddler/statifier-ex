@@ -386,4 +386,66 @@ defmodule Statifier.ReplayRoundTripTest do
       assert Recording.opts(recording)[:session_id] == "sess_fixed"
     end
   end
+
+  # -- case 7: a <send delay> / <cancel> document (ADR-0035's proof) -------
+
+  defp send_cancel_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <datamodel>
+            <data id="loc"/>
+        </datamodel>
+        <state id="a">
+            <onentry>
+                <send event="go" delay="10ms" idlocation="loc"/>
+                <cancel sendid="never_sent"/>
+            </onentry>
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+  end
+
+  describe "a <send delay> / <cancel> document (ADR-0035's determinism proof)" do
+    # sabotage: `Statifier.MachineState.new/2`'s `send_counter: 0` literal is
+    # changed to seed from `System.unique_integer([:positive])` instead of
+    # the fixed `0` -> the live run and its replay each mint their own
+    # unrelated starting counter, so the replayed run's recorded `{:timer,
+    # send_id, _}` entry no longer names a send_id the replayed
+    # `Interpreter.initialize/2` scheduled, and `round_trip/3`'s own `assert
+    # {:ok, result} = Replay.run(recording)` reddens outright with `{:error,
+    # {:unscheduled_timer_firing, _}}` before this test's own `live_send_id
+    # == "send_1"` assertion is even reached. Reverted and confirmed green.
+    test "the generated send_id is identical across the live run and its replay" do
+      machine = compile!(send_cancel_doc())
+
+      {_recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+        end)
+
+      live_send_id =
+        Enum.find_value(stream, fn
+          {:effect, {:send_delayed, %Effect.SendDelayed{send_id: id}}} -> id
+          _other -> nil
+        end)
+
+      replayed_send_id =
+        Enum.find_value(result.stream, fn
+          {:effect, {:send_delayed, %Effect.SendDelayed{send_id: id}}} -> id
+          _other -> nil
+        end)
+
+      assert live_send_id == "send_1"
+      assert replayed_send_id == "send_1"
+      assert live_send_id == replayed_send_id
+
+      # `idlocation` writing the same id through to the datamodel on both
+      # sides is the concrete, document-level reading of the same claim -
+      # not just present on the effect, but bound identically where a
+      # `<log expr="loc"/>` in this document would have read it.
+      assert result.machine_state.datamodel["loc"] == live_send_id
+    end
+  end
 end
