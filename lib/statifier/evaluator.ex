@@ -166,13 +166,16 @@ defmodule Statifier.Evaluator do
 
   Every top-level key in `machine_state.datamodel` must be a binary:
   `Predicator.Context.bind/3` (unlike `new/2`) guards `is_binary(name)` and
-  raises a `FunctionClauseError` rather than stringifying an atom key. Every
-  writer of `machine_state.datamodel` produces binary keys today (the seed
-  in `MachineState.new/2`, `MachineState.put_event/2`'s `"_event"`,
-  `<data id>` binding, a program's own writes, `<assign>`'s declared
-  `location` root, and `<foreach>`'s declared `item`/`index`), so this is a
-  louder failure for a case no writer can produce today, not a behavior
-  change for any document this library can build a `MachineState` from.
+  raises a `FunctionClauseError` rather than stringifying an atom key. The one
+  writer whose keys did not come from an SCXML id - the caller-supplied
+  `:datamodel` option - is checked by `MachineState.new/2` itself, so this
+  holds for every `%MachineState{}` this library can construct, not just for
+  every writer this codebase happens to contain (`MachineState.new/2`'s own
+  seed, `MachineState.put_event/2`'s `"_event"`, `<data id>` binding, a
+  program's own writes, `<assign>`'s declared `location` root, and
+  `<foreach>`'s declared `item`/`index`). The `bind/3` crash remains the
+  backstop for a `%MachineState{}` assembled by hand, bypassing `new/2` - as a
+  test might.
   """
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
   def context(%MachineState{machine: machine, configuration: configuration} = machine_state) do

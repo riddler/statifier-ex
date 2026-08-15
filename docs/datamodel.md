@@ -81,6 +81,10 @@ Every evaluation goes through one module with one context type:
   rejection. The trigger to watch for is a corpus document with an unparseable
   `cond` plus an `error.execution` handler - none exists today, and test344 is
   not one (its `cond="1"` compiles, then fails boolean coercion at evaluation).
+- Datamodel keys are strings at every level, top-level and nested alike; an
+  embedder-supplied `:datamodel` option is checked for this at
+  `MachineState.new/2` construction time rather than trusted (see the `@doc`
+  on `Statifier.Evaluator.context/1` for the property this backs).
 - Type coercion to/from event data has one normalization function with defined rules,
   `Statifier.EventData.coerce/1`, shared by `<param>`, `<content>`, `namelist`, and
   `<donedata>`. It implements B.2.8.1's key-value-pairs and space-normalized-string
