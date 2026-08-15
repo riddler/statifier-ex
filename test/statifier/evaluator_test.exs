@@ -238,9 +238,27 @@ defmodule Statifier.EvaluatorTest do
       # `Event.external/2` itself now spells "no data" as `:undefined`
       # (ADR-0037, docs/adr/0037-unbound-spelled-undefined-at-the-writer.md);
       # a caller that means a genuinely null payload passes `data: nil`
-      # explicitly (see Phase 3's sibling test once `undefine_nils/1` is
-      # retired, which reads that case's `=== null` answer).
+      # explicitly (see the sibling test right below, which reads that
+      # case's `=== null` answer now that `bind/3` hands values to
+      # predicator verbatim).
       assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
+    end
+
+    # sabotage: `Evaluator.bind/3` is changed to rewrite `nil` to `:undefined`
+    # (recursively) before handing `value` to `Predicator.Context.bind/3` ->
+    # the explicit `data: nil` this event carries reads back `:undefined`
+    # instead of predicator's own null, and `_event.data === null` reddens
+    # to `false`.
+    test "put_event/2 with an explicit nil data reads _event.data as null, not undefined" do
+      context =
+        new_machine_state()
+        |> MachineState.put_event(Statifier.Event.external("go", data: nil))
+        |> Evaluator.context()
+
+      assert Evaluator.evaluate(context, compiled_expr("_event.data === null")) == {:ok, true}
+
+      assert Evaluator.evaluate(context, compiled_expr("_event.data === undefined")) ==
+               {:ok, false}
     end
   end
 
@@ -297,13 +315,22 @@ defmodule Statifier.EvaluatorTest do
 
     # sabotage: in execute/2, merge `after_data` wholesale instead of just
     # `non_system_changed` -> `z`, never mentioned by the program, comes back
-    # `:undefined` (context/1's normalization) instead of staying `nil`, and
-    # this assertion reddens.
-    test "an untouched nil root stays nil after a successful program" do
-      ms = new_machine_state(datamodel: %{"z" => nil, "x" => nil})
+    # through the *bound* context's own `normalize_value/1` instead of the
+    # raw map. `bind/3` no longer rewrites `nil`, so a scalar `nil`
+    # normalizes identically either way, so `z`'s fixture carries an
+    # atom-keyed nested map instead (assembled by hand, past `MachineState.
+    # new/2`'s own string-key check - see `context/1`'s moduledoc note on
+    # that backstop): `Predicator.Context.bind/3`'s own `normalize_value/1`
+    # stringifies atom keys (`deps/predicator/lib/predicator/
+    # context.ex:486-514`), so a wholesale merge would return
+    # `%{"untouched" => nil}` where the raw map (and this assertion) expects
+    # the atom-keyed `%{untouched: nil}`, reddening it.
+    test "an untouched root keeps its raw value after a successful program" do
+      ms = new_machine_state(datamodel: %{"x" => nil})
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "z", %{untouched: nil})}
 
       assert {:ok, new_ms} = Evaluator.execute(ms, program("x = 1;"))
-      assert new_ms.datamodel["z"] == nil
+      assert new_ms.datamodel["z"] == %{untouched: nil}
     end
 
     # sabotage: in `context/1`, drop the `functions: %{"In" => ...}` option
@@ -337,26 +364,26 @@ defmodule Statifier.EvaluatorTest do
   end
 
   describe "bind/3" do
-    # sabotage: `bind/3` calls `Predicator.Context.bind(context, root, value)`
-    # without `undefine_nils/1` -> the bound `nil` stays predicator 6.x's
-    # own null literal instead of normalizing to `:undefined`, and
-    # evaluating `y` returns `{:ok, nil}` instead of `{:ok, :undefined}`,
-    # reddening this assertion.
-    test "normalizes a bound nil to :undefined, matching context/1" do
+    # sabotage: `bind/3` is changed to re-add a `nil` -> `:undefined` normalization walk over
+    # `value` before handing it to `Predicator.Context.bind/3` -> the bound
+    # `nil` reads back as `:undefined` instead of predicator's own null
+    # literal, and `y === null` reddens to `{:ok, false}`.
+    test "hands a bound nil to predicator verbatim, so it reads as null not undefined" do
       context = Evaluator.context(new_machine_state())
 
       bound = Evaluator.bind(context, "y", nil)
 
-      assert Evaluator.evaluate(bound, compiled_expr("y")) == {:ok, :undefined}
+      assert Evaluator.evaluate(bound, compiled_expr("y === null")) == {:ok, true}
+      assert Evaluator.evaluate(bound, compiled_expr("y === undefined")) == {:ok, false}
     end
 
     # sabotage: `bind/3` is changed to build a brand-new
-    # `Predicator.Context.new(%{root => undefine_nils(value)}, ...)` instead
-    # of calling `Predicator.Context.bind/3` on the existing context -> every
-    # key but the just-bound one is lost, and evaluating "b" or "c.d"
-    # against the bound context answers `{:error, %UndefinedVariableError{}}`
-    # instead of matching the rebuilt context's answer, reddening the last
-    # two assertions.
+    # `Predicator.Context.new(%{root => value}, ...)` instead of calling
+    # `Predicator.Context.bind/3` on the existing context -> every key but
+    # the just-bound one is lost, and evaluating "b" or "c.d" against the
+    # bound context answers `{:error, %UndefinedVariableError{}}` instead of
+    # matching the rebuilt context's answer, reddening the last two
+    # assertions.
     test "a bound context answers identically to a rebuilt one for every key, not just the bound one" do
       ms = new_machine_state(datamodel: %{"a" => 1, "b" => nil, "c" => %{"d" => 2}})
       context = Evaluator.context(ms)
@@ -377,12 +404,11 @@ defmodule Statifier.EvaluatorTest do
     end
 
     # sabotage: `bind/3` is changed to build a fresh
-    # `Predicator.Context.new(%{root => undefine_nils(value)}, ...)` with no
-    # `functions:` option instead of calling `Predicator.Context.bind/3` on
-    # the existing context -> `In/1` is no longer resolvable on the bound
-    # context, and evaluating `In('s1')` returns an `{:error, _}` (an
-    # undefined-function failure) instead of `{:ok, true}`, reddening this
-    # assertion.
+    # `Predicator.Context.new(%{root => value}, ...)` with no `functions:`
+    # option instead of calling `Predicator.Context.bind/3` on the existing
+    # context -> `In/1` is no longer resolvable on the bound context, and
+    # evaluating `In('s1')` returns an `{:error, _}` (an undefined-function
+    # failure) instead of `{:ok, true}`, reddening this assertion.
     test "In/1 still resolves against the block's configuration after a bind" do
       context = Evaluator.context(machine_state_with_s1_active())
 
@@ -392,10 +418,10 @@ defmodule Statifier.EvaluatorTest do
     end
 
     # sabotage: `bind/3` is changed to build a fresh
-    # `Predicator.Context.new(%{root => undefine_nils(value)}, on_unbound:
-    # :undefined)` instead of calling `Predicator.Context.bind/3`, which
-    # would have carried the existing context's `on_unbound: :error` policy
-    # over unchanged -> an unbound load of "nope" answers `{:ok, :undefined}`
+    # `Predicator.Context.new(%{root => value}, on_unbound: :undefined)`
+    # instead of calling `Predicator.Context.bind/3`, which would have
+    # carried the existing context's `on_unbound: :error` policy over
+    # unchanged -> an unbound load of "nope" answers `{:ok, :undefined}`
     # instead of failing, reddening this pattern match.
     test "on_unbound: :error survives a bind, still failing an unbound load" do
       context = Evaluator.context(new_machine_state())
@@ -406,18 +432,36 @@ defmodule Statifier.EvaluatorTest do
                Evaluator.evaluate(bound, compiled_expr("nope"))
     end
 
-    # sabotage: `bind/3` is changed to call `undefine_nils/1` only on
-    # `value` itself, bypassing its recursive map clause (as if it were
-    # `if is_nil(value), do: :undefined, else: value` instead of a full
-    # deep walk) -> the nested `nil` inside `%{"inner" => nil}` is never
-    # normalized, and evaluating `obj.inner` returns `{:ok, nil}` instead of
-    # `{:ok, :undefined}`, reddening this assertion.
-    test "binding a value with a nested nil normalizes the nested nil too" do
+    # sabotage: `bind/3` is changed to re-add a `nil` -> `:undefined` normalization walk over
+    # `value` before handing it to `Predicator.Context.bind/3` -> the nested
+    # `nil` inside `%{"inner" => nil}` reads back as `:undefined` instead of
+    # predicator's own null literal, and `obj.inner === null` reddens to
+    # `{:ok, false}`.
+    test "binding a value with a nested nil hands it to predicator verbatim, at depth" do
       context = Evaluator.context(new_machine_state())
 
       bound = Evaluator.bind(context, "obj", %{"inner" => nil})
 
-      assert Evaluator.evaluate(bound, compiled_expr("obj.inner")) == {:ok, :undefined}
+      assert Evaluator.evaluate(bound, compiled_expr("obj.inner === null")) == {:ok, true}
+      assert Evaluator.evaluate(bound, compiled_expr("obj.inner === undefined")) == {:ok, false}
+    end
+
+    # sabotage: `bind/3` is changed to re-add a `nil` -> `:undefined` normalization walk over
+    # `value` before handing it to `Predicator.Context.bind/3` -> the nested
+    # `nil` two levels deep inside `_event.data.foo` reads back as
+    # `:undefined` instead of predicator's own null literal, and
+    # `_event.data.foo === null` reddens to `{:ok, false}` - the bead's named
+    # acceptance criterion (`bind(ctx, "_event", %{"data" => %{"foo" =>
+    # nil}})` preserves the `nil`).
+    test "bind/3 preserves a nested nil inside _event.data, so it reads null not undefined" do
+      context = Evaluator.context(new_machine_state())
+
+      bound = Evaluator.bind(context, "_event", %{"data" => %{"foo" => nil}})
+
+      assert Evaluator.evaluate(bound, compiled_expr("_event.data.foo === null")) == {:ok, true}
+
+      assert Evaluator.evaluate(bound, compiled_expr("_event.data.foo === undefined")) ==
+               {:ok, false}
     end
 
     # sabotage: `bind/3`'s `is_binary(root)` guard is dropped along with the
@@ -492,9 +536,14 @@ defmodule Statifier.EvaluatorTest do
     # but `on_unbound` diverges, reddening the third assertion below. This is
     # "the test to write first": the whole safety argument for bypassing
     # `new/2` is that folding `bind/3` over a compile-time base produces the
-    # identical context `new/2` would have, for every shape `undefine_nils/1`
-    # and `normalize_value/1` disagree about - nested maps, lists, a nil
-    # root, a nested nil, a non-string scalar, and `_event`.
+    # identical context `new/2` would have, for every shape in the datamodel
+    # fixture below - nested maps, lists, a nil root, a nested nil, a
+    # non-string scalar, and `_event`. Since `bind/3`'s own `nil` ->
+    # `:undefined` rewrite was retired (Phase 3) this is a *stronger* check
+    # than before: the reference is built directly from `ms.datamodel`, with
+    # no hand-mirrored transform
+    # standing between the two paths, so this test would also catch `bind/3`
+    # or `context/1` silently reintroducing one.
     test "context/1 builds a context equivalent to a direct new/2 call, for a representative datamodel" do
       datamodel = %{
         "score" => 85,
@@ -510,7 +559,7 @@ defmodule Statifier.EvaluatorTest do
 
       reference =
         Predicator.Context.new(
-          deep_undefine_nils(ms.datamodel),
+          ms.datamodel,
           providers: [Statifier.Evaluator.Functions],
           host: {ms.machine, ms.configuration},
           on_unbound: :error
@@ -522,19 +571,6 @@ defmodule Statifier.EvaluatorTest do
       assert built.host == reference.host
     end
   end
-
-  # Mirrors `Statifier.Evaluator`'s own private `undefine_nils/1`, so the
-  # equivalence test above can build the same "nil -> :undefined,
-  # recursively" reference shape `Predicator.Context.new/2` would receive
-  # through `Evaluator.context/1`, without reaching into a private function.
-  defp deep_undefine_nils(nil), do: :undefined
-  defp deep_undefine_nils(list) when is_list(list), do: Enum.map(list, &deep_undefine_nils/1)
-
-  defp deep_undefine_nils(map) when is_map(map) and not is_struct(map) do
-    Map.new(map, fn {key, value} -> {key, deep_undefine_nils(value)} end)
-  end
-
-  defp deep_undefine_nils(other), do: other
 
   describe "put_configuration/2" do
     # sabotage: `put_configuration/2` is changed to call

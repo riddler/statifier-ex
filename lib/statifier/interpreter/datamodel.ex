@@ -104,8 +104,8 @@ defmodule Statifier.Interpreter.Datamodel do
   3. Require the resolved root to already be a key of
      `machine_state.datamodel` - auto-vivification only ever creates
      intermediate containers, never an undeclared top-level variable.
-  4. Write into the *raw* `machine_state.datamodel` (`nil`s intact), never
-     the normalized `.data` read in step 1.
+  4. Write into the *raw* `machine_state.datamodel`, never the normalized
+     `.data` read in step 1.
   5. Bind just the written root into `datamodel_context` - O(size of that
      root), not O(size of the datamodel).
 
@@ -190,11 +190,10 @@ defmodule Statifier.Interpreter.Datamodel do
   end
 
   # Step 4: the write itself, against the *raw* `machine_state.datamodel`
-  # (`nil`s intact) rather than the normalized context read in step 1 - the
-  # `nil`-versus-`:undefined` round trip. `context.data` deep-normalizes
-  # `nil` to `:undefined`, and nothing in `lib/` reads it back out; writing
-  # through the raw map is what keeps an unrelated seeded-but-unbound
-  # `<data>` id reading `nil`, not `:undefined`, after this write.
+  # rather than the normalized context read in step 1 - the raw map is
+  # `MachineState`'s resumable truth (ADR-0012 / `docs/observability.md`
+  # constraint 1), and writing through it is what keeps every other,
+  # untouched root in `machine_state.datamodel` unaffected by this write.
   @spec write(
           machine_state :: MachineState.t(),
           path_source :: String.t(),

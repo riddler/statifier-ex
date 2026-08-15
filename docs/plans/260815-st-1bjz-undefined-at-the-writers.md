@@ -702,12 +702,12 @@ mechanism.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run).
-- [ ] `grep -rn 'undefine_nils' lib/ test/` returns nothing.
-- [ ] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly. **This is the acceptance criterion's central check.**
-- [ ] `mix test.regression` is green.
-- [ ] The new `bind(ctx, "_event", %{"data" => %{"foo" => nil}})` test asserts `=== null` true and `=== undefined` false and passes.
-- [ ] W3C test319, test333, test335, test337, test339, test343, test488, test528, test150, test151 all keep their prior pass/fail status (check them individually against Phase 0's per-test record, not just against the aggregate count).
+- [x] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run).
+- [x] `grep -rn 'undefine_nils' lib/ test/` returns nothing.
+- [x] `mix test --include scion --include scxml_w3` matches Phase 0's recorded counts exactly. **This is the acceptance criterion's central check.**
+- [x] `mix test.regression` is green.
+- [x] The new `bind(ctx, "_event", %{"data" => %{"foo" => nil}})` test asserts `=== null` true and `=== undefined` false and passes.
+- [x] W3C test319, test333, test335, test337, test339, test343, test488, test528, test150, test151 all keep their prior pass/fail status (check them individually against Phase 0's per-test record, not just against the aggregate count).
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: `bind/3`, `bind_roots/2`, `context/1`, and `run_program/2` still match their documented contracts, and `write_location/4`'s five steps are unchanged in behavior. No Appendix D procedure body is touched by this phase, so no Appendix D deviation is introduced or removed.
@@ -987,6 +987,24 @@ blocking here.
 - [ ] The two answers are readable from the code alone - a reader of `lib/statifier/effect/send.ex` and `lib/statifier/event.ex` finds both decisions and their reasons without opening the ADR.
 - [ ] Every changed and new test's sabotage was actually run.
 - [ ] No regressions in `<send>`, `<invoke>`, `<donedata>`, or session delivery behavior.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Spec-conformance judgment: `bind/3`, `bind_roots/2`, `context/1`, and `run_program/2` still match their documented contracts, and `write_location/4`'s five steps are unchanged in behavior. No Appendix D procedure body is touched by this phase, so no Appendix D deviation is introduced or removed.
+- [ ] `run_program/2`'s remaining diff-merge reasoning reads correctly on its own - the system-variable check survives as the reason, and no sentence still references a rewrite that no longer exists.
+- [ ] A `grep` for "normaliz" across the four touched modules finds no prose still claiming this repo normalizes `nil`.
+- [ ] Every rewritten sabotage line was actually re-run.
+- [ ] No regressions in related features.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
