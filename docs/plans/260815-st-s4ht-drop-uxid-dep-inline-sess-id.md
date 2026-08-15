@@ -581,12 +581,12 @@ assertion must not change; only surrounding prose may.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never as the phase gate).
-- [ ] Full `mix quality` is green, including Doctor (moduledoc coverage is
+- [x] `mix quality --profile loop` while iterating (never as the phase gate).
+- [x] Full `mix quality` is green, including Doctor (moduledoc coverage is
       unaffected - no `@doc` or `@moduledoc` is removed, only reworded).
-- [ ] `grep -rn UXID lib/ mix.exs docs/architecture.md docs/datamodel.md`
+- [x] `grep -rn UXID lib/ mix.exs docs/architecture.md docs/datamodel.md`
       returns nothing.
-- [ ] `git diff --stat` for this phase names no file under `docs/research/`,
+- [x] `git diff --stat` for this phase names no file under `docs/research/`,
       `docs/adr/`, or `docs/plans/`.
 
 #### Manual Verification:
@@ -749,6 +749,29 @@ blocking here.
 
 - [ ] A fresh `rm -rf _build deps && mix deps.get && mix compile` succeeds, so
       the drop is real rather than masked by a warm build directory.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 4
+
+- [ ] Spec-conformance judgment for `lib/statifier/`: the diff touches comment
+      and doc lines only. Confirm no Appendix D function body changed - the
+      `generate_invoke_id` edit is the comment above it, not the function.
+- [ ] Each rewritten "why a counter is not a UXID" passage still makes the
+      ADR-0003 argument intact: a clock and a CSPRNG in the core would turn
+      `(state, event) -> {state, [effect]}` into
+      `(state, event, clock, entropy) -> ...` and break replay observably.
+- [ ] `docs/architecture.md` and `docs/datamodel.md` read naturally rather than
+      as mechanical substitutions.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while

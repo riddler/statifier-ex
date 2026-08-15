@@ -19,7 +19,7 @@ defmodule Statifier.Supervisor do
   ## Children, in order, under `:rest_for_one`
 
   1. `{Registry, keys: :unique, name: Statifier.Registry}` - `Session.init/1`
-     registers under the `sess_` UXID once it is generated (`Session`'s own
+     registers under the `sess_` id once it is generated (`Session`'s own
      moduledoc, "`<send>` routing" section).
   2. `{DynamicSupervisor, name: Statifier.SessionSupervisor}` - the flat
      supervisor `Statifier.start_session/2` starts sessions on.

@@ -38,7 +38,7 @@ continuity with v1's converted W3C tests).
   `error.execution` rather than being created, so vivification only ever
   extends a path under a name the document already declared.
 - `cond` on transitions and `<if>`/`<elseif>`, `expr` everywhere the spec allows.
-- System variables per spec 5.10: `_event`, `_sessionid` (a UXID, stable for the
+- System variables per spec 5.10: `_event`, `_sessionid` (a `sess_` id, stable for the
   session's lifetime), `_name`, `_ioprocessors`, and the `In(stateId)` predicate.
 
 ## Evaluation contract

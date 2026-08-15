@@ -31,7 +31,7 @@ defmodule Statifier.Evaluator.SystemVariables do
   @doc """
   The address C.1.1 asks for: a value external entities can use to reach this
   session, which C.1 also makes the delivered event's `origin` and 5.10.1
-  requires to work as a `<send target>`. `_sessionid` stays the bare UXID.
+  requires to work as a `<send target>`. `_sessionid` stays the bare session id.
   """
   @spec scxml_location(session_id :: String.t()) :: String.t()
   def scxml_location(session_id), do: @scxml_session_target_prefix <> session_id

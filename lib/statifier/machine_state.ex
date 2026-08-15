@@ -141,17 +141,17 @@ defmodule Statifier.MachineState do
   fallback (`inv_<counter>`, no qualifier - `Machine.State.id` is `nil` for
   a state with no author-written id) unique with no special case.
 
-  This field exists, instead of a `UXID.generate!` call at the generation
-  site, because ADR-0003 wins where ADR-0008's identifier aesthetics
-  collide with the core's `(state, event) -> {state, [effect]}` contract:
-  UXID reads the wall clock and a CSPRNG, and `<invoke idlocation>` writes
-  the generated id into the datamodel, so minting it with entropy would
-  make a recorded run and its replay diverge in program state. A counter
-  that is a pure field on `%MachineState{}` replays identically and
-  satisfies ADR-0012 constraint 1 (inspectable, not hidden generator
-  state). See ADR-0008's 2026-08-15 amendment for the full argument,
-  including why session ids keep the UXID (uniqueness *across* sessions,
-  which entropy buys and a session-local counter cannot).
+  This field exists, instead of a clock-and-CSPRNG generator call at the
+  generation site, because ADR-0003 wins where ADR-0008's identifier
+  aesthetics collide with the core's `(state, event) -> {state, [effect]}`
+  contract: an entropy-based id reads the wall clock and a CSPRNG, and
+  `<invoke idlocation>` writes the generated id into the datamodel, so
+  minting it with entropy would make a recorded run and its replay diverge
+  in program state. A counter that is a pure field on `%MachineState{}`
+  replays identically and satisfies ADR-0012 constraint 1 (inspectable, not
+  hidden generator state). See ADR-0008's 2026-08-15 amendment for the full
+  argument, including why session ids keep the entropy-based id (uniqueness
+  *across* sessions, which entropy buys and a session-local counter cannot).
 
   Starts at `0` in `new/2` (no invocation has generated an id yet) and is
   incremented by `generate_invoke_id/3` immediately before use, so the
@@ -176,9 +176,9 @@ defmodule Statifier.MachineState do
   `<send>`'s own generation site (a later phase's job, not this field's),
   producing ids `send_1`, `send_2`, ... in the order the processor mints
   them. Same reasoning as `invoke_counter` above for why this is a plain
-  counter and not a `UXID.generate!` call: ADR-0003's core is
-  `(state, event) -> {state, [effect]}`, and a UXID reads the wall clock and
-  a CSPRNG, which `<send idlocation>` writing the generated id into the
+  counter and not a clock-and-CSPRNG generator call: ADR-0003's core is
+  `(state, event) -> {state, [effect]}`, and an entropy-based id reads the
+  wall clock and a CSPRNG, which `<send idlocation>` writing the generated id into the
   datamodel would turn into an observable replay divergence. A counter that
   is a pure field on `%MachineState{}` replays identically instead.
 

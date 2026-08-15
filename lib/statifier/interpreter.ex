@@ -1416,8 +1416,8 @@ defmodule Statifier.Interpreter do
   # auto-increment - not per-state, not per-element (6.4.1 hangs its
   # uniqueness MUST on the platformid itself, so per-state counters would
   # be nonconformant). It is read from and written back to
-  # `%MachineState{}` rather than minted with `UXID.generate!`: UXID reads
-  # the wall clock and a CSPRNG, which would make this function
+  # `%MachineState{}` rather than minted with a clock-and-CSPRNG generator:
+  # an entropy-based id reads the wall clock and a CSPRNG, which would make this function
   # `(state, event, clock, entropy) -> ...` instead of ADR-0003's
   # `(state, event) -> {state, [effect]}`, observably so because `<invoke
   # idlocation>` writes the generated id into the datamodel. A pure counter
