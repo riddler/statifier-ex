@@ -226,12 +226,12 @@ existing ones.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never as the phase gate).
-- [ ] Full `mix quality` is green, including the `ADR guard` stage.
-- [ ] `grep -rn UXID lib/mix/` returns nothing.
-- [ ] `grep -rn 'adr-0008-uxid' lib/ test/` still returns the definition and
+- [x] `mix quality --profile loop` while iterating (never as the phase gate).
+- [x] Full `mix quality` is green, including the `ADR guard` stage.
+- [x] `grep -rn UXID lib/mix/` returns nothing.
+- [x] `grep -rn 'adr-0008-uxid' lib/ test/` still returns the definition and
       the two assertions - the check id did not move.
-- [ ] `git diff --name-only` for this phase lists no file under
+- [x] `git diff --name-only` for this phase lists no file under
       `lib/statifier/`, so the ADR guard's own scope predicate is not
       exercised by this diff.
 
@@ -699,3 +699,25 @@ statement true.
   `.claude/wurk/implement.md` (the sabotage protocol), `.claude/wurk/plan.md`
   (always-required criteria, the Appendix D rule)
 - Bead: `st-s4ht` (depends on `st-mvna`)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The reworded message still reads as an instruction to the person who
+      trips it: it names the ADR and says what the ADR requires.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
