@@ -49,6 +49,15 @@ defmodule Statifier.EventTest do
     test "data option is carried through" do
       assert Event.internal("done.state.a", @cause, data: %{value: 1}).data == %{value: 1}
     end
+
+    # sabotage: `Event.internal/3` ignores the `:sendid` option and always
+    # stores `nil` -> this assertion reddens. Phase 4 is the first caller
+    # that passes `:sendid` (for `<send target="#_internal">`), and a
+    # dropped keyword here raises nothing, so this direct constructor test
+    # is the only thing that would have caught it.
+    test "sendid option is carried through" do
+      assert Event.internal("done.state.a", @cause, sendid: "send1").sendid == "send1"
+    end
   end
 
   describe "platform/3" do

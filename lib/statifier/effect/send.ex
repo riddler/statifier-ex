@@ -17,6 +17,12 @@ defmodule Statifier.Effect.Send do
   not say which `<onentry>`/`<onexit>` block or transition it belongs to).
   `macrostep`/`microstep` are the step counters as they stand at the moment
   of the send.
+
+  `id_from_author?` is `true` when the document wrote `id` or `idlocation`
+  on this `<send>`, `false` when `send_id` was generated. It exists for
+  C.1's empty-`sendid` rule: a delivered event's `sendid` must be `nil` when
+  the author never named the send, and `send_id` alone cannot express that
+  distinction, since ADR-0035 always mints one either way.
   """
 
   alias Statifier.Machine.Content
@@ -34,7 +40,8 @@ defmodule Statifier.Effect.Send do
     :c_index,
     :owner,
     :macrostep,
-    :microstep
+    :microstep,
+    id_from_author?: false
   ]
 
   @type t :: %__MODULE__{
@@ -46,6 +53,7 @@ defmodule Statifier.Effect.Send do
           c_index: non_neg_integer() | nil,
           owner: owner() | nil,
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          id_from_author?: boolean()
         }
 end

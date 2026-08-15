@@ -77,19 +77,17 @@ defmodule Statifier.Evaluator.SystemVariables do
   end
 
   @doc """
-  `_event`'s value for `event` - spec 5.10.1's fields. `sendid`, `origin`,
-  and `origintype` are `nil` because `Statifier.Event` does not carry them
-  yet (its own moduledoc); they become real once `<send>` lands. `invokeid`
-  is `event.invokeid` - `Statifier.Event`'s own first reader of that field.
+  `_event`'s value for `event` - spec 5.10.1's fields, read straight off
+  `Statifier.Event`.
   """
   @spec event(event :: Event.t()) :: map()
   def event(%Event{} = event) do
     %{
       "name" => event.name,
       "type" => Atom.to_string(event.type),
-      "sendid" => nil,
-      "origin" => nil,
-      "origintype" => nil,
+      "sendid" => event.sendid,
+      "origin" => event.origin,
+      "origintype" => event.origintype,
       "invokeid" => event.invokeid,
       "data" => event.data
     }

@@ -341,6 +341,41 @@ defmodule Statifier.Machine.Content.SendTest do
       assert {:ok, _ctx_2, [{:send, %Effect.Send{send_id: "send_2"}}]} =
                ExecutableContent.execute(node, context(ctx_1.machine_state))
     end
+
+    # sabotage: `id_from_author?/1` is changed to `true or idlocation != nil`
+    # (always true) -> this assertion reddens, since a generated id would
+    # now also read as author-written.
+    test "id_from_author? is false when the author wrote neither id nor idlocation" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "id_generated")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{id_from_author?: false}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: `id_from_author?/1` is changed to `false` unconditionally ->
+    # this assertion reddens for an author-written literal id.
+    test "id_from_author? is true when the author wrote id" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "id_literal")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{id_from_author?: true}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: `id_from_author?/1` is changed to `false` unconditionally
+    # (same mutation as the "wrote id" test above) -> this assertion reddens
+    # too, for a send that named only `idlocation`.
+    test "id_from_author? is true when the author wrote idlocation" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "idlocation")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{id_from_author?: true}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
   end
 
   describe "execute/2 - idlocation" do

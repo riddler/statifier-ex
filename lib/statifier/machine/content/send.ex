@@ -286,7 +286,7 @@ defmodule Statifier.Machine.Content.Send do
             owner :: Machine.Content.owner(),
             machine_state :: MachineState.t()
           ) :: {:send, Effect.Send.t()} | {:send_delayed, Effect.SendDelayed.t()}
-    defp build_effect(%Send{c_index: c_index}, fields, send_id, nil, owner, ms) do
+    defp build_effect(%Send{c_index: c_index} = node, fields, send_id, nil, owner, ms) do
       {:send,
        %Effect.Send{
          event: fields.event,
@@ -297,11 +297,12 @@ defmodule Statifier.Machine.Content.Send do
          c_index: c_index,
          owner: owner,
          macrostep: ms.macrostep,
-         microstep: ms.microstep
+         microstep: ms.microstep,
+         id_from_author?: id_from_author?(node)
        }}
     end
 
-    defp build_effect(%Send{c_index: c_index}, fields, send_id, delay_ms, owner, ms)
+    defp build_effect(%Send{c_index: c_index} = node, fields, send_id, delay_ms, owner, ms)
          when is_integer(delay_ms) do
       {:send_delayed,
        %Effect.SendDelayed{
@@ -314,8 +315,17 @@ defmodule Statifier.Machine.Content.Send do
          c_index: c_index,
          owner: owner,
          macrostep: ms.macrostep,
-         microstep: ms.microstep
+         microstep: ms.microstep,
+         id_from_author?: id_from_author?(node)
        }}
     end
+
+    # C.1's empty-`sendid` rule: `true` only when the author wrote `id` or
+    # `idlocation` on this `<send>` - `send_id` itself is always non-`nil`
+    # (ADR-0035 generates one when the author did not), so this flag is the
+    # only place that distinction survives past `generate_send_id/2`.
+    @spec id_from_author?(node :: Send.t()) :: boolean()
+    defp id_from_author?(%Send{id: id, idlocation: idlocation}),
+      do: id != nil or idlocation != nil
   end
 end

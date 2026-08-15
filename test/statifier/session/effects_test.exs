@@ -11,8 +11,13 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Session.Effects
+
+  @session_id "sess_test"
+  @origin SystemVariables.scxml_location(@session_id)
+  @origintype SystemVariables.scxml_event_processor()
 
   # Table-driven over the whole `Effect.t()` vocabulary (eighteen tags: nine
   # core plus nine trace), mirroring `test/statifier/effect_test.exs`'s
@@ -24,7 +29,13 @@ defmodule Statifier.Session.EffectsTest do
      [
        {:notify,
         {:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1}}},
-       {:enqueue_event, Event.external("e", data: %{k: 1})}
+       {:enqueue_event,
+        Event.external("e",
+          data: %{k: 1},
+          origin: @origin,
+          origintype: @origintype,
+          sendid: nil
+        )}
      ]},
     {{:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}},
      [
@@ -53,7 +64,13 @@ defmodule Statifier.Session.EffectsTest do
            macrostep: 1,
            microstep: 1
          }}},
-       {:schedule, "s1", 30, Event.external("e", data: %{k: 1})}
+       {:schedule, "s1", 30,
+        Event.external("e",
+          data: %{k: 1},
+          origin: @origin,
+          origintype: @origintype,
+          sendid: nil
+        )}
      ]},
     {{:send_delayed,
       %SendDelayed{
@@ -75,7 +92,8 @@ defmodule Statifier.Session.EffectsTest do
            macrostep: 1,
            microstep: 1
          }}},
-       {:schedule, nil, 30, Event.external("e")}
+       {:schedule, nil, 30,
+        Event.external("e", origin: @origin, origintype: @origintype, sendid: nil)}
      ]},
     {{:send_delayed,
       %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}},
@@ -270,7 +288,8 @@ defmodule Statifier.Session.EffectsTest do
       # `plan/1` call raises `FunctionClauseError` for the `:log` fixture, and
       # this test reddens instead of silently planning nothing for it.
       test "plans #{tag} carrying #{inspect(payload.__struct__)} (fixture #{index})" do
-        assert Effects.plan([unquote(Macro.escape(effect))]) == unquote(Macro.escape(expected))
+        assert Effects.plan([unquote(Macro.escape(effect))], @session_id) ==
+                 unquote(Macro.escape(expected))
       end
     end
   end
@@ -283,7 +302,7 @@ defmodule Statifier.Session.EffectsTest do
       send_effect = {:send, %Send{event: "e", target: nil, macrostep: 1, microstep: 1}}
       cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}}
 
-      instructions = Effects.plan([log, send_effect, cancel])
+      instructions = Effects.plan([log, send_effect, cancel], @session_id)
 
       notify_effects = for {:notify, e} <- instructions, do: e
       assert notify_effects == [log, send_effect, cancel]
@@ -297,7 +316,7 @@ defmodule Statifier.Session.EffectsTest do
     test "no :enqueue_event instruction appears for a targeted send" do
       effect = {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}
 
-      instructions = Effects.plan([effect])
+      instructions = Effects.plan([effect], @session_id)
 
       refute Enum.any?(instructions, &match?({:enqueue_event, _}, &1))
       assert Enum.any?(instructions, &match?({:unroutable, ^effect}, &1))
@@ -311,7 +330,8 @@ defmodule Statifier.Session.EffectsTest do
     test "the enqueued event's data matches the send effect's data" do
       effect = {:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1}}
 
-      assert [_notify, {:enqueue_event, %Event{data: %{k: 1}}}] = Effects.plan([effect])
+      assert [_notify, {:enqueue_event, %Event{data: %{k: 1}}}] =
+               Effects.plan([effect], @session_id)
     end
   end
 
@@ -332,7 +352,8 @@ defmodule Statifier.Session.EffectsTest do
            microstep: 1
          }}
 
-      assert [_notify, {:schedule, nil, 30, %Event{name: "e"}}] = Effects.plan([effect])
+      assert [_notify, {:schedule, nil, 30, %Event{name: "e"}}] =
+               Effects.plan([effect], @session_id)
     end
   end
 end

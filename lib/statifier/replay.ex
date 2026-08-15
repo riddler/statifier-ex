@@ -263,7 +263,7 @@ defmodule Statifier.Replay do
     halt_override = Keyword.get(opts, :halt_override)
 
     effects
-    |> Effects.plan()
+    |> Effects.plan(state.machine_state.datamodel["_sessionid"])
     |> Enum.reduce(state, &perform_instruction(&1, &2, halt_override))
   end
 

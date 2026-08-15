@@ -3,6 +3,7 @@ defmodule Statifier.SessionTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Lowering
   alias Statifier.MachineState
@@ -585,6 +586,83 @@ defmodule Statifier.SessionTest do
       assert_receive {:statifier, ^session_id, {:unroutable, {:cancel_invoke, ^cancel_effect}}}
 
       assert Session.status(session).configuration == MapSet.new(["a"])
+    end
+  end
+
+  # -- delivered event fields (spec 5.10.1 / C.1) --------------------------
+
+  describe "origin, origintype and sendid on a delivered (target-less) send" do
+    defp self_send_doc(send_attrs) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" #{send_attrs}/>
+              </onentry>
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Session.Effects`'s `delivered_event/2` passes `sendid:
+    # send.send_id` unconditionally instead of gating it on
+    # `send.id_from_author?` -> the generated (non-nil) `Effect.Send.send_id`
+    # leaks onto `_event.sendid`, reddening the `nil` assertion below even
+    # though the `Effect.Send.send_id` assertion stays green. Reverted and
+    # confirmed green.
+    test "sendid is nil on _event while Effect.Send.send_id is non-nil, when the author named neither id nor idlocation" do
+      machine = compile!(self_send_doc(""))
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+
+      assert_receive {:statifier, ^session_id, {:effect, {:send, %Effect.Send{send_id: send_id}}}}
+
+      refute send_id == nil
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == nil
+    end
+
+    # sabotage: `Effect.Send`'s `id_from_author?` field default is changed
+    # from `false` to `true` -> a generated id would now also read as
+    # author-written, but this test writes `id="send1"` explicitly so it
+    # would stay green under that particular mutation; instead sabotaged at
+    # `Session.Effects.delivered_event/2`, changing `sendid: if(send.id_from_author?,
+    # do: send.send_id)` to always `nil` -> this assertion reddens (test351's
+    # own assertion, run here as a unit test since the corpus cannot run it
+    # yet). Reverted and confirmed green.
+    test "sendid is the author's id on _event, when the author wrote id" do
+      machine = compile!(self_send_doc(~s(id="send1")))
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `Session.Effects.delivered_event/2` passes
+    # `origintype: "scxml"` (the short alias, not
+    # `SystemVariables.scxml_event_processor/0`'s URI) -> the `origintype`
+    # assertion below reddens, per plan decision 11 (origintype is the
+    # Processor's type URI, not the string "scxml"; test352 is the corpus
+    # test that will judge it). Reverted and confirmed green.
+    test "origintype is the processor URI and origin is this session's own #_scxml_ location" do
+      machine = compile!(self_send_doc(""))
+      {:ok, session} = Session.start_link(machine)
+
+      session_id = Session.session_id(session)
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      event = Session.snapshot(session).datamodel["_event"]
+      assert event["origintype"] == SystemVariables.scxml_event_processor()
+      assert event["origin"] == "#_scxml_" <> session_id
     end
   end
 
