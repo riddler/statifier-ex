@@ -6,8 +6,7 @@ defmodule Statifier.Machine.Content.Assign do
   `location` is the raw, uncompiled SCXML `location` attribute (a path
   expression such as `"foo.bar.baz"` or `"items[0]"`) - it cannot be resolved
   any earlier than `execute/2` even in principle, since a bracket key such as
-  `items[i]` reads `i` against the *pre-assignment* datamodel (Decision 6,
-  `docs/plans/260813-st-af3.4-assign-deep-path-vivification.md`). `node_location`
+  `items[i]` reads `i` against the *pre-assignment* datamodel. `node_location`
   is this node's own `Statifier.Parser.Location` span - named apart from
   `location` for exactly the reason `Statifier.Document.Assign`'s moduledoc
   gives, so the raw path string and the element's own span are never

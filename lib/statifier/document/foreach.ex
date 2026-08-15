@@ -27,8 +27,7 @@ defmodule Statifier.Document.Foreach do
 
   Unlike `Statifier.Document.If`, `<foreach>` has no partitioning: `content`
   is the flat `[Document.content_node()]` list `<foreach>`'s children lower
-  into, in document order (Decision 8 of
-  `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`) - never a
+  into, in document order - never a
   branch struct, since there is exactly one child block and the `array`/
   `item`/`index` attributes all belong to `<foreach>` itself rather than to
   any partition of it.

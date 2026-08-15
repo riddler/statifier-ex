@@ -57,8 +57,7 @@ defmodule Statifier.Compiler do
   transition and a bad `<log expr=...>` elsewhere reports both.
   `build_data_elements/2` never joins that merge - a `<data expr>` that
   fails to compile is captured onto the compiled `Statifier.Machine.Data`
-  node as `{:invalid, error}` rather than failing `compile/1` (Decision 2,
-  `docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`), so a
+  node as `{:invalid, error}` rather than failing `compile/1`, so a
   document with a bad `cond` *and* a bad `<data expr>` reports only the
   `cond`'s error.
 
@@ -130,14 +129,11 @@ defmodule Statifier.Compiler do
   and `<assign>` are stored raw, since none of the three has children of its
   own to number - but an `<if>` and a `<foreach>` do, so their entries carry
   the raw node alongside the `c_index` list(s) `assign_content_nodes/2`'s
-  own recursion (Decision 2 of
-  `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`)
-  assigned: `%{if: DIf.t(), branches: [[non_neg_integer()]]}` for an `<if>`
-  (one list per branch), `%{foreach: DForeach.t(), content: [non_neg_integer()]}`
-  for a `<foreach>` (one flat list, one nesting level shallower - Decision 8
-  of `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`) - mirroring
-  `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
-  shape (`:396-408`).
+  own recursion assigned: `%{if: DIf.t(), branches: [[non_neg_integer()]]}`
+  for an `<if>` (one list per branch), `%{foreach: DForeach.t(), content:
+  [non_neg_integer()]}` for a `<foreach>` (one flat list, one nesting level
+  shallower) - mirroring `transitions_acc`'s own `%{transition: ..., source:
+  ..., content: ...}` shape (`:396-408`).
 
   `invoke_acc`/`invoke_errors` belong to the `<invoke>` pass - the one pass
   that does not fit the "numbered during the walk, compiled in a deferred

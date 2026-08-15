@@ -103,8 +103,7 @@ defmodule Statifier.Compiler.Expressions do
 
   @doc """
   Constant-folds a `<data>` element's child text into a `{:static, value}`
-  `Machine.expr()` - Decision 8
-  (`docs/plans/260812-st-af3.3-datamodel-data-early-late-binding.md`). Spec
+  `Machine.expr()`. Spec
   5.3.2 is explicit that `<data>`'s children are "an in-line specification
   of the **value** of the data object", not an expression that reads the
   datamodel, and B.2.1 gives the ECMAScript datamodel a

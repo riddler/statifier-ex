@@ -4,8 +4,7 @@ defmodule Statifier.EventData do
   defined rules, that normalizes a value into `_event.data` per spec
   B.2.8.1. `<param>` and `<content>` (under `<donedata>`) call it here;
   `namelist`, `<send>`, and `<invoke>` extend it rather than reinventing it
-  when they land (`docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md`
-  Decision 2).
+  when they land.
 
   B.2.8.1's own ladder, and which rungs this function implements:
 
