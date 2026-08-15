@@ -317,6 +317,57 @@ defmodule Statifier.ReplayTest do
     end
   end
 
+  describe "run/1 over a recorded #_parent send (no live parent to reach)" do
+    defp parent_route_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="ping" target="#_parent"/>
+              </onentry>
+              <transition event="error.communication" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # `:parent` still falls into `perform_instruction/3`'s catch-all
+    # `{:deliver, _route, _event, _effect} -> state` clause - Phase 3 adds no
+    # `Replay` clause of its own (this module's moduledoc, "`{:deliver,
+    # ...}`/`{:raise, ...}` defer to the recorded `{:internal, ...}` entry"):
+    # a replayed session has no live parent to reach either way, and the
+    # live session's own `error.communication` write is what actually moves
+    # the configuration, reached here through the recorded `{:internal, ...}`
+    # entry, not through this clause.
+    #
+    # sabotage: that catch-all clause's body is changed from `state` to
+    # `append(state, {:unroutable, effect})`, mirroring the mutation the
+    # `{:start_child, ...}` no-op test above uses for the same shape of
+    # claim -> `result.stream` gains a second entry the live session's own
+    # resolver never produces (`Statifier.Session` never plans `:parent` as
+    # `{:unroutable, _}`), reddening the exact-list equality assertion below.
+    # Reverted and confirmed green.
+    test "a recorded #_parent send reaches the same final configuration as the live run, with no extra stream entry" do
+      machine = compile!(parent_route_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      live_status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      {:ok, recording} = Session.recording(session)
+
+      assert {:ok, result} = Replay.run(recording)
+
+      replayed_configuration =
+        result.machine_state.configuration
+        |> Enum.map(&Statifier.Machine.id(machine, &1))
+        |> Enum.reject(&is_nil/1)
+        |> MapSet.new()
+
+      assert replayed_configuration == live_status.configuration
+      refute Enum.any?(result.stream, &match?({:unroutable, _}, &1))
+    end
+  end
+
   describe "a delayed send through a real recording (widened {:schedule, ...})" do
     defp two_state_delay_doc do
       """
