@@ -18,6 +18,23 @@ defmodule Statifier.Evaluator.SystemVariables do
   alias Statifier.Machine
 
   @scxml_event_processor "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+  @scxml_session_target_prefix "#_scxml_"
+
+  @doc """
+  The SCXML Event I/O Processor's type URI (spec 6.2.5 / C.1). Public so the
+  session's target router names the same string this module keys
+  `_ioprocessors` by, rather than a second copy of it.
+  """
+  @spec scxml_event_processor() :: String.t()
+  def scxml_event_processor, do: @scxml_event_processor
+
+  @doc """
+  The address C.1.1 asks for: a value external entities can use to reach this
+  session, which C.1 also makes the delivered event's `origin` and 5.10.1
+  requires to work as a `<send target>`. `_sessionid` stays the bare UXID.
+  """
+  @spec scxml_location(session_id :: String.t()) :: String.t()
+  def scxml_location(session_id), do: @scxml_session_target_prefix <> session_id
 
   @doc """
   All four system variables (spec 5.10) as they stand before any event.
@@ -54,7 +71,7 @@ defmodule Statifier.Evaluator.SystemVariables do
       "_name" => machine.name,
       "_event" => nil,
       "_ioprocessors" => %{
-        @scxml_event_processor => %{"location" => session_id}
+        @scxml_event_processor => %{"location" => scxml_location(session_id)}
       }
     }
   end

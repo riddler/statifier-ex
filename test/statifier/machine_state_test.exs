@@ -124,15 +124,21 @@ defmodule Statifier.MachineStateTest do
     # `author_datamodel` over `SystemVariables.initial/2`) -> the seeded
     # system variables no longer land in `datamodel`, reddening this
     # assertion.
+    # sabotage: `scxml_location/1` returns the bare session id -> the
+    # "location" assertion reddens, since it no longer carries the
+    # `#_scxml_` prefix.
     test "datamodel defaults to exactly the four seeded system variables and no author data" do
       ms = new_machine_state()
+      session_id = ms.datamodel["_sessionid"]
 
       assert %{
-               "_sessionid" => session_id,
+               "_sessionid" => ^session_id,
                "_name" => nil,
                "_event" => nil,
                "_ioprocessors" => %{
-                 "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{"location" => session_id}
+                 "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{
+                   "location" => "#_scxml_" <> ^session_id
+                 }
                }
              } = ms.datamodel
 
@@ -269,13 +275,16 @@ defmodule Statifier.MachineStateTest do
     # ...)` is changed to `Keyword.get(opts, :session_id, "ignored")` ->
     # the caller-supplied `:session_id` value is dropped in favor of the
     # generated default, reddening the equality assertion.
+    # sabotage: `scxml_location/1` returns the bare session id -> the
+    # "location" assertion reddens, since it no longer carries the
+    # `#_scxml_` prefix.
     test "a supplied :session_id option wins over the generated default" do
       ms = new_machine_state(session_id: "sess_fixed")
       assert ms.datamodel["_sessionid"] == "sess_fixed"
 
       assert ms.datamodel["_ioprocessors"]["http://www.w3.org/TR/scxml/#SCXMLEventProcessor"][
                "location"
-             ] == "sess_fixed"
+             ] == "#_scxml_sess_fixed"
     end
 
     # sabotage: `MachineState.new/2`'s generated `:session_id` default is
