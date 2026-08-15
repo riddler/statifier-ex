@@ -3,6 +3,7 @@ defmodule StatifierTest do
 
   alias Statifier.Event
   alias Statifier.Machine
+  alias Statifier.Validator.Warning
 
   # sabotage: in `Statifier.compile/1`, swap `Compiler.compile(document)` for
   # `{:ok, document}` (return the uncompiled document instead of running the
@@ -106,6 +107,49 @@ defmodule StatifierTest do
 
     assert [%Statifier.Lowering.Error{reason: {:unsupported_attribute, "script", "src"}}] =
              errors
+  end
+
+  # sabotage: in `Statifier.compile/1`, drop the `%Machine{machine | warnings:
+  # warnings}` stamp and return `Compiler.compile(document)` directly as the
+  # `with`'s do-block value -> this test reddens because `machine.warnings`
+  # comes back `[]` instead of the one expected finalize_forbidden_content
+  # warning, even though the document did trip the check
+  test "a document with <raise> inside <finalize> compiles with the finding on Machine.warnings" do
+    xml = """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+        <state id="s">
+            <invoke type="t">
+                <finalize>
+                    <raise event="done"/>
+                </finalize>
+            </invoke>
+        </state>
+    </scxml>
+    """
+
+    assert {:ok, %Machine{warnings: [warning]}} = Statifier.compile(xml)
+    assert %Warning{reason: {:finalize_forbidden_content, "raise"}} = warning
+  end
+
+  # sabotage: in `Statifier.compile/1`, change `warnings: warnings` to
+  # `warnings: ["fake" | warnings]` (stamp a synthesized extra finding rather
+  # than the validator's list as-is) -> this test reddens because
+  # `machine.warnings` comes back non-empty for a document the validator
+  # found nothing wrong with
+  test "the same document without <raise> inside <finalize> compiles with no warnings" do
+    xml = """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+        <state id="s">
+            <invoke type="t">
+                <finalize>
+                    <log expr="'done'"/>
+                </finalize>
+            </invoke>
+        </state>
+    </scxml>
+    """
+
+    assert {:ok, %Machine{warnings: []}} = Statifier.compile(xml)
   end
 
   describe "initialize/2" do

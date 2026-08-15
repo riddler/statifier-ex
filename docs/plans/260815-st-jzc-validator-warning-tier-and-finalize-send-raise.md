@@ -822,16 +822,16 @@ heading (`changelog.d/README.md`, Format).
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is green, including dialyzer against the unchanged
+- [x] `mix quality` is green, including dialyzer against the unchanged
       `compile/1` `@spec` and the new `Machine.t()` type.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `mix test.regression` passes.
-- [ ] `changelog.d/st-jzc.md` carries both an `### Added` and a `### Changed`
+- [x] `mix gate.verify` exits zero.
+- [x] `mix test.regression` passes.
+- [x] `changelog.d/st-jzc.md` carries both an `### Added` and a `### Changed`
       heading, using only the headings `changelog.d/README.md` permits.
-- [ ] `grep -n "@spec compile" lib/statifier.ex` still shows
+- [x] `grep -n "@spec compile" lib/statifier.ex` still shows
       `{:ok, Machine.t()} | {:error, [error()]}` - the public spec did not
       change.
-- [ ] `grep -rn "st-jzc" lib/ test/` returns nothing.
+- [x] `grep -rn "st-jzc" lib/ test/` returns nothing.
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: no Appendix D function is touched by this
@@ -1061,6 +1061,30 @@ blocking here.
 - [ ] `Checks.Invoke.check/2`'s five 6.4.1 arms and their tests are byte-for-byte
       unchanged, confirming the acceptance criterion that existing pass/reject
       behavior did not move.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before moving
+to the next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Spec-conformance judgment: no Appendix D function is touched by this
+      phase; `Statifier.compile/1` is a pipeline facade and
+      `Statifier.Machine` is a data structure, so ADR-0002's line-for-line
+      rule has nothing to bind. Confirm by reading the diff that no
+      `lib/statifier/interpreter*` file appears in it.
+- [ ] A machine compiled from a warning-free document is indistinguishable
+      from one compiled before this phase apart from the new field - checked by
+      running the interpreter suite and confirming nothing depended on
+      `%Machine{}`'s field count.
+- [ ] The sabotage mutations were performed and reverted, and each note names
+      the mutation it describes.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive
