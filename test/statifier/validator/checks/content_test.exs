@@ -140,5 +140,25 @@ defmodule Statifier.Validator.Checks.ContentTest do
 
       assert error.location.start_line == 5
     end
+
+    # sabotage: `contents/1`'s new `invoke_content(invokes)` half is
+    # dropped, leaving only `donedata_content(donedata)` -> an offending
+    # `<content>` under `<invoke>` goes unwalked, reddening this assertion
+    test "an offending <content> under <invoke> is reported too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <content expr="payload">literal</content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error]} =
+               validate!(xml)
+
+      assert error.location.start_line == 4
+    end
   end
 end

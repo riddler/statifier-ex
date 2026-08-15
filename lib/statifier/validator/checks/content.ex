@@ -15,11 +15,12 @@ defmodule Statifier.Validator.Checks.Content do
   `"\\n  "`. That is source formatting, not a payload, and firing on it
   would reject documents the spec allows.
 
-  The only `%Statifier.Document.Content{}` a document can hold today is a
-  `<final>`'s `<donedata><content>` (`Statifier.Document.Donedata`), so that
-  is the one place this check walks. When `<send>` gains a
-  `<content>` child, this walk grows an arm; the rule itself is unchanged,
-  since spec 5.6 states it on `<content>` rather than on either parent.
+  Two places today hold a `%Statifier.Document.Content{}`: a `<final>`'s
+  `<donedata><content>` (`Statifier.Document.Donedata`) and any state's
+  `<invoke><content>` (`Statifier.Document.Invoke`), so this check walks
+  both. When `<send>` gains a `<content>` child, this walk grows a third
+  arm; the rule itself is unchanged, since spec 5.6 states it on `<content>`
+  rather than on whichever parent holds it.
 
   The `Content` alias below is `Statifier.Document.Content`, the document
   node - not this module.
@@ -33,10 +34,10 @@ defmodule Statifier.Validator.Checks.Content do
   alias Statifier.Validator.Error
 
   @doc """
-  Walks every `<final>`'s `<donedata><content>` in the document and returns a
-  `:content_expr_and_text` error for each one that carries both an `expr`
-  attribute and non-blank inline text. Returns `[]` when no `<content>`
-  element mixes the two forms.
+  Walks every `<final>`'s `<donedata><content>` and every state's
+  `<invoke><content>` in the document and returns a `:content_expr_and_text`
+  error for each one that carries both an `expr` attribute and non-blank
+  inline text. Returns `[]` when no `<content>` element mixes the two forms.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
@@ -50,8 +51,18 @@ defmodule Statifier.Validator.Checks.Content do
     Enum.flat_map(states, fn state -> [state | flatten(state.states)] end)
   end
 
-  defp contents(%State{donedata: %Donedata{content: %Content{} = content}}), do: [content]
-  defp contents(%State{}), do: []
+  defp contents(%State{donedata: donedata, invoke: invokes}) do
+    donedata_content(donedata) ++ invoke_content(invokes)
+  end
+
+  defp donedata_content(%Donedata{content: %Content{} = content}), do: [content]
+  defp donedata_content(_donedata), do: []
+
+  defp invoke_content(invokes) do
+    invokes
+    |> Enum.map(& &1.content)
+    |> Enum.filter(&match?(%Content{}, &1))
+  end
 
   defp check_content(%Content{expr: nil}), do: []
 

@@ -16,23 +16,27 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own twenty-one keys (`lib/statifier/lowering.ex`),
-  # duplicated here as data rather than imported - there is nothing in
-  # `lib/` to import, since the map itself is a private module attribute.
+  # The dispatch map's own keys that name an element in
+  # `@scxml_element_names` (`lib/statifier/lowering.ex`) - `finalize` is also
+  # a dispatch key but, like the parser's own 25-name vocabulary this list
+  # mirrors, is not itself one of the 25 names this file scans for, so it
+  # stays out of both `@supported` and `@scxml_element_names` here.
+  # Duplicated as data rather than imported - there is nothing in `lib/` to
+  # import, since the map itself is a private module attribute.
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
     raise log donedata content param datamodel data assign if elseif else
-    foreach script
+    foreach script invoke
   )
 
-  # The three names `@phase_3_elements` exists to word the unsupported-
+  # The two names `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
   # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
   # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1;
-  # `param` and `script` moved the same way.
+  # `param`, `script`, and `invoke` moved the same way since.
   @phase_3_elements ~w(
-    send invoke cancel
+    send cancel
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only

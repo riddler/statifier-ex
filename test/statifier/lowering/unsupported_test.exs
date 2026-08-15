@@ -35,15 +35,8 @@ defmodule Statifier.Lowering.UnsupportedTest do
     # `test/statifier/lowering/content_test.exs` for their own coverage.
     # `<script>` moved the same way - see
     # `test/statifier/lowering/content_test.exs` for its own coverage.
-
-    # sabotage: `Lowering`'s dispatch map grows a stray "invoke" entry
-    # dispatching to `state_like/3` with `kind: :invoke` (an invented state
-    # kind) -> this test reddens because `<invoke>` builds instead of being
-    # reported unsupported
-    test "<invoke> under a <state>" do
-      xml = ~s(<scxml><state id="s"><invoke type="t"/></state></scxml>)
-      assert_unsupported(xml, "invoke")
-    end
+    # `<invoke>` moved the same way - see
+    # `test/statifier/lowering/invoke_test.exs` for its own coverage.
 
     # sabotage: `Lowering`'s dispatch map grows a stray "cancel" entry
     # dispatching to `build_raise/2` (an accidental content-node builder) ->
