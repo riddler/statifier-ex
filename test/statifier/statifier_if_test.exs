@@ -20,7 +20,8 @@ defmodule Statifier.StatifierIfTest do
   `test/scxml_tests/mandatory/system_variables/test319_test.exs` are
   feature-clean and run through the generated harness too.
 
-  This file is **not** a duplicate to delete now that that has landed: it drives the
+  This file is **not** a duplicate to delete now that those documents are
+  feature-clean: it drives the
   exact same documents through `Statifier.compile/1`, `Statifier.initialize/2`,
   `Statifier.send_event/2`, and `Statifier.active_leaf_states/1` - the same
   four-function public API `Statifier.Case`'s own private helpers use

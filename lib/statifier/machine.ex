@@ -38,8 +38,10 @@ defmodule Statifier.Machine do
   `contents` (`content/2` below, the same `elem/2` reader shape); the
   compiler's `<data>` pass populates `data_elements` (`data/2` below, same
   shape again) - see `Statifier.Machine.Data`'s moduledoc for what a
-  `d_index` names; it lives both here (document order, dense) and on
-  `Statifier.Machine.State.data` (per-state membership).
+  `d_index` names. It lives in both places because the two carry different
+  access patterns: here in document order as a dense list for whole-document
+  passes, and on `Statifier.Machine.State.data` as per-state membership for
+  entry-time binding.
 
   ## Expressions
 

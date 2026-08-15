@@ -14,10 +14,10 @@ defmodule Statifier.ContextRecorder do
   `execute/2` merges it into `machine_state.datamodel` and returns a
   `Context` carrying that updated `machine_state` - but *not* a rebuilt
   `datamodel_context`, unlike `Statifier.Machine.Content.Assign`, which does
-  rebuild it in its own `execute/2` -
-  `execute_block/3` itself still builds `datamodel_context` exactly once,
-  before the block's nodes run at all - the rebuild, when one happens, is
-  always a node's own doing, never the runner's). This struct's *not*
+  rebuild it in its own `execute/2`. (`execute_block/3` itself still builds
+  `datamodel_context` exactly once, before the block's nodes run at all - the
+  rebuild, when one happens, is always a node's own doing, never the
+  runner's.) This struct's *not*
   rebuilding is what makes the once-per-block property observable through
   data rather than only through reference equality: a later node reading
   this recorder's `put` in the same block still evaluates against the

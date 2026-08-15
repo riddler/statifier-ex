@@ -657,16 +657,16 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Each rewritten paragraph still states the fact its citation stood in for,
+- [x] Each rewritten paragraph still states the fact its citation stood in for,
       and reads as prose rather than as a sentence with a hole in it.
-- [ ] Every ADR number, W3C spec clause, Appendix D name and `docs/*.md` path in
+- [x] Every ADR number, W3C spec clause, Appendix D name and `docs/*.md` path in
       the touched paragraphs is byte-identical to before.
-- [ ] Spec conformance (`.claude/wurk/plan.md`'s standing criterion for
+- [x] Spec conformance (`.claude/wurk/plan.md`'s standing criterion for
       `lib/statifier/`): the touched moduledocs still describe the code
       accurately against the W3C Appendix D pseudocode. No function bodies
       change in this phase, so the criterion is a documentation-accuracy read
       rather than a re-derivation.
-- [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
+- [x] Read this phase's `git diff origin/main` hunk by hunk: every changed line
       sits inside a `"""` doc body, and no executable line moved. (This is the
       manual half of the check `git diff --stat` above can only bound by
       filename.)
@@ -682,15 +682,15 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] Every quoted spec clause, section number and Appendix D procedure name in
+- [x] Every quoted spec clause, section number and Appendix D procedure name in
       the touched interpreter paragraphs is byte-identical to before.
-- [ ] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
+- [x] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
       touched interpreter moduledocs still describe the ported functions
       accurately against the W3C Appendix D pseudocode. No function bodies
       change, so no new deviation is introduced.
-- [ ] The two conformance-driver moduledocs still explain why the file exists
+- [x] The two conformance-driver moduledocs still explain why the file exists
       alongside the generated harness.
-- [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
+- [x] Read this phase's `git diff origin/main` hunk by hunk: every changed line
       sits inside a `"""` doc body, and no executable line moved.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -704,17 +704,17 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] Each of the three forward-looking passages still tells a reader the thing
+- [x] Each of the three forward-looking passages still tells a reader the thing
       is not implemented yet, and names *what* is missing rather than *who* will
       add it.
-- [ ] Neither rewritten `st-af3.2` passage now claims something is unimplemented
+- [x] Neither rewritten `st-af3.2` passage now claims something is unimplemented
       that in fact landed.
-- [ ] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
+- [x] Spec conformance (`.claude/wurk/plan.md`'s standing criterion): the
       touched `Statifier.Interpreter` moduledoc bullets still describe
       `main_event_loop/1`, `microstep/1` and the `Selection` entry points
       accurately against the W3C Appendix D pseudocode, including the existing
       "not a deviation" note on `statesToInvoke.sort(entryOrder)`.
-- [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
+- [x] Read this phase's `git diff origin/main` hunk by hunk: every changed line
       sits inside a `"""` doc body, and no executable line moved.
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -728,13 +728,13 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 4
 
-- [ ] The two driver moduledocs still explain, without dates or tags, why each
+- [x] The two driver moduledocs still explain, without dates or tags, why each
       file exists alongside the generated corpus tests.
-- [ ] `feature_detector.ex`'s support list is unchanged in content - only the
+- [x] `feature_detector.ex`'s support list is unchanged in content - only the
       provenance clause was removed.
-- [ ] A read of `git diff origin/main` confirms no executable line changed
+- [x] A read of `git diff origin/main` confirms no executable line changed
       anywhere in the branch.
-- [ ] Three rewritten paragraphs read cold - one each from Phases 1, 3 and 4 -
+- [x] Three rewritten paragraphs read cold - one each from Phases 1, 3 and 4 -
       each explain the code rather than reading as a sentence with a citation
       surgically removed from it.
 

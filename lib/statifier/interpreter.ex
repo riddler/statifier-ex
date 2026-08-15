@@ -106,9 +106,9 @@ defmodule Statifier.Interpreter do
     Both `Selection.select_eventless_transitions/1` and
     `Selection.select_transitions/2` return `{machine_state, transitions}`,
     and this module continues with the returned `machine_state` rather than
-    the one it passed in - the `cond` evaluation lives inside `Selection`,
-    which reshaped that module's private walk while both entry points kept
-    their signatures and this module did not change.
+    the one it passed in - `cond` evaluation lives inside `Selection`, where
+    it reshapes that module's private walk without changing either entry
+    point's signature or anything in this module.
   - **The outer `while running` loop is driven by the caller.** ADR-0003:
     the pure core takes one external event per call, and the session that
     drives it owns the waiting external events and their queue.
