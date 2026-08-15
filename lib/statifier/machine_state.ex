@@ -125,6 +125,47 @@ defmodule Statifier.MachineState do
   all, so the two sets diverge exactly where late binding's "first time"
   question needs the session-long answer.
 
+  ## `invoke_counter` is the session-global platformid sequence (ADR-0008)
+
+  Spec 6.4.1 mandates a generated invoke id of the form
+  `stateid.platformid`, and its own MUST binds uniqueness to the
+  platformid alone - "platformid MUST be unique within the current
+  session" - not to the composite. `invoke_counter` is that platformid
+  source: one auto-increment for the whole session, read from and written
+  back to this struct by `Statifier.Interpreter.generate_invoke_id/3`
+  (`lib/statifier/interpreter.ex`), never per-state or per-`<invoke>`
+  element. A per-state counter would let `s0.1` and `s1.1` collide on
+  platformid `1` while still satisfying composite uniqueness, which 6.4.1
+  as written does not permit; one session-global counter makes every
+  platformid distinct by construction and also keeps the anonymous-state
+  fallback (`inv_<counter>`, no qualifier - `Machine.State.id` is `nil` for
+  a state with no author-written id) unique with no special case.
+
+  This field exists, instead of a `UXID.generate!` call at the generation
+  site, because ADR-0003 wins where ADR-0008's identifier aesthetics
+  collide with the core's `(state, event) -> {state, [effect]}` contract:
+  UXID reads the wall clock and a CSPRNG, and `<invoke idlocation>` writes
+  the generated id into the datamodel, so minting it with entropy would
+  make a recorded run and its replay diverge in program state. A counter
+  that is a pure field on `%MachineState{}` replays identically and
+  satisfies ADR-0012 constraint 1 (inspectable, not hidden generator
+  state). See ADR-0008's 2026-08-15 amendment for the full argument,
+  including why session ids keep the UXID (uniqueness *across* sessions,
+  which entropy buys and a session-local counter cannot).
+
+  Starts at `0` in `new/2` (no invocation has generated an id yet) and is
+  incremented by `generate_invoke_id/3` immediately before use, so the
+  first generated platformid is `inv_1` - the same "increment before
+  read" idiom `begin_macrostep/1` etc. use below, though this field is not
+  part of that trio's enforced-by-review contract: it is written directly
+  at its one call site rather than through a dedicated `MachineState`
+  function, matching how `active_invocations` and `states_to_invoke` are
+  already mutated directly from `lib/statifier/interpreter.ex` and
+  `lib/statifier/interpreter/exit_entry.ex` rather than through setters.
+  An author-written `<invoke id="...">` is used verbatim and never
+  composed, so it does not advance this counter - only a generated id
+  consumes the sequence.
+
   ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
@@ -260,6 +301,7 @@ defmodule Statifier.MachineState do
     entered_states: MapSet.new(),
     states_to_invoke: MapSet.new(),
     active_invocations: %{},
+    invoke_counter: 0,
     datamodel: %{},
     running: true,
     status: :running,
@@ -307,6 +349,7 @@ defmodule Statifier.MachineState do
           entered_states: MapSet.t(non_neg_integer()),
           states_to_invoke: MapSet.t(non_neg_integer()),
           active_invocations: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()},
+          invoke_counter: non_neg_integer(),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -351,6 +394,7 @@ defmodule Statifier.MachineState do
       entered_states: MapSet.new(),
       states_to_invoke: MapSet.new(),
       active_invocations: %{},
+      invoke_counter: 0,
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,

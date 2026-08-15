@@ -78,10 +78,10 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert MapSet.new() == result.states_to_invoke
   end
 
-  # sabotage: `generate_invoke_id/2`'s first clause (`%MInvoke{id: id} when
-  # is_binary(id) -> id`) is deleted, leaving only the generated clauses ->
-  # the author's literal id is discarded and replaced with a generated one,
-  # reddening the equality assertion.
+  # sabotage: `generate_invoke_id/3`'s first clause (`%MInvoke{id: id} when
+  # is_binary(id) -> {id, machine_state}`) is deleted, leaving only the
+  # generated clause -> the author's literal id is discarded and replaced
+  # with a generated one, reddening the equality assertion.
   test "an author-written id is used verbatim" do
     m = compile!(@parallel_document)
     {_result, effects} = Interpreter.initialize(m)
@@ -90,11 +90,10 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert alpha_effect.invoke_id == "inv-alpha"
   end
 
-  # sabotage: `generate_invoke_id/2`'s state-qualified clause
-  # (`state_id <> "." <> UXID.generate!(prefix: "inv")`) is changed to
-  # `UXID.generate!(prefix: "inv")` alone, dropping the state-id qualifier
-  # -> the `beta.inv_` prefix assertion reddens (W3C test224's own shape,
-  # ADR-0008 as amended).
+  # sabotage: `generate_invoke_id/3`'s generated clause is changed from
+  # `state.id <> "." <> platformid` to `platformid` alone, dropping the
+  # state-id qualifier -> the `beta.inv_` prefix assertion reddens (W3C
+  # test224's own shape, ADR-0008 as amended 2026-08-15).
   test "a generated id is qualified by the owning state's id" do
     m = compile!(@parallel_document)
     {_result, effects} = Interpreter.initialize(m)
@@ -103,6 +102,41 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert beta1_effect.invoke_id =~ ~r/^beta\.inv_/
     assert beta2_effect.invoke_id =~ ~r/^beta\.inv_/
     refute beta1_effect.invoke_id == beta2_effect.invoke_id
+  end
+
+  # sabotage: `MachineState.new/2`'s `invoke_counter: 0` is changed to
+  # `invoke_counter: 1` -> both generated ids below shift by one
+  # (`beta.inv_2`/`beta.inv_3` instead of `beta.inv_1`/`beta.inv_2`),
+  # reddening the exact-value assertions. Confirmed red and reverted.
+  test "the invoke counter is session-global, starts at 1, and advances per generation" do
+    m = compile!(@parallel_document)
+    {_result, effects} = Interpreter.initialize(m)
+
+    assert [_alpha, beta1_effect, beta2_effect] = invoke_effects(effects)
+    assert beta1_effect.invoke_id == "beta.inv_1"
+    assert beta2_effect.invoke_id == "beta.inv_2"
+  end
+
+  # Determinism is ADR-0008's whole point for this generation site: the id
+  # is a pure function of `%MachineState{}`, not the wall clock or a CSPRNG,
+  # so generating twice from the same initial machine_state produces the
+  # same sequence of ids both times.
+  #
+  # sabotage: `MachineState.new/2`'s `invoke_counter: 0` is changed to
+  # `invoke_counter: System.unique_integer([:positive])`, simulating an
+  # entropy-seeded counter -> `ids1` and `ids2` start from different bases
+  # across the two `initialize/2` calls, reddening the `ids1 == ids2`
+  # assertion. Confirmed red and reverted.
+  test "generating an invoke id twice from the same machine_state is deterministic" do
+    m = compile!(@parallel_document)
+    {result1, effects1} = Interpreter.initialize(m)
+    {result2, effects2} = Interpreter.initialize(m)
+
+    ids1 = for effect <- invoke_effects(effects1), do: effect.invoke_id
+    ids2 = for effect <- invoke_effects(effects2), do: effect.invoke_id
+
+    assert ids1 == ids2
+    assert result1.invoke_counter == result2.invoke_counter
   end
 
   #  0 scxml (root)
