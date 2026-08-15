@@ -100,6 +100,12 @@ empty-string rule applies unchanged to a payload bound for an external
 receiver, because B.2.6 routes those contexts to the Event I/O Processor
 and the platform, not to B.2.8.1.
 
+`<send>` has since answered this for its own context: ADR-0036 finds that a
+failed `<content expr>` under `<send>` also yields no data, but by 6.2.2's
+element-level discard rather than by this record's `_event.data`-blank-field
+reasoning - the message is discarded before 5.6's empty-string rung would
+apply at all.
+
 ## Consequences
 
 - test528 passes, and stays passing under the regression ratchet.
