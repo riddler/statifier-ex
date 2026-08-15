@@ -11,6 +11,10 @@ defmodule Statifier.Effect.SendDelayed do
   (the same gap `Statifier.Effect.Log`'s own moduledoc describes for
   `c_index` alone). `macrostep`/`microstep` are the counters
   as they stood when the send was scheduled, not when the timer fires.
+
+  `id_from_author?` is `true` when the document wrote `id` or `idlocation`
+  on this `<send>`, `false` when `send_id` was generated - the same C.1
+  empty-`sendid` flag `Statifier.Effect.Send`'s own moduledoc explains.
   """
 
   alias Statifier.Machine.Content
@@ -29,7 +33,8 @@ defmodule Statifier.Effect.SendDelayed do
     :c_index,
     :owner,
     :macrostep,
-    :microstep
+    :microstep,
+    id_from_author?: false
   ]
 
   @type t :: %__MODULE__{
@@ -42,6 +47,7 @@ defmodule Statifier.Effect.SendDelayed do
           c_index: non_neg_integer() | nil,
           owner: owner() | nil,
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          id_from_author?: boolean()
         }
 end

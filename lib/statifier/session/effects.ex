@@ -25,6 +25,7 @@ defmodule Statifier.Session.Effects do
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
 
   @typedoc "One instruction for `Statifier.Session` to perform."
@@ -38,56 +39,76 @@ defmodule Statifier.Session.Effects do
 
   @doc """
   Plans `effects`, the core's own order preserved, into the instructions
-  `Statifier.Session` performs. `:log` and `:trace` effects plan to nothing
-  but their own `{:notify, effect}`.
+  `Statifier.Session` performs. `session_id` is the sending session's own id
+  (spec 5.10's `_sessionid`), needed to build a delivered event's `origin`.
+  `:log` and `:trace` effects plan to nothing but their own
+  `{:notify, effect}`.
   """
-  @spec plan(effects :: [Effect.t()]) :: [instruction()]
-  def plan(effects) when is_list(effects) do
-    Enum.flat_map(effects, &plan_one/1)
+  @spec plan(effects :: [Effect.t()], session_id :: String.t()) :: [instruction()]
+  def plan(effects, session_id) when is_list(effects) and is_binary(session_id) do
+    Enum.flat_map(effects, &plan_one(&1, session_id))
   end
 
-  @spec plan_one(effect :: Effect.t()) :: [instruction()]
-  defp plan_one({:send, %Send{target: nil} = send} = effect) do
-    [{:notify, effect}, {:enqueue_event, Event.external(send.event, data: send.data)}]
+  @spec plan_one(effect :: Effect.t(), session_id :: String.t()) :: [instruction()]
+  defp plan_one({:send, %Send{target: nil} = send} = effect, session_id) do
+    [{:notify, effect}, {:enqueue_event, delivered_event(send, session_id)}]
   end
 
-  defp plan_one({:send, %Send{}} = effect) do
+  defp plan_one({:send, %Send{}} = effect, _session_id) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:send_delayed, %SendDelayed{target: nil} = send} = effect) do
-    event = Event.external(send.event, data: send.data)
+  defp plan_one({:send_delayed, %SendDelayed{target: nil} = send} = effect, session_id) do
+    event = delivered_event(send, session_id)
     [{:notify, effect}, {:schedule, send.send_id, send.delay_ms, event}]
   end
 
-  defp plan_one({:send_delayed, %SendDelayed{}} = effect) do
+  defp plan_one({:send_delayed, %SendDelayed{}} = effect, _session_id) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect) do
+  defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect, _session_id) do
     [{:notify, effect}, {:cancel_timers, send_id}]
   end
 
-  defp plan_one({:invoke, _invoke} = effect) do
+  defp plan_one({:invoke, _invoke} = effect, _session_id) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:cancel_invoke, %CancelInvoke{}} = effect) do
+  defp plan_one({:cancel_invoke, %CancelInvoke{}} = effect, _session_id) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:autoforward, %Autoforward{}} = effect) do
+  defp plan_one({:autoforward, %Autoforward{}} = effect, _session_id) do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:done, _done} = effect) do
+  defp plan_one({:done, _done} = effect, _session_id) do
     [{:notify, effect}, {:halt, :done}]
   end
 
-  defp plan_one({:budget_exhausted, _budget_exhausted} = effect) do
+  defp plan_one({:budget_exhausted, _budget_exhausted} = effect, _session_id) do
     [{:notify, effect}, {:halt, :budget_exhausted}]
   end
 
-  defp plan_one({:log, _log} = effect), do: [{:notify, effect}]
-  defp plan_one({:trace, _payload} = effect), do: [{:notify, effect}]
+  defp plan_one({:log, _log} = effect, _session_id), do: [{:notify, effect}]
+  defp plan_one({:trace, _payload} = effect, _session_id), do: [{:notify, effect}]
+
+  # C.1's four mappings for a `<send>` with no target, delivered to the
+  # sending session's own external queue: `origin` is this session's own
+  # `_ioprocessors` location, `origintype` is the processor's type **URI**
+  # rather than the short alias `"scxml"` - plan decision 11 argues the
+  # C.1-prose-versus-test352 conflict and picks the URI - and `sendid` is
+  # blank unless the author actually named this `<send>` (`id`/`idlocation`),
+  # per `id_from_author?`.
+  @spec delivered_event(send :: Send.t() | SendDelayed.t(), session_id :: String.t()) ::
+          Event.t()
+  defp delivered_event(send, session_id) do
+    Event.external(send.event,
+      data: send.data,
+      origin: SystemVariables.scxml_location(session_id),
+      origintype: SystemVariables.scxml_event_processor(),
+      sendid: if(send.id_from_author?, do: send.send_id)
+    )
+  end
 end

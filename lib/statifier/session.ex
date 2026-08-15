@@ -504,7 +504,7 @@ defmodule Statifier.Session do
     halt_override = Keyword.get(opts, :halt_override)
 
     effects
-    |> Effects.plan()
+    |> Effects.plan(state.session_id)
     |> Enum.reduce(state, &perform_instruction(&1, &2, halt_override))
   end
 

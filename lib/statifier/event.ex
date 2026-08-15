@@ -29,20 +29,28 @@ defmodule Statifier.Event do
   - `_event`, spec 5.10's system variable holding the last processed event,
     is datamodel content and lands in the datamodel slot once that
     evaluation work exists. It is not a field here.
-  - `origin` and `sendid` (spec 5.10.1's remaining event fields) are left
-    out rather than carried dead: they matter to `<send>` round-tripping,
-    which the not-yet-implemented session support handles. They get added
-    once that caller exists. `invokeid` was in the same position until
-    `Statifier.Interpreter`'s finalize/autoforward pass became its first
-    reader (spec 6.4/6.5): the pass needs an external event's `invokeid` to
-    select which invocation's `<finalize>` runs and, once populated on
-    `_event`, spec 5.10.1's own system-variable reading of it.
+
+  `origin`, `origintype` and `sendid` (spec 5.10.1's remaining event fields)
+  are no longer on this list: `Statifier.Session.Effects`' delivery path
+  (the `target: nil` `<send>` clauses) became their first reader/writer, the
+  same way `Statifier.Interpreter`'s finalize/autoforward pass became
+  `invokeid`'s. `origintype` was never named on this list at all before -
+  it simply had no field yet.
   """
 
   alias Statifier.Event.Cause
 
   @enforce_keys [:name, :type]
-  defstruct [:name, :type, data: nil, cause: nil, invokeid: nil]
+  defstruct [
+    :name,
+    :type,
+    data: nil,
+    cause: nil,
+    invokeid: nil,
+    origin: nil,
+    origintype: nil,
+    sendid: nil
+  ]
 
   @typedoc "Spec 5.10.1's three event types - provenance, not queue routing."
   @type type :: :external | :internal | :platform
@@ -52,7 +60,10 @@ defmodule Statifier.Event do
           data: term(),
           type: type(),
           cause: Cause.t() | nil,
-          invokeid: String.t() | nil
+          invokeid: String.t() | nil,
+          origin: String.t() | nil,
+          origintype: String.t() | nil,
+          sendid: String.t() | nil
         }
 
   @doc """
@@ -61,6 +72,9 @@ defmodule Statifier.Event do
   `%{}` ("data, empty"). `invokeid` (spec 5.10.1) defaults to `nil` - most
   external events arrive from outside any invocation; a caller delivering an
   event from an invoked child's session passes `invokeid: invoke_id`.
+  `origin`, `origintype` and `sendid` (spec 5.10.1 / C.1) default to `nil`
+  too; `Statifier.Session.Effects`' delivery path is the caller that passes
+  them for a `<send>` with no `target`.
   """
   @spec external(name :: String.t(), opts :: keyword()) :: t()
   def external(name, opts \\ []) do
@@ -68,7 +82,10 @@ defmodule Statifier.Event do
       name: name,
       type: :external,
       data: Keyword.get(opts, :data),
-      invokeid: Keyword.get(opts, :invokeid)
+      invokeid: Keyword.get(opts, :invokeid),
+      origin: Keyword.get(opts, :origin),
+      origintype: Keyword.get(opts, :origintype),
+      sendid: Keyword.get(opts, :sendid)
     }
   end
 
@@ -79,20 +96,41 @@ defmodule Statifier.Event do
   session's *external* queue and is `type: :external` instead, not this
   constructor. `cause` travels through unchanged from the caller, which
   built it from the raising node's identity and the current counters.
+  `origin`/`origintype` are never read from `opts` - 5.10.1: "For internal
+  and platform events, the Processor MUST leave [`origin`/`origintype`]
+  blank". `sendid` *is* read: it exists for `<send target="#_internal">`,
+  whose delivered event C.1 still requires to carry the sending `<send>`'s
+  id when the author wrote one - the only caller today
+  (`MachineState.raise_internal/4`, for `<raise>`) never has one to pass.
   """
   @spec internal(name :: String.t(), cause :: Cause.t(), opts :: keyword()) :: t()
   def internal(name, %Cause{} = cause, opts \\ []) do
-    %__MODULE__{name: name, type: :internal, cause: cause, data: Keyword.get(opts, :data)}
+    %__MODULE__{
+      name: name,
+      type: :internal,
+      cause: cause,
+      data: Keyword.get(opts, :data),
+      sendid: Keyword.get(opts, :sendid)
+    }
   end
 
   @doc """
   An event the platform itself raised (`error.execution`,
   `error.communication`, `done.state.*`) - rides the internal queue exactly
   like `internal/3`; `type: :platform` only distinguishes its
-  provenance for a consumer that cares.
+  provenance for a consumer that cares. `origin`/`origintype` are never read
+  from `opts` for the same 5.10.1 reason `internal/3`'s `@doc` gives: "For
+  internal and platform events, the Processor MUST leave [them] blank".
+  `sendid` *is* read, for the same C.1 reason `internal/3` reads it.
   """
   @spec platform(name :: String.t(), cause :: Cause.t(), opts :: keyword()) :: t()
   def platform(name, %Cause{} = cause, opts \\ []) do
-    %__MODULE__{name: name, type: :platform, cause: cause, data: Keyword.get(opts, :data)}
+    %__MODULE__{
+      name: name,
+      type: :platform,
+      cause: cause,
+      data: Keyword.get(opts, :data),
+      sendid: Keyword.get(opts, :sendid)
+    }
   end
 end
