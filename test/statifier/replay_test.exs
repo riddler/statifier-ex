@@ -7,6 +7,7 @@ defmodule Statifier.ReplayTest do
   alias Statifier.Lowering
   alias Statifier.Parser
   alias Statifier.Replay
+  alias Statifier.Session
   alias Statifier.Session.Recording
   alias Statifier.Validator
 
@@ -239,6 +240,106 @@ defmodule Statifier.ReplayTest do
                {:effect, log_one},
                {:effect, log_two}
              ]
+    end
+  end
+
+  # -- <send> routing (ADR-0037) -------------------------------------------
+
+  describe "run/1 over a recorded <send> routing run" do
+    defp internal_and_communication_error_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e1" target="#_internal"/>
+                  <send event="e2" target="#_scxml_foo"/>
+              </onentry>
+              <transition event="e1" target="b"/>
+          </state>
+          <state id="b">
+              <transition event="error.communication" target="c"/>
+          </state>
+          <state id="c"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `apply_entry/2`'s `{:internal, kind, name, origin, opts}`
+    # clause is deleted, leaving no catch-all -> replaying the recording
+    # below raises `FunctionClauseError` from `Replay.run/1` instead of
+    # returning `{:ok, result}`, reddening the configuration assertion.
+    # Reverted and confirmed green.
+    test "a recorded #_internal delivery and a failed #_scxml_foo send reach the same final configuration as the live run" do
+      machine = compile!(internal_and_communication_error_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      live_status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+      {:ok, recording} = Session.recording(session)
+
+      assert {:ok, result} = Replay.run(recording)
+
+      replayed_configuration =
+        result.machine_state.configuration
+        |> Enum.map(&Statifier.Machine.id(machine, &1))
+        |> Enum.reject(&is_nil/1)
+        |> MapSet.new()
+
+      assert replayed_configuration == live_status.configuration
+    end
+  end
+
+  describe "a delayed send through a real recording (widened {:schedule, ...})" do
+    defp two_state_delay_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="go" delay="10ms"/>
+              </onentry>
+              <transition event="go" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `perform_instruction({:schedule, send_id, _delay_ms, _route,
+    # _event, _effect}, state, _override)` (the widened five-argument
+    # pattern) is narrowed back to the old four-argument shape,
+    # `{:schedule, send_id, _delay_ms, _event}` -> the recorded five-element
+    # `{:interpret, [{:send_delayed, _}]}` entry's own `{:schedule, ...}`
+    # instruction (now six elements, tag included) no longer matches any
+    # clause, and `Replay.run/1` raises `FunctionClauseError` instead of
+    # returning `{:ok, result}`, reddening the assertion below. Reverted and
+    # confirmed green.
+    test "a real live-recorded delayed send replays to the same final configuration" do
+      machine = compile!(two_state_delay_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      _status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      {:ok, recording} = Session.recording(session)
+      assert {:ok, result} = Replay.run(recording)
+
+      assert result.machine_state.configuration ==
+               MapSet.new([0, state_index(machine, "b")])
+    end
+  end
+
+  # Polls `Session.status/1` until `pred` is true, or gives up after a
+  # generous window - mirrors `Statifier.SessionTest`'s own helper, needed
+  # here only for the two real-`Session` recordings above.
+  defp wait_for_status(session, pred, attempts \\ 50)
+
+  defp wait_for_status(_session, _pred, 0), do: flunk("status/1 never satisfied the predicate")
+
+  defp wait_for_status(session, pred, attempts) do
+    status = Session.status(session)
+
+    if pred.(status) do
+      status
+    else
+      Process.sleep(5)
+      wait_for_status(session, pred, attempts - 1)
     end
   end
 end

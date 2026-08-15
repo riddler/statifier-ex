@@ -442,4 +442,91 @@ defmodule Statifier.InterpreterTest do
       assert done_effect_index == length(effects) - 1
     end
   end
+
+  # -- deliver_internal/5 (ADR-0037) ---------------------------------------
+
+  describe "deliver_internal/5" do
+    defp two_state_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `deliver_internal/5`'s `:internal ->` clause calls
+    # `MachineState.raise_platform/4` instead of `raise_internal/4` -> the
+    # delivered event's `type` reads `:platform` instead of `:internal`,
+    # reddening the type assertion below. Reverted and confirmed green.
+    test "kind: :internal raises through raise_internal/4 and runs to quiescence" do
+      machine = compile!(two_state_doc())
+      {running, _effects} = Interpreter.initialize(machine, trace: true)
+
+      assert {:ok, result, effects} =
+               Interpreter.deliver_internal(running, :internal, "e", {:state, 0}, [])
+
+      assert result.configuration == MapSet.new([0, state_index(machine, "b")])
+
+      assert Enum.any?(
+               effects,
+               &match?(
+                 {:trace, %Effect.Trace.EventDequeued{event: %Event{type: :internal, name: "e"}}},
+                 &1
+               )
+             )
+    end
+
+    # sabotage: `deliver_internal/5`'s `:platform ->` clause calls
+    # `MachineState.raise_internal/4` instead of `raise_platform/4` -> the
+    # delivered event's `type` reads `:internal` instead of `:platform`,
+    # reddening the type assertion below. Reverted and confirmed green.
+    test "kind: :platform raises through raise_platform/4" do
+      machine = compile!(two_state_doc())
+      {running, _effects} = Interpreter.initialize(machine, trace: true)
+
+      assert {:ok, _result, effects} =
+               Interpreter.deliver_internal(running, :platform, "e", {:state, 0}, [])
+
+      assert Enum.any?(
+               effects,
+               &match?(
+                 {:trace, %Effect.Trace.EventDequeued{event: %Event{type: :platform, name: "e"}}},
+                 &1
+               )
+             )
+    end
+
+    # sabotage: `deliver_internal/5`'s `opts` argument is dropped from the
+    # `raise_internal/4`/`raise_platform/4` call (hardcoded to `[]`) -> the
+    # `sendid` passed through `opts` never reaches the delivered event, so
+    # `_event.sendid` reads `nil` instead of `"send1"`, reddening the
+    # assertion below. Reverted and confirmed green.
+    test "opts (sendid) pass through to the delivered event" do
+      machine = compile!(two_state_doc())
+      {running, _effects} = Interpreter.initialize(machine)
+
+      assert {:ok, result, _effects} =
+               Interpreter.deliver_internal(running, :internal, "e", {:state, 0}, sendid: "send1")
+
+      assert result.configuration == MapSet.new([0, state_index(machine, "b")])
+      assert result.datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `deliver_internal/5`'s `%MachineState{running: false}` head
+    # clause is deleted, leaving only the general clause -> calling it on an
+    # already-terminated machine_state falls through to the general clause
+    # instead of returning `{:error, :not_running}`, reddening the match
+    # below. Reverted and confirmed green.
+    test "rejects an already-terminated machine_state with {:error, :not_running}" do
+      machine = compile!(two_state_doc())
+      {running, _effects} = Interpreter.initialize(machine)
+      assert {:ok, done, _effects} = Interpreter.cancel(running)
+
+      assert Interpreter.deliver_internal(done, :internal, "e", {:state, 0}, []) ==
+               {:error, :not_running}
+    end
+  end
 end

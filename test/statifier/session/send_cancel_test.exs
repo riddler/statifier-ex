@@ -189,26 +189,30 @@ defmodule Statifier.Session.SendCancelTest do
     end
   end
 
-  # -- a targeted <send> plans as {:unroutable, _} --------------------------
+  # -- a targeted <send> with an unparseable target ------------------------
 
-  describe "a <send target=\"...\"> plans as {:unroutable, _}, not a delivery" do
-    # Pins the boundary this bead deliberately leaves open (plan's "What
-    # We're NOT Doing": delivery, routing, and `error.communication` for
-    # unreachable targets are later beads' work) rather than pretending it
-    # is closed.
+  describe "a <send target=\"...\"> naming no recognized special target" do
+    # The target vocabulary has a router: an unparseable target
+    # (`Statifier.Session.Target.parse/1` returns `{:invalid, _}`) is 6.2.4's
+    # "not supported or invalid" -> `error.execution` on the sender's own
+    # internal queue, never `{:unroutable, _}` (that vocabulary member
+    # survives only for `:invoke`/`:cancel_invoke`/`:autoforward`, later,
+    # separate work).
     #
-    # sabotage: `Statifier.Session.Effects`'s `plan_one({:send, %Send{}} =
-    # effect)` clause (the non-`target: nil` fallback) is changed to `[]`,
-    # dropping both the `:notify` and the `:unroutable` instruction -> the
-    # `assert_receive` below times out instead of observing the message.
-    # Reverted and confirmed green.
-    test "a <send target> effect is notified and forwarded as unroutable" do
+    # sabotage: `Statifier.Session.Effects.plan_send/3`'s `{:invalid,
+    # _target} -> [execution_error(send)]` clause is changed to `[]`,
+    # dropping the raise entirely -> no `error.execution` ever reaches the
+    # transition, so the configuration stays at `a` instead of advancing to
+    # `caught`, reddening the assertion below. Reverted and confirmed green.
+    test "an unparseable target raises error.execution on the internal queue" do
       machine =
         compile!("""
         <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
             <state id="a">
                 <onentry><send event="e" target="whatever"/></onentry>
+                <transition event="error.execution" target="caught"/>
             </state>
+            <state id="caught"/>
         </scxml>
         """)
 
@@ -216,7 +220,10 @@ defmodule Statifier.Session.SendCancelTest do
       session_id = Session.session_id(session)
 
       assert_receive {:statifier, ^session_id,
-                      {:unroutable, {:send, %Effect.Send{event: "e", target: "whatever"}}}}
+                      {:effect, {:send, %Effect.Send{event: "e", target: "whatever"}}}}
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
+      assert status.configuration == MapSet.new(["caught"])
     end
   end
 end

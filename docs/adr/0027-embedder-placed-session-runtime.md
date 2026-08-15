@@ -198,3 +198,10 @@ does not write it.**
   caller. The first embedder who needs two isolated session populations in
   one VM is the trigger, and amending this record there is expected to be
   additive.
+- `#_scxml_<sessionid>` resolution has one case that never reaches the
+  registry: a session addressing *itself*. st-cmq.5 resolves `sid ==
+  state.session_id` to the session's own inbox ahead of
+  `Registry.lookup/2`, so a bare, unregistered `Session.start_link/2` session
+  can still `<send>` to its own id. Decision 2's "an unregistered session is
+  an inaccessible one" is about reachability *by other sessions*; the sending
+  session is by construction neither nonexistent nor inaccessible to itself.

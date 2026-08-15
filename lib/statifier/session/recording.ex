@@ -67,6 +67,7 @@ defmodule Statifier.Session.Recording do
 
   alias Statifier.Effect
   alias Statifier.Event
+  alias Statifier.Event.Cause
   alias Statifier.Machine
 
   @enforce_keys [:machine, :opts, :entries]
@@ -78,6 +79,8 @@ defmodule Statifier.Session.Recording do
           | :cancel
           | {:timer, send_id :: String.t() | nil, Event.t()}
           | {:interpret, [Effect.t()]}
+          | {:internal, kind :: :internal | :platform, name :: String.t(), Cause.origin(),
+             opts :: keyword()}
 
   @opaque t :: %__MODULE__{
             machine: Machine.t(),
@@ -143,6 +146,29 @@ defmodule Statifier.Session.Recording do
   @spec put_interpret(recording :: t(), effects :: [Effect.t()]) :: t()
   def put_interpret(%__MODULE__{entries: entries} = recording, effects) when is_list(effects) do
     %{recording | entries: [{:interpret, effects} | entries]}
+  end
+
+  @doc """
+  Appends a `Statifier.Interpreter.deliver_internal/5` call as the next
+  entry - `kind`, `name`, `origin` and `opts` exactly as
+  `Statifier.Session` passed them to that seam (ADR-0037). This is *not*
+  deterministic from the recorded effect stream alone - whether a
+  `#_scxml_<sessionid>` target resolved depends on which sessions were
+  alive when the sending session performed its effects - so it has to be an
+  input in its own right, exactly as a fired timer is (`put_timer/3`
+  above). It is also the delivery path for an entirely successful
+  `<send target="#_internal">`, not only for the two spec-6.2.4 failures.
+  """
+  @spec put_internal(
+          recording :: t(),
+          kind :: :internal | :platform,
+          name :: String.t(),
+          origin :: Cause.origin(),
+          opts :: keyword()
+        ) :: t()
+  def put_internal(%__MODULE__{entries: entries} = recording, kind, name, origin, opts)
+      when kind in [:internal, :platform] and is_binary(name) and is_list(opts) do
+    %{recording | entries: [{:internal, kind, name, origin, opts} | entries]}
   end
 
   @doc "The compiled document this recording was made over."

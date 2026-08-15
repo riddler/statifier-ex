@@ -69,16 +69,23 @@ defmodule Statifier.Session do
   walk produces is still forwarded to subscribers exactly as natural
   termination's is.
 
-  ## Absent-target routing only
+  ## `<send>` routing
 
   A `<send>`/`<send_delayed>` with no `target` lands on this session's own
-  external queue, per `Statifier.Event.internal/3`'s own `@doc`. Every
-  other target - `#_internal` included - plans as `{:unroutable, effect}`
-  and is forwarded, never guessed and never a crash. `:invoke`,
-  `:cancel_invoke`, and `:autoforward` plan the same way today: there is no
-  child session to route any of them to yet. `#_internal` resolution,
-  `#_parent`, `#_scxml_<sessionid>`, and external URI targets are a later
-  bead's work; see `Statifier.Session.Effects`.
+  external queue. `#_internal` and a self-addressed `#_scxml_<sessionid>`
+  (decision 10: a session is always accessible to itself, registry or not)
+  both resolve with no registry at all - the former through
+  `Statifier.Interpreter.deliver_internal/5` (ADR-0037), the latter onto
+  this session's own inbox. Every other `#_scxml_<sessionid>`, `#_parent`,
+  and `#_<invokeid>` route resolves to `error.communication` on the
+  sender's own internal queue - there is no registry and no invocation
+  table yet (that is a later bead's work) - through the private
+  `communication_error/4` resolver, so a later bead changes a resolver, not
+  this module's `{:deliver, ...}` clause. An unsupported `type` or an
+  unparseable `target` raises `error.execution` the same way, at plan time.
+  `:invoke`, `:cancel_invoke`, and `:autoforward` still plan as
+  `{:unroutable, effect}`: there is no child session to route any of them
+  to yet. See `Statifier.Session.Effects` and `Statifier.Session.Target`.
 
   ## Two snapshot shapes
 
@@ -115,12 +122,14 @@ defmodule Statifier.Session do
   alias Statifier.Effect
   alias Statifier.Effect.Done
   alias Statifier.Event
+  alias Statifier.Event.Cause
   alias Statifier.Interpreter
   alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Session.Effects
   alias Statifier.Session.Inbox
   alias Statifier.Session.Recording
+  alias Statifier.Session.Target
   alias Statifier.Session.Timers
 
   defmodule State do
@@ -426,21 +435,26 @@ defmodule Statifier.Session do
 
   # The fired-timer path (spec 6.2): forget the reference regardless of
   # whether this session is halted - a fired timer is gone either way - then
-  # enqueue its event onto the ordinary inbox exactly as `send_event/2`
-  # would, so a caller's send, a self-targeted send re-enqueued from an
-  # effect, and a fired timer all reach the core through the one recordable
-  # input path (`docs/observability.md` constraint 6). `handle_continue/2`'s
-  # own halted check decides whether it is drained now or stays queued.
+  # deliver by `route`, resolved now rather than at schedule time (6.2.3:
+  # the route was decided when the `<send>` was *evaluated*, but a
+  # cross-session target can only be *reached* once the timer actually
+  # fires) - `deliver_fired/4` below. A `:self` route enqueues onto the
+  # ordinary inbox exactly as `send_event/2` would, so a caller's send, a
+  # self-targeted send re-enqueued from an effect, and a fired timer all
+  # reach the core through the one recordable input path
+  # (`docs/observability.md` constraint 6). `handle_continue/2`'s own halted
+  # check decides whether it is drained now or stays queued.
   @impl GenServer
-  def handle_info({:statifier_delayed_send, ref, send_id, event}, state) do
+  def handle_info({:statifier_delayed_send, ref, send_id, route, event, effect}, state) do
     state = record(state, &Recording.put_timer(&1, send_id, event))
 
     state = %{
       state
       | timers: Timers.forget(state.timers, ref),
-        timer_refs: Map.delete(state.timer_refs, ref),
-        inbox: Inbox.enqueue_event(state.inbox, event)
+        timer_refs: Map.delete(state.timer_refs, ref)
     }
+
+    state = deliver_fired(route, event, effect, state)
 
     {:noreply, state, {:continue, :drain}}
   end
@@ -527,18 +541,39 @@ defmodule Statifier.Session do
     %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
   end
 
+  # ADR-0037's re-entry seam: enqueue on the internal queue exactly as an
+  # in-loop `raise` would, then run to quiescence. `:internal`
+  # (`<send target="#_internal">`, a self-targeted `error.communication`
+  # never - see `deliver/5` below) and `:platform`
+  # (`error.execution`/`error.communication`) share this one door.
+  defp perform_instruction({:raise, kind, name, origin, opts}, state, override) do
+    deliver_internal(kind, name, origin, opts, state, override)
+  end
+
+  # A `<send>` whose route resolved to something other than `:self` (which
+  # plans straight to `{:enqueue_event, _}` and never reaches here).
+  defp perform_instruction({:deliver, route, event, effect}, state, override) do
+    deliver(route, event, effect, state, override)
+  end
+
   # The one `Process.send_after/3` call in the library. `ref` is a
   # correlation id this session mints itself and embeds in the message, so
   # the fired message can identify which entry to `Timers.forget/2` -
   # `Process.send_after/3` has no way to embed its own return value in the
   # message it delivers, since that value does not exist until the call
   # returns. `timer_ref`, the value `Process.cancel_timer/1` actually needs,
-  # is kept in `timer_refs`, keyed by that same correlation id.
-  defp perform_instruction({:schedule, send_id, delay_ms, event}, state, _override) do
+  # is kept in `timer_refs`, keyed by that same correlation id. `route` rides
+  # along in the message unresolved - see `handle_info/2`'s own comment for
+  # why resolution waits for the fire.
+  defp perform_instruction({:schedule, send_id, delay_ms, route, event, effect}, state, _override) do
     ref = make_ref()
 
     timer_ref =
-      Process.send_after(self(), {:statifier_delayed_send, ref, send_id, event}, delay_ms)
+      Process.send_after(
+        self(),
+        {:statifier_delayed_send, ref, send_id, route, event, effect},
+        delay_ms
+      )
 
     %{
       state
@@ -564,6 +599,132 @@ defmodule Statifier.Session do
     notify(state, {:halted, reason})
     state
   end
+
+  # -- <send> routing --------------------------------------------------
+
+  # `:internal` resolves through the ADR-0037 seam with no registry needed at
+  # all. `{:session, sid}` where `sid == state.session_id` is the clause
+  # that needs no registry either: a session is accessible to itself whether
+  # or not it is registered (decision 10), which narrows ADR-0027 decision
+  # 2's "an unregistered session is an inaccessible one" - that sentence is
+  # about reachability *by other sessions* - and is recorded as a
+  # consequence in `docs/adr/0027-embedder-placed-session-runtime.md`. Every
+  # other `{:session, _}`, `:parent`, and `{:invoke, _}` route is
+  # unresolvable in this phase: there is no registry and no invocation
+  # table, so each takes C.1's mandated `error.communication` path via
+  # `communication_error/4`, which a later bead changes without touching
+  # this clause.
+  @spec deliver(
+          route :: Target.route(),
+          event :: Event.t(),
+          effect :: Effect.t(),
+          state :: State.t(),
+          override :: :cancelled | nil
+        ) :: State.t()
+  defp deliver(:internal, event, effect, state, override) do
+    deliver_internal(
+      :internal,
+      event.name,
+      origin_of(effect),
+      [data: event.data, sendid: event.sendid],
+      state,
+      override
+    )
+  end
+
+  defp deliver({:session, sid}, event, _effect, %State{session_id: sid} = state, _override) do
+    %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
+  end
+
+  defp deliver({:session, _sid}, event, effect, state, override) do
+    communication_error(event, effect, state, override)
+  end
+
+  defp deliver(:parent, event, effect, state, override) do
+    communication_error(event, effect, state, override)
+  end
+
+  defp deliver({:invoke, _invokeid}, event, effect, state, override) do
+    communication_error(event, effect, state, override)
+  end
+
+  # A delayed send's route is resolved only once the timer actually fires
+  # (`handle_info/2`'s own comment) - `:self` is the one route
+  # `deliver/5` above does not carry (an immediate `:self` send plans
+  # straight to `{:enqueue_event, _}` and never reaches `deliver/5` at all),
+  # so it gets its own clause here; every other route reuses `deliver/5`
+  # unchanged.
+  @spec deliver_fired(
+          route :: Target.route(),
+          event :: Event.t(),
+          effect :: Effect.t(),
+          state :: State.t()
+        ) :: State.t()
+  defp deliver_fired(:self, event, _effect, state) do
+    %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
+  end
+
+  defp deliver_fired(route, event, effect, state), do: deliver(route, event, effect, state, nil)
+
+  # C.1's mandated path for a route this phase cannot resolve: "a session
+  # that does not exist or is inaccessible" -> `error.communication` on the
+  # *sending* session's own internal queue, carrying the failing send's
+  # `sendid`. One private resolver so a later bead's registry/invocation
+  # table changes this function, not the `{:deliver, ...}` clause or the
+  # planner.
+  @spec communication_error(
+          event :: Event.t(),
+          effect :: Effect.t(),
+          state :: State.t(),
+          override :: :cancelled | nil
+        ) :: State.t()
+  defp communication_error(event, effect, state, override) do
+    deliver_internal(
+      :platform,
+      "error.communication",
+      origin_of(effect),
+      [sendid: event.sendid],
+      state,
+      override
+    )
+  end
+
+  # The one call site of `Interpreter.deliver_internal/5` - records the
+  # call (ADR-0029, `docs/observability.md` constraint 6) before making it,
+  # then performs whatever effects it returns exactly as `drain_event/2`
+  # does. `{:error, :not_running}` is a no-op: a halted session has no queue
+  # to raise onto.
+  @spec deliver_internal(
+          kind :: Effects.raise_kind(),
+          name :: String.t(),
+          origin :: Cause.origin(),
+          opts :: keyword(),
+          state :: State.t(),
+          override :: :cancelled | nil
+        ) :: State.t()
+  defp deliver_internal(kind, name, origin, opts, state, override) do
+    state = record(state, &Recording.put_internal(&1, kind, name, origin, opts))
+
+    case Interpreter.deliver_internal(state.machine_state, kind, name, origin, opts) do
+      {:ok, machine_state, effects} ->
+        %{state | machine_state: machine_state} |> perform(effects, halt_override: override)
+
+      {:error, :not_running} ->
+        state
+    end
+  end
+
+  # `Statifier.Effect.Send.owner/0`/`c_index` and
+  # `Statifier.Effect.SendDelayed`'s own copies name the block that emitted
+  # this send - the same identity `Statifier.Event.Cause.origin/0`'s
+  # `{:content, c_index, owner}` arm already carries for every other
+  # content-raised event.
+  @spec origin_of(effect :: Effect.t()) :: Cause.origin()
+  defp origin_of({:send, %Effect.Send{c_index: c_index, owner: owner}}),
+    do: {:content, c_index, owner}
+
+  defp origin_of({:send_delayed, %Effect.SendDelayed{c_index: c_index, owner: owner}}),
+    do: {:content, c_index, owner}
 
   @spec cancel_ref(ref :: reference(), timer_refs :: %{reference() => reference()}) ::
           %{reference() => reference()}

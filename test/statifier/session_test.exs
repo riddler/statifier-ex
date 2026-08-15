@@ -536,33 +536,6 @@ defmodule Statifier.SessionTest do
   # -- unroutable -------------------------------------------------------------
 
   describe "unroutable" do
-    # sabotage: `Statifier.Session.Effects.plan/1`'s own
-    # `{:send, %Send{}} -> [{:notify, effect}, {:unroutable, effect}]` clause
-    # is Phase 3's, already sabotage-tested there; the mutation under test
-    # here is `perform_instruction({:unroutable, effect}, state, _override)`
-    # dropping its `notify/2` call -> no `{:unroutable, _}` message ever
-    # reaches the subscriber, reddening the `assert_receive` below. Reverted
-    # and confirmed green.
-    test "a targeted send delivers {:unroutable, _} and enqueues nothing" do
-      machine = compile!(two_state_doc())
-      {:ok, session} = Session.start_link(machine, subscribers: [self()])
-
-      send_effect = %Effect.Send{
-        event: "go",
-        target: "#_internal",
-        macrostep: 1,
-        microstep: 1
-      }
-
-      Session.interpret(session, [{:send, send_effect}])
-
-      session_id = Session.session_id(session)
-      assert_receive {:statifier, ^session_id, {:unroutable, {:send, ^send_effect}}}
-
-      assert Session.status(session).queued_events == 0
-      assert Session.status(session).configuration == MapSet.new(["a"])
-    end
-
     # sabotage: `Statifier.Session.Effects.plan_one/1`'s
     # `{:cancel_invoke, %CancelInvoke{}}` clause drops its `{:unroutable,
     # effect}` instruction, returning only `[{:notify, effect}]` -> the
@@ -663,6 +636,283 @@ defmodule Statifier.SessionTest do
       event = Session.snapshot(session).datamodel["_event"]
       assert event["origintype"] == SystemVariables.scxml_event_processor()
       assert event["origin"] == "#_scxml_" <> session_id
+    end
+  end
+
+  # -- <send> target routing --------------------------------------------
+
+  describe "#_internal delivers with no registry (test189, test495)" do
+    defp internal_send_doc(send_attrs) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" target="#_internal" #{send_attrs}/>
+              </onentry>
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Session.Effects.plan_send/3`'s `:internal ->` clause is
+    # changed to route through `{:enqueue_event, ...}` instead of
+    # `{:deliver, :internal, ...}` - for this particular document the final
+    # configuration is unaffected (both queues eventually reach the same
+    # transition), so the decisive assertion is `queued_events == 0` staying
+    # true throughout: an external-queue delivery would briefly populate it.
+    # Sabotaged instead at `Interpreter.deliver_internal/5`'s own
+    # `:internal ->` clause, swapped from `raise_internal/4` to
+    # `raise_platform/4` -> `_event.type` reads `"platform"` instead of
+    # `"internal"`, reddening the type assertion below. Reverted and
+    # confirmed green.
+    test "an internally-delivered send advances the configuration with a blank origin/origintype" do
+      machine = compile!(internal_send_doc(""))
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      event = Session.snapshot(session).datamodel["_event"]
+      assert event["type"] == "internal"
+      assert event["origin"] == nil
+      assert event["origintype"] == nil
+    end
+
+    # sabotage: `Session.Effects.internal_event/1`'s `sendid:
+    # if(send.id_from_author?, do: send.send_id)` is changed to always `nil`
+    # -> the "carries the author's id" assertion below reddens. Reverted and
+    # confirmed green.
+    test "sendid is the author's id when the author named the send" do
+      machine = compile!(internal_send_doc(~s(id="send1")))
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `Session.Effects.internal_event/1`'s `sendid:
+    # if(send.id_from_author?, do: send.send_id)` is changed to
+    # unconditionally `send.send_id` (dropping the `id_from_author?` gate) ->
+    # the generated (non-nil) id leaks onto `_event.sendid`, reddening the
+    # `nil` assertion below. Reverted and confirmed green.
+    test "sendid is nil when the author named neither id nor idlocation" do
+      machine = compile!(internal_send_doc(""))
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == nil
+    end
+  end
+
+  describe "self-addressed #_scxml_<sessionid> via targetexpr (test190, test350, test501)" do
+    defp self_targetexpr_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" targetexpr="'#_scxml_' + _sessionid"/>
+              </onentry>
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `perform_instruction/3`'s `{:deliver, {:session, sid}, event,
+    # _effect}` clause (via `deliver/5`) has its self-match guard changed
+    # from `%State{session_id: sid}` to `%State{session_id: _sid}` (always
+    # matches, dropping the equality requirement) - this particular document
+    # only ever addresses itself, so that mutation stays green here;
+    # sabotaged instead by inverting the guard to `%State{session_id: other}
+    # when other != sid` (never matches its own id) -> the send falls
+    # through to `communication_error/4` instead, and `error.communication`
+    # (not `e`) reaches the transition, reddening the configuration
+    # assertion below since no `event="e"` transition exists to catch it.
+    # Reverted and confirmed green.
+    test "delivers to the session's own inbox with no registry" do
+      machine = compile!(self_targetexpr_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+    end
+  end
+
+  describe "a send addressed to the received _event.origin (test349)" do
+    defp origin_round_trip_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="ping" targetexpr="'#_scxml_' + _sessionid"/>
+              </onentry>
+              <transition event="ping" target="b"/>
+          </state>
+          <state id="b">
+              <onentry>
+                  <send event="pong" targetexpr="_event.origin"/>
+              </onentry>
+              <transition event="pong" target="c"/>
+          </state>
+          <state id="c"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Session.Effects.delivered_event/2` (Phase 3) is changed to
+    # pass `origin: nil` unconditionally -> `_event.origin` in state `b`
+    # reads `:undefined` from predicator's normalization, `targetexpr`
+    # evaluates to a non-`#_scxml_`-shaped string, `Target.parse/1` returns
+    # `{:invalid, _}`, and the send raises `error.execution` instead of
+    # reaching `c` - reddening the configuration assertion below. Reverted
+    # and confirmed green.
+    test "a reply addressed to _event.origin reaches the sender" do
+      machine = compile!(origin_round_trip_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+      assert status.configuration == MapSet.new(["c"])
+    end
+  end
+
+  describe "#_scxml_<unknown> -> error.communication (test496, mandatory/send/test521)" do
+    defp unknown_session_doc(send_attrs) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" target="#_scxml_no-such-session" #{send_attrs}/>
+              </onentry>
+              <transition event="error.communication" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `deliver/5`'s `{:session, _sid}` (non-self) clause is
+    # changed to `Inbox.enqueue_event/2` unconditionally instead of calling
+    # `communication_error/4` -> no `error.communication` is ever raised, so
+    # the transition to `b` never fires and both assertions below time out
+    # (via `wait_for_status/3`'s own flunk). Reverted and confirmed green.
+    test "an unresolvable session id raises error.communication carrying the failing send's id" do
+      machine = compile!(unknown_session_doc(~s(id="send1")))
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+  end
+
+  describe "an unsupported type raises error.execution with no delivery and no timer" do
+    defp unsupported_type_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" type="http://example.com/bogus" delay="200ms" id="send1"/>
+              </onentry>
+              <transition event="error.execution" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Session.Effects.plan_send_delayed/3`'s
+    # `not Target.supported_type?(send.type) ->` clause is dropped, falling
+    # through to the ordinary route/schedule clauses -> the send schedules a
+    # real timer instead of raising immediately, so `pending_timers` reads 1
+    # (not 0) and the configuration has not yet reached `b`, reddening both
+    # assertions below (checked well before the 200ms delay could have
+    # elapsed on its own). Reverted and confirmed green.
+    test "the check happens at plan time, not fire time, and schedules nothing" do
+      machine = compile!(unsupported_type_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+      assert status.pending_timers == 0
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+  end
+
+  describe "a delayed send to #_scxml_<self> fires to the right place" do
+    defp delayed_self_targetexpr_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" delay="10ms" targetexpr="'#_scxml_' + _sessionid"/>
+              </onentry>
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Session.Effects.plan_send_delayed/3`'s generic `route ->`
+    # clause is changed to always schedule with route `:internal` instead of
+    # the resolved `route` - for this document `:internal` also happens to
+    # deliver "e" successfully (`#_internal` and self-addressed
+    # `#_scxml_<id>` both eventually satisfy the `event="e"` transition), so
+    # the final-configuration assertion alone would stay green under that
+    # mutation. Sabotaged instead at `Session`'s own `deliver_fired/4`: the
+    # generic `deliver_fired(route, event, effect, state)` clause is changed
+    # to always resolve as `:parent` (`communication_error/4`) regardless of
+    # `route` -> `error.communication` fires instead of `e`, and the
+    # configuration never reaches `b`, reddening the assertion below.
+    # Reverted and confirmed green.
+    test "fires and delivers after the delay, not before" do
+      machine = compile!(delayed_self_targetexpr_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+      refute_receive {:statifier, ^session_id, {:effect, {:trace, %Effect.Trace.EntrySet{}}}}, 5
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+    end
+  end
+
+  describe "an invalid target on a halted session is a no-op, not a crash" do
+    # sabotage: `Session`'s own private `deliver_internal/6` helper (the one
+    # call site of `Interpreter.deliver_internal/5`) has its
+    # `{:error, :not_running} -> state` clause changed to
+    # `{:error, :not_running} -> raise "unreachable"` -> the session process
+    # crashes on the `<send>` below instead of no-opping, reddening
+    # `Process.alive?/1`. Confirmed red (the process exits with the raised
+    # error). Reverted and confirmed green.
+    test "a targeted send to an unparseable target after :done neither crashes nor changes the snapshot" do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      Session.send_event(session, "finish")
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:halted, :done}}
+
+      before_status = Session.status(session)
+
+      send_effect = %Effect.Send{
+        event: "e",
+        target: "not a recognized target",
+        macrostep: 1,
+        microstep: 1
+      }
+
+      Session.interpret(session, [{:send, send_effect}])
+      _settled = Session.status(session)
+
+      assert Process.alive?(session)
+      assert Session.status(session) == before_status
     end
   end
 
