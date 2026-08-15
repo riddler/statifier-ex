@@ -325,6 +325,14 @@ defmodule Statifier.MachineState do
   alias Statifier.Event.Cause
   alias Statifier.Machine
 
+  # Crockford base32's alphabet in `Base.hex_encode32/2`'s symbol order, so a
+  # 32-entry character translation is exact and order-preserving. Crockford
+  # over a fixed-width big-endian bit string keeps lexicographic order, which
+  # is what makes a `sess_` id sort by creation millisecond.
+  @hex32_alphabet ~c"0123456789abcdefghijklmnopqrstuv"
+  @crockford_alphabet ~c"0123456789abcdefghjkmnpqrstvwxyz"
+  @hex32_to_crockford Map.new(Enum.zip(@hex32_alphabet, @crockford_alphabet))
+
   @enforce_keys [:machine]
   defstruct [
     :machine,
@@ -405,7 +413,7 @@ defmodule Statifier.MachineState do
   constructor's.
 
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
-  `:session_id` (default a freshly generated `sess_` UXID, ADR-0008), and
+  `:session_id` (default a freshly generated `sess_` id, ADR-0008), and
   `:max_macrostep_rounds` (default `10_000`). All four system variables
   (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
   option's map, so author-supplied data can never shadow a system variable.
@@ -420,7 +428,7 @@ defmodule Statifier.MachineState do
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
-    session_id = Keyword.get_lazy(opts, :session_id, fn -> UXID.generate!(prefix: "sess") end)
+    session_id = Keyword.get_lazy(opts, :session_id, &generate_session_id/0)
     author_datamodel = opts |> Keyword.get(:datamodel, %{}) |> checked_datamodel!()
 
     %__MODULE__{
@@ -456,6 +464,29 @@ defmodule Statifier.MachineState do
   # same map. The refusal is deliberate rather than a silent stringification:
   # coercing would duplicate upstream's precedence rules here, and would drop
   # one of `%{"x" => 1, x: 2}`'s two entries by a rule the caller never stated.
+  # ADR-0008 (2026-08-15 amendment): the `sess_` id is minted here rather than
+  # by a library - 48-bit big-endian millisecond timestamp then 80 bits of
+  # CSPRNG output, Crockford base32. This is the one generation site outside
+  # the pure core, exactly where the dependency's call sat; ADR-0003 is
+  # untouched, and entropy is kept at full strength because session ids must be
+  # unique *across* sessions (the ADR-0027 registry and parent/child routing
+  # depend on it).
+  @spec generate_session_id() :: String.t()
+  defp generate_session_id do
+    # ADR-0008: 48-bit millisecond timestamp, then 80 bits of entropy.
+    body = <<System.os_time(:millisecond)::48, :crypto.strong_rand_bytes(10)::binary>>
+    "sess_" <> crockford32(body)
+  end
+
+  @spec crockford32(bytes :: binary()) :: String.t()
+  defp crockford32(bytes) do
+    bytes
+    |> Base.hex_encode32(case: :lower, padding: false)
+    |> String.to_charlist()
+    |> Enum.map(&Map.fetch!(@hex32_to_crockford, &1))
+    |> List.to_string()
+  end
+
   @spec checked_datamodel!(datamodel :: map()) :: map()
   defp checked_datamodel!(datamodel) when is_map(datamodel) do
     check_keys!(datamodel, [])

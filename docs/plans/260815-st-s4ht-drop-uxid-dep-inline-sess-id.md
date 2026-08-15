@@ -398,18 +398,18 @@ prefix test against the new generator rather than trusting the old wording.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never as the phase gate).
-- [ ] Full `mix quality` is green, including the `ADR guard` stage - which is
+- [x] `mix quality --profile loop` while iterating (never as the phase gate).
+- [x] Full `mix quality` is green, including the `ADR guard` stage - which is
       the mechanical proof the citation comment cleared
       `@uxid_adhoc_pattern` on the branch's own diff, and that no
       `adr-0018-bead-id` finding fired on a bead ID in a new comment.
-- [ ] `grep -rn 'UXID\.' lib/` returns nothing: the last call site is gone.
-- [ ] `grep -n 'st-' lib/statifier/machine_state.ex` returns no bead ID - the
+- [x] `grep -rn 'UXID\.' lib/` returns nothing: the last call site is gone.
+- [x] `grep -n 'st-' lib/statifier/machine_state.ex` returns no bead ID - the
       ADR-0018 check clears only on `ADR-0018-exempt`, never on an ADR
       citation, so the comment must simply not contain one.
-- [ ] `mix test test/statifier/machine_state_test.exs` is green, with the two
+- [x] `mix test test/statifier/machine_state_test.exs` is green, with the two
       new tests present.
-- [ ] Every new test carries a `# sabotage:` note (`/wurk:commit` refuses
+- [x] Every new test carries a `# sabotage:` note (`/wurk:commit` refuses
       otherwise).
 
 #### Manual Verification:
@@ -710,6 +710,29 @@ before considering the plan fully landed.
 
 - [ ] The reworded message still reads as an instruction to the person who
       trips it: it names the ADR and says what the ADR requires.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment for `lib/statifier/`: this phase touches no
+      Appendix D function. Confirm from the diff that `main_event_loop`,
+      `microstep`, `enter_states`, `exit_states` and the rest are untouched,
+      so the Appendix D line-for-line rule is satisfied vacuously rather than
+      by inspection. No deviation is introduced, mechanical or otherwise.
+- [ ] Eyeball a handful of generated ids in IEx: `sess_` prefix, 31 characters
+      total, no hyphen, double-clicking selects the whole token.
+- [ ] The generator still sits outside any fold - `new/2` only, never reached
+      from `main_event_loop/1` - so ADR-0003's core contract is unchanged.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while

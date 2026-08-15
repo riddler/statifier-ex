@@ -287,12 +287,34 @@ defmodule Statifier.MachineStateTest do
              ] == "#_scxml_sess_fixed"
     end
 
-    # sabotage: `MachineState.new/2`'s generated `:session_id` default is
-    # changed from `UXID.generate!(prefix: "sess")` to
-    # `UXID.generate!(prefix: "usr")` -> the prefix assertion reddens.
+    # sabotage: `generate_session_id/0`'s "sess_" literal is changed to
+    # "usr_" -> the prefix assertion reddens.
     test "the generated default :session_id carries the sess_ prefix (ADR-0008)" do
       ms = new_machine_state()
       assert String.starts_with?(ms.datamodel["_sessionid"], "sess_")
+    end
+
+    # sabotage: `crockford32/1` is changed to `Base.encode32/2` (uppercase
+    # RFC 4648, which emits `A-Z2-7`) -> the alphabet assertion reddens on
+    # the uppercase letters.
+    test "the generated :session_id body is 26 hyphen-free lowercase Crockford chars (ADR-0008)" do
+      "sess_" <> body = new_machine_state().datamodel["_sessionid"]
+
+      assert String.length(body) == 26
+      refute String.contains?(body, "-")
+      assert body =~ ~r/\A[0123456789abcdefghjkmnpqrstvwxyz]{26}\z/
+    end
+
+    # sabotage: the `System.os_time(:millisecond)::48` prefix in
+    # `generate_session_id/0` is replaced with a constant `0::48` -> the two
+    # ids no longer order by creation time and the comparison reddens.
+    test "generated :session_ids sort by creation millisecond (ADR-0008)" do
+      earlier = new_machine_state().datamodel["_sessionid"]
+      Process.sleep(2)
+      later = new_machine_state().datamodel["_sessionid"]
+
+      assert earlier < later
+      assert earlier != later
     end
 
     # sabotage: `SystemVariables.initial/2` reads `machine.id` instead of
