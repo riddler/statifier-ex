@@ -353,14 +353,14 @@ exists at the moment it commits.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating).
-- [ ] `mix quality --profile merge` passes, which is what actually runs the
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating).
+- [x] `mix quality --profile merge` passes, which is what actually runs the
       ADR judge stage - the bare gate skips it by design
       (`.quality.exs:23`), so a bare green does not exercise the new record.
-- [ ] `mix quality --format json --report -` is green - every phase advances
+- [x] `mix quality --format json --report -` is green - every phase advances
       under `/wurk:commit --auto` in a `--loop` run, which routes on that
       output, so it is a criterion of each phase and not only the last.
-- [ ] `grep -c '^## ' docs/adr/0033-*.md` returns 3, and
+- [x] `grep -c '^## ' docs/adr/0033-*.md` returns 3, and
       `grep -c '0033-' docs/adr/README.md` returns at least 1.
 
 #### Manual Verification:
@@ -888,3 +888,24 @@ the end of a run, and it is why `recording/1` is a call rather than a field on
   (`wait_for_status/3`), `test/statifier/session/inbox_test.exs:10-11`
   (sabotage line form)
 - Bead: `st-dtm`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The ADR's Decision section states the position, not the plan's summary
+      of it: a reader who has never seen this plan can tell why replay is not
+      a live session.
+- [ ] `docs/observability.md` no longer promises anything the code will not
+      deliver at the end of this plan.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and the
+full gate as the phase gate. This phase touches no Elixir, so per CLAUDE.md it
+could commit on review of the diff alone; run the gate anyway, since the ADR
+judge is the point of the phase.
+
+---
