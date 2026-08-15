@@ -1016,16 +1016,41 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+All thirteen were confirmed with the human on 2026-08-15, against a full
+`mix gate.verify` green (1,780 tests, 96.1% coverage). How the two judgment
+items were settled, since a tick alone does not record it:
+
+- **The sabotage notes** were re-run rather than read. Seven mutations were
+  applied to `lib/` and reverted: `forbidden/1` matching `%DLog{}` instead of
+  `%DRaise{}`, `descend/1` losing its `%DIf{}` clause, `warn_finalize/1`'s
+  `finalize: nil` clause reporting instead of returning `[]`, `validate/2`'s
+  error arm dropping `warnings`, `run/3` losing its `sort_by`, `compile/1`
+  losing the `%Machine{machine | warnings: warnings}` stamp, and `Machine`'s
+  `warnings` default moving from `[]` to `nil`. Each reddened the test its
+  note sits above. Where a mutation reddened more than one test, the extras
+  were traced to genuine shared dependence on the mutated clause - a single
+  clause cannot be broken for one test only - and never to a note describing
+  the wrong mutation.
+- **The 74-site migration** was checked exhaustively rather than by the
+  ten-site sample this section asked for. Every changed test file's
+  `%Error{reason: ...}` multiset and its `assert {:ok`/`assert {:error`/
+  `refute`/`test` counts were compared between `fa92e06` and `7b1c00e`. All
+  reason multisets are identical except one added `{:duplicate_id, "dup"}`,
+  which belongs to the new both-channels test; the only count changes are in
+  the four files that gained new tests. No pre-existing assertion's meaning
+  moved, and `lib/statifier/validator/error.ex` and its layer test were not
+  touched at all.
+
 ### Phase 1
 
-- [ ] The Context section's 6.5.2 quotation matches the local spec cache
+- [x] The Context section's 6.5.2 quotation matches the local spec cache
       verbatim, checked against
       `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`
       rather than from memory.
-- [ ] Each of the seven decisions above appears in the ADR, and the Consequences
+- [x] Each of the seven decisions above appears in the ADR, and the Consequences
       section states the two things this ADR deliberately leaves undone
       (`:strict`, and the `<send>` half).
-- [ ] The ADR reads as a decision record, not as a summary of this plan: it
+- [x] The ADR reads as a decision record, not as a summary of this plan: it
       argues from the spec and from the existing struct shapes, not from phase
       numbers.
 
@@ -1041,15 +1066,15 @@ blocking here.
 
 ### Phase 2
 
-- [ ] Each sabotage note names a mutation actually performed, and each
+- [x] Each sabotage note names a mutation actually performed, and each
       mutation reddened the test it sits above and no more than it should have.
-- [ ] Spec-conformance judgment: the check's forbidden set and its message
+- [x] Spec-conformance judgment: the check's forbidden set and its message
       match 6.5.2's clause as quoted from the local spec cache, and the
       `@doc` on `finalize_forbidden_content/2` quotes it rather than
       paraphrasing. This is a document-conformance clause, not Appendix D
       pseudocode, so no Appendix D function is touched and ADR-0002's
       line-for-line rule has nothing to bind here.
-- [ ] The 74-site test migration changed no assertion's meaning - spot-check
+- [x] The 74-site test migration changed no assertion's meaning - spot-check
       ten of the mechanical edits and confirm each only widened a pattern. The
       sample is not free: it must include every file whose call sites do not
       literally read `{:ok, document} = Validator.validate` or
@@ -1058,7 +1083,7 @@ blocking here.
       which pattern-matches the result of a local `validate!/1` wrapper, is one
       of them; find the rest with
       `grep -rln "defp validate!\|defp validate(" test/`.
-- [ ] `Checks.Invoke.check/2`'s five 6.4.1 arms and their tests are byte-for-byte
+- [x] `Checks.Invoke.check/2`'s five 6.4.1 arms and their tests are byte-for-byte
       unchanged, confirming the acceptance criterion that existing pass/reject
       behavior did not move.
 
@@ -1074,16 +1099,16 @@ blocking here.
 
 ### Phase 3
 
-- [ ] Spec-conformance judgment: no Appendix D function is touched by this
+- [x] Spec-conformance judgment: no Appendix D function is touched by this
       phase; `Statifier.compile/1` is a pipeline facade and
       `Statifier.Machine` is a data structure, so ADR-0002's line-for-line
       rule has nothing to bind. Confirm by reading the diff that no
       `lib/statifier/interpreter*` file appears in it.
-- [ ] A machine compiled from a warning-free document is indistinguishable
+- [x] A machine compiled from a warning-free document is indistinguishable
       from one compiled before this phase apart from the new field - checked by
       running the interpreter suite and confirming nothing depended on
       `%Machine{}`'s field count.
-- [ ] The sabotage mutations were performed and reverted, and each note names
+- [x] The sabotage mutations were performed and reverted, and each note names
       the mutation it describes.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
@@ -1098,12 +1123,12 @@ blocking here.
 
 ### Phase 4
 
-- [ ] The observability seam table reads as complete again: a reader looking
+- [x] The observability seam table reads as complete again: a reader looking
       for "where does a validator finding surface" finds the row and stops.
-- [ ] `docs/architecture.md` principle 4 still reads as a statement about the
+- [x] `docs/architecture.md` principle 4 still reads as a statement about the
       Machine type rather than about diagnostics, with the warning sentence
       subordinate to it.
-- [ ] No document names a bead id or a phase number (ADR-0018).
+- [x] No document names a bead id or a phase number (ADR-0018).
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive
