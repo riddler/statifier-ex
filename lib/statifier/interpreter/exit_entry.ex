@@ -953,9 +953,10 @@ defmodule Statifier.Interpreter.ExitEntry do
   `<donedata>`, folded to the value a raised or returned `done.*` event
   carries as `data`.
 
-  - A `nil` donedata, or a `%Donedata{expr: nil, params: []}` (no
-    `<content>` or `<param>` child at all) - `{machine_state, nil}`,
-    unchanged.
+  - No `<donedata>` at all, or a `%Donedata{expr: nil, params: []}` (no
+    `<content>` or `<param>` child at all) - `{machine_state, :undefined}`:
+    "no data", the same spelling every other absent-payload writer uses
+    (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`).
   - `{:static, text}` - `<content>`'s text body, which can only originate
     there (`Statifier.Compiler.build_content_expr/2`). Coerced through
     `Statifier.EventData.coerce({:text, text})` (Decision 3 of the plan on
@@ -966,9 +967,11 @@ defmodule Statifier.Interpreter.ExitEntry do
     `EventData.coerce({:value, v})` (identity - an evaluated expression
     already produced a legal data value, so it is never re-run through the
     text ladder). Failure raises `error.execution` via
-    `MachineState.raise_platform/4` and returns `nil` donedata - **not**
-    the empty string spec 5.6 names for `<content>` generally. ADR-0021
-    records that deviation and its scope.
+    `MachineState.raise_platform/4` and returns `:undefined` donedata -
+    **not** the empty string spec 5.6 names for `<content>` generally
+    (ADR-0021 records that deviation and its scope), and not `nil` either:
+    a failed evaluation produced no data, it did not produce a null value
+    (W3C test528).
   - `expr: nil` with a non-empty `params` list - `<param>` children, folded
     against one `Statifier.Evaluator.context/1` built once for the whole
     fold. Each param is evaluated in document order; a failure raises its
@@ -979,11 +982,11 @@ defmodule Statifier.Interpreter.ExitEntry do
     'error.execution' in the internal event queue and MUST ignore the name
     and value") and is dropped rather than aborting the remaining params.
     The surviving `{name, value}` pairs, still in document order, go
-    through `EventData.coerce({:params, pairs})`, which returns `nil` for
-    an empty result (`Statifier.EventData`'s own moduledoc, Decision 5) -
-    so a `<donedata>` whose only param fails produces `nil` data, the same
-    shape as no donedata at all, not `%{}`. The `<content>` arm above and
-    this params arm are mutually exclusive by validator check
+    through `EventData.coerce({:params, pairs})`, which returns `:undefined`
+    for an empty result (`Statifier.EventData`'s own moduledoc, Decision 5) -
+    so a `<donedata>` whose only param fails produces `:undefined` data, the
+    same shape as no donedata at all, not `%{}`. The `<content>` arm above
+    and this params arm are mutually exclusive by validator check
     (`Statifier.Validator.Checks.Donedata`), so there is no case where both
     are non-empty.
 
@@ -999,14 +1002,14 @@ defmodule Statifier.Interpreter.ExitEntry do
   itself - for both the `<content>` arm and each failing `<param>`.
   """
   @spec donedata(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
-          {MachineState.t(), term() | nil}
+          {MachineState.t(), term()}
   def donedata(%MachineState{machine: machine} = machine_state, state_index) do
     case Machine.at(machine, state_index).donedata do
       nil ->
-        {machine_state, nil}
+        {machine_state, :undefined}
 
       %Donedata{expr: nil, params: []} ->
-        {machine_state, nil}
+        {machine_state, :undefined}
 
       %Donedata{expr: nil, params: params} ->
         evaluate_donedata_params(machine_state, state_index, params)
@@ -1037,7 +1040,7 @@ defmodule Statifier.Interpreter.ExitEntry do
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
           expr :: Machine.expr()
-        ) :: {MachineState.t(), term() | nil}
+        ) :: {MachineState.t(), term()}
   defp evaluate_donedata(machine_state, state_index, expr) do
     context = Evaluator.context(machine_state)
 
@@ -1054,7 +1057,7 @@ defmodule Statifier.Interpreter.ExitEntry do
             data: reason
           )
 
-        {machine_state, nil}
+        {machine_state, :undefined}
     end
   end
 
@@ -1070,7 +1073,7 @@ defmodule Statifier.Interpreter.ExitEntry do
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
           params :: [Param.t()]
-        ) :: {MachineState.t(), term() | nil}
+        ) :: {MachineState.t(), term()}
   defp evaluate_donedata_params(machine_state, state_index, params) do
     context = Evaluator.context(machine_state)
 

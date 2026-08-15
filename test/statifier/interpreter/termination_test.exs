@@ -139,10 +139,11 @@ defmodule Statifier.Interpreter.TerminationTest do
 
   describe "exit_interpreter/1 - donedata" do
     # sabotage: `exit_interpreter/1`'s `ExitEntry.donedata(ms, state_index)`
-    # call is replaced with `{ms, nil}` -> the static `42` and evaluated `2`
-    # cases below both redden while the already-nil `done_nil` case stays
-    # green, pointing at exactly the wiring this mutation broke.
-    test "static and evaluated donedata ride the terminal effect; absent donedata is nil" do
+    # call is replaced with `{ms, :undefined}` -> the static `42` and
+    # evaluated `2` cases below both redden while the already-`:undefined`
+    # `done_nil` case stays green, pointing at exactly the wiring this
+    # mutation broke.
+    test "static and evaluated donedata ride the terminal effect; absent donedata is :undefined" do
       m = machine()
 
       {static_result, static_effects} =
@@ -152,7 +153,7 @@ defmodule Statifier.Interpreter.TerminationTest do
       assert static_result.status == :done
 
       {_result, absent_effects} = Interpreter.exit_interpreter(machine_state(m, [idx(:done_nil)]))
-      assert {:done, %Effect.Done{donedata: nil}} = List.last(absent_effects)
+      assert {:done, %Effect.Done{donedata: :undefined}} = List.last(absent_effects)
 
       {_result, compiled_effects} =
         Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled)]))
@@ -161,26 +162,29 @@ defmodule Statifier.Interpreter.TerminationTest do
     end
 
     # AC: "a failing top-level <content expr> donedata leaves Effect.Done's
-    # donedata nil, plus one error.execution visible on the returned
+    # donedata :undefined, plus one error.execution visible on the returned
     # terminal MachineState" (Decision 8 of
     # docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md
     # - the error is enqueued on the internal queue but never dequeued,
     # since the event loop has already stopped by the time
     # exit_interpreter/1 runs; that is Appendix D's own consequence, not a
-    # deviation).
+    # deviation). The failure produced no data, not a null value
+    # (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`, W3C
+    # test528).
     #
     # sabotage: `evaluate_donedata/3`'s `{:error, reason}` clause is
     # changed to skip the `MachineState.raise_platform/4` call -> the
     # `error.execution` would never be enqueued, reddening the
     # `internal_events/1` assertion below while `Effect.Done`'s `donedata`
-    # stays `nil` regardless (a false-green risk this sabotage rules out).
-    test "a failing top-level <content expr> donedata leaves donedata nil and enqueues one error.execution" do
+    # stays `:undefined` regardless (a false-green risk this sabotage rules
+    # out).
+    test "a failing top-level <content expr> donedata leaves donedata :undefined and enqueues one error.execution" do
       m = machine()
 
       {result, effects} =
         Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled_fail)]))
 
-      assert {:done, %Effect.Done{donedata: nil}} = List.last(effects)
+      assert {:done, %Effect.Done{donedata: :undefined}} = List.last(effects)
       assert [event] = MachineState.internal_events(result)
       assert event.name == "error.execution"
     end

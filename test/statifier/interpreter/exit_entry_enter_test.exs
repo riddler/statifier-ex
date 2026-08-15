@@ -435,7 +435,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert [event] = MachineState.internal_events(result)
       assert event.name == "done.state.compound_final"
       assert event.type == :platform
-      assert event.data == nil
+      assert event.data == :undefined
       assert event.cause.origin == {:state, idx(:cf_done)}
       assert event.cause.macrostep == 3
       assert event.cause.microstep == 2
@@ -477,14 +477,14 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert event.data == 2
     end
 
-    # AC: "a failing <content expr> donedata yields nil data plus exactly
-    # one error.execution, error enqueued before the done event"
+    # AC: "a failing <content expr> donedata yields :undefined data plus
+    # exactly one error.execution, error enqueued before the done event"
     #
     # sabotage: `evaluate_donedata/3`'s `{:error, reason}` clause is
     # changed to skip the `MachineState.raise_platform/4` call and just
-    # return `{machine_state, nil}` -> the `error.execution` event would
-    # never be enqueued, reddening the two-event assertion below.
-    test "a failing compiled <content expr> donedata yields nil data and one error.execution first" do
+    # return `{machine_state, :undefined}` -> the `error.execution` event
+    # would never be enqueued, reddening the two-event assertion below.
+    test "a failing compiled <content expr> donedata yields :undefined data and one error.execution first" do
       m = machine()
       ms = machine_state(m)
       transition = transition_named(m, "go-ce-fail-final")
@@ -494,7 +494,7 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert [error_event, done_event] = MachineState.internal_events(result)
       assert error_event.name == "error.execution"
       assert done_event.name == "done.state.ce_fail_holder"
-      assert done_event.data == nil
+      assert done_event.data == :undefined
     end
 
     # AC: "done.state.{grandparent} when a parallel completes"
@@ -519,9 +519,9 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
       assert [reg_event, par_event] = MachineState.internal_events(result)
       assert reg_event.name == "done.state.reg2"
       # reg_event's data comes from `donedata/2`'s own no-donedata clause,
-      # which explicitly passes `data: nil` through `raise_platform/4` - an
-      # explicit `nil` opt is not the same as an absent one, so it stays nil.
-      assert reg_event.data == nil
+      # which explicitly passes `data: :undefined` through `raise_platform/4`
+      # (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`).
+      assert reg_event.data == :undefined
       assert par_event.name == "done.state.par"
       # par_event, unlike reg_event, comes from
       # `maybe_raise_grandparent_completion/3`, which passes no `:data` opt

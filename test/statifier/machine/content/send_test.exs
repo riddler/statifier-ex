@@ -36,7 +36,7 @@ defmodule Statifier.Machine.Content.SendTest do
           <data id="p1" expr="10"/>
           <data id="p2" expr="20"/>
           <data id="loc"/>
-          <data id="Var1"/>
+          <data id="Var1" src="file:unfetched.txt"/>
       </datamodel>
       <state id="bare"><onentry><send event="ping"/></onentry></state>
       <state id="eventexpr"><onentry><send eventexpr="ev"/></onentry></state>
@@ -192,7 +192,12 @@ defmodule Statifier.Machine.Content.SendTest do
     # namelist entry over a declared-but-unbound root reads `:undefined`
     # off the normalized context and lands in `data` untranslated - the
     # escape is already the shipped behavior; this asserts it rather than
-    # assuming it.
+    # assuming it. `Var1` is declared with `src` (never fetched, ADR-0003)
+    # rather than value-less, so it stays genuinely unbound at the seed -
+    # a value-less `<data id="Var1"/>` instead compiles to `{:static, nil}`
+    # and binds a real `nil` (see `test/statifier/interpreter/
+    # datamodel_test.exs`'s "declared-unassigned" test), which is a
+    # different, already-null case this test does not mean to exercise.
     #
     # sabotage: `resolve_params/2`'s success clause is changed to
     # `{:cont, {:ok, [{name, value || %{}} | pairs]}}` (translate a bound

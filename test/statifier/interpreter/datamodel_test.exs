@@ -47,11 +47,13 @@ defmodule Statifier.Interpreter.DatamodelTest do
     assert ms.datamodel["Var1"] == nil
   end
 
-  # sabotage: `Statifier.Evaluator.context/1`'s `on_unbound: :error` option
-  # is dropped -> an unbound identifier would resolve to something other
-  # than the seeded :undefined, and predicator would not be exercised the
-  # same way, reddening this equality.
-  test "Var1 === undefined evaluates {:ok, true} against the seeded datamodel" do
+  # sabotage: `Evaluator.bind/3` is changed to rewrite `nil` to `:undefined`
+  # before handing a value to `Predicator.Context.bind/3` (reintroducing the
+  # retired shim) -> `Var1`'s genuine bound `nil` (see the
+  # "declared-unassigned" test above - the value-less `<data>`'s compiled
+  # `{:static, nil}` overwrites the seed) reads back as `:undefined`, and
+  # `Var1 === null` reddens to `{:ok, false}`.
+  test "Var1 === null evaluates {:ok, true} against a value-less <data>'s bound nil" do
     machine =
       compile!("""
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
@@ -65,25 +67,25 @@ defmodule Statifier.Interpreter.DatamodelTest do
     ms = machine |> MachineState.new() |> Datamodel.initialize()
     context = Evaluator.context(ms)
 
-    assert Evaluator.evaluate(context, compiled_expr("Var1 === undefined")) == {:ok, true}
-    assert Evaluator.evaluate(context, compiled_expr("Var1 !== undefined")) == {:ok, false}
+    assert Evaluator.evaluate(context, compiled_expr("Var1 === null")) == {:ok, true}
+    assert Evaluator.evaluate(context, compiled_expr("Var1 === undefined")) == {:ok, false}
   end
 
   # sabotage: `Datamodel.seed/2` is changed to fold over `[]` instead of
   # `Tuple.to_list(machine.data_elements)` -> "Var1" never becomes a
   # datamodel key at all, so `on_unbound: :error` turns the first assertion's
   # evaluation into an `{:error, %UndefinedVariableError{}}` instead of
-  # `{:ok, true}`. (A `Datamodel.seed/2`-only mutation of `:undefined` to
-  # `nil` does *not* redden this test while `undefine_nils/1` is still in
-  # place - `Statifier.Evaluator.context/1` normalizes either spelling to
-  # the same bound answer today; the raw-map assertions elsewhere in this
-  # file are what pin the seed's own spelling during Phase 1.) `src` is
-  # never fetched (ADR-0003), so `Var1` keeps exactly the seed
-  # `initialize/1` wrote - unlike a value-less `<data id="Var1"/>`, whose
-  # compiled `{:static, nil}` value evaluates and overwrites the seed with a
-  # genuine `nil` (see the "declared-unassigned" test above); this fixture
-  # pins what evaluating a never-bound root reads once it is bound at all,
-  # a property Phase 3's retirement of `undefine_nils/1` does not change.
+  # `{:ok, true}`. Since `Evaluator.bind/3`'s own `nil` -> `:undefined`
+  # rewrite was retired (Phase 3), `Statifier.Evaluator.context/1` no longer
+  # bridges the two spellings, so a
+  # `Datamodel.seed/2`-only mutation of `:undefined` to `nil` also reddens
+  # this test directly - `Var1 === undefined` would answer `{:ok, false}`
+  # instead of `{:ok, true}`. `src` is never fetched (ADR-0003), so `Var1`
+  # keeps exactly the seed `initialize/1` wrote - unlike a value-less
+  # `<data id="Var1"/>`, whose compiled `{:static, nil}` value evaluates and
+  # overwrites the seed with a genuine `nil` (see the "declared-unassigned"
+  # test above); this fixture pins what evaluating a never-bound root reads
+  # once it is bound at all.
   test "a <data> whose value never binds reads undefined, not null, through Evaluator.evaluate/2" do
     machine =
       compile!("""

@@ -712,11 +712,17 @@ defmodule Statifier.SessionTest do
   end
 
   describe "a namelist over a declared-but-unbound root round-trips as :undefined (ADR-0037 open question 1)" do
+    # `Var1` is declared with `src` (never fetched, ADR-0003) so it stays
+    # genuinely unbound at the seed. A value-less `<data id="Var1"/>`
+    # instead compiles to `{:static, nil}` and binds a real `nil` (see
+    # `test/statifier/interpreter/datamodel_test.exs`'s "declared-unassigned"
+    # test) - a different, already-null case this fixture does not mean to
+    # exercise.
     defp namelist_unbound_round_trip_doc do
       """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
           <datamodel>
-              <data id="Var1"/>
+              <data id="Var1" src="file:unfetched.txt"/>
           </datamodel>
           <state id="a">
               <onentry>

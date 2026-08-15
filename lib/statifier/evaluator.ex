@@ -183,59 +183,25 @@ defmodule Statifier.Evaluator do
     |> bind_roots(machine_state.datamodel)
   end
 
-  # Folds `bind/3` over `datamodel`'s top-level roots. `bind/3` applies
-  # `undefine_nils/1` per root and hands off to `Predicator.Context.bind/3`,
-  # which applies `normalize_value/1` - so this produces exactly the `data`
-  # a whole-map construction would have produced for the same map, since
-  # that whole-map path is `normalize_value(whole_map)` and `normalize_value`
-  # on a map recurses per entry. `context/1`'s equivalence test
-  # (`test/statifier/evaluator_test.exs`) is the mechanical check that this
-  # claim holds.
+  # Folds `bind/3` over `datamodel`'s top-level roots. `bind/3` hands off to
+  # `Predicator.Context.bind/3`, which applies `normalize_value/1` - so this
+  # produces exactly the `data` a whole-map construction would have produced
+  # for the same map, since that whole-map path is
+  # `normalize_value(whole_map)` and `normalize_value` on a map recurses per
+  # entry. `context/1`'s equivalence test (`test/statifier/evaluator_test.exs`)
+  # is the mechanical check that this claim holds.
   @spec bind_roots(context :: Predicator.Context.t(), datamodel :: map()) ::
           Predicator.Context.t()
   defp bind_roots(context, datamodel) do
     Enum.reduce(datamodel, context, fn {root, value}, acc -> bind(acc, root, value) end)
   end
 
-  # `Predicator.Context.new/2` deep-normalized `nil` to `:undefined` through
-  # predicator 5.x (`deps/predicator/lib/predicator/context.ex` on that
-  # version: `normalize_value(nil), do: Undefined.value()`). predicator 6.0
-  # (px-o9v) made `nil` the null literal's own value, distinct from
-  # `:undefined`, and dropped that clause - `nil` now survives `Context.new/2`
-  # unchanged. `machine_state.datamodel` still spells "declared but no value
-  # yet" as a raw `nil` (`SystemVariables.initial/2`'s `_event`, a seeded
-  # `<data>` with no child, `<foreach>`'s declared `item`/`index` - see
-  # `Statifier.Evaluator.SystemVariables`'s and `Statifier.Machine.Content.
-  # Foreach.declare/2`'s moduledocs), a convention this function's callers
-  # never revisited because it used to be predicator's job to translate that
-  # `nil` into the spec's "undefined" answer. This mirrors predicator 5.x's
-  # own normalization, recursively, so every existing "seeded-but-unbound
-  # reads as undefined" test (W3C test319/335/337/339, this module's own
-  # `_event`/`_event.data` tests) keeps its predicator-5.x answer under
-  # predicator 8.x. It does not (and, per the corpus, does not need to)
-  # distinguish a genuine assigned `null` from an unbound datamodel entry -
-  # no corpus document assigns one, and `docs/research/260812-st-unt-*` and
-  # `docs/research/260812-st-af3.3-*` already record that gap as latent
-  # rather than something this bump is asked to close.
-  @spec undefine_nils(value :: term()) :: term()
-  defp undefine_nils(nil), do: :undefined
-  defp undefine_nils(list) when is_list(list), do: Enum.map(list, &undefine_nils/1)
-
-  defp undefine_nils(map) when is_map(map) and not is_struct(map) do
-    Map.new(map, fn {key, value} -> {key, undefine_nils(value)} end)
-  end
-
-  defp undefine_nils(other), do: other
-
   @doc """
-  Binds `root`'s value into `context`, replacing whatever it held there and
-  applying the same `nil` -> `:undefined` normalization `context/1` applies
-  through `undefine_nils/1` - a bound `nil` has to read the same as a
-  rebuilt one, or W3C test319/335/337/339 answer differently depending on
-  which path built the context. `Predicator.Context.bind/3` does the write:
-  a single `Map.put/3` plus normalizing `value` itself, O(size of `value`)
-  rather than O(size of the whole datamodel), carrying `context`'s
-  `functions`, `on_unbound`, and `host` over unchanged.
+  Binds `root`'s value into `context`, replacing whatever it held there.
+  `Predicator.Context.bind/3` does the write: a single `Map.put/3` plus
+  normalizing `value` itself, O(size of `value`) rather than O(size of the
+  whole datamodel), carrying `context`'s `functions`, `on_unbound`, and
+  `host` over unchanged.
 
   This is safe **within** the executable-content block that already holds
   `context` and unsafe **across** one: `functions` and `host` (and with it
@@ -248,13 +214,18 @@ defmodule Statifier.Evaluator do
 
   `Predicator.Context.assign/3` is deliberately not used here: it writes at
   a path but skips `normalize_value/1` (`deps/predicator/lib/predicator/
-  context.ex:313-318`), so a bound `nil` would stay `nil` instead of
-  reading `:undefined`.
+  context.ex:313-318`), so a bound value would not receive predicator's own
+  normalization the way a fresh `Context.new/2` build would.
+
+  `value` is handed to `Predicator.Context.bind/3` verbatim - the only
+  remaining normalization is predicator's own `normalize_value/1`. `nil`
+  means null; a caller that means "declared, no value yet" spells
+  `:undefined` itself (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`).
   """
   @spec bind(context :: Predicator.Context.t(), root :: String.t(), value :: term()) ::
           Predicator.Context.t()
   def bind(%Predicator.Context{} = context, root, value) when is_binary(root) do
-    Predicator.Context.bind(context, root, undefine_nils(value))
+    Predicator.Context.bind(context, root, value)
   end
 
   @doc """
@@ -345,23 +316,23 @@ defmodule Statifier.Evaluator do
   pre-run `data`, then hands the compiled program to `Predicator.execute/3`.
   `Predicator.execute/3` returns `{:ok, %Predicator.Context{}}` on success
   or `{:error, error, %Predicator.Context{}}` on a mid-program failure -
-  either way the returned context's `data` is the whole post-run datamodel,
-  normalized (`undefine_nils/1`), so it is never written back wholesale
-  (that would permanently rewrite every untouched `nil` root to
-  `:undefined` - see `undefine_nils/1`'s own note).
-
-  Instead this diffs `data` against the pre-run copy at the **top level
-  only** - `store` (`deps/predicator/lib/predicator/evaluator.ex:1491-1523`)
-  always writes through a root segment, so any nested write already changes
-  its root's value and is caught by a top-level compare - and merges just
-  the changed and newly-created roots into the *raw*
-  `machine_state.datamodel` map, the same "write through the raw map"
-  property `Statifier.Machine.Content.Assign`'s moduledoc protects, reached
-  differently here because a program returns a whole context rather than
-  one resolved path. A root the program never touches keeps its raw value
-  untouched, so a seeded-but-unbound `<data>` id still reads `nil` after a
-  run that never mentioned it. `store` never deletes a root, so there is no
-  removal case here to handle.
+  either way the returned context's `data` is the whole post-run datamodel.
+  This is never written back wholesale; instead this diffs `data` against
+  the pre-run copy at the **top level only** - `store`
+  (`deps/predicator/lib/predicator/evaluator.ex:1491-1523`) always writes
+  through a root segment, so any nested write already changes its root's
+  value and is caught by a top-level compare - and merges just the changed
+  and newly-created roots into the *raw* `machine_state.datamodel` map, the
+  same "write through the raw map" property `Statifier.Machine.Content.
+  Assign`'s moduledoc protects, reached differently here because a program
+  returns a whole context rather than one resolved path. This diff-merge
+  survives for two reasons that do not depend on any `nil`/`:undefined`
+  seam: it is the mechanism the system-variable write check below reads
+  off of, and merging only changed roots is cheaper than writing the whole
+  post-run map back. A root the program never touches keeps its raw value
+  untouched, so a seeded-but-unbound `<data>` id still reads `:undefined`
+  after a run that never mentioned it. `store` never deletes a root, so
+  there is no removal case here to handle.
 
   Unlike `Statifier.Machine.Content.Assign`'s `check_root/3`, a program
   writing a root no `<datamodel>` declared is not rejected: `<assign>`'s
