@@ -3,6 +3,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect.Autoforward
+  alias Statifier.Effect.Trace.FinalizeAutoforward
   alias Statifier.Event
   alias Statifier.Interpreter
   alias Statifier.Lowering
@@ -19,6 +20,10 @@ defmodule Statifier.Interpreter.FinalizeTest do
 
   defp autoforward_effects(effects) do
     for {:autoforward, %Autoforward{} = payload} <- effects, do: payload
+  end
+
+  defp finalize_autoforward_traces(effects) do
+    for {:trace, %FinalizeAutoforward{} = payload} <- effects, do: payload
   end
 
   #  0 scxml (root)
@@ -60,6 +65,54 @@ defmodule Statifier.Interpreter.FinalizeTest do
     assert result.datamodel["b_ran"] == false
   end
 
+  # sabotage: `apply_invoke_passes/2`'s `finalized = invocations |>
+  # Map.values() |> Enum.filter(&(&1 == event.invokeid)) |> Enum.uniq()`
+  # line is changed to always produce `[]` -> `inv-a` disappears from
+  # `trace.finalized` even though its finalize ran, reddening the
+  # equality assertion below. Confirmed red and reverted.
+  test "the finalize/autoforward pass emits Trace.FinalizeAutoforward naming the matched invocation" do
+    m = compile!(@two_invocations_document)
+    {ms, _init_effects} = Interpreter.initialize(m, trace: true)
+
+    event = Event.external("go", invokeid: "inv-a")
+    assert {:ok, _result, effects} = Interpreter.handle_event(ms, event)
+
+    assert [trace] = finalize_autoforward_traces(effects)
+    assert trace.event == event
+    assert trace.finalized == ["inv-a"]
+    assert trace.forwarded == []
+  end
+
+  #  0 scxml (root)
+  #  1   s0      (no <invoke> at all; transition event="go" -> s1)
+  #  2   s1
+  @no_invocations_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <transition event="go" target="s1"/>
+      </state>
+      <state id="s1"/>
+  </scxml>
+  """
+
+  # sabotage: `apply_invoke_passes/2`'s short-circuited
+  # `map_size(invocations) == 0` clause is changed from building and
+  # returning `trace` to `{machine_state, []}` -> no `Trace.FinalizeAutoforward`
+  # is emitted at all, reddening the length-one assertion below. Confirmed
+  # red and reverted.
+  test "the finalize/autoforward pass emits Trace.FinalizeAutoforward with empty lists when there are no active invocations" do
+    m = compile!(@no_invocations_document)
+    {ms, _init_effects} = Interpreter.initialize(m, trace: true)
+
+    event = Event.external("go")
+    assert {:ok, _result, effects} = Interpreter.handle_event(ms, event)
+
+    assert [trace] = finalize_autoforward_traces(effects)
+    assert trace.event == event
+    assert trace.finalized == []
+    assert trace.forwarded == []
+  end
+
   #  0 scxml (root)
   #  1   s0      (invoke id="inv-a" autoforward="true", finalize assigns a_ran)
   @autoforwarding_document """
@@ -94,6 +147,23 @@ defmodule Statifier.Interpreter.FinalizeTest do
     assert [autoforward] = autoforward_effects(effects)
     assert autoforward.invoke_id == "inv-a"
     assert autoforward.event == event
+  end
+
+  # sabotage: `apply_invoke_passes/2`'s `forwarded = for {:autoforward,
+  # %Effect.Autoforward{invoke_id: id}} <- effects, do: id` line is changed
+  # to always produce `[]` -> `inv-a` disappears from `trace.forwarded`
+  # even though `Effect.Autoforward` names it, reddening the equality
+  # assertion below. Confirmed red and reverted.
+  test "a matching and autoforwarding invocation names inv-a in both Trace.FinalizeAutoforward lists" do
+    m = compile!(@autoforwarding_document)
+    {ms, _init_effects} = Interpreter.initialize(m, trace: true)
+
+    event = Event.external("go", invokeid: "inv-a")
+    assert {:ok, _result, effects} = Interpreter.handle_event(ms, event)
+
+    assert [trace] = finalize_autoforward_traces(effects)
+    assert trace.finalized == ["inv-a"]
+    assert trace.forwarded == ["inv-a"]
   end
 
   # sabotage: `autoforward_effect/5`'s `%MInvoke{autoforward: true}` clause

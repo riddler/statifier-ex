@@ -127,7 +127,11 @@ defmodule Statifier.Interpreter do
     and yields no `Effect.Invoke` for that invocation, siblings unaffected
     (ADR-0031), and otherwise the invocation is recorded in
     `machine_state.active_invocations` and emits one `{:invoke, _}` effect.
-    `states_to_invoke` is cleared once the pass finishes. When invoking left
+    `states_to_invoke` is cleared once the pass finishes, and one
+    `Trace.InvokePass` is emitted last, carrying the states walked and the
+    invoke ids started - a phase boundary Appendix D itself names
+    (ADR-0012 item 2's parenthetical is illustrative, not closed) that
+    predates this bead having any `<invoke>` to trace. When invoking left
     the internal queue non-empty, Appendix D's `continue` re-enters the
     outer loop - a self-call of the private `main_event_loop/3` - which is
     why the round budget has to span it (ADR-0032; see the deviation
@@ -145,7 +149,11 @@ defmodule Statifier.Interpreter do
     pure. Neither `if` is inside
     the other's `else`: a matching, autoforwarding invocation does both,
     exactly as Appendix D's own two separate `if`s read. The walk
-    short-circuits to a no-op when `active_invocations == %{}`.
+    short-circuits to a no-op when `active_invocations == %{}` - but even
+    that no-op still emits one `Trace.FinalizeAutoforward` with both lists
+    empty, the same "includes the empty set" reasoning
+    `Trace.TransitionsSelected` already carries into this vocabulary, so the
+    pass's absence is never mistaken for a pass that found nothing to do.
   - **`returnDoneEvent` becomes a returned effect, appended last.**
     `exit_interpreter/1` builds `{:done, %Effect.Done{}}` instead of
     performing an I/O call (ADR-0003), and appends it after `Trace.Done`
@@ -475,19 +483,54 @@ defmodule Statifier.Interpreter do
           {MachineState.t(), [Effect.t()]}
   defp apply_invoke_passes(
          %MachineState{active_invocations: invocations} = machine_state,
-         %Event{}
+         %Event{} = event
        )
        when map_size(invocations) == 0 do
-    {machine_state, []}
+    trace =
+      Effect.trace(machine_state, Effect.Trace.FinalizeAutoforward,
+        event: event,
+        finalized: [],
+        forwarded: []
+      )
+
+    {machine_state, trace}
   end
 
-  defp apply_invoke_passes(%MachineState{machine: machine} = machine_state, %Event{} = event) do
+  defp apply_invoke_passes(
+         %MachineState{machine: machine, active_invocations: invocations} = machine_state,
+         %Event{} = event
+       ) do
     state_order = Machine.document_order(machine, machine_state.configuration)
 
-    Enum.reduce(state_order, {machine_state, []}, fn state_index, {ms, effects} ->
-      {ms, state_effects} = apply_invoke_passes_for_state(ms, state_index, event)
-      {ms, effects ++ state_effects}
-    end)
+    {machine_state, effects} =
+      Enum.reduce(state_order, {machine_state, []}, fn state_index, {ms, effects} ->
+        {ms, state_effects} = apply_invoke_passes_for_state(ms, state_index, event)
+        {ms, effects ++ state_effects}
+      end)
+
+    # `finalized` reads the pass's own matching rule (`inv.invokeid ==
+    # externalEvent.invokeid`) directly off `active_invocations` rather than
+    # threading a second accumulator through `apply_invoke_passes_for_*` -
+    # `active_invocations` is untouched by this pass (only the invoke pass
+    # records into it, only `ExitEntry` removes from it), so it names the
+    # same set `apply_invoke_passes_for_invocation/5` ran `apply_finalize/5`
+    # against.
+    finalized =
+      invocations
+      |> Map.values()
+      |> Enum.filter(&(&1 == event.invokeid))
+      |> Enum.uniq()
+
+    forwarded = for {:autoforward, %Effect.Autoforward{invoke_id: id}} <- effects, do: id
+
+    trace =
+      Effect.trace(machine_state, Effect.Trace.FinalizeAutoforward,
+        event: event,
+        finalized: finalized,
+        forwarded: forwarded
+      )
+
+    {machine_state, effects ++ trace}
   end
 
   # One state's own `for inv in state.invoke: ...` (Appendix D) -
@@ -1177,7 +1220,15 @@ defmodule Statifier.Interpreter do
         {ms, context, effects ++ state_effects}
       end)
 
-    {%{machine_state | states_to_invoke: MapSet.new()}, effects}
+    invoke_ids = for {:invoke, %Effect.Invoke{invoke_id: invoke_id}} <- effects, do: invoke_id
+
+    trace =
+      Effect.trace(machine_state, Effect.Trace.InvokePass,
+        state_indexes: state_order,
+        invoke_ids: invoke_ids
+      )
+
+    {%{machine_state | states_to_invoke: MapSet.new()}, effects ++ trace}
   end
 
   # One state's own `for inv in state.invoke.sort(documentOrder): invoke(inv)`

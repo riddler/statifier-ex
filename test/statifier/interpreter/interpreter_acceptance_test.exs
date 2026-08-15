@@ -124,10 +124,19 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
   # macrostep (`handle_event/2`'s own `EventDequeued` from `:external`, in
   # particular). The invariant is about step-*body* effects, not about the
   # pre-round selection trace's own stamp.
+  #
+  # `FinalizeAutoforward` and `InvokePass` join them for the same reason
+  # (`entry_test.exs`'s own `microsteps_on/1` spells out both cases): the
+  # first is stamped before any microstep of its macrostep has run, the
+  # second is stamped after a fold that may have run zero microsteps (an
+  # eventless probe with nothing to select and an already-empty internal
+  # queue reaches quiescence without ever calling `begin_microstep/1`).
   defp microsteps_on(effects) do
     Enum.flat_map(effects, fn
       {:trace, %Effect.Trace.EventDequeued{}} -> []
       {:trace, %Effect.Trace.TransitionsSelected{}} -> []
+      {:trace, %Effect.Trace.FinalizeAutoforward{}} -> []
+      {:trace, %Effect.Trace.InvokePass{}} -> []
       {:trace, payload} -> [payload.microstep]
       {:done, payload} -> [payload.microstep]
       _other -> []

@@ -78,7 +78,24 @@ defmodule Statifier.EffectTest do
          microstep: 1,
          round: 0
        }},
-      {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}}
+      {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}},
+      {:trace,
+       %Trace.InvokePass{
+         state_indexes: [],
+         invoke_ids: [],
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
+      {:trace,
+       %Trace.FinalizeAutoforward{
+         event: Event.external("e"),
+         finalized: [],
+         forwarded: [],
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }}
     ]
 
     # sabotage: `trace?/1` returns `true` unconditionally (dropping the
@@ -101,8 +118,8 @@ defmodule Statifier.EffectTest do
 
     # sabotage: n/a - this test only checks that the fixture tables above
     # are complete, not any lib/ behavior.
-    test "the table covers all sixteen effects" do
-      assert length(@core_effects) + length(@trace_effects) == 16
+    test "the table covers all eighteen effects" do
+      assert length(@core_effects) + length(@trace_effects) == 18
     end
   end
 

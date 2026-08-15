@@ -6,6 +6,8 @@ defmodule Statifier.Effect.TraceTest do
   alias Statifier.Effect.Trace.EntrySet
   alias Statifier.Effect.Trace.EventDequeued
   alias Statifier.Effect.Trace.ExitSet
+  alias Statifier.Effect.Trace.FinalizeAutoforward
+  alias Statifier.Effect.Trace.InvokePass
   alias Statifier.Effect.Trace.MacrostepStable
   alias Statifier.Effect.Trace.TransitionsSelected
   alias Statifier.Event
@@ -112,6 +114,48 @@ defmodule Statifier.Effect.TraceTest do
                round: 11
              } =
                payload
+    end
+  end
+
+  describe "InvokePass.new/2" do
+    # sabotage: `InvokePass.new/2` hardcodes `macrostep: 0, microstep: 0,
+    # round: 0` instead of reading them off `machine_state` -> this
+    # assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      payload = InvokePass.new(ms(4, 2, 6), state_indexes: [1, 3], invoke_ids: ["inv_1"])
+
+      assert %InvokePass{
+               state_indexes: [1, 3],
+               invoke_ids: ["inv_1"],
+               macrostep: 4,
+               microstep: 2,
+               round: 6
+             } = payload
+    end
+  end
+
+  describe "FinalizeAutoforward.new/2" do
+    # sabotage: `FinalizeAutoforward.new/2` hardcodes `macrostep: 0,
+    # microstep: 0, round: 0` instead of reading them off `machine_state` ->
+    # this assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      event = Event.external("go", invokeid: "inv-a")
+
+      payload =
+        FinalizeAutoforward.new(ms(3, 5, 2),
+          event: event,
+          finalized: ["inv-a"],
+          forwarded: ["inv-a"]
+        )
+
+      assert %FinalizeAutoforward{
+               event: ^event,
+               finalized: ["inv-a"],
+               forwarded: ["inv-a"],
+               macrostep: 3,
+               microstep: 5,
+               round: 2
+             } = payload
     end
   end
 

@@ -66,6 +66,16 @@ commitment):
 | entry set | `compute_entry_set` result, before entering |
 | macrostep stable | the configuration reached quiescence |
 | done | top-level final entry / `exit_interpreter` |
+| invoke pass | `run_invoke_pass` finished: the states walked and the invocations it started (`<invoke>`, spec 6.4) |
+| finalize/autoforward pass | `apply_invoke_passes` finished for one external event: which invocation(s) it ran `<finalize>` for and which it autoforwarded the event to (spec 6.4/6.5) |
+
+The last two rows postdate the table above them - they arrived with
+`<invoke>` support and are two more phase boundaries Appendix D itself
+names inside `mainEventLoop`, not a broadening of what counts as a phase
+boundary. The "Minimum trace vocabulary... the set is the commitment" line
+above is about the shapes being settled at implementation, not about the
+table being closed to boundaries Appendix D had not yet been ported far
+enough to need.
 
 Rules:
 
