@@ -784,7 +784,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Spec 6.2.2: "event ... Must not occur with 'eventexpr'." An `<send>`
+  Spec 6.2.2: "event ... Must not occur with 'eventexpr'." A `<send>`
   carrying both. Reported at the `<send>` element's own `location`.
   """
   @spec send_event_and_eventexpr(location :: Location.t()) :: t()
@@ -797,7 +797,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Spec 6.2.2: "target ... Must not occur with 'targetexpr'." An `<send>`
+  Spec 6.2.2: "target ... Must not occur with 'targetexpr'." A `<send>`
   carrying both. Reported at the `<send>` element's own `location`.
   """
   @spec send_target_and_targetexpr(location :: Location.t()) :: t()
@@ -810,7 +810,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Spec 6.2.2: "type ... Must not occur with 'typeexpr'." An `<send>`
+  Spec 6.2.2: "type ... Must not occur with 'typeexpr'." A `<send>`
   carrying both. Reported at the `<send>` element's own `location`.
   """
   @spec send_type_and_typeexpr(location :: Location.t()) :: t()
@@ -823,7 +823,7 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Spec 6.2.2: "id ... Must not occur with 'idlocation'." An `<send>`
+  Spec 6.2.2: "id ... Must not occur with 'idlocation'." A `<send>`
   carrying both. Reported at the `<send>` element's own `location`.
   """
   @spec send_id_and_idlocation(location :: Location.t()) :: t()
@@ -839,7 +839,7 @@ defmodule Statifier.Validator.Error do
   Spec 6.2.2: "delay ... Must not occur with 'delayexpr' or when the
   attribute 'target' has the value \"_internal\"." The `delay`/`delayexpr`
   half of that constraint; the `target="_internal"` half is
-  `send_delay_and_internal_target/1`. An `<send>` carrying both `delay` and
+  `send_delay_and_internal_target/1`. A `<send>` carrying both `delay` and
   `delayexpr`. Reported at the `<send>` element's own `location`.
   """
   @spec send_delay_and_delayexpr(location :: Location.t()) :: t()
@@ -853,7 +853,7 @@ defmodule Statifier.Validator.Error do
 
   @doc """
   Spec 6.2.2: the other half of `delay`'s "Must not occur with ... when the
-  attribute 'target' has the value \"_internal\"" constraint - an `<send>`
+  attribute 'target' has the value \"_internal\"" constraint - a `<send>`
   carrying `delay` or `delayexpr` alongside a literal `target="_internal"`.
   Detectable only when `target` is a literal attribute; with `targetexpr`
   the value is not known until execute time, so this check stays silent
@@ -872,7 +872,7 @@ defmodule Statifier.Validator.Error do
   @doc """
   Spec 6.2.3: "A conformant document MUST NOT specify 'namelist' or
   `<param>` with `<content>`." The `namelist` half of that constraint; the
-  `<param>` half is `send_param_and_content/1`. An `<send>` carrying a
+  `<param>` half is `send_param_and_content/1`. A `<send>` carrying a
   written `namelist` alongside a `<content>` child. Reported at the
   `<send>` element's own `location`.
   """
@@ -887,7 +887,7 @@ defmodule Statifier.Validator.Error do
 
   @doc """
   Spec 6.2.3: the other half of "A conformant document MUST NOT specify
-  'namelist' or `<param>` with `<content>`" - an `<send>` carrying a
+  'namelist' or `<param>` with `<content>`" - a `<send>` carrying a
   `<param>` child alongside a `<content>` child. Reported at the `<send>`
   element's own `location`.
   """
