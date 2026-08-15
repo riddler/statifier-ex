@@ -791,10 +791,10 @@ whatever they do.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run) - `machine_state.ex`'s moduledoc change means this phase has Elixir in it and the gate applies.
-- [ ] `mix quality --profile merge` is green, so the ADR judge stage actually runs over the ADR-0024 edit (the bare gate skips it by design - CLAUDE.md's not-applicable list).
-- [ ] `changelog.d/st-1bjz.md` exists and `CHANGELOG.md` is unmodified (`git diff --name-only origin/main -- CHANGELOG.md` is empty).
-- [ ] `mix test.regression` is green.
+- [x] Full `mix quality` is green (`mix gate.verify` confirms an unscoped run) - `machine_state.ex`'s moduledoc change means this phase has Elixir in it and the gate applies.
+- [x] `mix quality --profile merge` is green, so the ADR judge stage actually runs over the ADR-0024 edit (the bare gate skips it by design - CLAUDE.md's not-applicable list).
+- [x] `changelog.d/st-1bjz.md` exists and `CHANGELOG.md` is unmodified (`git diff --name-only origin/main -- CHANGELOG.md` is empty).
+- [x] `mix test.regression` is green.
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment (the extension file's always-required item, discharged for a doc-only phase): this phase's `lib/statifier/` change is `@doc`/moduledoc prose in `machine_state.ex` and touches no function body, so there is no Appendix D pseudocode to diff line for line - the same discharge Phase 1 gives for `seed/2`. Confirm by reading the diff that no expression outside a docstring moved.
@@ -1005,6 +1005,24 @@ blocking here.
 - [ ] A `grep` for "normaliz" across the four touched modules finds no prose still claiming this repo normalizes `nil`.
 - [ ] Every rewritten sabotage line was actually re-run.
 - [ ] No regressions in related features.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 4
+
+- [ ] Spec-conformance judgment (the extension file's always-required item, discharged for a doc-only phase): this phase's `lib/statifier/` change is `@doc`/moduledoc prose in `machine_state.ex` and touches no function body, so there is no Appendix D pseudocode to diff line for line - the same discharge Phase 1 gives for `seed/2`. Confirm by reading the diff that no expression outside a docstring moved.
+- [ ] ADR-0024's edit is genuinely a pointer: `git diff docs/adr/0024-*.md` adds sentences and changes no existing argument.
+- [ ] The `:datamodel` option's documentation now tells an embedder, unambiguously, how to express "declared, no value".
+- [ ] Typography in each edited file matches that file's existing convention; no incidental em-dash-to-hyphen conversion appears in the diff.
+- [ ] The changelog fragment describes the change from the point of view of someone who only calls the public API.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

@@ -425,6 +425,10 @@ defmodule Statifier.MachineState do
   Boolean keys and non-atom keys (integers, for one) are accepted, and a
   struct value's fields are never inspected, since predicator's walk does
   not descend into one either.
+
+  A `nil` value anywhere in `:datamodel` means predicator's null (ADR-0037);
+  an embedder that means "declared, no value yet" passes `:undefined`
+  instead.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do

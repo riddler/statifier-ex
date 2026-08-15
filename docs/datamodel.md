@@ -177,7 +177,10 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    No ratchet update was owed - none of those files is in
    `test/passing_tests.json`. The literal does not rescue a genuinely unbound
    root, so a `Var<n>` boundness cond still waits on st-af3.3 seeding the
-   declared `<data>` it names.
+   declared `<data>` it names. This repo's own `nil` -> `:undefined` shim is
+   retired as of `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`:
+   writers spell `:undefined` themselves, and `nil` means only predicator's
+   null.
 4. **Statement sequences** (above). Landed in predicator 5.0.0:
    `parse_program/2`, the `store`/`pop` instructions, and
    `Predicator.execute/1,2,3` returning the resulting context (with the
