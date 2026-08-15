@@ -1,7 +1,7 @@
 defmodule Statifier.Replay do
   @moduledoc """
   Re-drives a `Statifier.Session.Recording` through the pure core, with no
-  process and no timer (ADR-0033).
+  process and no timer (ADR-0034).
 
   ## The reuse boundary
 
@@ -29,7 +29,7 @@ defmodule Statifier.Replay do
   that line (deciding what to do) is reused byte for byte; everything below
   it (performing it against a real process and a real clock) is replaced,
   which is exactly the split `lib/statifier/session.ex`'s own moduledoc
-  documents and ADR-0003 is the warrant for (ADR-0033).
+  documents and ADR-0003 is the warrant for (ADR-0034).
 
   ## Why replacing `{:schedule, ...}` dissolves the double-delivery seam
 
@@ -43,7 +43,7 @@ defmodule Statifier.Replay do
   increments a plain count under `send_id` in `pending`, and a
   `{:timer, send_id, event}` entry draws one credit from that count before
   enqueuing the event. Each recorded firing is therefore delivered exactly
-  once, at its recorded position (ADR-0033 decision 1).
+  once, at its recorded position (ADR-0034 decision 1).
 
   `pending` and `raced` are plain `%{send_id() => non_neg_integer()}` count
   maps rather than `Statifier.Session.Timers`, which is keyed by

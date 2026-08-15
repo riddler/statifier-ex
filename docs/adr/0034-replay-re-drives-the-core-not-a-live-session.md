@@ -1,4 +1,4 @@
-# ADR-0033: Replay re-drives the core, not a live session
+# ADR-0034: Replay re-drives the core, not a live session
 
 Status: accepted (2026-08-15)
 

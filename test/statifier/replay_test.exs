@@ -143,7 +143,7 @@ defmodule Statifier.ReplayTest do
     # sabotage: `perform_instruction({:schedule, send_id, _delay_ms, _event},
     # state, _override)` is changed from incrementing `state.pending[send_id]`
     # to instead immediately enqueuing the event onto the inbox (mirroring
-    # the double-delivery bug ADR-0033 exists to dissolve) -> the `go` event
+    # the double-delivery bug ADR-0034 exists to dissolve) -> the `go` event
     # is delivered once by the `:schedule` clause itself and a second time by
     # the `{:timer, ...}` entry's own delivery, so the configuration advances
     # two steps (to "c") instead of one (to "b"), reddening the assertion.

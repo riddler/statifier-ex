@@ -103,7 +103,7 @@ defmodule Statifier.Session do
   entry's effects are ever planned or performed - the same "one recordable
   input path" the converging-paths comment above `handle_info/2`'s fired-timer
   clause already describes. ADR-0029 named the
-  four inputs a sound recording needs; ADR-0033 decided replay re-derives core
+  four inputs a sound recording needs; ADR-0034 decided replay re-derives core
   effects and re-injects `interpret/2` batches rather than replaying against a
   live session, which is why the tap sits on the input side and not on the
   effect stream `notify/2` fans out. `recording/1` reads the value back; see

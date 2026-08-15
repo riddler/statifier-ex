@@ -124,7 +124,7 @@ What exists, from `docs/research/260815-st-dtm-replay-recorder-session-boundary.
   equals `Session.snapshot/1`'s.
 - `docs/observability.md` constraint 6 no longer promises "session
   timestamps", and cites the new ADR for why.
-- ADR-0033 records the two architectural decisions and joins the
+- ADR-0034 records the two architectural decisions and joins the
   `docs/adr/README.md` table.
 
 Verify with a full `mix quality` and by reading the round-trip test's
@@ -160,7 +160,7 @@ assertions: they are the acceptance criteria in executable form.
 ## Implementation Approach
 
 Four decisions settle the research's open questions. They are stated here and,
-for the first two, on the record in ADR-0033.
+for the first two, on the record in ADR-0034.
 
 **Decision 1 (research Q2 - the sharp one): replay re-drives the pure core and
 `Session.Effects.plan/1` directly, with no process and no timer.**
@@ -292,11 +292,11 @@ an explicit document-order sort. Iteration order is a function of set contents
 on a given BEAM build, so two runs in one test process agree. A recording
 replayed on a different OTP release could in principle differ. That is a
 pre-existing property of the interpreter, not something this work introduces,
-and fixing it is an interpreter change out of scope here; ADR-0033's
+and fixing it is an interpreter change out of scope here; ADR-0034's
 Consequences name it so the next reader finds it stated rather than
 rediscovers it.
 
-## Phase 1: Record the decision (ADR-0033) and amend constraint 6
+## Phase 1: Record the decision (ADR-0034) and amend constraint 6
 
 ### Overview
 
@@ -308,7 +308,7 @@ no Elixir changes, so this phase has no test to write and no coverage to move.
 
 #### 1. The ADR
 
-**File**: `docs/adr/0033-replay-re-drives-the-core-not-a-live-session.md`
+**File**: `docs/adr/0034-replay-re-drives-the-core-not-a-live-session.md`
 **Changes**: New record in the three-section format (Context, Decision,
 Consequences) the ADR README requires.
 
@@ -334,7 +334,9 @@ reproducible only through `Process.send_after/3`), which would be argued
 there rather than patched around.
 
 If `0033` is taken by a branch that lands first, take the next free number -
-this plan's references are by title.
+this plan's references are by title. That is what happened: ADR-0033 went to
+the validator warning tier on `main` (80cd090) while this branch was in
+flight, so this record is ADR-0034.
 
 #### 2. The ADR index
 
@@ -360,8 +362,8 @@ exists at the moment it commits.
 - [x] `mix quality --format json --report -` is green - every phase advances
       under `/wurk:commit --auto` in a `--loop` run, which routes on that
       output, so it is a criterion of each phase and not only the last.
-- [x] `grep -c '^## ' docs/adr/0033-*.md` returns 3, and
-      `grep -c '0033-' docs/adr/README.md` returns at least 1.
+- [x] `grep -c '^## ' docs/adr/0034-*.md` returns 3, and
+      `grep -c '0034-' docs/adr/README.md` returns at least 1.
 
 #### Manual Verification:
 - [ ] The ADR's Decision section states the position, not the plan's summary
@@ -597,7 +599,7 @@ Phase 5 points a live run at it.
 defmodule Statifier.Replay do
   @moduledoc """
   Re-drives a `Statifier.Session.Recording` through the pure core, with no
-  process and no timer (ADR-0033).
+  process and no timer (ADR-0034).
   ...
   """
 
@@ -649,7 +651,7 @@ The fold:
 
 The moduledoc states the reuse boundary explicitly: which session components
 are reused unchanged, which three `perform_instruction/3` clauses are
-replaced, and why that is the nondeterministic half by construction (ADR-0033,
+replaced, and why that is the nondeterministic half by construction (ADR-0034,
 ADR-0003).
 
 #### 2. The unit test
@@ -876,7 +878,7 @@ the end of a run, and it is why `recording/1` is a call rather than a field on
   recording), `docs/adr/0019-macrostep-round-budget.md` and
   `docs/adr/0020-round-ordinal-joins-the-step-counters.md` (the counters two
   runs are compared on), `docs/adr/0018-no-process-jargon-in-code-comments.md`
-  (binds the comments this work adds), plus the new ADR-0033 from Phase 1
+  (binds the comments this work adds), plus the new ADR-0034 from Phase 1
 - Constraint: `docs/observability.md` constraint 6 (`:145-165`)
 - Similar implementation: `lib/statifier/session/inbox.ex`,
   `lib/statifier/session/timers.ex` (the pure-value-on-`State` shape),
@@ -967,7 +969,7 @@ as the phase gate.
 
 - [x] Read `Replay`'s `perform` clauses against `Session`'s
       `perform_instruction/3` clauses side by side: every divergence is one
-      ADR-0033 licenses, and each replaced clause is replaced for the reason
+      ADR-0034 licenses, and each replaced clause is replaced for the reason
       the moduledoc gives. **The item's own count was wrong** and is corrected
       here: it said "the four non-process clauses agree, and the three
       replaced ones are replaced". In fact only `{:enqueue_event, _}` is

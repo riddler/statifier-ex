@@ -156,7 +156,7 @@ defmodule Statifier.ReplayRoundTripTest do
     # sabotage: `Statifier.Replay`'s `perform_instruction({:schedule, send_id,
     # _delay_ms, _event}, state, _override)` clause is changed to *also*
     # `Inbox.enqueue_event/2` the event immediately, on top of the existing
-    # `state.pending` credit (mirroring the double-delivery bug ADR-0033
+    # `state.pending` credit (mirroring the double-delivery bug ADR-0034
     # exists to dissolve) -> the replayed run delivers the delayed "go" once
     # from the (mutated) `:schedule` instruction and a second time from the
     # recording's own `{:timer, "s1", _}` entry drawing its still-intact
