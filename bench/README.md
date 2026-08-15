@@ -32,6 +32,9 @@ side effect of landing a benchmark.
 - `macrostep.exs` - the end-to-end share of a real macrostep's time and
   memory that context construction accounts for, at realistic and stress
   scale (Phase 2 of the plan above).
+- `bench/results/260815-st-59d-predicator-8-0.md` - the current capture of
+  both scripts, against predicator 8.0 (`st-59d`), alongside the 7.0-era
+  260814 files above.
 
 ## `bench/` is outside every gate stage, on purpose
 

@@ -38,6 +38,16 @@ alias Statifier.Evaluator
 #                        function-literal closure (In/1's pre-Phase-1
 #                        shape) - the same term, so this and the provider
 #                        row above should land within noise of each other.
+#
+# One scenario added in st-59d (predicator 8.0 bump,
+# docs/plans/260815-st-59d-predicator-8-0-bump-structured-compile-errors.md
+# Phase 2), evidence for Phase 3's normalize: false refusal.
+#
+# T_new_nf = Context.new/2, no nils, normalize: false - the build shape a
+#            normalize: false adoption would use. T_new minus T_new_nf
+#            isolates the size-scaling normalize_value/1 walk that
+#            normalize: false removes, and T_new_nf against T_full compares
+#            the whole candidate path to the shipped one.
 
 defmodule ClosureFunctions do
   @moduledoc false
@@ -59,6 +69,9 @@ Benchee.run(
     "T_new   Context.new/2, no nils" => fn %{clean: d, fns: f} ->
       Context.new(d, functions: f, on_unbound: :error)
     end,
+    "T_new_nf Context.new/2, no nils, normalize: false" => fn %{clean: d, fns: f} ->
+      Context.new(d, functions: f, on_unbound: :error, normalize: false)
+    end,
     "T_fixed Context.new/2, empty data" => fn %{fns: f} ->
       Context.new(%{}, functions: f, on_unbound: :error)
     end,
@@ -77,9 +90,13 @@ Benchee.run(
     end
   },
   inputs: Workload.size_points(),
-  time: 5,
-  memory_time: 2,
-  warmup: 2,
+  # Reduced from time: 5, memory_time: 2, warmup: 2 in st-59d Phase 2: these
+  # operations are microsecond-scale, so 2s of measurement still yields on
+  # the order of a million samples per scenario; past that, the error bars
+  # are set by machine noise rather than sample count.
+  time: 2,
+  memory_time: 1,
+  warmup: 1,
   formatters: [Benchee.Formatters.Console]
 )
 
@@ -127,7 +144,11 @@ for {label, %{ms: ms, ctx: ctx, root: root, val: val}} <- Workload.size_points()
       "rebuild-per-write (n=100)" => fn -> BlockAB.rebuild_per_write(ms, root, val, 100) end,
       "bind/3-threaded    (n=100)" => fn -> BlockAB.bind_threaded(ctx, root, val, 100) end
     },
-    time: 3,
+    # Reduced from time: 3, memory_time: 1, warmup: 1 in st-59d Phase 2:
+    # microsecond-scale operations still yield on the order of a million
+    # samples per scenario at 2s; beyond that the error bars are set by
+    # machine noise rather than sample count.
+    time: 2,
     memory_time: 1,
     warmup: 1,
     formatters: [Benchee.Formatters.Console]

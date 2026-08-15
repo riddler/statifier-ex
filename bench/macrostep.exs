@@ -187,9 +187,13 @@ defmodule Bench do
     Benchee.run(
       %{"macrostep (send_event go)" => fn ms -> Statifier.send_event(ms, "go") end},
       inputs: inputs,
-      time: 5,
-      memory_time: 2,
-      warmup: 2,
+      # Reduced from time: 5, memory_time: 2, warmup: 2 in st-59d Phase 2:
+      # this operation is microsecond-scale, so 2s of measurement still
+      # yields on the order of a million samples per scenario; past that,
+      # the error bars are set by machine noise rather than sample count.
+      time: 2,
+      memory_time: 1,
+      warmup: 1,
       formatters: [Benchee.Formatters.Console]
     )
   end
@@ -206,7 +210,11 @@ defmodule Bench do
     Benchee.run(
       %{"Evaluator.context/1" => fn ms -> Evaluator.context(ms) end},
       inputs: inputs,
-      time: 3,
+      # Reduced from time: 3, memory_time: 1, warmup: 1 in st-59d Phase 2:
+      # microsecond-scale operation, still on the order of a million samples
+      # per scenario at 2s; beyond that the error bars are set by machine
+      # noise rather than sample count.
+      time: 2,
       memory_time: 1,
       warmup: 1,
       formatters: [Benchee.Formatters.Console]

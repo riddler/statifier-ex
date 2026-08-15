@@ -492,14 +492,14 @@ the existing pointers to the 260814 files. The older files stay - they are the
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` used between edits while iterating.
-- [ ] Full `mix quality` is green, and `mix gate.verify` exits zero. `bench/`
+- [x] `mix quality --profile loop` used between edits while iterating.
+- [x] Full `mix quality` is green, and `mix gate.verify` exits zero. `bench/`
       is outside every stage (`bench/README.md:36-58`), so this proves only
       that nothing else moved - which is the point of committing the phase
       alone.
-- [ ] `mix run bench/context_build.exs` and `mix run bench/macrostep.exs`
+- [x] `mix run bench/context_build.exs` and `mix run bench/macrostep.exs`
       both complete without raising, with `predicator 8.0.x` in `mix.lock`.
-- [ ] `bench/results/260815-st-59d-predicator-8-0.md` exists and names every
+- [x] `bench/results/260815-st-59d-predicator-8-0.md` exists and names every
       scenario both scripts printed.
 
 #### Manual Verification:
@@ -805,6 +805,28 @@ before considering the plan fully landed.
       here is an Appendix D procedure. If the conformance diff in the criterion
       above is non-empty, this declination lapses and the Appendix D reading is
       owed on the function that explains the move.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Both scripts were run on one machine, back to back, and the machine
+      block in the results file describes that machine.
+- [ ] Each of ADR-0030's five cited figures is explicitly confirmed or
+      restated in the results file, with the 7.0 value beside the 8.0 one.
+- [ ] Every time delta is read against its own deviation band, and any delta
+      inside the band is reported as noise rather than as a win or a
+      regression.
+- [ ] `T_new_nf` is present at all four size points, so Phase 3's refusal has
+      a corpus-scale number and a stress-scale one.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
