@@ -112,29 +112,35 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   Body, in the pseudocode's own order:
 
-  1. `states_to_exit` = `Selection.compute_exit_set/2` over
-     `enabled_transitions`, piped through `Machine.exit_order/2` for exit
-     order: `compute_exit_set/2` returns an unordered `MapSet`, and ordering
+  1. `exit_set` = `Selection.compute_exit_set/2` over `enabled_transitions`
+     - an *unordered* `MapSet`.
+  2. `states_to_invoke` loses every member of `exit_set`, over that same
+     unordered set - `statesToInvoke.delete(s)` (Appendix D), which runs
+     before the exit-order sort and before `record_history_values/2`.
+  3. `exit_set` is sorted into exit order via `Machine.exit_order/2` into
+     `states_to_exit`: `compute_exit_set/2` returns unordered, and ordering
      it is this function's job, not `Selection`'s.
-  2. The pseudocode's `statesToInvoke.delete(s)` line is skipped:
-     `states_to_invoke` is deliberately absent from `MachineState` until
-     `<invoke>` support adds it with its own caller.
-  3. `Effect.trace(machine_state, Effect.Trace.ExitSet, indexes:
-     states_to_exit)` is emitted before any mutation, over the *original*
-     `machine_state` - the macro's own hygienic `machine_state` rebinding
-     inside its expansion does not touch this function's parameter.
-  4. `record_history_values/2` runs its whole first pass over
+  4. `Effect.trace(machine_state, Effect.Trace.ExitSet, indexes:
+     states_to_exit)` is emitted over the `machine_state` as it stands after
+     step 2's `states_to_invoke` update - the macro's own hygienic
+     `machine_state` rebinding inside its expansion does not touch this
+     function's parameter.
+  5. `record_history_values/2` runs its whole first pass over
      `states_to_exit`, reading the untouched configuration.
-  5. `states_to_exit` is reduced through `depart/2`, each state running its
+  6. `states_to_exit` is reduced through `depart/2`, each state running its
      `onexit` blocks and then leaving the configuration.
   """
   @spec exit_states(machine_state :: MachineState.t(), enabled_transitions :: [Transition.t()]) ::
           {MachineState.t(), [Effect.t()]}
   def exit_states(%MachineState{machine: machine} = machine_state, enabled_transitions) do
-    states_to_exit =
+    exit_set = Selection.compute_exit_set(machine_state, enabled_transitions)
+
+    machine_state = %{
       machine_state
-      |> Selection.compute_exit_set(enabled_transitions)
-      |> then(&Machine.exit_order(machine, &1))
+      | states_to_invoke: MapSet.difference(machine_state.states_to_invoke, exit_set)
+    }
+
+    states_to_exit = Machine.exit_order(machine, exit_set)
 
     trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
 
@@ -612,13 +618,14 @@ defmodule Statifier.Interpreter.ExitEntry do
     {machine_state, trace_effects ++ arrive_effects}
   end
 
-  # `enterStates`'s per-state entry body: add to the configuration, skip
-  # `statesToInvoke.add(s)` (no `<invoke>` support exists yet), bind
+  # `enterStates`'s per-state entry body: add to the configuration, add
+  # `state_index` to `states_to_invoke` unconditionally (see
+  # `MachineState`'s own moduledoc section on that field), bind
   # `state_index`'s own datamodel under `binding == "late"` on first entry
-  # (st-af3.3 Phase 5 - `MachineState.entered_states` is the ADR-0002
-  # substitute for Appendix D's `s.isFirstEntry`, see that field's moduledoc
-  # section), run `onentry` blocks, run default-entry / default-history
-  # content, then raise this state's completion events.
+  # (`MachineState.entered_states` is the ADR-0002 substitute for Appendix
+  # D's `s.isFirstEntry`, see that field's moduledoc section), run
+  # `onentry` blocks, run default-entry / default-history content, then
+  # raise this state's completion events.
   @spec arrive(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -629,6 +636,14 @@ defmodule Statifier.Interpreter.ExitEntry do
     machine_state = %{
       machine_state
       | configuration: MapSet.put(machine_state.configuration, state_index)
+    }
+
+    # `statesToInvoke.add(s)` (Appendix D) - unconditional, no test for
+    # `s.invoke`; the invoke pass (a later caller) is what skips a state
+    # with none.
+    machine_state = %{
+      machine_state
+      | states_to_invoke: MapSet.put(machine_state.states_to_invoke, state_index)
     }
 
     # `if binding == "late" and s.isFirstEntry: initializeDataModel(...); s.isFirstEntry = false`

@@ -30,15 +30,32 @@ defmodule Statifier.MachineState do
   `main_event_loop` port (`Statifier.Interpreter.main_event_loop/1`)
   repeats this comment at its own site, where it matters.
 
-  ## `states_to_invoke` is deliberately absent
+  ## `states_to_invoke` is every state entered since the last invoke pass
 
-  Appendix D carries `statesToInvoke` as a global, but every read and write
-  of it belongs to the invoke passes of `main_event_loop`, not yet
-  implemented. Adding an unused field now would be exactly the "dead field
-  nobody can test" mistake avoided for `origin`/`sendid` on
-  `Statifier.Event`: the field is added deliberately, with a caller, once
-  the invoke passes exist, rather than added now as a placeholder ahead of
-  any caller.
+  `states_to_invoke` mirrors Appendix D's `statesToInvoke` global: a
+  `MapSet` of state indexes, added to by `Statifier.Interpreter.ExitEntry.arrive/3`
+  (`enterStates`'s per-state entry body) and deleted from by
+  `Statifier.Interpreter.ExitEntry.exit_states/2` (`exitStates`'s
+  `for s in statesToExit: statesToInvoke.delete(s)`).
+
+  Population is unconditional - a state with no `<invoke>` children still
+  lands its index here on entry, exactly as `entered_states` below is
+  populated unconditionally and for the same reason: a field whose contents
+  depend on whether the document happens to carry `<invoke>` children has a
+  meaning a reader cannot state without the document in hand, and
+  ADR-0012 constraint 1 wants a `%MachineState{}` that inspects as a
+  complete position regardless of which document produced it.
+
+  The entry-order sort Appendix D's own pseudocode performs
+  (`statesToInvoke.sort(entryOrder)`) happens at the invoke pass itself, not
+  here - this field stores an unordered `MapSet`, the same pattern
+  `configuration` uses everywhere in this module.
+
+  It has two writers by design, matching the two Appendix D procedures that
+  touch it: `exit_states/2` deletes any state that exits before the invoke
+  pass runs, and the invoke pass empties whatever remains once it has walked
+  it. Neither is a counter function - unlike `macrostep`/`microstep`/`round`
+  above, membership here is not monotonic within a macrostep.
 
   ## `entered_states` is `s.isFirstEntry` moved off the state
 
@@ -207,6 +224,7 @@ defmodule Statifier.MachineState do
     internal_queue: nil,
     history_values: %{},
     entered_states: MapSet.new(),
+    states_to_invoke: MapSet.new(),
     datamodel: %{},
     running: true,
     status: :running,
@@ -252,6 +270,7 @@ defmodule Statifier.MachineState do
           internal_queue: :queue.queue(Event.t()),
           history_values: %{optional(non_neg_integer()) => MapSet.t(non_neg_integer())},
           entered_states: MapSet.t(non_neg_integer()),
+          states_to_invoke: MapSet.t(non_neg_integer()),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -294,6 +313,7 @@ defmodule Statifier.MachineState do
       internal_queue: :queue.new(),
       history_values: %{},
       entered_states: MapSet.new(),
+      states_to_invoke: MapSet.new(),
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,
