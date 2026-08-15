@@ -22,6 +22,9 @@ defmodule Statifier.Invoke.SourceTest do
   """
 
   describe "resolve/2" do
+    # sabotage: the `content is a binary` success clause's `{:ok, machine} ->
+    # {:ok, machine}` branch is changed to `{:ok, _machine} -> {:error,
+    # :sabotage}` -> the `{:ok, %Machine{}}` match below reddens
     test "content is a binary -> Statifier.compile/1, success" do
       assert {:ok, %Machine{}} = Source.resolve(invoke(content: @child_xml), [])
     end

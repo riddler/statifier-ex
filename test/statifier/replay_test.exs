@@ -141,6 +141,35 @@ defmodule Statifier.ReplayTest do
       assert Enum.any?(result.stream, &match?({:effect, {:send, _}}, &1))
     end
 
+    # sabotage: `perform_instruction({:start_child, %Invoke{}, _effect}, state,
+    # _override)` is changed from `state` to `append(state, {:unroutable,
+    # effect})`, treating it like the `:unroutable` clause it deliberately is
+    # not -> `result.stream` gains a second entry the live session's own
+    # `{:start_child, _, _}` performer never produces (it starts a process and
+    # writes a table entry, it does not notify `:unroutable`), reddening the
+    # exact-list equality assertion below. Reverted and confirmed green.
+    test "a supported <invoke>'s {:start_child, ...} instruction is a no-op beyond its own {:notify, ...}" do
+      machine = compile!(two_state_doc())
+
+      invoke_effect =
+        {:invoke,
+         %Effect.Invoke{
+           invoke_id: "i1",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1
+         }}
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([invoke_effect])
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.stream == [{:effect, invoke_effect}]
+    end
+
     # sabotage: `perform_instruction({:schedule, send_id, _delay_ms, _event},
     # state, _override)` is changed from incrementing `state.pending[send_id]`
     # to instead immediately enqueuing the event onto the inbox (mirroring

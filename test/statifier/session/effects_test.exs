@@ -143,7 +143,8 @@ defmodule Statifier.Session.EffectsTest do
        {:notify,
         {:invoke,
          %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}},
-       {:unroutable,
+       {:start_child,
+        %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1},
         {:invoke,
          %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}}
      ]},
@@ -411,7 +412,7 @@ defmodule Statifier.Session.EffectsTest do
 
     # sabotage: `plan_invoke/2`'s `if Target.supported_invoke_type?(...)` is
     # inverted to `unless` -> a supported (`nil`) invoke type would raise
-    # instead of planning `:unroutable`, and this refute reddens
+    # instead of planning `{:start_child, ...}`, and this refute reddens
     test "no :raise instruction appears for a supported (nil) invoke type" do
       effect =
         {:invoke,
@@ -427,7 +428,7 @@ defmodule Statifier.Session.EffectsTest do
       instructions = Effects.plan([effect], @session_id)
 
       refute Enum.any?(instructions, &match?({:raise, _, _, _, _}, &1))
-      assert Enum.any?(instructions, &match?({:unroutable, ^effect}, &1))
+      assert Enum.any?(instructions, &match?({:start_child, _invoke, ^effect}, &1))
     end
   end
 end
