@@ -862,10 +862,10 @@ human's call.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `bd show st-1bjz` returns notes containing both open questions' answers.
-- [ ] `bd show st-1bjz` returns a dated note naming st-cmq.3 and the deferred conformance re-check.
-- [ ] A new bead exists for the ADR-0037 number collision and is linked from st-1bjz.
-- [ ] Full `mix quality` is still green on the branch tip.
+- [x] `bd show st-1bjz` returns notes containing both open questions' answers.
+- [x] `bd show st-1bjz` returns a dated note naming st-cmq.3 and the deferred conformance re-check.
+- [x] A new bead exists for the ADR-0037 number collision and is linked from st-1bjz.
+- [x] Full `mix quality` is still green on the branch tip.
 
 #### Manual Verification:
 - [ ] Each answer note points at the file where its reasoning lives, and the two do not disagree with the code.
@@ -1031,5 +1031,16 @@ phase. In looped (`--loop`) execution, this phase's Automated Verification
 gates advancement automatically (via `/wurk:commit --auto`), and Manual
 Verification items are deferred and surfaced once at the end instead of
 blocking here.
+
+---
+
+### Phase 5
+
+- [ ] Each answer note points at the file where its reasoning lives, and the two do not disagree with the code.
+- [ ] The deferred-re-check note states st-cmq.3's status as of the day it was written, per CLAUDE.md's cross-tracker freshness rule.
+
+**Implementation Note**: This phase produces bead state, not a commit. If the
+worktree is clean there is nothing to commit. `bd dolt push` waits until the
+git side of this branch has reached `origin`, per CLAUDE.md's authority table.
 
 ---
