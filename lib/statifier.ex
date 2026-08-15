@@ -33,6 +33,7 @@ defmodule Statifier do
   alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Session
   alias Statifier.Validator
 
   @typedoc """
@@ -147,5 +148,50 @@ defmodule Statifier do
     |> Enum.map(&Machine.id(machine, &1))
     |> Enum.reject(&is_nil/1)
     |> MapSet.new()
+  end
+
+  @doc """
+  Starts a `Statifier.Session` for `machine` on `Statifier.SessionSupervisor`,
+  under the ADR-0027 session runtime.
+
+  `opts` is `Statifier.Session.start_link/2`'s own option set, passed
+  through unchanged. This is the runtime-placed alternative to calling
+  `Statifier.Session.start_link/2` directly: a session started here lands
+  on `Statifier.SessionSupervisor` (`restart: :temporary`, so a crash is
+  never silently restarted into a fresh, unrelated session id - ADR-0027
+  decision 4) and registers itself under `Statifier.Registry` during
+  `init/1`, so it becomes reachable by other sessions as
+  `#_scxml_<sessionid>` (ADR-0027 decision 2). A session started instead by
+  a bare `Statifier.Session.start_link/2` call is legal but stays
+  unregistered, and therefore unreachable by id from any session but
+  itself.
+
+  Requires `Statifier.Supervisor` to already be placed somewhere in the
+  embedder's own supervision tree - this library ships no application
+  callback (ADR-0027 decision 1), so nothing starts one automatically. The
+  return value is `DynamicSupervisor.start_child/2`'s own
+  `{:ok, pid} | {:error, term}` (see its docs for what `term` can be, most
+  commonly `Statifier.SessionSupervisor` itself not being started).
+  """
+  @spec start_session(machine :: Machine.t(), opts :: keyword()) ::
+          {:ok, pid()} | {:error, term()}
+  def start_session(%Machine{} = machine, opts \\ []) do
+    # `Session.start_link/2` takes two positional arguments (`machine`,
+    # `opts`), not the single `init_arg` the `use GenServer`-generated
+    # `child_spec/1` expects (`{Session, single_term}` calls
+    # `Session.start_link(single_term)`), so a literal `{Session, {machine,
+    # opts}}` child-spec tuple would call `start_link/1` with a 2-tuple
+    # where it expects a `%Machine{}` and raise. Building the child spec
+    # directly, naming the MFA and both arguments, sidesteps that mismatch
+    # without touching `Session`'s own `child_spec/1` (still available
+    # unchanged for an embedder who places a session directly with a
+    # single-argument `{Session, machine}`-style spec).
+    spec = %{
+      id: Session,
+      start: {Session, :start_link, [machine, opts]},
+      restart: :temporary
+    }
+
+    DynamicSupervisor.start_child(Statifier.SessionSupervisor, spec)
   end
 end
