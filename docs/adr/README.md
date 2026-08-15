@@ -34,6 +34,7 @@
 | [0030](0030-in1-becomes-a-provider-context-stays-off-machinestate.md) | `In/1` becomes a provider; the built context still is not a `MachineState` field | accepted (amended 2026-08-15: predicator 8.0 memoization; hoist kept) |
 | [0031](0031-invoke-argument-failure-aborts-the-invocation.md) | A failed invoke argument evaluation aborts the invocation | accepted |
 | [0032](0032-round-budget-spans-the-invoke-re-entry.md) | The round budget spans the invoke pass's re-entry | accepted (amends 0019 in part) |
+| [0033](0033-validator-warning-tier.md) | The validator has a warning tier; warnings ride on the Machine | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
