@@ -678,14 +678,14 @@ says so, e.g.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] `mix quality --format json --report -` is green (see Phase 1's note on
+- [x] Full `mix quality` passes.
+- [x] `mix quality --format json --report -` is green (see Phase 1's note on
       why this is a per-phase criterion).
-- [ ] `mix test test/statifier/replay_test.exs` passes.
-- [ ] `mix adr.check` reports no finding on `lib/statifier/replay.ex` - the
+- [x] `mix test test/statifier/replay_test.exs` passes.
+- [x] `mix adr.check` reports no finding on `lib/statifier/replay.ex` - the
       module is pure, so any finding is a design escape, not a comment to
       write.
-- [ ] Doctor's 100% thresholds hold for the new module.
+- [x] Doctor's 100% thresholds hold for the new module.
 
 #### Manual Verification:
 - [ ] Read `Replay`'s `perform` clauses against `Session`'s
@@ -934,6 +934,26 @@ manual items are deferred.
       `drain_event/2`, and `drain_cancel/1` are untouched, so Appendix D's
       `mainEventLoop` port is line-for-line what it was. Confirm by diff that
       no line inside those functions changed.
+
+**Implementation Note**: `mix quality --profile loop` between edits, full gate
+as the phase gate.
+
+---
+
+### Phase 4
+
+- [ ] Read `Replay`'s `perform` clauses against `Session`'s
+      `perform_instruction/3` clauses side by side: the four non-process
+      clauses agree, and the three replaced ones are replaced for the reason
+      the moduledoc gives.
+- [ ] Read `Replay`'s `drain` against `handle_continue(:drain, _)` at
+      `lib/statifier/session.ex:317-333`: the halted rules agree, including
+      that a cancel is always drained.
+- [ ] Spec conformance: `Replay` calls the Appendix D functions rather than
+      reimplementing any of them - confirm no pseudocode-named function is
+      duplicated in the new module. The drain loop it does mirror is the
+      session's port of `mainEventLoop`'s dequeue tail, and the criterion is
+      that it matches that port line for line.
 
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate.

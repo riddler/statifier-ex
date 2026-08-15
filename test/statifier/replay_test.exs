@@ -1,0 +1,244 @@
+defmodule Statifier.ReplayTest do
+  use ExUnit.Case, async: true
+
+  alias Statifier.Compiler
+  alias Statifier.Effect
+  alias Statifier.Event
+  alias Statifier.Lowering
+  alias Statifier.Parser
+  alias Statifier.Replay
+  alias Statifier.Session.Recording
+  alias Statifier.Validator
+
+  defp compile!(xml) do
+    {:ok, root} = Parser.parse(xml)
+    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Validator.validate(document, xml)
+    {:ok, machine} = Compiler.compile(document)
+    machine
+  end
+
+  defp two_state_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b">
+            <transition event="go" target="c"/>
+        </state>
+        <state id="c"/>
+    </scxml>
+    """
+  end
+
+  defp cancel_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a"/>
+    </scxml>
+    """
+  end
+
+  defp livelock_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition target="a"/>
+        </state>
+    </scxml>
+    """
+  end
+
+  defp event(name), do: Event.external(name)
+
+  defp send_delayed(send_id, delay_ms) do
+    %Effect.SendDelayed{
+      event: "go",
+      target: nil,
+      send_id: send_id,
+      delay_ms: delay_ms,
+      macrostep: 1,
+      microstep: 1
+    }
+  end
+
+  defp cancel_effect(send_id) do
+    %Effect.Cancel{send_id: send_id, macrostep: 1, microstep: 1}
+  end
+
+  defp state_index(machine, id) do
+    {:ok, index} = Statifier.Machine.index(machine, id)
+    index
+  end
+
+  describe "run/1" do
+    # sabotage: `to_result/1`'s `status: state.halted || :running` is changed
+    # to hardcode `status: :done` -> this assertion reddens on the `:running`
+    # mismatch. Reverted and confirmed green.
+    test "an empty recording replays to the post-initialize state" do
+      machine = compile!(two_state_doc())
+      recording = Recording.new(machine, session_id: "sess_replay_test")
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.status == :running
+      assert result.machine_state.configuration != MapSet.new()
+      assert result.stream == []
+    end
+
+    # sabotage: `apply_entry({:event, event}, state)` drains without first
+    # enqueuing the event onto the inbox (drops the `Inbox.enqueue_event/2`
+    # call) -> the configuration never advances, reddening the assertion.
+    # Reverted and confirmed green.
+    test "an event entry advances the configuration" do
+      machine = compile!(two_state_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_event(event("go"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
+    end
+
+    # sabotage: `apply_entry(:cancel, state)` drains without enqueuing the
+    # cancel marker (drops `Inbox.enqueue_cancel/1`) -> the cancel never
+    # drains, so `result.status` stays `:running` instead of `:cancelled`,
+    # reddening both assertions below. Reverted and confirmed green.
+    test "a cancel entry halts :cancelled and emits {:halted, :cancelled}" do
+      machine = compile!(cancel_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_cancel()
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.status == :cancelled
+      assert {:halted, :cancelled} in result.stream
+    end
+
+    # sabotage: `perform_instruction({:enqueue_event, event}, state,
+    # _override)` is changed to drop the event without enqueuing it -> the
+    # batch's re-enqueued `go` event never reaches the core, so the
+    # configuration stays "a" instead of advancing to "b", reddening the
+    # assertion. Reverted and confirmed green.
+    test "an interpret/2 batch with a targetless :send re-enqueues and drains" do
+      machine = compile!(two_state_doc())
+
+      send_effect =
+        {:send, %Effect.Send{event: "go", target: nil, macrostep: 1, microstep: 1}}
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([send_effect])
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
+      assert Enum.any?(result.stream, &match?({:effect, {:send, _}}, &1))
+    end
+
+    # sabotage: `perform_instruction({:schedule, send_id, _delay_ms, _event},
+    # state, _override)` is changed from incrementing `state.pending[send_id]`
+    # to instead immediately enqueuing the event onto the inbox (mirroring
+    # the double-delivery bug ADR-0033 exists to dissolve) -> the `go` event
+    # is delivered once by the `:schedule` clause itself and a second time by
+    # the `{:timer, ...}` entry's own delivery, so the configuration advances
+    # two steps (to "c") instead of one (to "b"), reddening the assertion.
+    # Reverted and confirmed green.
+    test "a :send_delayed batch followed by its {:timer, ...} entry delivers the event exactly once" do
+      machine = compile!(two_state_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 40)}])
+        |> Recording.put_timer("s1", event("go"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
+    end
+
+    # sabotage: `perform_instruction({:cancel_timers, send_id}, state,
+    # _override)` is changed to `Map.delete/2` the pending count outright
+    # instead of moving it into `state.raced` -> the later `{:timer, ...}`
+    # entry finds no credit in either map and `run/1` returns
+    # `{:error, {:unscheduled_timer_firing, "s1"}}` instead of delivering the
+    # event, reddening the assertion. Reverted and confirmed green.
+    test "a :cancel effect followed by that send id's {:timer, ...} entry delivers via the raced credit" do
+      machine = compile!(two_state_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 30)}])
+        |> Recording.put_interpret([{:cancel, cancel_effect("s1")}])
+        |> Recording.put_timer("s1", event("go"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
+    end
+
+    # sabotage: `draw_credit/2` is changed to always return `{:ok, state}`
+    # unconditionally instead of checking `pending`/`raced` for a positive
+    # count -> a firing with no credit anywhere is accepted instead of
+    # erroring, reddening the assertion. Reverted and confirmed green.
+    test "a {:timer, ...} entry for an unscheduled send id returns an error" do
+      machine = compile!(two_state_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_timer("never-scheduled", event("go"))
+
+      assert Replay.run(recording) == {:error, {:unscheduled_timer_firing, "never-scheduled"}}
+    end
+
+    # sabotage: `drain/1`'s `{:ok, {:event, _event}, _inbox} when state.halted
+    # != nil -> state` clause condition is changed to `state.halted == nil`,
+    # which falls through to the unconditional drain clause instead -> a
+    # `:budget_exhausted` halt leaves `machine_state.running` true (ADR-0019),
+    # so the queued event is wrongly drained too, re-running the livelocked
+    # document to a second budget exhaustion and appending a second
+    # `{:halted, :budget_exhausted}` to the stream, reddening the count
+    # assertion below. Reverted and confirmed green.
+    test "an event entry after a halt stays queued with no further stream messages" do
+      machine = compile!(livelock_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test", max_macrostep_rounds: 5)
+        |> Recording.put_event(event("ignored"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.status == :budget_exhausted
+      assert Enum.count(result.stream, &match?({:halted, :budget_exhausted}, &1)) == 1
+    end
+
+    # sabotage: `perform/3`'s `Enum.reduce/3` is changed from `Effects.plan()
+    # |> Enum.reduce(...)` to `Effects.plan() |> Enum.reverse() |>
+    # Enum.reduce(...)`, reversing instruction order within one batch -> the
+    # two `{:effect, {:log, _}}` messages arrive in reverse order, reddening
+    # the assertion. Reverted and confirmed green.
+    test "a multi-effect batch preserves effect order in the stream" do
+      machine = compile!(two_state_doc())
+
+      log_one = {:log, %Effect.Log{label: "one", value: nil, macrostep: 1, microstep: 1}}
+      log_two = {:log, %Effect.Log{label: "two", value: nil, macrostep: 1, microstep: 1}}
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([log_one, log_two])
+
+      assert {:ok, result} = Replay.run(recording)
+
+      assert result.stream == [
+               {:effect, log_one},
+               {:effect, log_two}
+             ]
+    end
+  end
+end
