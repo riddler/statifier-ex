@@ -74,7 +74,8 @@ defmodule Statifier.Lowering do
     "foreach" => &Builders.build_foreach/2,
     "script" => &Builders.build_script/2,
     "invoke" => &Builders.build_invoke/2,
-    "finalize" => &Builders.build_finalize/2
+    "finalize" => &Builders.build_finalize/2,
+    "send" => &Builders.build_send/2
   }
 
   @doc """

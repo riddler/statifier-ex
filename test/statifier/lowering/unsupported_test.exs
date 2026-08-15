@@ -47,21 +47,8 @@ defmodule Statifier.Lowering.UnsupportedTest do
       assert_unsupported(xml, "cancel")
     end
 
-    # sabotage: `Lowering`'s dispatch map grows a stray "send" entry
-    # dispatching to `build_log/2` -> this test reddens because `<send>`
-    # builds a `Log` and lands in `Block.content` instead of being reported
-    # unsupported
-    test "<send> under <onentry>" do
-      xml = ~s(<scxml><state id="s"><onentry><send event="e"/></onentry></state></scxml>)
-      assert_unsupported(xml, "send")
-    end
-
-    # sabotage: same dispatch-map addition as above, checked from a
-    # transition's own content instead of a block's
-    test "<send> under a <transition>" do
-      xml = ~s(<scxml><state id="s"><transition><send event="e"/></transition></state></scxml>)
-      assert_unsupported(xml, "send")
-    end
+    # `<send>` moved the same way - see
+    # `test/statifier/lowering/send_test.exs` for its own coverage.
 
     # `<foreach>` moved from this deferred set to the supported set in
     # st-af3.6 Phase 1 - see `test/statifier/lowering/content_test.exs` for

@@ -149,7 +149,11 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   # is raised as a platform event..." test): no module under
   # `lib/statifier/machine/content/` mentions `error.execution` or `Event`,
   # so a future leaf that raises its own error fails here even before it
-  # reaches a behavioral test.
+  # reaches a behavioral test. `Event(?!Data)` (not a bare `"Event"`
+  # substring) since `Machine.Content.Send` has a legitimate dependency on
+  # `Statifier.EventData` - B.2.8.1's payload coercion, not `Statifier.Event`
+  # construction or raising - and a bare substring match would misfire on
+  # that module name.
   #
   # sabotage: a line reading `# Event error.execution` is appended to
   # `lib/statifier/machine/content/raise.ex` -> the offenders list below
@@ -162,7 +166,7 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
     offenders =
       for file <- files,
           text = File.read!(file),
-          String.contains?(text, "error.execution") or String.contains?(text, "Event") do
+          String.contains?(text, "error.execution") or Regex.match?(~r/Event(?!Data)/, text) do
         file
       end
 

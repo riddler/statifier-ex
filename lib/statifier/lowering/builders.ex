@@ -28,6 +28,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Param
   alias Statifier.Document.Raise
   alias Statifier.Document.Script
+  alias Statifier.Document.Send
   alias Statifier.Document.State
   alias Statifier.Document.Transition
   alias Statifier.Lowering
@@ -808,6 +809,60 @@ defmodule Statifier.Lowering.Builders do
   end
 
   @doc """
+  Builds a `%Statifier.Document.Send{}` from a `<send>` element (spec 6.2),
+  tagged `{:content_node, send}` - unlike `<invoke>`, `<send>` is executable
+  content, so it lands in a block's `content` list through the existing
+  `{:content_node, _}` placement clauses rather than a dedicated state-level
+  slot.
+
+  Reads all eleven of 6.2.1's own attributes, each raw and nilable
+  (`Statifier.Document.Send`'s moduledoc: mutually exclusive pairs are
+  simultaneously representable so the validator can report the shape).
+  `<param>` and `<content>` children are placed onto `Send.params`/`.content`
+  by `place/3`'s own `%Send{}` clauses, mirroring `%Invoke{}`'s.
+  """
+  @spec build_send(element :: Element.t(), ctx :: map()) ::
+          {{:content_node, Send.t()}, [Error.t()]}
+  def build_send(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    attribute_locations =
+      %{}
+      |> Attributes.put_location(:event, element, "event")
+      |> Attributes.put_location(:eventexpr, element, "eventexpr")
+      |> Attributes.put_location(:target, element, "target")
+      |> Attributes.put_location(:targetexpr, element, "targetexpr")
+      |> Attributes.put_location(:type, element, "type")
+      |> Attributes.put_location(:typeexpr, element, "typeexpr")
+      |> Attributes.put_location(:id, element, "id")
+      |> Attributes.put_location(:idlocation, element, "idlocation")
+      |> Attributes.put_location(:delay, element, "delay")
+      |> Attributes.put_location(:delayexpr, element, "delayexpr")
+      |> Attributes.put_location(:namelist, element, "namelist")
+
+    send_node = %Send{
+      location: element.location,
+      event: Attributes.value(element, "event"),
+      eventexpr: Attributes.value(element, "eventexpr"),
+      target: Attributes.value(element, "target"),
+      targetexpr: Attributes.value(element, "targetexpr"),
+      type: Attributes.value(element, "type"),
+      typeexpr: Attributes.value(element, "typeexpr"),
+      id: Attributes.value(element, "id"),
+      idlocation: Attributes.value(element, "idlocation"),
+      delay: Attributes.value(element, "delay"),
+      delayexpr: Attributes.value(element, "delayexpr"),
+      namelist: Attributes.list(element, "namelist"),
+      attribute_locations: attribute_locations
+    }
+
+    {send_node, place_errors} = place_children(results, send_node, element.name)
+    send_node = reverse_lists(send_node)
+
+    {{:content_node, send_node}, errors ++ place_errors}
+  end
+
+  @doc """
   Builds a `%Statifier.Document.Block{}` from a `<finalize>` element (spec
   6.5), tagged `{:finalize, block}`.
 
@@ -950,6 +1005,14 @@ defmodule Statifier.Lowering.Builders do
     {%{parent | finalize: block}, nil}
   end
 
+  defp place({:param, param}, %Send{} = parent, _parent_name) do
+    {%{parent | params: [param | parent.params]}, nil}
+  end
+
+  defp place({:content, content}, %Send{} = parent, _parent_name) do
+    {%{parent | content: content}, nil}
+  end
+
   defp place({:datamodel, datamodel}, %Document{} = parent, _parent_name) do
     {%{parent | datamodel_element: datamodel}, nil}
   end
@@ -1066,6 +1129,7 @@ defmodule Statifier.Lowering.Builders do
   defp content_node_name(%If{}), do: "if"
   defp content_node_name(%Foreach{}), do: "foreach"
   defp content_node_name(%Script{}), do: "script"
+  defp content_node_name(%Send{}), do: "send"
 
   @spec reverse_lists(container :: struct()) :: struct()
   defp reverse_lists(%State{} = state) do
@@ -1105,6 +1169,10 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Invoke{} = invoke) do
     %{invoke | params: Enum.reverse(invoke.params)}
+  end
+
+  defp reverse_lists(%Send{} = send_node) do
+    %{send_node | params: Enum.reverse(send_node.params)}
   end
 
   # `%If{}`'s branches were built newest-first (`place/3`'s `%If{}` clauses
