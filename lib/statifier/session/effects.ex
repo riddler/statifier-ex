@@ -48,14 +48,13 @@ defmodule Statifier.Session.Effects do
   invoke_index}, []}` and nothing else - 3.12.2 puts an unsupported `type`
   in `error.execution`'s class ("errors internal to the execution of the
   document"), the same class `<send>`'s own unsupported-type check uses,
-  because no communication is attempted at all. Everything else still plans
-  `{:unroutable, effect}`, pending the child-start work a later phase adds
-  (ADR-0027 decision 3, ADR-0038).
+  because no communication is attempted at all. A supported `type` plans
+  `{:start_child, invoke, effect}` instead - `Statifier.Session` resolves
+  the source, seeds the child's datamodel, and starts it (ADR-0027 decision
+  3, ADR-0038).
 
   `{:unroutable, effect}` survives for `:cancel_invoke` and `:autoforward`
-  unconditionally, and for `:invoke` with a supported `type` - later,
-  separate work, not this vocabulary's - since there is still no child
-  session to route any of them to.
+  unconditionally, pending the routing work later phases add.
   """
 
   alias Statifier.Effect
@@ -82,6 +81,7 @@ defmodule Statifier.Session.Effects do
           | {:schedule, send_id :: String.t() | nil, delay_ms :: non_neg_integer(),
              Target.route(), Event.t(), Effect.t()}
           | {:cancel_timers, send_id :: String.t()}
+          | {:start_child, Invoke.t(), Effect.t()}
           | {:unroutable, Effect.t()}
           | {:halt, :done | :budget_exhausted}
 
@@ -190,7 +190,7 @@ defmodule Statifier.Session.Effects do
   @spec plan_invoke(invoke :: Invoke.t(), effect :: Effect.t()) :: [instruction()]
   defp plan_invoke(invoke, effect) do
     if Target.supported_invoke_type?(invoke.type) do
-      [{:unroutable, effect}]
+      [{:start_child, invoke, effect}]
     else
       [
         {:raise, :platform, "error.execution", {:invoke, invoke.state_index, invoke.invoke_index},

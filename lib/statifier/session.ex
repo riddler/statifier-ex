@@ -101,14 +101,40 @@ defmodule Statifier.Session do
   or named a session that has since died - takes C.1's mandated
   `error.communication` path on the *sending* session's own internal queue,
   through the private `communication_error/4` resolver. `#_parent` and
-  `#_<invokeid>` resolve to `error.communication` the same way - there is
-  no invocation table yet (that is a later bead's work), so a later bead
-  changes that resolver, not this module's `{:deliver, ...}` clause. An
-  unsupported `type` or an unparseable `target` raises `error.execution`
-  the same way, at plan time.
-  `:invoke`, `:cancel_invoke`, and `:autoforward` still plan as
-  `{:unroutable, effect}`: there is no child session to route any of them
-  to yet. See `Statifier.Session.Effects` and `Statifier.Session.Target`.
+  `#_<invokeid>` still resolve to `error.communication` the same way - the
+  invocation table this module now holds (`Statifier.Session.Invocations`)
+  answers "which child does `<invoke>` start", not yet "where does
+  `#_parent`/`#_<invokeid>` deliver"; a later bead changes each resolver in
+  turn, not this module's `{:deliver, ...}` clause. An unsupported `type` or
+  an unparseable `target` raises `error.execution` the same way, at plan
+  time. `:cancel_invoke` and `:autoforward` still plan as
+  `{:unroutable, effect}`, pending later routing work. See
+  `Statifier.Session.Effects` and `Statifier.Session.Target`.
+
+  ## Starting an invocation's child session
+
+  `{:invoke, %Effect.Invoke{}}` with a supported `type` plans
+  `{:start_child, invoke, effect}` (`Statifier.Session.Effects`). Performing
+  it resolves `invoke.content`/`invoke.src` through `Statifier.Invoke.Source`
+  (`state.invoke_source`, the embedder-supplied resolver from `start_link/2`
+  ADR-0038 hands off to), seeds the resolved child `Machine.t()`'s datamodel
+  through `Statifier.Session.Invocations.seed_datamodel/2` (spec 6.4.3's
+  name-matched `<param>`/namelist seeding), and starts it on
+  `Statifier.SessionSupervisor` via `Statifier.start_session/2` with
+  `invoked_by: {self(), invoke.invoke_id}`. Success monitors the child and
+  records `{pid, session_id, monitor_ref, autoforward}` in
+  `state.invocations`; either a resolve failure or a
+  `Statifier.start_session/2` failure raises `error.communication` on this
+  session's own internal queue instead (Decision 4: 3.12.2 names `<invoke>`
+  outright as a communication-error source), through the private
+  `invoke_error/4` resolver, and writes no table entry - "terminate the
+  processing of the element without further action."
+
+  A session started with `invoked_by: {parent_pid, invoke_id}` (an invoked
+  child) monitors `parent_pid` in turn: the parent's `:DOWN` stops this
+  session (a child whose parent is gone has nobody to report to), and a
+  monitored child's own `:DOWN` pops its entry from `state.invocations` -
+  both checked ahead of the ordinary subscriber `:DOWN` clause.
 
   ## Two snapshot shapes
 
@@ -144,13 +170,16 @@ defmodule Statifier.Session do
 
   alias Statifier.Effect
   alias Statifier.Effect.Done
+  alias Statifier.Effect.Invoke
   alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Interpreter
+  alias Statifier.Invoke.Source
   alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Session.Effects
   alias Statifier.Session.Inbox
+  alias Statifier.Session.Invocations
   alias Statifier.Session.Recording
   alias Statifier.Session.Target
   alias Statifier.Session.Timers
@@ -165,10 +194,13 @@ defmodule Statifier.Session do
       :done_effect,
       :inbox,
       :timers,
+      :invoke_source,
+      :invoked_by,
       timer_refs: %{},
       subscribers: %{},
       halted: nil,
-      recording: nil
+      recording: nil,
+      invocations: Invocations.new()
     ]
 
     @type t :: %__MODULE__{
@@ -180,7 +212,10 @@ defmodule Statifier.Session do
             timer_refs: %{reference() => reference()},
             subscribers: %{pid() => reference()},
             halted: :done | :cancelled | :budget_exhausted | nil,
-            recording: Statifier.Session.Recording.t() | nil
+            recording: Statifier.Session.Recording.t() | nil,
+            invocations: Statifier.Session.Invocations.t(),
+            invoke_source: (String.t() -> {:ok, Machine.t()} | {:error, term()}) | nil,
+            invoked_by: {pid(), String.t()} | nil
           }
   end
 
@@ -228,6 +263,16 @@ defmodule Statifier.Session do
       `Statifier.Session.Recording.t()` that captures every delivered event,
       timer firing, cancel marker, and `interpret/2` batch this session
       handles, in input order (ADR-0029). Read it back with `recording/1`.
+    - `:invoke_source` - a `(src :: String.t() -> {:ok, Machine.t()} |
+      {:error, term()})` function this session hands to
+      `Statifier.Invoke.Source.resolve/2` for every `<invoke src="...">` it
+      starts (ADR-0038). `nil` (the default) leaves every `src`-only
+      invocation unresolved, per `Statifier.Invoke.Source`'s own contract.
+    - `:invoked_by` - `{parent_pid, invoke_id}`, set by
+      `Statifier.Session` itself when it starts a child for an `<invoke>`
+      (never set by an ordinary caller). Makes this session monitor
+      `parent_pid`, so a dead parent stops it in turn ("Starting an
+      invocation's child session" above).
   """
   @spec start_link(machine :: Machine.t(), opts :: keyword()) :: GenServer.on_start()
   def start_link(%Machine{} = machine, opts \\ []) do
@@ -368,16 +413,37 @@ defmodule Statifier.Session do
         Recording.new(machine, Keyword.put(machine_opts, :session_id, session_id))
       end
 
+    invoked_by = Keyword.get(opts, :invoked_by)
+    monitor_parent(invoked_by)
+
     state = %State{
       machine_state: machine_state,
       session_id: session_id,
       inbox: Inbox.new(),
       timers: Timers.new(),
       subscribers: subscribers,
-      recording: recording
+      recording: recording,
+      invocations: Invocations.new(),
+      invoke_source: Keyword.get(opts, :invoke_source),
+      invoked_by: invoked_by
     }
 
     {:ok, perform(state, effects), {:continue, :drain}}
+  end
+
+  # `invoked_by` is `nil` for every session started as a plain document (the
+  # common case) and `{parent_pid, invoke_id}` for a child `Statifier.Session`
+  # starts to serve an `<invoke>` ("Starting an invocation's child session",
+  # this module's own moduledoc). Monitoring the parent here, rather than
+  # leaving it to the parent's own side, is what makes a brutally-killed
+  # parent take its children down (ADR-0027 decision 3): the child's own
+  # `:DOWN` clause below stops it the moment that monitor fires.
+  @spec monitor_parent(invoked_by :: {pid(), String.t()} | nil) :: :ok
+  defp monitor_parent(nil), do: :ok
+
+  defp monitor_parent({parent_pid, _invoke_id}) do
+    Process.monitor(parent_pid)
+    :ok
   end
 
   # ADR-0027 decision 2: registration happens here, not by a caller-supplied
@@ -510,10 +576,27 @@ defmodule Statifier.Session do
     {:noreply, state, {:continue, :drain}}
   end
 
+  # This session's own invoking parent has gone down (`monitor_parent/1`'s
+  # own comment) - a child with nobody to report to has nothing left to do.
+  # Ahead of the general clause below on purpose: `pid` here is
+  # `state.invoked_by`'s own parent pid, which is never also a subscriber or
+  # an invocation this session started, so clause order never actually
+  # picks between them for one `:DOWN` - but stating the parent case first
+  # is what the moduledoc's own ordering claim documents.
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, %State{invoked_by: {pid, _id}} = state) do
+    {:stop, :normal, state}
+  end
+
   def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
-    case Map.get(state.subscribers, pid) do
-      ^ref -> {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
-      _other -> {:noreply, state}
+    case Invocations.pop_by_pid(state.invocations, pid) do
+      {{_invoke_id, _entry}, invocations} ->
+        {:noreply, %{state | invocations: invocations}}
+
+      {nil, _unchanged} ->
+        case Map.get(state.subscribers, pid) do
+          ^ref -> {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
+          _other -> {:noreply, state}
+        end
     end
   end
 
@@ -639,6 +722,21 @@ defmodule Statifier.Session do
     %{state | timers: timers, timer_refs: timer_refs}
   end
 
+  # 6.4's own body: resolve the child's source, seed its datamodel from the
+  # name-matched `<param>`/namelist map, start it, and monitor it - or, on
+  # any failure along the way, raise `error.communication` (Decision 4) and
+  # write no table entry ("terminate the processing of the element without
+  # further action"). `Statifier.Invoke.Source.resolve/2` and
+  # `Statifier.start_session/2` are the two ways this can fail; both reach
+  # `invoke_error/4` the same way, so a caller reading the effect stream
+  # cannot (and need not) tell them apart.
+  defp perform_instruction({:start_child, %Invoke{} = invoke, effect}, state, override) do
+    case Source.resolve(invoke, invoke_source: state.invoke_source) do
+      {:ok, machine} -> start_child(machine, invoke, effect, state, override)
+      {:error, _reason} -> invoke_error(invoke, effect, state, override)
+    end
+  end
+
   defp perform_instruction({:unroutable, effect}, state, _override) do
     notify(state, {:unroutable, effect})
     state
@@ -649,6 +747,88 @@ defmodule Statifier.Session do
     state = %{state | halted: reason}
     notify(state, {:halted, reason})
     state
+  end
+
+  # -- <invoke> starting -----------------------------------------------
+
+  # `Source.resolve/2` succeeded: seed the child's datamodel (6.4.3), start
+  # it on `Statifier.SessionSupervisor` with `invoked_by: {self(),
+  # invoke.invoke_id}` (this module's own moduledoc, "Starting an
+  # invocation's child session"), and record it in `state.invocations` on
+  # success. `Statifier.start_session/2`'s own `{:error, _}` - most commonly
+  # `Statifier.SessionSupervisor` not running - is Decision 4's other
+  # failure path, handled identically to a `Source.resolve/2` failure.
+  @spec start_child(
+          machine :: Machine.t(),
+          invoke :: Invoke.t(),
+          effect :: Effect.t(),
+          state :: State.t(),
+          override :: :cancelled | nil
+        ) :: State.t()
+  defp start_child(machine, invoke, effect, state, override) do
+    datamodel = Invocations.seed_datamodel(invoke.params, machine)
+
+    case start_session(machine, invoke, datamodel) do
+      {:ok, pid} ->
+        entry = %{
+          session_id: session_id(pid),
+          pid: pid,
+          monitor_ref: Process.monitor(pid),
+          autoforward: invoke.autoforward == true
+        }
+
+        %{state | invocations: Invocations.put(state.invocations, invoke.invoke_id, entry)}
+
+      {:error, _reason} ->
+        invoke_error(invoke, effect, state, override)
+    end
+  end
+
+  # `Statifier.start_session/2`'s own moduledoc promises `DynamicSupervisor.start_child/2`'s
+  # `{:ok, pid} | {:error, term}` "most commonly `Statifier.SessionSupervisor`
+  # itself not being started" - but `Statifier.SessionSupervisor` unstarted is
+  # an *unregistered name*, and `GenServer.call/3` to one **exits** the caller
+  # rather than returning `{:error, _}` (confirmed empirically: `Registry.lookup/2`
+  # raises `ArgumentError` on the same condition, which is a different failure
+  # shape from a `GenServer.call` to a name nothing is registered under).
+  # `registry_lookup/1` below already exists to fold exactly this kind of
+  # "no runtime placed" failure into `{:error, _}` for the registry; this does
+  # the same for the session-start call, so a bare parent (no
+  # `Statifier.Supervisor` anywhere) reaches `invoke_error/4` above instead of
+  # crashing.
+  @spec start_session(machine :: Machine.t(), invoke :: Invoke.t(), datamodel :: map()) ::
+          {:ok, pid()} | {:error, term()}
+  defp start_session(machine, invoke, datamodel) do
+    Statifier.start_session(machine,
+      invoked_by: {self(), invoke.invoke_id},
+      datamodel: datamodel
+    )
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  # Decision 4's `error.communication` write: the same ADR-0037
+  # `deliver_internal/5` door `communication_error/4` uses, with `<invoke>`'s
+  # own origin (`{:invoke, state_index, invoke_index}`, spec 3.12.2's
+  # "arising from `<send>` and `<invoke>`") and no `sendid` - there is no
+  # triggering `<send>` here to name one. `effect` is accepted but unused:
+  # the origin is built from `invoke` alone, kept as a parameter for the same
+  # symmetry `communication_error/4`'s own signature has with its caller.
+  @spec invoke_error(
+          invoke :: Invoke.t(),
+          effect :: Effect.t(),
+          state :: State.t(),
+          override :: :cancelled | nil
+        ) :: State.t()
+  defp invoke_error(invoke, _effect, state, override) do
+    deliver_internal(
+      :platform,
+      "error.communication",
+      {:invoke, invoke.state_index, invoke.invoke_index},
+      [],
+      state,
+      override
+    )
   end
 
   # -- <send> routing --------------------------------------------------

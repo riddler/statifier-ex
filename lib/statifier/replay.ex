@@ -106,6 +106,7 @@ defmodule Statifier.Replay do
 
   alias Statifier.Effect
   alias Statifier.Effect.Done
+  alias Statifier.Effect.Invoke
   alias Statifier.Event
   alias Statifier.Interpreter
   alias Statifier.MachineState
@@ -380,6 +381,17 @@ defmodule Statifier.Replay do
       {count, pending} ->
         %{state | pending: pending, raced: Map.update(state.raced, send_id, count, &(&1 + count))}
     end
+  end
+
+  # A child process is not replayable (ADR-0034): every contribution it made
+  # to the parent's run is already in the recorded event log, reached
+  # through the parent's own `{:internal, ...}`/`{:event, ...}` entries, not
+  # through re-starting the child. The `{:notify, effect}` instruction
+  # always planned ahead of this one (`Statifier.Session.Effects.plan_one/2`)
+  # has already appended the `{:invoke, _}` effect itself to `stream`; this
+  # clause starts nothing.
+  defp perform_instruction({:start_child, %Invoke{}, _effect}, state, _override) do
+    state
   end
 
   defp perform_instruction({:unroutable, effect}, state, _override) do
