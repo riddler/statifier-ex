@@ -1,6 +1,6 @@
 # ADR-0035: The send id is `send_<n>` off a new `machine_state.send_counter`
 
-Status: accepted (2026-08-15)
+Status: accepted (2026-08-15) - amended 2026-08-15 (st-mvna: cross-session sendid collision recorded harmless)
 
 ## Context
 
@@ -79,6 +79,59 @@ established: one struct field, one typespec line, one key in
 survives; "UXID" does not. `st-cmq.3`'s description should be read with this
 substitution in mind rather than edited to match, since the bead's wording is
 historical context for the decision, not the decision itself.
+
+**Cross-session collision of generated sendids is harmless, and here is
+why.** *(Amended 2026-08-15, st-mvna.)* Per-session counters mean every
+session's first generated id is `send_1`, so once cross-session delivery
+works (st-cmq.5) a receiving session can see a sendid that is unique only
+within its sender. Three walls, each independently sufficient, make that a
+non-defect rather than a latent one:
+
+- A generated sendid usually never leaves its session at all. C.1:
+
+  > The 'sendid' field of the event raised in the receiving session MUST
+  > match the sendid in the sending session, if the author of the sending
+  > session specifies either the 'id' or 'idlocation' attribute. If the
+  > author does not specify either the 'id' or 'idlocation' attribute,
+  > the 'sendid' field MUST be left empty.
+
+  The implementation honors this: `Statifier.Session.Effects` stamps
+  `sendid: if(send.id_from_author?, do: send.send_id)` on delivered
+  events, and `id_from_author?` is true only when the author wrote `id`
+  or `idlocation` (`lib/statifier/machine/content/send.ex`). The one
+  generated id that does cross is `idlocation`'s - the author asked for
+  the platform id by name - which is the next wall's case.
+
+- A received sendid is inert data, not an identifier the receiver can act
+  on. The only platform operation keyed on a sendid is `<cancel>`, and
+  spec 6.3 confines it to the sender:
+
+  > The SCXML Processor MUST NOT allow <cancel> to affect events that
+  > were not raised in the same session.
+
+  The implementation cannot violate that even by accident: a `{:cancel,
+  %Effect.Cancel{}}` plans to `{:cancel_timers, send_id}` and
+  `Timers.take(state.timers, send_id)` resolves against the cancelling
+  session's own GenServer state (`lib/statifier/session/effects.ex`,
+  `lib/statifier/session.ex`) - there is no lookup path from a sendid to
+  another session's timers. What remains for a received `_event.sendid`
+  is author-level correlation, and an author correlating replies from
+  several senders must key on the pair (`_event.origin`,
+  `_event.sendid`), which is unique; C.1 delivers `origin` for exactly
+  that reason. A bare sendid was never a cross-session key in the spec's
+  model either.
+
+- `error.communication`'s sendid stays home. 5.10.1 sets it "in the case
+  of error events triggered by a failed attempt to send an event ... to
+  the send id of the triggering <send> element", and 6.2.4 places that
+  error on the *sending* session's internal queue - where `send_N` is
+  unique by construction. ADR-0037 (session-detected send failures) keeps
+  the same routing.
+
+Were a real defect ever found here, the fix still could not be "make it a
+UXID" - ADR-0003 bars the core from entropy - it would be qualifying the
+id with the session id, and this record would be re-opened for it. No such
+case is known; the collision is recorded as harmless.
 
 ## Consequences
 

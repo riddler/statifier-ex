@@ -1,6 +1,6 @@
 # ADR-0008: UXID for generated identifiers
 
-Status: accepted (2026-08-02) - amended 2026-08-15 (invoke id format; invoke platformid is a session counter, not a UXID)
+Status: accepted (2026-08-02) - amended 2026-08-15 (invoke id format; invoke platformid is a session counter, not a UXID) - amended 2026-08-15 (st-mvna: the uxid dependency is dropped; the format decisions stand)
 
 ## Context
 
@@ -160,6 +160,49 @@ invocation's own life. "Generated once at creation" still holds - it is
 the invocation, not the syntactic `<invoke>` element, whose creation the
 rule is about.
 
+**The uxid dependency is dropped; the format outlives the library.**
+*(Amended 2026-08-15, st-mvna.)* After the amendment above, `UXID.generate!`
+has exactly one call site in the library: the session id in
+`MachineState.new/2` (`lib/statifier/machine_state.ex:423`,
+`Keyword.get_lazy(opts, :session_id, fn -> UXID.generate!(prefix: "sess")
+end)`). Send ids and invoke ids are `%MachineState{}` counters and are out
+of reach permanently - ADR-0003 forbids the core a clock or a CSPRNG, and
+ADR-0035 and the invoke amendment above already decided both. One call site
+does not justify a dependency every embedder inherits, because everything
+this record wanted from the library is a property of the *format*, not the
+implementation: a stable `sess_` prefix, lexicographic sort by creation
+time, and a hyphen-free body so a double-click selects the whole id.
+
+`MachineState.new/2` therefore mints the session id inline: `"sess_"` plus
+a lowercase Crockford base32 encoding of a 48-bit big-endian
+`System.os_time(:millisecond)` timestamp followed by at least 80 bits of
+`:crypto.strong_rand_bytes/1` output. That is the same
+timestamp-then-randomness layout UXID's defaults produce (48-bit time, 10
+random bytes), so all three format properties survive, and the entropy
+that makes session ids unique **across** sessions - what the ADR-0027
+registry and parent/child routing depend on - is kept at full strength.
+The generator runs outside the pure core, exactly where the UXID call sat;
+nothing about the core/non-core split above moves.
+
+The monotonicity question, answered before the dependency call was made:
+dropping the library loses no within-millisecond monotonicity, because the
+engine never had it. UXID's monotonic mode is opt-in - a per-call
+`monotonic:` option or the `:uxid` application env, and `UXID.monotonic/0`
+defaults to `false` - and this library passes no such option and sets no
+such env, so two `sess_` ids minted in the same millisecond already sorted
+in random relative order. Nothing observes that order anyway: session ids
+are compared for equality and embedded in routing strings (registry keys
+per ADR-0027, `#_scxml_` + sessionid targets per C.1, `_sessionid` and
+`_ioprocessors` values, ADR-0029's recorded input) and are never sorted -
+no `Enum.sort` in `lib/` touches a session id. Sortability by creation
+*millisecond* survives in the new layout; ties within one millisecond stay
+unordered, exactly as before.
+
+Everything else in this record stands: the `sess_` prefix, the core/non-core
+split, "generated once at the owning entity's creation", and both counter
+decisions. This amendment reverses only the "use this library" half of the
+original decision - the record is amended, not superseded.
+
 ## Consequences
 
 - Log lines, effects, and error events are self-describing. Time-sortability
@@ -184,3 +227,24 @@ rule is about.
 - *(2026-08-15)* An id-shape change before any child-session mechanics
   exist (st-cmq.7) breaks no compatibility: no persisted run, external
   service, or sibling session has ever seen a UXID-form invoke id.
+- *(2026-08-15, st-mvna)* `{:uxid, "~> 2.9"}` leaves `mix.exs` and
+  `mix.lock`; embedders inherit one fewer transitive dependency. No
+  compatibility break: a `sess_` id is opaque to every consumer - compared,
+  registered under, and embedded in routing strings, never parsed or
+  decoded - and the inline layout keeps the same prefix-underscore-base32
+  shape.
+- *(2026-08-15, st-mvna)* The ADR guard's `@uxid_adhoc_pattern`
+  (`lib/mix/statifier/adr_guard.ex`) flags `:crypto.strong_rand_bytes(` as
+  ad-hoc id generation. The inline generator's site must carry an
+  `ADR-0008` citation comment (the guard's escape pattern), and the finding
+  message "ADR-0008 makes generated IDs UXIDs" should be reworded by the
+  implementing bead - the check's substance, no ad-hoc id minting outside
+  this record's formats, is unchanged and stays enforced.
+- *(2026-08-15, st-mvna)* Prose that reads "`sess_` UXID" (moduledocs in
+  `session.ex`, `supervisor.ex`, `session/recording.ex`,
+  `evaluator/system_variables.ex`, `machine_state.ex`;
+  `docs/architecture.md`, `docs/datamodel.md`) becomes "`sess_` id" as the
+  implementing bead touches it - the format is this record's, not the
+  library's. Implementation is that separate bead's whole scope: `mix.exs`
+  (area:build) and `machine_state.ex` (area:interpreter); this record
+  changes no code.
