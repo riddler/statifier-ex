@@ -210,7 +210,7 @@ defmodule Statifier.Evaluator do
   # own normalization, recursively, so every existing "seeded-but-unbound
   # reads as undefined" test (W3C test319/335/337/339, this module's own
   # `_event`/`_event.data` tests) keeps its predicator-5.x answer under
-  # predicator 7.x. It does not (and, per the corpus, does not need to)
+  # predicator 8.x. It does not (and, per the corpus, does not need to)
   # distinguish a genuine assigned `null` from an unbound datamodel entry -
   # no corpus document assigns one, and `docs/research/260812-st-unt-*` and
   # `docs/research/260812-st-af3.3-*` already record that gap as latent
