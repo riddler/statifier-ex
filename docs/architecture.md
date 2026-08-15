@@ -123,15 +123,24 @@ Decision 5, for why it was widened once).
 `Statifier.Session` is the GenServer effect interpreter (ADR-0003): it owns the
 outer `while running` loop, the waiting external events, the delayed-send
 timers, `<cancel>`'s effect, and the fan-out of the effect stream to
-subscribers. Child sessions, `#_parent` routing, `autoforward`, and
-`<finalize>` are not built yet; `<invoke type="scxml">` (v1 never implemented
-it) will eventually spawn a real child session with that routing once they
-land. v1's handler-registry invoke is kept as an explicit extension type - a
-useful, safe escape hatch, but not the definition of `<invoke>`.
+subscribers. The pure core now lowers, validates, and compiles `<invoke>`
+([ADR-0031](adr/0031-invoke-argument-failure-aborts-the-invocation.md)),
+runs Appendix D's `statesToInvoke` and cancel-invoke passes
+([ADR-0032](adr/0032-round-budget-spans-the-invoke-re-entry.md) covers the
+round budget across a post-invoke re-entry), runs `<finalize>` before
+transition selection, and emits `{:invoke, _}`, `{:cancel_invoke, _}`, and
+`{:autoforward, _}` effects for the session to act on. What is still missing
+is the child-session half: no process is spawned, no `done.invoke.<id>` is
+generated, and `#_parent`/`#_invokeid` routing and delivery do not exist yet -
+that is st-cmq.7. v1's handler-registry invoke is kept as an explicit
+extension type - a useful, safe escape hatch, but not the definition of
+`<invoke>`.
 
 Session, send, and invoke IDs are UXIDs ([ADR-0008](adr/0008-uxid-for-identifiers.md)):
 sortable, prefixed (`sess_`, `send_`, `inv_`), and stable per session (v1 regenerated
-`_sessionid` on every expression evaluation).
+`_sessionid` on every expression evaluation). An invoke's generated id is a
+narrow amendment to that scheme (spec 6.4.1): the invoking state's id, a dot,
+then the `inv_` UXID - or the bare `inv_` UXID when the state has no id.
 
 ## What is deliberately out of scope
 
