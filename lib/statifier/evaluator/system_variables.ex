@@ -61,9 +61,9 @@ defmodule Statifier.Evaluator.SystemVariables do
 
   @doc """
   `_event`'s value for `event` - spec 5.10.1's fields. `sendid`, `origin`,
-  `origintype`, and `invokeid` are `nil` because `Statifier.Event` does not
-  carry them yet (its own moduledoc); they become real once `<send>` and
-  `<invoke>` land.
+  and `origintype` are `nil` because `Statifier.Event` does not carry them
+  yet (its own moduledoc); they become real once `<send>` lands. `invokeid`
+  is `event.invokeid` - `Statifier.Event`'s own first reader of that field.
   """
   @spec event(event :: Event.t()) :: map()
   def event(%Event{} = event) do
@@ -73,7 +73,7 @@ defmodule Statifier.Evaluator.SystemVariables do
       "sendid" => nil,
       "origin" => nil,
       "origintype" => nil,
-      "invokeid" => nil,
+      "invokeid" => event.invokeid,
       "data" => event.data
     }
   end

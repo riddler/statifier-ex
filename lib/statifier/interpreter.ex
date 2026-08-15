@@ -132,6 +132,19 @@ defmodule Statifier.Interpreter do
     outer loop - a self-call of the private `main_event_loop/3` - which is
     why the round budget has to span it (ADR-0032; see the deviation
     comment above `defp main_event_loop/3`).
+  - **The finalize/autoforward pass runs once per external event, inside
+    `handle_event/2`, before transition selection.** `apply_invoke_passes/2`
+    walks the full `configuration` (ADR-0005), and for each state's
+    compiled `invoke` list, in document order: when a live invocation's
+    invokeid equals the external event's own `invokeid`, its `<finalize>`
+    runs in the pure core (`Statifier.Machine.Invoke.finalize`'s
+    absent/empty/populated split, spec 6.5); when it autoforwards, one
+    `{:autoforward, %Effect.Autoforward{}}` carries the event on, verbatim,
+    for the session to deliver (Decision 6 - not `Effect.Send`, since 6.4
+    requires an exact copy of every 5.10.1 field). Neither `if` is inside
+    the other's `else`: a matching, autoforwarding invocation does both,
+    exactly as Appendix D's own two separate `if`s read. The walk
+    short-circuits to a no-op when `active_invocations == %{}`.
   - **`returnDoneEvent` becomes a returned effect, appended last.**
     `exit_interpreter/1` builds `{:done, %Effect.Done{}}` instead of
     performing an I/O call (ADR-0003), and appends it after `Trace.Done`
@@ -167,6 +180,7 @@ defmodule Statifier.Interpreter do
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Interpreter.Selection
   alias Statifier.Machine
+  alias Statifier.Machine.Block
   alias Statifier.Machine.Invoke, as: MInvoke
   alias Statifier.Machine.Param
   alias Statifier.Machine.Transition
@@ -400,8 +414,8 @@ defmodule Statifier.Interpreter do
   caller instead of a blocking queue read (ADR-0003, `main_event_loop/1`'s
   own `@doc`). Rejects when the machine is not running - Appendix D's own
   `running` flag, so the guard reads as the pseudocode's loop condition -
-  otherwise begins a new macrostep, selects on `event`, runs whatever it
-  enables, and folds to quiescence.
+  otherwise begins a new macrostep, runs the finalize/autoforward pass,
+  selects on `event`, runs whatever it enables, and folds to quiescence.
   """
   @spec handle_event(machine_state :: MachineState.t(), event :: Event.t()) ::
           {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
@@ -413,16 +427,285 @@ defmodule Statifier.Interpreter do
     dequeued =
       Effect.trace(machine_state, Effect.Trace.EventDequeued, event: event, from: :external)
 
-    # `datamodel["_event"] = externalEvent` (Appendix D); the invoke
-    # `finalize` and `autoforward` passes over the configuration are
-    # st-cmq's.
+    # `datamodel["_event"] = externalEvent` (Appendix D)
     machine_state = MachineState.put_event(machine_state, event)
+
+    # `for state in configuration: for inv in state.invoke: if inv.invokeid
+    # == externalEvent.invokeid: applyFinalize(inv, externalEvent); if
+    # inv.autoforward: send(inv.id, externalEvent)` (Appendix D) -
+    # `apply_invoke_passes/2` below, in the pseudocode's own position:
+    # after `_event` is assigned, before `selectTransitions`.
+    {machine_state, invoke_pass_effects} = apply_invoke_passes(machine_state, event)
 
     {machine_state, transitions} = Selection.select_transitions(machine_state, event)
     {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
-    {:ok, machine_state, dequeued ++ selected_effects ++ loop_effects}
+    {:ok, machine_state, dequeued ++ invoke_pass_effects ++ selected_effects ++ loop_effects}
+  end
+
+  # `for state in configuration: for inv in state.invoke: if inv.invokeid
+  # == externalEvent.invokeid: applyFinalize(inv, externalEvent); if
+  # inv.autoforward: send(inv.id, externalEvent)` (Appendix D `:152-158`) -
+  # the finalize/autoforward pass. Walks the **full** `configuration`
+  # (every entered state, ancestors included - `MachineState.configuration`
+  # already is that set, ADR-0005), not `states_to_invoke`: an ancestor
+  # entered several macrosteps ago can still own a live invocation whose
+  # finalize this event must reach. The `autoforward` test is deliberately
+  # **not** in an `else` of the invokeid-match test - an invocation that
+  # matches *and* autoforwards does both, exactly as the pseudocode's two
+  # separate `if`s read.
+  #
+  # `active_invocations == %{}` short-circuits to a no-op: with no live
+  # invocation, no `inv.invokeid` can ever equal `externalEvent.invokeid`
+  # and no invocation can be autoforwarded to, so skipping the walk finds
+  # exactly what walking it would have found - nothing. This is the same
+  # observational-equivalence argument `Statifier.Machine.Content`'s
+  # `execute_block/3` empty-block clause and this module's own untraced
+  # `Effect.trace/3` gate already rely on, not a new semantic deviation
+  # (ADR-0002).
+  #
+  # `configuration` sorts into document order via `Machine.document_order/2`
+  # for a deterministic effect list - Appendix D's own loop names no sort
+  # for this walk (unlike the invoke pass's `statesToInvoke.sort(entryOrder)`),
+  # so this is a choice with no ordering constraint to conflict with, not a
+  # deviation from one.
+  @spec apply_invoke_passes(machine_state :: MachineState.t(), event :: Event.t()) ::
+          {MachineState.t(), [Effect.t()]}
+  defp apply_invoke_passes(
+         %MachineState{active_invocations: invocations} = machine_state,
+         %Event{}
+       )
+       when map_size(invocations) == 0 do
+    {machine_state, []}
+  end
+
+  defp apply_invoke_passes(%MachineState{machine: machine} = machine_state, %Event{} = event) do
+    state_order = Machine.document_order(machine, machine_state.configuration)
+
+    Enum.reduce(state_order, {machine_state, []}, fn state_index, {ms, effects} ->
+      {ms, state_effects} = apply_invoke_passes_for_state(ms, state_index, event)
+      {ms, effects ++ state_effects}
+    end)
+  end
+
+  # One state's own `for inv in state.invoke: ...` (Appendix D) -
+  # `state.invoke` is already compiled in document order.
+  @spec apply_invoke_passes_for_state(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          event :: Event.t()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp apply_invoke_passes_for_state(
+         %MachineState{machine: machine} = machine_state,
+         state_index,
+         event
+       ) do
+    state = Machine.at(machine, state_index)
+
+    state.invoke
+    |> Enum.with_index()
+    |> Enum.reduce({machine_state, []}, fn {invoke, invoke_index}, {ms, effects} ->
+      {ms, new_effects} =
+        apply_invoke_passes_for_invocation(ms, state_index, invoke, invoke_index, event)
+
+      {ms, effects ++ new_effects}
+    end)
+  end
+
+  # One `<invoke>`'s own body of the pass. `active_invocations`'s lookup
+  # stands in for Appendix D's `inv.invokeid`/`inv.id` (`MachineState`'s own
+  # moduledoc section on the hoist): an invocation with no entry there never
+  # started (ADR-0031) or has already been cancelled, so it can neither
+  # match an invokeid nor be forwarded to, and both `if`s are skipped for it
+  # - the same no-op a never-started or already-gone `inv` would be in the
+  # pseudocode, which has no `inv.invokeid`/`inv.id` to read at all in that
+  # case.
+  @spec apply_invoke_passes_for_invocation(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke :: MInvoke.t(),
+          invoke_index :: non_neg_integer(),
+          event :: Event.t()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp apply_invoke_passes_for_invocation(machine_state, state_index, invoke, invoke_index, event) do
+    case Map.fetch(machine_state.active_invocations, {state_index, invoke_index}) do
+      :error ->
+        {machine_state, []}
+
+      {:ok, invoke_id} ->
+        {machine_state, finalize_effects} =
+          if invoke_id == event.invokeid do
+            apply_finalize(machine_state, state_index, invoke, invoke_index, event)
+          else
+            {machine_state, []}
+          end
+
+        autoforward_effects =
+          autoforward_effect(machine_state, state_index, invoke, invoke_id, event)
+
+        {machine_state, finalize_effects ++ autoforward_effects}
+    end
+  end
+
+  # `if inv.autoforward: send(inv.id, externalEvent)` (Appendix D) - one
+  # `{:autoforward, %Effect.Autoforward{}}` carrying `event` verbatim
+  # (Decision 6: not `Effect.Send`, since 6.4 requires an exact copy of
+  # every 5.10.1 field and `Effect.Send` only ever *builds* an event from
+  # `<send>` attributes).
+  @spec autoforward_effect(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke :: MInvoke.t(),
+          invoke_id :: String.t(),
+          event :: Event.t()
+        ) :: [Effect.t()]
+  defp autoforward_effect(
+         _machine_state,
+         _state_index,
+         %MInvoke{autoforward: false},
+         _invoke_id,
+         _event
+       ),
+       do: []
+
+  defp autoforward_effect(
+         machine_state,
+         state_index,
+         %MInvoke{autoforward: true},
+         invoke_id,
+         event
+       ) do
+    [
+      {:autoforward,
+       %Effect.Autoforward{
+         invoke_id: invoke_id,
+         state_index: state_index,
+         event: event,
+         macrostep: machine_state.macrostep,
+         microstep: machine_state.microstep
+       }}
+    ]
+  end
+
+  # `applyFinalize(inv, externalEvent)` (Appendix D) - the three-way split
+  # spec 6.5 draws structurally on `Machine.Invoke.finalize` (that struct's
+  # own moduledoc): `nil` is absent (no-op), `%Block{content: []}` is empty
+  # (the namelist/`<param location>` auto-assign), anything else runs
+  # through the ordinary block runner exactly like an `<onentry>`/`<onexit>`
+  # block, owned by `{:finalize, state_index, invoke_index}`
+  # (`Statifier.Machine.Content.owner/0`, ADR-0028's threaded context).
+  @spec apply_finalize(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke :: MInvoke.t(),
+          invoke_index :: non_neg_integer(),
+          event :: Event.t()
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp apply_finalize(machine_state, _state_index, %MInvoke{finalize: nil}, _invoke_index, _event) do
+    {machine_state, []}
+  end
+
+  defp apply_finalize(
+         machine_state,
+         state_index,
+         %MInvoke{finalize: %Block{content: []}} = invoke,
+         invoke_index,
+         event
+       ) do
+    {auto_assign_finalize(machine_state, state_index, invoke, invoke_index, event), []}
+  end
+
+  defp apply_finalize(
+         machine_state,
+         state_index,
+         %MInvoke{finalize: %Block{content: c_indexes}},
+         invoke_index,
+         _event
+       ) do
+    Content.execute_block(machine_state, {:finalize, state_index, invoke_index}, c_indexes)
+  end
+
+  # 6.5's empty-`<finalize>` case: "for each item in the 'namelist'
+  # attribute and each such `<param>` element, the Processor MUST update the
+  # corresponding location as if by `<assign>` with any return value that
+  # has a name that matches the 'namelist' item or the 'name' of the
+  # `<param>` element" - read from the local spec cache, quoted verbatim.
+  # Only a map `event.data` can carry named return values at all; anything
+  # else (nil, a bare string from `{:text, _}` coercion) has nothing to
+  # match against, so this is a no-op.
+  @spec auto_assign_finalize(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke :: MInvoke.t(),
+          invoke_index :: non_neg_integer(),
+          event :: Event.t()
+        ) :: MachineState.t()
+  defp auto_assign_finalize(machine_state, state_index, invoke, invoke_index, %Event{data: data})
+       when is_map(data) do
+    context = Evaluator.context(machine_state)
+
+    {machine_state, _context} =
+      (invoke.namelist ++ invoke.params)
+      |> Enum.filter(&(&1.kind == :location))
+      |> Enum.reduce({machine_state, context}, fn param, {ms, ctx} ->
+        case Map.fetch(data, param.name) do
+          {:ok, value} -> write_finalize_target(ms, ctx, state_index, invoke_index, param, value)
+          :error -> {ms, ctx}
+        end
+      end)
+
+    machine_state
+  end
+
+  defp auto_assign_finalize(machine_state, _state_index, _invoke, _invoke_index, %Event{}),
+    do: machine_state
+
+  # The write itself, through the same `Datamodel.write_location/4` an
+  # `<assign>` uses (Phase 4's extraction). `param.expr` for a `kind:
+  # :location` entry is always `{:compiled, _compiled, source}` -
+  # `Statifier.Compiler.Expressions.compile/3` is the only builder either a
+  # namelist entry or a `<param location>` ever goes through
+  # (`Statifier.Compiler`'s `build_param/6`), and it never returns
+  # `{:static, _}`. A write failure raises `error.execution` with origin
+  # `{:finalize, state_index, invoke_index}` - `Cause.origin/0`'s own arm for
+  # exactly this block-less write, distinct from the `{:content, c_index,
+  # owner}` arm a *populated* `<finalize>`'s own failures raise through
+  # `Interpreter.Content.execute_block/3` - and the context is left
+  # unrebound for that entry, matching that same module's "nodes that
+  # already ran keep the effects they already produced" rule one level
+  # down: a failed write for one target does not undo or block another.
+  @spec write_finalize_target(
+          machine_state :: MachineState.t(),
+          context :: Predicator.Context.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          param :: Param.t(),
+          value :: term()
+        ) :: {MachineState.t(), Predicator.Context.t()}
+  defp write_finalize_target(
+         machine_state,
+         context,
+         state_index,
+         invoke_index,
+         %Param{expr: {:compiled, _compiled, source}},
+         value
+       ) do
+    case Datamodel.write_location(machine_state, context, source, value) do
+      {:ok, machine_state, context} ->
+        {machine_state, context}
+
+      {:error, reason} ->
+        machine_state =
+          MachineState.raise_platform(
+            machine_state,
+            "error.execution",
+            {:finalize, state_index, invoke_index},
+            data: reason
+          )
+
+        {machine_state, context}
+    end
   end
 
   @doc """
