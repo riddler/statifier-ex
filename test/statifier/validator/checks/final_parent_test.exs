@@ -29,7 +29,9 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:error, [%Error{reason: {:final_parent_missing_id, "done"}} = error]} = validate!(xml)
+    assert {:error, [%Error{reason: {:final_parent_missing_id, "done"}} = error], _warnings} =
+             validate!(xml)
+
     assert error.location.start_line == 2
   end
 
@@ -45,7 +47,7 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:ok, _document} = validate!(xml)
+    assert {:ok, _document, _warnings} = validate!(xml)
   end
 
   # sabotage: offending?/1 recurses into descendants (`Enum.any?(children,
@@ -63,7 +65,7 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:ok, _document} = validate!(xml)
+    assert {:ok, _document, _warnings} = validate!(xml)
   end
 
   # sabotage: offending?/1's `id: nil` head dropped so every parent matches
@@ -78,7 +80,7 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:ok, _document} = validate!(xml)
+    assert {:ok, _document, _warnings} = validate!(xml)
   end
 
   # sabotage: check/2's flatten call replaced with
@@ -93,7 +95,7 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:ok, _document} = validate!(xml)
+    assert {:ok, _document, _warnings} = validate!(xml)
   end
 
   # sabotage: check/2's filter narrowed to `&(&1.kind == :state)` (mirroring
@@ -108,7 +110,8 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:error, [%Error{reason: {:final_parent_missing_id, "done"}}]} = validate!(xml)
+    assert {:error, [%Error{reason: {:final_parent_missing_id, "done"}}], _warnings} =
+             validate!(xml)
   end
 
   # sabotage: n/a - asserts that Checks.Ids' own {:empty_id} guarantee holds
@@ -123,7 +126,7 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:error, errors} = validate!(xml)
+    assert {:error, errors, _warnings} = validate!(xml)
     reasons = Enum.map(errors, & &1.reason)
     assert {:empty_id} in reasons
   end
@@ -143,6 +146,6 @@ defmodule Statifier.Validator.Checks.FinalParentTest do
     </scxml>
     """
 
-    assert {:error, [%Error{reason: {:final_parent_missing_id, "a"}}]} = validate!(xml)
+    assert {:error, [%Error{reason: {:final_parent_missing_id, "a"}}], _warnings} = validate!(xml)
   end
 end

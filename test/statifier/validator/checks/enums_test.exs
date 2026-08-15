@@ -32,7 +32,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:transition_bad_type, "sideways"}} = error]} =
+      assert {:error, [%Error{reason: {:transition_bad_type, "sideways"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -53,7 +53,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: out_of_range/5's `:error` arm returns a report built from
@@ -71,7 +71,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: transition_type_errors/1 keeps only `{:plain, _}` owners out
@@ -97,7 +97,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
 
       assert [{:transition_bad_type, "sideways"}, {:transition_bad_type, "upward"}] =
                errors
@@ -121,7 +121,8 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:scxml_bad_binding, "whenever"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:scxml_bad_binding, "whenever"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 1
       assert error.message == ~s(binding "whenever" must be "early" or "late")
@@ -138,7 +139,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
         </scxml>
         """
 
-        assert {:ok, _document} = validate!(xml)
+        assert {:ok, _document, _warnings} = validate!(xml)
       end
     end
 
@@ -154,7 +155,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -170,7 +171,8 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:scxml_bad_datamodel, "cobol"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:scxml_bad_datamodel, "cobol"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 1
       assert error.message =~ "cobol"
@@ -187,7 +189,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same drop as above, exercised for every allowed value at
@@ -200,7 +202,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
         </scxml>
         """
 
-        assert {:ok, _document} = validate!(xml)
+        assert {:ok, _document, _warnings} = validate!(xml)
       end
     end
 
@@ -216,7 +218,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -234,7 +236,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}} = error]} =
+      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -254,7 +256,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
         </scxml>
         """
 
-        assert {:ok, _document} = validate!(xml)
+        assert {:ok, _document, _warnings} = validate!(xml)
       end
     end
 
@@ -273,7 +275,8 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}}], _warnings} =
+               validate!(xml)
     end
 
     # sabotage: out_of_range/5's `:error` arm (shared with the other
@@ -290,7 +293,7 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -312,7 +315,8 @@ defmodule Statifier.Validator.Checks.EnumsTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:history_bad_type, "sideways"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:history_bad_type, "sideways"}}], _warnings} =
+               validate!(xml)
     end
   end
 end

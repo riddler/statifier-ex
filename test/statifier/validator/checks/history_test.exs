@@ -74,7 +74,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:history_bad_parent, "h", :scxml}} = error]} =
+      assert {:error, [%Error{reason: {:history_bad_parent, "h", :scxml}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 2
@@ -98,7 +98,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert %Error{reason: {:history_bad_parent, "h", :final}} = error = find(errors, "h")
       assert error.location.start_line == 4
     end
@@ -121,7 +121,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert %Error{reason: {:history_bad_parent, "inner", :history}} = find(errors, "inner")
     end
 
@@ -141,7 +141,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: compound_parent?/1 gains a %State{kind: :parallel} clause
@@ -160,7 +160,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -179,7 +179,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:transition_count, {:history, "h"}, 0}} = error]} =
+      assert {:error, [%Error{reason: {:transition_count, {:history, "h"}, 0}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 4
@@ -201,7 +202,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [error]} = validate!(xml)
+      assert {:error, [error], _warnings} = validate!(xml)
       assert error.message =~ "<history>"
       refute error.message =~ "<initial>"
     end
@@ -225,7 +226,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: target_descendancy_errors/3's Enum.reject(&Context.descendant?/3)
@@ -244,7 +245,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_not_descendant, "outside", "a"}} = error]} =
+      assert {:error, [%Error{reason: {:initial_not_descendant, "outside", "a"}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 5
@@ -267,7 +269,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:unresolved_target, "missing"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:unresolved_target, "missing"}}], _warnings} =
+               validate!(xml)
     end
   end
 
@@ -288,7 +291,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:history_bad_type, "sideways"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:history_bad_type, "sideways"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
     end
 
@@ -309,7 +314,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: compound?/1 drops :state from its kind list -> the
@@ -329,7 +334,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: compound?/1 drops :state from its kind list -> the
@@ -349,7 +354,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 

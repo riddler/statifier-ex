@@ -33,7 +33,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error]} =
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 4
@@ -54,7 +54,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: check_content/1 reports whenever `text` is non-blank,
@@ -71,7 +71,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: blank?/1 tests `text == ""` instead of trimming ->
@@ -90,7 +90,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: contents/1 returns only the first offending state's content
@@ -112,7 +112,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:error, [first, second]} = validate!(xml)
+      assert {:error, [first, second], _warnings} = validate!(xml)
       assert %Error{reason: {:content_expr_and_text, "a"}} = first
       assert %Error{reason: {:content_expr_and_text, "b"}} = second
       assert first.location.start_line == 4
@@ -135,7 +135,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error]} =
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 5
@@ -155,7 +155,7 @@ defmodule Statifier.Validator.Checks.ContentTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error]} =
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 4

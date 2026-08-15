@@ -33,7 +33,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
 
       assert %Error{reason: {:default_entry_not_enterable, "a", :history}} =
                error =
@@ -63,7 +63,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: candidate?/1's `states: [_first | _rest]` non-empty guard is
@@ -79,7 +79,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: check_state/1's `[%State{kind: :history} = first | _rest]`
@@ -101,7 +101,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: candidate?/1 drops its `kind: :state` conjunct (matching any
@@ -127,7 +127,7 @@ defmodule Statifier.Validator.Checks.DefaultEntryTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 

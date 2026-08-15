@@ -32,7 +32,8 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 4
       assert error.message =~ "expr"
@@ -53,7 +54,7 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: check_assign/1 drops its `%DAssign{expr: nil}` head, so the
@@ -73,7 +74,7 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same branch swap as the first two tests in this describe -
@@ -92,7 +93,7 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: assigns/1 covers only `state.onentry` and drops the
@@ -110,7 +111,7 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}}], _warnings} = validate!(xml)
     end
 
     # sabotage: `flatten/1` stops at the document's top-level states instead
@@ -129,7 +130,8 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -152,7 +154,8 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -174,7 +177,8 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 5
     end
@@ -198,7 +202,8 @@ defmodule Statifier.Validator.Checks.AssignTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
 
       assert error.location.start_line == 6
     end

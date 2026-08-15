@@ -54,13 +54,22 @@ defmodule Statifier do
   that fails. `Statifier.Parser.parse/1` is the one stage that reports a
   single error rather than a list; this function wraps it so every failure
   from every stage has one shape: `{:error, [error()]}`.
+
+  `Validator.validate/2` returns three elements on both arms (ADR-0033); its
+  warnings are discarded here rather than threaded onto the result, and its
+  error arm's extra element is collapsed back to this function's own
+  `{:error, [error()]}` shape so this stage's failure looks like every other
+  stage's.
   """
   @spec compile(source :: binary()) :: {:ok, Machine.t()} | {:error, [error()]}
   def compile(source) when is_binary(source) do
     with {:ok, root} <- parse(source),
          {:ok, document} <- Lowering.lower(root),
-         {:ok, document} <- Validator.validate(document, source) do
+         {:ok, document, _warnings} <- Validator.validate(document, source) do
       Compiler.compile(document)
+    else
+      {:error, errors, _warnings} -> {:error, errors}
+      other -> other
     end
   end
 

@@ -30,7 +30,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: offending?/1 gains an erroneous `%State{kind: :state}, do:
@@ -46,7 +46,9 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:donedata_not_on_final, "s"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:donedata_not_on_final, "s"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
       assert error.message =~ "donedata"
     end
@@ -66,7 +68,9 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:donedata_not_on_final, "p"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:donedata_not_on_final, "p"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 5
     end
 
@@ -87,7 +91,9 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:donedata_not_on_final, "p"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:donedata_not_on_final, "p"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 6
     end
   end
@@ -109,7 +115,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: `content_and_params?/1`'s `%Donedata{params: []}` clause is
@@ -127,7 +133,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: `content_and_params?/1`'s catch-all `%Donedata{}, do: true`
@@ -145,7 +151,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:donedata_content_and_params, "f"}} = error]} =
+      assert {:error, [%Error{reason: {:donedata_content_and_params, "f"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -164,7 +170,7 @@ defmodule Statifier.Validator.Checks.DonedataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 end

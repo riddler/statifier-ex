@@ -30,7 +30,9 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:final_has_states, "s"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:final_has_states, "s"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
       assert error.message =~ "final"
     end
@@ -50,7 +52,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: check_final/1 reports the parent <final>'s own id instead
@@ -68,7 +70,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert length(errors) == 2
       assert %Error{reason: {:final_has_states, "a"}} = find(errors, "a")
       assert %Error{reason: {:final_has_states, "b"}} = find(errors, "b")
@@ -87,7 +89,9 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:final_has_states, "inner"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:final_has_states, "inner"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
     end
 
@@ -104,7 +108,9 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:final_has_states, "s"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:final_has_states, "s"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
     end
   end
@@ -124,7 +130,9 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:final_has_transitions, "done"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:final_has_transitions, "done"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 4
     end
 
@@ -143,7 +151,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [first, second]} = validate!(xml)
+      assert {:error, [first, second], _warnings} = validate!(xml)
       assert %Error{reason: {:final_has_transitions, "done"}} = first
       assert %Error{reason: {:final_has_transitions, "done"}} = second
       assert first.location.start_line == 4
@@ -163,7 +171,8 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:final_has_transitions, "the_end"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:final_has_transitions, "the_end"}}], _warnings} =
+               validate!(xml)
     end
 
     # sabotage: check_final/1 grows an `initial` arm of its own (reporting
@@ -178,7 +187,8 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_on_atomic_state, "done"}}]} = validate!(xml)
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, "done"}}], _warnings} =
+               validate!(xml)
     end
 
     # sabotage: check_final/1's transitions arm drops its `Enum.map` guard on
@@ -196,7 +206,7 @@ defmodule Statifier.Validator.Checks.FinalTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 

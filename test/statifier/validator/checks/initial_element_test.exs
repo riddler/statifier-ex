@@ -32,7 +32,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:initial_attribute_and_element, "a"}} = error]} =
+      assert {:error, [%Error{reason: {:initial_attribute_and_element, "a"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -52,7 +52,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: both_forms_errors/1 drops its `%State{initial: []}` clause
@@ -70,7 +70,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -88,7 +88,8 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:transition_count, {:initial, "a"}, 0}} = error]} =
+      assert {:error, [%Error{reason: {:transition_count, {:initial, "a"}, 0}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -113,7 +114,8 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:transition_count, {:initial, "a"}, 2}} = error]} =
+      assert {:error, [%Error{reason: {:transition_count, {:initial, "a"}, 2}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -135,7 +137,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -157,7 +159,8 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:transition_missing_target, {:initial, "a"}}} = error]} =
+      assert {:error, [%Error{reason: {:transition_missing_target, {:initial, "a"}}} = error],
+              _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 4
@@ -187,7 +190,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
                 %Error{
                   reason: {:transition_forbidden_attribute, {:initial, "a"}, :event}
                 } = error
-              ]} = validate!(xml)
+              ], _warnings} = validate!(xml)
 
       assert error.location.start_line == 4
     end
@@ -212,7 +215,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
                 %Error{
                   reason: {:transition_forbidden_attribute, {:initial, "a"}, :cond}
                 } = error
-              ]} = validate!(xml)
+              ], _warnings} = validate!(xml)
 
       assert error.location.start_line == 4
     end
@@ -233,7 +236,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -252,7 +255,7 @@ defmodule Statifier.Validator.Checks.InitialElementTest do
       </scxml>
       """
 
-      assert {:error, [error]} = validate!(xml)
+      assert {:error, [error], _warnings} = validate!(xml)
       assert error.message =~ "<initial>"
       refute error.message =~ "<history>"
     end

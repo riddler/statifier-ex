@@ -31,7 +31,9 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:data_expr_and_src, "x"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:data_expr_and_src, "x"}} = error], _warnings} =
+               validate!(xml)
+
       assert error.location.start_line == 3
       assert error.message =~ "x"
     end
@@ -49,7 +51,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same as above, mirrored for src alone
@@ -63,7 +65,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -81,7 +83,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:data_value_and_children, "x"}} = error]} =
+      assert {:error, [%Error{reason: {:data_value_and_children, "x"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -101,7 +103,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: value_and_children_errors/1's `%Data{expr: nil, src: nil},
@@ -118,7 +120,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -136,7 +138,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:data_reserved_id, "_reserved"}} = error]} =
+      assert {:error, [%Error{reason: {:data_reserved_id, "_reserved"}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 3
@@ -155,7 +157,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 
@@ -177,7 +179,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:datamodel_bad_parent, :final}} = error]} =
+      assert {:error, [%Error{reason: {:datamodel_bad_parent, :final}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 6
@@ -200,7 +202,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:datamodel_bad_parent, :history}} = error]} =
+      assert {:error, [%Error{reason: {:datamodel_bad_parent, :history}} = error], _warnings} =
                validate!(xml)
 
       assert error.location.start_line == 6
@@ -220,7 +222,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same widening as above, mirrored for :parallel
@@ -237,7 +239,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # sabotage: same widening as above, checking the document root
@@ -251,7 +253,7 @@ defmodule Statifier.Validator.Checks.DataTest do
       </scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
   end
 end

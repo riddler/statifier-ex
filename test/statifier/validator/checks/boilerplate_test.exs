@@ -28,7 +28,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
       </scxml>
       """
 
-      assert {:error, errors} = validate!(xml)
+      assert {:error, errors, _warnings} = validate!(xml)
       assert length(errors) == 2
 
       assert %Error{reason: {:bad_namespace, nil}} = find(errors, :bad_namespace)
@@ -53,7 +53,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
       </s:scxml>
       """
 
-      assert {:ok, _document} = validate!(xml)
+      assert {:ok, _document, _warnings} = validate!(xml)
     end
 
     # A bare `xmlns` naming a genuinely foreign namespace never reaches this
@@ -85,7 +85,8 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
 
       document = %{lower!(xml) | namespace: "http://example.com/other"}
 
-      assert {:error, [%Error{reason: {:bad_namespace, "http://example.com/other"}} = error]} =
+      assert {:error, [%Error{reason: {:bad_namespace, "http://example.com/other"}} = error],
+              _warnings} =
                Validator.validate(document, xml)
 
       assert error.location.start_line == 2
@@ -102,7 +103,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:bad_version, "2.0"}} = error]} = validate!(xml)
+      assert {:error, [%Error{reason: {:bad_version, "2.0"}} = error], _warnings} = validate!(xml)
       assert error.message =~ "2.0"
     end
   end

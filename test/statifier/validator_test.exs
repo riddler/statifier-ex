@@ -5,6 +5,7 @@ defmodule Statifier.ValidatorTest do
   alias Statifier.Parser
   alias Statifier.Validator
   alias Statifier.Validator.Error
+  alias Statifier.Validator.Warning
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -138,7 +139,7 @@ defmodule Statifier.ValidatorTest do
     test "passes clean and returns the input document unchanged" do
       document = lower!(@valid_document)
 
-      assert {:ok, ^document} = Validator.validate(document, @valid_document)
+      assert {:ok, ^document, []} = Validator.validate(document, @valid_document)
     end
 
     # sabotage: `Statifier.Validator.Checks.History.compound_parent?/1`'s
@@ -149,7 +150,7 @@ defmodule Statifier.ValidatorTest do
     test "the prefixed twin passes clean and returns the input document unchanged" do
       document = lower!(@valid_prefixed_document)
 
-      assert {:ok, ^document} = Validator.validate(document, @valid_prefixed_document)
+      assert {:ok, ^document, []} = Validator.validate(document, @valid_prefixed_document)
     end
   end
 
@@ -182,7 +183,7 @@ defmodule Statifier.ValidatorTest do
     # `Enum.flat_map` over every check) -> only one of the six distinct
     # codes below survives, reddening the six-distinct-codes assertion
     test "six distinct violations across six checks are all reported, once each, in document order" do
-      assert {:error, errors} = Validator.validate(lower!(@all_at_once), @all_at_once)
+      assert {:error, errors, _warnings} = Validator.validate(lower!(@all_at_once), @all_at_once)
 
       assert length(errors) == 6
 
@@ -200,6 +201,50 @@ defmodule Statifier.ValidatorTest do
 
       offsets = Enum.map(errors, & &1.location.start_offset)
       assert offsets == Enum.sort(offsets)
+    end
+  end
+
+  describe "validate/2 - both channels" do
+    @both_channels """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+        <state id="dup">
+            <invoke type="t">
+                <finalize>
+                    <raise event="x"/>
+                </finalize>
+            </invoke>
+        </state>
+        <state id="dup"/>
+    </scxml>
+    """
+
+    # sabotage: `validate/2`'s `errors -> {:error, errors}` clause drops
+    # `warnings` (reverting to the pre-tier two-element shape) -> this
+    # three-element pattern match fails with a `MatchError`, reddening this
+    # assertion
+    test "a document that trips both an error and a warning returns both, populated" do
+      assert {:error, [error], [warning]} =
+               Validator.validate(lower!(@both_channels), @both_channels)
+
+      assert %Error{reason: {:duplicate_id, "dup"}} = error
+      assert %Warning{reason: {:finalize_forbidden_content, "raise"}} = warning
+    end
+
+    # sabotage: `run/3`'s `|> Enum.sort_by(fn finding -> ...)` step is
+    # dropped, so `errors` and `warnings` are returned in `@checks`/
+    # `@warning_checks` list order instead of document order -> the
+    # errors-sorted assertion below reddens (the six checks that produce
+    # `@all_at_once`-shaped violations run in a fixed pipeline order that
+    # does not match the document's physical layout), demonstrating that
+    # the same shared `run/3` sort also backs the warning channel
+    test "warnings are sorted by start_offset, the same way errors are" do
+      assert {:error, errors, warnings} = Validator.validate(lower!(@all_at_once), @all_at_once)
+
+      error_offsets = Enum.map(errors, & &1.location.start_offset)
+      assert error_offsets == Enum.sort(error_offsets)
+
+      warning_offsets = Enum.map(warnings, & &1.location.start_offset)
+      assert warning_offsets == Enum.sort(warning_offsets)
     end
   end
 end
