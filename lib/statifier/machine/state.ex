@@ -31,17 +31,19 @@ defmodule Statifier.Machine.State do
   | `history_default` | `:history` - its default transition's `t_index` |
   | `donedata` | `:final` - the compiled `Machine.Donedata.t()`, or `nil` |
   | `data` | `:state`, `:parallel`, `:scxml` - the `d_index`es this state's own `<datamodel>` declares, `[]` when it has none |
+  | `invoke` | `:state`, `:parallel` - the compiled `Machine.Invoke.t()` list this state's own `<invoke>` children produced, in document order, `[]` when it has none |
 
   Every field above `donedata` is written in one pass: the compiler's
   state-interning walk builds each `%Statifier.Machine.State{}` whole, index
-  and `t_index`/`c_index` references included. `donedata` is the exception -
-  it is filled in after that walk, once the `<donedata>` compilation has run,
-  so it is the only field whose value is not known when the struct is first
-  built.
+  and `t_index`/`c_index` references included. `donedata` and `invoke` are
+  the exception - each is filled in after that walk, once its own
+  compilation pass has run, so they are the only fields whose values are not
+  known when the struct is first built.
   """
 
   alias Statifier.Machine.Block
   alias Statifier.Machine.Donedata
+  alias Statifier.Machine.Invoke
   alias Statifier.Parser.Location
 
   @enforce_keys [:index, :kind, :last, :location]
@@ -62,7 +64,8 @@ defmodule Statifier.Machine.State do
     initial_transition: nil,
     history_default: nil,
     donedata: nil,
-    data: []
+    data: [],
+    invoke: []
   ]
 
   @type t :: %__MODULE__{
@@ -82,6 +85,7 @@ defmodule Statifier.Machine.State do
           history_default: non_neg_integer() | nil,
           donedata: Donedata.t() | nil,
           data: [non_neg_integer()],
+          invoke: [Invoke.t()],
           location: Location.t()
         }
 end

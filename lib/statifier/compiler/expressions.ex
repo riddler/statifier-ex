@@ -38,6 +38,13 @@ defmodule Statifier.Compiler.Expressions do
   put a false index into the ADR-0012 index space, naming a block-runner
   slot that does not exist for this node; the integer here is instead the
   script's own position among `document.scripts`, in document order.
+
+  `{:invoke, state_index, invoke_index}` names one `<invoke>` element's own
+  attributes and children (`type`/`typeexpr`, `src`/`srcexpr`, a `<param>`,
+  a namelist entry, `<content>`) - `state_index` is the owning state, and
+  `invoke_index` is that invocation's position in the state's own `invoke`
+  list, mirroring `{:donedata_param, state_index, param_index}`'s shape
+  (`Statifier.Event.Cause.origin/0`).
   """
   @type owner_ref ::
           {:transition, non_neg_integer()}
@@ -45,6 +52,7 @@ defmodule Statifier.Compiler.Expressions do
           | {:donedata, non_neg_integer()}
           | {:data, non_neg_integer()}
           | {:global_script, non_neg_integer()}
+          | {:invoke, non_neg_integer(), non_neg_integer()}
 
   @doc """
   Compiles `source` into a `Machine.expr()`.

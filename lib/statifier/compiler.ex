@@ -91,6 +91,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Initial
+  alias Statifier.Document.Invoke, as: DInvoke
   alias Statifier.Document.Log, as: DLog
   alias Statifier.Document.Param, as: DParam
   alias Statifier.Document.Raise, as: DRaise
@@ -108,6 +109,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Content.Script, as: MScript
   alias Statifier.Machine.Data, as: MData
   alias Statifier.Machine.Donedata, as: MDonedata
+  alias Statifier.Machine.Invoke, as: MInvoke
   alias Statifier.Machine.Param, as: MParam
   alias Statifier.Machine.State, as: MState
   alias Statifier.Machine.Transition, as: MTransition
@@ -136,6 +138,22 @@ defmodule Statifier.Compiler do
   of `docs/plans/260813-st-af3.6-foreach-datamodel-iteration.md`) - mirroring
   `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
   shape (`:396-408`).
+
+  `invoke_acc`/`invoke_errors` belong to the `<invoke>` pass (Decision 4 of
+  `docs/plans/260815-st-cmq.6-invoke-lowering-and-states-to-invoke.md`) - the
+  one pass that does not fit the "numbered during the walk, compiled in a
+  deferred pass" split every other field above follows. A `Machine.Invoke`'s
+  `<finalize>` is executable content, so its `Machine.Block` needs the same
+  `c_next` counter every `<onentry>`/`<onexit>` block draws from
+  (`assign_blocks/2`), which only exists while the walk is threading `acc`
+  through `walk_siblings/4` - so the whole `%Statifier.Machine.Invoke{}`,
+  finalize block included, is built complete during the walk and
+  accumulated into `invoke_acc`, keyed by owning state index, rather than
+  deferred the way `donedata_acc` is. Building inline means a `typeexpr`/
+  `srcexpr`/`<content>`/`<param>`/namelist compile failure cannot join the
+  deferred passes' own `collect/1` merge the way `build_transitions/3`'s and
+  `build_contents/2`'s do - `invoke_errors` is where those land instead,
+  concatenated into `compile/1`'s own error merge before the final sort.
   """
   @type acc :: %{
           id_to_index: %{optional(String.t()) => non_neg_integer()},
@@ -156,7 +174,9 @@ defmodule Statifier.Compiler do
           d_next: non_neg_integer(),
           data_acc: %{
             optional(non_neg_integer()) => %{data: DData.t(), state_index: non_neg_integer()}
-          }
+          },
+          invoke_acc: %{optional(non_neg_integer()) => [MInvoke.t()]},
+          invoke_errors: [Error.t()]
         }
 
   @doc """
@@ -186,7 +206,9 @@ defmodule Statifier.Compiler do
       contents_acc: %{},
       donedata_acc: %{},
       d_next: 0,
-      data_acc: %{}
+      data_acc: %{},
+      invoke_acc: %{},
+      invoke_errors: []
     }
 
     # The root's own top-level <datamodel> is assigned before the walk, so
@@ -238,6 +260,7 @@ defmodule Statifier.Compiler do
         {:error, errors} -> errors
         {:ok, _value} -> []
       end)
+      |> Enum.concat(acc.invoke_errors)
       |> Enum.sort_by(& &1.location.start_offset)
 
     case errors do
@@ -253,6 +276,7 @@ defmodule Statifier.Compiler do
             Map.fetch!(states_acc, index)
             |> with_donedata(donedata_map)
             |> with_data(state_data_map)
+            |> with_invoke(acc.invoke_acc)
           end)
           |> List.to_tuple()
 
@@ -294,6 +318,18 @@ defmodule Statifier.Compiler do
   defp with_data(%MState{index: index} = mstate, state_data_map) do
     case Map.fetch(state_data_map, index) do
       {:ok, d_indexes} -> %{mstate | data: d_indexes}
+      :error -> mstate
+    end
+  end
+
+  # Attaches each state's own already-compiled `<invoke>` list, built during
+  # the walk into `invoke_acc` (Decision 4, unlike `donedata_map`'s deferred
+  # pass) - mirrors `with_donedata/2`.
+  @spec with_invoke(mstate :: MState.t(), invoke_acc :: %{non_neg_integer() => [MInvoke.t()]}) ::
+          MState.t()
+  defp with_invoke(%MState{index: index} = mstate, invoke_acc) do
+    case Map.fetch(invoke_acc, index) do
+      {:ok, invoke_list} -> %{mstate | invoke: invoke_list}
       :error -> mstate
     end
   end
@@ -341,6 +377,9 @@ defmodule Statifier.Compiler do
 
     acc = %{acc | donedata_acc: maybe_put_donedata(acc.donedata_acc, index, dstate.donedata)}
     acc = assign_data(dstate.datamodel_element, index, acc)
+
+    {invoke_list, acc} = build_invoke(dstate.invoke, index, acc)
+    acc = %{acc | invoke_acc: maybe_put_invoke(acc.invoke_acc, index, invoke_list)}
 
     {children, next_after_subtree, acc} = walk_siblings(dstate.states, index + 1, index, acc)
 
@@ -586,6 +625,20 @@ defmodule Statifier.Compiler do
 
   defp maybe_put_donedata(donedata_acc, index, %DDonedata{} = donedata),
     do: Map.put(donedata_acc, index, donedata)
+
+  # Mirrors `maybe_put_donedata/3`: a state with no `<invoke>` children never
+  # gets an `invoke_acc` entry, so `with_invoke/2`'s `Map.fetch/2` falls
+  # through to `MState.invoke`'s own `[]` default rather than writing an
+  # empty list back onto every state in the machine.
+  @spec maybe_put_invoke(
+          invoke_acc :: %{non_neg_integer() => [MInvoke.t()]},
+          index :: non_neg_integer(),
+          invoke_list :: [MInvoke.t()]
+        ) :: %{non_neg_integer() => [MInvoke.t()]}
+  defp maybe_put_invoke(invoke_acc, _index, []), do: invoke_acc
+
+  defp maybe_put_invoke(invoke_acc, index, invoke_list),
+    do: Map.put(invoke_acc, index, invoke_list)
 
   @spec maybe_put_id(id_to_index :: map(), id :: String.t() | nil, index :: non_neg_integer()) ::
           map()
@@ -1141,32 +1194,50 @@ defmodule Statifier.Compiler do
           {:ok, MParam.t()} | {:error, Error.t()}
   defp build_donedata_param(%DParam{expr: source, param_location: nil} = param, index)
        when not is_nil(source) do
-    build_param(param, :expr, source, index)
+    build_dparam(param, :expr, source, {:donedata, index})
   end
 
   defp build_donedata_param(%DParam{param_location: source} = param, index)
        when not is_nil(source) do
-    build_param(param, :location, source, index)
+    build_dparam(param, :location, source, {:donedata, index})
   end
 
-  @spec build_param(
+  # Shared by `build_donedata_param/2` and `build_invoke_param/2` (Decision
+  # 4, Phase 3) - the only difference between a `<donedata>`'s own `<param>`
+  # and an `<invoke>`'s own `<param>` is which `owner_ref` a compile failure
+  # is reported against.
+  @spec build_dparam(
           param :: DParam.t(),
           kind :: MParam.kind(),
           source :: String.t(),
-          index :: non_neg_integer()
+          owner :: Expressions.owner_ref()
         ) :: {:ok, MParam.t()} | {:error, Error.t()}
-  defp build_param(%DParam{name: name} = param, kind, source, index) do
-    param_expr_location = param_expr_location(param)
+  defp build_dparam(%DParam{name: name} = param, kind, source, owner) do
+    build_param(name, param.location, kind, source, param_expr_location(param), owner)
+  end
 
-    case Expressions.compile(source, {:donedata, index}, param_expr_location) do
+  # The one place an `MParam` is actually built - reused by `build_dparam/4`
+  # (a `<param>` element, `<donedata>`'s or `<invoke>`'s) and directly by
+  # `build_invoke_namelist/3` (a namelist entry, which has no `%DParam{}` of
+  # its own to read `name`/`location` off of).
+  @spec build_param(
+          name :: String.t(),
+          location :: Location.t(),
+          kind :: MParam.kind(),
+          source :: String.t(),
+          expr_location :: Location.t(),
+          owner :: Expressions.owner_ref()
+        ) :: {:ok, MParam.t()} | {:error, Error.t()}
+  defp build_param(name, location, kind, source, expr_location, owner) do
+    case Expressions.compile(source, owner, expr_location) do
       {:ok, expr} ->
         {:ok,
          %MParam{
            name: name,
            kind: kind,
            expr: expr,
-           expr_location: param_expr_location,
-           location: param.location
+           expr_location: expr_location,
+           location: location
          }}
 
       {:error, error} ->
@@ -1186,6 +1257,186 @@ defmodule Statifier.Compiler do
        }) do
     key = if is_nil(expr), do: :location, else: :expr
     Map.get(attribute_locations, key, location)
+  end
+
+  # Builds one state's own `<invoke>` list, complete - unlike `<donedata>`,
+  # not deferred (Decision 4, moduledoc's `invoke_acc`/`invoke_errors`
+  # section): `<finalize>` is executable content, so its `Machine.Block`
+  # must be built through `assign_blocks/2` while `acc.c_next` is still live,
+  # which only holds true during `walk_siblings/4` itself. Every other field
+  # is built here too, in the same pass, purely so one function builds one
+  # `%Statifier.Machine.Invoke{}` whole rather than splitting it between a
+  # walk-time half and a deferred half. Any compile failure (a bad
+  # `typeexpr`/`srcexpr`, `<content expr>`, `<param>`, or namelist entry) is
+  # recorded onto `acc.invoke_errors` rather than raised - `compile/1`
+  # discards the whole machine once `invoke_errors` is non-empty, so the
+  # invoking `%Machine.Invoke{}`'s own field stays `nil` in that case rather
+  # than carrying a half-compiled expression nothing will ever read.
+  @spec build_invoke(
+          invokes :: [DInvoke.t()],
+          state_index :: non_neg_integer(),
+          acc :: acc()
+        ) :: {[MInvoke.t()], acc()}
+  defp build_invoke(invokes, state_index, acc) do
+    invokes
+    |> Enum.with_index()
+    |> Enum.map_reduce(acc, fn {invoke, invoke_index}, acc ->
+      owner = {:invoke, state_index, invoke_index}
+
+      {type_expr, acc} =
+        build_invoke_pair(invoke.type, invoke.typeexpr, :typeexpr, invoke, owner, acc)
+
+      {src_expr, acc} =
+        build_invoke_pair(invoke.src, invoke.srcexpr, :srcexpr, invoke, owner, acc)
+
+      {content_expr, acc} = build_invoke_content(invoke.content, owner, acc)
+      {params, acc} = build_invoke_params(invoke.params, owner, acc)
+      {namelist, acc} = build_invoke_namelist(invoke.namelist, invoke, owner, acc)
+      {finalize, acc} = build_invoke_finalize(invoke.finalize, acc)
+
+      minvoke = %MInvoke{
+        index: invoke_index,
+        location: invoke.location,
+        type: type_expr,
+        src: src_expr,
+        id: invoke.id,
+        idlocation: invoke.idlocation,
+        namelist: namelist,
+        params: params,
+        content: content_expr,
+        autoforward: invoke.autoforward,
+        finalize: finalize,
+        attribute_locations: invoke.attribute_locations
+      }
+
+      {minvoke, acc}
+    end)
+  end
+
+  # `type`/`src` (Decision 4): the static attribute wins when both are
+  # somehow present on an unvalidated struct (6.4.1's mutual exclusion is the
+  # validator's, not this pass's, to enforce), compiled from the `expr`
+  # sibling attribute otherwise, `nil` when neither was written.
+  @spec build_invoke_pair(
+          static_value :: String.t() | nil,
+          compiled_source :: String.t() | nil,
+          expr_attr :: atom(),
+          invoke :: DInvoke.t(),
+          owner :: Expressions.owner_ref(),
+          acc :: acc()
+        ) :: {Machine.expr() | nil, acc()}
+  defp build_invoke_pair(static_value, _compiled_source, _expr_attr, _invoke, _owner, acc)
+       when not is_nil(static_value) do
+    {Expressions.static(static_value), acc}
+  end
+
+  defp build_invoke_pair(nil, nil, _expr_attr, _invoke, _owner, acc), do: {nil, acc}
+
+  defp build_invoke_pair(nil, source, expr_attr, invoke, owner, acc) do
+    location = invoke_attr_location(invoke, expr_attr)
+
+    case Expressions.compile(source, owner, location) do
+      {:ok, expr} -> {expr, acc}
+      {:error, error} -> {nil, %{acc | invoke_errors: [error | acc.invoke_errors]}}
+    end
+  end
+
+  @spec build_invoke_content(
+          content :: DContent.t() | nil,
+          owner :: Expressions.owner_ref(),
+          acc :: acc()
+        ) :: {Machine.expr() | nil, acc()}
+  defp build_invoke_content(nil, _owner, acc), do: {nil, acc}
+
+  defp build_invoke_content(%DContent{} = content, owner, acc) do
+    case build_content_expr(content, owner) do
+      {:ok, expr} -> {expr, acc}
+      {:error, error} -> {nil, %{acc | invoke_errors: [error | acc.invoke_errors]}}
+    end
+  end
+
+  @spec build_invoke_params(
+          params :: [DParam.t()],
+          owner :: Expressions.owner_ref(),
+          acc :: acc()
+        ) :: {[MParam.t()], acc()}
+  defp build_invoke_params(params, owner, acc) do
+    {results, acc} = Enum.map_reduce(params, acc, &build_invoke_param(&1, owner, &2))
+    {Enum.reject(results, &is_nil/1), acc}
+  end
+
+  defp build_invoke_param(%DParam{expr: source, param_location: nil} = param, owner, acc)
+       when not is_nil(source) do
+    collect_invoke_param(build_dparam(param, :expr, source, owner), acc)
+  end
+
+  defp build_invoke_param(%DParam{param_location: source} = param, owner, acc)
+       when not is_nil(source) do
+    collect_invoke_param(build_dparam(param, :location, source, owner), acc)
+  end
+
+  # Each namelist entry is a raw location-expression string, not a
+  # `%DParam{}` - `build_param/6` is called directly rather than through
+  # `build_dparam/4`, with the entry's own text doing double duty as both
+  # `MParam.name` (6.4.1: "the name of the location is the attribute") and
+  # the source to compile (`kind: :location` - the same location-as-value
+  # reading `Statifier.Machine.Param`'s moduledoc gives `<param location>`).
+  # The whole `namelist` attribute shares one written span
+  # (`invoke.attribute_locations[:namelist]`) - there is no per-entry span
+  # to point at instead.
+  @spec build_invoke_namelist(
+          namelist :: [String.t()],
+          invoke :: DInvoke.t(),
+          owner :: Expressions.owner_ref(),
+          acc :: acc()
+        ) :: {[MParam.t()], acc()}
+  defp build_invoke_namelist(namelist, invoke, owner, acc) do
+    location = invoke_attr_location(invoke, :namelist)
+
+    {results, acc} =
+      Enum.map_reduce(namelist, acc, fn name, acc ->
+        collect_invoke_param(
+          build_param(name, invoke.location, :location, name, location, owner),
+          acc
+        )
+      end)
+
+    {Enum.reject(results, &is_nil/1), acc}
+  end
+
+  @spec collect_invoke_param(
+          result :: {:ok, MParam.t()} | {:error, Error.t()},
+          acc :: acc()
+        ) :: {MParam.t() | nil, acc()}
+  defp collect_invoke_param({:ok, mparam}, acc), do: {mparam, acc}
+
+  defp collect_invoke_param({:error, error}, acc),
+    do: {nil, %{acc | invoke_errors: [error | acc.invoke_errors]}}
+
+  # `nil` stays `nil` (an `<invoke>` with no `<finalize>` child); a written
+  # `<finalize>` - even an empty one, spec 6.5's absent-versus-empty rule -
+  # is run through `assign_blocks/2` exactly as a state's own `onentry`/
+  # `onexit` blocks are, so its content shares the same dense, whole-machine
+  # `c_index` counter and a compile failure inside it surfaces through
+  # `build_contents/2`'s own deferred pass, not through `invoke_errors`.
+  @spec build_invoke_finalize(finalize :: DBlock.t() | nil, acc :: acc()) ::
+          {MBlock.t() | nil, acc()}
+  defp build_invoke_finalize(nil, acc), do: {nil, acc}
+
+  defp build_invoke_finalize(%DBlock{} = block, acc) do
+    {[mblock], acc} = assign_blocks([block], acc)
+    {mblock, acc}
+  end
+
+  # `invoke.attribute_locations[attr]`'s value span when the author wrote
+  # that attribute, the `<invoke>` node's own `location` otherwise - mirrors
+  # `cond_location/1`.
+  @spec invoke_attr_location(invoke :: DInvoke.t(), attr :: atom()) :: Location.t()
+  defp invoke_attr_location(
+         %DInvoke{attribute_locations: attribute_locations, location: location},
+         attr
+       ) do
+    Map.get(attribute_locations, attr, location)
   end
 
   # `<content>`'s folded value: the compiled arm from a written `expr`
