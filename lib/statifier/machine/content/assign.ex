@@ -25,12 +25,17 @@ defmodule Statifier.Machine.Content.Assign do
 
   Its `Statifier.ExecutableContent` implementation lives right below the
   struct: this file is the whole node, top to bottom, with no dispatcher
-  anywhere else in the tree.
+  anywhere else in the tree. The location-resolution, system-variable,
+  root-existence, and write mechanics (spec 5.4.2/5.9.2/5.10) live in
+  `Statifier.Interpreter.Datamodel.write_location/4` - extracted so
+  `idlocation` (6.4.1) and the empty-`<finalize>` auto-assign (6.5) can call
+  the same mechanics without duplicating them here.
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
   alias Statifier.Evaluator
   alias Statifier.ExecutableContent.Context
+  alias Statifier.Interpreter.Datamodel
   alias Statifier.Machine
   alias Statifier.Machine.Content.Assign
   alias Statifier.Parser.Location
@@ -59,40 +64,29 @@ defmodule Statifier.Machine.Content.Assign do
   defimpl Statifier.ExecutableContent do
     @moduledoc false
 
-    # spec 5.4.2/5.9.2's <assign>: evaluate the value, resolve `location`
-    # against the block's (pre-write) datamodel context, reject a resolved
-    # root that begins with "_" (Decision 5, spec 5.10 - a system variable),
-    # verify the resolved root already exists (Decision 4 - vivification
-    # never creates an undeclared top-level variable), then write into the
-    # *raw* `machine_state.datamodel` and bind the written root into the
-    # block's existing threaded datamodel context so a later node in the
-    # same block sees the write (ADR-0028 - this is the seam
-    # `Statifier.Interpreter.Content`'s moduledoc names as taken here, in the
-    # node, never in the runner). Binding just the written root rather than
-    # rebuilding the whole context is O(size of that root), not O(size of
-    # the datamodel) - the root is the first segment of `path`, so a deep
-    # vivifying write still binds the whole root it landed in. Every
-    # predicator failure becomes `{:error, reason}`, never a raise and never
-    # a platform notification of its own - the runner is the sole
-    # conversion site for that (ADR-0003).
+    # spec 5.4.2/5.9.2's <assign>: evaluate the value, then delegate
+    # `location`'s resolution, the "_"-rooted system-variable rejection
+    # (Decision 5, spec 5.10), the root-existence check (Decision 4 -
+    # vivification never creates an undeclared top-level variable), the
+    # write into the *raw* `machine_state.datamodel`, and the rebind of the
+    # written root into the block's threaded datamodel context (ADR-0028) to
+    # `Statifier.Interpreter.Datamodel.write_location/4` - the seam
+    # `Statifier.Interpreter.Content`'s moduledoc names as taken here, in
+    # the node, never in the runner. Every predicator failure becomes
+    # `{:error, reason}`, never a raise and never a platform notification of
+    # its own - the runner is the sole conversion site for that (ADR-0003).
     @spec execute(node :: Assign.t(), context :: Context.t()) ::
             {:ok, Context.t(), []} | {:error, term()}
-    def execute(%Assign{} = node, %Context{} = context) do
+    def execute(%Assign{location: location} = node, %Context{} = context) do
       with {:ok, value} <- evaluate_value(node, context),
-           {:ok, path} <- resolve_location(node, context),
-           :ok <- check_system_variable(path),
-           :ok <- check_root(node, context, path),
-           {:ok, new_datamodel} <- write(node, context, path, value) do
-        machine_state = %{context.machine_state | datamodel: new_datamodel}
-        [root | _rest] = path
-
-        {:ok,
-         %{
-           context
-           | machine_state: machine_state,
-             datamodel_context:
-               Evaluator.bind(context.datamodel_context, root, Map.fetch!(new_datamodel, root))
-         }, []}
+           {:ok, machine_state, datamodel_context} <-
+             Datamodel.write_location(
+               context.machine_state,
+               context.datamodel_context,
+               location,
+               value
+             ) do
+        {:ok, %{context | machine_state: machine_state, datamodel_context: datamodel_context}, []}
       end
     end
 
@@ -108,94 +102,6 @@ defmodule Statifier.Machine.Content.Assign do
 
     defp evaluate_value(%Assign{value: value}, %Context{datamodel_context: datamodel_context}) do
       Evaluator.evaluate(datamodel_context, value)
-    end
-
-    # Step 2: resolve `location` into a path. Resolution reads
-    # `datamodel_context.data` - the normalized view, so a bracket key such
-    # as `items[i]` reads `i` exactly as an expression would (Decision 2) -
-    # never the `%Predicator.Context{}` struct itself, which would also
-    # satisfy `context_location/3`'s `is_map/1` guard and then look up the
-    # wrong keys entirely.
-    @spec resolve_location(node :: Assign.t(), context :: Context.t()) ::
-            {:ok, Predicator.ContextLocation.location_path()} | {:error, term()}
-    defp resolve_location(%Assign{location: location}, %Context{
-           datamodel_context: %Predicator.Context{data: data}
-         }) do
-      case Predicator.context_location(location, data) do
-        {:ok, path} -> {:ok, path}
-        {:error, error} -> {:error, Evaluator.Error.new(location, error)}
-      end
-    end
-
-    # Step 3 (Decision 5, spec 5.10): the resolved root segment must not
-    # begin with "_". Spec 5.10: "Variable names beginning with '_' are
-    # reserved for system use[, and] A conformant SCXML document MUST NOT
-    # contain ids beginning with '_' in the <data> element" - and "The
-    # Processor MUST cause any attempt to change the value of a system
-    # variable to fail" (and, per that same clause, queue the runner's usual
-    # execution-failure event - left to the block runner's sole conversion
-    # site, ADR-0003, exactly like every other `{:error, reason}` this node
-    # returns). A prefix test on the *resolved* root (rather than a
-    # membership test against the four named variables,
-    # `_event`/`_sessionid`/`_name`/`_ioprocessors`) can never collide with a
-    # legitimate author id - the second quoted sentence above is exactly the
-    # licence for that - and it covers `_x` (5.10's platform-variable root)
-    # and any future system variable for free. Testing the resolved root
-    # rather than the raw `location` attribute string handles `_event.name`
-    # and `_event['name']` uniformly. This runs before Decision 4's
-    # root-existence check, so an undeclared system-looking root (e.g.
-    # `_undeclared`) reports as a system-variable violation rather than an
-    # unbound location.
-    @spec check_system_variable(path :: Predicator.ContextLocation.location_path()) ::
-            :ok | {:error, {:system_variable, String.t()}}
-    defp check_system_variable([root | _rest]) when is_binary(root) do
-      if String.starts_with?(root, "_") do
-        {:error, {:system_variable, root}}
-      else
-        :ok
-      end
-    end
-
-    defp check_system_variable(_path), do: :ok
-
-    # Step 4 (Decision 4): the resolved root segment must already be a key
-    # of `machine_state.datamodel` - predicator's own `put/3` would happily
-    # vivify an undeclared root, but 5.9.2 requires this to fail when a
-    # location "cannot be evaluated to yield a valid location", and
-    # `docs/datamodel.md`'s scope commitment is auto-vivification of
-    # *intermediate* containers, never creation of undeclared top-level
-    # variables (`test286_test.exs`).
-    @spec check_root(
-            node :: Assign.t(),
-            context :: Context.t(),
-            path :: Predicator.ContextLocation.location_path()
-          ) :: :ok | {:error, term()}
-    defp check_root(%Assign{location: location}, %Context{machine_state: machine_state}, path) do
-      if Map.has_key?(machine_state.datamodel, List.first(path)) do
-        :ok
-      else
-        {:error, {:unbound_location, location}}
-      end
-    end
-
-    # Step 5: the write itself, against the *raw* `machine_state.datamodel`
-    # (`nil`s intact) rather than the normalized context read in step 2 -
-    # Decision 2's `nil`-versus-`:undefined` round trip. `context.data`
-    # deep-normalizes `nil` to `:undefined`, and nothing in `lib/` reads it
-    # back out; writing through the raw map is what keeps an unrelated
-    # seeded-but-unbound `<data>` id reading `nil`, not `:undefined`, after
-    # this write.
-    @spec write(
-            node :: Assign.t(),
-            context :: Context.t(),
-            path :: Predicator.ContextLocation.location_path(),
-            value :: term()
-          ) :: {:ok, map()} | {:error, term()}
-    defp write(%Assign{location: location}, %Context{machine_state: machine_state}, path, value) do
-      case Predicator.ContextLocation.put(machine_state.datamodel, path, value) do
-        {:ok, new_datamodel} -> {:ok, new_datamodel}
-        {:error, error} -> {:error, Evaluator.Error.new(location, error)}
-      end
     end
   end
 end

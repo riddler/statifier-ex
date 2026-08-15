@@ -88,6 +88,128 @@ defmodule Statifier.Interpreter.Datamodel do
   alias Statifier.MachineState
 
   @doc """
+  Writes `value` at `path_source` (a raw, uncompiled path expression such as
+  `"foo.bar.baz"` or `"items[0]"`) against `machine_state`'s datamodel,
+  rebinding the written root into `datamodel_context` for callers that thread
+  a context across a block (ADR-0028). Extracted from
+  `Statifier.Machine.Content.Assign`'s defimpl - see that module's moduledoc
+  for the vivification and system-variable reasoning this function's five
+  steps carry out unchanged; this is a pure mechanics move, not a new
+  decision.
+
+  1. Resolve `path_source` against `datamodel_context.data` (the normalized
+     view, so a bracket key such as `items[i]` reads `i` exactly as an
+     expression would).
+  2. Reject a resolved root beginning with `"_"` (spec 5.10 - a system
+     variable).
+  3. Require the resolved root to already be a key of
+     `machine_state.datamodel` - auto-vivification only ever creates
+     intermediate containers, never an undeclared top-level variable.
+  4. Write into the *raw* `machine_state.datamodel` (`nil`s intact), never
+     the normalized `.data` read in step 1.
+  5. Bind just the written root into `datamodel_context` - O(size of that
+     root), not O(size of the datamodel).
+
+  Every predicator failure returns as a bare `{:error, term()}` - the caller
+  is the sole `error.execution` conversion site (ADR-0003).
+  """
+  @spec write_location(
+          machine_state :: MachineState.t(),
+          datamodel_context :: Predicator.Context.t(),
+          path_source :: String.t(),
+          value :: term()
+        ) :: {:ok, MachineState.t(), Predicator.Context.t()} | {:error, term()}
+  def write_location(
+        %MachineState{} = machine_state,
+        %Predicator.Context{} = datamodel_context,
+        path_source,
+        value
+      )
+      when is_binary(path_source) do
+    with {:ok, path} <- resolve_location(path_source, datamodel_context),
+         :ok <- check_system_variable(path),
+         :ok <- check_root(machine_state, path_source, path),
+         {:ok, new_datamodel} <- write(machine_state, path_source, path, value) do
+      new_machine_state = %{machine_state | datamodel: new_datamodel}
+      [root | _rest] = path
+
+      {:ok, new_machine_state,
+       Evaluator.bind(datamodel_context, root, Map.fetch!(new_datamodel, root))}
+    end
+  end
+
+  # Step 1: resolve `path_source` into a path. Resolution reads
+  # `datamodel_context.data` - the normalized view - never the
+  # `%Predicator.Context{}` struct itself, which would also satisfy
+  # `context_location/3`'s `is_map/1` guard and then look up the wrong keys
+  # entirely.
+  @spec resolve_location(path_source :: String.t(), datamodel_context :: Predicator.Context.t()) ::
+          {:ok, Predicator.ContextLocation.location_path()} | {:error, term()}
+  defp resolve_location(path_source, %Predicator.Context{data: data}) do
+    case Predicator.context_location(path_source, data) do
+      {:ok, path} -> {:ok, path}
+      {:error, error} -> {:error, Evaluator.Error.new(path_source, error)}
+    end
+  end
+
+  # Step 2 (spec 5.10): the resolved root segment must not begin with "_". A
+  # prefix test on the *resolved* root (rather than a membership test
+  # against the four named variables) can never collide with a legitimate
+  # author id and covers `_x` (5.10's platform-variable root) and any future
+  # system variable for free. This runs before step 3's root-existence
+  # check, so an undeclared system-looking root reports as a
+  # system-variable violation rather than an unbound location.
+  @spec check_system_variable(path :: Predicator.ContextLocation.location_path()) ::
+          :ok | {:error, {:system_variable, String.t()}}
+  defp check_system_variable([root | _rest]) when is_binary(root) do
+    if String.starts_with?(root, "_") do
+      {:error, {:system_variable, root}}
+    else
+      :ok
+    end
+  end
+
+  defp check_system_variable(_path), do: :ok
+
+  # Step 3: the resolved root segment must already be a key of
+  # `machine_state.datamodel` - predicator's own `put/3` would happily
+  # vivify an undeclared root, but this requires it to fail when a location
+  # "cannot be evaluated to yield a valid location" - auto-vivification of
+  # *intermediate* containers only, never creation of undeclared top-level
+  # variables.
+  @spec check_root(
+          machine_state :: MachineState.t(),
+          path_source :: String.t(),
+          path :: Predicator.ContextLocation.location_path()
+        ) :: :ok | {:error, term()}
+  defp check_root(%MachineState{datamodel: datamodel}, path_source, path) do
+    if Map.has_key?(datamodel, List.first(path)) do
+      :ok
+    else
+      {:error, {:unbound_location, path_source}}
+    end
+  end
+
+  # Step 4: the write itself, against the *raw* `machine_state.datamodel`
+  # (`nil`s intact) rather than the normalized context read in step 1 - the
+  # `nil`-versus-`:undefined` round trip. `context.data` deep-normalizes
+  # `nil` to `:undefined`, and nothing in `lib/` reads it back out; writing
+  # through the raw map is what keeps an unrelated seeded-but-unbound
+  # `<data>` id reading `nil`, not `:undefined`, after this write.
+  @spec write(
+          machine_state :: MachineState.t(),
+          path_source :: String.t(),
+          path :: Predicator.ContextLocation.location_path(),
+          value :: term()
+        ) :: {:ok, map()} | {:error, term()}
+  defp write(%MachineState{datamodel: datamodel}, path_source, path, value) do
+    case Predicator.ContextLocation.put(datamodel, path, value) do
+      {:ok, new_datamodel} -> {:ok, new_datamodel}
+      {:error, error} -> {:error, Evaluator.Error.new(path_source, error)}
+    end
+  end
+
+  @doc """
   `interpret`'s datamodel preamble (Appendix D `:101-102`, prose above), plus
   the top-level half of `enterStates`' per-state binding (`:312`) that late
   binding would otherwise defer forever - see the moduledoc's "no Appendix D
