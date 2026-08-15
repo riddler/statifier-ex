@@ -45,6 +45,11 @@ defmodule Statifier.Machine.Content do
   - `{:onentry, state_index, ordinal}` - an `<onentry>` block
   - `{:onexit, state_index, ordinal}` - an `<onexit>` block
   - `{:transition, t_index}` - a transition's own executable content
+  - `{:finalize, state_index, invoke_index}` - an `<invoke>`'s own
+    `<finalize>` block, `invoke_index` naming its position in the owning
+    state's own `invoke` list (`Statifier.Compiler.Expressions.owner_ref/0`'s
+    `{:invoke, state_index, invoke_index}` arm names the same invocation for
+    its own non-block attributes and children)
 
   The shared home for this concept: `Statifier.Event.Cause.origin` embeds
   this type unwidened for its `:content` cause, rather than redefining it.
@@ -57,6 +62,7 @@ defmodule Statifier.Machine.Content do
           {:onentry, non_neg_integer(), non_neg_integer()}
           | {:onexit, non_neg_integer(), non_neg_integer()}
           | {:transition, non_neg_integer()}
+          | {:finalize, non_neg_integer(), non_neg_integer()}
 
   @typedoc "Any compiled executable-content node - the family this module maps."
   @type t :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t()
