@@ -167,7 +167,7 @@ promotion path.
   distinguish core-derived effects (replay re-derives them) from
   `interpret/2`-injected ones (replay re-injects them). `Statifier.Replay`
   drives the pure core directly rather than a live session, and the recording
-  carries ordinal order with no clock reading (ADR-0033).
+  carries ordinal order with no clock reading (ADR-0034).
 
 ## Non-goals (for now)
 

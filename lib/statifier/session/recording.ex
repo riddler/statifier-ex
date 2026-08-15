@@ -56,7 +56,7 @@ defmodule Statifier.Session.Recording do
   ## Nothing here reads a clock
 
   Ordering in `entries` is ordinal - each entry's position in the list - and
-  that is sufficient: ADR-0033 decided that replay reproduces firing *order*
+  that is sufficient: ADR-0034 decided that replay reproduces firing *order*
   and *relative* timing, never re-waiting the original delays, so a
   wall-clock timestamp would be a value replay is obligated to ignore.
   ADR-0029 named the four inputs a sound recording needs, and none of them is
