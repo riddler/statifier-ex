@@ -41,6 +41,20 @@ defmodule Statifier.Evaluator.Functions do
   # two agree, so this entry cannot silently drift from it. Escaping into a
   # module attribute is what proves the resolved map holds no `function()`
   # value - a closure could not survive this compile step.
+  #
+  # `Context.resolve_functions/1`'s provider validation is memoized in
+  # `:persistent_term` as of predicator 8.0, so a `Context.new/2` call no
+  # longer re-pays `Code.ensure_loaded?/1` plus `function_exported?/3` per
+  # entry. It still pays, on every call, one `Code.ensure_loaded?/1` and one
+  # `module_info(:md5)` per provider module to compute the cache stamp, plus
+  # a `:persistent_term.get/2`, a map lookup keyed on the provider list, and
+  # a stamp-list comparison - and then allocates the struct. A module
+  # attribute is a compile-time literal read and costs none of that -
+  # predicator's own docs (`deps/predicator/lib/predicator/context.ex:150-155`,
+  # the `## Performance` section) say the memo "removes re-validation, not
+  # the allocation and struct construction `new/2` does on every call" and
+  # still name per-evaluation `new/2` as the anti-pattern. So the hoist
+  # below stays.
   @base_context Predicator.Context.new(%{},
                   builtins: true,
                   functions: %{"In" => {1, {__MODULE__, :in_state}}},
