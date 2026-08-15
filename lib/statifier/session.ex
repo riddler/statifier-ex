@@ -586,8 +586,9 @@ defmodule Statifier.Session do
   end
 
   # A session started without `record: true` carries `recording: nil` and
-  # pays only this one check per input; a recording session hands its
-  # current value through `append` and keeps the result.
+  # pays only its call site's closure and this one clause match per input,
+  # leaving the state untouched; a recording session hands its current value
+  # through `append` and keeps the result.
   @spec record(state :: State.t(), append :: (Recording.t() -> Recording.t())) :: State.t()
   defp record(%State{recording: nil} = state, _append), do: state
 

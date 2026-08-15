@@ -11,8 +11,8 @@ defmodule Statifier.ReplayRoundTripTest do
   alias Statifier.Session.Recording
   alias Statifier.Validator
 
-  # st-dtm's acceptance criteria, executable: record a live run, replay it,
-  # and assert both the effect stream and the terminal snapshot match
+  # The recorder bead's acceptance criteria, executable: record a live run,
+  # replay it, and assert both the effect stream and the terminal snapshot match
   # (Decision 4, plan lines ~269-287). Every case below drives a live
   # `record: true` session, drains its subscriber mailbox to quiescence, then
   # replays the recording it produced and compares.
@@ -178,7 +178,7 @@ defmodule Statifier.ReplayRoundTripTest do
 
       log_effect = %Effect.Log{label: "batch-log", value: nil, macrostep: 1, microstep: 1}
 
-      {recording, stream, result} =
+      {recording, _stream, result} =
         round_trip(machine, [], fn session ->
           Session.interpret(session, [{:send_delayed, send_delayed}, {:log, log_effect}])
           wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
@@ -194,11 +194,15 @@ defmodule Statifier.ReplayRoundTripTest do
                {:event, %Event{name: "go"}}
              ] = Recording.entries(recording)
 
-      # The event's own transition effects (b -> c) show up exactly once in
-      # the compared stream, not twice - a double delivery would duplicate
-      # them and also desync the configuration from the live run's.
-      assert Enum.count(stream, &match?({:effect, {:log, ^log_effect}}, &1)) == 1
-      assert length(stream) > 1
+      # What catches a double delivery is `round_trip/3`'s full ordered
+      # `result.stream == stream` comparison, not a count: delivering the
+      # timer's "go" twice still ends at "c" with two transitions, and what
+      # moves is the *position* of those effects relative to the batch's own
+      # `:log`. What this asserts locally is about the replayed stream - the
+      # batch's log appears once there, so the batch was re-injected whole
+      # rather than re-derived per effect.
+      assert Enum.count(result.stream, &match?({:effect, {:log, ^log_effect}}, &1)) == 1
+      assert length(result.stream) > 1
 
       assert result.machine_state.configuration ==
                MapSet.new([0, state_index(machine, "c")])
@@ -306,7 +310,59 @@ defmodule Statifier.ReplayRoundTripTest do
     end
   end
 
-  # -- case 5: a pinned session_id ------------------------------------------
+  # -- case 5: all four input kinds in one run ------------------------------
+
+  describe "a run mixing all four input kinds" do
+    # sabotage: `Statifier.Session`'s `handle_cast(:enqueue_cancel, state)`
+    # drops its `record(state, &Recording.put_cancel/1)` call -> the `:cancel`
+    # marker never reaches the recording, so the replayed run has no cancel to
+    # drain and never emits the `{:halted, :cancelled}` message (nor the
+    # cancel's own exit effects) the live run's stream ends with, reddening
+    # `round_trip/3`'s `result.stream == stream` assertion before the
+    # four-entry match below is reached. Observed red for exactly that reason
+    # (this case and case 4 both), reverted, and confirmed green.
+    test "interpret, timer, event and cancel are recorded in the order issued" do
+      machine = compile!(two_state_doc())
+
+      send_delayed = %Effect.SendDelayed{
+        event: "go",
+        target: nil,
+        send_id: "s1",
+        delay_ms: 20,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      effects = [{:send_delayed, send_delayed}]
+
+      {recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          Session.interpret(session, effects)
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+          Session.send_event(session, "go")
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+          :ok = Session.cancel(session)
+          wait_for_status(session, fn s -> s.status == :cancelled end)
+        end)
+
+      # The four kinds, in the order the drive above issued them - this is
+      # the session-level reading of "serialized input order" that the
+      # per-kind cases each cover only a slice of.
+      assert [
+               {:interpret, ^effects},
+               {:timer, "s1", %Event{name: "go"}},
+               {:event, %Event{name: "go"}},
+               :cancel
+             ] = Recording.entries(recording)
+
+      assert length(stream) > 1
+      assert {:halted, :cancelled} in stream
+      assert result.status == :cancelled
+      assert result.machine_state.configuration == MapSet.new()
+    end
+  end
+
+  # -- case 6: a pinned session_id ------------------------------------------
 
   describe "a pinned :session_id" do
     # sabotage: `Statifier.Session.init/1`'s
