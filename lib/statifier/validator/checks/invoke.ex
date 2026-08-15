@@ -26,16 +26,17 @@ defmodule Statifier.Validator.Checks.Invoke do
   `warn/2` walks each `<invoke>`'s `finalize` block and reports spec 6.5.2's
   rule: "the executable content inside `<finalize>` MUST NOT raise events or
   invoke external actions. In particular, the `<send>` and `<raise>`
-  elements MUST NOT occur." The forbidden set today is `%Document.Raise{}`
-  alone - one member - because `<send>` is not representable in a lowered
-  `Document` at all, so a `<send>` anywhere in a document, `<finalize>`
-  included, is already a hard lowering error before this check ever runs.
-  When `Statifier.Document.Send` exists, a `%Document.Send{}` clause joins
-  `forbidden/1` here; that is this check's obligation, not a new reason tag.
-  This is a warning, not an error: the engine has a defined behavior for the
-  content 6.5.2 forbids (it executes like any other executable content
-  inside `<finalize>`), so the document is told about the violation rather
-  than refused.
+  elements MUST NOT occur." The forbidden set is `%Document.Raise{}` and
+  `%Document.Send{}` - both are lowered, executable content nodes with a
+  defined engine behavior (each executes like any other executable content
+  inside `<finalize>`), so a document that writes one there is told about
+  the violation rather than refused. `Statifier.Validator.Checks.Send`
+  enforces 6.2.2/6.2.3's own attribute constraints on the same `<send>`
+  independently of this warning - the two checks are not mutually
+  exclusive, and a `<send>` inside `<finalize>` can trip both at once. This
+  is a warning, not an error: `forbidden/1` carries the offending element's
+  own name as data (`"raise"` or `"send"`) rather than one reason tag per
+  element, per ADR-0033's consequences.
   """
 
   alias Statifier.Document
@@ -44,6 +45,7 @@ defmodule Statifier.Validator.Checks.Invoke do
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.Invoke, as: DInvoke
   alias Statifier.Document.Raise, as: DRaise
+  alias Statifier.Document.Send, as: DSend
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
   alias Statifier.Validator.Warning
@@ -144,6 +146,9 @@ defmodule Statifier.Validator.Checks.Invoke do
 
   defp forbidden(%DRaise{location: location}),
     do: [Warning.finalize_forbidden_content("raise", location)]
+
+  defp forbidden(%DSend{location: location}),
+    do: [Warning.finalize_forbidden_content("send", location)]
 
   defp forbidden(_other), do: []
 end

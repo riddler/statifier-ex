@@ -40,6 +40,7 @@ defmodule Statifier.Validator do
   alias Statifier.Document
   alias Statifier.Validator.Checks.Assign
   alias Statifier.Validator.Checks.Boilerplate
+  alias Statifier.Validator.Checks.Cancel
   alias Statifier.Validator.Checks.Content
   alias Statifier.Validator.Checks.Data
   alias Statifier.Validator.Checks.DefaultEntry
@@ -55,6 +56,7 @@ defmodule Statifier.Validator do
   alias Statifier.Validator.Checks.Invoke
   alias Statifier.Validator.Checks.Param
   alias Statifier.Validator.Checks.Script
+  alias Statifier.Validator.Checks.Send
   alias Statifier.Validator.Checks.Targets
   alias Statifier.Validator.Context
   alias Statifier.Validator.Error
@@ -78,7 +80,9 @@ defmodule Statifier.Validator do
     &Assign.check/2,
     &If.check/2,
     &Script.check/2,
-    &Invoke.check/2
+    &Invoke.check/2,
+    &Send.check/2,
+    &Cancel.check/2
   ]
 
   @warning_checks [
@@ -86,7 +90,7 @@ defmodule Statifier.Validator do
   ]
 
   @doc """
-  Runs all eighteen `@checks` and the `@warning_checks` against `document`,
+  Runs all twenty `@checks` and the `@warning_checks` against `document`,
   collecting every finding on each channel rather than stopping at the
   first one, and returns `{:ok, document, warnings}` when no error fired or
   `{:error, errors, warnings}` otherwise - both arms carry `warnings` per

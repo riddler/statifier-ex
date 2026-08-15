@@ -404,5 +404,29 @@ defmodule Statifier.Validator.Checks.InvokeTest do
 
       assert {:ok, _document, []} = validate!(xml)
     end
+
+    # sabotage: `forbidden/1`'s `%DSend{}` clause is dropped (only the
+    # `%DRaise{}` clause and the catch-all survive) -> a <send> directly
+    # inside <finalize> is no longer recognized as forbidden, reddening
+    # this assertion. This is ADR-0033's reserved obligation: the document
+    # still compiles (the third element of the ok arm carries the warning,
+    # not an error).
+    test "a <send> directly inside <finalize> is reported as a warning, and still compiles" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <finalize>
+                      <send event="done"/>
+                  </finalize>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, _document, [warning]} = validate!(xml)
+      assert %Warning{reason: {:finalize_forbidden_content, "send"}} = warning
+      assert warning.location.start_line == 5
+    end
   end
 end

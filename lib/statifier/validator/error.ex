@@ -71,6 +71,16 @@ defmodule Statifier.Validator.Error do
           | {:invoke_id_and_idlocation}
           | {:invoke_namelist_and_param}
           | {:invoke_bad_autoforward, raw :: binary()}
+          | {:send_event_and_eventexpr}
+          | {:send_target_and_targetexpr}
+          | {:send_type_and_typeexpr}
+          | {:send_id_and_idlocation}
+          | {:send_delay_and_delayexpr}
+          | {:send_delay_and_internal_target}
+          | {:send_namelist_and_content}
+          | {:send_param_and_content}
+          | {:cancel_sendid_and_sendidexpr}
+          | {:cancel_no_sendid}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -769,6 +779,150 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:invoke_bad_autoforward, raw},
       message: "invoke autoforward #{inspect(raw)} must be \"true\" or \"false\"",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: "event ... Must not occur with 'eventexpr'." An `<send>`
+  carrying both. Reported at the `<send>` element's own `location`.
+  """
+  @spec send_event_and_eventexpr(location :: Location.t()) :: t()
+  def send_event_and_eventexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_event_and_eventexpr},
+      message: "<send> must not specify both event and eventexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: "target ... Must not occur with 'targetexpr'." An `<send>`
+  carrying both. Reported at the `<send>` element's own `location`.
+  """
+  @spec send_target_and_targetexpr(location :: Location.t()) :: t()
+  def send_target_and_targetexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_target_and_targetexpr},
+      message: "<send> must not specify both target and targetexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: "type ... Must not occur with 'typeexpr'." An `<send>`
+  carrying both. Reported at the `<send>` element's own `location`.
+  """
+  @spec send_type_and_typeexpr(location :: Location.t()) :: t()
+  def send_type_and_typeexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_type_and_typeexpr},
+      message: "<send> must not specify both type and typeexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: "id ... Must not occur with 'idlocation'." An `<send>`
+  carrying both. Reported at the `<send>` element's own `location`.
+  """
+  @spec send_id_and_idlocation(location :: Location.t()) :: t()
+  def send_id_and_idlocation(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_id_and_idlocation},
+      message: "<send> must not specify both id and idlocation",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: "delay ... Must not occur with 'delayexpr' or when the
+  attribute 'target' has the value \"_internal\"." The `delay`/`delayexpr`
+  half of that constraint; the `target="_internal"` half is
+  `send_delay_and_internal_target/1`. An `<send>` carrying both `delay` and
+  `delayexpr`. Reported at the `<send>` element's own `location`.
+  """
+  @spec send_delay_and_delayexpr(location :: Location.t()) :: t()
+  def send_delay_and_delayexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_delay_and_delayexpr},
+      message: "<send> must not specify both delay and delayexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.2: the other half of `delay`'s "Must not occur with ... when the
+  attribute 'target' has the value \"_internal\"" constraint - an `<send>`
+  carrying `delay` or `delayexpr` alongside a literal `target="_internal"`.
+  Detectable only when `target` is a literal attribute; with `targetexpr`
+  the value is not known until execute time, so this check stays silent
+  there rather than guessing (`Statifier.Validator.Checks.Send`'s
+  moduledoc). Reported at the `<send>` element's own `location`.
+  """
+  @spec send_delay_and_internal_target(location :: Location.t()) :: t()
+  def send_delay_and_internal_target(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_delay_and_internal_target},
+      message: "<send> must not specify delay or delayexpr when target is \"_internal\"",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.3: "A conformant document MUST NOT specify 'namelist' or
+  `<param>` with `<content>`." The `namelist` half of that constraint; the
+  `<param>` half is `send_param_and_content/1`. An `<send>` carrying a
+  written `namelist` alongside a `<content>` child. Reported at the
+  `<send>` element's own `location`.
+  """
+  @spec send_namelist_and_content(location :: Location.t()) :: t()
+  def send_namelist_and_content(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_namelist_and_content},
+      message: "<send> must not specify namelist together with a <content> child",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.2.3: the other half of "A conformant document MUST NOT specify
+  'namelist' or `<param>` with `<content>`" - an `<send>` carrying a
+  `<param>` child alongside a `<content>` child. Reported at the `<send>`
+  element's own `location`.
+  """
+  @spec send_param_and_content(location :: Location.t()) :: t()
+  def send_param_and_content(%Location{} = location) do
+    %__MODULE__{
+      reason: {:send_param_and_content},
+      message: "<send> must not specify a <param> child together with a <content> child",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.3.1: "sendid ... Must not occur with sendidexpr." A `<cancel>`
+  carrying both. Reported at the `<cancel>` element's own `location`.
+  """
+  @spec cancel_sendid_and_sendidexpr(location :: Location.t()) :: t()
+  def cancel_sendid_and_sendidexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:cancel_sendid_and_sendidexpr},
+      message: "<cancel> must not specify both sendid and sendidexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.3.1: "A conformant SCXML document MUST specify exactly one of
+  sendid or sendidexpr." A `<cancel>` carrying neither. Reported at the
+  `<cancel>` element's own `location`.
+  """
+  @spec cancel_no_sendid(location :: Location.t()) :: t()
+  def cancel_no_sendid(%Location{} = location) do
+    %__MODULE__{
+      reason: {:cancel_no_sendid},
+      message: "<cancel> must specify exactly one of sendid or sendidexpr",
       location: location
     }
   end
