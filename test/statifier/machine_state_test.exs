@@ -342,6 +342,11 @@ defmodule Statifier.MachineStateTest do
     # sabotage: `put_event/2`'s `Map.put/3` is changed to write under the
     # key `"event"` instead of `"_event"` -> the lookup below finds
     # nothing, reddening the pattern match.
+    #
+    # sabotage: `SystemVariables.event/1`'s `absent/1` helper is changed to
+    # `defp absent(value), do: value` (identity, no translation) -> the four
+    # absent string fields redden against `:undefined`, since they would
+    # come back `nil` instead.
     test "writes datamodel[\"_event\"] to the event's system-variable shape" do
       ms = new_machine_state()
       event = Event.external("go", data: %{"x" => 1})
@@ -351,10 +356,10 @@ defmodule Statifier.MachineStateTest do
       assert %{
                "name" => "go",
                "type" => "external",
-               "sendid" => nil,
-               "origin" => nil,
-               "origintype" => nil,
-               "invokeid" => nil,
+               "sendid" => :undefined,
+               "origin" => :undefined,
+               "origintype" => :undefined,
+               "invokeid" => :undefined,
                "data" => %{"x" => 1}
              } = result.datamodel["_event"]
     end

@@ -584,6 +584,10 @@ defmodule Statifier.Interpreter.ContentTest do
     # with `context` instead of `new_context` -> the pending error recorded
     # before the failure vanishes, reddening the assertion that the pending
     # reason's error.execution is present.
+    #
+    # sabotage: `Event.internal/3` reads `Keyword.get(opts, :data)` (default
+    # `nil`) instead of `Keyword.get(opts, :data, :undefined)` -> the "one"
+    # event's data, raised with no `:data` opt, reddens against `:undefined`.
     test "a fail_with_context node's pending errors are queued before its own fatal error.execution" do
       m =
         machine()
@@ -605,7 +609,7 @@ defmodule Statifier.Interpreter.ContentTest do
         |> Enum.map(&{&1.name, &1.data})
 
       assert [
-               {"one", nil},
+               {"one", :undefined},
                {"error.execution", :cond_error},
                {"error.execution", {:test_content, "mid"}}
              ] = names_and_data

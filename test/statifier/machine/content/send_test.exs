@@ -36,6 +36,7 @@ defmodule Statifier.Machine.Content.SendTest do
           <data id="p1" expr="10"/>
           <data id="p2" expr="20"/>
           <data id="loc"/>
+          <data id="Var1"/>
       </datamodel>
       <state id="bare"><onentry><send event="ping"/></onentry></state>
       <state id="eventexpr"><onentry><send eventexpr="ev"/></onentry></state>
@@ -44,6 +45,10 @@ defmodule Statifier.Machine.Content.SendTest do
       <state id="type"><onentry><send event="e" type="ty1"/></onentry></state>
       <state id="typeexpr"><onentry><send event="e" typeexpr="typ"/></onentry></state>
       <state id="namelist"><onentry><send event="e" namelist="p1 p2"/></onentry></state>
+      <state id="namelist_unbound"><onentry><send event="e" namelist="Var1"/></onentry></state>
+      <state id="namelist_undeclared">
+          <onentry><send event="e" namelist="Undeclared"/></onentry>
+      </state>
       <state id="param">
           <onentry><send event="e"><param name="a" expr="p1"/></send></onentry>
       </state>
@@ -180,6 +185,41 @@ defmodule Statifier.Machine.Content.SendTest do
 
       assert {:ok, _ctx, [{:send, %Effect.Send{data: %{"a" => 10}}}]} =
                ExecutableContent.execute(send_node(m, "param"), context(ms))
+    end
+
+    # Open question 1's pin (ADR-0037,
+    # docs/adr/0037-unbound-spelled-undefined-at-the-writer.md): a
+    # namelist entry over a declared-but-unbound root reads `:undefined`
+    # off the normalized context and lands in `data` untranslated - the
+    # escape is already the shipped behavior; this asserts it rather than
+    # assuming it.
+    #
+    # sabotage: `resolve_params/2`'s success clause is changed to
+    # `{:cont, {:ok, [{name, value || %{}} | pairs]}}` (translate a bound
+    # `:undefined` to `%{}`) -> `data` would come back `%{"Var1" => %{}}`
+    # instead of `%{"Var1" => :undefined}`, reddening this test.
+    test "namelist over a declared-but-unbound root puts :undefined in event data" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:ok, _ctx, [{:send, %Effect.Send{data: %{"Var1" => :undefined}}}]} =
+               ExecutableContent.execute(send_node(m, "namelist_unbound"), context(ms))
+    end
+
+    # Companion to the pin above: an *undeclared* namelist root is a
+    # different case entirely - ADR-0036's element-level discard, not a
+    # value that ever reaches `data`.
+    #
+    # sabotage: `resolve_params/2`'s `{:error, reason} -> {:halt, ...}`
+    # branch is changed to `{:cont, {:ok, pairs}}` (skip the failed pair
+    # instead of halting) -> the undeclared-root failure would be silently
+    # dropped and the send would still emit an effect, reddening this test.
+    test "namelist over an undeclared root produces no effect at all" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:error, _reason} =
+               ExecutableContent.execute(send_node(m, "namelist_undeclared"), context(ms))
     end
 
     # sabotage: `data/3`'s clauses are swapped (`%Send{content: nil}` picks

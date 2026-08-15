@@ -63,21 +63,21 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
   end
 
   describe "event/1" do
-    # sabotage: `event/1` writes `"data" => event.data || %{}` instead of
-    # `event.data` verbatim -> a `nil` data field becomes `%{}` here,
-    # reddening the equality assertion (the map-shape check, not yet the
-    # end-to-end undefined check below).
-    test "maps an event with no data to a map whose \"data\" is nil" do
+    # sabotage: `event/1`'s `absent/1` helper is changed to `defp absent(_),
+    # do: nil` (translate every field to `nil` instead of `:undefined`) ->
+    # all five absent fields below come back `nil`, reddening this
+    # assertion.
+    test "maps an event with no data to a map whose absent fields are all :undefined" do
       result = SystemVariables.event(Event.external("go"))
 
       assert result == %{
                "name" => "go",
                "type" => "external",
-               "sendid" => nil,
-               "origin" => nil,
-               "origintype" => nil,
-               "invokeid" => nil,
-               "data" => nil
+               "sendid" => :undefined,
+               "origin" => :undefined,
+               "origintype" => :undefined,
+               "invokeid" => :undefined,
+               "data" => :undefined
              }
     end
 
@@ -105,11 +105,14 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
 
   describe "absent event data evaluates as :undefined, not %{} (conf:emptyEventData)" do
     # sabotage: `event/1`'s `"data" => event.data` clause is changed to
-    # `"data" => event.data || %{}` -> `Predicator.Context.new/2` no longer
-    # has a `nil` to normalize, `_event.data` evaluates to `{:ok, %{}}`
-    # instead of `{:ok, :undefined}`, reddening this assertion - this is
-    # the bead's own `conf:emptyEventData` acceptance criterion, tested at
-    # evaluation time rather than by inspecting the map.
+    # `"data" => event.data || %{}` -> `Event.external/2`'s own
+    # `:undefined` default is masked, `_event.data` evaluates to
+    # `{:ok, %{}}` instead of `{:ok, :undefined}`, reddening this
+    # assertion - this is the bead's own `conf:emptyEventData` acceptance
+    # criterion, tested at evaluation time rather than by inspecting the
+    # map. `Event.external/2` writes `:undefined` for absent data directly
+    # now, so this pins the writer's spelling rather than a bind-time
+    # rewrite of it.
     test "_event.data and _event.data.foo evaluate as :undefined for an event with no data" do
       ms =
         machine()

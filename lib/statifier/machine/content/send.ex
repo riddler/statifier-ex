@@ -223,7 +223,7 @@ defmodule Statifier.Machine.Content.Send do
     # exclusivity means the two never both apply to one document, but the
     # dispatch is keyed on the *node's own shape* rather than on which
     # resolved value happens to be non-nil, since a blank `<content/>`
-    # legitimately coerces to `nil` too.
+    # legitimately coerces to `:undefined` too.
     @spec data(node :: Send.t(), raw_params :: [{String.t(), term()}], content :: term()) ::
             term()
     defp data(%Send{content: nil}, raw_params, _content),

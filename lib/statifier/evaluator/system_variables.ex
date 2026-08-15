@@ -77,18 +77,30 @@ defmodule Statifier.Evaluator.SystemVariables do
 
   @doc """
   `_event`'s value for `event` - spec 5.10.1's fields, read straight off
-  `Statifier.Event`.
+  `Statifier.Event`. `sendid`/`origin`/`origintype`/`invokeid` are
+  `String.t() | nil` on `Statifier.Event` (a datamodel null can never be one
+  of them, so `nil` there is unambiguous - `Statifier.Event`'s moduledoc
+  makes the same argument); `absent/1` translates a `nil` to `:undefined`
+  here, at the one place they cross into the datamodel, so `_event`'s own
+  fields spell "declared, no value yet" the way every other datamodel
+  writer does. `data` is not translated - `Statifier.EventData.coerce/1`
+  already spells `:undefined` for "no data" and `nil` for a null payload, so
+  it passes through verbatim.
   """
   @spec event(event :: Event.t()) :: map()
   def event(%Event{} = event) do
     %{
       "name" => event.name,
       "type" => Atom.to_string(event.type),
-      "sendid" => event.sendid,
-      "origin" => event.origin,
-      "origintype" => event.origintype,
-      "invokeid" => event.invokeid,
+      "sendid" => absent(event.sendid),
+      "origin" => absent(event.origin),
+      "origintype" => absent(event.origintype),
+      "invokeid" => absent(event.invokeid),
       "data" => event.data
     }
   end
+
+  @spec absent(value :: String.t() | nil) :: String.t() | :undefined
+  defp absent(nil), do: :undefined
+  defp absent(value), do: value
 end

@@ -33,6 +33,13 @@ defmodule Statifier.EventData do
   name wins - the same resolution an ECMAScript object literal gives
   duplicate properties, and what a left-to-right fold produces with no
   extra machinery.
+
+  **`:undefined` versus `nil`.** An empty rung - no `<content>` text, no
+  `<param>` pairs - returns `:undefined`: "no data", per
+  `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`. A genuinely
+  null *value* (`<content>null</content>`, `<param expr="null"/>`) returns
+  `nil`, predicator's own null, unchanged. The two are now distinguishable
+  end to end, all the way through `Evaluator.bind/3` and into `_event.data`.
   """
 
   @typedoc """
@@ -49,7 +56,7 @@ defmodule Statifier.EventData do
   Normalizes `input` into an `_event.data` value per B.2.8.1, as detailed
   in the moduledoc above.
   """
-  @spec coerce(input :: input()) :: term() | nil
+  @spec coerce(input :: input()) :: term()
   def coerce({:value, value}), do: value
   def coerce({:text, text}), do: from_text(text)
   def coerce({:params, pairs}), do: from_params(pairs)
@@ -62,11 +69,11 @@ defmodule Statifier.EventData do
   # compiles to an identifier load that errors against a context holding
   # nothing, so it falls through to the string literal instead of silently
   # becoming a datamodel read.
-  @spec from_text(text :: String.t()) :: term() | nil
+  @spec from_text(text :: String.t()) :: term()
   defp from_text(text) do
     case String.trim(text) do
       "" ->
-        nil
+        :undefined
 
       trimmed ->
         empty_context = Predicator.Context.new(%{}, on_unbound: :error)
@@ -87,10 +94,10 @@ defmodule Statifier.EventData do
   defp space_normalize(trimmed), do: String.replace(trimmed, ~r/\s+/, " ")
 
   # B.2.8.1's key-value rung. Document order, last duplicate key wins (see
-  # moduledoc). An empty result is `nil`, not `%{}` - conf:emptyEventData
+  # moduledoc). An empty result is `:undefined`, not `%{}` - conf:emptyEventData
   # (test343/488/528) requires absent event data to be `undefined`.
-  @spec from_params(pairs :: [{String.t(), term()}]) :: %{optional(String.t()) => term()} | nil
-  defp from_params([]), do: nil
+  @spec from_params(pairs :: [{String.t(), term()}]) :: term()
+  defp from_params([]), do: :undefined
 
   defp from_params(pairs) do
     Enum.reduce(pairs, %{}, fn {name, value}, acc -> Map.put(acc, name, value) end)

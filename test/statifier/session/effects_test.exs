@@ -110,7 +110,7 @@ defmodule Statifier.Session.EffectsTest do
            microstep: 1
          }}},
        {:schedule, nil, 30, :self,
-        Event.external("e", origin: @origin, origintype: @origintype, sendid: nil),
+        Event.external("e", data: nil, origin: @origin, origintype: @origintype, sendid: nil),
         {:send_delayed,
          %SendDelayed{
            event: "e",

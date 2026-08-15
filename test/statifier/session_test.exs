@@ -582,10 +582,10 @@ defmodule Statifier.SessionTest do
     # sabotage: `Session.Effects`'s `delivered_event/2` passes `sendid:
     # send.send_id` unconditionally instead of gating it on
     # `send.id_from_author?` -> the generated (non-nil) `Effect.Send.send_id`
-    # leaks onto `_event.sendid`, reddening the `nil` assertion below even
-    # though the `Effect.Send.send_id` assertion stays green. Reverted and
-    # confirmed green.
-    test "sendid is nil on _event while Effect.Send.send_id is non-nil, when the author named neither id nor idlocation" do
+    # leaks onto `_event.sendid`, reddening the `:undefined` assertion below
+    # even though the `Effect.Send.send_id` assertion stays green. Reverted
+    # and confirmed green.
+    test "sendid is :undefined on _event while Effect.Send.send_id is non-nil, when the author named neither id nor idlocation" do
       machine = compile!(self_send_doc(""))
       {:ok, session} = Session.start_link(machine, subscribers: [self()])
 
@@ -598,7 +598,7 @@ defmodule Statifier.SessionTest do
       status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
       assert status.configuration == MapSet.new(["b"])
 
-      assert Session.snapshot(session).datamodel["_event"]["sendid"] == nil
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == :undefined
     end
 
     # sabotage: `Effect.Send`'s `id_from_author?` field default is changed
@@ -666,7 +666,10 @@ defmodule Statifier.SessionTest do
     # `:internal ->` clause, swapped from `raise_internal/4` to
     # `raise_platform/4` -> `_event.type` reads `"platform"` instead of
     # `"internal"`, reddening the type assertion below. Reverted and
-    # confirmed green.
+    # confirmed green. A second sabotage at `SystemVariables.event/1`'s
+    # `absent/1` helper, changed to `defp absent(_), do: nil` -> the
+    # `origin`/`origintype` assertions below redden against `:undefined`.
+    # Reverted and confirmed green.
     test "an internally-delivered send advances the configuration with a blank origin/origintype" do
       machine = compile!(internal_send_doc(""))
       {:ok, session} = Session.start_link(machine)
@@ -676,8 +679,8 @@ defmodule Statifier.SessionTest do
 
       event = Session.snapshot(session).datamodel["_event"]
       assert event["type"] == "internal"
-      assert event["origin"] == nil
-      assert event["origintype"] == nil
+      assert event["origin"] == :undefined
+      assert event["origintype"] == :undefined
     end
 
     # sabotage: `Session.Effects.internal_event/1`'s `sendid:
@@ -697,14 +700,68 @@ defmodule Statifier.SessionTest do
     # if(send.id_from_author?, do: send.send_id)` is changed to
     # unconditionally `send.send_id` (dropping the `id_from_author?` gate) ->
     # the generated (non-nil) id leaks onto `_event.sendid`, reddening the
-    # `nil` assertion below. Reverted and confirmed green.
-    test "sendid is nil when the author named neither id nor idlocation" do
+    # `:undefined` assertion below. Reverted and confirmed green.
+    test "sendid is :undefined when the author named neither id nor idlocation" do
       machine = compile!(internal_send_doc(""))
       {:ok, session} = Session.start_link(machine)
 
       status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
       assert status.configuration == MapSet.new(["b"])
-      assert Session.snapshot(session).datamodel["_event"]["sendid"] == nil
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == :undefined
+    end
+  end
+
+  describe "a namelist over a declared-but-unbound root round-trips as :undefined (ADR-0037 open question 1)" do
+    defp namelist_unbound_round_trip_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <datamodel>
+              <data id="Var1"/>
+          </datamodel>
+          <state id="a">
+              <onentry>
+                  <send event="e" target="#_internal" namelist="Var1"/>
+              </onentry>
+              <transition event="e" target="undefined_check"/>
+          </state>
+          <state id="undefined_check">
+              <transition cond="_event.data.Var1 === undefined" target="null_check"/>
+              <transition target="fail"/>
+          </state>
+          <state id="null_check">
+              <transition cond="_event.data.Var1 === null" target="fail"/>
+              <transition target="pass"/>
+          </state>
+          <state id="pass"/>
+          <state id="fail"/>
+      </scxml>
+      """
+    end
+
+    # Open question 1's end-to-end pin (ADR-0037,
+    # docs/adr/0037-unbound-spelled-undefined-at-the-writer.md): this is the
+    # property that would break under either candidate translation at the
+    # effect boundary (mapping `:undefined -> nil`, or dropping the member) -
+    # `undefined_check` alone would still pass under a `nil` translation, so
+    # `null_check` is the state that makes the answer non-reversible by
+    # accident.
+    #
+    # sabotage: `SystemVariables.event/1`'s `"data" => event.data` clause is
+    # changed to `"data" => event.data || %{}` -> `_event.data.Var1` would
+    # evaluate as an unbound-identifier error against `%{}` instead of
+    # `:undefined`, and the session would halt in neither `pass` nor `fail`
+    # (an uncaught `error.execution` with no matching transition), reddening
+    # the configuration assertion below.
+    test "delivered _event.data.Var1 reads === undefined true and === null false" do
+      machine = compile!(namelist_unbound_round_trip_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      status =
+        wait_for_status(session, fn s ->
+          s.configuration == MapSet.new(["pass"]) or s.configuration == MapSet.new(["fail"])
+        end)
+
+      assert status.configuration == MapSet.new(["pass"])
     end
   end
 

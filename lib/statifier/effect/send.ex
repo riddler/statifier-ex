@@ -23,6 +23,21 @@ defmodule Statifier.Effect.Send do
   C.1's empty-`sendid` rule: a delivered event's `sendid` must be `nil` when
   the author never named the send, and `send_id` alone cannot express that
   distinction, since ADR-0035 always mints one either way.
+
+  ## `data` may carry `:undefined`, untranslated
+
+  `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`'s open question
+  1, answered: a `namelist` entry or `<param location>` referencing a
+  declared-but-unbound datamodel root reads `{:ok, :undefined}` off the
+  normalized context (`resolve_params/2` in
+  `Statifier.Machine.Content.Send`), and that atom lands in `data` exactly
+  as written - no translation at this boundary. An *undeclared* root is a
+  different case entirely: it is an argument failure that discards the
+  whole `<send>` (ADR-0036), never a value that reaches `data` at all. This
+  settles the `#_internal`, same-session, and `#_scxml_<sessionid>` routes
+  that exist today; a future external-wire processor (BasicHTTP or
+  otherwise) owns its own `:undefined` encoding at its own boundary, not
+  here.
   """
 
   alias Statifier.Machine.Content
