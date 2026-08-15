@@ -136,6 +136,17 @@ defmodule Statifier.SessionRuntimeTest do
       assert Session.snapshot(sender).datamodel["_event"]["sendid"] == "send1"
     end
 
+    # sabotage: this shares the empty-lookup branch with the test above, so
+    # the same mutation reddens it - `deliver/5`'s `{:session, sid}` clause
+    # has its `[] -> communication_error/4` branch swapped for a bare `state`
+    # (a silent drop) -> the sender never leaves `"a"`, and the wait below
+    # flunks with "status/1 never satisfied the predicate". Confirmed red on
+    # this test specifically, reverted, confirmed green. What it adds over
+    # its sibling is not a second branch but two properties that branch alone
+    # does not prove: that a *dead* pid reaches the empty-lookup path at all
+    # (a `GenServer.cast/2` to a dead pid succeeds silently, so a stale
+    # registry hit would hang here rather than fail), and that the lookup
+    # never crashes on one.
     test "a send to a session that has since died raises error.communication, not a crash" do
       start_supervised!(Statifier.Supervisor)
 
