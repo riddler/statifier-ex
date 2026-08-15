@@ -394,6 +394,17 @@ defmodule Statifier.Replay do
     state
   end
 
+  # Autoforward delivery is a live-process action (`Statifier.Session`
+  # `send_event/2`s the child, unmodified) with nothing to replay against - a
+  # replayed run has no live child, and every contribution the child made to
+  # the parent's run is already in the recorded event log, the same reason
+  # `{:start_child, _, _}` above starts nothing. The `{:notify, effect}`
+  # instruction planned ahead of this one has already appended the
+  # `{:autoforward, _}` effect itself to `stream`.
+  defp perform_instruction({:forward, _invoke_id, _event}, state, _override) do
+    state
+  end
+
   defp perform_instruction({:unroutable, effect}, state, _override) do
     append(state, {:unroutable, effect})
   end

@@ -175,15 +175,7 @@ defmodule Statifier.Session.EffectsTest do
            macrostep: 1,
            microstep: 1
          }}},
-       {:unroutable,
-        {:autoforward,
-         %Autoforward{
-           invoke_id: "i1",
-           state_index: 0,
-           event: Event.external("e"),
-           macrostep: 1,
-           microstep: 1
-         }}}
+       {:forward, "i1", Event.external("e")}
      ]},
     {{:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}},
      [

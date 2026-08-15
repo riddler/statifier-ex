@@ -53,8 +53,17 @@ defmodule Statifier.Session.Effects do
   the source, seeds the child's datamodel, and starts it (ADR-0027 decision
   3, ADR-0038).
 
-  `{:unroutable, effect}` survives for `:cancel_invoke` and `:autoforward`
-  unconditionally, pending the routing work later phases add.
+  `:autoforward` plans `{:forward, invoke_id, event}` unconditionally - no
+  type or target check, since the effect is the core's own decision about an
+  invocation this session started, not a `<send>` with author-written
+  attributes. `Statifier.Session` looks `invoke_id` up in its invocation
+  table and forwards `event` unmodified (6.4.2's "All the fields specified in
+  5.10.1 ... MUST have the same values in the forwarded copy"); a miss is a
+  silent no-op, not an error (6.4.3's MUST-ignore for a cancelled
+  invocation).
+
+  `{:unroutable, effect}` survives for `:cancel_invoke` unconditionally,
+  pending the routing work a later phase adds.
   """
 
   alias Statifier.Effect
@@ -82,6 +91,7 @@ defmodule Statifier.Session.Effects do
              Target.route(), Event.t(), Effect.t()}
           | {:cancel_timers, send_id :: String.t()}
           | {:start_child, Invoke.t(), Effect.t()}
+          | {:forward, invoke_id :: String.t(), Event.t()}
           | {:unroutable, Effect.t()}
           | {:halt, :done | :budget_exhausted}
 
@@ -118,8 +128,8 @@ defmodule Statifier.Session.Effects do
     [{:notify, effect}, {:unroutable, effect}]
   end
 
-  defp plan_one({:autoforward, %Autoforward{}} = effect, _session_id) do
-    [{:notify, effect}, {:unroutable, effect}]
+  defp plan_one({:autoforward, %Autoforward{} = af} = effect, _session_id) do
+    [{:notify, effect}, {:forward, af.invoke_id, af.event}]
   end
 
   defp plan_one({:done, _done} = effect, _session_id) do

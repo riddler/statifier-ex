@@ -112,12 +112,24 @@ defmodule Statifier.Session do
   follow-up bead (C.1's `#_invokeid` delivery) changes that one resolver,
   not this module's `{:deliver, ...}` clause. An
   unsupported `type` or an unparseable `target` raises `error.execution` the
-  same way, at plan time. `:cancel_invoke` and `:autoforward` still plan as
-  `{:unroutable, effect}`, pending later routing work. A child reaching a
-  top-level final returns `done.invoke.<invokeid>` to its parent's external
-  queue the same direct way ("Starting an invocation's child session" below
-  names the reciprocal obligation this halt-time delivery completes). See
+  same way, at plan time. `:cancel_invoke` still plans as `{:unroutable,
+  effect}`, pending later routing work. A child reaching a top-level final
+  returns `done.invoke.<invokeid>` to its parent's external queue the same
+  direct way ("Starting an invocation's child session" below names the
+  reciprocal obligation this halt-time delivery completes). See
   `Statifier.Session.Effects` and `Statifier.Session.Target`.
+
+  ## Autoforward delivery
+
+  `{:autoforward, %Effect.Autoforward{}}` plans `{:forward, invoke_id,
+  event}` unconditionally (`Statifier.Session.Effects`) - every external
+  event the parent removes from its queue, forwarded verbatim to each
+  autoforwarding invocation, at the point 6.4.2 puts it: inside
+  `apply_invoke_passes/2`'s own turn, before the next `Inbox.next/1`.
+  Performing it looks `invoke_id` up in `state.invocations` and
+  `send_event/2`s the event unmodified; a miss - the invocation was
+  cancelled or the child died between the core's pass and this instruction -
+  is a silent no-op, not an error.
 
   ## Starting an invocation's child session
 
@@ -744,6 +756,24 @@ defmodule Statifier.Session do
       {:ok, machine} -> start_child(machine, invoke, effect, state, override)
       {:error, _reason} -> invoke_error(invoke, effect, state, override)
     end
+  end
+
+  # 6.4.2's autoforward delivery: `event` is the core's own copy, unmodified
+  # ("All the fields specified in 5.10.1 ... MUST have the same values in the
+  # forwarded copy of the event"), so it is never rebuilt through
+  # `Effect.Send`. A miss in `state.invocations` is a silent no-op, not an
+  # error: the invocation was cancelled or the child died between the core's
+  # finalize/autoforward pass and this instruction, and 6.4 specifies no
+  # error for forwarding to a gone child - the cancelled case is 6.4.3's
+  # MUST-ignore, which is a silence requirement, not an
+  # `error.communication` one.
+  defp perform_instruction({:forward, invoke_id, event}, state, _override) do
+    case Invocations.fetch(state.invocations, invoke_id) do
+      {:ok, %{pid: pid}} -> send_event(pid, event)
+      :error -> :ok
+    end
+
+    state
   end
 
   defp perform_instruction({:unroutable, effect}, state, _override) do
