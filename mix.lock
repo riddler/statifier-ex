@@ -22,5 +22,4 @@
   "saxy": {:hex, :saxy, "1.6.1", "742eff28f553c066d0b54e84662dbf384a1d1f38595472ed15f6e0a33038bbe1", [:mix], [], "hexpm", "8989d504424ba29460a61950f8968380651413fa05e63b6118084db057da1a6b"},
   "sobelow": {:hex, :sobelow, "0.14.1", "2f81e8632f15574cba2402bcddff5497b413c01e6f094bc0ab94e83c2f74db81", [:mix], [{:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}], "hexpm", "8fac9a2bd90fdc4b15d6fca6e1608efb7f7c600fa75800813b794ee9364c87f2"},
   "statistex": {:hex, :statistex, "1.1.1", "73612aa7f79e53c30569be065fd121e380f1cf57bc4c2da5b41be9246da18df9", [:mix], [], "hexpm", "310c4b49b34adf683de3103639006bed233ab54c08a4add65a531448e653857c"},
-  "uxid": {:hex, :uxid, "2.9.0", "e61508fa4d0f997995fd3958d0033acceb70f23e5ec85ea3144485b8b9683c61", [:mix], [{:ecto, "~> 3.12", [hex: :ecto, repo: "hexpm", optional: true]}], "hexpm", "af4a43db3e9f25b7b182eb1870c712224e9a205f39676d98e6cfaaf3fe6029c1"},
 }
