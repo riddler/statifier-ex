@@ -91,4 +91,59 @@ defmodule Statifier.Session.TargetTest do
       refute Target.supported_type?("http://example.com/BasicHTTPEventProcessor")
     end
   end
+
+  describe "scxml_invoke_type/0" do
+    # sabotage: n/a - this test only pins the literal URI 6.4.2 mandates; a
+    # mutation here is just "return a different string", which the
+    # `supported_invoke_type?/1` tests below already exercise.
+    test "is 6.4.2's mandated URI" do
+      assert Target.scxml_invoke_type() == "http://www.w3.org/TR/scxml/"
+    end
+  end
+
+  describe "supported_invoke_type?/1" do
+    # sabotage: `supported_invoke_type?(nil)`'s clause returns `false`
+    # instead of `true` -> this reddens
+    test "nil defaults to the SCXML Event I/O Processor, supported" do
+      assert Target.supported_invoke_type?(nil)
+    end
+
+    # sabotage: the `"scxml"` short-alias clause is deleted, falling through
+    # to the URI-equality clause -> `"scxml"` no longer matches (it is not
+    # equal to `scxml_invoke_type/0`'s URI), reddening this assertion
+    test ~s(the "scxml" short alias is supported) do
+      assert Target.supported_invoke_type?("scxml")
+    end
+
+    # sabotage: `supported_invoke_type?/1`'s final clause changes `type ==
+    # scxml_invoke_type()` to `type != scxml_invoke_type()` -> this reddens
+    # (the invoke type URI itself would read as unsupported)
+    test "the invoke type URI (6.4.2) is supported" do
+      assert Target.supported_invoke_type?(Target.scxml_invoke_type())
+    end
+
+    # sabotage: n/a - this test only confirms an arbitrary unrelated string
+    # falls through every supported clause; it is the negative space of the
+    # two positive clauses above, not a new mutation to sabotage
+    # independently.
+    test "an unsupported type string is unsupported" do
+      refute Target.supported_invoke_type?("http://example.com/BasicHTTPEventProcessor")
+    end
+
+    # sabotage: `supported_invoke_type?/1`'s final clause changes `type ==
+    # scxml_invoke_type()` to `type == SystemVariables.scxml_event_processor()`
+    # -> the send-processor URI (with its `#SCXMLEventProcessor` fragment)
+    # would wrongly read as a supported invoke type, and this refute reddens
+    test "the two URIs are not interchangeable: the send processor URI is not a supported invoke type" do
+      refute Target.supported_invoke_type?(SystemVariables.scxml_event_processor())
+    end
+
+    # sabotage: `supported_type?/1`'s final clause changes `type ==
+    # SystemVariables.scxml_event_processor()` to `type ==
+    # Target.scxml_invoke_type()` -> the invoke type URI would wrongly read
+    # as a supported send type, and this refute reddens
+    test "the two URIs are not interchangeable: the invoke type URI is not a supported send type" do
+      refute Target.supported_type?(Target.scxml_invoke_type())
+    end
+  end
 end

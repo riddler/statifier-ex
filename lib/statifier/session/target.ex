@@ -75,4 +75,35 @@ defmodule Statifier.Session.Target do
   def supported_type?(nil), do: true
   def supported_type?("scxml"), do: true
   def supported_type?(type), do: type == SystemVariables.scxml_event_processor()
+
+  @doc """
+  6.4.2's URI for `<invoke type>`, mandated verbatim: "Platforms MUST
+  support `http://www.w3.org/TR/scxml/` as a value for the 'type'
+  attribute." This is a **different string** from `supported_type?/1`'s
+  `SystemVariables.scxml_event_processor/0` URI
+  (`http://www.w3.org/TR/scxml/#SCXMLEventProcessor`): 6.4.2 names the bare
+  namespace URI for invoke's `type`, 6.2.5 names the processor URI with its
+  `#SCXMLEventProcessor` fragment for send's. Conflating the two would fail
+  the corpus in both directions - an `<invoke type="http://www.w3.org/TR/scxml/">`
+  rejected as unsupported, or a `<send type="http://www.w3.org/TR/scxml/">`
+  wrongly accepted.
+  """
+  @spec scxml_invoke_type() :: String.t()
+  def scxml_invoke_type, do: "http://www.w3.org/TR/scxml/"
+
+  @doc """
+  Whether `<invoke type>` names the SCXML Event I/O processor (6.4.2). `nil`
+  (the attribute omitted) defaults to it, same as `supported_type?/1`.
+  `"scxml"` is the short form 6.2.5 permits and this codebase already
+  honors for `<send>`; `<invoke>` gets no separate spec license for the
+  short form, but accepting it here is the same no-cost superset decision
+  `parse/1` already makes for `_internal`/`#_internal` and `_parent`/`#_parent`.
+  Anything else - including `supported_type?/1`'s own processor URI - is
+  unsupported: this engine implements only SCXML-typed invocations (see the
+  plan's "What We're NOT Doing" on BasicHTTP and non-SCXML invoke types).
+  """
+  @spec supported_invoke_type?(type :: String.t() | nil) :: boolean()
+  def supported_invoke_type?(nil), do: true
+  def supported_invoke_type?("scxml"), do: true
+  def supported_invoke_type?(type), do: type == scxml_invoke_type()
 end
