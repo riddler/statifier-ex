@@ -26,17 +26,19 @@ defmodule Statifier.Lowering.CoverageTest do
   @supported ~w(
     scxml state parallel final history initial transition onentry onexit
     raise log donedata content param datamodel data assign if elseif else
-    foreach script invoke
+    foreach script invoke send
   )
 
-  # The two names `@phase_3_elements` exists to word the unsupported-
+  # The one name `@phase_3_elements` exists to word the unsupported-
   # element message for - deferred, not partially built. `datamodel` and
   # `data` moved to `@supported` in st-af3.3 Phase 1; `assign` moved the same
   # way in st-af3.4 Phase 1; `if`/`elseif`/`else` moved the same way in
   # st-af3.5 Phase 2; `foreach` moved the same way in st-af3.6 Phase 1;
-  # `param`, `script`, and `invoke` moved the same way since.
+  # `param`, `script`, and `invoke` moved the same way since; `send` moved
+  # the same way too - see `test/statifier/lowering/send_test.exs` for its
+  # own coverage.
   @phase_3_elements ~w(
-    send cancel
+    cancel
   )
 
   # One minimal, spec-legal fixture per known element name. `<data>`'s only

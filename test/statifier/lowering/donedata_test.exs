@@ -228,8 +228,8 @@ defmodule Statifier.Lowering.DonedataTest do
     # instead of `{[result | results], Enum.reverse(child_errors) ++
     # errors}`) -> this test reddens because only the top-level walk's own
     # errors would surface, losing both the misplaced <invoke> error nested
-    # inside <donedata> and the <send> error nested inside the sibling
-    # <state>, so the assertion's two-element list comes back empty
+    # inside <donedata> and the misplaced <send> error nested inside the
+    # sibling <state>, so the assertion's two-element list comes back empty
     test "a misplaced <invoke> in one <donedata> and a <send> in a sibling state report two errors, in document order" do
       xml = """
       <scxml>
@@ -248,7 +248,7 @@ defmodule Statifier.Lowering.DonedataTest do
 
       assert [
                %Error{reason: {:misplaced_element, "invoke", "donedata"}},
-               %Error{reason: {:unsupported_element, "send"}}
+               %Error{reason: {:misplaced_element, "send", "state"}}
              ] = errors
 
       assert Enum.map(errors, & &1.location.start_offset) ==

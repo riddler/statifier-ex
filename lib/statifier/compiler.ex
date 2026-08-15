@@ -95,6 +95,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Param, as: DParam
   alias Statifier.Document.Raise, as: DRaise
   alias Statifier.Document.Script, as: DScript
+  alias Statifier.Document.Send, as: DSend
   alias Statifier.Document.State, as: DState
   alias Statifier.Document.Transition, as: DTransition
   alias Statifier.Machine
@@ -106,6 +107,7 @@ defmodule Statifier.Compiler do
   alias Statifier.Machine.Content.Log, as: MLog
   alias Statifier.Machine.Content.Raise, as: MRaise
   alias Statifier.Machine.Content.Script, as: MScript
+  alias Statifier.Machine.Content.Send, as: MSend
   alias Statifier.Machine.Data, as: MData
   alias Statifier.Machine.Donedata, as: MDonedata
   alias Statifier.Machine.Invoke, as: MInvoke
@@ -126,14 +128,17 @@ defmodule Statifier.Compiler do
   index for `with_data/2`.
 
   `contents_acc`'s value type is asymmetric on purpose: `<raise>`, `<log>`,
-  and `<assign>` are stored raw, since none of the three has children of its
-  own to number - but an `<if>` and a `<foreach>` do, so their entries carry
-  the raw node alongside the `c_index` list(s) `assign_content_nodes/2`'s
-  own recursion assigned: `%{if: DIf.t(), branches: [[non_neg_integer()]]}`
-  for an `<if>` (one list per branch), `%{foreach: DForeach.t(), content:
-  [non_neg_integer()]}` for a `<foreach>` (one flat list, one nesting level
-  shallower) - mirroring `transitions_acc`'s own `%{transition: ..., source:
-  ..., content: ...}` shape (`:396-408`).
+  `<assign>`, and `<send>` are stored raw, since none of the four has
+  children of its own to number (`<send>`'s own `<param>`/`<content>` fold
+  onto its own fields rather than becoming further numbered content nodes,
+  the same way `<invoke>`'s do) - but an `<if>` and a `<foreach>` do, so
+  their entries carry the raw node alongside the `c_index` list(s)
+  `assign_content_nodes/2`'s own recursion assigned: `%{if: DIf.t(),
+  branches: [[non_neg_integer()]]}` for an `<if>` (one list per branch),
+  `%{foreach: DForeach.t(), content: [non_neg_integer()]}` for a `<foreach>`
+  (one flat list, one nesting level shallower) - mirroring
+  `transitions_acc`'s own `%{transition: ..., source: ..., content: ...}`
+  shape (`:396-408`).
 
   `invoke_acc`/`invoke_errors` belong to the `<invoke>` pass - the one pass
   that does not fit the "numbered during the walk, compiled in a deferred
@@ -162,6 +167,7 @@ defmodule Statifier.Compiler do
               | DLog.t()
               | DAssign.t()
               | DScript.t()
+              | DSend.t()
               | %{if: DIf.t(), branches: [[non_neg_integer()]]}
               | %{foreach: DForeach.t(), content: [non_neg_integer()]}
           },
@@ -562,7 +568,14 @@ defmodule Statifier.Compiler do
   # nesting depth - a nested `<if>` inside a branch recurses again the same
   # way.
   @spec assign_content_node(
-          node :: DRaise.t() | DLog.t() | DAssign.t() | DIf.t() | DForeach.t() | DScript.t(),
+          node ::
+            DRaise.t()
+            | DLog.t()
+            | DAssign.t()
+            | DIf.t()
+            | DForeach.t()
+            | DScript.t()
+            | DSend.t(),
           acc :: acc()
         ) ::
           {non_neg_integer(), acc()}
@@ -813,6 +826,7 @@ defmodule Statifier.Compiler do
             | DLog.t()
             | DAssign.t()
             | DScript.t()
+            | DSend.t()
             | %{if: DIf.t(), branches: [[non_neg_integer()]]}
             | %{foreach: DForeach.t(), content: [non_neg_integer()]}
         ) ::
@@ -963,6 +977,133 @@ defmodule Statifier.Compiler do
        program: program,
        node_location: script.location
      }}
+  end
+
+  # `<send>` (spec 6.2), a leaf executable-content node like `<log>`/`<raise>`
+  # rather than a composite like `<if>`/`<foreach>` - it has no
+  # `Machine.Content.t()` children of its own, only `<param>`/`<content>`
+  # data folded directly onto its own fields, mirroring `build_invoke/3`'s
+  # own treatment of the same two children. Every `*expr` variant compiles
+  # through `Expressions.compile/3` with owner `{:content, c_index}` - the
+  # same owner every other content node at this `c_index` uses - the literal
+  # variants fold to `{:static, v}`, and `idlocation` stays a raw,
+  # uncompiled path string (`Machine.Invoke.idlocation`'s own reasoning: a
+  # location path cannot be resolved any earlier than execute time). Any
+  # single compile failure - `event`/`target`/`type`/`delay`, `<content
+  # expr>`, a `<param>`, or a `namelist` entry - stops the `with` and is
+  # returned whole, mirroring `%DLog{}`'s own single-error shape rather than
+  # `%DIf{}`'s multi-error `collect/1` merge: unlike an `<if>`'s independent
+  # branches, `<send>`'s own attributes have no reason to keep compiling
+  # once one of them is already known bad.
+  defp build_content_node(c_index, %DSend{} = send_node) do
+    owner = {:content, c_index}
+
+    with {:ok, event_expr} <-
+           build_send_pair(send_node.event, send_node.eventexpr, :eventexpr, send_node, owner),
+         {:ok, target_expr} <-
+           build_send_pair(send_node.target, send_node.targetexpr, :targetexpr, send_node, owner),
+         {:ok, type_expr} <-
+           build_send_pair(send_node.type, send_node.typeexpr, :typeexpr, send_node, owner),
+         {:ok, delay_expr} <-
+           build_send_pair(send_node.delay, send_node.delayexpr, :delayexpr, send_node, owner),
+         {:ok, content_expr} <- build_send_content(send_node.content, owner),
+         {:ok, params} <- build_send_params(send_node.params, owner),
+         {:ok, namelist} <- build_send_namelist(send_node.namelist, send_node, owner) do
+      {:ok,
+       %MSend{
+         c_index: c_index,
+         location: send_node.location,
+         event: event_expr,
+         target: target_expr,
+         type: type_expr,
+         id: send_node.id,
+         idlocation: send_node.idlocation,
+         delay: delay_expr,
+         namelist: namelist,
+         params: params,
+         content: content_expr,
+         attribute_locations: send_node.attribute_locations
+       }}
+    end
+  end
+
+  # `event`/`target`/`type`/`delay`: the static attribute wins when both are
+  # somehow present on an unvalidated struct (6.2.1's mutual exclusion is
+  # the validator's, not this pass's, to enforce), compiled from the `expr`
+  # sibling attribute otherwise, `nil` when neither was written. Mirrors
+  # `build_invoke_pair/6`, minus its `acc`/`invoke_errors` threading - this
+  # pass reports its own single failure through the `with` above instead.
+  @spec build_send_pair(
+          static_value :: String.t() | nil,
+          compiled_source :: String.t() | nil,
+          expr_attr :: atom(),
+          send_node :: DSend.t(),
+          owner :: Expressions.owner_ref()
+        ) :: {:ok, Machine.expr() | nil} | {:error, Error.t()}
+  defp build_send_pair(static_value, _compiled_source, _expr_attr, _send_node, _owner)
+       when not is_nil(static_value) do
+    {:ok, Expressions.static(static_value)}
+  end
+
+  defp build_send_pair(nil, nil, _expr_attr, _send_node, _owner), do: {:ok, nil}
+
+  defp build_send_pair(nil, source, expr_attr, send_node, owner) do
+    Expressions.compile(source, owner, send_attr_location(send_node, expr_attr))
+  end
+
+  @spec build_send_content(content :: DContent.t() | nil, owner :: Expressions.owner_ref()) ::
+          {:ok, Machine.expr() | nil} | {:error, Error.t()}
+  defp build_send_content(nil, _owner), do: {:ok, nil}
+  defp build_send_content(%DContent{} = content, owner), do: build_content_expr(content, owner)
+
+  # `<send>`'s own `<param>` children, mirroring `build_invoke_param/3` minus
+  # its `acc` threading - failures accumulate through `collect/1` instead,
+  # the same merge `build_donedata_params/2` uses for its own `<param>` list.
+  @spec build_send_params(params :: [DParam.t()], owner :: Expressions.owner_ref()) ::
+          {:ok, [MParam.t()]} | {:error, [Error.t()]}
+  defp build_send_params(params, owner) do
+    params
+    |> Enum.map(&build_send_param(&1, owner))
+    |> collect()
+  end
+
+  defp build_send_param(%DParam{expr: source, param_location: nil} = param, owner)
+       when not is_nil(source) do
+    build_dparam(param, :expr, source, owner)
+  end
+
+  defp build_send_param(%DParam{param_location: source} = param, owner)
+       when not is_nil(source) do
+    build_dparam(param, :location, source, owner)
+  end
+
+  # Each namelist entry is a raw location-expression string, not a
+  # `%DParam{}` - mirrors `build_invoke_namelist/4`'s own reasoning: the
+  # entry's own text doing double duty as both `MParam.name` and the source
+  # to compile (`kind: :location`). The whole `namelist` attribute shares
+  # one written span - there is no per-entry span to point at instead.
+  @spec build_send_namelist(
+          namelist :: [String.t()],
+          send_node :: DSend.t(),
+          owner :: Expressions.owner_ref()
+        ) :: {:ok, [MParam.t()]} | {:error, [Error.t()]}
+  defp build_send_namelist(namelist, send_node, owner) do
+    location = send_attr_location(send_node, :namelist)
+
+    namelist
+    |> Enum.map(&build_param(&1, send_node.location, :location, &1, location, owner))
+    |> collect()
+  end
+
+  # `send_node.attribute_locations[attr]`'s value span when the author wrote
+  # that attribute, the `<send>` node's own `location` otherwise - mirrors
+  # `invoke_attr_location/2`.
+  @spec send_attr_location(send_node :: DSend.t(), attr :: atom()) :: Location.t()
+  defp send_attr_location(
+         %DSend{attribute_locations: attribute_locations, location: location},
+         attr
+       ) do
+    Map.get(attribute_locations, attr, location)
   end
 
   # `document.scripts` (Decision 7, Phase 3) compiled to

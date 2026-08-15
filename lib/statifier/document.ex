@@ -86,7 +86,7 @@ defmodule Statifier.Document do
   rather than copying a `%State{}` that never existed at this layer.
   """
 
-  alias Statifier.Document.{Assign, Datamodel, Foreach, If, Log, Raise, Script, State}
+  alias Statifier.Document.{Assign, Datamodel, Foreach, If, Log, Raise, Script, Send, State}
   alias Statifier.Parser.Location
 
   @typedoc """
@@ -97,7 +97,8 @@ defmodule Statifier.Document do
   @type attribute_locations :: %{optional(atom()) => Location.t()}
 
   @typedoc "The executable-content node types lowering currently supports."
-  @type content_node :: Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t()
+  @type content_node ::
+          Raise.t() | Log.t() | Assign.t() | If.t() | Foreach.t() | Script.t() | Send.t()
 
   @typedoc """
   The kinds a `Statifier.Document.State` can have. Equal to the element
