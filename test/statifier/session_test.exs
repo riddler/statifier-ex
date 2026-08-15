@@ -3,10 +3,12 @@ defmodule Statifier.SessionTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect
+  alias Statifier.Event
   alias Statifier.Lowering
   alias Statifier.MachineState
   alias Statifier.Parser
   alias Statifier.Session
+  alias Statifier.Session.Recording
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -583,6 +585,143 @@ defmodule Statifier.SessionTest do
       assert_receive {:statifier, ^session_id, {:unroutable, {:cancel_invoke, ^cancel_effect}}}
 
       assert Session.status(session).configuration == MapSet.new(["a"])
+    end
+  end
+
+  # -- recording ----------------------------------------------------------
+
+  describe "recording" do
+    # sabotage: `recording/1`'s `handle_call(:recording, _from, %State{recording:
+    # nil} = state)` clause is swapped to reply `{:ok, state.recording}`
+    # unconditionally (dropping the `nil` branch entirely) -> the default
+    # session below gets back `{:ok, nil}` instead of `{:error,
+    # :not_recording}`, reddening the assertion. Reverted and confirmed green.
+    test "recording/1 returns {:error, :not_recording} by default" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      assert Session.recording(session) == {:error, :not_recording}
+    end
+
+    # sabotage: `handle_cast({:enqueue_event, event}, state)`'s `record(state,
+    # &Recording.put_event(&1, event))` call is dropped -> the two `go` events
+    # below never reach the recording, so `Recording.entries/1` comes back
+    # empty instead of two `{:event, _}` entries, reddening the assertion.
+    # Reverted and confirmed green.
+    test "with record: true, events sent via send_event/2 are recorded in order" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      Session.send_event(session, "go")
+      Session.send_event(session, "go")
+
+      _status = wait_for_status(session, fn s -> s.status == :running end)
+
+      {:ok, recording} = Session.recording(session)
+
+      assert [
+               {:event, %Event{name: "go"}},
+               {:event, %Event{name: "go"}}
+             ] = Recording.entries(recording)
+    end
+
+    # sabotage: `handle_cast(:enqueue_cancel, state)`'s `record(state,
+    # &Recording.put_cancel/1)` call is dropped -> the cancel marker never
+    # reaches the recording, so the entry list below comes back with only the
+    # one `{:event, _}` entry instead of the event followed by `:cancel`,
+    # reddening the pattern match. Reverted and confirmed green.
+    test "cancel/1 records the cancel marker in queue position relative to events" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, record: true, subscribers: [self()])
+
+      Session.send_event(session, "go")
+      :ok = Session.cancel(session)
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:halted, :cancelled}}
+
+      {:ok, recording} = Session.recording(session)
+
+      assert [{:event, %Event{name: "go"}}, :cancel] = Recording.entries(recording)
+    end
+
+    # sabotage: `handle_cast({:interpret, effects}, state)`'s `record(state,
+    # &Recording.put_interpret(&1, effects))` call is dropped -> the
+    # interpret/2 batch below is never recorded, so the entry list comes back
+    # empty instead of one `{:interpret, _}` entry, reddening the assertion.
+    # Reverted and confirmed green.
+    test "an interpret/2 call records its batch" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      send_delayed = %Effect.SendDelayed{
+        event: "go",
+        target: nil,
+        send_id: "s1",
+        delay_ms: 200,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      effects = [{:send_delayed, send_delayed}]
+      Session.interpret(session, effects)
+
+      _status = wait_for_status(session, fn s -> s.pending_timers == 1 end)
+
+      {:ok, recording} = Session.recording(session)
+      assert [{:interpret, ^effects}] = Recording.entries(recording)
+    end
+
+    # sabotage: `handle_info({:statifier_delayed_send, ref, send_id, event},
+    # state)`'s `record(state, &Recording.put_timer(&1, send_id, event))` call
+    # is moved to after the `inbox: Inbox.enqueue_event(...)` update instead of
+    # before it, and `send_id` is reverted to the ignored `_send_id` binding
+    # used before this bead so the appended entry's `send_id` field is always
+    # `nil` -> the assertion below (matching the real "s1") reddens. Reverted
+    # and confirmed green.
+    test "a fired delayed send records a {:timer, send_id, event} entry after the interpret/2 entry that scheduled it" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, record: true, subscribers: [self()])
+
+      send_delayed = %Effect.SendDelayed{
+        event: "go",
+        target: nil,
+        send_id: "s1",
+        delay_ms: 20,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      effects = [{:send_delayed, send_delayed}]
+      Session.interpret(session, effects)
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:effect, {:send_delayed, _}}}
+
+      status = wait_for_status(session, fn s -> s.configuration != MapSet.new(["a"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      {:ok, recording} = Session.recording(session)
+
+      assert [
+               {:interpret, ^effects},
+               {:timer, "s1", %Event{name: "go"}}
+             ] = Recording.entries(recording)
+    end
+
+    # sabotage: `init/1`'s `Recording.new(machine, Keyword.put(machine_opts,
+    # :session_id, session_id))` call is changed to pass `machine_opts`
+    # unchanged (dropping the `Keyword.put/3`) -> `Recording.opts/1` carries
+    # `session_id: nil` instead of the session's resolved `sess_` id,
+    # reddening the assertion below. Reverted and confirmed green.
+    test "the recorded opts carry the resolved session id when none was supplied" do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      session_id = Session.session_id(session)
+      {:ok, recording} = Session.recording(session)
+
+      assert Recording.opts(recording)[:session_id] == session_id
     end
   end
 

@@ -550,17 +550,17 @@ addition, which `changelog.d/README.md` lists as fragment-worthy.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] `mix quality --format json --report -` is green (see Phase 1's note on
+- [x] Full `mix quality` passes.
+- [x] `mix quality --format json --report -` is green (see Phase 1's note on
       why this is a per-phase criterion).
-- [ ] `mix test test/statifier/session_test.exs` passes, including the
+- [x] `mix test test/statifier/session_test.exs` passes, including the
       existing suites - the appends must not perturb them.
-- [ ] `mix adr.check` reports no new finding on `lib/statifier/session.ex`
+- [x] `mix adr.check` reports no new finding on `lib/statifier/session.ex`
       (the file is allowlisted for I/O, but ADR-0018 still applies to the
       comments this phase adds).
-- [ ] `mix test.regression` is unchanged - no conformance result moves, so
+- [x] `mix test.regression` is unchanged - no conformance result moves, so
       `test/passing_tests.json` needs no `mix test.baseline add`.
-- [ ] `changelog.d/st-dtm.md` exists.
+- [x] `changelog.d/st-dtm.md` exists.
 
 #### Manual Verification:
 - [ ] A session started without `record: true` is unchanged in behavior and
@@ -921,5 +921,21 @@ judge is the point of the phase.
 **Implementation Note**: `mix quality --profile loop` between edits, full gate
 as the phase gate. Under `--loop`, the automated list gates advancement and the
 manual items are deferred.
+
+---
+
+### Phase 3
+
+- [ ] A session started without `record: true` is unchanged in behavior and
+      pays only a `nil` check per input.
+- [ ] The recorded entry order for a run mixing all four input kinds matches
+      the order the inputs were actually issued in, read by eye off the test.
+- [ ] Spec conformance: this phase adds no interpreter logic - the drain loop,
+      `drain_event/2`, and `drain_cancel/1` are untouched, so Appendix D's
+      `mainEventLoop` port is line-for-line what it was. Confirm by diff that
+      no line inside those functions changed.
+
+**Implementation Note**: `mix quality --profile loop` between edits, full gate
+as the phase gate.
 
 ---
