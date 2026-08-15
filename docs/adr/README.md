@@ -9,7 +9,7 @@
 | [0005](0005-full-configuration-and-interned-state-indexes.md) | Full configuration; interned state indexes | accepted |
 | [0006](0006-reuse-conformance-corpus-and-regression-ratchet.md) | Reuse conformance corpus and ratchet; commit a generator | accepted |
 | [0007](0007-beads-for-issue-tracking.md) | Beads for issue tracking | accepted |
-| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted (amended 2026-08-15: invoke id format) |
+| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted (amended 2026-08-15: invoke id format; invoke platformid is a session counter, not a UXID) |
 | [0009](0009-ex-quality-as-quality-gate.md) | ex_quality is the quality gate | accepted |
 | [0010](0010-worktree-parallel-development.md) | Worktree parallel development via beads | accepted |
 | [0011](0011-quality-gate-config-not-agent-editable.md) | Quality gate config is not agent-editable | accepted |

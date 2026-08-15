@@ -76,6 +76,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :entered_states,
     :states_to_invoke,
     :active_invocations,
+    :invoke_counter,
     :datamodel,
     :running,
     :status,
@@ -88,9 +89,10 @@ defmodule Statifier.MachineStateAcceptanceTest do
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
   # indexes), FIFO internal queue, history values, first-entry tracking,
-  # states awaiting the invoke pass, live invocation ids, datamodel slot,
-  # running, status, macrostep/microstep/round counters, trace option,
-  # round budget (ADR-0019) - nothing loop-local left unreified".
+  # states awaiting the invoke pass, live invocation ids, the session-global
+  # invoke platformid counter (ADR-0008 as amended 2026-08-15), datamodel
+  # slot, running, status, macrostep/microstep/round counters, trace
+  # option, round budget (ADR-0019) - nothing loop-local left unreified".
   # `entered_states` is the ADR-0002 substitute for Appendix D's
   # `s.isFirstEntry`, which cannot live on a compiled, immutable
   # `%Machine.State{}` in this port - see that field's own moduledoc
@@ -100,13 +102,17 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # `active_invocations` is `inv.invokeid` hoisted off compiled data
   # (Decision 7 of the plan this bead's Phase 6 implements) - see that
   # field's own moduledoc section. `round` (ADR-0020) is the third
-  # counter, joining `macrostep`/`microstep`.
+  # counter, joining `macrostep`/`microstep`. `invoke_counter` is a fourth,
+  # unrelated to that trio's per-macrostep reset - it is the pure,
+  # session-global source `Statifier.Interpreter.generate_invoke_id/3`
+  # reads and writes so the invoke id it mints never touches the wall clock
+  # or a CSPRNG (ADR-0003) - see that field's own moduledoc section.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a sixteenth key,
-  # and this equality assertion reddens for exactly the "someone adds a
-  # field without updating the docs" failure the plan calls out.
-  test "machine_state holds the fifteen fields, and the struct has no others" do
+  # lib/statifier/machine_state.ex - the struct then grows a seventeenth
+  # key, and this equality assertion reddens for exactly the "someone adds
+  # a field without updating the docs" failure the plan calls out.
+  test "machine_state holds the sixteen fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)

@@ -1211,8 +1211,8 @@ defmodule Statifier.Interpreter do
   # the same accumulator rather than a fold that stops on first error.
   #
   # On success: `invoke_id` is the author's literal `id`, or `state.id <>
-  # "." <> UXID(inv)`, or the bare UXID when the state has no `id` (Decision
-  # 1, ADR-0008 as amended). `idlocation`, when set, is written through
+  # "." <> "inv_" <> counter`, or bare `inv_<counter>` when the state has
+  # no `id` (Decision 1, ADR-0008 as amended 2026-08-15). `idlocation`, when set, is written through
   # `Datamodel.write_location/4` - a write failure is a step-4-shaped
   # failure, same abort, no effect. Otherwise the invocation is recorded in
   # `active_invocations` and one `{:invoke, %Effect.Invoke{}}` is emitted.
@@ -1229,7 +1229,7 @@ defmodule Statifier.Interpreter do
          {:ok, src} <- resolve_expr(context, invoke.src),
          {:ok, raw_params} <- resolve_params(context, invoke.namelist ++ invoke.params),
          {:ok, content} <- resolve_content(context, invoke.content) do
-      invoke_id = generate_invoke_id(state, invoke)
+      {invoke_id, machine_state} = generate_invoke_id(machine_state, state, invoke)
 
       case maybe_write_idlocation(machine_state, context, invoke.idlocation, invoke_id) do
         {:ok, machine_state, context} ->
@@ -1307,17 +1307,51 @@ defmodule Statifier.Interpreter do
     end
   end
 
-  # Decision 1 / ADR-0008 as amended: the author's literal `id`, used
-  # verbatim, or the generated `state.id <> "." <> UXID(inv)` / bare UXID
-  # composite - generated fresh for *this* invocation, not memoized on the
-  # `<invoke>` element (3.14: "not at load time but each time the element
-  # is executed").
-  @spec generate_invoke_id(state :: Machine.State.t(), invoke :: MInvoke.t()) :: String.t()
-  defp generate_invoke_id(_state, %MInvoke{id: id}) when is_binary(id), do: id
-  defp generate_invoke_id(%{id: nil}, %MInvoke{id: nil}), do: UXID.generate!(prefix: "inv")
+  # Decision 1 / ADR-0008 as amended (2026-08-15): the author's literal
+  # `id`, used verbatim and never composed, or the generated
+  # `state.id <> "." <> "inv_" <> counter` / bare `inv_<counter>` when the
+  # state has no `id` - generated fresh for *this* invocation, not memoized
+  # on the `<invoke>` element (3.14: "not at load time but each time the
+  # element is executed", and a state entered twice invokes twice, each
+  # with its own id).
+  #
+  # `counter` is `machine_state.invoke_counter`, one session-global
+  # auto-increment - not per-state, not per-element (6.4.1 hangs its
+  # uniqueness MUST on the platformid itself, so per-state counters would
+  # be nonconformant). It is read from and written back to
+  # `%MachineState{}` rather than minted with `UXID.generate!`: UXID reads
+  # the wall clock and a CSPRNG, which would make this function
+  # `(state, event, clock, entropy) -> ...` instead of ADR-0003's
+  # `(state, event) -> {state, [effect]}`, observably so because `<invoke
+  # idlocation>` writes the generated id into the datamodel. A pure counter
+  # replays identically. ADR-0003 wins over ADR-0008's original identifier
+  # aesthetics where the two collide.
+  #
+  # An author-written id never advances the counter - only a generated id
+  # consumes the session-global sequence, so `generate_invoke_id/3` returns
+  # `machine_state` unchanged on that clause.
+  @spec generate_invoke_id(
+          machine_state :: MachineState.t(),
+          state :: Machine.State.t(),
+          invoke :: MInvoke.t()
+        ) :: {String.t(), MachineState.t()}
+  defp generate_invoke_id(machine_state, _state, %MInvoke{id: id}) when is_binary(id),
+    do: {id, machine_state}
 
-  defp generate_invoke_id(%{id: state_id}, %MInvoke{id: nil}),
-    do: state_id <> "." <> UXID.generate!(prefix: "inv")
+  defp generate_invoke_id(%MachineState{invoke_counter: counter} = machine_state, state, %MInvoke{
+         id: nil
+       }) do
+    machine_state = %{machine_state | invoke_counter: counter + 1}
+    platformid = "inv_" <> Integer.to_string(counter + 1)
+
+    invoke_id =
+      case state.id do
+        nil -> platformid
+        state_id -> state_id <> "." <> platformid
+      end
+
+    {invoke_id, machine_state}
+  end
 
   # `idlocation`'s write (6.4.1) - a no-op tuple shaped like
   # `Datamodel.write_location/4`'s own success return when the attribute is
