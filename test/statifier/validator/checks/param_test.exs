@@ -142,5 +142,23 @@ defmodule Statifier.Validator.Checks.ParamTest do
       assert {:error, [%Error{reason: {:param_no_value, "x"}} = error]} = validate!(xml)
       assert error.location.start_line == 5
     end
+
+    # sabotage: `params/1`'s new `Enum.flat_map(invokes, & &1.params)` half
+    # is dropped, leaving only `donedata_params(donedata)` -> an offending
+    # `<param>` under `<invoke>` goes unwalked, reddening this assertion
+    test "an offending <param> under <invoke> is reported too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <param name="x"/>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "x"}} = error]} = validate!(xml)
+      assert error.location.start_line == 4
+    end
   end
 end

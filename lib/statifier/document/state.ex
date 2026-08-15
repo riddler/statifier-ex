@@ -88,6 +88,7 @@ defmodule Statifier.Document.State do
   alias Statifier.Document.Datamodel
   alias Statifier.Document.Donedata
   alias Statifier.Document.Initial
+  alias Statifier.Document.Invoke
   alias Statifier.Document.Transition
   alias Statifier.Parser.Location
 
@@ -105,6 +106,7 @@ defmodule Statifier.Document.State do
     history_type: nil,
     donedata: nil,
     datamodel_element: nil,
+    invoke: [],
     attribute_locations: %{}
   ]
 
@@ -120,6 +122,7 @@ defmodule Statifier.Document.State do
           history_type: :shallow | :deep | nil,
           donedata: Donedata.t() | nil,
           datamodel_element: Datamodel.t() | nil,
+          invoke: [Invoke.t()],
           location: Location.t(),
           attribute_locations: Document.attribute_locations()
         }

@@ -227,10 +227,10 @@ defmodule Statifier.Lowering.DonedataTest do
     # own errors instead of prepending them (`{[result | results], errors}`
     # instead of `{[result | results], Enum.reverse(child_errors) ++
     # errors}`) -> this test reddens because only the top-level walk's own
-    # errors would surface, losing both the <invoke> error nested inside
-    # <donedata> and the <send> error nested inside the sibling <state>, so
-    # the assertion's two-element list comes back empty
-    test "an <invoke> in one <donedata> and a <send> in a sibling state report two errors, in document order" do
+    # errors would surface, losing both the misplaced <invoke> error nested
+    # inside <donedata> and the <send> error nested inside the sibling
+    # <state>, so the assertion's two-element list comes back empty
+    test "a misplaced <invoke> in one <donedata> and a <send> in a sibling state report two errors, in document order" do
       xml = """
       <scxml>
           <final id="f">
@@ -247,7 +247,7 @@ defmodule Statifier.Lowering.DonedataTest do
       assert {:error, errors} = xml |> parse!() |> Lowering.lower()
 
       assert [
-               %Error{reason: {:unsupported_element, "invoke"}},
+               %Error{reason: {:misplaced_element, "invoke", "donedata"}},
                %Error{reason: {:unsupported_element, "send"}}
              ] = errors
 

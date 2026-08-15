@@ -220,6 +220,80 @@ defmodule Statifier.Validator.Checks.EnumsTest do
     end
   end
 
+  describe "check/2 - invoke_bad_autoforward" do
+    # sabotage: `autoforward_errors/2` reads
+    # `invoke.attribute_locations[:namelist]` instead of `[:autoforward]` ->
+    # the sliced text is the namelist value rather than the autoforward one,
+    # so the reason no longer carries "sideways", reddening this assertion
+    test "an out-of-range autoforward value is reported with the source text" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a">
+              <invoke type="t" autoforward="sideways"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}} = error]} =
+               validate!(xml)
+
+      assert error.location.start_line == 3
+      assert error.message == ~s(invoke autoforward "sideways" must be "true" or "false")
+    end
+
+    # sabotage: @autoforwards drops "false", keeping only "true" -> the
+    # legal autoforward="false" below is reported as out of range, reddening
+    # this {:ok, _} assertion
+    test "both legal autoforward values report nothing" do
+      for autoforward <- ["true", "false"] do
+        xml = """
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+            <state id="a">
+                <invoke type="t" autoforward="#{autoforward}"/>
+            </state>
+        </scxml>
+        """
+
+        assert {:ok, _document} = validate!(xml)
+      end
+    end
+
+    # sabotage: `autoforward_errors/2` drops its `flatten/1` step, walking
+    # only `document.states` directly instead of every nested state -> an
+    # `<invoke>` under a nested `<state>` is no longer reached, reddening
+    # this assertion
+    test "an <invoke> under a nested state is covered too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a">
+              <state id="b">
+                  <invoke type="t" autoforward="sideways"/>
+              </state>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:invoke_bad_autoforward, "sideways"}}]} = validate!(xml)
+    end
+
+    # sabotage: out_of_range/5's `:error` arm (shared with the other
+    # enumerated attributes above) reports a zero-width span instead of
+    # returning [], treating an absent attribute as a written empty one ->
+    # an <invoke> with no autoforward attribute gains a spurious
+    # :invoke_bad_autoforward, reddening this {:ok, _} assertion
+    test "an <invoke> with no autoforward attribute reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a">
+              <invoke type="t"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, _document} = validate!(xml)
+    end
+  end
+
   describe "check/2 - the history type attribute stays check 5's" do
     # sabotage: Checks.Enums grows a `:history` arm reporting
     # :transition_bad_type for a <history type="...">, the duplication this

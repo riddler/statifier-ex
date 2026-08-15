@@ -23,6 +23,7 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Foreach
   alias Statifier.Document.If
   alias Statifier.Document.Initial
+  alias Statifier.Document.Invoke
   alias Statifier.Document.Log
   alias Statifier.Document.Param
   alias Statifier.Document.Raise
@@ -38,6 +39,7 @@ defmodule Statifier.Lowering.Builders do
   @binding_values %{"early" => :early, "late" => :late}
   @history_type_values %{"shallow" => :shallow, "deep" => :deep}
   @transition_type_values %{"internal" => :internal, "external" => :external}
+  @autoforward_values %{"true" => true, "false" => false}
 
   @doc """
   Builds the `%Statifier.Document{}` root from `<scxml>`.
@@ -754,6 +756,83 @@ defmodule Statifier.Lowering.Builders do
     end
   end
 
+  @doc """
+  Builds a `%Statifier.Document.Invoke{}` from an `<invoke>` element (spec
+  6.4), tagged `{:invoke, invoke}`.
+
+  Reads all eight 6.4.1 attributes with `Attributes.value/2` (`namelist`
+  with `Attributes.list/2`, `autoforward` with `Attributes.atom/4` against
+  `"true"`/`"false"`, defaulting `false` per 6.4.1's own stated default) and
+  records every one's span in `attribute_locations`. Like `<param>`'s
+  deliberate expr/location pair, every mutually exclusive attribute pairing
+  6.4.1 names (`type`/`typeexpr`, `src`/`srcexpr`, `id`/`idlocation`,
+  `namelist`/`<param>`, and `src`|`srcexpr`/`<content>`) is lowered rather
+  than refused - `Statifier.Validator.Checks.Invoke` reports the shape.
+
+  `<param>` children accumulate into `params`, a `<content>` child sets
+  `content`, and a `<finalize>` child sets `finalize` - all three via
+  `place_children/3`'s own `%Invoke{}` clauses below.
+  """
+  @spec build_invoke(element :: Element.t(), ctx :: map()) ::
+          {{:invoke, Invoke.t()}, [Error.t()]}
+  def build_invoke(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    attribute_locations =
+      %{}
+      |> Attributes.put_location(:type, element, "type")
+      |> Attributes.put_location(:typeexpr, element, "typeexpr")
+      |> Attributes.put_location(:src, element, "src")
+      |> Attributes.put_location(:srcexpr, element, "srcexpr")
+      |> Attributes.put_location(:id, element, "id")
+      |> Attributes.put_location(:idlocation, element, "idlocation")
+      |> Attributes.put_location(:namelist, element, "namelist")
+      |> Attributes.put_location(:autoforward, element, "autoforward")
+
+    invoke = %Invoke{
+      location: element.location,
+      type: Attributes.value(element, "type"),
+      typeexpr: Attributes.value(element, "typeexpr"),
+      src: Attributes.value(element, "src"),
+      srcexpr: Attributes.value(element, "srcexpr"),
+      id: Attributes.value(element, "id"),
+      idlocation: Attributes.value(element, "idlocation"),
+      namelist: Attributes.list(element, "namelist"),
+      autoforward: Attributes.atom(element, "autoforward", @autoforward_values, false),
+      attribute_locations: attribute_locations
+    }
+
+    {invoke, place_errors} = place_children(results, invoke, element.name)
+    invoke = reverse_lists(invoke)
+
+    {{:invoke, invoke}, errors ++ place_errors}
+  end
+
+  @doc """
+  Builds a `%Statifier.Document.Block{}` from a `<finalize>` element (spec
+  6.5), tagged `{:finalize, block}`.
+
+  Mirrors `build_onentry/2`/`build_onexit/2`'s shared `build_block/3` - one
+  `Block` per `<finalize>`, carrying its own `location` - but is not routed
+  through that helper since its tag is `:finalize`, not `:onentry`/`:onexit`.
+  An `<invoke>` with no `<finalize>` child leaves `Invoke.finalize` at its
+  struct default of `nil`; a written but childless `<finalize/>` still
+  builds a `%Block{content: []}` here, which is how `Invoke.finalize`
+  distinguishes absent from empty (6.5, `Statifier.Document.Invoke`'s
+  moduledoc).
+  """
+  @spec build_finalize(element :: Element.t(), ctx :: map()) ::
+          {{:finalize, Block.t()}, [Error.t()]}
+  def build_finalize(%Element{} = element, ctx) do
+    {results, errors} = Lowering.walk_children(element, ctx)
+
+    block = %Block{location: element.location}
+    {block, place_errors} = place_children(results, block, element.name)
+    block = reverse_lists(block)
+
+    {{:finalize, block}, errors ++ place_errors}
+  end
+
   # Shared by `build_onentry/2` and `build_onexit/2` (`build_block/3` takes a
   # `tag` atom, its own contribution - never a parent element name). `Block`
   # has no slot for anything but `Document.content_node`
@@ -854,6 +933,22 @@ defmodule Statifier.Lowering.Builders do
 
   defp place({:datamodel, datamodel}, %State{} = parent, _parent_name) do
     {%{parent | datamodel_element: datamodel}, nil}
+  end
+
+  defp place({:invoke, invoke}, %State{} = parent, _parent_name) do
+    {%{parent | invoke: [invoke | parent.invoke]}, nil}
+  end
+
+  defp place({:param, param}, %Invoke{} = parent, _parent_name) do
+    {%{parent | params: [param | parent.params]}, nil}
+  end
+
+  defp place({:content, content}, %Invoke{} = parent, _parent_name) do
+    {%{parent | content: content}, nil}
+  end
+
+  defp place({:finalize, block}, %Invoke{} = parent, _parent_name) do
+    {%{parent | finalize: block}, nil}
   end
 
   defp place({:datamodel, datamodel}, %Document{} = parent, _parent_name) do
@@ -980,7 +1075,8 @@ defmodule Statifier.Lowering.Builders do
       | states: Enum.reverse(state.states),
         transitions: Enum.reverse(state.transitions),
         onentry: Enum.reverse(state.onentry),
-        onexit: Enum.reverse(state.onexit)
+        onexit: Enum.reverse(state.onexit),
+        invoke: Enum.reverse(state.invoke)
     }
   end
 
@@ -1006,6 +1102,10 @@ defmodule Statifier.Lowering.Builders do
 
   defp reverse_lists(%Donedata{} = donedata) do
     %{donedata | params: Enum.reverse(donedata.params)}
+  end
+
+  defp reverse_lists(%Invoke{} = invoke) do
+    %{invoke | params: Enum.reverse(invoke.params)}
   end
 
   # `%If{}`'s branches were built newest-first (`place/3`'s `%If{}` clauses

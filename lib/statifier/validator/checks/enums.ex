@@ -10,7 +10,7 @@ defmodule Statifier.Validator.Checks.Enums do
   argument exists for: the written attribute's span is sliced
   back out and compared against the range.
 
-  Three reasons, one per enumerated attribute this check owns:
+  Four reasons, one per enumerated attribute this check owns:
 
   - `{:transition_bad_type, raw}` - a `<transition type="...">` that is
     neither `"internal"` nor `"external"` (spec 3.5). Covers every
@@ -34,8 +34,13 @@ defmodule Statifier.Validator.Checks.Enums do
     `datamodel="javascript"`) - the ordinary job of a validator check on an
     enumerated NMTOKEN. An absent `datamodel` attribute is `"predicator"`,
     this platform's documented default (3.2.2), so it is never reported.
+  - `{:invoke_bad_autoforward, raw}` - an `<invoke autoforward="...">` that
+    is neither `"true"` nor `"false"` (spec 6.4.1). Walks every `<invoke>`
+    in the document directly (this check's own `flatten/1`, the same shape
+    `Checks.Donedata`/`Checks.Content`/`Checks.Param` use), since
+    `Statifier.Validator.Context` indexes transitions but not invocations.
 
-  The third enumerated attribute lowering maps this way, `<history
+  The fifth enumerated attribute lowering maps this way, `<history
   type="...">`, is **not** here: `Statifier.Validator.Checks.History` reports
   it as `:history_bad_type` under spec 3.10, alongside that element's other
   structural rules. The slice-and-compare shape is duplicated between the two
@@ -55,22 +60,26 @@ defmodule Statifier.Validator.Checks.Enums do
   @transition_types ["internal", "external"]
   @bindings ["early", "late"]
   @datamodels ["predicator", "elixir", "null", "ecmascript", "xpath"]
+  @autoforwards ["true", "false"]
 
   @doc """
   Returns a `:transition_bad_type` error for every `<transition type="...">`
   whose written value is neither `"internal"` nor `"external"`, a
   `:scxml_bad_binding` error when the root `<scxml binding="...">` is neither
-  `"early"` nor `"late"`, and a `:scxml_bad_datamodel` error when the root
+  `"early"` nor `"late"`, a `:scxml_bad_datamodel` error when the root
   `<scxml datamodel="...">` is outside `["predicator", "elixir", "null",
-  "ecmascript", "xpath"]`. All three slice the raw source text rather than
-  trusting the lowered atom, since an out-of-range value and a valid one can
-  lower to the same default. Returns `[]` when all three enumerated
+  "ecmascript", "xpath"]`, and an `:invoke_bad_autoforward` error for every
+  `<invoke autoforward="...">` whose written value is neither `"true"` nor
+  `"false"`. All four slice the raw source text rather than trusting the
+  lowered atom/boolean, since an out-of-range value and a valid one can
+  lower to the same default. Returns `[]` when all four enumerated
   attributes are in range everywhere they were written.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{} = document, %Context{} = context) do
     transition_type_errors(context) ++
-      binding_errors(document, context) ++ datamodel_errors(document, context)
+      binding_errors(document, context) ++
+      datamodel_errors(document, context) ++ autoforward_errors(document, context)
   end
 
   defp transition_type_errors(%Context{transitions: transitions} = context) do
@@ -92,6 +101,22 @@ defmodule Statifier.Validator.Checks.Enums do
     out_of_range(attribute_locations, :datamodel, @datamodels, context, fn raw, location ->
       Error.scxml_bad_datamodel(raw, location)
     end)
+  end
+
+  defp autoforward_errors(%Document{states: states}, context) do
+    states
+    |> flatten()
+    |> Enum.flat_map(& &1.invoke)
+    |> Enum.flat_map(fn invoke ->
+      out_of_range(invoke.attribute_locations, :autoforward, @autoforwards, context, fn raw,
+                                                                                        location ->
+        Error.invoke_bad_autoforward(raw, location)
+      end)
+    end)
+  end
+
+  defp flatten(states) do
+    Enum.flat_map(states, fn state -> [state | flatten(state.states)] end)
   end
 
   defp out_of_range(attribute_locations, key, allowed, %Context{source: source}, build) do

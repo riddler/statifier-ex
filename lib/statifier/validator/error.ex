@@ -65,6 +65,12 @@ defmodule Statifier.Validator.Error do
           | {:if_elseif_after_else}
           | {:if_duplicate_else}
           | {:script_no_src_or_text}
+          | {:invoke_type_and_typeexpr}
+          | {:invoke_src_and_srcexpr}
+          | {:invoke_src_and_content}
+          | {:invoke_id_and_idlocation}
+          | {:invoke_namelist_and_param}
+          | {:invoke_bad_autoforward, raw :: binary()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -671,6 +677,98 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:script_no_src_or_text},
       message: "<script> must specify either the src attribute or child content",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: "type: Must not occur with the 'typeexpr' attribute." An
+  `<invoke>` carrying both. Reported at the `<invoke>` element's own
+  `location` - the reason carries no payload, matching `{:if_duplicate_else}`
+  and `{:script_no_src_or_text}`'s own nullary shape for a violation with no
+  natural id to name it by.
+  """
+  @spec invoke_type_and_typeexpr(location :: Location.t()) :: t()
+  def invoke_type_and_typeexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:invoke_type_and_typeexpr},
+      message: "<invoke> must not specify both type and typeexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: "src: Must not occur with the 'srcexpr' attribute or the
+  `<content>` element." The `src`/`srcexpr` half of that constraint; the
+  `<content>` half is `invoke_src_and_content/1`. An `<invoke>` carrying both
+  `src` and `srcexpr`. Reported at the `<invoke>` element's own `location`.
+  """
+  @spec invoke_src_and_srcexpr(location :: Location.t()) :: t()
+  def invoke_src_and_srcexpr(%Location{} = location) do
+    %__MODULE__{
+      reason: {:invoke_src_and_srcexpr},
+      message: "<invoke> must not specify both src and srcexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: the other half of `src`'s "Must not occur with ... the
+  `<content>` element" constraint - an `<invoke>` carrying a `<content>`
+  child alongside `src` or `srcexpr`. Reported at the `<invoke>` element's
+  own `location`.
+  """
+  @spec invoke_src_and_content(location :: Location.t()) :: t()
+  def invoke_src_and_content(%Location{} = location) do
+    %__MODULE__{
+      reason: {:invoke_src_and_content},
+      message: "<invoke> must not specify src or srcexpr together with a <content> child",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: "id: Must not occur with the 'idlocation' attribute." An
+  `<invoke>` carrying both. Reported at the `<invoke>` element's own
+  `location`.
+  """
+  @spec invoke_id_and_idlocation(location :: Location.t()) :: t()
+  def invoke_id_and_idlocation(%Location{} = location) do
+    %__MODULE__{
+      reason: {:invoke_id_and_idlocation},
+      message: "<invoke> must not specify both id and idlocation",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: "namelist: Must not occur with the `<param>` element." An
+  `<invoke>` carrying a written `namelist` alongside one or more `<param>`
+  children. Reported at the `<invoke>` element's own `location`.
+  """
+  @spec invoke_namelist_and_param(location :: Location.t()) :: t()
+  def invoke_namelist_and_param(%Location{} = location) do
+    %__MODULE__{
+      reason: {:invoke_namelist_and_param},
+      message: "<invoke> must not specify namelist together with a <param> child",
+      location: location
+    }
+  end
+
+  @doc """
+  Spec 6.4.1: an `<invoke autoforward="...">` value that is neither
+  `"true"` nor `"false"`. Same slice-back substrate as
+  `transition_bad_type/2` and `Statifier.Validator.Checks.Enums`'s other
+  three enumerated attributes - `Statifier.Lowering.Attributes.atom/4` maps
+  an unrecognised value onto the `false` default, so the atom alone cannot
+  tell `autoforward="false"` from `autoforward="sideways"`. `raw` is the
+  source text as written (`Location.slice/2`).
+  """
+  @spec invoke_bad_autoforward(raw :: binary(), location :: Location.t()) :: t()
+  def invoke_bad_autoforward(raw, %Location{} = location) when is_binary(raw) do
+    %__MODULE__{
+      reason: {:invoke_bad_autoforward, raw},
+      message: "invoke autoforward #{inspect(raw)} must be \"true\" or \"false\"",
       location: location
     }
   end
