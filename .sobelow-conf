@@ -21,14 +21,20 @@
 # `ignore_files` excludes by path, with the reason stated, the way .credo.exs
 # does - never by lowering a threshold to get past a finding:
 #
-#   lib/mix/statifier/gate_guard.ex, lib/mix/statifier/regression_registry.ex
-#     Traversal.FileModule on File.read/1 and File.write/2. Both are Mix task
-#     support modules: they run under `mix` on a developer's machine and read
-#     paths that developer configured, so the path is not attacker-controlled
-#     and never reaches the released library. Everything under lib/statifier is
-#     scanned; only these two dev-only modules are not, and a new one is not
-#     covered by this list until someone adds it here.
+#   lib/mix/statifier/gate_guard.ex, lib/mix/statifier/regression_registry.ex,
+#   lib/mix/statifier/adr_guard.ex
+#     Traversal.FileModule on File.read/1 and File.write/2. All three are Mix
+#     task support modules: they run under `mix` on a developer's machine and
+#     read paths that developer configured, so the path is not
+#     attacker-controlled and never reaches the released library. Everything
+#     under lib/statifier is scanned; only these three dev-only modules are
+#     not, and a new one is not covered by this list until someone adds it
+#     here.
 [
   exit: "low",
-  ignore_files: ["lib/mix/statifier/gate_guard.ex", "lib/mix/statifier/regression_registry.ex"]
+  ignore_files: [
+    "lib/mix/statifier/gate_guard.ex",
+    "lib/mix/statifier/regression_registry.ex",
+    "lib/mix/statifier/adr_guard.ex"
+  ]
 ]

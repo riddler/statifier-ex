@@ -296,12 +296,47 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
 
     # A bead ID added mid-body into a heredoc whose opening `\"\"\"` is unchanged
-    # context is invisible to a line-based, --unified=0 diff pass - the guard's
-    # documented blind spot rather than a bug.
-    #
-    # sabotage: have doc_context_step/2's fall-through branch keep the entry
-    #           instead of dropping it, so every added line reads as doc text -> red
-    test "a bead ID added into a heredoc whose opener is not in the diff is not caught" do
+    # context is invisible to the diff hunk alone - this is the case the
+    # file-derived heredoc-body set closes: the post-image text on `:files`
+    # carries the moduledoc's extent even though its opener never appears
+    # above.
+    # sabotage: have doc_context_texts/2 ignore the file-derived body-line set -> red
+    test "a bead ID added into a heredoc whose opener is not in the diff is still caught" do
+      diff = """
+      diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
+      --- a/lib/statifier/document.ex
+      +++ b/lib/statifier/document.ex
+      @@ -11,0 +11,1 @@
+      +  st-af3 explains why this module exists.
+      """
+
+      file_text = """
+      defmodule Statifier.Document do
+        @moduledoc \"\"\"
+        Line 3.
+        Line 4.
+        Line 5.
+        Line 6.
+        Line 7.
+        Line 8.
+        Line 9.
+        Line 10.
+        st-af3 explains why this module exists.
+        Line 12.
+        \"\"\"
+      end
+      """
+
+      assert [%{check: "adr-0018-bead-id", line: 11}] =
+               AdrGuard.analyze(%{diff: diff, files: %{"lib/statifier/document.ex" => file_text}})
+    end
+
+    # Documents the degradation when a source carries no post-image text
+    # rather than leaving it implicit: with no `:files` key, the file-derived
+    # half of the seed flag contributes nothing, and the hunk-local fallback
+    # (no opener in this hunk) reports no finding.
+    # sabotage: have doc_heredoc_body_lines/1 raise on nil instead of returning an empty set -> red
+    test "a bead ID added into a heredoc whose opener is not in the diff, with no file text supplied, is not caught" do
       diff = """
       diff --git a/lib/statifier/document.ex b/lib/statifier/document.ex
       --- a/lib/statifier/document.ex
@@ -479,6 +514,41 @@ defmodule Mix.Statifier.AdrGuardTest do
 
       assert_received {:diffed, "lib/statifier/interpreter.ex"}
       refute_received {:diffed, "scratch.exs"}
+    end
+
+    # `collect/1`'s `:files` seam: only the lib/ and test/ paths the diff
+    # names get their post-image text read, which is what lets `analyze/1` see
+    # inside a doc heredoc whose opener sits outside the diff hunk.
+    # sabotage: drop the lib/ + test/ filter from file_texts/2, so every diffed path is read -> red
+    test "collect/1 reads post-image text for the diffed lib/ and test/ paths only" do
+      parent = self()
+
+      diff =
+        file_diff("lib/statifier/document.ex", ["  defp exitset(s) do"]) <>
+          file_diff("test/statifier/document_test.exs", ["  test \"x\" do"]) <>
+          file_diff("docs/adr/0013-something.md", ["  something"])
+
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff", {diff, 0}}
+      ]
+
+      reader = fn path ->
+        send(parent, {:read, path})
+        {:ok, "content of #{path}"}
+      end
+
+      assert {:ok, sourced} = AdrGuard.collect(runner: runner(responses), reader: reader)
+
+      assert Map.keys(sourced.files) |> Enum.sort() == [
+               "lib/statifier/document.ex",
+               "test/statifier/document_test.exs"
+             ]
+
+      assert_received {:read, "lib/statifier/document.ex"}
+      assert_received {:read, "test/statifier/document_test.exs"}
+      refute_received {:read, "docs/adr/0013-something.md"}
     end
 
     # sabotage: raise instead of returning {:error, _} when git fails -> red

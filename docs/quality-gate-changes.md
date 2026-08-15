@@ -13,6 +13,31 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-15 - st-0ej
+
+Approved-by: JohnnyT (in session)
+
+- .sobelow-conf: adds lib/mix/statifier/adr_guard.ex to `ignore_files`, and
+  extends the inline reason from two dev-only Mix support modules to three
+
+Reason: closing the guard's heredoc blind spot means it can no longer work
+from the diff alone - a body line added into a heredoc whose opening `"""` is
+unchanged context is invisible to `--unified=0` - so `collect/1` now reads the
+post-image text of the diffed files behind an `opts[:reader]` seam defaulting
+to `File.read/1`. Sobelow's Traversal.FileModule flags that call because the
+path is not a literal, and this project runs `exit: "low"` on purpose, so the
+finding blocks. No code-level fix clears it: the check has no sanitization
+detection and fires on any non-literal path outside a Phoenix controller.
+
+adr_guard.ex is now the same shape as the two modules already excluded here -
+a Mix task support module that runs under `mix` on a developer's machine,
+reads paths derived from that developer's own repository, and never reaches
+the released library. The exclusion is by path with its reason stated, which
+is what .sobelow-conf's own comment asks for when a third such module
+appears. No threshold moved: `exit: "low"` is unchanged, every other file
+under lib/ is still scanned, and the change to the guard itself strengthens a
+check rather than weakening one.
+
 ## 2026-08-14 - st-wjg
 
 Approved-by: JohnnyT (in session)
