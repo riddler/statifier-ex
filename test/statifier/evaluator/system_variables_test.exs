@@ -37,6 +37,9 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
     # sabotage: `initial/2` writes `"_ioprocessors"` as an empty map instead
     # of the SCXML event-processor entry -> the pattern match below no
     # longer matches, reddening this test.
+    # sabotage: `scxml_location/1` returns the bare session id -> the
+    # "location" assertion reddens, since it no longer carries the
+    # `#_scxml_` prefix.
     test "carries the three session-lifetime system variables" do
       m = machine()
 
@@ -44,7 +47,9 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
                "_sessionid" => "sess_abc",
                "_name" => nil,
                "_ioprocessors" => %{
-                 "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{"location" => "sess_abc"}
+                 "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{
+                   "location" => "#_scxml_sess_abc"
+                 }
                }
              } = SystemVariables.initial(m, "sess_abc")
     end
