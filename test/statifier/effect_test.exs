@@ -123,6 +123,43 @@ defmodule Statifier.EffectTest do
     end
   end
 
+  describe "owner field on the three send-family effects" do
+    # sabotage: `Effect.Send`'s `defstruct` entry is changed from `:owner`
+    # to `owner: :bogus` -> this reddens, since a `%Send{}` built with no
+    # `:owner` key would default to `:bogus` instead of `nil`.
+    test "Send defaults owner to nil and accepts one" do
+      assert %Send{event: "e", macrostep: 1, microstep: 1}.owner == nil
+
+      assert %Send{event: "e", macrostep: 1, microstep: 1, owner: {:transition, 0}}.owner ==
+               {:transition, 0}
+    end
+
+    # sabotage: `Effect.SendDelayed`'s `defstruct` entry is changed from
+    # `:owner` to `owner: :bogus` -> this reddens, since a `%SendDelayed{}`
+    # built with no `:owner` key would default to `:bogus` instead of `nil`.
+    test "SendDelayed defaults owner to nil and accepts one" do
+      assert %SendDelayed{event: "e", delay_ms: 1, macrostep: 1, microstep: 1}.owner == nil
+
+      assert %SendDelayed{
+               event: "e",
+               delay_ms: 1,
+               macrostep: 1,
+               microstep: 1,
+               owner: {:onentry, 0, 0}
+             }.owner == {:onentry, 0, 0}
+    end
+
+    # sabotage: `Effect.Cancel`'s `defstruct` entry is changed from `:owner`
+    # to `owner: :bogus` -> this reddens, since a `%Cancel{}` built with no
+    # `:owner` key would default to `:bogus` instead of `nil`.
+    test "Cancel defaults owner to nil and accepts one" do
+      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1}.owner == nil
+
+      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1, owner: {:onexit, 0, 0}}.owner ==
+               {:onexit, 0, 0}
+    end
+  end
+
   describe "trace/3 gate" do
     # sabotage: `Effect.trace/3` checks `not machine_state.trace` (inverting
     # the condition) -> the on-case below returns `[]` instead of the

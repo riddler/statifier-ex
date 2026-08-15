@@ -77,6 +77,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :states_to_invoke,
     :active_invocations,
     :invoke_counter,
+    :send_counter,
     :datamodel,
     :running,
     :status,
@@ -106,15 +107,30 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # session-global source `Statifier.Interpreter.generate_invoke_id/3`
   # reads and writes so the invoke id it mints never touches the wall clock
   # or a CSPRNG (ADR-0003) - see that field's own moduledoc section.
+  # `send_counter` is a fifth, the same session-global pure-counter shape as
+  # `invoke_counter` but its own sibling sequence rather than a shared one
+  # (ADR-0035) - see that field's own moduledoc section.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a seventeenth
+  # lib/statifier/machine_state.ex - the struct then grows an eighteenth
   # key, and this equality assertion reddens for exactly the "someone adds
   # a field without updating the docs" failure the plan calls out.
-  test "machine_state holds the sixteen fields, and the struct has no others" do
+  test "machine_state holds the seventeen fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)
+  end
+
+  # AC: "the session-global send-id counter (ADR-0035) starts at zero -
+  # no send has generated an id yet, mirroring invoke_counter's own zero
+  # start."
+  #
+  # sabotage: change `send_counter: 0` to `send_counter: 1` in `new/2`'s
+  # struct literal (`lib/statifier/machine_state.ex`) -> this reddens.
+  test "send_counter defaults to 0" do
+    ms = MachineState.new(machine())
+
+    assert ms.send_counter == 0
   end
 
   # AC: "External queue explicitly NOT in core state; divergence documented

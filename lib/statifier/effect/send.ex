@@ -12,9 +12,17 @@ defmodule Statifier.Effect.Send do
 
   `c_index` is the identity (`docs/observability.md` constraint 3) of the
   `<send>` content node that produced this effect - never a compiled
-  content-node struct. `macrostep`/`microstep` are the
-  step counters as they stand at the moment of the send.
+  content-node struct. `owner` names which block emitted the send (the same
+  gap `Statifier.Effect.Log`'s own moduledoc describes: `c_index` alone does
+  not say which `<onentry>`/`<onexit>` block or transition it belongs to).
+  `macrostep`/`microstep` are the step counters as they stand at the moment
+  of the send.
   """
+
+  alias Statifier.Machine.Content
+
+  @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
+  @type owner :: Content.owner()
 
   @enforce_keys [:event, :macrostep, :microstep]
   defstruct [
@@ -24,6 +32,7 @@ defmodule Statifier.Effect.Send do
     :data,
     :send_id,
     :c_index,
+    :owner,
     :macrostep,
     :microstep
   ]
@@ -35,6 +44,7 @@ defmodule Statifier.Effect.Send do
           data: term(),
           send_id: String.t() | nil,
           c_index: non_neg_integer() | nil,
+          owner: owner() | nil,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer()
         }
