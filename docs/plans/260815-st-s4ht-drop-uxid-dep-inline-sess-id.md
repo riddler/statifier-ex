@@ -481,19 +481,19 @@ why it rides in this phase rather than another.
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` while iterating (never as the phase gate).
-- [ ] Full `mix quality` is green - compilation alone proves no call site
+- [x] `mix quality --profile loop` while iterating (never as the phase gate).
+- [x] Full `mix quality` is green - compilation alone proves no call site
       survived Phase 2.
-- [ ] `grep -rn uxid mix.exs mix.lock` returns nothing.
-- [ ] `mix deps.get` is a no-op and leaves `mix.lock` unchanged.
-- [ ] The `Gate guard` stage does not fire. If it does, **stop and report**
+- [x] `grep -rn uxid mix.exs mix.lock` returns nothing.
+- [x] `mix deps.get` is a no-op and leaves `mix.lock` unchanged.
+- [x] The `Gate guard` stage does not fire. If it does, **stop and report**
       rather than writing a `docs/quality-gate-changes.md` entry - ADR-0011
       makes that a human's call.
-- [ ] `changelog.d/st-s4ht.md` exists.
-- [ ] `git diff --name-only` for this phase lists exactly `mix.exs`,
+- [x] `changelog.d/st-s4ht.md` exists.
+- [x] `git diff --name-only` for this phase lists exactly `mix.exs`,
       `mix.lock`, and `changelog.d/st-s4ht.md` - nothing else. A `lib/` or
       `test/` file in this commit means the phase boundary leaked.
-- [ ] `mix deps.tree` no longer lists `uxid` anywhere.
+- [x] `mix deps.tree` no longer lists `uxid` anywhere.
 
 #### Manual Verification:
 
@@ -733,6 +733,22 @@ blocking here.
       total, no hyphen, double-clicking selects the whole token.
 - [ ] The generator still sits outside any fold - `new/2` only, never reached
       from `main_event_loop/1` - so ADR-0003's core contract is unchanged.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] A fresh `rm -rf _build deps && mix deps.get && mix compile` succeeds, so
+      the drop is real rather than masked by a warm build directory.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
