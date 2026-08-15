@@ -7,9 +7,16 @@ defmodule Statifier.Effect.SendDelayed do
   schedule; this module only defines the shape it schedules.
 
   `c_index` identifies the `<send>` content node (constraint 3, never a
-  compiled content-node struct); `macrostep`/`microstep` are the counters
+  compiled content-node struct); `owner` names which block emitted the send
+  (the same gap `Statifier.Effect.Log`'s own moduledoc describes for
+  `c_index` alone). `macrostep`/`microstep` are the counters
   as they stood when the send was scheduled, not when the timer fires.
   """
+
+  alias Statifier.Machine.Content
+
+  @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
+  @type owner :: Content.owner()
 
   @enforce_keys [:event, :delay_ms, :macrostep, :microstep]
   defstruct [
@@ -20,6 +27,7 @@ defmodule Statifier.Effect.SendDelayed do
     :send_id,
     :delay_ms,
     :c_index,
+    :owner,
     :macrostep,
     :microstep
   ]
@@ -32,6 +40,7 @@ defmodule Statifier.Effect.SendDelayed do
           send_id: String.t() | nil,
           delay_ms: non_neg_integer(),
           c_index: non_neg_integer() | nil,
+          owner: owner() | nil,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer()
         }

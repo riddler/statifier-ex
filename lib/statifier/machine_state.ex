@@ -166,6 +166,41 @@ defmodule Statifier.MachineState do
   composed, so it does not advance this counter - only a generated id
   consumes the sequence.
 
+  ## `send_counter` is the session-global `send_` id sequence (ADR-0035)
+
+  Spec 3.14 leaves `<send>`'s generated-id format unconstrained ("The SCXML
+  processor MAY generate all other ids in any format, as long as they are
+  unique"), unlike `<invoke>`'s spec-pinned `stateid.platformid` form.
+  `send_counter` is the one auto-increment behind that free format: one
+  session-global counter, read from and written back to this struct at
+  `<send>`'s own generation site (a later phase's job, not this field's),
+  producing ids `send_1`, `send_2`, ... in the order the processor mints
+  them. Same reasoning as `invoke_counter` above for why this is a plain
+  counter and not a `UXID.generate!` call: ADR-0003's core is
+  `(state, event) -> {state, [effect]}`, and a UXID reads the wall clock and
+  a CSPRNG, which `<send idlocation>` writing the generated id into the
+  datamodel would turn into an observable replay divergence. A counter that
+  is a pure field on `%MachineState{}` replays identically instead.
+
+  **Not shared with `invoke_counter`.** ADR-0035 gives two reasons: the two
+  sequences answer to different governing clauses (`<invoke>`'s format is
+  pinned by 6.4.1; `<send>`'s is free per the 3.14 sentence above, so
+  coupling a free-format sequence to a pinned one buys nothing), and sharing
+  would let an `<invoke>` advance the send-id sequence, making a document's
+  `send_` ids depend on how many invocations happened first - still
+  deterministic and replayable, but no longer locally readable the way
+  `idlocation` wants them to be. See ADR-0035 for the full argument.
+
+  Starts at `0` in `new/2` (no send has generated an id yet). An
+  author-written `<send id="...">` is used verbatim and never advances this
+  counter, exactly as an author-written `<invoke id="...">` leaves
+  `invoke_counter` untouched - only a generated id consumes the sequence,
+  and a fresh id is generated on every execution of the element (3.14: "not
+  at load time but each time the element is executed"), never memoized on
+  it. No setter function, matching `invoke_counter`'s own precedent: written
+  directly at its one call site rather than through a dedicated
+  `MachineState` function.
+
   ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
@@ -302,6 +337,7 @@ defmodule Statifier.MachineState do
     states_to_invoke: MapSet.new(),
     active_invocations: %{},
     invoke_counter: 0,
+    send_counter: 0,
     datamodel: %{},
     running: true,
     status: :running,
@@ -350,6 +386,7 @@ defmodule Statifier.MachineState do
           states_to_invoke: MapSet.t(non_neg_integer()),
           active_invocations: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()},
           invoke_counter: non_neg_integer(),
+          send_counter: non_neg_integer(),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -395,6 +432,7 @@ defmodule Statifier.MachineState do
       states_to_invoke: MapSet.new(),
       active_invocations: %{},
       invoke_counter: 0,
+      send_counter: 0,
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,
