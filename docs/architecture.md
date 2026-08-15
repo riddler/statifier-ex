@@ -145,10 +145,10 @@ safe escape hatch, but not the definition of `<invoke>`.
 
 Generated identifiers split on the pure core's boundary
 ([ADR-0008](adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the
-session id is a UXID: sortable, prefixed (`sess_`), and stable per session (v1
+session id is sortable, prefixed (`sess_`), and stable per session (v1
 regenerated `_sessionid` on every expression evaluation). Minted *inside* it, an
-id is a deterministic value derived from `%MachineState{}` alone - UXID reads the
-wall clock and a CSPRNG, and the core's contract
+id is a deterministic value derived from `%MachineState{}` alone - an
+entropy-based id reads the wall clock and a CSPRNG, and the core's contract
 ([ADR-0003](adr/0003-pure-core-with-effects.md)) admits neither. The invoke id is
 the only one minted inside the core today, and spec 6.4.1 fixes its shape: the
 invoking state's id, a dot, then `inv_` and a session-global counter - or bare

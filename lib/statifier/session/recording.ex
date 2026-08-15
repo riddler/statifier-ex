@@ -22,7 +22,7 @@ defmodule Statifier.Session.Recording do
   ## `:session_id` is resolved, not supplied
 
   A caller starting a session may never pass `:session_id` at all, letting
-  `Statifier.MachineState.new/2` generate a fresh `sess_` UXID (ADR-0008). A
+  `Statifier.MachineState.new/2` generate a fresh `sess_` id (ADR-0008). A
   recording still needs one concrete value stored, or replaying it would
   regenerate a *different* id and diverge from the run it is meant to
   reproduce. `new/2` therefore takes the id the session actually settled on -

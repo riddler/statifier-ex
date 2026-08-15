@@ -37,7 +37,7 @@ defmodule Statifier.Session do
   to `restart: :permanent` - which would have a supervisor restart a
   session that halted normally, the opposite of the next section - and
   because `:temporary` itself is a decision: a supervisor restart re-runs
-  `start_link/2`, which generates a *fresh* `sess_` UXID and loses every
+  `start_link/2`, which generates a *fresh* `sess_` id and loses every
   bit of the crashed session's state, so restarting is actively wrong, not
   merely useless. Recovery that preserves identity is replay, not a
   restart flag.
@@ -218,7 +218,7 @@ defmodule Statifier.Session do
       `{:via, Registry, _}` works today with no code here.
     - `:session_id`, `:trace`, `:datamodel`, `:max_macrostep_rounds` -
       `Statifier.MachineState.new/2`'s own options, passed straight
-      through. The session never generates the `sess_` UXID itself
+      through. The session never generates the `sess_` id itself
       (ADR-0008); it reads it back off
       `machine_state.datamodel["_sessionid"]` once `new/2` has written it,
       since there is no `session_id` field on `%MachineState{}`.
@@ -235,7 +235,7 @@ defmodule Statifier.Session do
     GenServer.start_link(__MODULE__, {machine, opts}, gen_opts)
   end
 
-  @doc "This session's `sess_` UXID - `datamodel[\"_sessionid\"]`, held apart for routing."
+  @doc "This session's `sess_` id - `datamodel[\"_sessionid\"]`, held apart for routing."
   @spec session_id(server :: server()) :: String.t()
   def session_id(server), do: GenServer.call(server, :session_id)
 
@@ -381,7 +381,7 @@ defmodule Statifier.Session do
   end
 
   # ADR-0027 decision 2: registration happens here, not by a caller-supplied
-  # `:name`, because the `sess_` UXID this session registers under does not
+  # `:name`, because the `sess_` id this session registers under does not
   # exist until `Interpreter.initialize/2` (above) has run - no `{:via,
   # ...}` tuple can name a session before it starts. There is no separate
   # `Statifier.Registry`-running check ahead of the call: `Registry.register/3`
