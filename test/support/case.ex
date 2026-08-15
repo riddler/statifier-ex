@@ -26,8 +26,9 @@ defmodule Statifier.Case do
 
   - `initialize/1` and `send_event/2` now also return the call's effect list.
     `assert_configuration/3` looks for a `{:done, _}` effect in it and, when
-    found, restores that effect's `configuration` (added to `Effect.Done` in
-    st-k8d Phase 1) onto the `%MachineState{}` before reading leaves off it -
+    found, restores that effect's `configuration` field - `Effect.Done`
+    carries the terminal configuration - onto the `%MachineState{}` before
+    reading leaves off it -
     so the terminal position is observed instead of the post-exit emptiness.
     This is still driving-side plumbing routed to the assertion, not a fifth
     driving function.

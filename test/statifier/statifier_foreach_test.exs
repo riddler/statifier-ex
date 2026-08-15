@@ -4,22 +4,20 @@ defmodule Statifier.StatifierForeachTest do
   SCION - through the real engine, end to end, without going through
   `Statifier.Case.test_scxml/4`.
 
-  That was deliberate, not an oversight: until bead **st-af3.8**, all eight
-  `foreach_elements` corpus files also tripped `conditional_transitions`
-  (`test/support/feature_detector.ex`, then `:unsupported` - the
-  `~r/\bcond\s*=/` attribute detector fires on `<transition cond=...>`
-  everywhere these documents use it). `Statifier.Case.test_scxml/4` flunks
+  That was deliberate, not an oversight: `Statifier.Case.test_scxml/4` flunks
   rather than skips a document that names an unsupported feature
-  (`test/support/case.ex:41-46`), so these eight flunked before that bead even
-  though `<foreach>` itself was already fully implemented and correct.
+  (`test/support/case.ex:41-46`), so a corpus document that couples an
+  unrelated feature to `conditional_transitions`
+  (`test/support/feature_detector.ex` - the `~r/\bcond\s*=/` attribute
+  detector fires on `<transition cond=...>` everywhere these documents use
+  it) would flunk on that coupling even when `<foreach>` itself is fully
+  implemented and correct.
 
-  st-af3.8 flipped `conditional_transitions` to `:supported`, ran the full
-  conformance suites, and ratcheted `test/passing_tests.json`
-  (`mix test.baseline add`), so
+  `conditional_transitions` is `:supported`, so
   `test/scxml_tests/mandatory/foreach/test150_test.exs`, `test151_test.exs`,
   `test152_test.exs`, `test153_test.exs`, `test155_test.exs`,
   `test156_test.exs`, `test525_test.exs`, and
-  `test/scion_tests/foreach/test1_test.exs` are now feature-clean and run
+  `test/scion_tests/foreach/test1_test.exs` are feature-clean and run
   through the generated harness too.
 
   This file is **not** a duplicate to delete now that that has landed: it drives the

@@ -11,9 +11,9 @@ defmodule Statifier.FeatureDetector do
   when one lands, a `detect_features/1` clause for it is added alongside the
   string clause.
 
-  The registry reflects what v2 actually supports today: the Phase 1 engine
-  surface landed through st-wju.7 - basic/compound/parallel/final/history
-  states, the initial attribute and `<initial>` element, event/eventless/
+  The registry reflects what v2 actually supports today:
+  basic/compound/parallel/final/history states, the initial attribute and
+  `<initial>` element, event/eventless/
   targetless/internal/wildcard transitions, `<onentry>`/`<onexit>`,
   `<raise>`, `<log>`, and static `<donedata>`. Later phases added
   `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded transitions (including

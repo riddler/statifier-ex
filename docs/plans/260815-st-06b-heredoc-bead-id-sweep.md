@@ -541,19 +541,19 @@ reports nothing. Neither script is committed.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] The enumerator over the full scope (`lib/**` and `test/**` minus
+- [x] The enumerator over the full scope (`lib/**` and `test/**` minus
       `test/scion_tests/` and `test/scxml_tests/`) reports
       `heredoc_only = 0`.
-- [ ] The cross-check reports no heredoc body line that is also comment-shaped
+- [x] The cross-check reports no heredoc body line that is also comment-shaped
       and carries a bead ID, confirming the subtraction did not hide anything.
-- [ ] `mix adr.check --base origin/main` exits 0 with all four phases in the
+- [x] `mix adr.check --base origin/main` exits 0 with all four phases in the
       diff.
-- [ ] Full `mix quality` passes.
-- [ ] `mix test` passes; `mix test --include scion --include scxml_w3` shows no
+- [x] Full `mix quality` passes.
+- [x] `mix test` passes; `mix test --include scion --include scxml_w3` shows no
       change against `test/passing_tests.json`, and `mix test.regression`
       passes.
-- [ ] `grep -rn "ADR-0018-exempt" lib test` returns nothing.
-- [ ] `git diff origin/main --stat` lists only `lib/` and `test/` source files
+- [x] `grep -rn "ADR-0018-exempt" lib test` returns nothing.
+- [x] `git diff origin/main --stat` lists only `lib/` and `test/` source files
       plus this plan; no `.quality.exs`, `.credo.exs`, `coveralls.json`,
       `.sobelow-conf`, `.doctor.exs`, `mix.exs` or `test/passing_tests.json`
       change, so `mix gate.check` needs no ledger entry.
@@ -716,6 +716,27 @@ items are deferred and surfaced once at the end instead of blocking here.
       "not a deviation" note on `statesToInvoke.sort(entryOrder)`.
 - [ ] Read this phase's `git diff origin/main` hunk by hunk: every changed line
       sits inside a `"""` doc body, and no executable line moved.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The two driver moduledocs still explain, without dates or tags, why each
+      file exists alongside the generated corpus tests.
+- [ ] `feature_detector.ex`'s support list is unchanged in content - only the
+      provenance clause was removed.
+- [ ] A read of `git diff origin/main` confirms no executable line changed
+      anywhere in the branch.
+- [ ] Three rewritten paragraphs read cold - one each from Phases 1, 3 and 4 -
+      each explain the code rather than reading as a sentence with a citation
+      surgically removed from it.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

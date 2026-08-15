@@ -4,23 +4,20 @@ defmodule Statifier.StatifierIfTest do
   through the real engine, end to end, without going through
   `Statifier.Case.test_scxml/4`.
 
-  That was deliberate, not an oversight: until bead **st-af3.8**, all eight
-  `if_elements` corpus files also tripped `conditional_transitions`
-  (`test/support/feature_detector.ex:68`, then `:unsupported` - the
-  `~r/\bcond\s*=/` attribute detector fires on `<if cond=...>` and
-  `<elseif cond=...>` exactly as it does on `<transition cond=...>`).
-  `Statifier.Case.test_scxml/4` flunks rather than skips a document that names
-  an unsupported feature (`test/support/case.ex:41-46`), so these five flunked
-  before that bead even though `<if>`/`<elseif>`/`<else>` themselves were
-  already fully implemented and correct.
+  That was deliberate, not an oversight: `Statifier.Case.test_scxml/4` flunks
+  rather than skips a document that names an unsupported feature
+  (`test/support/case.ex:41-46`), so a corpus document that couples an
+  unrelated feature to `conditional_transitions`
+  (`test/support/feature_detector.ex:68` - the `~r/\bcond\s*=/` attribute
+  detector fires on `<if cond=...>` and `<elseif cond=...>` exactly as it does
+  on `<transition cond=...>`) would flunk on that coupling even when
+  `<if>`/`<elseif>`/`<else>` themselves are fully implemented and correct.
 
-  st-af3.8 flipped `conditional_transitions` to `:supported`, ran the full
-  conformance suites, and ratcheted `test/passing_tests.json`
-  (`mix test.baseline add`), so
+  `conditional_transitions` is `:supported`, so
   `test/scion_tests/if_else/test0_test.exs`,
   `test/scxml_tests/mandatory/if/test147_test.exs`, `test148_test.exs`,
   `test149_test.exs`, and
-  `test/scxml_tests/mandatory/system_variables/test319_test.exs` are now
+  `test/scxml_tests/mandatory/system_variables/test319_test.exs` are
   feature-clean and run through the generated harness too.
 
   This file is **not** a duplicate to delete now that that has landed: it drives the
