@@ -49,8 +49,8 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
   # sabotage: `Statifier.Evaluator.context/1`'s `on_unbound: :error` option
   # is dropped -> an unbound identifier would resolve to something other
-  # than the seeded nil, and predicator's own `:undefined` normalization
-  # would not be exercised the same way, reddening this equality.
+  # than the seeded :undefined, and predicator would not be exercised the
+  # same way, reddening this equality.
   test "Var1 === undefined evaluates {:ok, true} against the seeded datamodel" do
     machine =
       compile!("""
@@ -67,6 +67,39 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     assert Evaluator.evaluate(context, compiled_expr("Var1 === undefined")) == {:ok, true}
     assert Evaluator.evaluate(context, compiled_expr("Var1 !== undefined")) == {:ok, false}
+  end
+
+  # sabotage: `Datamodel.seed/2` is changed to fold over `[]` instead of
+  # `Tuple.to_list(machine.data_elements)` -> "Var1" never becomes a
+  # datamodel key at all, so `on_unbound: :error` turns the first assertion's
+  # evaluation into an `{:error, %UndefinedVariableError{}}` instead of
+  # `{:ok, true}`. (A `Datamodel.seed/2`-only mutation of `:undefined` to
+  # `nil` does *not* redden this test while `undefine_nils/1` is still in
+  # place - `Statifier.Evaluator.context/1` normalizes either spelling to
+  # the same bound answer today; the raw-map assertions elsewhere in this
+  # file are what pin the seed's own spelling during Phase 1.) `src` is
+  # never fetched (ADR-0003), so `Var1` keeps exactly the seed
+  # `initialize/1` wrote - unlike a value-less `<data id="Var1"/>`, whose
+  # compiled `{:static, nil}` value evaluates and overwrites the seed with a
+  # genuine `nil` (see the "declared-unassigned" test above); this fixture
+  # pins what evaluating a never-bound root reads once it is bound at all,
+  # a property Phase 3's retirement of `undefine_nils/1` does not change.
+  test "a <data> whose value never binds reads undefined, not null, through Evaluator.evaluate/2" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+          <datamodel>
+              <data id="Var1" src="file:unfetched.txt"/>
+          </datamodel>
+          <state id="s0"/>
+      </scxml>
+      """)
+
+    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    context = Evaluator.context(ms)
+
+    assert Evaluator.evaluate(context, compiled_expr("Var1 === undefined")) == {:ok, true}
+    assert Evaluator.evaluate(context, compiled_expr("Var1 !== null")) == {:ok, true}
   end
 
   # sabotage: `Datamodel.bind_value/4`'s catch-all clause is changed to
@@ -93,7 +126,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
   # `Evaluator.evaluate/2` failure is silently ignored instead of raised ->
   # no `error.execution` reaches the internal queue, reddening the
   # assertions below.
-  test "expr=\"return\" leaves nil and enqueues one error.execution with cause {:data, 0}" do
+  test "expr=\"return\" leaves :undefined and enqueues one error.execution with cause {:data, 0}" do
     machine =
       compile!("""
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
@@ -106,7 +139,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     ms = machine |> MachineState.new() |> Datamodel.initialize()
 
-    assert ms.datamodel["Var1"] == nil
+    assert ms.datamodel["Var1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
     assert event.name == "error.execution"
     assert event.type == :platform
@@ -118,7 +151,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
   # `Evaluator.evaluate/2` on a value that is not a `Machine.expr()` and
   # raises a `FunctionClauseError` instead of a clean `error.execution` ->
   # this test would crash rather than assert cleanly.
-  test "an unparseable expr leaves nil and enqueues one error.execution with cause {:data, 0}" do
+  test "an unparseable expr leaves :undefined and enqueues one error.execution with cause {:data, 0}" do
     machine =
       compile!("""
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
@@ -131,7 +164,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     ms = machine |> MachineState.new() |> Datamodel.initialize()
 
-    assert ms.datamodel["o1"] == nil
+    assert ms.datamodel["o1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
     assert event.name == "error.execution"
     assert event.type == :platform
@@ -142,7 +175,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
   # falling through to the catch-all clause and crashing the same way the
   # invalid-expr sabotage above does, rather than raising a clean
   # `error.execution`.
-  test "src leaves nil and enqueues one error.execution with cause {:data, 0}" do
+  test "src leaves :undefined and enqueues one error.execution with cause {:data, 0}" do
     machine =
       compile!("""
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
@@ -155,7 +188,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     ms = machine |> MachineState.new() |> Datamodel.initialize()
 
-    assert ms.datamodel["Var1"] == nil
+    assert ms.datamodel["Var1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
     assert event.name == "error.execution"
     assert event.type == :platform
@@ -207,9 +240,9 @@ defmodule Statifier.Interpreter.DatamodelTest do
   # sabotage: `Datamodel.d_indexes_to_bind/2`'s `:late` clause is changed to
   # return `0..(tuple_size(machine.data_elements) - 1)//1` (the `:early`
   # body) unconditionally -> the state-scoped `<data expr="2">` would be
-  # bound at initialization under late binding too, reddening the `== nil`
-  # half of this assertion.
-  test "under binding=\"late\", a top-level <data> binds at initialization while a state-scoped one stays nil" do
+  # bound at initialization under late binding too, reddening the
+  # `== :undefined` half of this assertion.
+  test "under binding=\"late\", a top-level <data> binds at initialization while a state-scoped one stays :undefined" do
     machine =
       compile!("""
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
@@ -228,17 +261,15 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     assert ms.datamodel["Root1"] == 1
     assert Map.has_key?(ms.datamodel, "Local1")
-    assert ms.datamodel["Local1"] == nil
+    assert ms.datamodel["Local1"] == :undefined
   end
 
-  # sabotage: `Statifier.Machine.Content.Assign`'s write step is changed to
-  # write `assigned_context.data` (the normalized view read back out of
-  # `Predicator.ContextLocation.put/3` applied to
-  # `context.datamodel_context.data`) into `machine_state.datamodel`, instead
-  # of writing through the raw `machine_state.datamodel` directly (Decision
-  # 2) -> `Predicator.Context.new/2` deep-normalizes `nil` to `:undefined`, so
-  # the unrelated seeded-but-unbound "Other" id would come back `:undefined`
-  # instead of `nil`, reddening the `== nil` assertion below.
+  # sabotage: `Interpreter.Datamodel.write/4` is changed to call
+  # `Predicator.ContextLocation.put(%{}, path, value)` (an empty base map)
+  # instead of `Predicator.ContextLocation.put(datamodel, path, value)` -> the
+  # resulting datamodel would contain only the written "Var1" key, dropping
+  # the unrelated seeded-but-unbound "Other" id entirely, reddening the
+  # `Map.has_key?/2` assertion below.
   test "after an <assign> to one id, an unrelated seeded-but-unbound <data> id is still nil" do
     machine =
       compile!("""
@@ -347,14 +378,14 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
     # sabotage: `Datamodel.bind_state_data/4`'s `:late` clause is changed to
     # `Enum.reduce([], machine_state, ...)` instead of folding over the
-    # state's real `d_indexes` -> "Var1" would stay nil even after
+    # state's real `d_indexes` -> "Var1" would stay :undefined even after
     # `enter_state/2` runs, reddening this assertion.
     test ~s(under binding="late", a state-scoped <data expr="1"> binds to 1 at enter_state/2) do
       machine = late_machine()
       s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
 
       ms = machine |> MachineState.new() |> Datamodel.initialize()
-      assert ms.datamodel["Var1"] == nil
+      assert ms.datamodel["Var1"] == :undefined
 
       ms = Datamodel.enter_state(ms, s0)
       assert ms.datamodel["Var1"] == 1
@@ -396,7 +427,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
     # `Machine.at(machine, state_index).data` -> entering `s0`, which
     # declares no `<datamodel>` of its own, would incorrectly also bind the
     # sibling `other` state's still-unentered `<data id="Other1">`,
-    # reddening the `== nil` assertion below.
+    # reddening the `== :undefined` assertion below.
     test "under binding=\"late\", a state with no <datamodel> touches no other state's data" do
       machine =
         compile!("""
@@ -416,7 +447,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       result = Datamodel.enter_state(ms, s0)
 
       assert result == ms
-      assert result.datamodel["Other1"] == nil
+      assert result.datamodel["Other1"] == :undefined
     end
 
     # sabotage: `Datamodel.bind_state_data/4`'s `:late, 0` clause is deleted,

@@ -51,18 +51,18 @@ defmodule Statifier.Interpreter.Datamodel do
      `SystemVariables.initial/2`, so key presence here is definitionally
      "provided by the environment at instantiation time" (5.3.2's own
      phrase).
-  2. Seed: `Map.put_new(datamodel, id, nil)` for every `%Machine.Data{}` in
-     `machine.data_elements`, regardless of binding - 5.3.3 makes *creation*
-     unconditional under both bindings, and `Predicator.Context.new/2`
-     normalizes `nil` to `:undefined` recursively, so a seeded-but-unbound id
-     answers `=== undefined`/`!== undefined` rather than raising
-     `UndefinedVariableError` (Decision 3).
+  2. Seed: `Map.put_new(datamodel, id, :undefined)` for every `%Machine.Data{}`
+     in `machine.data_elements`, regardless of binding - 5.3.3 makes
+     *creation* unconditional under both bindings, and writing `:undefined`
+     directly means a seeded-but-unbound id answers `=== undefined`/
+     `!== undefined` rather than raising `UndefinedVariableError`
+     (Decision 3).
   3. Bind, in ascending `d_index` order: under `:early`, every `d_index`;
      under `:late`, only the root state's own (`Machine.at(machine, 0).data`)
      - the top-level `<data>`, which 5.3.3's per-state deferral has no state
      to defer to (Decision 7, and this module's own `initialize/1` `@doc`
      below). A top-level `d_index` whose id is in `env_ids` is skipped
-     entirely, leaving its seeded `nil` in place - Decision 1's
+     entirely, leaving its seeded `:undefined` in place - Decision 1's
      environment-wins rule. A state-scoped `<data>` is never skipped this
      way: 5.3.2 scopes the override to top-level only.
 
@@ -71,9 +71,9 @@ defmodule Statifier.Interpreter.Datamodel do
   short-circuit straight to the failure branch with no evaluation attempted;
   any other `Machine.expr()` goes through `Statifier.Evaluator.evaluate/2`
   and takes the failure branch on `{:error, _}`. Either way the id keeps the
-  `nil` step 2 already wrote - 5.3.2's "MUST create an empty data element" is
-  satisfied by *not overwriting* the seed, never by writing `nil` after an
-  error (Decision 3) - and
+  `:undefined` step 2 already wrote - 5.3.2's "MUST create an empty data
+  element" is satisfied by *not overwriting* the seed, never by writing
+  `:undefined` after an error (Decision 3) - and
   `MachineState.raise_platform(machine_state, "error.execution", {:data,
   d_index}, data: reason)` runs: `raise_platform/4`, not `raise_internal/4`,
   because spec 5.10.1 classifies `error.*` as a platform event, matching the
@@ -257,13 +257,14 @@ defmodule Statifier.Interpreter.Datamodel do
     end)
   end
 
-  # Every declared <data> id, seeded to nil - 5.3.3's unconditional-creation
-  # half, run before any value is evaluated (Decision 3). Map.put_new/3
-  # never overwrites a datamodel key the environment already supplied.
+  # Every declared <data> id, seeded to :undefined - 5.3.3's
+  # unconditional-creation half, run before any value is evaluated
+  # (Decision 3). Map.put_new/3 never overwrites a datamodel key the
+  # environment already supplied.
   @spec seed(machine_state :: MachineState.t(), machine :: Machine.t()) :: MachineState.t()
   defp seed(machine_state, machine) do
     Enum.reduce(Tuple.to_list(machine.data_elements), machine_state, fn data, ms ->
-      %{ms | datamodel: Map.put_new(ms.datamodel, data.id, nil)}
+      %{ms | datamodel: Map.put_new(ms.datamodel, data.id, :undefined)}
     end)
   end
 
@@ -280,10 +281,10 @@ defmodule Statifier.Interpreter.Datamodel do
     Enum.sort(top_level_indexes)
   end
 
-  # One <data>'s bind step: skip (leaving the seeded nil) when it is
+  # One <data>'s bind step: skip (leaving the seeded :undefined) when it is
   # top-level and the environment already supplied its id (Decision 1);
   # otherwise evaluate its value and either write it or raise
-  # error.execution, keeping the seeded nil either way (Decision 3).
+  # error.execution, keeping the seeded :undefined either way (Decision 3).
   @spec bind(
           machine_state :: MachineState.t(),
           machine :: Machine.t(),
@@ -374,7 +375,7 @@ defmodule Statifier.Interpreter.Datamodel do
   Otherwise: one `Evaluator.context/1` for `state_index`'s whole `data` list
   (B.2.2's "no ordering dependencies" licenses this exactly as it does in
   `initialize/1`), each `d_index` bound through the same `bind_value/4` this
-  module's `initialize/1` uses - same seeded-`nil`-on-failure,
+  module's `initialize/1` uses - same seeded-`:undefined`-on-failure,
   `raise_platform/4` shape, Decision 2/3 unchanged. There is no environment
   override on this path: Decision 1 scopes that skip to top-level `<data>`
   only, and a state-scoped `<data>` on any state but the root is never
@@ -424,7 +425,7 @@ defmodule Statifier.Interpreter.Datamodel do
   # Statifier.Interpreter.Content.raise_execution_error/4 and
   # Statifier.Interpreter.Selection.raise_cond_errors/2 give: error.* is a
   # platform event regardless of what raised it. The datamodel keeps its
-  # seeded nil - this function never writes to `datamodel` itself.
+  # seeded :undefined - this function never writes to `datamodel` itself.
   @spec raise_binding_error(
           machine_state :: MachineState.t(),
           d_index :: non_neg_integer(),

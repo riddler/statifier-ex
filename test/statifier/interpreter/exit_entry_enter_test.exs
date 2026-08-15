@@ -984,12 +984,12 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
     # here) instead of `Machine.at(machine, state_index).data` -> `c`'s own
     # `<data id="X">` would never bind at first entry, reddening the `== 1`
     # assertion below.
-    test "a state-scoped <data expr=\"1\"> is nil before first entry and 1 after" do
+    test "a state-scoped <data expr=\"1\"> is :undefined before first entry and 1 after" do
       m = late_machine()
       {:ok, c} = Machine.index(m, "c")
 
       {ms, _effects} = Interpreter.initialize(m)
-      assert ms.datamodel["X"] == nil
+      assert ms.datamodel["X"] == :undefined
 
       {:ok, ms, _effects} = Interpreter.handle_event(ms, Event.external("go"))
 

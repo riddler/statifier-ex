@@ -6,12 +6,12 @@ defmodule Statifier.Evaluator.SystemVariables do
   5.10 knowledge of its own - `MachineState.new/2` calls `initial/2` once,
   and `MachineState.put_event/2` calls `event/1` on every write.
 
-  `nil` for an absent field is deliberate everywhere it appears here, not an
-  oversight: `Statifier.Evaluator`'s own `undefine_nils/1`
-  (`lib/statifier/evaluator.ex`) normalizes `nil` to `:undefined` recursively,
-  so a `nil` written here becomes the spec-correct "not bound" answer once a
-  `Statifier.Evaluator.context/1` wraps it, rather than the `%{}` a naive
-  default would produce.
+  Every writer here spells "declared, no value yet" as `:undefined` directly,
+  never `nil` - `nil` is reserved for predicator's own null (ADR-0037,
+  `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`). Writing the
+  spec-correct "not bound" answer at the source means a
+  `Statifier.Evaluator.context/1` wrap needs no normalization pass to produce
+  it.
   """
 
   alias Statifier.Event
@@ -43,15 +43,14 @@ defmodule Statifier.Evaluator.SystemVariables do
   `_sessionid`, `_name`, and `_ioprocessors` are session-lifetime and are
   never rewritten afterward - `_sessionid` stays stable for the session's
   whole lifetime (ADR-0008). `_event` is different: it is seeded here to
-  `nil` and thereafter written only by `MachineState.put_event/2`.
+  `:undefined` and thereafter written only by `MachineState.put_event/2`.
 
   ## Why `_event` is seeded rather than left absent
 
   Spec 5.10's system variables are *declared* for the session's whole
   lifetime; `_event` merely has no value until an event is being processed.
   A datamodel is a plain map, so the only way to say "declared, no value
-  yet" is to bind the key to `nil` and let
-  `Predicator.Context.new/2` normalize it to `:undefined`. Leaving the key
+  yet" is to bind the key to `:undefined` directly. Leaving the key
   out instead says something different and wrong - "no such variable" -
   which under `Statifier.Evaluator.context/1`'s `on_unbound: :error`
   (ADR-0014 item 5) makes every pre-event `_event` reference an
@@ -69,7 +68,7 @@ defmodule Statifier.Evaluator.SystemVariables do
     %{
       "_sessionid" => session_id,
       "_name" => machine.name,
-      "_event" => nil,
+      "_event" => :undefined,
       "_ioprocessors" => %{
         @scxml_event_processor => %{"location" => scxml_location(session_id)}
       }

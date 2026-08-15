@@ -192,9 +192,8 @@ defmodule Statifier.Machine.Content.Foreach do
     # Step 5 (Decision 2/6): declares `item` (and, when present, `index`)
     # with `Map.put_new/3` on the *raw* `machine_state.datamodel` - never
     # through `<assign>`'s path machinery, and never onto the normalized
-    # `%Predicator.Context{}` (st-af3.4's Decision 2's `nil`-versus-
-    # `:undefined` round-trip). This runs even for an empty collection, so
-    # `item`/`index` are bound (to `nil`, matching
+    # `%Predicator.Context{}`. This runs even for an empty collection, so
+    # `item`/`index` are bound (to `:undefined`, matching
     # `Statifier.Interpreter.Datamodel.seed/2`'s own `<data>`-with-no-value
     # shape) whether or not the loop body ever runs. ADR-0028: the block's
     # threaded datamodel context gets the same two names bound into it with
@@ -205,7 +204,7 @@ defmodule Statifier.Machine.Content.Foreach do
     defp declare(%Foreach{item: item, index: index}, %Context{} = context) do
       datamodel =
         context.machine_state.datamodel
-        |> Map.put_new(item, nil)
+        |> Map.put_new(item, :undefined)
         |> maybe_put_new(index)
 
       bind_names(context, datamodel, item, index)
@@ -213,7 +212,7 @@ defmodule Statifier.Machine.Content.Foreach do
 
     @spec maybe_put_new(datamodel :: map(), index :: String.t() | nil) :: map()
     defp maybe_put_new(datamodel, nil), do: datamodel
-    defp maybe_put_new(datamodel, index), do: Map.put_new(datamodel, index, nil)
+    defp maybe_put_new(datamodel, index), do: Map.put_new(datamodel, index, :undefined)
 
     # Step 6: one iteration per element of the array evaluated in step 3.
     # Each iteration writes `item` (and, when present, the 0-based `index`)
@@ -288,10 +287,9 @@ defmodule Statifier.Machine.Content.Foreach do
     # freshly written value into the block's existing threaded
     # `datamodel_context`, rather than rebuilding it from the whole
     # datamodel. Each bind reads its value back off `datamodel` - not off
-    # the caller's already-normalized value - so `declare/2`'s `nil` default
-    # and `write_iteration/4`'s real value both go through
-    # `Evaluator.bind/3`'s own `nil` -> `:undefined` normalization
-    # identically.
+    # the caller's already-normalized value - so `declare/2`'s `:undefined`
+    # default and `write_iteration/4`'s real value both go through
+    # `Evaluator.bind/3` needing no normalization.
     @spec bind_names(
             context :: Context.t(),
             datamodel :: map(),

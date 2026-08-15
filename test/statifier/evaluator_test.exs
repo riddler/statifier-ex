@@ -195,10 +195,10 @@ defmodule Statifier.EvaluatorTest do
   end
 
   describe "evaluate/2 - system variables before any event" do
-    # sabotage: `SystemVariables.initial/2` drops its `"_event" => nil` entry
-    # -> `_event` is absent from the datamodel, so `on_unbound: :error` makes
-    # this an `{:error, %UndefinedVariableError{variable: "_event"}}` instead
-    # of the undefined value, reddening both assertions.
+    # sabotage: `SystemVariables.initial/2` drops its `"_event" => :undefined`
+    # entry -> `_event` is absent from the datamodel, so `on_unbound: :error`
+    # makes this an `{:error, %UndefinedVariableError{variable: "_event"}}`
+    # instead of the undefined value, reddening both assertions.
     test "_event is declared-but-undefined, not an unbound variable" do
       context = Evaluator.context(new_machine_state())
 
@@ -206,8 +206,8 @@ defmodule Statifier.EvaluatorTest do
       assert Evaluator.evaluate(context, compiled_expr("_event.data")) == {:ok, :undefined}
     end
 
-    # sabotage: `SystemVariables.initial/2` drops `"_event" => nil` -> the
-    # comparison's left side errors before any comparison happens, so this
+    # sabotage: `SystemVariables.initial/2` drops `"_event" => :undefined` ->
+    # the comparison's left side errors before any comparison happens, so this
     # returns an `{:error, _}` rather than `{:ok, false}`.
     #
     # This is the shape the W3C corpus tests boundness with (test319): a
@@ -287,7 +287,7 @@ defmodule Statifier.EvaluatorTest do
                Evaluator.execute(ms, program("_event = 1; x = 2;"))
 
       assert new_ms.datamodel["x"] == 2
-      assert new_ms.datamodel["_event"] == nil
+      assert new_ms.datamodel["_event"] == :undefined
     end
 
     # sabotage: in execute/2, merge `after_data` wholesale instead of just
