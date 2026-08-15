@@ -1,4 +1,4 @@
-# ADR-0029: `In/1` becomes a provider; the built context still is not a `MachineState` field
+# ADR-0030: `In/1` becomes a provider; the built context still is not a `MachineState` field
 
 Status: accepted (2026-08-14)
 

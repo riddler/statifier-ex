@@ -16,7 +16,7 @@ defmodule Statifier.Evaluator do
     `Predicator.FunctionProvider` entry (`Statifier.Evaluator.Functions`),
     the `host` value `In/1` reads (`{machine, configuration}`), and the
     `on_unbound: :error` policy. "The `In/1` host function" described this
-    struct's `functions` entry accurately by accident before ADR-0029; it is
+    struct's `functions` entry accurately by accident before ADR-0030; it is
     accurate on purpose now that `In/1` reads `host` rather than closing
     over anything. This is the "context" this module's own name refers to.
   - `Statifier.ExecutableContent.Context.t()` - the second argument every
@@ -47,8 +47,8 @@ defmodule Statifier.Evaluator do
   is a `Predicator.FunctionProvider` now
   (`Statifier.Evaluator.Functions`, below), so that particular impossibility
   is gone - and the decision not to store a context is still the decision,
-  on three grounds recorded in full in ADR-0029
-  (`docs/adr/0029-in1-becomes-a-provider-context-stays-off-machinestate.md`):
+  on three grounds recorded in full in ADR-0030
+  (`docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md`):
 
   - **Non-resumability dissolved.** A closure in `functions` could not
     survive a node boundary, a code reload, or a round-trip through storage,
@@ -89,7 +89,7 @@ defmodule Statifier.Evaluator do
   `Statifier.Evaluator.Functions.base_context/0`, a compile-time constant
   holding the already-resolved `functions` map and `on_unbound: :error`,
   refreshes `host` with `put_host/2`, and binds each datamodel root with
-  `bind/3`. Measured (ADR-0029,
+  `bind/3`. Measured (ADR-0030,
   `bench/results/260814-st-l0t-provider-host-seam.md`): at a realistic
   corpus-shaped datamodel, this hoist drops one context build from 2.30 us /
   10.92 KB to 1.13 us / 4.77 KB, and the corpus-representative `realistic`
@@ -101,7 +101,7 @@ defmodule Statifier.Evaluator do
   the microstep it runs inside, so neither ground above is contradicted.
   Widening the threaded interval *across* blocks or microsteps - which would
   need a stored context - remains future work, still gated on staleness and
-  duplication exactly as ADR-0029 leaves it.
+  duplication exactly as ADR-0030 leaves it.
 
   ## The membrane
 

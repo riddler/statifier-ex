@@ -132,7 +132,7 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    macrostep's cost at realistic datamodel scale, and `<assign>` and
    `<foreach>` bind into the context an executable-content block already
    threads rather than rebuilding it per write. Then, taken for `In/1`
-   itself ([ADR-0029](adr/0029-in1-becomes-a-provider-context-stays-off-machinestate.md)):
+   itself ([ADR-0030](adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md)):
    `In/1` is a `Predicator.FunctionProvider` reading `host` rather than an
    inline `functions:` closure, so the resolved `functions` map holds no
    captured configuration and is identical for every context this library
@@ -145,7 +145,7 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    still the whole block or selection round, not the individual write, and
    not the whole macrostep - and the seam is still not taken across blocks:
    no context is stored on `MachineState`, and widening the interval that
-   far remains future work, per ADR-0029's grounds.
+   far remains future work, per ADR-0030's grounds.
 2. **Auto-vivifying path assignment**: path resolution exists (`context_location`);
    assignment-with-creation should live beside it. Landed in predicator 3.6.0:
    `Predicator.context_assign/4` and `ContextLocation.put/3`. Vivification is

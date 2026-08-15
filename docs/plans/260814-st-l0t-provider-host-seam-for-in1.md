@@ -88,7 +88,7 @@ Verification:
   down with it.
 - `grep -c "in_function" lib/` returns nothing; `Predicator.Context.new/2` no
   longer appears in `lib/statifier/evaluator.ex`.
-- ADR-0029 exists and is accepted, and the moduledoc section formerly titled
+- ADR-0030 exists and is accepted, and the moduledoc section formerly titled
   "Why the built context is not a `MachineState` field" states the two grounds
   as they now stand.
 
@@ -187,7 +187,7 @@ Four phases, each independently committable and gate-verifiable:
    per-root `bind/3`. This is where every measurable win lives.
 3. **Measure and record.** Re-run both benchmark scripts, repair
    `bench/macrostep.exs`'s stale derivation constants, write the results doc.
-4. **Decide and document.** ADR-0029 plus the moduledoc and `docs/datamodel.md`
+4. **Decide and document.** ADR-0030 plus the moduledoc and `docs/datamodel.md`
    rewrites, citing Phase 3's numbers the way ADR-0028 cited its own.
 
 ### Resolved open questions
@@ -204,7 +204,7 @@ implementer.
    machine also keeps the provider reading through `Machine.index/2`, the
    public ADR-0005 seam, instead of reaching into the `id_to_index` field.
    Narrowing stays available and is a one-line change if a stored context ever
-   lands; ADR-0029 records that.
+   lands; ADR-0030 records that.
 2. **Does "per-selection-round builds reduced" need a new `bench/` document
    family?** No. The criterion is read as **build cost**, not build count. The
    research's caveat - that no benchmark document evaluates `In()` - bites
@@ -235,13 +235,13 @@ implementer.
    which is precisely what an ADR is for. A moduledoc-only rewrite would leave
    the next reader unable to tell whether the question was decided or drifted.
 4. **Is the duplication a stored context introduces a constraint-1 concern in
-   its own right?** Recorded in ADR-0029 as a third ground against storage,
+   its own right?** Recorded in ADR-0030 as a third ground against storage,
    distinct from both existing ones: two fields that must agree and can
    silently disagree is a different failure mode from a closure, and
    `lib/statifier/machine_state.ex:169-180` already documents a related sharp
    edge. It is not decisive on its own - it is decided alongside grounds 1 and
    2, and it is moot for this plan because nothing is stored.
-5. **`px-rnc` weakening the case.** Noted in ADR-0029 and in the moduledoc, not
+5. **`px-rnc` weakening the case.** Noted in ADR-0030 and in the moduledoc, not
    blocked on. See "What We're NOT Doing".
 
 ---
@@ -647,7 +647,7 @@ here; the manual criteria carry this phase.
 
 ---
 
-## Phase 4: ADR-0029 and the documentation rewrite
+## Phase 4: ADR-0030 and the documentation rewrite
 
 ### Overview
 
@@ -656,7 +656,7 @@ still argues from the closure.
 
 ### Changes Required:
 
-#### 1. ADR-0029
+#### 1. ADR-0030
 
 **File**: `docs/adr/0029-<kebab-title>.md` (next free number; 0028 is the
 highest today)
@@ -706,7 +706,7 @@ requires that before citing a mirrored bead's status.
 field"). It keeps its conclusion and loses its first argument. Retitle it so
 the title is not a claim the body no longer makes on the old basis - the
 section is now about what a context costs and why it is still not stored.
-State the three grounds as ADR-0029 states them, cite ADR-0029 rather than
+State the three grounds as ADR-0030 states them, cite ADR-0030 rather than
 re-arguing it, and describe the current construction: a compile-time base
 context, `put_host/2` per site, `bind/3` per root.
 
@@ -728,7 +728,7 @@ seam is "Not taken here yet: `In/1` is still an inline `functions:` closure".
 Rewrite that to record it as taken, in the per-site-cost form rather than the
 widened-interval form, and keep the closing sentence - no context is stored on
 `MachineState` and widening the interval remains future work - because it is
-still true and is now true by decision rather than by omission. Cite ADR-0029.
+still true and is now true by decision rather than by omission. Cite ADR-0030.
 
 The "once per evaluation site" commitment at `:54-59` is unchanged; say so
 rather than leaving the reader to infer it.
@@ -761,7 +761,7 @@ with it on the record.
 - [ ] The `mirrors: px-10u` / `px-rnc` reconciliation notes were re-read in
       predicator-ex and a new dated note was written on `st-l0t` before the
       ADR cited either.
-- [ ] ADR-0029 does not re-argue ADR-0028 or ADR-0012; it cites them.
+- [ ] ADR-0030 does not re-argue ADR-0028 or ADR-0012; it cites them.
 - [ ] The moduledoc's rewritten section would let a reader who has never seen
       this plan answer "why is there no context on `MachineState`" correctly.
 - [ ] House style: `docs/adr/` and `docs/datamodel.md` are hyphen-only ASCII
@@ -949,7 +949,7 @@ here; the manual criteria carry this phase.
 - [ ] The `mirrors: px-10u` / `px-rnc` reconciliation notes were re-read in
       predicator-ex and a new dated note was written on `st-l0t` before the
       ADR cited either.
-- [ ] ADR-0029 does not re-argue ADR-0028 or ADR-0012; it cites them.
+- [ ] ADR-0030 does not re-argue ADR-0028 or ADR-0012; it cites them.
 - [ ] The moduledoc's rewritten section would let a reader who has never seen
       this plan answer "why is there no context on `MachineState`" correctly.
 - [ ] House style: `docs/adr/` and `docs/datamodel.md` are hyphen-only ASCII
