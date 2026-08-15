@@ -4,7 +4,7 @@ defmodule Mix.Statifier.AdrGuard do
 
   Covers ADR-0002 (Appendix D naming), ADR-0003 (pure core with effects),
   ADR-0004 (predicator as the datamodel, so no `Code.eval_*`), ADR-0008
-  (UXIDs for identifiers), and ADR-0018 (process artifacts are not code
+  (generated identifier formats), and ADR-0018 (process artifacts are not code
   comments). Each check is a name or call-site pattern over the lines a diff
   adds - deliberately not an AST pass - so a false positive is cleared the way
   this project already clears an Appendix D deviation: an inline comment on or
@@ -292,7 +292,7 @@ defmodule Mix.Statifier.AdrGuard do
       @uxid_adhoc_pattern,
       "adr-0008-uxid",
       &String.starts_with?(&1, @core_prefix),
-      "identifier generated ad hoc; ADR-0008 makes generated IDs UXIDs"
+      "identifier generated ad hoc; ADR-0008 fixes the format of generated IDs"
     )
   end
 

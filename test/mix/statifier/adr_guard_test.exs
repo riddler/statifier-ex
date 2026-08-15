@@ -121,7 +121,7 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
   end
 
-  describe "ADR-0008 - UXIDs for identifiers" do
+  describe "ADR-0008 - generated identifier formats" do
     # sabotage: drop the unique_integer alternatives from
     #           @uxid_adhoc_pattern -> red
     test "an ad-hoc generated identifier fires" do

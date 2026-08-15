@@ -93,7 +93,7 @@ defmodule Mix.Statifier.AdrJudge do
     judge from memory of it, the unverifiable verdict this design exists to
     avoid.
   - ADR-0003 (pure core with effects), ADR-0004 (predicator as the
-    datamodel), ADR-0008 (UXIDs for identifiers) - `AdrGuard` already covers
+    datamodel), ADR-0008 (generated identifier formats) - `AdrGuard` already covers
     each mechanically with a citation escape hatch; a model verdict over the
     same lines buys a second opinion on cases the guard already decides.
   - ADR-0005 (full configuration, interned state indexes) - the rule is a

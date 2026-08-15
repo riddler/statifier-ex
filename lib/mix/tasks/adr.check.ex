@@ -4,8 +4,8 @@ defmodule Mix.Tasks.Adr.Check do
   @moduledoc """
   Reports lines the branch adds that look like violations of ADR-0002 (Appendix
   D naming), ADR-0003 (pure core with effects), ADR-0004 (predicator as the
-  datamodel), ADR-0008 (UXIDs for identifiers), or ADR-0018 (process artifacts
-  are not code comments).
+  datamodel), ADR-0008 (generated identifier formats), or ADR-0018 (process
+  artifacts are not code comments).
 
   It runs as the `ADR guard` custom stage of `mix quality`, so drift from an
   accepted decision is a named gate failure rather than something review has to
