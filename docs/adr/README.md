@@ -9,7 +9,7 @@
 | [0005](0005-full-configuration-and-interned-state-indexes.md) | Full configuration; interned state indexes | accepted |
 | [0006](0006-reuse-conformance-corpus-and-regression-ratchet.md) | Reuse conformance corpus and ratchet; commit a generator | accepted |
 | [0007](0007-beads-for-issue-tracking.md) | Beads for issue tracking | accepted |
-| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted (amended 2026-08-15: invoke id format; invoke platformid is a session counter, not a UXID) |
+| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted (amended 2026-08-15: invoke id format; invoke platformid is a session counter, not a UXID; amended 2026-08-15: the uxid dependency is dropped, the format decisions stand) |
 | [0009](0009-ex-quality-as-quality-gate.md) | ex_quality is the quality gate | accepted |
 | [0010](0010-worktree-parallel-development.md) | Worktree parallel development via beads | accepted |
 | [0011](0011-quality-gate-config-not-agent-editable.md) | Quality gate config is not agent-editable | accepted |
@@ -36,7 +36,7 @@
 | [0032](0032-round-budget-spans-the-invoke-re-entry.md) | The round budget spans the invoke pass's re-entry | accepted (amends 0019 in part) |
 | [0033](0033-validator-warning-tier.md) | The validator has a warning tier; warnings ride on the Machine | accepted |
 | [0034](0034-replay-re-drives-the-core-not-a-live-session.md) | Replay re-drives the core, not a live session; recording carries ordinal order, no clock | accepted |
-| [0035](0035-send-id-is-a-machinestate-counter.md) | The send id is `send_<n>` off a new `machine_state.send_counter` | accepted |
+| [0035](0035-send-id-is-a-machinestate-counter.md) | The send id is `send_<n>` off a new `machine_state.send_counter` | accepted (amended 2026-08-15: cross-session sendid collision recorded harmless) |
 | [0036](0036-send-argument-failure-discards-the-message.md) | A failed `<send>` argument discards the message (amends 0021 in part) | accepted |
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 
