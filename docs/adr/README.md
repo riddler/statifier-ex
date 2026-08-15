@@ -9,7 +9,7 @@
 | [0005](0005-full-configuration-and-interned-state-indexes.md) | Full configuration; interned state indexes | accepted |
 | [0006](0006-reuse-conformance-corpus-and-regression-ratchet.md) | Reuse conformance corpus and ratchet; commit a generator | accepted |
 | [0007](0007-beads-for-issue-tracking.md) | Beads for issue tracking | accepted |
-| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted |
+| [0008](0008-uxid-for-identifiers.md) | UXID for generated identifiers | accepted (amended 2026-08-15: invoke id format) |
 | [0009](0009-ex-quality-as-quality-gate.md) | ex_quality is the quality gate | accepted |
 | [0010](0010-worktree-parallel-development.md) | Worktree parallel development via beads | accepted |
 | [0011](0011-quality-gate-config-not-agent-editable.md) | Quality gate config is not agent-editable | accepted |
@@ -20,7 +20,7 @@
 | [0016](0016-wurk-skills-out-of-repo-extensions-gated.md) | The wurk skills live in their own repo; this repo gates its extensions | accepted (amends 0015 in part; amended by 0017) |
 | [0017](0017-judgment-not-scriptable-in-wurk-extensions.md) | Judgment is not scriptable, scoped to the wurk extension surface | accepted (supersedes 0015; amends 0016 in part) |
 | [0018](0018-no-process-jargon-in-code-comments.md) | Process artifacts are not code comments | accepted |
-| [0019](0019-macrostep-round-budget.md) | A round budget bounds the macrostep fold | accepted (amended in part by 0020: round ordinal) |
+| [0019](0019-macrostep-round-budget.md) | A round budget bounds the macrostep fold | accepted (amended in part by 0020: round ordinal; amended in part by 0032: invoke re-entry) |
 | [0020](0020-round-ordinal-joins-the-step-counters.md) | A round ordinal joins the step counters | accepted (amends 0019 in part) |
 | [0021](0021-donedata-content-expr-failure-yields-no-data.md) | A failed donedata content expr yields no data | accepted |
 | [0022](0022-parallel-is-never-the-lcca.md) | A parallel is never the LCCA; SCION's contrary tests leave the corpus | accepted |
@@ -32,6 +32,8 @@
 | [0028](0028-executable-content-blocks-thread-one-context.md) | Executable-content blocks thread one context and `bind/3` each write | accepted |
 | [0029](0029-session-interpret-stays-public.md) | `Session.interpret/2` stays public; replay records four inputs | accepted |
 | [0030](0030-in1-becomes-a-provider-context-stays-off-machinestate.md) | `In/1` becomes a provider; the built context still is not a `MachineState` field | accepted (amended 2026-08-15: predicator 8.0 memoization; hoist kept) |
+| [0031](0031-invoke-argument-failure-aborts-the-invocation.md) | A failed invoke argument evaluation aborts the invocation | accepted |
+| [0032](0032-round-budget-spans-the-invoke-re-entry.md) | The round budget spans the invoke pass's re-entry | accepted (amends 0019 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
