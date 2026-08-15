@@ -188,9 +188,24 @@ defmodule Statifier.Session.Effects do
   # are the *sending* session's own address regardless of where the event
   # ends up: `origin` is this session's own `_ioprocessors` location,
   # `origintype` is the processor's type **URI** rather than the short alias
-  # `"scxml"` - plan decision 11 argues the C.1-prose-versus-test352
-  # conflict and picks the URI - and `sendid` is blank unless the author
-  # actually named this `<send>` (`id`/`idlocation`), per `id_from_author?`.
+  # `"scxml"` - see below - and `sendid` is blank unless the author actually
+  # named this `<send>` (`id`/`idlocation`), per `id_from_author?`.
+  #
+  # `origintype` deliberately contradicts C.1's prose, which says the field
+  # "MUST have the value \"scxml\"". The W3C's own conformance suite requires
+  # the URI instead: test198 sends with *no* `type` attribute at all - the
+  # default case - and asserts `_event.origintype ==
+  # 'http://www.w3.org/TR/scxml/#SCXMLEventProcessor'`, which only the URI
+  # satisfies; test352 asserts the same for an explicitly-typed send; test253
+  # accepts either spelling. No test in the corpus requires `"scxml"`. Plan
+  # decision 11 picks the URI on that evidence.
+  #
+  # Known residual, untested either way: this hardcodes the URI regardless of
+  # what the author wrote, so `<send type="scxml">` still reports the URI,
+  # where 5.10.1's "equivalent to the 'type' field on the `<send>` element"
+  # would echo `"scxml"` back. test253 accepts both, and nothing else covers
+  # it. Echoing the written value would satisfy every test above too, so this
+  # is a free choice until a test constrains it.
   @spec delivered_event(send :: Send.t() | SendDelayed.t(), session_id :: String.t()) ::
           Event.t()
   defp delivered_event(send, session_id) do

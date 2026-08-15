@@ -466,6 +466,11 @@ defmodule Statifier.Interpreter do
   as an in-loop `raise` would, then run to quiescence. No selection or
   entry/exit procedure changes.
 
+  That paragraph is ADR-0002's required citation for a deviation from the
+  Appendix D pseudocode: the reason is mechanical (where effects run), not
+  semantic, and the resulting queue state is what the in-loop write would
+  have produced.
+
   Delegates to `MachineState.raise_internal/4` or `raise_platform/4` by
   `kind` - the same two functions the core's own executable content already
   uses, so no third internal-queue writer is introduced - then folds
