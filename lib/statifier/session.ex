@@ -13,16 +13,34 @@ defmodule Statifier.Session do
   performing half lives here. A different path or module name fails the
   gate.
 
-  ## No supervision tree, no registry, in this bead
+  ## A bare `start_link/2` stays legal; the runtime is opt-in
 
-  `start_link/2` and the `use GenServer`-generated `child_spec/1` are the
-  whole of it: an embedder places a session in their own supervision tree,
-  and `:name` is passed to `GenServer.start_link/3` unchanged, so
-  `{:via, Registry, _}` works today with no code here. `use GenServer,
-  restart: :transient` is written explicitly because the generated
-  `child_spec/1` otherwise defaults to `restart: :permanent`, which would
-  have an embedder's supervisor restart a session that halted normally -
-  the opposite of the next section.
+  `start_link/2` and the `use GenServer`-generated `child_spec/1` still work
+  exactly as before: an embedder can place a session directly
+  in their own supervision tree, and `:name` is passed to
+  `GenServer.start_link/3` unchanged, so an embedder-owned
+  `{:via, Registry, _}` works with no code here. A session started this way
+  is legal and unregistered - ADR-0027 decision 2 sanctions this outright,
+  since C.1 leaves "accessible to a given SCXML Processor" platform-defined,
+  and an unregistered session is an inaccessible one to every *other*
+  session (decision 10 below is the one exception, and it is about
+  self-addressing, not registration).
+
+  `Statifier.start_session/2` is the alternative that registers: it starts
+  the session on `Statifier.SessionSupervisor` under `Statifier.Supervisor`
+  (ADR-0027), and `init/1` below registers under `Statifier.Registry` when
+  that registry is running - never fatal to the session when it is not, so
+  a bare `start_link/2` embedder pays nothing for a runtime it never placed.
+
+  `use GenServer, restart: :temporary` (ADR-0027 decision 4) is written
+  explicitly, both because the generated `child_spec/1` otherwise defaults
+  to `restart: :permanent` - which would have a supervisor restart a
+  session that halted normally, the opposite of the next section - and
+  because `:temporary` itself is a decision: a supervisor restart re-runs
+  `start_link/2`, which generates a *fresh* `sess_` UXID and loses every
+  bit of the crashed session's state, so restarting is actively wrong, not
+  merely useless. Recovery that preserves identity is replay, not a
+  restart flag.
 
   ## `:done` idles the session; it does not stop it
 
@@ -76,13 +94,18 @@ defmodule Statifier.Session do
   (decision 10: a session is always accessible to itself, registry or not)
   both resolve with no registry at all - the former through
   `Statifier.Interpreter.deliver_internal/5` (ADR-0037), the latter onto
-  this session's own inbox. Every other `#_scxml_<sessionid>`, `#_parent`,
-  and `#_<invokeid>` route resolves to `error.communication` on the
-  sender's own internal queue - there is no registry and no invocation
-  table yet (that is a later bead's work) - through the private
-  `communication_error/4` resolver, so a later bead changes a resolver, not
-  this module's `{:deliver, ...}` clause. An unsupported `type` or an
-  unparseable `target` raises `error.execution` the same way, at plan time.
+  this session's own inbox. Every other `#_scxml_<sessionid>` resolves
+  through `Registry.lookup(Statifier.Registry, sid)` (ADR-0027 decision 2):
+  a hit casts the event onto that session's inbox via `send_event/2`; an
+  empty lookup - the id never existed, named a bare unregistered session,
+  or named a session that has since died - takes C.1's mandated
+  `error.communication` path on the *sending* session's own internal queue,
+  through the private `communication_error/4` resolver. `#_parent` and
+  `#_<invokeid>` resolve to `error.communication` the same way - there is
+  no invocation table yet (that is a later bead's work), so a later bead
+  changes that resolver, not this module's `{:deliver, ...}` clause. An
+  unsupported `type` or an unparseable `target` raises `error.execution`
+  the same way, at plan time.
   `:invoke`, `:cancel_invoke`, and `:autoforward` still plan as
   `{:unroutable, effect}`: there is no child session to route any of them
   to yet. See `Statifier.Session.Effects` and `Statifier.Session.Target`.
@@ -117,7 +140,7 @@ defmodule Statifier.Session do
   its own `@doc` for the ordering caveat on when it is safe to call.
   """
 
-  use GenServer, restart: :transient
+  use GenServer, restart: :temporary
 
   alias Statifier.Effect
   alias Statifier.Effect.Done
@@ -338,6 +361,7 @@ defmodule Statifier.Session do
       |> Enum.reduce(%{}, fn pid, acc -> Map.put(acc, pid, Process.monitor(pid)) end)
 
     session_id = machine_state.datamodel["_sessionid"]
+    register_session(session_id)
 
     recording =
       if Keyword.get(opts, :record, false) do
@@ -354,6 +378,33 @@ defmodule Statifier.Session do
     }
 
     {:ok, perform(state, effects), {:continue, :drain}}
+  end
+
+  # ADR-0027 decision 2: registration happens here, not by a caller-supplied
+  # `:name`, because the `sess_` UXID this session registers under does not
+  # exist until `Interpreter.initialize/2` (above) has run - no `{:via,
+  # ...}` tuple can name a session before it starts. There is no separate
+  # `Statifier.Registry`-running check ahead of the call: `Registry.register/3`
+  # itself raises when the named registry does not exist, and that raise is
+  # rescued into the same no-op every other registration failure gets, so a
+  # bare `start_link/2` embedder who never placed `Statifier.Supervisor`
+  # stays legal and unregistered (the "bare `start_link/2`" section above)
+  # through the same path as any other failure, not a second mechanism.
+  # Failure is never fatal to the session: whether `Statifier.Registry`
+  # was never started, crashed mid-call, or `session_id` somehow collides,
+  # the session still starts, merely unreachable by id - exactly what an
+  # unregistered session already is. Registration is a one-shot call made
+  # here at `init/1` time only; a session that starts before
+  # `Statifier.Supervisor` exists stays unregistered even if the runtime
+  # is placed later, since nothing here retries it.
+  @spec register_session(session_id :: String.t()) :: :ok
+  defp register_session(session_id) do
+    Registry.register(Statifier.Registry, session_id, nil)
+    :ok
+  rescue
+    _error -> :ok
+  catch
+    :exit, _reason -> :ok
   end
 
   # `mainEventLoop`'s dequeue tail (Appendix D), with `Statifier.Session.Inbox`
@@ -609,11 +660,13 @@ defmodule Statifier.Session do
   # 2's "an unregistered session is an inaccessible one" - that sentence is
   # about reachability *by other sessions* - and is recorded as a
   # consequence in `docs/adr/0027-embedder-placed-session-runtime.md`. Every
-  # other `{:session, _}`, `:parent`, and `{:invoke, _}` route is
-  # unresolvable in this phase: there is no registry and no invocation
-  # table, so each takes C.1's mandated `error.communication` path via
-  # `communication_error/4`, which a later bead changes without touching
-  # this clause.
+  # other `{:session, sid}` resolves through `Statifier.Registry`
+  # (`registry_lookup/1`): a hit casts onto that session's inbox, an empty
+  # lookup takes C.1's mandated `error.communication` path via
+  # `communication_error/4`. `:parent` and `{:invoke, _}` are still
+  # unresolvable in this phase - there is no invocation table yet - so each
+  # takes the same `communication_error/4` path, which a later bead changes
+  # without touching this clause.
   @spec deliver(
           route :: Target.route(),
           event :: Event.t(),
@@ -636,8 +689,15 @@ defmodule Statifier.Session do
     %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
   end
 
-  defp deliver({:session, _sid}, event, effect, state, override) do
-    communication_error(event, effect, state, override)
+  defp deliver({:session, sid}, event, effect, state, override) do
+    case registry_lookup(sid) do
+      [{pid, _value}] ->
+        send_event(pid, event)
+        state
+
+      [] ->
+        communication_error(event, effect, state, override)
+    end
   end
 
   defp deliver(:parent, event, effect, state, override) do
@@ -665,6 +725,21 @@ defmodule Statifier.Session do
   end
 
   defp deliver_fired(route, event, effect, state), do: deliver(route, event, effect, state, nil)
+
+  # `Registry.lookup/2` raises `ArgumentError` when `Statifier.Registry`
+  # itself is not running (no ETS table backs a registry nobody started),
+  # which is exactly the "no runtime placed" case a bare `start_link/2`
+  # sender is allowed to be in - so that raise is caught and folded into the
+  # same empty-lookup shape a live registry returns for an unknown or dead
+  # id. Both arrive at `communication_error/4` the same way; the caller
+  # cannot tell "no registry" from "registry, but nothing there" apart, per
+  # C.1's "does not exist or is inaccessible".
+  @spec registry_lookup(sid :: String.t()) :: [{pid(), term()}]
+  defp registry_lookup(sid) do
+    Registry.lookup(Statifier.Registry, sid)
+  rescue
+    ArgumentError -> []
+  end
 
   # C.1's mandated path for a route this phase cannot resolve: "a session
   # that does not exist or is inaccessible" -> `error.communication` on the

@@ -13,6 +13,38 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-15 - st-cmq.5
+
+Approved-by: JohnnyT (in session)
+
+- lib/mix/statifier/adr_guard.ex: widens `@effect_interpreter_paths` from
+  `["lib/statifier/session.ex"]` to the named session-runtime set, adding
+  `lib/statifier/supervisor.ex`
+
+Reason: ADR-0027 decided the session runtime's shape - an embedder-placed
+`Statifier.Supervisor` holding `Statifier.Registry` and
+`Statifier.SessionSupervisor` - and st-cmq.5 implements it. ADR-0003 names
+`Statifier.Session` as the production effect interpreter; the supervisor that
+places the registry and the DynamicSupervisor behind it is the same design
+statement, and the exemption list is where that statement is written.
+Registration, lookup and `start_child` calls stay inside `session.ex`, which
+was already exempt, so this is the one new path ADR-0027 predicted - and that
+record is explicit that a second new path is a smell to be argued, not
+defaulted. It loosens no check, skips no test, and lowers no threshold: every
+other file under `lib/statifier/` is still scanned by the same pattern, and the
+guard's own comment ("Excluding it is the design, not a hole in the check") is
+what this amendment keeps true rather than routing around.
+
+Worth stating plainly, because it is the reason this entry matters more than
+its size suggests: **the gate would have gone green without it.**
+`mix gate.check` does not guard `lib/mix/statifier/adr_guard.ex`, and a
+module-based `use Supervisor` matches none of `@effect_call_pattern`'s
+alternatives, so the supervisor could have shipped exempt-by-accident with no
+amendment and no record. ADR-0027 forbids exactly that: "riding a pattern gap
+instead of amending it would be the hole the guard's own comment disclaims."
+The block on this phase was policy, not a red gate, which is the stronger of
+the two and the easier one to quietly skip.
+
 ## 2026-08-15 - st-0ej
 
 Approved-by: JohnnyT (in session)

@@ -69,9 +69,13 @@ defmodule Mix.Statifier.AdrGuard do
   @test_prefix "test/"
 
   # ADR-0003 names `Statifier.Session` as *the* production effect interpreter,
-  # so it is the one core module allowed to do I/O. Excluding it is the design,
-  # not a hole in the check.
-  @effect_interpreter_paths ["lib/statifier/session.ex"]
+  # so it is the one core module allowed to do I/O. ADR-0027 adds
+  # `Statifier.Supervisor`, the session runtime's registry-and-DynamicSupervisor
+  # holder: it is the same design statement as `Statifier.Session` itself, not
+  # a second one, since registration, lookup, monitor and start_child calls
+  # all still happen inside `session.ex`. Excluding both is the design, not a
+  # hole in the check.
+  @effect_interpreter_paths ["lib/statifier/session.ex", "lib/statifier/supervisor.ex"]
 
   @interpreter_pattern ~r{^lib/statifier/interpreter}
 
