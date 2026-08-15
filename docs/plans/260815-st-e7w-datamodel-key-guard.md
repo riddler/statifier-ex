@@ -412,10 +412,10 @@ than collapsing the three into one test.
       globbed, so the new tests join it the moment they are written.
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment: the change adds no Appendix D procedure and
+- [x] Spec-conformance judgment: the change adds no Appendix D procedure and
       alters none, and `new/2`'s existing fields are untouched - confirm by
       reading the diff that only the `:datamodel` option's path changed.
-- [ ] No conformance movement: run `mix test --include scion --include
+- [x] No conformance movement: run `mix test --include scion --include
       scxml_w3` and compare its failure list against a run from
       `origin/main`. This is a manual item deliberately, not an automated
       one - no command decides "the same pass set as before" on its own
@@ -424,13 +424,13 @@ than collapsing the three into one test.
       state). No document supplies the `:datamodel` option, so the expected
       answer is an identical list and no `mix test.baseline add`; a
       difference means something other than this change moved.
-- [ ] Each sabotage was actually performed and reverted, and each note names
+- [x] Each sabotage was actually performed and reverted, and each note names
       the mutation that reddened its test.
-- [ ] The raised message is legible without reading the source: run
+- [x] The raised message is legible without reading the source: run
       `Statifier.initialize(machine, datamodel: %{"user" => %{name: "Ada"}})`
       in `iex -S mix` and confirm the message identifies both the key and its
       path.
-- [ ] No regression in the seeded-system-variable behavior: the existing
+- [x] No regression in the seeded-system-variable behavior: the existing
       `new/2` datamodel tests still describe the same merge order.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
@@ -500,13 +500,13 @@ option contains a non-string key at any level."
       documentation files changed in this phase.
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment for the `lib/statifier/` file touched:
+- [x] Spec-conformance judgment for the `lib/statifier/` file touched:
       `evaluator.ex`'s change is prose only, and `context/1`'s behavior
       description still matches what the function does.
-- [ ] The amended `context/1` doc does not claim the `bind/3` guard is now
+- [x] The amended `context/1` doc does not claim the `bind/3` guard is now
       unreachable - a hand-built `%MachineState{}` in a test can still reach
       it.
-- [ ] `docs/datamodel.md`'s new sentence reads as a pointer, not a second
+- [x] `docs/datamodel.md`'s new sentence reads as a pointer, not a second
       copy of the argument.
 
 **Implementation Note**: Same gate rules as Phase 1.
@@ -588,12 +588,19 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+All eight items were verified with the human on 2026-08-15, after both
+phases had landed. Two findings came out of it, neither a code defect; both
+are recorded under "Findings from the verification pass" below.
+
 ### Phase 1
 
-- [ ] Spec-conformance judgment: the change adds no Appendix D procedure and
+- [x] Spec-conformance judgment: the change adds no Appendix D procedure and
       alters none, and `new/2`'s existing fields are untouched - confirm by
       reading the diff that only the `:datamodel` option's path changed.
-- [ ] No conformance movement: run `mix test --include scion --include
+      *Verified: every struct field, the `@spec`, and every other `new/2`
+      assignment are byte-identical; the only change is `Keyword.get/3`
+      piping through `checked_datamodel!/1`.*
+- [x] No conformance movement: run `mix test --include scion --include
       scxml_w3` and compare its failure list against a run from
       `origin/main`. This is a manual item deliberately, not an automated
       one - no command decides "the same pass set as before" on its own
@@ -602,14 +609,29 @@ before considering the plan fully landed.
       state). No document supplies the `:datamodel` option, so the expected
       answer is an identical list and no `mix test.baseline add`; a
       difference means something other than this change moved.
-- [ ] Each sabotage was actually performed and reverted, and each note names
+      *Verified: both runs performed - this branch, and `origin/main` in a
+      throwaway worktree (`origin/main` was exactly `HEAD~2`, so the baseline
+      carried no drift). 107 failures on each side, and `diff` of the two
+      sorted failure lists is empty. The test count moves 1683 -> 1691,
+      exactly the eight tests added here. No `mix test.baseline add` needed.*
+- [x] Each sabotage was actually performed and reverted, and each note names
       the mutation that reddened its test.
-- [ ] The raised message is legible without reading the source: run
+      *Verified by re-running all seven distinct mutations mechanically
+      against the committed tree: each reddened the test its note names, and
+      the file reverted byte-identical afterwards. See finding 1 below.*
+- [x] The raised message is legible without reading the source: run
       `Statifier.initialize(machine, datamodel: %{"user" => %{name: "Ada"}})`
       in `iex -S mix` and confirm the message identifies both the key and its
       path.
-- [ ] No regression in the seeded-system-variable behavior: the existing
+      *Verified via `mix run` over three shapes. The path segment renders as
+      `the top level`, `"user"`, and `"a" -> "b" -> 0 -> "c"` - list indices
+      included.*
+- [x] No regression in the seeded-system-variable behavior: the existing
       `new/2` datamodel tests still describe the same merge order.
+      *Verified: the test file's diff is 80 insertions and 0 deletions, so
+      both pre-existing merge-order tests are untouched. Mutation D1 reddened
+      both, which is what proves they are still live rather than passing
+      vacuously.*
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 the full `mix quality` as the phase gate. In interactive execution, pause here
@@ -621,15 +643,54 @@ items are surfaced at the end.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment for the `lib/statifier/` file touched:
+- [x] Spec-conformance judgment for the `lib/statifier/` file touched:
       `evaluator.ex`'s change is prose only, and `context/1`'s behavior
       description still matches what the function does.
-- [ ] The amended `context/1` doc does not claim the `bind/3` guard is now
+      *Verified: the diff touches only the `@doc` heredoc; `def context/1`
+      and `bind_roots/2` are unchanged. The description still matches -
+      `bind_roots/2` folds `bind/3` over the top-level roots, which is
+      exactly where the `is_binary(name)` guard the doc describes applies.*
+- [x] The amended `context/1` doc does not claim the `bind/3` guard is now
       unreachable - a hand-built `%MachineState{}` in a test can still reach
       it.
-- [ ] `docs/datamodel.md`'s new sentence reads as a pointer, not a second
+      *Verified: the doc says so explicitly - "The `bind/3` crash remains
+      the backstop for a `%MachineState{}` assembled by hand, bypassing
+      `new/2` - as a test might."*
+- [x] `docs/datamodel.md`'s new sentence reads as a pointer, not a second
       copy of the argument.
+      *Verified: it states the invariant and where it is checked, then
+      defers to `context/1`'s `@doc`; the reject-vs-normalize argument
+      appears nowhere in it. House style also checked - that file contains
+      no em dashes, so the plain-hyphen form used is the right one.*
 
 **Implementation Note**: Same gate rules as Phase 1.
+
+---
+
+## Findings from the verification pass
+
+Neither finding is a defect in the shipped code, and neither was acted on
+during the pass - both are recorded so the next reader does not have to
+rediscover them.
+
+1. **The sabotage bookkeeping in this plan undercounts by one.** The
+   recursion-stop mutation (`check_keys!/2`'s map clause dropping its
+   recursive call) reddens *four* tests, not the three the notes claim: the
+   message test uses `%{"user" => %{name: "Ada"}}`, whose offending key is
+   nested, so it joins the set. Each individual sabotage note still names a
+   mutation that genuinely reddens its own test, which is what
+   `docs/testing.md` requires; only the cross-referencing prose in the notes
+   on the three nesting tests is off. Left as-is rather than corrected in
+   place, since editing a landed sabotage note to match a later recount is a
+   change to the record rather than to the code.
+
+2. **`new/2` on a non-map `:datamodel` raises a different error than it used
+   to.** `checked_datamodel!/1` carries `when is_map(datamodel)`, so
+   `new(machine, datamodel: [])` now raises `FunctionClauseError` on a
+   private function, where it previously raised `BadMapError` from
+   `Map.merge/2`. Both crash and neither is more informative, but the new
+   one names a function the caller cannot see. No test covers it either way.
+   Out of scope for this bead; worth a separate one only if the constructor
+   ever grows a broader argument-shape contract.
 
 ---
