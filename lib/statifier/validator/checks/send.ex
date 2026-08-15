@@ -30,13 +30,45 @@ defmodule Statifier.Validator.Checks.Send do
 
   Deliberately **not** enforced: 6.2.3's "A conformant SCXML document MUST
   specify exactly one of 'event', 'eventexpr' and `<content>`" as a
-  three-way constraint. `<content>` under `<send>` is the message
-  *payload*, not the event name, and reading that sentence literally would
-  refuse the extremely common `<send event="e"><content>...</content></send>`.
-  Only the `event`/`eventexpr` pairwise exclusivity above is checked;
-  `<content>`'s co-occurrence with `event` is fine. This is recorded here
-  so the omission is a decision on the record rather than a gap a later
-  reader closes by reflex.
+  three-way constraint. Only the `event`/`eventexpr` pairwise exclusivity
+  above is checked; `<content>` alongside `event` passes.
+
+  Read literally, that sentence makes `<send event="e"><content>...</content></send>`
+  nonconformant, and 6.2.6 restates the same split ("the document author
+  can specify the message content in one of two mutually exclusive ways"),
+  so it is not a drafting slip in a single clause. The omission rests on
+  two things that outweigh the letter rather than on reading it away:
+
+  - The W3C's own **mandatory** conformance tests violate it.
+    `test/scxml_tests/mandatory/send/test179_test.exs` and
+    `test/scxml_tests/mandatory/scxml_event_processor/test354_test.exs`
+    both carry `<send event="..."><content>123</content></send>`, and both
+    carry the `send_elements` feature atom. Enforcing the constraint at
+    error severity would reject two mandatory tests the moment that atom
+    is flipped. No corpus file specifies `<content>` without `event`, so
+    the pairwise checks above reject nothing that exists.
+  - 6.2.3 contradicts 6.2.2's own attribute table. The `event` row reads
+    "If the type is http://www.w3.org/TR/scxml/#SCXMLEventProcessor,
+    either this attribute or 'eventexpr' must be present", and that
+    processor is the default type (6.2.5) - so a `<content>`-only `<send>`
+    with no `type` satisfies "exactly one" and violates the event-presence
+    requirement at the same time. The letter is unsatisfiable for a
+    content-bearing send over the default processor, and the WG's test
+    suite resolves it the way this check does.
+
+  ADR-0033's warning tier is the natural home for a document-directed MUST
+  the engine has defined behavior for, and it was considered; a warning
+  that fires on the W3C's own conformance suite is noise rather than
+  diligence, so this stays silent. Do not "fix" the omission by reflex on
+  finding 6.2.6: the behavior is forced by the corpus, and changing it
+  needs the two facts above rebutted first.
+
+  The same clause also forbids **zero** of the three, and that half is
+  unchecked too: a `<send/>` with neither `event`, `eventexpr`, nor
+  `<content>` is accepted and produces an effect with `event: nil`. No
+  corpus file does this, so unlike the three-way constraint it has no
+  evidence against it - a fair warning-tier candidate if one is ever
+  wanted, left alone here because nothing needs it yet.
 
   The walk reaches every block a `<send>` can appear in: a state's
   `onentry`/`onexit`, its own (and its `<initial>` element's) transitions,

@@ -95,3 +95,12 @@ historical context for the decision, not the decision itself.
 - No compatibility is broken: no prior release of this engine has generated a
   `<send>` id in any format, UXID or otherwise, since `<send>` has had no
   producer until this bead.
+- An author who writes `id="send_1"` on one `<send>` while another `<send>`
+  generates its id can produce two live sends sharing a sendid, which strains
+  3.14's "they MUST be unique within the session". The collision is accepted
+  rather than defended against: it is inherent to every counter-based format,
+  the colliding document is already nonconformant under that same MUST, and
+  6.3.1 tolerates the outcome anyway - "If multiple delayed events have this
+  sendid, the Processor will cancel them all." Widening the counter's format
+  to dodge an author id would trade a spec-conformant collision the author
+  caused for less readable ids on every document.
