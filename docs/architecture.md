@@ -126,20 +126,41 @@ Decision 5, for why it was widened once).
 `Statifier.Session` is the GenServer effect interpreter (ADR-0003): it owns the
 outer `while running` loop, the waiting external events, the delayed-send
 timers, `<cancel>`'s effect, and the fan-out of the effect stream to
-subscribers. The pure core now lowers, validates, and compiles `<invoke>`
+subscribers. The pure core lowers, validates, and compiles `<invoke>`
 ([ADR-0031](adr/0031-invoke-argument-failure-aborts-the-invocation.md)),
 runs Appendix D's `statesToInvoke` and cancel-invoke passes
 ([ADR-0032](adr/0032-round-budget-spans-the-invoke-re-entry.md) covers the
 round budget across a post-invoke re-entry), runs `<finalize>` before
 transition selection, and emits `{:invoke, _}`, `{:cancel_invoke, _}`, and
-`{:autoforward, _}` effects for the session to act on. What is still missing
-is the child-session half: no process is spawned and no `done.invoke.<id>`
-is generated - that is st-cmq.7. The `<send>` target vocabulary and its
-router exist (st-cmq.5): `#_internal` and a self-addressed
-`#_scxml_<sessionid>` deliver with no registry at all, and `#_parent` and
-`#_<invokeid>` already parse to routes, but both resolve to nothing
-(`error.communication`) until an invocation table exists to resolve them
-against - delivering to a live child or parent is st-cmq.7's. v1's
+`{:autoforward, _}` effects for the session to act on.
+
+`Statifier.Session` performs all three, under the embedder-placed runtime
+[ADR-0027](adr/0027-embedder-placed-session-runtime.md) decided:
+`Statifier.Supervisor` holds a `Statifier.Registry` and a flat
+`Statifier.SessionSupervisor`, `:rest_for_one`. `{:invoke, _}` resolves the
+child's source through `Statifier.Invoke.Source`
+([ADR-0038](adr/0038-invoke-source-resolves-at-the-session-boundary.md) -
+the library never fetches `src` itself; an embedder-supplied `invoke_source`
+resolver does, or the invocation raises `error.communication`), seeds the
+child's datamodel per 6.4.3's name-matched `<param>`/namelist rule, and
+starts it on `Statifier.SessionSupervisor` with `invoked_by: {parent_pid,
+invoke_id}`, monitored in both directions. `#_parent`/`_parent` and a live
+invocation's `done.invoke.<invokeid>` (carrying its donedata) both resolve
+through that `invoked_by` link directly, with no registry lookup needed;
+`#_<invokeid>` still resolves to `error.communication` unconditionally - the
+parent's invocation table (`Statifier.Session.Invocations`) answers "which
+child does `<invoke>` start", not yet "where does `#_<invokeid>` deliver",
+which is st-xcgr. `{:autoforward, _}` forwards every external event the
+parent removes from its queue to each autoforwarding invocation, unmodified,
+at the point the core's finalize/autoforward pass runs. `{:cancel_invoke, _}`
+stops the child via `Session.cancel/1` (not `stop/2`, so its `<onexit>`
+handlers still run) and pops its table entry before the stop, so the
+drain-time discard - a queued event whose `invokeid` no longer names a live
+invocation is dropped, per 6.4.3's "MUST NOT insert them into the external
+event queue" - is correct against events queued either before or after the
+cancel. Inline `<content><scxml>...</scxml></content>` does not lower yet
+(a parser-layer, layer-boundary decision deferred to st-53ys); a `<content>`
+holding markup as a text/CDATA binary compiles and runs today. v1's
 handler-registry invoke is kept as an explicit extension type - a useful,
 safe escape hatch, but not the definition of `<invoke>`.
 
