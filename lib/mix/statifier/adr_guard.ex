@@ -292,7 +292,7 @@ defmodule Mix.Statifier.AdrGuard do
       @uxid_adhoc_pattern,
       "adr-0008-uxid",
       &String.starts_with?(&1, @core_prefix),
-      "identifier generated ad hoc; ADR-0008 fixes the format of generated IDs"
+      "identifier generated ad hoc; ADR-0008 fixes the sess_/send_/inv_ id formats"
     )
   end
 
