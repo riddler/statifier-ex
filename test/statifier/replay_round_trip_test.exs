@@ -264,7 +264,6 @@ defmodule Statifier.ReplayRoundTripTest do
       assert non_trace == [
                {:effect, {:log, log_effect}},
                {:effect, {:cancel_invoke, cancel_invoke_effect}},
-               {:unroutable, {:cancel_invoke, cancel_invoke_effect}},
                {:effect, {:send_delayed, send_delayed}}
              ]
     end

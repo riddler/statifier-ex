@@ -125,7 +125,8 @@ defmodule Statifier.Replay do
       halted: nil,
       stream: [],
       pending: %{},
-      raced: %{}
+      raced: %{},
+      live_invoke_ids: MapSet.new()
     ]
 
     @type t :: %__MODULE__{
@@ -135,7 +136,8 @@ defmodule Statifier.Replay do
             halted: Statifier.Replay.halt_reason() | nil,
             stream: [Statifier.Replay.message()],
             pending: %{(String.t() | nil) => non_neg_integer()},
-            raced: %{(String.t() | nil) => non_neg_integer()}
+            raced: %{(String.t() | nil) => non_neg_integer()},
+            live_invoke_ids: MapSet.t(String.t())
           }
   end
 
@@ -193,8 +195,21 @@ defmodule Statifier.Replay do
 
   @spec apply_entry(entry :: Recording.entry(), state :: State.t()) ::
           {:ok, State.t()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}
-  defp apply_entry({:event, %Event{} = event}, state) do
-    {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
+  defp apply_entry({:event, %Event{invokeid: id} = event}, state) do
+    if id != nil and not MapSet.member?(state.live_invoke_ids, id) do
+      # Decision 6's replay half: the live session discarded this event at
+      # drain time (`lib/statifier/session.ex`'s own `handle_continue(:drain,
+      # _)` clause) before it was ever recorded as delivered to the core, so
+      # a sound recording never actually needed this branch - but a
+      # recording captured by an older build, or hand-built in a test, can
+      # still carry one. Skipping it here rather than draining it is what
+      # keeps a discarded-event recording replaying to the same
+      # configuration the live run reached (ADR-0034's round-trip
+      # obligation), instead of the two disagreeing about what the core saw.
+      {:ok, state}
+    else
+      {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
+    end
   end
 
   defp apply_entry(:cancel, state) do
@@ -389,9 +404,27 @@ defmodule Statifier.Replay do
   # through re-starting the child. The `{:notify, effect}` instruction
   # always planned ahead of this one (`Statifier.Session.Effects.plan_one/2`)
   # has already appended the `{:invoke, _}` effect itself to `stream`; this
-  # clause starts nothing.
-  defp perform_instruction({:start_child, %Invoke{}, _effect}, state, _override) do
-    state
+  # clause starts no process, but it does add `invoke.invoke_id` to
+  # `live_invoke_ids` (Decision 6) - the same live-invocation set a real
+  # session keeps in `Statifier.Session.Invocations`, re-derived here from
+  # the same `{:start_child, _, _}`/`{:stop_child, _}` instructions this
+  # module already folds, so a recorded `{:event, %Event{invokeid: id}}`
+  # discards identically on replay (see `apply_entry/2`'s `{:event, _}`
+  # clause below).
+  defp perform_instruction(
+         {:start_child, %Invoke{invoke_id: invoke_id}, _effect},
+         state,
+         _override
+       ) do
+    %{state | live_invoke_ids: MapSet.put(state.live_invoke_ids, invoke_id)}
+  end
+
+  # `{:cancel_invoke, _}`'s own performed half (Decision 6): a live session
+  # pops its `Invocations` table entry here; this module has no table, so it
+  # removes `invoke_id` from `live_invoke_ids` instead - the same predicate
+  # change, with no process to cancel.
+  defp perform_instruction({:stop_child, invoke_id}, state, _override) do
+    %{state | live_invoke_ids: MapSet.delete(state.live_invoke_ids, invoke_id)}
   end
 
   # Autoforward delivery is a live-process action (`Statifier.Session`

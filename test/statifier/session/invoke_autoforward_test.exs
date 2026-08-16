@@ -104,7 +104,7 @@ defmodule Statifier.Session.InvokeAutoforwardTest do
   end
 
   describe "an external event with an autoforward=\"true\" invocation active" do
-    # sabotage (two mutations, both reverted and confirmed green):
+    # sabotage: two mutations, both reverted and confirmed green:
     # 1. `Statifier.Session.Effects.plan_one/2`'s `{:autoforward, _}` clause
     #    is reverted to `[{:notify, effect}, {:unroutable, effect}]` ->
     #    `Statifier.Session` never receives a `{:forward, ...}` instruction,

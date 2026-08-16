@@ -11,7 +11,6 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
   alias Statifier.Lowering
   alias Statifier.Parser
   alias Statifier.Session
-  alias Statifier.Session.Invocations
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -91,21 +90,30 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
       assert_receive {:statifier, ^session_id,
                       {:effect, {:invoke, %Statifier.Effect.Invoke{invoke_id: invoke_id}}}}
 
-      %{invocations: invocations} = :sys.get_state(parent)
-
-      assert {:ok, %{pid: child_pid, session_id: child_session_id}} =
-               Invocations.fetch(invocations, invoke_id)
-
+      # `Invocations.fetch/2` is deliberately not read here: since Phase 5
+      # (`{:cancel_invoke, _}` -> `{:stop_child, _}`), the very "ping" this
+      # test is about pops the table entry the instant it drives the parent
+      # out of "a" (the invoking state) - `:sys.get_state/1` racing that pop
+      # against this test process is exactly the kind of flake Phase 5
+      # introduces for a test that used to be able to read the table at
+      # leisure, back when `:cancel_invoke` was still `{:unroutable, _}` and
+      # left the entry untouched. Waiting for "b" first, then reading the
+      # delivered `_event` and cross-checking the child's *global*
+      # `Statifier.Registry` entry (which outlives the parent's own table
+      # entry - a cancelled child stays registered) sidesteps the table
+      # race entirely.
       wait_for_status(parent, fn s -> s.configuration == MapSet.new(["b"]) end)
 
       event = Session.snapshot(parent).datamodel["_event"]
       assert event["name"] == "ping"
       assert event["invokeid"] == invoke_id
-      assert event["origin"] == SystemVariables.scxml_location(child_session_id)
+      assert String.starts_with?(event["origin"], "#_scxml_")
       assert event["origintype"] == SystemVariables.scxml_event_processor()
 
-      # child_pid is otherwise unused past locating the invocation; assert
-      # it is the one that actually reported in, not some other pid.
+      child_session_id = String.replace_prefix(event["origin"], "#_scxml_", "")
+      assert event["origin"] == SystemVariables.scxml_location(child_session_id)
+
+      assert [{child_pid, _value}] = Registry.lookup(Statifier.Registry, child_session_id)
       assert Session.session_id(child_pid) == child_session_id
     end
   end
