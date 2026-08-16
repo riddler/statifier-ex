@@ -195,20 +195,29 @@ defmodule Statifier.Replay do
 
   @spec apply_entry(entry :: Recording.entry(), state :: State.t()) ::
           {:ok, State.t()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}
-  defp apply_entry({:event, %Event{invokeid: id} = event}, state) do
-    if id != nil and not MapSet.member?(state.live_invoke_ids, id) do
-      # Decision 6's replay half: the live session discarded this event at
-      # drain time (`lib/statifier/session.ex`'s own `handle_continue(:drain,
-      # _)` clause) before it was ever recorded as delivered to the core, so
-      # a sound recording never actually needed this branch - but a
-      # recording captured by an older build, or hand-built in a test, can
-      # still carry one. Skipping it here rather than draining it is what
-      # keeps a discarded-event recording replaying to the same
-      # configuration the live run reached (ADR-0034's round-trip
-      # obligation), instead of the two disagreeing about what the core saw.
-      {:ok, state}
+  defp apply_entry({:event, %Event{} = event}, state) do
+    {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
+  end
+
+  # Decision 6's replay half, mirroring `Statifier.Session`'s own
+  # `handle_continue(:drain, _)`: an entry one of this session's invocations
+  # delivered is dropped once that invocation is no longer live. The
+  # predicate reads the recorded entry's origin, never `event.invokeid` - a
+  # forwarded copy carries a *sibling's* id under 6.4.2's exact-copy rule,
+  # and discarding on the field would drop it in both the live run and the
+  # replay (`Statifier.Session.Inbox`'s `entry` typedoc).
+  #
+  # A sound recording rarely needs this branch at all: the live session
+  # discards before recording delivery to the core. A recording captured by
+  # an older build, or hand-built in a test, can still carry one, and
+  # skipping it here is what keeps such a recording replaying to the same
+  # configuration the live run reached (ADR-0034's round-trip obligation).
+  defp apply_entry({:invoked_event, invoke_id, %Event{} = event}, state) do
+    if MapSet.member?(state.live_invoke_ids, invoke_id) do
+      {:ok,
+       %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)} |> drain()}
     else
-      {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
+      {:ok, state}
     end
   end
 
@@ -272,10 +281,17 @@ defmodule Statifier.Replay do
       {:ok, :cancel, inbox} ->
         %{state | inbox: inbox} |> drain_cancel() |> drain()
 
-      {:ok, {:event, _event}, _inbox} when state.halted != nil ->
+      {:ok, entry, _inbox}
+      when state.halted != nil and elem(entry, 0) in [:event, :invoked_event] ->
         state
 
       {:ok, {:event, event}, inbox} ->
+        %{state | inbox: inbox} |> drain_event(event) |> drain()
+
+      # The live session re-checks liveness here, at the point it pops the
+      # entry; this module already checked it in `apply_entry/2` and never
+      # enqueues an entry from a dead invocation, so popping it is enough.
+      {:ok, {:invoked_event, _invoke_id, event}, inbox} ->
         %{state | inbox: inbox} |> drain_event(event) |> drain()
     end
   end
@@ -400,7 +416,8 @@ defmodule Statifier.Replay do
 
   # A child process is not replayable (ADR-0034): every contribution it made
   # to the parent's run is already in the recorded event log, reached
-  # through the parent's own `{:internal, ...}`/`{:event, ...}` entries, not
+  # through the parent's own `{:internal, ...}`/`{:invoked_event, ...}`
+  # entries, not
   # through re-starting the child. The `{:notify, effect}` instruction
   # always planned ahead of this one (`Statifier.Session.Effects.plan_one/2`)
   # has already appended the `{:invoke, _}` effect itself to `stream`; this
@@ -408,9 +425,9 @@ defmodule Statifier.Replay do
   # `live_invoke_ids` (Decision 6) - the same live-invocation set a real
   # session keeps in `Statifier.Session.Invocations`, re-derived here from
   # the same `{:start_child, _, _}`/`{:stop_child, _}` instructions this
-  # module already folds, so a recorded `{:event, %Event{invokeid: id}}`
-  # discards identically on replay (see `apply_entry/2`'s `{:event, _}`
-  # clause below).
+  # module already folds, so a recorded `{:invoked_event, invoke_id, _}`
+  # discards identically on replay (see `apply_entry/2`'s
+  # `{:invoked_event, _, _}` clause below).
   defp perform_instruction(
          {:start_child, %Invoke{invoke_id: invoke_id}, _effect},
          state,

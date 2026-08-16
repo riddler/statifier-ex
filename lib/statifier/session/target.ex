@@ -99,12 +99,22 @@ defmodule Statifier.Session.Target do
   def scxml_invoke_type, do: "http://www.w3.org/TR/scxml/"
 
   @doc """
-  Whether `<invoke type>` names the SCXML Event I/O processor (6.4.2). `nil`
-  (the attribute omitted) defaults to it, same as `supported_type?/1`.
-  `"scxml"` is the short form 6.2.5 permits and this codebase already
-  honors for `<send>`; `<invoke>` gets no separate spec license for the
-  short form, but accepting it here is the same no-cost superset decision
-  `parse/1` already makes for `_internal`/`#_internal` and `_parent`/`#_parent`.
+  Whether `<invoke type>` names an SCXML-typed service (6.4.2).
+
+  `"scxml"` is licensed by 6.4.2 itself - "Processors MAY define short form
+  notations as an authoring convenience (e.g., \"scxml\" as equivalent to
+  `http://www.w3.org/TR/scxml/`)" - not borrowed from `<send>`'s own short
+  form.
+
+  `nil` (the attribute omitted) is accepted as SCXML-typed, but that is this
+  platform's choice rather than a spec default: 6.4.1's attribute table
+  gives `<invoke type>` a Default Value of "none", where 6.2.5 mandates one
+  for `<send>` ("If neither the 'type' nor the 'typeexpr' is defined, the
+  SCXML Processor MUST assume the default value of
+  `http://www.w3.org/TR/scxml/#SCXMLEventProcessor`"). Starting a child
+  session is the only invocation this engine implements, so an untyped
+  `<invoke>` has nothing else it could have meant.
+
   Anything else - including `supported_type?/1`'s own processor URI - is
   unsupported: this engine implements only SCXML-typed invocations (see the
   plan's "What We're NOT Doing" on BasicHTTP and non-SCXML invoke types).

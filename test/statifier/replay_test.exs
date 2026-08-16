@@ -175,12 +175,12 @@ defmodule Statifier.ReplayTest do
     # sabotage: `perform_instruction({:start_child, %Invoke{invoke_id:
     # invoke_id}, _effect}, state, _override)` is changed to leave
     # `state.live_invoke_ids` untouched (`state` instead of `%{state |
-    # live_invoke_ids: MapSet.put(...)}`) -> the recorded "go" event's
-    # `invokeid: "i1"` is never found live, so `apply_entry/2`'s `{:event,
-    # _}` clause discards it instead of delivering it, and the configuration
-    # stays on "a" instead of advancing to "b", reddening the assertion.
-    # Reverted and confirmed green.
-    test "a recorded event whose invokeid names a still-live (started, uncancelled) invocation is delivered" do
+    # live_invoke_ids: MapSet.put(...)}`) -> the recorded entry's delivering
+    # invocation "i1" is never found live, so `apply_entry/2`'s
+    # `{:invoked_event, _, _}` clause discards it instead of delivering it,
+    # and the configuration stays on "a" instead of advancing to "b",
+    # reddening the assertion. Reverted and confirmed green.
+    test "a recorded entry whose delivering invocation is still live (started, uncancelled) is delivered" do
       machine = compile!(two_state_doc())
 
       invoke_effect =
@@ -197,7 +197,7 @@ defmodule Statifier.ReplayTest do
         machine
         |> Recording.new(session_id: "sess_replay_test")
         |> Recording.put_interpret([invoke_effect])
-        |> Recording.put_event(Event.external("go", invokeid: "i1"))
+        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"))
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -212,7 +212,7 @@ defmodule Statifier.ReplayTest do
     # the configuration advances to "b", reddening the assertion (which
     # expects it to stay on "a", matching what a live session actually does
     # once it has popped the table entry). Reverted and confirmed green.
-    test "a recorded event whose invokeid names an invocation already stopped is discarded" do
+    test "a recorded entry whose delivering invocation was already stopped is discarded" do
       machine = compile!(two_state_doc())
 
       invoke_effect =
@@ -233,7 +233,7 @@ defmodule Statifier.ReplayTest do
         machine
         |> Recording.new(session_id: "sess_replay_test")
         |> Recording.put_interpret([invoke_effect, cancel_invoke_effect])
-        |> Recording.put_event(Event.external("go", invokeid: "i1"))
+        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"))
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "a")])
