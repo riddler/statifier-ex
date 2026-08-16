@@ -180,12 +180,16 @@ defmodule Statifier.Session.InvocationsTest do
       refute Map.has_key?(Invocations.seed_datamodel(params, machine), "unmatched")
     end
 
-    # sabotage: `seed_datamodel/2`'s `nil` clause is removed, falling
-    # through to the `is_map(params)` clause with `nil` -> raises
-    # `FunctionClauseError` instead of returning `%{}`, reddening this test
-    test "nil params (no <param>/namelist at all) seed nothing" do
+    # sabotage: `seed_datamodel/2`'s `:undefined` clause is removed, falling
+    # through to the `is_map(params)` clause with `:undefined` -> raises
+    # `FunctionClauseError` instead of returning `%{}`, reddening this test.
+    # `:undefined` is what `EventData.coerce({:params, []})` actually
+    # produces for an invocation with no <param>/namelist (ADR-0037); `nil`
+    # is accepted for the same outcome and pinned alongside it.
+    test "absent params (no <param>/namelist at all) seed nothing" do
       machine = compile!(@child_xml)
 
+      assert Invocations.seed_datamodel(:undefined, machine) == %{}
       assert Invocations.seed_datamodel(nil, machine) == %{}
     end
   end

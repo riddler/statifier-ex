@@ -933,8 +933,8 @@ defmodule Statifier.Session do
   # `exitInterpreter`'s own `returnDoneEvent` (Appendix D declares it
   # platform-specific and gives it no pseudocode): 6.4.3's
   # `done.invoke.<invokeid>`, carrying the child's own `<donedata>`, reaches
-  # the parent's **external** queue directly through `send_event/2` - not
-  # through ADR-0037's `deliver_internal/5` door, which is for routing
+  # the parent's **external** queue directly through `send_invoked_event/3`
+  # - not through ADR-0039's `deliver_internal/5` door, which is for routing
   # failures on the *sending* session's own queue, not for this session
   # telling its parent it finished. Only a `:done` halt with a live
   # `invoked_by` qualifies: `:cancelled` is 6.4.3's own "MUST NOT generate
@@ -1020,7 +1020,7 @@ defmodule Statifier.Session do
     :exit, reason -> {:error, reason}
   end
 
-  # Decision 4's `error.communication` write: the same ADR-0037
+  # Decision 4's `error.communication` write: the same ADR-0039
   # `deliver_internal/5` door `communication_error/4` uses, with `<invoke>`'s
   # own origin (`{:invoke, state_index, invoke_index}`, spec 3.12.2's
   # "arising from `<send>` and `<invoke>`") and no `sendid` - there is no
