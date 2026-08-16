@@ -443,7 +443,7 @@ defmodule Statifier.InterpreterTest do
     end
   end
 
-  # -- deliver_internal/5 (ADR-0037) ---------------------------------------
+  # -- deliver_internal/5 (ADR-0039) ---------------------------------------
 
   describe "deliver_internal/5" do
     defp two_state_doc do

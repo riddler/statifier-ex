@@ -93,7 +93,7 @@ defmodule Statifier.Session do
   external queue. `#_internal` and a self-addressed `#_scxml_<sessionid>`
   (decision 10: a session is always accessible to itself, registry or not)
   both resolve with no registry at all - the former through
-  `Statifier.Interpreter.deliver_internal/5` (ADR-0037), the latter onto
+  `Statifier.Interpreter.deliver_internal/5` (ADR-0039), the latter onto
   this session's own inbox. Every other `#_scxml_<sessionid>` resolves
   through `Registry.lookup(Statifier.Registry, sid)` (ADR-0027 decision 2):
   a hit casts the event onto that session's inbox via `send_event/2`; an
@@ -592,7 +592,7 @@ defmodule Statifier.Session do
     %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
   end
 
-  # ADR-0037's re-entry seam: enqueue on the internal queue exactly as an
+  # ADR-0039's re-entry seam: enqueue on the internal queue exactly as an
   # in-loop `raise` would, then run to quiescence. `:internal`
   # (`<send target="#_internal">`, a self-targeted `error.communication`
   # never - see `deliver/5` below) and `:platform`
@@ -653,7 +653,7 @@ defmodule Statifier.Session do
 
   # -- <send> routing --------------------------------------------------
 
-  # `:internal` resolves through the ADR-0037 seam with no registry needed at
+  # `:internal` resolves through the ADR-0039 seam with no registry needed at
   # all. `{:session, sid}` where `sid == state.session_id` is the clause
   # that needs no registry either: a session is accessible to itself whether
   # or not it is registered (decision 10), which narrows ADR-0027 decision

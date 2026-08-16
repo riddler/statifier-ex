@@ -454,14 +454,14 @@ defmodule Statifier.Interpreter do
   end
 
   @doc """
-  ADR-0037's re-entry seam: the sole path `Statifier.Session` uses to write
+  ADR-0039's re-entry seam: the sole path `Statifier.Session` uses to write
   a session-detected `<send>` failure (6.2.4's unsupported/invalid target,
   6.2.5's unsupported `type`) - or a `<send target="#_internal">` delivery -
   onto `%MachineState{}`'s own internal queue.
 
   Appendix D discovers a routing failure inside `mainEventLoop` and writes
   the internal queue in place. ADR-0003 puts routing in the effect
-  interpreter, which is outside that loop by construction, so ADR-0037
+  interpreter, which is outside that loop by construction, so ADR-0039
   gives the session one way back in: enqueue on the internal queue exactly
   as an in-loop `raise` would, then run to quiescence. No selection or
   entry/exit procedure changes.

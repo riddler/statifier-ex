@@ -151,7 +151,7 @@ defmodule Statifier.Session.Recording do
   @doc """
   Appends a `Statifier.Interpreter.deliver_internal/5` call as the next
   entry - `kind`, `name`, `origin` and `opts` exactly as
-  `Statifier.Session` passed them to that seam (ADR-0037). This is *not*
+  `Statifier.Session` passed them to that seam (ADR-0039). This is *not*
   deterministic from the recorded effect stream alone - whether a
   `#_scxml_<sessionid>` target resolved depends on which sessions were
   alive when the sending session performed its effects - so it has to be an

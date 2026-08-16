@@ -243,7 +243,7 @@ defmodule Statifier.ReplayTest do
     end
   end
 
-  # -- <send> routing (ADR-0037) -------------------------------------------
+  # -- <send> routing (ADR-0039) -------------------------------------------
 
   describe "run/1 over a recorded <send> routing run" do
     defp internal_and_communication_error_doc do

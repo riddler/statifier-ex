@@ -244,14 +244,15 @@ Grounds:
 - **Not adding corpus files.** ADR-0037 records that no corpus document
   distinguishes null from undefined, and inventing one is a corpus decision
   (`area:corpus`) that belongs to its own bead, not to this respell.
-- **Not resolving the ADR number collision.** `docs/adr/0037-session-detected-send-failures-re-enter-the-core.md`
-  and `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md` are both on
-  `origin/main` with the number 0037, and `docs/adr/README.md`'s table lists
-  only the second. Two branches picked the same next number concurrently. That
-  is a real defect and it makes the bare citation "ADR-0037" ambiguous - this
-  plan therefore cites the *filename* wherever precision matters - but
-  renumbering an accepted record is a direction-level call for a human, on its
-  own bead. **Recorded here rather than acted on.**
+- **Resolving the ADR number collision.** `docs/adr/0037-session-detected-send-failures-re-enter-the-core.md`
+  and `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md` were both on
+  `origin/main` with the number 0037, and `docs/adr/README.md`'s table listed
+  only the second. Two branches had picked the same next number concurrently.
+  Resolved on this branch under st-7wql: the unbound record keeps 0037 (earlier
+  commit, already in the README table, cited from ~14 files); the send-failure
+  record became ADR-0039, `docs/adr/0039-session-detected-send-failures-re-enter-the-core.md`.
+  0038 was skipped because the unmerged `st-cmq.7-invoke-scxml-child-sessions`
+  branch already carries `docs/adr/0038-invoke-source-resolves-at-the-session-boundary.md`.
 - **Not re-running the Phase 4 send/cancel corpus re-check.** ADR-0037 and the
   bead both ask for a re-check once st-cmq.3's corpus atoms flip; that flip has
   not happened, so Phase 5 leaves a dated bead note asking for it rather than
@@ -858,6 +859,11 @@ time of writing.
 0037 on `origin/main`, and that `docs/adr/README.md` lists only the latter.
 This branch does not renumber either - renumbering an accepted record is a
 human's call.
+
+**Superseded after the DMV review**: that call was made, and the renumbering
+landed on this branch under st-7wql - the send-failure record became ADR-0039.
+See the "Resolving the ADR number collision" entry under "What We're NOT
+Doing", which carries the outcome.
 
 ### Success Criteria:
 
