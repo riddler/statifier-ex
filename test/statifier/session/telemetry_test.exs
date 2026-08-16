@@ -522,12 +522,14 @@ defmodule Statifier.Session.TelemetryTest do
     # span comes back - reverted and confirmed green.
     #
     # No core effect in the current vocabulary carries a bare `t_index` -
-    # only `Trace.TransitionsSelected.t_indexes`, a list, which Decision 4
-    # excludes from resolution - so `location/2`'s `t_index` clause has no
-    # reachable caller through `effect/3`/`unroutable/3` today. It stays
+    # only `Trace.TransitionsSelected.t_indexes`, a list. `trace_shape/2`'s
+    # singleton clause resolves a one-element `t_indexes` directly through
+    # `Machine.transition/2` rather than routing through this
+    # `location/2` function, so `location/2`'s own `t_index` clause still has
+    # no reachable caller through `effect/3`/`unroutable/3` today. It stays
     # implemented per ADR-0040's resolver contract (`Machine.transition/2`
     # is one of the three named readers) for whichever future effect names
-    # a `t_index`, and is not exercised by a test for that reason.
+    # a bare `t_index`, and is not exercised by a test for that reason.
     test "resolves location from c_index and from state_index against a real machine", %{
       ref: ref
     } do
@@ -579,10 +581,14 @@ defmodule Statifier.Session.TelemetryTest do
       assert metadata.location == nil
     end
 
-    # sabotage: `trace_shape/1`'s `Trace.ExitSet` clause omits `:size` from
-    # its measurements map -> red, `measurements.size` no longer exists and
-    # the `KeyError` fails the assertion - reverted and confirmed green.
-    test "a list-carrying trace effect carries location: nil, the index list, and a size measurement",
+    # sabotage: two mutations, each confirmed independently. (1)
+    # `trace_shape/2`'s `Trace.ExitSet` clause omits `:size` from its
+    # measurements map -> red, `measurements.size` no longer exists and the
+    # `KeyError` fails the assertion - reverted and confirmed green. (2) the
+    # same clause is reverted to its earlier `%{location: nil}` shape -> red,
+    # `refute Map.has_key?(metadata, :location)` fails since the key
+    # is present with a `nil` value - reverted and confirmed green.
+    test "a list-carrying trace effect carries no location key, the index list, and a size measurement",
          %{ref: ref} do
       machine = located_machine()
       payload = %Trace.ExitSet{indexes: [1, 2, 3], macrostep: 1, microstep: 1, round: 0}
@@ -591,8 +597,104 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert_received {[:statifier, :session, :trace, :exit_set], ^ref, measurements, metadata}
       assert measurements.size == 3
-      assert metadata.location == nil
+      refute Map.has_key?(metadata, :location)
       assert metadata.effect.indexes == [1, 2, 3]
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.EventDequeued` clause is reverted to
+    # `%{location: nil}` -> red, `refute Map.has_key?(metadata, :location)`
+    # fails because the key is present (with a `nil` value, which
+    # `Map.has_key?/2` still counts as present) - reverted and confirmed
+    # green. `assert metadata.location == nil` would have passed on both the
+    # fixed and the unfixed code, which is why this asserts key absence
+    # instead.
+    test "a trace effect that never resolves a location carries no location key at all", %{
+      ref: ref
+    } do
+      machine = located_machine()
+
+      payload = %Trace.EventDequeued{
+        event: Event.external("e"),
+        from: :external,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Telemetry.effect("sess1", machine, {:trace, payload})
+
+      assert_received {[:statifier, :session, :trace, :event_dequeued], ^ref, _measurements,
+                       metadata}
+
+      refute Map.has_key?(metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s singleton `Trace.TransitionsSelected`
+    # clause (`t_indexes: [t_index]`) is deleted, leaving only the
+    # list-length clause -> red, the singleton case now falls through to the
+    # general clause and `metadata.location` no longer exists, failing the
+    # `%Statifier.Parser.Location{} = metadata.location` assertion below -
+    # reverted and confirmed green.
+    test "a singleton t_indexes resolves a real transition's location; zero or many carry no location key",
+         %{ref: ref} do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+      [t_index] = Machine.at(machine, a_index).transitions
+
+      one =
+        {:trace,
+         %Trace.TransitionsSelected{
+           t_indexes: [t_index],
+           event: Event.external("go"),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :transitions_selected], ^ref,
+                       one_measurements, one_metadata}
+
+      assert one_measurements.size == 1
+      assert %Statifier.Parser.Location{} = one_metadata.location
+      assert one_metadata.location == Machine.transition(machine, t_index).location
+
+      zero =
+        {:trace,
+         %Trace.TransitionsSelected{
+           t_indexes: [],
+           event: nil,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, zero)
+
+      assert_received {[:statifier, :session, :trace, :transitions_selected], ^ref,
+                       zero_measurements, zero_metadata}
+
+      assert zero_measurements.size == 0
+      refute Map.has_key?(zero_metadata, :location)
+
+      many =
+        {:trace,
+         %Trace.TransitionsSelected{
+           t_indexes: [t_index, t_index],
+           event: Event.external("go"),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :transitions_selected], ^ref,
+                       many_measurements, many_metadata}
+
+      assert many_measurements.size == 2
+      refute Map.has_key?(many_metadata, :location)
     end
   end
 
