@@ -20,9 +20,9 @@ defmodule Statifier do
     none of them is inspected, logged, or executed here. A caller that wants
     to act on `:log`, `:done`, or a `:trace` effect does so itself.
 
-  All four functions land in this module: `compile/1` runs the parse
-  pipeline; `initialize/2`, `send_event/2`, and `active_leaf_states/1` wrap
-  `Statifier.Interpreter`.
+  All four functions land in this module: `compile/2` (with `compile/1`'s
+  default `opts \\ []`) runs the parse pipeline; `initialize/2`,
+  `send_event/2`, and `active_leaf_states/1` wrap `Statifier.Interpreter`.
   """
 
   alias Statifier.Compiler
@@ -37,7 +37,7 @@ defmodule Statifier do
   alias Statifier.Validator
 
   @typedoc """
-  The union of every error struct any pipeline stage `compile/1` runs can
+  The union of every error struct any pipeline stage `compile/2` runs can
   produce.
   """
   @type error ::
@@ -50,13 +50,13 @@ defmodule Statifier do
   Compiles SCXML source into a `Statifier.Machine`.
 
   Runs the full pipeline - `Statifier.Parser.parse/1`,
-  `Statifier.Lowering.lower/2`, `Statifier.Validator.validate/2`,
+  `Statifier.Lowering.lower/2`, `Statifier.Validator.validate/3`,
   `Statifier.Compiler.compile/1` - in that order, stopping at the first stage
   that fails. `Statifier.Parser.parse/1` is the one stage that reports a
   single error rather than a list; this function wraps it so every failure
   from every stage has one shape: `{:error, [error()]}`.
 
-  `Validator.validate/2` returns three elements on both arms (ADR-0033). On
+  `Validator.validate/3` returns three elements on both arms (ADR-0033). On
   success its warnings ride onto the returned `Machine.t()`'s `warnings`
   field rather than a third element of this function's own return, so a
   document with warnings still compiles and the caller finds the findings on
@@ -64,12 +64,27 @@ defmodule Statifier do
   Its error arm's extra element is collapsed back to this function's own
   `{:error, [error()]}` shape so this stage's failure looks like every other
   stage's.
+
+  `opts` defaults to `[]`, so every existing `compile/1` call keeps its exact
+  behavior. The one recognized option today is `invoke_content_markup:
+  true` (ADR-0042): it relaxes `Statifier.Validator.Checks.Boilerplate`'s
+  root-namespace check (spec 3.2.1's `xmlns` requirement) to accept a root
+  that declares no namespace at all, the same leniency
+  `Statifier.Lowering.Namespace.scxml_vocabulary?/1` already applies to
+  lowering dispatch. It exists to compile the verbatim source slice
+  `Statifier.Invoke.Source.resolve/2` extracts from an `<invoke><content>`
+  element - G.6 (informative) places an undeclared-namespace child of
+  `<content>` in the SCXML namespace by ordinary XML scoping, a fact the
+  slice's standalone compile can no longer see for itself. It is not a
+  general validation off-switch: a root that declares a namespace other than
+  SCXML's still fails, in this mode and without it alike, and `version` must
+  still be `"1.0"` either way.
   """
-  @spec compile(source :: binary()) :: {:ok, Machine.t()} | {:error, [error()]}
-  def compile(source) when is_binary(source) do
+  @spec compile(source :: binary(), opts :: keyword()) :: {:ok, Machine.t()} | {:error, [error()]}
+  def compile(source, opts \\ []) when is_binary(source) and is_list(opts) do
     with {:ok, root} <- parse(source),
          {:ok, document} <- Lowering.lower(root, source),
-         {:ok, document, warnings} <- Validator.validate(document, source),
+         {:ok, document, warnings} <- Validator.validate(document, source, opts),
          {:ok, machine} <- Compiler.compile(document) do
       {:ok, %Machine{machine | warnings: warnings}}
     else

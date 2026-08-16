@@ -16,6 +16,10 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
     Validator.validate(lower!(xml), xml)
   end
 
+  defp validate!(xml, opts) do
+    Validator.validate(lower!(xml), xml, opts)
+  end
+
   describe "check/2 - bad_namespace and bad_version" do
     # sabotage: `check/2` drops the `check_version(document)` half of
     # `check_namespace(document) ++ check_version(document)` -> the
@@ -105,6 +109,63 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
 
       assert {:error, [%Error{reason: {:bad_version, "2.0"}} = error], _warnings} = validate!(xml)
       assert error.message =~ "2.0"
+    end
+  end
+
+  describe "check/2 - invoke_content_markup: true (ADR-0042)" do
+    # sabotage: `check_namespace/2`'s `(relaxed? and is_nil(namespace))` arm
+    # is dropped, leaving only `namespace == Namespace.scxml_namespace()` ->
+    # a `nil` namespace stops passing even in flagged mode, and this
+    # assertion reddens with a spurious `:bad_namespace` error.
+    test "a boilerplate-free fragment passes clean when the flag is set" do
+      xml = """
+      <scxml version="1.0">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(xml, invoke_content_markup: true)
+    end
+
+    # sabotage: same mutation as above (`(relaxed? and is_nil(namespace))`
+    # dropped from `check_namespace/2`) -> `document.namespace` is `nil`
+    # here too, so this assertion reddens the same way.
+    test "a fragment reports only bad_version when the flag is set and version is wrong" do
+      xml = """
+      <scxml version="2.0">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:error, [error], _warnings} = validate!(xml, invoke_content_markup: true)
+      assert %Error{reason: {:bad_version, "2.0"}} = error
+    end
+
+    # A non-nil namespace that is not the SCXML URI must keep failing in
+    # flagged mode too - the flag only ever widens the `nil` case. This
+    # constructs the same not-otherwise-reachable shape the unflagged
+    # "resolved namespace is wrong" test above does, since lowering itself
+    # never produces a resolved-but-wrong namespace through the normal
+    # pipeline.
+    #
+    # sabotage: `check_namespace/2`'s guard is changed from
+    # `namespace == Namespace.scxml_namespace() or (relaxed? and
+    # is_nil(namespace))` to `relaxed? or namespace ==
+    # Namespace.scxml_namespace()` (the flag alone short-circuits the check)
+    # -> a wrong, non-nil namespace now passes clean in flagged mode, and
+    # this assertion's `{:error, [...]}` match reddens with `{:ok, ...}`.
+    test "a wrong, non-nil namespace still fails when the flag is set" do
+      xml = """
+      <scxml
+          xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="a"/>
+      </scxml>
+      """
+
+      document = %{lower!(xml) | namespace: "http://example.com/other"}
+
+      assert {:error, [%Error{reason: {:bad_namespace, "http://example.com/other"}}], _warnings} =
+               Validator.validate(document, xml, invoke_content_markup: true)
     end
   end
 

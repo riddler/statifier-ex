@@ -101,11 +101,18 @@ defmodule Statifier.Validator do
   `source` must be the exact binary `document` was parsed from; a mismatched
   `source` produces wrong `Location.slice/2` results in any check that reads
   it rather than raising, so callers must not pass a substitute binary.
+
+  `opts` defaults to `[]` and is threaded straight onto
+  `Statifier.Validator.Context.build/3`; today's one recognized option is
+  `invoke_content_markup: true` (ADR-0042), which `Checks.Boilerplate` reads
+  off the context to relax its root-namespace check. See `Statifier.compile/2`
+  for what the flag is for and why it exists.
   """
-  @spec validate(document :: Document.t(), source :: binary()) ::
+  @spec validate(document :: Document.t(), source :: binary(), opts :: keyword()) ::
           {:ok, Document.t(), [Warning.t()]} | {:error, [Error.t()], [Warning.t()]}
-  def validate(%Document{} = document, source) when is_binary(source) do
-    context = Context.build(document, source)
+  def validate(%Document{} = document, source, opts \\ [])
+      when is_binary(source) and is_list(opts) do
+    context = Context.build(document, source, opts)
 
     errors = run(@checks, document, context)
     warnings = run(@warning_checks, document, context)
