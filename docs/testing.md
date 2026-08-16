@@ -212,9 +212,10 @@ printed. Surfacing the figures there would need a JSON summary mode for the
 task plus a guarded `.quality.exs` edit with its own ledger entry (see the
 "Which skipped stages" discipline in `CLAUDE.md`) - both out of scope here.
 
-The denominator behind both figures is the emitted corpus: 118 SCION and 159
-W3C files on disk today (`test/scion_tests/`, `test/scxml_tests/`), not the
-upstream suites (127 native SCION cases, 193 W3C cases). The emitted count is
+The denominator behind both figures is the emitted corpus: 119 SCION and 162
+W3C files on disk today (`test/scion_tests/`, `test/scxml_tests/` - the W3C
+figure is 159 `mandatory/` plus 3 `optional/`), not the upstream suites (127
+native SCION cases, 193 W3C cases). The emitted count is
 the only one 100% is reachable against - some upstream cases have no
 predicator equivalent and are excluded at generation time (script tags, list
 concatenation, the BasicHTTP Event I/O Processor tree, and more), so no build

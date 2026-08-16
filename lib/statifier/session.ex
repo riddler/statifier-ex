@@ -106,12 +106,13 @@ defmodule Statifier.Session do
   `state.invoked_by`: a live invocation's child stamps `invokeid` (5.10.1)
   and delivers straight to the parent's external queue; a session that was
   never invoked has no parent and takes the same `communication_error/4`
-  path as any other unreachable route. `#_<invokeid>` still resolves to
-  `error.communication` unconditionally - the invocation table this module
-  holds (`Statifier.Session.Invocations`) answers "which child does
-  `<invoke>` start", not yet "where does `#_<invokeid>` deliver"; a
-  follow-up bead (C.1's `#_invokeid` delivery) changes that one resolver,
-  not this module's `{:deliver, ...}` clause. An
+  path as any other unreachable route. `#_<invokeid>` resolves through the
+  same invocation table this module holds (`Statifier.Session.Invocations`,
+  `Invocations.fetch/2`) rather than the registry: a live entry's `pid` gets
+  the event delivered to its external queue directly, and an `invokeid`
+  naming no live invocation - never one, or since cancelled or exited -
+  takes the same `communication_error/4` path as any other unreachable
+  route. An
   unsupported `type` or an unparseable `target` raises `error.execution` the
   same way, at plan time. `:cancel_invoke` plans `{:stop_child, invoke_id}`
   ("Cancelling an invocation" below). A child reaching a top-level final
