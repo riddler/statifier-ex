@@ -24,14 +24,20 @@ defmodule Statifier.Validator.Context do
   `<initial>` element, and `{:history, state}` for a `:history` state's own
   transitions (its default-transition candidates). Checks 2, 4, and 5 all
   consume this one traversal instead of each re-walking the tree.
+
+  `invoke_content_markup?` mirrors `Statifier.compile/2`'s
+  `invoke_content_markup` option (ADR-0042), defaulting to `false`. It is
+  not a general validation off-switch: `Statifier.Validator.Checks.Boilerplate`
+  is the only check that reads it, and only to accept a root that resolves
+  to no namespace at all, never a root that declares a wrong one.
   """
 
   alias Statifier.Document
   alias Statifier.Document.State
   alias Statifier.Document.Transition
 
-  @enforce_keys [:source, :states, :ancestors, :parents, :transitions]
-  defstruct [:source, :states, :ancestors, :parents, :transitions]
+  @enforce_keys [:source, :states, :ancestors, :parents, :transitions, :invoke_content_markup?]
+  defstruct [:source, :states, :ancestors, :parents, :transitions, :invoke_content_markup?]
 
   @type owner :: {:plain, State.t()} | {:initial, State.t()} | {:history, State.t()}
 
@@ -40,7 +46,8 @@ defmodule Statifier.Validator.Context do
           states: %{optional(String.t()) => State.t()},
           ancestors: %{optional(String.t()) => [String.t()]},
           parents: %{State.t() => State.t() | Document.t()},
-          transitions: [{Transition.t(), owner()}]
+          transitions: [{Transition.t(), owner()}],
+          invoke_content_markup?: boolean()
         }
 
   @doc """
@@ -48,9 +55,13 @@ defmodule Statifier.Validator.Context do
   the shared transition list. `source` is the binary `document` was parsed
   from; it is stored verbatim for checks that need `Location.slice/2`
   and is not otherwise read here.
+
+  `opts` defaults to `[]`; `invoke_content_markup: true` sets the
+  same-named boolean field, per `Statifier.Validator.validate/3`.
   """
-  @spec build(document :: Document.t(), source :: binary()) :: t()
-  def build(%Document{states: states} = document, source) when is_binary(source) do
+  @spec build(document :: Document.t(), source :: binary(), opts :: keyword()) :: t()
+  def build(%Document{states: states} = document, source, opts \\ [])
+      when is_binary(source) and is_list(opts) do
     {states_map, ancestors, parents, transitions} = walk(states, document, [])
 
     %__MODULE__{
@@ -58,7 +69,8 @@ defmodule Statifier.Validator.Context do
       states: states_map,
       ancestors: ancestors,
       parents: parents,
-      transitions: transitions
+      transitions: transitions,
+      invoke_content_markup?: Keyword.get(opts, :invoke_content_markup, false)
     }
   end
 

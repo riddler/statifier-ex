@@ -9,8 +9,12 @@ defmodule Statifier.Invoke.Source do
   one resolution path. `content` reaching this module has already been
   resolved by the pure core (`Statifier.Effect.Invoke`'s own moduledoc);
   when it is a binary, 6.4.2 requires an SCXML-typed service to "interpret
-  [it]... as markup to be executed", and `Statifier.compile/1` is exactly
-  that interpretation. `src` names a resource the core never fetches
+  [it]... as markup to be executed", and `Statifier.compile/2` is exactly
+  that interpretation - called here with `invoke_content_markup: true`
+  (ADR-0042), the one call site in the pipeline that sets it, since this is
+  the one place a `Document.Content` markup slice or expr-delivered markup
+  binary is ever compiled standalone. `src` names a resource the core never
+  fetches
   (ADR-0031); resolving it is handed to an embedder-supplied function,
   never performed here, on the same security posture ADR-0024 already
   applies to `<data src>` - a document-named URI dereferenced by the engine
@@ -36,7 +40,7 @@ defmodule Statifier.Invoke.Source do
   Why a source could not be resolved into a `Machine.t()`:
 
   - `{:compile, errors}` - `content` was markup that failed to compile
-    (`Statifier.compile/1`'s own error list).
+    (`Statifier.compile/2`'s own error list).
   - `:src_not_resolved` - `src` was present but no `invoke_source` resolver
     was configured.
   - `{:content_not_markup, content}` - `content` was present but neither
@@ -60,11 +64,17 @@ defmodule Statifier.Invoke.Source do
   function an embedder supplies to `Statifier.start_session/2`; with no
   resolver configured, a `src`-only invocation is `{:error,
   :src_not_resolved}` rather than a fetch attempt.
+
+  `content`, when a binary, compiles with `invoke_content_markup: true`
+  (ADR-0042) - the one call site in the whole pipeline that sets this
+  `Statifier.compile/2` option, so a namespace-less `<content>` markup root
+  compiles here exactly as G.6 places it, and nowhere else relaxes that
+  check.
   """
   @spec resolve(invoke :: Invoke.t(), opts :: keyword()) ::
           {:ok, Machine.t()} | {:error, reason()}
   def resolve(%Invoke{content: content}, _opts) when is_binary(content) do
-    case Statifier.compile(content) do
+    case Statifier.compile(content, invoke_content_markup: true) do
       {:ok, machine} -> {:ok, machine}
       {:error, errors} -> {:error, {:compile, errors}}
     end

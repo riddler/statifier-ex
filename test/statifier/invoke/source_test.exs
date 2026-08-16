@@ -163,16 +163,61 @@ defmodule Statifier.Invoke.SourceTest do
     # markup slice produced by the compiler instead of a hand-written binary.
     #
     # The inner `<scxml>` here carries its own `xmlns` (unlike the actual
-    # corpus test220_test.exs:26-31, which does not); `Statifier.compile/1`
-    # on the extracted markup runs the same
-    # `Statifier.Validator.Checks.Boilerplate` check any standalone document
-    # does, and that check requires `document.namespace` to resolve to the
-    # SCXML namespace, not merely `nil` - the relaxed rule only reaches as
-    # far as `Statifier.Lowering.lower/2` (see the next test), so a bare
-    # `<scxml>` root still fails to compile standalone, xmlns-less-corpus-file
-    # or not. That gap is pre-existing and outside ADR-0041's scope.
+    # corpus test220_test.exs:26-31, which does not). `resolve/2`'s
+    # `invoke_content_markup: true` (ADR-0042) makes this pass either way,
+    # namespaced or not - the next test compiles the corpus's actual
+    # xmlns-less shape verbatim.
     test "an Effect.Invoke.content, test220-shaped and namespaced, resolves to a child Machine" do
       markup = @test220_shaped_xml |> compile!() |> invoke_content("s0")
+
+      assert {:ok, %Machine{}} = Source.resolve(invoke(content: markup), [])
+    end
+
+    # test220_test.exs:18-38's parent document, verbatim - byte for byte,
+    # including the child `<scxml>` at line 26 that (unlike every other
+    # fixture in this file) carries no `xmlns` at all, exactly the shape
+    # ADR-0041's namespace-limitation bullet and ADR-0042 are both about.
+    # Before ADR-0042 this failed at `resolve/2` with
+    # `{:bad_namespace, nil}`; the flag now carries G.6's placement rule
+    # into the standalone compile.
+    #
+    # sabotage: same mutation as the fragment-with-no-namespace test below
+    # (`Source.resolve/2`'s `Statifier.compile(content, invoke_content_markup:
+    # true)` call loses the option, becoming `Statifier.compile(content)`) ->
+    # this assertion reddens with `{:error, {:compile, [%{reason:
+    # {:bad_namespace, nil}} | _]}}` instead of `{:ok, %Machine{}}`.
+    test "test220's child markup, exactly as the corpus writes it, resolves to a child Machine" do
+      xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
+          <state id="s0">
+              <onentry>
+                  <send event="timeout" delay="5s" />
+              </onentry>
+              <invoke type="http://www.w3.org/TR/scxml/">
+                  <content>
+                      <scxml initial="subFinal" version="1.0" datamodel="predicator">
+                          <final id="subFinal" />
+                      </scxml>
+                  </content>
+              </invoke>
+              <transition event="done.invoke" target="pass" />
+              <transition event="*" target="fail" />
+          </state>
+          <final id="pass">
+              <onentry>
+                  <log label="Outcome" expr="'pass'" />
+              </onentry>
+          </final>
+          <final id="fail">
+              <onentry>
+                  <log label="Outcome" expr="'fail'" />
+              </onentry>
+          </final>
+      </scxml>
+      """
+
+      markup = xml |> compile!() |> invoke_content("s0")
 
       assert {:ok, %Machine{}} = Source.resolve(invoke(content: markup), [])
     end
@@ -196,29 +241,24 @@ defmodule Statifier.Invoke.SourceTest do
     # as any other markup; the relaxed rule
     # (`Statifier.Lowering.Namespace.scxml_vocabulary?/1` accepting `nil`)
     # means `Statifier.Lowering.lower/2` dispatches every element in the
-    # fragment as SCXML vocabulary rather than rejecting it as foreign -
-    # `Statifier.compile/1`'s failure here is `Checks.Boilerplate`'s
-    # separate, pre-existing root-declaration requirement (see the comment
-    # on the test above), never a `{:foreign_element, ...}` or
-    # `{:unexpected_root, ...}` lowering error. This is the precise, testable
-    # form of "relaxed no-namespace rule" available at this boundary today.
+    # fragment as SCXML vocabulary rather than rejecting it as foreign, and
+    # `Source.resolve/2`'s `invoke_content_markup: true` (ADR-0042) carries
+    # the same `nil`-accepts leniency into `Checks.Boilerplate`'s root
+    # namespace check, so the standalone compile now succeeds too - this
+    # once failed with `{:bad_namespace, nil}` before ADR-0042 landed; see
+    # `test/statifier/validator/checks/boilerplate_test.exs` for that check's
+    # own unit coverage of the flag.
     #
-    # sabotage: `Statifier.Lowering.Namespace.scxml_vocabulary?/1`'s
-    # `uri in [nil, @scxml_namespace]` is changed to `uri in [@scxml_namespace]`
-    # (dropping the relaxed no-namespace rule) -> lowering now rejects the
-    # fragment's `<final>` child as foreign before ever reaching
-    # `Checks.Boilerplate`, and the refutation below (no lowering-shaped
-    # error in the list) reddens.
-    test "a <content> fragment with no namespace declaration lowers as SCXML vocabulary (G.6)" do
+    # sabotage: `Source.resolve/2`'s markup clause's `Statifier.compile(content,
+    # invoke_content_markup: true)` call is changed to
+    # `Statifier.compile(content)` (dropping the option) -> the standalone
+    # compile runs `Checks.Boilerplate` in its default (non-relaxed) mode,
+    # and this assertion reddens with `{:error, {:compile, [%{reason:
+    # {:bad_namespace, nil}} | _]}}` instead of `{:ok, %Machine{}}`.
+    test "a <content> fragment with no namespace declaration compiles (G.6, ADR-0042)" do
       markup = @no_namespace_document |> compile!() |> invoke_content("s0")
 
-      assert {:error, {:compile, errors}} = Source.resolve(invoke(content: markup), [])
-
-      refute Enum.any?(errors, fn
-               %{reason: {:foreign_element, _name, _uri}} -> true
-               %{reason: {:unexpected_root, _name}} -> true
-               _other -> false
-             end)
+      assert {:ok, %Machine{}} = Source.resolve(invoke(content: markup), [])
     end
 
     @non_scxml_root_document """
@@ -262,12 +302,21 @@ defmodule Statifier.Invoke.SourceTest do
       assert {:error, {:compile, [_error | _rest]}} = Source.resolve(invoke(content: markup), [])
     end
 
-    # This pins ADR-0041's accepted namespace limitation as tested behavior,
-    # so a future change to it is visible; it is an assertion about the
-    # limitation, not a fix for it. The slice drops namespace declarations
-    # made on ancestors (`xmlns:ex` is declared on the parent `<scxml>`, not
-    # inside the sliced fragment), so the fragment's `ex`-prefixed root can
-    # never resolve at invoke time.
+    # This pins ADR-0041's namespace limitation as tested behavior, narrowed
+    # by ADR-0042. The slice drops namespace declarations made on ancestors
+    # (`xmlns:ex` is declared on the parent `<scxml>`, not inside the sliced
+    # fragment), so within the standalone slice the `ex` prefix is
+    # undeclared and `Statifier.Lowering.Namespace.resolve/2` resolves it
+    # leniently to `nil` (its own documented leniency for an unresolved
+    # prefix) - the same `nil` `Checks.Boilerplate` now accepts under
+    # `invoke_content_markup: true`. This is coincidental, not a general fix
+    # for ancestor-declared prefixes: it only lands on the SCXML vocabulary
+    # here because `xmlns:ex` happens to be bound to the SCXML namespace
+    # itself, so losing the declaration and falling back to the relaxed
+    # `nil` rule reaches the same place a correct resolution would have.
+    # ADR-0041's open question - what a prefix bound to some *other*
+    # namespace should do inside `<content>` - stays open and unchanged;
+    # nothing in the corpus exercises that shape.
     @ancestor_prefix_document """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ex="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
         <state id="s0">
@@ -278,23 +327,16 @@ defmodule Statifier.Invoke.SourceTest do
     </scxml>
     """
 
-    # sabotage: `Source.resolve/2`'s `content is a binary` clause's
-    # `{:error, errors} -> {:error, {:compile, errors}}` branch is changed to
-    # `{:error, errors} -> {:error, errors}` (the same mutation the
-    # non-`<scxml>`-root and truncated-fragment tests above use) -> this
-    # assertion's `{:error, {:compile, [_ | _]}}` pattern reddens too. The
-    # `ex` prefix, undeclared inside the slice, resolves to `nil`
-    # (`Statifier.Lowering.Namespace.resolve/2`'s own leniency for an
-    # unresolved prefix) - the relaxed rule then accepts that `nil` as SCXML
-    # vocabulary and lowering succeeds, so this fails for the same reason the
-    # "no namespace declaration" test above does
-    # (`Checks.Boilerplate`'s `{:bad_namespace, nil}`), not a parser-level
-    # undefined-prefix error.
-    test "a fragment root using an ancestor-declared prefix fails at resolve time" do
+    # sabotage: same mutation as the fragment-with-no-namespace test above
+    # (`Source.resolve/2`'s `Statifier.compile(content, invoke_content_markup:
+    # true)` call loses the option, becoming `Statifier.compile(content)`) ->
+    # this assertion reddens too, with `{:error, {:compile, [%{reason:
+    # {:bad_namespace, nil}} | _]}}` instead of `{:ok, %Machine{}}`.
+    test "a fragment root using an ancestor-declared prefix that resolves to nil compiles" do
       machine = compile!(@ancestor_prefix_document)
       markup = invoke_content(machine, "s0")
 
-      assert {:error, {:compile, [_error | _rest]}} = Source.resolve(invoke(content: markup), [])
+      assert {:ok, %Machine{}} = Source.resolve(invoke(content: markup), [])
     end
 
     @nested_document """

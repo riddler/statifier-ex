@@ -86,6 +86,55 @@ defmodule StatifierTest do
     assert [%Statifier.Compiler.Error{}] = errors
   end
 
+  # ADR-0042: `compile/2`'s `invoke_content_markup` option only relaxes
+  # `Checks.Boilerplate` for the one call site that sets it
+  # (`Statifier.Invoke.Source.resolve/2`); a bare `compile/1` call - and an
+  # explicit `compile(xml, [])` - must keep rejecting a namespace-less root
+  # exactly as before.
+  #
+  # sabotage: `Checks.Boilerplate.check_namespace/2`'s guard is changed from
+  # `namespace == Namespace.scxml_namespace() or (relaxed? and
+  # is_nil(namespace))` to `namespace == Namespace.scxml_namespace() or
+  # is_nil(namespace)` (dropping the `relaxed?` guard entirely) -> a
+  # namespace-less root now passes clean even with no option given, and this
+  # assertion's `{:error, [...]}` match reddens with `{:ok, %Machine{}}`.
+  test "a namespace-less root still fails Statifier.compile/1 with no options given" do
+    xml = """
+    <scxml version="1.0" initial="a">
+        <state id="a"/>
+    </scxml>
+    """
+
+    assert {:error, errors} = Statifier.compile(xml)
+
+    assert Enum.any?(
+             errors,
+             &match?(%Statifier.Validator.Error{reason: {:bad_namespace, nil}}, &1)
+           )
+
+    assert {:error, errors} = Statifier.compile(xml, [])
+
+    assert Enum.any?(
+             errors,
+             &match?(%Statifier.Validator.Error{reason: {:bad_namespace, nil}}, &1)
+           )
+  end
+
+  # sabotage: `Statifier.compile/2`'s `Validator.validate(document, source,
+  # opts)` call is changed to `Validator.validate(document, source)` (opts
+  # dropped entirely) -> `invoke_content_markup: true` never reaches
+  # `Context.build/3`, and this assertion reddens with `{:error, [...]}`
+  # instead of `{:ok, %Machine{}}`.
+  test "invoke_content_markup: true relaxes the namespace-less root at compile/2's own boundary" do
+    xml = """
+    <scxml version="1.0" initial="a">
+        <state id="a"/>
+    </scxml>
+    """
+
+    assert {:ok, %Machine{}} = Statifier.compile(xml, invoke_content_markup: true)
+  end
+
   # sabotage: in `Statifier.Lowering.Builders.build_script/2`, the `case
   # Attributes.value(element, "src")` clauses are swapped -> `<script src>`
   # would build a struct instead of reporting
