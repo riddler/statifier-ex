@@ -155,10 +155,16 @@ parent removes from its queue to each autoforwarding invocation, unmodified,
 at the point the core's finalize/autoforward pass runs. `{:cancel_invoke, _}`
 stops the child via `Session.cancel/1` (not `stop/2`, so its `<onexit>`
 handlers still run) and pops its table entry before the stop, so the
-drain-time discard - a queued event whose `invokeid` no longer names a live
-invocation is dropped, per 6.4.3's "MUST NOT insert them into the external
-event queue" - is correct against events queued either before or after the
-cancel. Inline `<content><scxml>...</scxml></content>` does not lower yet
+drain-time discard - a queued entry *delivered by* an invocation that no
+longer names a live one is dropped, per 6.4.3's "MUST NOT insert them into
+the external event queue" - is correct against events queued either before
+or after the cancel. The discard reads the queue entry's own origin
+(`Statifier.Session.Inbox`'s `{:invoked_event, _, _}`, set only on the
+child-to-parent direction) rather than the event's `invokeid` field, because
+6.4.2 requires an autoforwarded copy to preserve every 5.10.1 field: an
+event forwarded down to a child carries the *sibling* invocation's id into a
+session that has never had one, and keying on the field would discard
+exactly the copy 6.4.2 requires be delivered. Inline `<content><scxml>...</scxml></content>` does not lower yet
 (a parser-layer, layer-boundary decision deferred to st-53ys); a `<content>`
 holding markup as a text/CDATA binary compiles and runs today. v1's
 handler-registry invoke is kept as an explicit extension type - a useful,

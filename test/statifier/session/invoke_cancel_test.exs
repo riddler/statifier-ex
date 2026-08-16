@@ -82,13 +82,13 @@ defmodule Statifier.Session.InvokeCancelTest do
 
   # -- the drain-time discard, in isolation ----------------------------------
 
-  describe "an event whose invokeid names no live invocation" do
-    # sabotage: `handle_continue(:drain, state)`'s new discard branch (`if
-    # id != nil and not Invocations.live?(state.invocations, id)`) is
-    # inverted to `if id == nil or Invocations.live?(...)` -> the ghost event
-    # is delivered to the core instead of discarded, so the parent takes the
-    # "ghost" transition and lands on "ghost_reached" instead of
-    # "ping_reached", reddening the assertion. Reverted and confirmed green.
+  describe "an entry delivered by an invocation that is no longer live" do
+    # sabotage: `handle_continue(:drain, state)`'s discard branch (`if
+    # Invocations.live?(state.invocations, invoke_id)`) is inverted to
+    # `if not Invocations.live?(...)` -> the ghost entry is delivered to the
+    # core instead of discarded, so the parent takes the "ghost" transition
+    # and lands on "ghost_reached" instead of "ping_reached", reddening the
+    # assertion. Reverted and confirmed green.
     test "is dropped at drain time; the drain continues to the next entry" do
       machine =
         compile!("""
@@ -106,11 +106,14 @@ defmodule Statifier.Session.InvokeCancelTest do
 
       # No `<invoke>` was ever started, so `state.invocations` is empty and
       # "inv_dead" names nothing live - the same predicate a real cancel
-      # leaves behind once it pops the entry.
+      # leaves behind once it pops the entry. The entry has to be the
+      # `{:invoked_event, _, _}` kind a child-to-parent delivery builds: an
+      # ordinary `{:event, _}` entry is never discarded, however its
+      # `invokeid` field happens to read (`Statifier.Session.Inbox`).
       ghost = Event.external("ghost", invokeid: "inv_dead")
 
       :sys.replace_state(parent, fn state ->
-        %{state | inbox: Inbox.enqueue_event(state.inbox, ghost)}
+        %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, "inv_dead", ghost)}
       end)
 
       Session.send_event(parent, Event.external("ping"))
@@ -263,7 +266,7 @@ defmodule Statifier.Session.InvokeCancelTest do
 
         Enum.any?(
           Recording.entries(recording),
-          &match?({:event, %Event{name: "onexit.child"}}, &1)
+          &match?({:invoked_event, _invoke_id, %Event{name: "onexit.child"}}, &1)
         )
       end)
 

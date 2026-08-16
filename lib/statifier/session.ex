@@ -184,16 +184,28 @@ defmodule Statifier.Session do
   from that session. In particular it MUST NOT ... insert them into the
   external event queue of the invoking session" (the doubled "not" is
   verbatim in the REC). `handle_continue(:drain, _)` applies this at the one
-  point every queued entry passes through it: an `{:event, %Event{invokeid:
-  id}}` whose `id` is non-`nil` and no longer a key of `state.invocations`
-  is dropped and the drain continues, with no separate retired-id
-  bookkeeping - the live table is already the predicate (the invoke
-  child-session plan's own Decision 6), and cancelling removes the key, so
-  every event from that invocation - queued before the cancel or arriving
-  after it - is dropped this way.
-  `Statifier.Session.Inbox` needs no keyed discard of its own: the predicate
-  is applied to `Inbox.next/1`'s result, not inside the queue, which is what
-  keeps `Inbox` ignorant of invocations altogether.
+  point every queued entry passes through it: an `{:invoked_event,
+  invoke_id, _}` entry whose `invoke_id` is no longer a key of
+  `state.invocations` is dropped and the drain continues, with no separate
+  retired-id bookkeeping - the live table is already the predicate (the
+  invoke child-session plan's own Decision 6), and cancelling removes the
+  key, so every event from that invocation - queued before the cancel or
+  arriving after it - is dropped this way.
+
+  The predicate reads the *entry kind*, which `send_invoked_event/3` sets
+  only on the child-to-parent direction, and never `event.invokeid`. 6.4.2
+  requires an autoforwarded copy to preserve every 5.10.1 field, so an event
+  this session forwards to one of its children arrives there still carrying
+  a *sibling* invocation's `invokeid` - an id that names nothing in the
+  receiving session's own table. Keying the discard on that field would drop
+  exactly the copy 6.4.2 requires be delivered; keying it on where the entry
+  came from is also what ADR-0027 already says ("every queued entry
+  *originating from* a cancelled invokeid").
+
+  `Statifier.Session.Inbox` still needs no keyed discard of its own: the
+  predicate is applied to `Inbox.next/1`'s result, not inside the queue,
+  which is what keeps `Inbox` ignorant of the invocation *table* even while
+  it carries the entry's origin.
 
   `terminate/2` cancels every entry still in `state.invocations` alongside
   its existing timer cancellation, so an orderly stop of this session leaves
@@ -378,6 +390,20 @@ defmodule Statifier.Session do
   def send_event(server, name) when is_binary(name), do: send_event(server, Event.external(name))
 
   @doc """
+  Delivers `event` to `server`'s external queue as an entry originating from
+  `server`'s own invocation `invoke_id` - the child-to-parent direction, and
+  the only direction 6.4.3's "MUST ignore any events it receives from that
+  [cancelled] session" applies to. `send_event/2` is what every other caller
+  wants, autoforwarded copies included; see `Statifier.Session.Inbox`'s
+  `entry` typedoc for why the two are distinct entries rather than one entry
+  read two ways.
+  """
+  @spec send_invoked_event(server :: server(), invoke_id :: String.t(), event :: Event.t()) :: :ok
+  def send_invoked_event(server, invoke_id, %Event{} = event) when is_binary(invoke_id) do
+    GenServer.cast(server, {:enqueue_invoked_event, invoke_id, event})
+  end
+
+  @doc """
   Hands `effects` - any list of `Statifier.Effect.t()` values, from any
   driver of the pure core - to this session's own effect-interpretation
   path: planned through `Statifier.Session.Effects.plan/1` and performed
@@ -555,26 +581,39 @@ defmodule Statifier.Session do
         state = %{state | inbox: inbox} |> drain_cancel()
         {:noreply, state, {:continue, :drain}}
 
-      {:ok, {:event, _event}, _inbox} when state.halted != nil ->
+      {:ok, entry, _inbox}
+      when state.halted != nil and elem(entry, 0) in [:event, :invoked_event] ->
         {:noreply, state}
 
-      {:ok, {:event, %Event{invokeid: id} = event}, inbox} ->
-        if id != nil and not Invocations.live?(state.invocations, id) do
+      {:ok, {:invoked_event, invoke_id, event}, inbox} ->
+        if Invocations.live?(state.invocations, invoke_id) do
+          state = %{state | inbox: inbox} |> drain_event(event)
+          {:noreply, state, {:continue, :drain}}
+        else
           # 6.4.3: "MUST ignore any events it receives from that [cancelled]
           # session. In particular it MUST NOT ... insert them into the
           # external event queue of the invoking session." `Invocations`'s
           # live table is the predicate (Decision 6, `docs/plans/`): an
-          # event is discarded whenever its `invokeid` no longer names a
-          # live invocation, whether it was queued before the cancel or
-          # arrived after it - `{:stop_child, _}` above pops the entry
+          # entry is discarded whenever the invocation that *delivered* it no
+          # longer names a live one, whether it was queued before the cancel
+          # or arrived after it - `{:stop_child, _}` below pops the entry
           # before cancelling, so nothing accumulates and nothing needs a
           # separate retired-id set (ADR-0027's own "drops, at drain time,
           # every queued entry originating from a cancelled invokeid").
+          #
+          # The predicate reads the *entry kind*, never `event.invokeid`:
+          # 6.4.2 makes an autoforwarded copy preserve every 5.10.1 field,
+          # so an event forwarded to a child arrives still carrying the
+          # sibling invocation's `invokeid`, which names nothing in the
+          # receiving session's own table. Keying on the field would discard
+          # exactly the copy 6.4.2 requires be delivered
+          # (`Statifier.Session.Inbox`'s `entry` typedoc).
           {:noreply, %{state | inbox: inbox}, {:continue, :drain}}
-        else
-          state = %{state | inbox: inbox} |> drain_event(event)
-          {:noreply, state, {:continue, :drain}}
         end
+
+      {:ok, {:event, event}, inbox} ->
+        state = %{state | inbox: inbox} |> drain_event(event)
+        {:noreply, state, {:continue, :drain}}
     end
   end
 
@@ -617,6 +656,13 @@ defmodule Statifier.Session do
   def handle_cast({:enqueue_event, event}, state) do
     state = record(state, &Recording.put_event(&1, event))
     {:noreply, %{state | inbox: Inbox.enqueue_event(state.inbox, event)}, {:continue, :drain}}
+  end
+
+  def handle_cast({:enqueue_invoked_event, invoke_id, event}, state) do
+    state = record(state, &Recording.put_invoked_event(&1, invoke_id, event))
+
+    {:noreply, %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)},
+     {:continue, :drain}}
   end
 
   def handle_cast(:enqueue_cancel, state) do
@@ -911,7 +957,7 @@ defmodule Statifier.Session do
         origintype: SystemVariables.scxml_event_processor()
       )
 
-    send_event(parent_pid, event)
+    send_invoked_event(parent_pid, invoke_id, event)
   end
 
   defp return_done_event(_reason, _state), do: :ok
@@ -1065,7 +1111,7 @@ defmodule Statifier.Session do
          %State{invoked_by: {parent_pid, invoke_id}} = state,
          _override
        ) do
-    send_event(parent_pid, %{event | invokeid: invoke_id})
+    send_invoked_event(parent_pid, invoke_id, %{event | invokeid: invoke_id})
     state
   end
 

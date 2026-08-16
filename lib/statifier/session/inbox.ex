@@ -21,8 +21,20 @@ defmodule Statifier.Session.Inbox do
   @enforce_keys [:queue]
   defstruct [:queue]
 
-  @typedoc "One waiting entry: an external event, or the cancel marker."
-  @type entry :: {:event, Event.t()} | :cancel
+  @typedoc """
+  One waiting entry: an external event, an external event one of *this*
+  session's own invocations delivered, or the cancel marker.
+
+  `{:invoked_event, invoke_id, event}` is a separate kind rather than a flag
+  on `event` because 6.4.3's discard is a property of *where the entry came
+  from*, not of the event: 6.4.2 requires an autoforwarded copy to preserve
+  every 5.10.1 field, `invokeid` included, so an event forwarded down to a
+  child still carries the *sibling* invocation's id in a frame where it
+  names nothing. Keying the discard on the entry kind is what keeps a
+  forwarded sibling event deliverable while a cancelled invocation's own
+  queued events still drop (`Statifier.Session`'s `handle_continue(:drain, _)`).
+  """
+  @type entry :: {:event, Event.t()} | {:invoked_event, String.t(), Event.t()} | :cancel
 
   @opaque t :: %__MODULE__{queue: :queue.queue(entry())}
 
@@ -34,6 +46,18 @@ defmodule Statifier.Session.Inbox do
   @spec enqueue_event(inbox :: t(), event :: Event.t()) :: t()
   def enqueue_event(%__MODULE__{queue: queue}, %Event{} = event) do
     %__MODULE__{queue: :queue.in({:event, event}, queue)}
+  end
+
+  @doc """
+  Appends `event` as an entry originating from this session's own invocation
+  `invoke_id` - the child-to-parent direction only
+  (`<send target="#_parent">` and `done.invoke.<invokeid>`). Everything else,
+  autoforwarded copies included, goes through `enqueue_event/2`.
+  """
+  @spec enqueue_invoked_event(inbox :: t(), invoke_id :: String.t(), event :: Event.t()) :: t()
+  def enqueue_invoked_event(%__MODULE__{queue: queue}, invoke_id, %Event{} = event)
+      when is_binary(invoke_id) do
+    %__MODULE__{queue: :queue.in({:invoked_event, invoke_id, event}, queue)}
   end
 
   @doc "Appends the cancel marker to the back of the inbox."
@@ -59,6 +83,7 @@ defmodule Statifier.Session.Inbox do
   @spec cancel_event?(entry :: entry()) :: boolean()
   def cancel_event?(:cancel), do: true
   def cancel_event?({:event, %Event{}}), do: false
+  def cancel_event?({:invoked_event, _invoke_id, %Event{}}), do: false
 
   @doc """
   The waiting events, front to back, cancel markers dropped - the
@@ -72,6 +97,7 @@ defmodule Statifier.Session.Inbox do
     |> :queue.to_list()
     |> Enum.flat_map(fn
       {:event, event} -> [event]
+      {:invoked_event, _invoke_id, event} -> [event]
       :cancel -> []
     end)
   end

@@ -148,6 +148,62 @@ defmodule Statifier.Session.InvokeAutoforwardTest do
     end
   end
 
+  describe "an event one sibling invocation sent up through #_parent" do
+    # The event the parent forwards here is one it received *from another
+    # invocation*, so 6.4.2's exact copy carries that sibling's `invokeid`
+    # into a session whose own invocation table has never heard of it. The
+    # drain-time discard must not read that field: it keys on the entry
+    # kind (`Statifier.Session.Inbox`'s `{:invoked_event, _, _}`), which is
+    # set only on the child-to-parent direction.
+    #
+    # sabotage: `Statifier.Session`'s `handle_continue(:drain, _)` discard is
+    # reverted to the field-reading form - one clause,
+    # `{:ok, {:event, %Event{invokeid: id} = event}, inbox}` guarded by
+    # `id != nil and not Invocations.live?(state.invocations, id)`, with
+    # `#_parent`/`done.invoke` delivery back on `send_event/2` -> the
+    # forwarding child never leaves "run" and `wait_for_status` below times
+    # out, because it silently discarded the forwarded copy. Reverted and
+    # confirmed green.
+    test "is forwarded to an autoforwarding sibling, not discarded as a foreign invokeid" do
+      start_supervised!(Statifier.Supervisor)
+
+      pinger_xml =
+        ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="go" version="1.0" datamodel="predicator"><state id="go"><onentry><send target="#_parent" event="e"/></onentry></state></scxml>)
+
+      parent_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <invoke type="scxml" id="fwd" autoforward="true">
+                  #{content_body()}
+              </invoke>
+              <invoke type="scxml" id="pinger">
+                  <content><![CDATA[#{pinger_xml}]]></content>
+              </invoke>
+              <transition event="error.*" target="errored"/>
+          </state>
+          <state id="errored"/>
+      </scxml>
+      """
+
+      {:ok, parent} = Session.start_link(compile!(parent_xml))
+
+      wait_until(fn -> Invocations.count(:sys.get_state(parent).invocations) == 2 end)
+      {:ok, %{pid: fwd_pid}} = Invocations.fetch(:sys.get_state(parent).invocations, "fwd")
+
+      status = wait_for_status(fwd_pid, fn s -> s.configuration == MapSet.new(["reached"]) end)
+      assert status.configuration == MapSet.new(["reached"])
+
+      # The copy really did carry the *sibling's* invokeid (5.10.1 preserved
+      # verbatim per 6.4.2) - it was delivered in spite of naming an
+      # invocation the receiving session does not have, not because the
+      # stamp went missing.
+      assert Session.snapshot(fwd_pid).datamodel["ev_invokeid"] == "pinger"
+
+      # The parent took no error transition on the way through.
+      assert Session.status(parent).configuration == MapSet.new(["a"])
+    end
+  end
+
   describe "forwarding to a dead invocation" do
     # sabotage: `Statifier.Session`'s `{:forward, invoke_id, event}` clause's
     # `:error -> :ok` branch is changed to raise (`:error -> raise "boom"`)

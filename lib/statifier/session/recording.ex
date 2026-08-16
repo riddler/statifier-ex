@@ -76,6 +76,7 @@ defmodule Statifier.Session.Recording do
   @typedoc "One recorded input, in the session's serialized input order."
   @type entry ::
           {:event, Event.t()}
+          | {:invoked_event, invoke_id :: String.t(), Event.t()}
           | :cancel
           | {:timer, send_id :: String.t() | nil, Event.t()}
           | {:interpret, [Effect.t()]}
@@ -120,6 +121,19 @@ defmodule Statifier.Session.Recording do
   @spec put_event(recording :: t(), event :: Event.t()) :: t()
   def put_event(%__MODULE__{entries: entries} = recording, %Event{} = event) do
     %{recording | entries: [{:event, event} | entries]}
+  end
+
+  @doc """
+  Appends an external event one of this session's own invocations delivered,
+  keyed by the `invoke_id` that delivered it - the input `Statifier.Replay`
+  needs to reproduce 6.4.3's drain-time discard, which reads the entry's
+  origin rather than `event.invokeid` (`Statifier.Session.Inbox`'s `entry`
+  typedoc).
+  """
+  @spec put_invoked_event(recording :: t(), invoke_id :: String.t(), event :: Event.t()) :: t()
+  def put_invoked_event(%__MODULE__{entries: entries} = recording, invoke_id, %Event{} = event)
+      when is_binary(invoke_id) do
+    %{recording | entries: [{:invoked_event, invoke_id, event} | entries]}
   end
 
   @doc "Appends the cancel marker as the next entry."
