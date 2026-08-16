@@ -499,12 +499,12 @@ No change to `Machine.Invoke`, `Effect.Invoke`, `Invoke.Source`, or
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits)
-- [ ] `mix test test/statifier/compiler/ test/statifier/invoke/` passes
-- [ ] `mix test.regression` passes - no ratchet movement, since
+- [x] Full `mix quality` passes (loop gate between edits)
+- [x] `mix test test/statifier/compiler/ test/statifier/invoke/` passes
+- [x] `mix test.regression` passes - no ratchet movement, since
       `invoke_elements` stays `:unsupported` and every affected corpus file
       still flunks the feature gate before compiling (st-cmq.9)
-- [ ] `mix quality --format json --report -` is available for a later agent
+- [x] `mix quality --format json --report -` is available for a later agent
       routing on results
 
 #### Manual Verification:
@@ -728,6 +728,36 @@ of blocking here.
       vacuously: validation has no Appendix D counterpart (ADR-0002)
 - [ ] The reported message reads correctly for a markup payload, not just a
       text one - read one actual error string in IEx
+- [ ] No regressions in related features
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      vacuously: compilation has no Appendix D counterpart, and the child
+      compile at invoke time is an ordinary top-level pipeline run, not a
+      nested parse (ADR-0002, ADR-0041)
+- [ ] **All twenty-five inline corpus documents compile.** Run a throwaway
+      script (Ruby to extract, `mix run` to compile, or a single
+      `Code.eval_string` sweep) that pulls the XML heredoc out of each file
+      under `test/scxml_tests/mandatory/invoke/` and asserts
+      `Statifier.compile/1` returns `{:ok, _}` for all but test216 and
+      test224, which use `src`. Do **not** commit the script - it is a
+      one-shot check of a criterion the corpus suite cannot yet express,
+      because `test/support/feature_detector.ex:112` still flunks these files
+      on `invoke_elements` before any compile happens
+- [ ] Reading one child compile error in IEx confirms its location is
+      child-relative and `markup_location.start_offset + child_offset` lands on
+      the right parent byte (ADR-0012 constraint 3, ADR-0014)
 - [ ] No regressions in related features
 
 **Implementation Note**: Use the project's loop gate between edits while

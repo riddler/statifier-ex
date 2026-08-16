@@ -9,8 +9,10 @@ defmodule Statifier.Machine.ContentTest do
   alias Statifier.Machine.Content.If
   alias Statifier.Machine.Content.Log
   alias Statifier.Machine.Content.Raise
+  alias Statifier.Machine.Content.Send
   alias Statifier.Machine.Param
   alias Statifier.Parser
+  alias Statifier.Parser.Location
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -328,6 +330,82 @@ defmodule Statifier.Machine.ContentTest do
                %Log{expr: expr} -> match?({:static, "done text"}, expr)
                %Raise{} -> false
              end)
+    end
+  end
+
+  describe "compile/1 - donedata markup (ADR-0041)" do
+    @donedata_markup_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="f">
+        <final id="f">
+            <donedata>
+                <content><data-payload xmlns="urn:example" value="1"/></content>
+            </donedata>
+        </final>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.build_content_expr/2`'s markup clause
+    # (`%DContent{expr: nil, markup: markup} when is_binary(markup)`) is
+    # changed to build `Expressions.static(nil)` instead of
+    # `Expressions.static(markup)` -> this pattern match reddens because
+    # `expr` folds to `{:static, nil}` instead of the sliced markup.
+    test "a <donedata><content><foo/></content></donedata> folds its markup to {:static, markup}, not text" do
+      m = compile!(@donedata_markup_document)
+      f = state_of(m, "f")
+
+      assert %Machine.Donedata{expr: {:static, markup}} = f.donedata
+      assert markup =~ "<data-payload"
+      assert markup =~ "urn:example"
+    end
+
+    # sabotage: `Statifier.Compiler.content_expr_location/1`'s markup clause
+    # (`%DContent{expr: nil, markup_location: %Location{} = location}`) is
+    # deleted, so a markup-bearing `<content>` falls through to the plain
+    # `location`/`node's own location` clause instead -> `expr_location`
+    # becomes the `<content>` node's own span rather than the markup's, and
+    # slicing it no longer round-trips to the folded markup, reddening this
+    # assertion.
+    test "the markup fold's expr_location is markup_location, and Location.slice/2 round-trips it" do
+      {:ok, root} = Parser.parse(@donedata_markup_document)
+      {:ok, document} = Lowering.lower(root, @donedata_markup_document)
+      {:ok, document, _warnings} = Validator.validate(document, @donedata_markup_document)
+      {:ok, m} = Compiler.compile(document)
+      f = state_of(m, "f")
+
+      assert %Machine.Donedata{expr: {:static, markup}, expr_location: %Location{} = location} =
+               f.donedata
+
+      assert Location.slice(location, @donedata_markup_document) == markup
+    end
+  end
+
+  describe "compile/1 - send markup (ADR-0041)" do
+    @send_markup_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <send event="e">
+                    <content><data-payload xmlns="urn:example" value="1"/></content>
+                </send>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: same mutation as the donedata markup test above -
+    # `Statifier.Compiler.build_content_expr/2`'s markup clause returns
+    # `Expressions.static(nil)` instead of `Expressions.static(markup)` ->
+    # this pattern match reddens too, since `<send>` folds `<content>`
+    # through the same shared `build_content_expr/2`.
+    test "a <send><content><foo/></content></send> folds its markup to {:static, markup} on Content.Send" do
+      m = compile!(@send_markup_document)
+      a = state_of(m, "a")
+      [onentry_block] = a.onentry
+      [send_c_index] = onentry_block.content
+      send_content = Machine.content(m, send_c_index)
+
+      assert %Send{content: {:static, markup}} = send_content
+      assert markup =~ "<data-payload"
     end
   end
 
