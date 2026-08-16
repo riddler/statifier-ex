@@ -708,9 +708,9 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The reworded message still reads as an instruction to the person who
+- [x] The reworded message still reads as an instruction to the person who
       trips it: it names the ADR and says what the ADR requires.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -724,16 +724,16 @@ blocking here.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment for `lib/statifier/`: this phase touches no
+- [x] Spec-conformance judgment for `lib/statifier/`: this phase touches no
       Appendix D function. Confirm from the diff that `main_event_loop`,
       `microstep`, `enter_states`, `exit_states` and the rest are untouched,
       so the Appendix D line-for-line rule is satisfied vacuously rather than
       by inspection. No deviation is introduced, mechanical or otherwise.
-- [ ] Eyeball a handful of generated ids in IEx: `sess_` prefix, 31 characters
+- [x] Eyeball a handful of generated ids in IEx: `sess_` prefix, 31 characters
       total, no hyphen, double-clicking selects the whole token.
-- [ ] The generator still sits outside any fold - `new/2` only, never reached
+- [x] The generator still sits outside any fold - `new/2` only, never reached
       from `main_event_loop/1` - so ADR-0003's core contract is unchanged.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -747,9 +747,9 @@ blocking here.
 
 ### Phase 3
 
-- [ ] A fresh `rm -rf _build deps && mix deps.get && mix compile` succeeds, so
+- [x] A fresh `rm -rf _build deps && mix deps.get && mix compile` succeeds, so
       the drop is real rather than masked by a warm build directory.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -763,16 +763,16 @@ blocking here.
 
 ### Phase 4
 
-- [ ] Spec-conformance judgment for `lib/statifier/`: the diff touches comment
+- [x] Spec-conformance judgment for `lib/statifier/`: the diff touches comment
       and doc lines only. Confirm no Appendix D function body changed - the
       `generate_invoke_id` edit is the comment above it, not the function.
-- [ ] Each rewritten "why a counter is not a UXID" passage still makes the
+- [x] Each rewritten "why a counter is not a UXID" passage still makes the
       ADR-0003 argument intact: a clock and a CSPRNG in the core would turn
       `(state, event) -> {state, [effect]}` into
       `(state, event, clock, entropy) -> ...` and break replay observably.
-- [ ] `docs/architecture.md` and `docs/datamodel.md` read naturally rather than
+- [x] `docs/architecture.md` and `docs/datamodel.md` read naturally rather than
       as mechanical substitutions.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -783,3 +783,22 @@ Manual Verification items are deferred and surfaced once at the end instead of
 blocking here.
 
 ---
+
+### Verification outcome (2026-08-15)
+
+All twelve items above were confirmed. Two produced follow-up edits, committed
+together as the DMV pass rather than amended into their phases:
+
+- **Phase 1.** The reworded finding named the ADR but not what it requires, so
+  it now names the formats: "identifier generated ad hoc; ADR-0008 fixes the
+  sess_/send_/inv_ id formats".
+- **Phase 4.** Substituting the mechanism for the library name left all three
+  ADR-0003 passages stating it twice ("minted with a clock-and-CSPRNG
+  generator: an entropy-based id reads the wall clock and a CSPRNG"). The
+  first clause no longer pre-announces the mechanism, and the two comment
+  lines the substitution pushed past the block's ~72-column wrap were rewrapped.
+
+Phase 3's cold-build item was verified with `MIX_DEPS_PATH`/`MIX_BUILD_PATH`
+pointed at a scratch directory rather than `rm -rf _build deps` in place, which
+proves the same thing without discarding the worktree's warm Dialyzer PLT. It
+fetched 23 dependencies, none of them uxid, and compiled 133 files clean.
