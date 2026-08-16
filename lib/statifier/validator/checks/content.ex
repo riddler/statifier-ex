@@ -76,10 +76,10 @@ defmodule Statifier.Validator.Checks.Content do
   defp check_content(%Content{expr: nil}), do: []
 
   defp check_content(%Content{expr: expr, text: text, markup: markup, location: location}) do
-    if is_nil(markup) and blank?(text) do
-      []
-    else
-      [Error.content_expr_and_text(expr, location)]
+    cond do
+      not is_nil(markup) -> [Error.content_expr_and_text(expr, location, :markup)]
+      not blank?(text) -> [Error.content_expr_and_text(expr, location, :text)]
+      true -> []
     end
   end
 

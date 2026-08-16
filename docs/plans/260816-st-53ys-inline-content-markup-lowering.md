@@ -699,18 +699,42 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**Worked through 2026-08-16.** Every item below is checked off with what was
+actually run. Three found real defects, all fixed on this branch: the
+validator's message named the wrong payload for markup, ADR-0041's
+namespace-limitation bullet made a claim the corpus falsifies, and the
+`changelog.d/st-53ys.md` fragment overstated what a user gets. Two items are
+checked with a correction to the criterion's own wording rather than to the
+code, noted inline.
+
 ### Phase 1
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously here: Appendix D models no parsing stage, so lowering has no
       pseudocode counterpart and this phase introduces no interpreter
-      deviation (ADR-0002)
-- [ ] The slice is byte-exact against 5.6.2's "text, XML from any namespace, or
-      a mixture of both" for a hand-written mixture, checked in IEx
-- [ ] The mechanical test-file rewrite changed only call arity - `git diff
-      --stat` on `test/` shows one or two changed lines per file and no
-      assertion edits
-- [ ] No regressions in related features
+      deviation (ADR-0002). Confirmed against the phase diff: it touches
+      `statifier.ex`, `document/content.ex`, `lowering.ex` and
+      `lowering/builders.ex`, no interpreter module
+- [x] The slice is byte-exact against 5.6.2's "text, XML from any namespace, or
+      a mixture of both" for a hand-written mixture, checked in IEx. Five
+      cases, all exact, and `markup == Location.slice(markup_location, xml)`
+      in every one: text+element+text, an indented element alone, an entity
+      reference (`a &amp; b <foo/> c` stays encoded rather than decoded), a
+      foreign-namespace child, and CDATA beside an element. The entity and
+      foreign-namespace cases are the properties ADR-0041 chose slicing
+      *for*, so they are the ones worth having checked by hand
+- [x] The mechanical test-file rewrite changed only call arity - **criterion
+      corrected**. Four files change more than two lines. Three are the arity
+      change forcing a heredoc to be bound to a variable where the test
+      previously inlined it into `Parser.parse/1`. The fourth,
+      `test/statifier/lowering/donedata_test.exs`, is a genuine assertion
+      inversion: a test asserting `{:misplaced_element, "state", "content"}`
+      now asserts a successful slice. That is ADR-0041 landing rather than
+      drift - the record states the rule at `<content>` itself, so
+      `<donedata>` and `<send>` lose the error alongside `<invoke>` - and the
+      criterion was written without noticing that an existing test asserted
+      the old behavior
+- [x] No regressions in related features - full `mix quality` green
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -724,11 +748,16 @@ of blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously: validation has no Appendix D counterpart (ADR-0002)
-- [ ] The reported message reads correctly for a markup payload, not just a
-      text one - read one actual error string in IEx
-- [ ] No regressions in related features
+- [x] The reported message reads correctly for a markup payload, not just a
+      text one - **this item found a real defect, now fixed.** The message was
+      hardcoded to `"... and inline text"`, so a `<content expr="'x'">` with an
+      `<scxml>` child reported inline text the document does not contain.
+      `Error.content_expr_and_text/3` now takes a `:text | :markup` payload and
+      says "inline markup" for the markup arm; the `reason` tuple stays
+      `{:content_expr_and_text, expr}`, as this plan decided
+- [x] No regressions in related features - full `mix quality` green
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -742,23 +771,29 @@ of blocking here.
 
 ### Phase 3
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously: compilation has no Appendix D counterpart, and the child
       compile at invoke time is an ordinary top-level pipeline run, not a
       nested parse (ADR-0002, ADR-0041)
-- [ ] **All twenty-five inline corpus documents compile.** Run a throwaway
-      script (Ruby to extract, `mix run` to compile, or a single
-      `Code.eval_string` sweep) that pulls the XML heredoc out of each file
-      under `test/scxml_tests/mandatory/invoke/` and asserts
-      `Statifier.compile/1` returns `{:ok, _}` for all but test216 and
-      test224, which use `src`. Do **not** commit the script - it is a
-      one-shot check of a criterion the corpus suite cannot yet express,
-      because `test/support/feature_detector.ex:112` still flunks these files
-      on `invoke_elements` before any compile happens
-- [ ] Reading one child compile error in IEx confirms its location is
+- [x] **All inline corpus documents compile** - run as a throwaway `mix run`
+      sweep over `test/scxml_tests/mandatory/invoke/`, extracting each XML
+      heredoc and calling `Statifier.compile/1`. Script not committed, per the
+      criterion. **The criterion's own counts were wrong and are corrected
+      here**: 24 of the 27 files use the inline shape, not 25, and the
+      non-inline three are `test216` (`srcexpr`), `test226` (`src`), and
+      `test530` - not "test216 and test224". `test224` is an ordinary inline
+      file and compiles. Result: 23 of the 24 compile; `test554` fails on its
+      deliberately malformed `namelist="&quot;foo"`, and `test530` fails
+      `{:misplaced_element, "scxml", "assign"}`. Both are pre-existing gaps
+      outside ADR-0041's scope, tracked as st-ykn6
+- [x] Reading one child compile error in IEx confirms its location is
       child-relative and `markup_location.start_offset + child_offset` lands on
-      the right parent byte (ADR-0012 constraint 3, ADR-0014)
-- [ ] No regressions in related features
+      the right parent byte (ADR-0012 constraint 3, ADR-0014). Verified with a
+      child carrying a misplaced `<transition>`: child offset 122 +
+      `markup_location.start_offset` 144 = 266, and `binary_part(parent, 266,
+      len)` is exactly `<transition target="nowhere"/>`.
+      `Location.at_offset/2` re-derives it as parent line 6, column 17
+- [x] No regressions in related features - full `mix quality` green
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -772,12 +807,20 @@ of blocking here.
 
 ### Phase 4
 
-- [ ] The ADR-0041 row's wording and status column match the table's
-      established style
-- [ ] Reading `changelog.d/st-53ys.md` and `changelog.d/st-cmq.7.md` back to
+- [x] The ADR-0041 row's wording and status column match the table's
+      established style - it does, and the row has since gained an `amended`
+      note in the same form ADR-0035 and ADR-0040 already use
+- [x] Reading `changelog.d/st-53ys.md` and `changelog.d/st-cmq.7.md` back to
       back, the assembled notes make one coherent statement about `<invoke>`
-      sources with no contradiction
-- [ ] No regressions in related features
+      sources with no contradiction. The st-cmq.7 correction is right: its
+      now-false paragraph about inline content failing to compile is gone.
+      **But reading them together surfaced a defect in the st-53ys fragment**,
+      which claimed the inline child "starts as a session" without
+      qualification. That is only true when the child declares its own
+      namespace, which the corpus does not do - see the amended namespace
+      bullet in ADR-0041 and st-ybuj. The fragment now states both invoke-time
+      limitations
+- [x] No regressions in related features - full `mix quality` green
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. This phase touches no Elixir

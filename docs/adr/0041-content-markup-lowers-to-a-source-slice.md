@@ -1,6 +1,7 @@
 # ADR-0041: `<content>` markup lowers to a source slice, compiled at invoke time
 
-Status: accepted (2026-08-16)
+Status: accepted (2026-08-16; amended 2026-08-16: the namespace-limitation
+bullet's claim that the corpus case compiles was wrong, corrected below)
 
 ## Context
 
@@ -11,10 +12,13 @@ Status: accepted (2026-08-16)
 all. `Statifier.Document.Content`'s moduledoc records the original reasoning:
 preserving markup "would mean holding a DOM subtree inside a Document struct,
 crossing the layer boundary this rewrite is organized around, and nothing in
-the conformance corpus needs it." The last clause is now falsified: twenty-five
-of the twenty-seven files under `test/scxml_tests/mandatory/invoke/` write
-exactly this shape (`test220_test.exs:26-31` is the minimal case), and the
-spec requires it to work. 5.6.2:
+the conformance corpus needs it." The last clause is now falsified:
+twenty-four of the twenty-seven files under
+`test/scxml_tests/mandatory/invoke/` write exactly this shape
+(`test220_test.exs:26-31` is the minimal case), and the spec requires it to
+work. The three that do not are `test216` (`srcexpr`), `test226` (`src`), and
+`test530`, which assigns markup to a variable with `<assign><scxml>` and then
+passes it as `<content expr="Var1">`. 5.6.2:
 
 > When present, the children of `<content>` MAY consist of text, XML from any
 > namespace, or a mixture of both.
@@ -160,12 +164,29 @@ ADR-0014 fixed for expression spans.
   5.6.2's placement of the grammar and G.6's send examples; whether a given
   receiver wants a string or a parsed value is that consumer's decision at its
   own boundary, not lowering's.
-- **Namespace limitation, accepted.** The slice drops namespace declarations
-  made on ancestors. For the case the spec and corpus exercise - an
+- **Namespace limitation, accepted, and larger than first recorded.** The
+  slice drops namespace declarations made on ancestors. This record originally
+  claimed that for the case the spec and corpus exercise - an
   undeclared-namespace fragment under a default-SCXML-namespace document - the
-  relaxed no-namespace rule compiles the fragment as SCXML vocabulary, which
-  is G.6's stated semantics, so behavior is right where it matters. A fragment
-  whose root uses a prefix declared outside the slice compiles to a
+  relaxed no-namespace rule compiles the fragment as SCXML vocabulary, so
+  "behavior is right where it matters." **That claim was wrong**, and manual
+  verification of st-53ys falsified it. `Lowering.Namespace.scxml_vocabulary?/1`
+  governs lowering dispatch only; `Validator.Checks.Boilerplate` rejects a root
+  element that declares no namespace, and every `Statifier.compile/1` runs it.
+  The child slice is compiled as a standalone top-level document, so it meets
+  that check with no inherited `xmlns` and fails `{:bad_namespace, nil}`.
+
+  The consequence is concrete: all twenty-four inline corpus documents compile
+  as parents, and every one of them then fails at invoke time, because the
+  corpus writes its child `<scxml>` without an `xmlns` (`test220_test.exs:28`).
+  The parent-compiles half of st-53ys's acceptance criteria holds; the
+  child-starts half holds only for markup that declares its own namespace.
+  This is not a reason to reopen options 1 or 2 - re-serializing a DOM subtree
+  or re-parsing a span would both hit the same standalone-root check - but it
+  is a real gap, tracked as st-ybuj, and st-cmq.9 must not assume these files
+  reach their assertions once its harness change lands.
+
+  A fragment whose root uses a prefix declared outside the slice compiles to a
   `foreign_element`/unresolved failure at invoke time instead. Nothing in the
   corpus writes that shape.
 - **Open question.** If a real document ever needs ancestor-declared prefixes
