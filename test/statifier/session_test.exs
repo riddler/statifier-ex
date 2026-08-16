@@ -533,15 +533,18 @@ defmodule Statifier.SessionTest do
     end
   end
 
-  # -- unroutable -------------------------------------------------------------
+  # -- cancel-invoke miss ------------------------------------------------------
 
-  describe "unroutable" do
-    # sabotage: `Statifier.Session.Effects.plan_one/1`'s
-    # `{:cancel_invoke, %CancelInvoke{}}` clause drops its `{:unroutable,
-    # effect}` instruction, returning only `[{:notify, effect}]` -> the
-    # second `assert_receive` below (for `{:unroutable, _}`) never arrives
-    # and reddens. Confirmed red and reverted.
-    test "a cancel_invoke effect notifies subscribers without crashing the session" do
+  describe "a cancel_invoke effect naming no live invocation" do
+    # sabotage: `Statifier.Session`'s `perform_instruction({:stop_child,
+    # invoke_id}, state, _override)` clause's `{nil, invocations} -> %{state
+    # | invocations: invocations}` miss branch is changed to
+    # `{nil, _invocations} -> raise "boom"` -> `interpret/2` crashes the
+    # session handling this effect, so the `wait_for_status` poll below (for
+    # the ordinary "go" event this test sends afterward, proving the
+    # session is still alive) times out flunking instead of reaching "b".
+    # Reverted and confirmed green.
+    test "is a silent no-op; the session keeps running" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, subscribers: [self()])
 
@@ -556,9 +559,16 @@ defmodule Statifier.SessionTest do
 
       session_id = Session.session_id(session)
       assert_receive {:statifier, ^session_id, {:effect, {:cancel_invoke, ^cancel_effect}}}
-      assert_receive {:statifier, ^session_id, {:unroutable, {:cancel_invoke, ^cancel_effect}}}
 
+      # No `{:unroutable, _}` message follows - `:cancel_invoke` routes now
+      # (Phase 5) - and the session took no transition on the fabricated,
+      # never-live "a.inv_1" id, so it is still on "a" and still answers an
+      # ordinary event normally.
       assert Session.status(session).configuration == MapSet.new(["a"])
+
+      Session.send_event(session, "go")
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
     end
   end
 

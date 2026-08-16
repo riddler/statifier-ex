@@ -170,6 +170,75 @@ defmodule Statifier.ReplayTest do
       assert result.stream == [{:effect, invoke_effect}]
     end
 
+    # -- Decision 6: the live-invocation set --------------------------------
+
+    # sabotage: `perform_instruction({:start_child, %Invoke{invoke_id:
+    # invoke_id}, _effect}, state, _override)` is changed to leave
+    # `state.live_invoke_ids` untouched (`state` instead of `%{state |
+    # live_invoke_ids: MapSet.put(...)}`) -> the recorded "go" event's
+    # `invokeid: "i1"` is never found live, so `apply_entry/2`'s `{:event,
+    # _}` clause discards it instead of delivering it, and the configuration
+    # stays on "a" instead of advancing to "b", reddening the assertion.
+    # Reverted and confirmed green.
+    test "a recorded event whose invokeid names a still-live (started, uncancelled) invocation is delivered" do
+      machine = compile!(two_state_doc())
+
+      invoke_effect =
+        {:invoke,
+         %Effect.Invoke{
+           invoke_id: "i1",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1
+         }}
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([invoke_effect])
+        |> Recording.put_event(Event.external("go", invokeid: "i1"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
+    end
+
+    # sabotage: `perform_instruction({:stop_child, invoke_id}, state,
+    # _override)` is changed to leave `state.live_invoke_ids` untouched
+    # (`state` instead of `%{state | live_invoke_ids: MapSet.delete(...)}`)
+    # -> "i1" stays live in Replay's own bookkeeping even after the
+    # `:cancel_invoke` effect that a real session would have popped it on,
+    # so the later recorded "go" event is delivered instead of discarded and
+    # the configuration advances to "b", reddening the assertion (which
+    # expects it to stay on "a", matching what a live session actually does
+    # once it has popped the table entry). Reverted and confirmed green.
+    test "a recorded event whose invokeid names an invocation already stopped is discarded" do
+      machine = compile!(two_state_doc())
+
+      invoke_effect =
+        {:invoke,
+         %Effect.Invoke{
+           invoke_id: "i1",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1
+         }}
+
+      cancel_invoke_effect =
+        {:cancel_invoke,
+         %Effect.CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([invoke_effect, cancel_invoke_effect])
+        |> Recording.put_event(Event.external("go", invokeid: "i1"))
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "a")])
+    end
+
     # sabotage: `perform_instruction({:schedule, send_id, _delay_ms, _event},
     # state, _override)` is changed from incrementing `state.pending[send_id]`
     # to instead immediately enqueuing the event onto the inbox (mirroring

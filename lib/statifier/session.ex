@@ -67,9 +67,10 @@ defmodule Statifier.Session do
     - `{:effect, effect}` - every effect the core (or an `interpret/2`
       caller) hands this session, trace effects included, in order. Trace
       effects are ordinary list members here too, never a side channel.
-    - `{:unroutable, effect}` - a `:send`/`:send_delayed`/`:invoke`/
-      `:cancel_invoke`/`:autoforward` effect this session cannot route yet
-      (see `Statifier.Session.Effects`'s own moduledoc for exactly which).
+    - `{:unroutable, effect}` - reserved for an effect this session cannot
+      route; every `:send`/`:send_delayed`/`:invoke`/`:cancel_invoke`/
+      `:autoforward` effect now routes (see `Statifier.Session.Effects`'s
+      own moduledoc), so no message currently reaches a subscriber this way.
     - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
       message, following the effects that caused it.
 
@@ -112,8 +113,8 @@ defmodule Statifier.Session do
   follow-up bead (C.1's `#_invokeid` delivery) changes that one resolver,
   not this module's `{:deliver, ...}` clause. An
   unsupported `type` or an unparseable `target` raises `error.execution` the
-  same way, at plan time. `:cancel_invoke` still plans as `{:unroutable,
-  effect}`, pending later routing work. A child reaching a top-level final
+  same way, at plan time. `:cancel_invoke` plans `{:stop_child, invoke_id}`
+  ("Cancelling an invocation" below). A child reaching a top-level final
   returns `done.invoke.<invokeid>` to its parent's external queue the same
   direct way ("Starting an invocation's child session" below names the
   reciprocal obligation this halt-time delivery completes). See
@@ -155,6 +156,49 @@ defmodule Statifier.Session do
   session (a child whose parent is gone has nobody to report to), and a
   monitored child's own `:DOWN` pops its entry from `state.invocations` -
   both checked ahead of the ordinary subscriber `:DOWN` clause.
+
+  ## Cancelling an invocation
+
+  `{:cancel_invoke, %Effect.CancelInvoke{}}` - the core's own reaction to a
+  state exiting while one of its `<invoke>`s is still live - plans
+  `{:stop_child, invoke_id}` unconditionally (`Statifier.Session.Effects`).
+  Performing it pops `invoke_id`'s table entry *before* touching the child,
+  `Process.demonitor/2`s the ref with `[:flush]`, and calls this module's own
+  `cancel/1` on the child - never `stop/2`: 6.4.3 requires the cancelled
+  session to "exit at the end of the next microstep" having "execute[d] the
+  `<onexit>` handlers for all active states", which is `Interpreter.cancel/1`'s
+  own `exit_interpreter/1` walk, and `GenServer.stop/2` would skip every one
+  of them. The child is left to idle `:cancelled` exactly as any cancelled
+  session does; this session is no longer monitoring it and no longer holds
+  its id, so it is silent by construction. A miss - the invocation already
+  popped by its own `:DOWN`, or a second cancel of the same id - is a silent
+  no-op.
+
+  Popping the entry first is what makes the drain-time discard below
+  correct: any event this child already delivered is un-keyed the instant
+  the pop happens, not only once the cancelled child actually halts.
+
+  ## The discard of a cancelled invocation's queued events
+
+  6.4.3: after cancelling, this session "MUST ignore any events it receives
+  from that session. In particular it MUST NOT ... insert them into the
+  external event queue of the invoking session" (the doubled "not" is
+  verbatim in the REC). `handle_continue(:drain, _)` applies this at the one
+  point every queued entry passes through it: an `{:event, %Event{invokeid:
+  id}}` whose `id` is non-`nil` and no longer a key of `state.invocations`
+  is dropped and the drain continues, with no separate retired-id
+  bookkeeping - the live table is already the predicate (the invoke
+  child-session plan's own Decision 6), and cancelling removes the key, so
+  every event from that invocation - queued before the cancel or arriving
+  after it - is dropped this way.
+  `Statifier.Session.Inbox` needs no keyed discard of its own: the predicate
+  is applied to `Inbox.next/1`'s result, not inside the queue, which is what
+  keeps `Inbox` ignorant of invocations altogether.
+
+  `terminate/2` cancels every entry still in `state.invocations` alongside
+  its existing timer cancellation, so an orderly stop of this session leaves
+  no orphaned children; the child-side parent monitor above already covers
+  the disorderly case.
 
   ## Two snapshot shapes
 
@@ -514,9 +558,23 @@ defmodule Statifier.Session do
       {:ok, {:event, _event}, _inbox} when state.halted != nil ->
         {:noreply, state}
 
-      {:ok, {:event, event}, inbox} ->
-        state = %{state | inbox: inbox} |> drain_event(event)
-        {:noreply, state, {:continue, :drain}}
+      {:ok, {:event, %Event{invokeid: id} = event}, inbox} ->
+        if id != nil and not Invocations.live?(state.invocations, id) do
+          # 6.4.3: "MUST ignore any events it receives from that [cancelled]
+          # session. In particular it MUST NOT ... insert them into the
+          # external event queue of the invoking session." `Invocations`'s
+          # live table is the predicate (Decision 6, `docs/plans/`): an
+          # event is discarded whenever its `invokeid` no longer names a
+          # live invocation, whether it was queued before the cancel or
+          # arrived after it - `{:stop_child, _}` above pops the entry
+          # before cancelling, so nothing accumulates and nothing needs a
+          # separate retired-id set (ADR-0027's own "drops, at drain time,
+          # every queued entry originating from a cancelled invokeid").
+          {:noreply, %{state | inbox: inbox}, {:continue, :drain}}
+        else
+          state = %{state | inbox: inbox} |> drain_event(event)
+          {:noreply, state, {:continue, :drain}}
+        end
     end
   end
 
@@ -625,6 +683,14 @@ defmodule Statifier.Session do
   # elapsed, the SCXML Processor MUST discard the message without
   # attempting to deliver it." Every live timer this session ever scheduled
   # is cancelled here, `Statifier.Session.Timers.refs/1` in hand.
+  #
+  # Every live child is cancelled alongside the timers, so an orderly parent
+  # stop leaves no orphans: `Session.cancel/1` is a cast, not a call, so this
+  # never blocks terminate/2 waiting on a child that is itself mid-shutdown.
+  # The disorderly case (a parent that dies without running terminate/2 at
+  # all - a kill, a crash) is covered instead by the child-side parent
+  # monitor from Phase 2 (`monitor_parent/1`'s own comment): the child's own
+  # `:DOWN` on its parent stops it without this session's help.
   @impl GenServer
   def terminate(_reason, state) do
     state.timers
@@ -635,6 +701,10 @@ defmodule Statifier.Session do
         timer_ref -> Process.cancel_timer(timer_ref)
       end
     end)
+
+    state.invocations
+    |> Invocations.entries()
+    |> Enum.each(fn {_invoke_id, %{pid: pid}} -> cancel(pid) end)
 
     :ok
   end
@@ -774,6 +844,31 @@ defmodule Statifier.Session do
     end
 
     state
+  end
+
+  # 6.4.3's cancellation: pop the table entry *before* cancelling the child -
+  # that ordering is what makes the drain-time discard below correct, since
+  # any event this child already delivered is un-keyed the instant the entry
+  # is gone, not only once the child actually halts. `Process.demonitor/2`
+  # with `[:flush]` drops the queued `:DOWN` this session would otherwise see
+  # for a cancel it itself initiated (the child cancelling on its own is a
+  # different, still-monitored, path). `Session.cancel/1` - never
+  # `GenServer.stop/2` - is deliberate: 6.4.3 requires the cancelled session
+  # to run its `<onexit>` handlers for every active state before it exits,
+  # which is `Interpreter.cancel/1`'s own `exit_interpreter/1` walk;
+  # `GenServer.stop/2` would tear the process down with none of them run. A
+  # miss (the invocation already popped by its own `:DOWN`, or a prior
+  # cancel of the same id) is a silent no-op.
+  defp perform_instruction({:stop_child, invoke_id}, state, _override) do
+    case Invocations.pop(state.invocations, invoke_id) do
+      {nil, invocations} ->
+        %{state | invocations: invocations}
+
+      {%{pid: pid, monitor_ref: ref}, invocations} ->
+        Process.demonitor(ref, [:flush])
+        cancel(pid)
+        %{state | invocations: invocations}
+    end
   end
 
   defp perform_instruction({:unroutable, effect}, state, _override) do

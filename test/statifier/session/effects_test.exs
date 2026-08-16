@@ -153,9 +153,7 @@ defmodule Statifier.Session.EffectsTest do
        {:notify,
         {:cancel_invoke,
          %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}},
-       {:unroutable,
-        {:cancel_invoke,
-         %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}}
+       {:stop_child, "i1"}
      ]},
     {{:autoforward,
       %Autoforward{

@@ -62,8 +62,13 @@ defmodule Statifier.Session.Effects do
   silent no-op, not an error (6.4.3's MUST-ignore for a cancelled
   invocation).
 
-  `{:unroutable, effect}` survives for `:cancel_invoke` unconditionally,
-  pending the routing work a later phase adds.
+  `:cancel_invoke` plans `{:stop_child, invoke_id}` unconditionally - no type
+  or target check either, for the same reason `:autoforward` needs none:
+  this is the core's own reaction to a state exiting while one of its
+  `<invoke>`s is still live, not an author-addressed element.
+  `Statifier.Session` pops the table entry, demonitors, and cancels the
+  child (6.4.3); a miss is a silent no-op, the invocation having already
+  been popped by its own `:DOWN` or a prior cancel.
   """
 
   alias Statifier.Effect
@@ -92,6 +97,7 @@ defmodule Statifier.Session.Effects do
           | {:cancel_timers, send_id :: String.t()}
           | {:start_child, Invoke.t(), Effect.t()}
           | {:forward, invoke_id :: String.t(), Event.t()}
+          | {:stop_child, invoke_id :: String.t()}
           | {:unroutable, Effect.t()}
           | {:halt, :done | :budget_exhausted}
 
@@ -124,8 +130,8 @@ defmodule Statifier.Session.Effects do
     [{:notify, effect} | plan_invoke(invoke, effect)]
   end
 
-  defp plan_one({:cancel_invoke, %CancelInvoke{}} = effect, _session_id) do
-    [{:notify, effect}, {:unroutable, effect}]
+  defp plan_one({:cancel_invoke, %CancelInvoke{invoke_id: invoke_id}} = effect, _session_id) do
+    [{:notify, effect}, {:stop_child, invoke_id}]
   end
 
   defp plan_one({:autoforward, %Autoforward{} = af} = effect, _session_id) do
