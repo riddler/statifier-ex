@@ -160,5 +160,68 @@ defmodule Statifier.Validator.Checks.ContentTest do
 
       assert error.location.start_line == 4
     end
+
+    # sabotage: check_content/1 drops the `is_nil(markup)` half of the guard
+    # and keeps only `blank?(text)` -> the markup below carries no direct
+    # text child, so `blank?(text)` reads true and the
+    # {:content_expr_and_text, _} match reddens to {:ok, _}
+    test "a <content> with both expr and markup is reported at the element's own line" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <content expr="payload"><scxml version="1.0"/></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 4
+      assert error.message =~ "expr"
+    end
+
+    # sabotage: check_content/1 drops its `%Content{expr: nil}` head clause,
+    # so every call (nil expr included) falls into the two-arg clause ->
+    # this markup-only, expr-nil <content> now reports
+    # {:content_expr_and_text, nil} and the {:ok, _} match reddens
+    test "a <content> with only markup reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <content><scxml version="1.0"/></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(xml)
+    end
+
+    # sabotage: check_content/1's guard uses `or` instead of `and`
+    # (`if is_nil(markup) or blank?(text)`) -> markup is non-nil but the
+    # whitespace-only text below is blank, so the `or` reads true and the
+    # {:content_expr_and_text, _} match reddens to {:ok, _}
+    test "whitespace around markup with an expr present still reports" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <invoke type="t">
+                  <content expr="payload">
+                      <scxml version="1.0"/>
+                  </content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:content_expr_and_text, "payload"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 4
+    end
   end
 end
