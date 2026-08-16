@@ -121,8 +121,9 @@ numbers, so they are measurements, not metadata. This is the reading the
 Phase 2/3 tests assert.
 
 Configurations carried in metadata are translated from the raw
-`MapSet.t(non_neg_integer())` index set into a list of state id strings via
-`Machine.id/2`, mirroring what `session.ex`'s private `build_status/1`
+`MapSet.t(non_neg_integer())` index set into a `MapSet.t(String.t())` of
+state ids via `Machine.id/2`, mirroring what `session.ex`'s private
+`build_status/1`
 already does for the subscriber-facing status - so a subscriber never needs
 a `Machine` handle to read a configuration out of an event.
 
@@ -198,11 +199,24 @@ Naming that call is not the same as distinguishing what it injects. ADR-0029's
 point is that a consumer of the effect stream cannot tell a core-derived
 effect from one `interpret/2` injected, because `Effects.plan/2` plans both
 to the same `{:notify, effect}` instruction with nothing to discriminate
-them. That stays exactly true here: `[:statifier, :session, :interpret]`
-fires once, naming the call itself, and every effect it injects then flows
-through the ordinary `[:statifier, :session, :effect, kind]` /
-`[:statifier, :session, :trace, kind]` events with no metadata key
-distinguishing an injected effect from a core-derived one. A recorder built
+them. That has no per-event discriminator here either:
+`[:statifier, :session, :interpret]` fires once, naming the call itself, and
+every effect it injects then flows through the ordinary
+`[:statifier, :session, :effect, kind]` / `[:statifier, :session, :trace,
+kind]` events with no metadata key on any one of them distinguishing an
+injected effect from a core-derived one - carrying such a key would mean
+plumbing a discriminator through `Effects.plan/2` that ADR-0029 deliberately
+does not have, which is a change to the core's own contract this record does
+not make.
+
+This is narrower than ADR-0029's indistinguishability claim, not the same
+claim restated: `Statifier.Session` is a `GenServer`, so it is serial, and
+`:telemetry.execute/3` is synchronous, so a subscriber that also counts
+`effect_count` on the `:interpret` event can reconstruct which effects were
+injected by position - the `effect_count` effects immediately following that
+event are exactly the injected ones, in order, with nothing else able to
+interleave. A consumer willing to track that sequence can tell the two apart;
+one reading a single event's metadata in isolation cannot. A recorder built
 on these events still has to record the four ADR-0029 inputs directly - the
 telemetry stream is not a substitute for that recording, and this record
 does not claim it is.
@@ -231,9 +245,9 @@ integer identities. `session_id` is metadata on every event.
 | `[:statifier, :session, :init]` | `system_time` | `session_id`, `machine_name`, `trace`, `invoked_by` |
 | `[:statifier, :session, :halt]` | `macrostep`, `microstep`, `round` | `session_id`, `reason` (`:done \| :cancelled \| :budget_exhausted`), `configuration` (state ids) |
 | `[:statifier, :session, :terminate]` | `macrostep`, `microstep`, `round` | `session_id`, `reason` (the GenServer reason), `status` |
-| `[:statifier, :session, :macrostep, :start]` | `system_time` | `session_id`, `trigger`, `macrostep`, `event_name` |
-| `[:statifier, :session, :macrostep, :stop]` | `duration` (native), `macrostep`, `microsteps`, `rounds` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration` |
-| `[:statifier, :session, :interpret]` | `effect_count` | `session_id`, `macrostep`, `microstep` |
+| `[:statifier, :session, :macrostep, :start]` | `system_time`, `monotonic_time` | `session_id`, `trigger`, `event_name`, `span_ref` |
+| `[:statifier, :session, :macrostep, :stop]` | `duration` (native), `macrostep`, `microsteps`, `rounds`, `monotonic_time` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration`, `span_ref` |
+| `[:statifier, :session, :interpret]` | `effect_count`, `macrostep`, `microstep` | `session_id` |
 | `[:statifier, :session, :unroutable]` | `macrostep`, `microstep` | `session_id`, `effect`, `target`, `send_id`, `location` |
 
 `[:statifier, :session, :unroutable]` is a lifecycle event rather than a
@@ -257,7 +271,11 @@ kill. `:halt` is the event to build a "session finished" metric on.
 - Metadata: `session_id`, `effect` (the struct itself), `location` per the
   resolution rule above, and the family's identities - `send_id`, `target`,
   `c_index`, `owner` for the send family; `invoke_id`, `state_index`,
-  `invoke_index` for the invoke family; `label` for `:log`.
+  `invoke_index` for the invoke family; `label` for `:log`; `configuration`
+  for `:done`, resolved from the `Effect.Done` struct's own `configuration`
+  field (the full configuration as it stood at exit) rather than from
+  `MachineState.configuration`, which is already empty by the time this
+  effect fires.
 
 **Trace effect events (9), emitted only under `trace: true`:**
 
@@ -267,7 +285,10 @@ kill. `:halt` is the event to build a "session finished" metric on.
 - Measurements: `macrostep`, `microstep`, `round`; plus `size` for the
   list-carrying families (`exit_set`, `entry_set`, `transitions_selected`,
   `content_executed`, `invoke_pass`).
-- Metadata: `session_id`, `effect`, the index lists as carried, `location: nil`.
+- Metadata: `session_id`, `effect`, the index lists as carried, `location:
+  nil`; plus `configuration` for `:done`, mirroring the core `:done`
+  effect's own resolution (both are built from the same
+  `configuration_at_exit` binding).
 
 ## Consequences
 
@@ -297,5 +318,12 @@ kill. `:halt` is the event to build a "session finished" metric on.
   interpreter - is the record this ADR implements, not one it amends.
 - What would reopen this record: a second module outside `session.ex` and
   `session/telemetry.ex` needing an `@effect_interpreter_paths` exemption for
-  telemetry-shaped reasons, or an event name changing shape after st-cmq.2
-  has shipped against it. Neither is expected from this bead's own scope.
+  telemetry-shaped reasons, an event name changing shape after st-cmq.2 has
+  shipped against it, or a field being added to, removed from, or renamed on
+  any `Statifier.Effect.*`/`Statifier.Effect.Trace.*` struct. The raw struct
+  rides verbatim in every core/trace event's `effect` metadata key, so a
+  struct's fields are part of this contract by transitivity even though no
+  table above names them individually - the same st-cmq.2 breaking-change
+  argument applies to a field a subscriber was reading off `effect` as to a
+  metadata key this record does name directly. None of this is expected from
+  this bead's own scope.

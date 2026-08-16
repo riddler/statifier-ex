@@ -13,6 +13,42 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-16 - st-cmq.1
+
+Approved-by: JohnnyT (in session)
+
+- lib/mix/statifier/adr_guard.ex: adds `:telemetry\.` to
+  `@effect_call_pattern`, so a `:telemetry` call added anywhere under
+  `lib/statifier/` other than the ADR-0003 effect-interpreter paths is a
+  named ADR-0003 finding
+- lib/mix/statifier/adr_guard.ex: adds `lib/statifier/session/telemetry.ex`
+  to `@effect_interpreter_paths`, the module that holds the
+  `:telemetry.execute/3` call sites `session.ex` delegates to
+
+Reason: st-cmq.1 makes `Statifier.Session` forward its effect and trace
+stream as `:telemetry` events, and the bead's own acceptance criterion asks
+for "no `:telemetry` call sites anywhere in the pure core (enforced by a test
+or credo check if cheap)". The two halves go together: the pattern is what
+makes the check exist, and the exempt path is where the check's one legitimate
+exception lives. `Statifier.Session.Telemetry` is not a second effect
+interpreter - it is the emission half of the one ADR-0003 names, split out of
+`session.ex` only because `.doctor.exs`'s 100% bar puts the event contract in
+a `@moduledoc`. It holds no state, drives no core function, and is called from
+nowhere but `session.ex`. On net the check tightens: every other file under
+`lib/statifier/` gains a new named finding. It loosens nothing, skips no test,
+and lowers no threshold. `mix gate.check` does not guard
+`lib/mix/statifier/adr_guard.ex`, so the gate would have gone green without
+this entry - the block is policy, per ADR-0027, and this record is what keeps
+the guard's own comment true rather than routed around.
+
+This is the second new `@effect_interpreter_paths` entry since ADR-0027 called
+a second one "a smell to be argued, not defaulted", so the argument is here
+rather than assumed: `telemetry.ex` is not a new interpreter joining
+`session.ex` and `supervisor.ex`, it is a file split out of `session.ex`
+under documentation pressure. The check ADR-0027 wanted - that the exemption
+list names design statements rather than accumulating convenience - is met by
+that being true, not by the count staying at two.
+
 ## 2026-08-15 - st-cmq.5
 
 Approved-by: JohnnyT (in session)

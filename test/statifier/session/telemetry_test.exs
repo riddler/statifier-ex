@@ -94,6 +94,25 @@ defmodule Statifier.Session.TelemetryTest do
     """
   end
 
+  # A `#_internal` send fired from `<onentry>` self-delivers through
+  # ADR-0039 re-entry (`Interpreter.deliver_internal/5`), opening a nested
+  # `trigger: :internal` macrostep span inside the enclosing span - the
+  # `:initialize` span here, since the send fires on entry to the initial
+  # state. Mirrors `internal_send_doc/1` in `test/statifier/session_test.exs`.
+  defp internal_send_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <send event="e" target="#_internal"/>
+            </onentry>
+            <transition event="e" target="b"/>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+  end
+
   defp wait_for_status(session, pred, attempts \\ 50)
 
   defp wait_for_status(_session, _pred, 0), do: flunk("status/1 never satisfied the predicate")
@@ -297,32 +316,36 @@ defmodule Statifier.Session.TelemetryTest do
     end
   end
 
-  describe "macrostep_start/4 and macrostep_stop/6" do
+  describe "macrostep_start/4 and macrostep_stop/7" do
     # sabotage: `macrostep_start/4` hardcodes `trigger: :event` instead of
     # the given `trigger` -> red, `metadata.trigger == :cancel` fails -
     # reverted and confirmed green.
-    test "start emits the trigger, macrostep and event name", %{ref: ref} do
-      machine = located_machine()
-      {machine_state, _effects} = Statifier.initialize(machine)
+    test "start emits the trigger, event name, and span_ref - but no macrostep counter", %{
+      ref: ref
+    } do
       event = Event.external("go")
+      span_ref = make_ref()
 
-      assert :ok = Telemetry.macrostep_start("sess1", :cancel, machine_state, event)
+      assert :ok = Telemetry.macrostep_start("sess1", :cancel, event, span_ref)
 
       assert_received {[:statifier, :session, :macrostep, :start], ^ref, measurements, metadata}
       assert is_integer(measurements.system_time)
+      assert is_integer(measurements.monotonic_time)
       assert metadata.trigger == :cancel
-      assert metadata.macrostep == machine_state.macrostep
       assert metadata.event_name == "go"
+      assert metadata.span_ref == span_ref
+      refute Map.has_key?(metadata, :macrostep)
     end
 
-    # sabotage: `macrostep_stop/6` computes `duration` as `start_time -
+    # sabotage: `macrostep_stop/7` computes `duration` as `start_time -
     # System.monotonic_time()` (operands swapped) -> red, `duration > 0`
     # fails since a real elapsed span is negated - reverted and confirmed
     # green.
-    test "stop emits a positive duration and the outcome", %{ref: ref} do
+    test "stop emits a positive duration, the outcome, and the same span_ref", %{ref: ref} do
       machine = located_machine()
       {machine_state, _effects} = Statifier.initialize(machine)
       start_time = System.monotonic_time() - 1_000_000
+      span_ref = make_ref()
 
       assert :ok =
                Telemetry.macrostep_stop(
@@ -331,7 +354,8 @@ defmodule Statifier.Session.TelemetryTest do
                  machine_state,
                  nil,
                  :quiescent,
-                 start_time
+                 start_time,
+                 span_ref
                )
 
       assert_received {[:statifier, :session, :macrostep, :stop], ^ref, measurements, metadata}
@@ -339,15 +363,17 @@ defmodule Statifier.Session.TelemetryTest do
       assert measurements.macrostep == machine_state.macrostep
       assert measurements.microsteps == machine_state.microstep
       assert measurements.rounds == machine_state.round
+      assert is_integer(measurements.monotonic_time)
       assert metadata.outcome == :quiescent
       assert metadata.event_name == nil
+      assert metadata.span_ref == span_ref
     end
   end
 
   describe "interpret/3" do
     # sabotage: `interpret/3` emits `effect_count: 0` unconditionally -> red,
     # `measurements.effect_count == 3` fails - reverted and confirmed green.
-    test "emits the injected effect count", %{ref: ref} do
+    test "emits the injected effect count and step counters as measurements", %{ref: ref} do
       machine = located_machine()
       {machine_state, _effects} = Statifier.initialize(machine)
 
@@ -355,8 +381,9 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert_received {[:statifier, :session, :interpret], ^ref, measurements, metadata}
       assert measurements.effect_count == 3
-      assert metadata.macrostep == machine_state.macrostep
-      assert metadata.microstep == machine_state.microstep
+      assert measurements.macrostep == machine_state.macrostep
+      assert measurements.microstep == machine_state.microstep
+      assert metadata == %{session_id: "sess1"}
     end
   end
 
@@ -430,6 +457,22 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert measurements.round == 12
     end
+
+    # sabotage: `core_shape/2`'s `Done` clause drops `configuration` from its
+    # metadata map -> red, `metadata.configuration` no longer exists and the
+    # `KeyError` fails the assertion below - reverted and confirmed green.
+    test "resolves :done's own configuration field to state ids (Fix 4)", %{ref: ref} do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+      {:ok, b_index} = Machine.index(machine, "b")
+
+      payload = %Done{configuration: MapSet.new([a_index, b_index]), macrostep: 1, microstep: 2}
+
+      Telemetry.effect("sess1", machine, {:done, payload})
+
+      assert_received {[:statifier, :session, :effect, :done], ^ref, _measurements, metadata}
+      assert metadata.configuration == MapSet.new(["a", "b"])
+    end
   end
 
   describe "effect/3 on the nine trace kinds" do
@@ -445,6 +488,29 @@ defmodule Statifier.Session.TelemetryTest do
         assert :ok = Telemetry.effect("sess1", machine, effect)
         assert_received {[:statifier, :session, :trace, ^kind], ^ref, _measurements, _metadata}
       end
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.Done` clause drops `configuration`
+    # from its metadata map -> red, `metadata.configuration` no longer
+    # exists and the `KeyError` fails the assertion below - reverted and
+    # confirmed green.
+    test "trace, :done also resolves its own configuration field to state ids (Fix 4)", %{
+      ref: ref
+    } do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+
+      payload = %Trace.Done{
+        configuration: MapSet.new([a_index]),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Telemetry.effect("sess1", machine, {:trace, payload})
+
+      assert_received {[:statifier, :session, :trace, :done], ^ref, _measurements, metadata}
+      assert metadata.configuration == MapSet.new(["a"])
     end
   end
 
@@ -572,7 +638,8 @@ defmodule Statifier.Session.TelemetryTest do
       Telemetry.init("sess1", machine, machine_state, nil)
       Telemetry.halt("sess1", :done, machine_state)
       Telemetry.terminate("sess1", :normal, :done, machine_state)
-      Telemetry.macrostep_start("sess1", :event, machine_state, Event.external("go"))
+      span_ref = make_ref()
+      Telemetry.macrostep_start("sess1", :event, Event.external("go"), span_ref)
 
       Telemetry.macrostep_stop(
         "sess1",
@@ -580,7 +647,8 @@ defmodule Statifier.Session.TelemetryTest do
         machine_state,
         nil,
         :quiescent,
-        System.monotonic_time()
+        System.monotonic_time(),
+        span_ref
       )
 
       Telemetry.interpret("sess1", 2, machine_state)
@@ -830,6 +898,145 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert_receive {[:statifier, :session, :effect, :send], ^ref, _measurements, metadata}
       assert %Statifier.Parser.Location{} = metadata.location
+    end
+  end
+
+  # -- Fix 1: the start half never carries a counter it can disagree with --
+
+  describe "macrostep_start/macrostep_stop pairing across all four triggers" do
+    # sabotage: `macrostep_start/4`'s metadata map is given back
+    # `macrostep: machine_state.macrostep` (the pre-fix shape) -> red, the
+    # `refute Map.has_key?(..., :macrostep)` assertion below fails on the
+    # `:event` trigger, whose start half - unlike `:initialize`'s - is
+    # emitted before `MachineState.begin_macrostep/1` runs inside
+    # `Interpreter.handle_event/2`, so the pre-fix value would have silently
+    # disagreed with the stop half's post-increment one - reverted and
+    # confirmed green.
+    test "start never carries macrostep; stop's macrostep is always the authoritative value", %{
+      ref: ref
+    } do
+      # :initialize - begin_macrostep/1 already ran before this span opens,
+      # so its counter happens to agree even pre-fix; still asserted here so
+      # a future regression on this trigger is caught too.
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :initialize} = init_start}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, init_stop_measurements,
+                      %{trigger: :initialize}}
+
+      refute Map.has_key?(init_start, :macrostep)
+      assert init_stop_measurements.macrostep == 1
+
+      # :event - the counter this span opens against advances *inside* the
+      # core call it brackets (Interpreter.handle_event/2), the exact case
+      # Fix 1 exists for.
+      Session.send_event(session, "go")
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :event} = event_start}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, event_stop_measurements,
+                      %{trigger: :event}}
+
+      refute Map.has_key?(event_start, :macrostep)
+      assert event_stop_measurements.macrostep == 2
+
+      # :cancel - Interpreter.cancel/1 never calls begin_macrostep/1, so the
+      # counter does not move, but the start half still carries none of it.
+      machine2 = compile!(two_state_doc())
+      {:ok, session2} = Session.start_link(machine2)
+      drain(ref)
+
+      Session.cancel(session2)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :cancel} = cancel_start}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, cancel_stop_measurements,
+                      %{trigger: :cancel}}
+
+      refute Map.has_key?(cancel_start, :macrostep)
+      assert cancel_stop_measurements.macrostep == 1
+
+      # :internal - ADR-0039 re-entry; Interpreter.deliver_internal/5 also
+      # never calls begin_macrostep/1.
+      machine3 = compile!(internal_send_doc())
+      {:ok, _session3} = Session.start_link(machine3)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :initialize}}
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :internal} = internal_start}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, internal_stop_measurements,
+                      %{trigger: :internal}}
+
+      refute Map.has_key?(internal_start, :macrostep)
+      assert internal_stop_measurements.macrostep == 1
+    end
+  end
+
+  # -- Fix 2: span_ref pairs a span's halves and distinguishes nesting -----
+
+  describe "span_ref correlation" do
+    # sabotage: `in_macrostep/4` hoists `span_ref = make_ref()` out to a
+    # module attribute computed once at compile time instead of calling
+    # `make_ref/0` per invocation -> red, the nested `:internal` span's
+    # `span_ref` equals the enclosing `:initialize` span's and the
+    # `refute inner_ref == outer_ref` assertion below fails - reverted and
+    # confirmed green.
+    test "a nested :internal span carries a different span_ref than the :initialize span enclosing it",
+         %{ref: ref} do
+      machine = compile!(internal_send_doc())
+      {:ok, _session} = Session.start_link(machine)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :initialize, span_ref: outer_start_ref}}
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _m,
+                      %{trigger: :internal, span_ref: inner_ref}}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _m,
+                      %{trigger: :internal, span_ref: ^inner_ref}}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _m,
+                      %{trigger: :initialize, span_ref: outer_stop_ref}}
+
+      assert outer_stop_ref == outer_start_ref
+      refute inner_ref == outer_start_ref
+    end
+  end
+
+  # -- Fix 4: the terminal configuration is resolvable without a Machine ---
+
+  describe "the terminal :done events resolve their own configuration" do
+    # sabotage: `core_shape/2`'s `Done` clause is reverted to carry no
+    # `configuration` key -> red, `metadata.configuration` no longer exists
+    # on `[:statifier, :session, :effect, :done]` and the assertion below
+    # raises a `KeyError` instead of matching - reverted and confirmed
+    # green.
+    test "effect, :done and trace, :done carry the reached final state's id, unlike halt's empty one",
+         %{ref: ref} do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, trace: true)
+
+      Session.send_event(session, "finish")
+
+      assert_receive {[:statifier, :session, :effect, :done], ^ref, _m, done_metadata}
+      assert done_metadata.configuration == MapSet.new(["fin"])
+
+      assert_receive {[:statifier, :session, :trace, :done], ^ref, _m, trace_done_metadata}
+      assert trace_done_metadata.configuration == MapSet.new(["fin"])
+
+      # `MachineState.configuration` is already empty by the time `:halt`
+      # fires (the chart exited every state to reach the final one) - the
+      # contrast this fix exists to resolve around.
+      assert_receive {[:statifier, :session, :halt], ^ref, _m, halt_metadata}
+      assert halt_metadata.configuration == MapSet.new([])
     end
   end
 end
