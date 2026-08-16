@@ -1056,10 +1056,11 @@ defmodule Statifier.Session do
   # other `{:session, sid}` resolves through `Statifier.Registry`
   # (`registry_lookup/1`): a hit casts onto that session's inbox, an empty
   # lookup takes C.1's mandated `error.communication` path via
-  # `communication_error/4`. `:parent` and `{:invoke, _}` are still
-  # unresolvable in this phase - there is no invocation table yet - so each
-  # takes the same `communication_error/4` path, which a later bead changes
-  # without touching this clause.
+  # `communication_error/4`. `:parent` resolves through `state.invoked_by`
+  # below; `{:invoke, invokeid}` resolves through `state.invocations`
+  # instead of the registry - the parent-held table is this session's own
+  # handle on each child it created by `<invoke>`, so no registry lookup is
+  # needed to reach one.
   @spec deliver(
           route :: Target.route(),
           event :: Event.t(),
@@ -1119,8 +1120,25 @@ defmodule Statifier.Session do
     communication_error(event, effect, state, override)
   end
 
-  defp deliver({:invoke, _invokeid}, event, effect, state, override) do
-    communication_error(event, effect, state, override)
+  # C.1's `#_invokeid` route: `invokeid` names a session the sending session
+  # itself created by `<invoke>`, so `state.invocations` (this session's own
+  # parent-held table, `Statifier.Session.Invocations`) is resolved rather
+  # than the registry - a live entry's `pid` gets the event cast onto its
+  # external queue via `send_event/2`, the same mechanism `{:session, sid}`
+  # above uses once it has a pid in hand. A miss - the invokeid names no
+  # live invocation, whether because it was never one or because the
+  # invocation has since been cancelled or exited - is C.1's "does not exist
+  # or is inaccessible" and takes the same `communication_error/4` path as
+  # any other unreachable route.
+  defp deliver({:invoke, invoke_id}, event, effect, state, override) do
+    case Invocations.fetch(state.invocations, invoke_id) do
+      {:ok, %{pid: pid}} ->
+        send_event(pid, event)
+        state
+
+      :error ->
+        communication_error(event, effect, state, override)
+    end
   end
 
   # A delayed send's route is resolved only once the timer actually fires
