@@ -3,10 +3,10 @@ defmodule Statifier.SupervisorTest do
 
   # `Statifier.Registry` and `Statifier.SessionSupervisor` are fixed,
   # module-qualified names (ADR-0027's "one instance, no `:name` option"),
-  # so two of these tests running at once would collide starting
-  # `Statifier.Supervisor` under the same name. `async: false` serializes
-  # this module's tests against each other and against every other module
-  # that places the same supervisor.
+  # so this module inspects the one runtime `test/test_helper.exs` places for
+  # the whole run rather than starting its own. `async: false` keeps its
+  # tests from tripping over each other on the assumption that no other
+  # process crashes the shared runtime out from under them mid-run.
 
   describe "init/1" do
     # sabotage: `init/1`'s `Supervisor.init(children, strategy: :rest_for_one)`
@@ -29,8 +29,6 @@ defmodule Statifier.SupervisorTest do
     # `Process.whereis(Statifier.SessionSupervisor)` comes back `nil`,
     # reddening the second assertion below. Reverted and confirmed green.
     test "starts Statifier.Registry and Statifier.SessionSupervisor as named children" do
-      start_supervised!(Statifier.Supervisor)
-
       assert is_pid(Process.whereis(Statifier.Registry))
       assert is_pid(Process.whereis(Statifier.SessionSupervisor))
     end

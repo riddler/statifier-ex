@@ -3,10 +3,12 @@ defmodule Statifier.Session.InvokeStartChildTest do
 
   # `Statifier.start_session/2` (via `perform_instruction({:start_child, ...})`)
   # lands children on `Statifier.SessionSupervisor`, a fixed, module-qualified
-  # singleton (`test/statifier/session_runtime_test.exs`'s own comment). Every
-  # test in this module either places `Statifier.Supervisor` itself or
-  # specifically needs it *not* running yet, so this module is `async: false`
-  # the same way that one is.
+  # singleton `test/test_helper.exs` places once for the whole run
+  # (`test/statifier/session_runtime_test.exs`'s own comment explains why
+  # cycling one of its children down for a single test is safe under
+  # `async: false`). One test below does exactly that to reach the "no
+  # runtime placed" branch, so this module is `async: false` the same way
+  # that one is.
 
   alias Statifier.Compiler
   alias Statifier.Effect
@@ -88,8 +90,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # `Invocations.count/1` below stays 0 and the assertion reddens. Reverted
     # and confirmed green.
     test "starts a real child session, monitored, with one table entry" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc(content_body(), invoke_attrs: " autoforward=\"true\""))
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)
@@ -117,8 +117,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # the non-matching "nomatch" survives, reddening both assertions below at
     # once (`assert` on "x" fails first). Reverted and confirmed green.
     test "a matching <param> wins over the child's own expr; a non-matching one is absent" do
-      start_supervised!(Statifier.Supervisor)
-
       invoke_body = """
       <param name="x" expr="'from-parent'"/>
       <param name="nomatch" expr="1"/>
@@ -153,8 +151,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # is already sabotage-verified by the `<param>` test and by
     # `invocations_test.exs`.
     test "a namelist variable matching a top-level <data> id is seeded" do
-      start_supervised!(Statifier.Supervisor)
-
       parent_xml =
         parent_doc(content_body(),
           invoke_attrs: " namelist=\"from_namelist\"",
@@ -192,14 +188,26 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # stays on "a" instead of reaching "failed", reddening the wait below.
     # Reverted and confirmed green.
     test "no Statifier.Supervisor placed raises error.communication and writes no table entry" do
-      machine = compile!(parent_doc(content_body()))
-      {:ok, parent} = Session.start_link(machine)
+      # `Statifier.SessionSupervisor` is the shared, module-qualified runtime
+      # `test/test_helper.exs` places once for the whole run, so this cycles
+      # it down for the span this one test needs it unplaced - safe under
+      # `async: false` for the reason `session_runtime_test.exs`'s own
+      # comment gives. Restoring it in `after` keeps a failed assertion from
+      # leaving the shared runtime down for the rest of the suite.
+      :ok = Supervisor.terminate_child(Statifier.Supervisor, Statifier.SessionSupervisor)
 
-      status = wait_for_status(parent, fn s -> s.configuration == MapSet.new(["failed"]) end)
-      assert status.configuration == MapSet.new(["failed"])
+      try do
+        machine = compile!(parent_doc(content_body()))
+        {:ok, parent} = Session.start_link(machine)
 
-      %{invocations: invocations} = :sys.get_state(parent)
-      assert Invocations.count(invocations) == 0
+        status = wait_for_status(parent, fn s -> s.configuration == MapSet.new(["failed"]) end)
+        assert status.configuration == MapSet.new(["failed"])
+
+        %{invocations: invocations} = :sys.get_state(parent)
+        assert Invocations.count(invocations) == 0
+      after
+        {:ok, _pid} = Supervisor.restart_child(Statifier.Supervisor, Statifier.SessionSupervisor)
+      end
     end
 
     # sabotage: `Statifier.Session`'s `perform_instruction({:start_child,
@@ -210,8 +218,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # below the same way as its sibling test above. Reverted and confirmed
     # green.
     test "a non-compiling <content> binary raises error.communication and writes no table entry" do
-      start_supervised!(Statifier.Supervisor)
-
       invoke_body = "<content><![CDATA[<not-scxml/>]]></content>"
       machine = compile!(parent_doc(invoke_body))
       {:ok, parent} = Session.start_link(machine)
@@ -227,8 +233,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # exercised here through `Statifier.Invoke.Source`'s own `:src_not_resolved`
     # branch instead of a compile failure - reddens the same way.
     test "a src with no configured resolver raises error.communication and writes no table entry" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc("", invoke_attrs: " src=\"file:child.scxml\""))
       {:ok, parent} = Session.start_link(machine)
 
@@ -244,8 +248,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # unchanged (`Statifier.Invoke.Source.resolve/2`'s own pass-through
     # clause) - reddens the same way.
     test "a resolver returning {:error, _} raises error.communication and writes no table entry" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc("", invoke_attrs: " src=\"file:child.scxml\""))
       resolver = fn _src -> {:error, :nope} end
       {:ok, parent} = Session.start_link(machine, invoke_source: resolver)
@@ -268,8 +270,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # past the poll's attempts below, flunking `wait_until/2`. Reverted and
     # confirmed green.
     test "killing a parent stops its child" do
-      start_supervised!(Statifier.Supervisor)
-
       # `Session.start_link/2` links the calling process (this test) to the
       # session it starts, same as any `start_link`. A non-`:normal` exit
       # reason on a linked process propagates and would crash this test
@@ -302,8 +302,6 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # forever instead of reaching 0, flunking `wait_until/2`. Reverted and
     # confirmed green.
     test "killing a child removes its entry from the parent's table" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc(content_body()))
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)

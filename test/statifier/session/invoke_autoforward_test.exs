@@ -82,8 +82,6 @@ defmodule Statifier.Session.InvokeAutoforwardTest do
   # `{:notify, {:invoke, _}}` instructions arrive in *some* order matching
   # the core's own `states_to_invoke` walk, not which one is which.
   defp start_parent_with_two_invocations! do
-    start_supervised!(Statifier.Supervisor)
-
     machine = compile!(parent_xml())
     {:ok, parent} = Session.start_link(machine, subscribers: [self()])
     session_id = Session.session_id(parent)
@@ -165,8 +163,6 @@ defmodule Statifier.Session.InvokeAutoforwardTest do
     # out, because it silently discarded the forwarded copy. Reverted and
     # confirmed green.
     test "is forwarded to an autoforwarding sibling, not discarded as a foreign invokeid" do
-      start_supervised!(Statifier.Supervisor)
-
       pinger_xml =
         ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="go" version="1.0" datamodel="predicator"><state id="go"><onentry><send target="#_parent" event="e"/></onentry></state></scxml>)
 

@@ -3,13 +3,15 @@ defmodule Statifier.SessionRuntimeTest do
 
   # `Statifier.start_session/2` lands sessions on `Statifier.SessionSupervisor`
   # under `Statifier.Supervisor`, a fixed, module-qualified singleton
-  # (ADR-0027's "one instance, no `:name` option"). Two of these tests
-  # running at once would collide starting it, so `async: false` serializes
-  # this module against itself and against every other module that places
-  # the same supervisor. Each test starts `Statifier.Supervisor` itself,
-  # at whatever point in the test its own scenario needs it, rather than a
-  # blanket `setup` - the "stays unregistered" test below specifically needs
-  # it *not* running yet when its bare session starts.
+  # (ADR-0027's "one instance, no `:name` option") that `test/test_helper.exs`
+  # places once for the whole run. `async: false` here is what makes it safe
+  # for the "stays unregistered" test below to reach into that shared runtime
+  # and manually cycle `Statifier.Registry` for the span its own scenario
+  # needs it down - by the time any `async: false` module runs, every
+  # `async: true` module has already finished (`ExUnit.Runner`'s own
+  # async-then-sync scheduling), and `async: false` modules never overlap
+  # each other either, so no concurrently running session can observe the
+  # registry mid-cycle.
 
   alias Statifier.Compiler
   alias Statifier.Lowering
@@ -97,8 +99,6 @@ defmodule Statifier.SessionRuntimeTest do
     # _sender} =` match in this test flunks with a `MatchError` before the
     # receiver is ever checked. Reverted and confirmed green.
     test "a send to another registered session's id is delivered there" do
-      start_supervised!(Statifier.Supervisor)
-
       {:ok, receiver} =
         Statifier.start_session(compile!(receiver_doc()), session_id: "sess_b-runtime-test")
 
@@ -124,8 +124,6 @@ defmodule Statifier.SessionRuntimeTest do
     # rather than reaching `"failed"`, reddening the assertion below.
     # Reverted and confirmed green.
     test "a send to an id that never existed raises error.communication" do
-      start_supervised!(Statifier.Supervisor)
-
       {:ok, sender} =
         Statifier.start_session(compile!(sender_doc("#_scxml_totally-unknown-session")),
           session_id: "sess_a-unknown-test"
@@ -148,8 +146,6 @@ defmodule Statifier.SessionRuntimeTest do
     # registry hit would hang here rather than fail), and that the lookup
     # never crashes on one.
     test "a send to a session that has since died raises error.communication, not a crash" do
-      start_supervised!(Statifier.Supervisor)
-
       {:ok, receiver} =
         Statifier.start_session(compile!(receiver_doc()), session_id: "sess_b-dead-test")
 
@@ -175,19 +171,30 @@ defmodule Statifier.SessionRuntimeTest do
   describe "a bare Session.start_link/2 session stays unregistered" do
     # sabotage: `register_session/1`'s `rescue _ -> :ok` / `catch :exit, _ ->
     # :ok` clauses are deleted, leaving a bare `Registry.register/3` call ->
-    # this bare session's own `start_link/2` call below (issued before
-    # `Statifier.Supervisor` exists, so `Statifier.Registry` is not running
-    # yet) crashes instead of starting, and the `{:ok, _bare_receiver} =`
-    # match on the very next line flunks with a `MatchError` before the rest
-    # of the test can even run. Reverted and confirmed green - this is also
-    # the sabotage that would redden every *other* bare-`start_link/2` test
-    # in `session_test.exs`, since none of them place `Statifier.Supervisor`
+    # the bare session's own `start_link/2` call below (issued while
+    # `Statifier.Registry` is cycled down, so it is not running yet) crashes
+    # instead of starting, and the `{:ok, _bare_receiver} =` match on the
+    # very next line flunks with a `MatchError` before the rest of the test
+    # can even run. Reverted and confirmed green - this is also the sabotage
+    # that would redden every *other* bare-`start_link/2` test in
+    # `session_test.exs`, since none of them place `Statifier.Supervisor`
     # either.
     test "a session that started before the registry existed stays unreachable even after the registry later starts" do
-      {:ok, _bare_receiver} =
-        Session.start_link(compile!(receiver_doc()), session_id: "sess_bare-test")
+      # `Statifier.Registry` is the shared, module-qualified runtime
+      # `test/test_helper.exs` places once for the whole run - there is no
+      # "before `Statifier.Supervisor` exists" moment left to catch a bare
+      # session in anymore, so this cycles the registry child down for the
+      # span the bare session starts in and back up before anything else
+      # needs it. Restoring it in `after` keeps a failed assertion from
+      # leaving the shared runtime down for the rest of the suite.
+      :ok = Supervisor.terminate_child(Statifier.Supervisor, Statifier.Registry)
 
-      start_supervised!(Statifier.Supervisor)
+      try do
+        {:ok, _bare_receiver} =
+          Session.start_link(compile!(receiver_doc()), session_id: "sess_bare-test")
+      after
+        {:ok, _pid} = Supervisor.restart_child(Statifier.Supervisor, Statifier.Registry)
+      end
 
       {:ok, sender} =
         Statifier.start_session(compile!(sender_doc("#_scxml_sess_bare-test")),

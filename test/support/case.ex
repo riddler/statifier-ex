@@ -41,10 +41,21 @@ defmodule Statifier.Case do
 
   Documents using features v2 does not support flunk with the feature named
   (`Statifier.FeatureDetector`) - they never skip, so an unimplemented feature
-  can never masquerade as a passing test. Since the registry currently marks
-  everything `:unsupported`, that is where essentially every corpus test stops.
-  Both suites are excluded by default (`:scion`, `:scxml_w3`), so `mix test`
-  stays green while the ratchet starts at zero.
+  can never masquerade as a passing test. Both suites are excluded by default
+  (`:scion`, `:scxml_w3`), so `mix test` stays green while `test.regression`'s
+  ratchet is the thing that grows.
+
+  ## Two driving paths, one four-function contract
+
+  `test_scxml/4` routes each document, on the same detected feature set, to
+  one of two private paths. Documents that need real delivery, wall-clock
+  timers, or child sessions (`@session_features` below) drive through a
+  `Statifier.Session`; every other document drives synchronously through the
+  four functions this moduledoc opens with. The session path replaces two of
+  the four - `initialize` becomes `Statifier.start_session/2`, `send_event`
+  becomes `Statifier.Session.send_event/2` - while `Statifier.compile/1` and
+  `Statifier.active_leaf_states/1` stay exactly as they were. Either way the
+  corpus still cannot widen the library surface beyond those calls (ADR-0006).
 
   v1's `StateMachine` and logging helpers are deliberately not ported: the
   subsystems they drove do not exist in v2, and reintroducing them here would
@@ -55,12 +66,47 @@ defmodule Statifier.Case do
 
   alias Statifier.FeatureDetector
   alias Statifier.MachineState
+  alias Statifier.Session
 
   using do
     quote do
       import unquote(__MODULE__)
     end
   end
+
+  # These ten atoms are exactly the ones whose semantics need a running
+  # session: delivery to an external queue, wall-clock timers, and child
+  # sessions. Every other document reaches the same configuration through
+  # the four-function synchronous path, which stays the default - the files
+  # already in the ratchet detect none of these and keep driving exactly as
+  # before.
+  @session_features [
+    :send_elements,
+    :send_content_elements,
+    :send_param_elements,
+    :send_delay_expressions,
+    :send_idlocation,
+    :event_expressions,
+    :target_expressions,
+    :cancel_elements,
+    :invoke_elements,
+    :finalize_elements
+  ]
+
+  # The corpus's delay values fall into two populations: load-bearing
+  # intermediate delays (1ms, 2ms, 10ms) that a later assertion depends on
+  # having fired, and guard sends (`<send event="timeout" delay="5s"/>`) that a
+  # passing run must never let fire. 100ms separates them cleanly, so waiting
+  # out a pending timer before the *next* event drains the first population and
+  # never the second. Costs nothing when no timer is pending, which is most of
+  # the corpus.
+  @settle_window_ms 100
+
+  # The longest load-bearing delay in the corpus is 1.5s
+  # (mandatory/cancel/test208). 4s clears it with margin. This bounds only the
+  # wrong answer: a chart that cannot change again exits the poll immediately.
+  @configuration_deadline_ms 4_000
+  @poll_interval_ms 5
 
   @doc """
   Tests SCXML state chart behavior.
@@ -81,8 +127,28 @@ defmodule Statifier.Case do
           events :: [{map(), [String.t()]}]
         ) :: :ok
   def test_scxml(xml, description, expected_initial_config, events) do
-    validate_features!(xml, description)
+    detected = validate_features!(xml, description)
 
+    if session_required?(detected) do
+      drive_through_session(xml, expected_initial_config, events)
+    else
+      drive_synchronously(xml, expected_initial_config, events)
+    end
+  end
+
+  @doc """
+  Whether a document needs the session layer to reach its expected
+  configurations. Public so the routing decision can be asserted directly;
+  `test_scxml/4` is the only caller in the corpus.
+  """
+  @spec session_required?(xml_or_detected :: String.t() | MapSet.t(atom())) :: boolean()
+  def session_required?(xml) when is_binary(xml),
+    do: xml |> FeatureDetector.detect_features() |> session_required?()
+
+  def session_required?(%MapSet{} = detected),
+    do: Enum.any?(@session_features, &MapSet.member?(detected, &1))
+
+  defp drive_synchronously(xml, expected_initial_config, events) do
     {state_chart, effects} = xml |> parse_document() |> initialize()
 
     assert_configuration(state_chart, effects, expected_initial_config)
@@ -97,12 +163,142 @@ defmodule Statifier.Case do
     :ok
   end
 
+  # A corpus document that needs a session needs the *registered* runtime:
+  # `<invoke>` starts children through `Statifier.start_session/2` and
+  # `#_scxml_<sessionid>` targets resolve through `Statifier.Registry`.
+  # Sessions started this way are unlinked and `restart: :temporary`, so the
+  # harness stops each one itself - which is also what cancels any guard timer
+  # still pending when the test ends (`terminate/2`, spec 6.2's
+  # discard-on-termination).
+  defp drive_through_session(xml, expected_initial_config, events) do
+    machine = parse_document(xml)
+    {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
+
+    try do
+      assert_configuration_eventually(session, expected_initial_config)
+
+      Enum.each(events, fn {%{"name" => name}, expected_states} ->
+        settle_short_timers(session)
+        :ok = Session.send_event(session, name)
+        assert_configuration_eventually(session, expected_states)
+      end)
+    after
+      Session.stop(session)
+    end
+
+    :ok
+  end
+
+  # Polls `Session.status/1` for the counters and `Session.snapshot/1` for the
+  # `%MachineState{}` the leaf read needs, draining any
+  # `{:statifier, _sid, {:effect, {:done, done}}}` message from the mailbox so
+  # a terminated chart's configuration is restored by the same
+  # `observed_state_chart/2` the synchronous path uses. Stops on the first of:
+  # the observed leaf set equalling the expectation; the session being unable
+  # to change again (`status != :running`, or `queued_events == 0 and
+  # pending_timers == 0` on two consecutive polls - `poll_until_settled/4`'s
+  # own comment explains the debounce); or the deadline. Then performs the
+  # ordinary `assert_every_leaf_named/2` plus set-equality assertion, so a
+  # failure message is identical in shape to the synchronous path's.
+  defp assert_configuration_eventually(session, expected_state_ids) do
+    expected = MapSet.new(expected_state_ids)
+    deadline = System.monotonic_time(:millisecond) + @configuration_deadline_ms
+
+    observed = poll_until_settled(session, expected, deadline)
+    actual = active_leaf_states(observed)
+
+    assert_every_leaf_named(observed, actual)
+
+    assert expected == actual,
+           "Expected active states #{inspect(Enum.sort(expected))}, but got #{inspect(Enum.sort(actual))}"
+  end
+
+  defp poll_until_settled(session, expected, deadline),
+    do: poll_until_settled(session, expected, deadline, false)
+
+  # `was_stable?` debounces the "cannot change again" exit by one poll
+  # interval, for two distinct reasons folded into one flag:
+  #
+  # - An invoked child's own reply (`<send target="#_parent">`) lands on
+  #   this session's queue through a separate process's cast, which can
+  #   arrive a hair after the parent's own `queued_events == 0 and
+  #   pending_timers == 0` moment - the parent has nothing outstanding *of
+  #   its own* at that instant, but is not yet done changing.
+  # - `drain_done_effect/1` and `Session.status/1` are two separate calls;
+  #   a session that halts *between* them has already answered `:done` by
+  #   the second call while the terminal `{:done, _}` broadcast this
+  #   process's mailbox is racing to deliver has not yet arrived, so
+  #   trusting `status != :running` on that exact poll would restore
+  #   nothing and observe the post-exit empty configuration instead.
+  #
+  # Requiring the same stable reading twice in a row, one
+  # `@poll_interval_ms` apart, gives either race a full interval to resolve
+  # before this loop trusts it and stops early.
+  defp poll_until_settled(session, expected, deadline, was_stable?) do
+    done_effect = drain_done_effect(session)
+    observed = observed_state_chart(Session.snapshot(session), List.wrap(done_effect))
+    status = Session.status(session)
+
+    stable? =
+      status.status != :running or
+        (status.queued_events == 0 and status.pending_timers == 0)
+
+    cond do
+      active_leaf_states(observed) == expected ->
+        observed
+
+      stable? and was_stable? ->
+        observed
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        observed
+
+      true ->
+        Process.sleep(@poll_interval_ms)
+        poll_until_settled(session, expected, deadline, stable?)
+    end
+  end
+
+  # `settle_short_timers/1` returns immediately when `status.pending_timers ==
+  # 0`, and otherwise polls until it reaches 0 or `@settle_window_ms` elapses -
+  # draining the load-bearing intermediate delays (1ms/2ms/10ms) before the
+  # next event is sent, and never a guard send timed to outlive the test.
+  defp settle_short_timers(session) do
+    deadline = System.monotonic_time(:millisecond) + @settle_window_ms
+    settle_short_timers(session, deadline)
+  end
+
+  defp settle_short_timers(session, deadline) do
+    if Session.status(session).pending_timers == 0 do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) >= deadline do
+        :ok
+      else
+        Process.sleep(@poll_interval_ms)
+        settle_short_timers(session, deadline)
+      end
+    end
+  end
+
+  # `session` is unused - the subscriber mailbox only ever carries effects
+  # from the one session this harness started and subscribed to - kept as a
+  # parameter anyway so every poll-loop helper in this module takes the
+  # session it acts on, rather than reading ambient process state.
+  defp drain_done_effect(_session) do
+    receive do
+      {:statifier, _session_id, {:effect, {:done, _done} = effect}} -> effect
+    after
+      0 -> nil
+    end
+  end
+
   defp validate_features!(xml, description) do
     detected = FeatureDetector.detect_features(xml)
 
     case FeatureDetector.validate_features(detected) do
       {:ok, _supported} ->
-        :ok
+        detected
 
       {:error, unsupported} ->
         flunk("""

@@ -147,8 +147,6 @@ defmodule Statifier.Session.InvokeCancelTest do
     #    the parent lands on "saw_onexit" instead of staying on "b",
     #    reddening the configuration assertion.
     test "stops the child, runs its <onexit>, and discards what it sends back; no done.invoke" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_xml())
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)
@@ -208,8 +206,6 @@ defmodule Statifier.Session.InvokeCancelTest do
     # the child stops itself - the ordering the subscriber message below
     # captures regardless of what happens to the child process afterward.
     test "cancels every still-live child" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_xml())
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)
@@ -242,8 +238,6 @@ defmodule Statifier.Session.InvokeCancelTest do
     # reddens against `live_configuration` (which stayed on "b"). Reverted
     # and confirmed green.
     test "over a recording containing a start, a discard, and a cancel, both reach the same donedata configuration" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_xml())
       {:ok, parent} = Session.start_link(machine, subscribers: [self()], record: true)
       session_id = Session.session_id(parent)
