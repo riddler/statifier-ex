@@ -720,8 +720,10 @@ defmodule Statifier.Interpreter do
   # has a name that matches the 'namelist' item or the 'name' of the
   # `<param>` element" - read from the local spec cache, quoted verbatim.
   # Only a map `event.data` can carry named return values at all; anything
-  # else (nil, a bare string from `{:text, _}` coercion) has nothing to
-  # match against, so this is a no-op.
+  # else has nothing to match against, so this is a no-op. The common case
+  # is `:undefined` - "no data" under ADR-0037, and the struct's own default
+  # - alongside `nil` for a null payload and a bare string from `{:text, _}`
+  # coercion. The `is_map/1` guard rejects all three alike.
   @spec auto_assign_finalize(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),

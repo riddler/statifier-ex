@@ -184,3 +184,50 @@ Alternatives weighed:
    `SystemVariables.event/1` translating at the datamodel boundary is a
    struct-typing call the implementation makes; either satisfies this
    record's observable contract.
+
+### Both open questions, answered (st-1bjz, 2026-08-16)
+
+1. **`:undefined` escapes untranslated**, into `Effect.Send.data` and its
+   siblings. It is already the shipped behavior rather than a new choice: a
+   `namelist` entry and a `<param location>` compile to ordinary predicator
+   expressions evaluated against the normalized context, so the atom lands in
+   `data` verbatim and this record changes nothing there. Translating would
+   recreate, one layer out, the collapse this record retires. An *undeclared*
+   root is a different case - ADR-0036's argument failure, which discards the
+   whole message and never reaches `data`. A future external-wire processor
+   owns its own encoding at its own boundary. Pinned at
+   `test/statifier/machine/content/send_test.exs` and end to end in
+   `test/statifier/session_test.exs`; recorded in `Statifier.Effect.Send`'s
+   moduledoc.
+2. **`Statifier.Event.data` carries `:undefined`**, while `sendid`,
+   `origin`, `origintype`, and `invokeid` stay `nil` on the struct and are
+   translated by `SystemVariables.event/1` at the datamodel boundary. `data`
+   can hold a genuine null payload, so its two states collide and the writer
+   must spell them apart; the four string fields cannot, so `nil` is
+   unambiguous there.
+
+**Question 2 was not the judgment call this record assumed it was.** B.2.8 is
+normative and decides it outright, quoted verbatim from the REC:
+
+> `name`, `type`, `sendid`, `origin`, `origintype`, and `invokeid` are String
+> values, while `data` can be of any type. In cases where this specification
+> does not specify a value for one of these fields or states that the field is
+> empty or has no value, the Processor MUST set the value to ECMAScript
+> undefined.
+
+Both spellings this record called equally acceptable are therefore not equal:
+whatever the struct holds internally, every one of those six fields MUST read
+`undefined` from the datamodel when it has no value, which is what
+`SystemVariables.event/1` now guarantees. The clause reaches only `_event`'s
+own fields, so it does not settle question 1 - B.2.8.1 remains silent for a
+non-JSON wire, and question 1's answer rests on the reasoning above rather
+than on a MUST.
+
+One writer outside `_event` is worth naming, because it is the same class of
+mistake and the corpus does not cover it: `_name` is `String.t() | nil`
+whenever `<scxml>` omits the optional `name` attribute, and 5.10 says only
+that the Processor "MUST bind the variable `_name` ... to the value of the
+'name' attribute", silent on absence. B.2.8's MUST does not reach it, so
+`_name => :undefined` is this record's convention applied by inference, not a
+clause citation - sound, and matching the behavior both v1 and the released
+engine already had, but held on weaker ground than the six fields above.
