@@ -136,16 +136,42 @@ verbatim - not flattened into ad hoc `line`/`column` keys, which would invent
 a key set the library does not otherwise have and would silently drop
 whatever `Location` gains later. An effect with no index, or an index field
 present but `nil` (`Effect.Log.c_index` is `nil` for a global `<script>`),
-carries `location: nil`. `cond_location` is never resolved: no effect in the
-vocabulary is emitted from guard evaluation, so a resolved `cond_location`
-would always describe a condition that did not produce the event carrying
-it. An effect carrying a *list* of indexes (the list-carrying trace effects -
-`ExitSet`, `EntrySet`, `TransitionsSelected`, `ContentExecuted`,
-`InvokePass`) carries the list in metadata and its length as a `size`
-measurement, with `location: nil`; resolving a location per list entry would
-put an O(configuration) `Machine` walk on every microstep of a high-volume
-traced run, for a value a consumer with the index list and a `Machine`
-handle can already compute.
+carries no `location` key at all. `cond_location` is never resolved: no
+effect in the vocabulary is emitted from guard evaluation, so a resolved
+`cond_location` would always describe a condition that did not produce the
+event carrying it. An effect carrying a *list* of indexes (the list-carrying
+trace effects - `ExitSet`, `EntrySet`, `TransitionsSelected`,
+`ContentExecuted`, `InvokePass`) carries the list in metadata and its length
+as a `size` measurement, with no `location` key; resolving a location per
+list entry would put an O(configuration) `Machine` walk on every microstep
+of a high-volume traced run, for a value a consumer with the index list and
+a `Machine` handle can already compute.
+
+**Amendment (st-f6i9):** the rule above originally had every trace_shape/2
+clause return a literal `location: nil`, including the clauses - all nine at
+the time - where no location could structurally ever resolve. A key that can
+never hold a value is contract noise a consumer has to learn to ignore, and
+this contract is published once st-cmq.2 lands, so the key is now absent
+from those clauses rather than present-and-`nil`; a consumer distinguishes
+"no location resolved" from "this event never carries one" with
+`Map.has_key?/2` on either side.
+
+That same review also found the O(configuration) argument above does not
+apply to a *singleton* list: `Trace.TransitionsSelected` with exactly one
+`t_indexes` entry is O(1) to resolve, no different in cost from a bare
+`t_index`, and is the overwhelmingly common traced case (a chart usually
+selects one transition per microstep, not several). `TransitionsSelected`
+now resolves that one entry through `Machine.transition/2` and carries it
+verbatim, exactly as the single-index rule above resolves a bare `t_index`.
+With zero or many entries, it carries no `location` key, same as the rest of
+the list-carrying family. `TransitionsSelected` is therefore the one trace
+event that legitimately carries a location; the key-removal amendment above
+had to keep it there rather than dropping `location` from the trace family
+by rote. The other four list-carrying trace effects (`ExitSet`, `EntrySet`,
+`ContentExecuted`, `InvokePass`) keep the no-location-key rule even for a
+singleton list - `TransitionsSelected` was the case this review actually
+raised, and generalizing to the other four is future work, not a decision
+this amendment makes for them.
 
 ### The trace-off policy is structural, not a bridge-side branch
 
@@ -285,10 +311,12 @@ kill. `:halt` is the event to build a "session finished" metric on.
 - Measurements: `macrostep`, `microstep`, `round`; plus `size` for the
   list-carrying families (`exit_set`, `entry_set`, `transitions_selected`,
   `content_executed`, `invoke_pass`).
-- Metadata: `session_id`, `effect`, the index lists as carried, `location:
-  nil`; plus `configuration` for `:done`, mirroring the core `:done`
-  effect's own resolution (both are built from the same
-  `configuration_at_exit` binding).
+- Metadata: `session_id`, `effect`, the index lists as carried, no
+  `location` key; plus `configuration` for `:done`, mirroring the core
+  `:done` effect's own resolution (both are built from the same
+  `configuration_at_exit` binding). `transitions_selected` is the single
+  exception (amendment above): it carries `location` when `t_indexes` is a
+  singleton, and no `location` key otherwise.
 
 ## Consequences
 

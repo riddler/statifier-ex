@@ -83,13 +83,23 @@ defmodule Statifier.Session.Telemetry do
   resolved through `Statifier.Machine.content/2`, `Statifier.Machine.at/2`,
   or `Statifier.Machine.transition/2` as appropriate, and carried as the
   `%Statifier.Parser.Location{}` struct verbatim. An effect with no index, or
-  an index field present but `nil`, carries `location: nil`. An effect
-  carrying a *list* of indexes carries the list in metadata (nested in the
-  `effect` struct) and its length as a `size` measurement, with
-  `location: nil` - resolving one location per list entry would put an
-  O(configuration) `Machine` walk on every microstep of a high-volume traced
-  run. `cond_location` is never resolved: no effect in the vocabulary is
-  emitted from guard evaluation.
+  an index field present but `nil`, carries no `location` key at all - a key
+  that can never hold a value is contract noise a consumer would otherwise
+  have to learn to ignore, so it is simply absent rather than present and
+  `nil`. An effect carrying a *list* of indexes carries the list in metadata
+  (nested in the `effect` struct) and its length as a `size` measurement,
+  with no `location` key - resolving one location per list entry would put
+  an O(configuration) `Machine` walk on every microstep of a high-volume
+  traced run, for a value a consumer with the index list and a `Machine`
+  handle can already compute. The one exception is a singleton list:
+  `Trace.TransitionsSelected` with exactly one `t_indexes` entry - the
+  overwhelmingly common traced case - resolves that one index through
+  `Statifier.Machine.transition/2` exactly as the single-index rule above,
+  because a one-element list costs the same O(1) lookup a bare index would;
+  the O(configuration) argument only bites a genuine list. With zero or many
+  entries, `Trace.TransitionsSelected` carries no `location` key either.
+  `cond_location` is never resolved: no effect in the vocabulary is emitted
+  from guard evaluation.
 
   ## Lifecycle and span events (7), emitted regardless of `trace`
 
@@ -139,15 +149,15 @@ defmodule Statifier.Session.Telemetry do
 
   | Event | Measurements | Metadata |
   |---|---|---|
-  | `[:statifier, :session, :trace, :event_dequeued]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :transitions_selected]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :exit_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :content_executed]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :entry_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :macrostep_stable]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `configuration` |
-  | `[:statifier, :session, :trace, :invoke_pass]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :finalize_autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
+  | `[:statifier, :session, :trace, :event_dequeued]` | `macrostep`, `microstep`, `round` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :transitions_selected]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` (singleton `t_indexes` only) |
+  | `[:statifier, :session, :trace, :exit_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :content_executed]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :entry_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :macrostep_stable]` | `macrostep`, `microstep`, `round` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `configuration` |
+  | `[:statifier, :session, :trace, :invoke_pass]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :finalize_autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect` |
 
   `kind` (the fourth segment) is derived by a private, multi-clause function
   pattern-matching each `Statifier.Effect.Trace.*` struct to a literal atom -
@@ -531,40 +541,49 @@ defmodule Statifier.Session.Telemetry do
 
   @spec trace_shape(machine :: Machine.t(), payload :: trace_payload()) :: {map(), map()}
   defp trace_shape(_machine, %Trace.EventDequeued{} = payload) do
-    {counters(payload), %{location: nil}}
+    {counters(payload), %{}}
+  end
+
+  # Singleton carve-out (ADR-0040 Decision 4, amended): a one-element
+  # `t_indexes` is the overwhelmingly common traced case and is O(1) to
+  # resolve, unlike the worst-case O(configuration) walk the family's
+  # exclusion below still guards against. Resolved exactly as the
+  # single-index effect resolver (`location/2`) resolves a bare `t_index`.
+  defp trace_shape(machine, %Trace.TransitionsSelected{t_indexes: [t_index]} = payload) do
+    {Map.put(counters(payload), :size, 1),
+     %{location: Machine.transition(machine, t_index).location}}
   end
 
   defp trace_shape(_machine, %Trace.TransitionsSelected{t_indexes: t_indexes} = payload) do
-    {Map.put(counters(payload), :size, length(t_indexes)), %{location: nil}}
+    {Map.put(counters(payload), :size, length(t_indexes)), %{}}
   end
 
   defp trace_shape(_machine, %Trace.ExitSet{indexes: indexes} = payload) do
-    {Map.put(counters(payload), :size, length(indexes)), %{location: nil}}
+    {Map.put(counters(payload), :size, length(indexes)), %{}}
   end
 
   defp trace_shape(_machine, %Trace.ContentExecuted{c_indexes: c_indexes} = payload) do
-    {Map.put(counters(payload), :size, length(c_indexes)), %{location: nil}}
+    {Map.put(counters(payload), :size, length(c_indexes)), %{}}
   end
 
   defp trace_shape(_machine, %Trace.EntrySet{indexes: indexes} = payload) do
-    {Map.put(counters(payload), :size, length(indexes)), %{location: nil}}
+    {Map.put(counters(payload), :size, length(indexes)), %{}}
   end
 
   defp trace_shape(_machine, %Trace.MacrostepStable{} = payload) do
-    {counters(payload), %{location: nil}}
+    {counters(payload), %{}}
   end
 
   defp trace_shape(machine, %Trace.Done{} = payload) do
-    {counters(payload),
-     %{location: nil, configuration: resolve_configuration(machine, payload.configuration)}}
+    {counters(payload), %{configuration: resolve_configuration(machine, payload.configuration)}}
   end
 
   defp trace_shape(_machine, %Trace.InvokePass{state_indexes: state_indexes} = payload) do
-    {Map.put(counters(payload), :size, length(state_indexes)), %{location: nil}}
+    {Map.put(counters(payload), :size, length(state_indexes)), %{}}
   end
 
   defp trace_shape(_machine, %Trace.FinalizeAutoforward{} = payload) do
-    {counters(payload), %{location: nil}}
+    {counters(payload), %{}}
   end
 
   @spec counters(payload :: trace_payload()) :: map()
