@@ -88,18 +88,19 @@ defmodule Statifier.Session.Telemetry do
   have to learn to ignore, so it is simply absent rather than present and
   `nil`. An effect carrying a *list* of indexes carries the list in metadata
   (nested in the `effect` struct) and its length as a `size` measurement,
-  with no `location` key - resolving one location per list entry would put
-  an O(configuration) `Machine` walk on every microstep of a high-volume
-  traced run, for a value a consumer with the index list and a `Machine`
-  handle can already compute. The one exception is a singleton list:
-  `Trace.TransitionsSelected` with exactly one `t_indexes` entry - the
-  overwhelmingly common traced case - resolves that one index through
-  `Statifier.Machine.transition/2` exactly as the single-index rule above,
-  because a one-element list costs the same O(1) lookup a bare index would;
-  the O(configuration) argument only bites a genuine list. With zero or many
-  entries, `Trace.TransitionsSelected` carries no `location` key either.
-  `cond_location` is never resolved: no effect in the vocabulary is emitted
-  from guard evaluation.
+  with no `location` key, at any cardinality - zero, one, or many entries.
+  No `[:statifier, :session, :trace, _]` event ever carries a `location`
+  key, because every trace effect carrying a resolvable index carries it as
+  a list: a set-valued trace event names a phase (an exit set, an entry
+  set, an invoke-pass walk, a selection round's result), not a chart
+  element, so a location resolved from a list that happens to hold one
+  entry would describe a coincidence of the chart and the round rather than
+  a property of the event, and the rule would need a per-event footnote the
+  moment a second list field entered the picture (`Trace.InvokePass`
+  already carries two). Locations on this surface live exclusively on the
+  single-index core effect events and `:unroutable`, resolved by the rule
+  above (ADR-0040 Decision 4, amended). `cond_location` is never
+  resolved: no effect in the vocabulary is emitted from guard evaluation.
 
   ## Lifecycle and span events (7), emitted regardless of `trace`
 
@@ -150,7 +151,7 @@ defmodule Statifier.Session.Telemetry do
   | Event | Measurements | Metadata |
   |---|---|---|
   | `[:statifier, :session, :trace, :event_dequeued]` | `macrostep`, `microstep`, `round` | `session_id`, `effect` |
-  | `[:statifier, :session, :trace, :transitions_selected]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` (singleton `t_indexes` only) |
+  | `[:statifier, :session, :trace, :transitions_selected]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
   | `[:statifier, :session, :trace, :exit_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
   | `[:statifier, :session, :trace, :content_executed]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
   | `[:statifier, :session, :trace, :entry_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect` |
@@ -542,16 +543,6 @@ defmodule Statifier.Session.Telemetry do
   @spec trace_shape(machine :: Machine.t(), payload :: trace_payload()) :: {map(), map()}
   defp trace_shape(_machine, %Trace.EventDequeued{} = payload) do
     {counters(payload), %{}}
-  end
-
-  # Singleton carve-out (ADR-0040 Decision 4, amended): a one-element
-  # `t_indexes` is the overwhelmingly common traced case and is O(1) to
-  # resolve, unlike the worst-case O(configuration) walk the family's
-  # exclusion below still guards against. Resolved exactly as the
-  # single-index effect resolver (`location/2`) resolves a bare `t_index`.
-  defp trace_shape(machine, %Trace.TransitionsSelected{t_indexes: [t_index]} = payload) do
-    {Map.put(counters(payload), :size, 1),
-     %{location: Machine.transition(machine, t_index).location}}
   end
 
   defp trace_shape(_machine, %Trace.TransitionsSelected{t_indexes: t_indexes} = payload) do
