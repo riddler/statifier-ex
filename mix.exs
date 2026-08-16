@@ -40,6 +40,7 @@ defmodule Statifier.MixProject do
     [
       {:predicator, "~> 8.0"},
       {:saxy, "~> 1.6"},
+      {:telemetry, "~> 1.3"},
 
       # Dev / test
       {:ex_quality, "~> 0.13", only: :dev, runtime: false},
