@@ -199,10 +199,12 @@ defmodule Statifier.Machine.Content.SendTest do
     # datamodel_test.exs`'s "declared-unassigned" test), which is a
     # different, already-null case this test does not mean to exercise.
     #
-    # sabotage: `resolve_params/2`'s success clause is changed to
-    # `{:cont, {:ok, [{name, value || %{}} | pairs]}}` (translate a bound
-    # `:undefined` to `%{}`) -> `data` would come back `%{"Var1" => %{}}`
-    # instead of `%{"Var1" => :undefined}`, reddening this test.
+    # sabotage: `resolve_params/2`'s success clause translates a bound
+    # `:undefined` to `%{}` - written as
+    # `if value == :undefined, do: %{}, else: value`, never as
+    # `value || %{}`, which is a no-op here: `||` falls back only on
+    # `nil`/`false`, and `:undefined` is a truthy atom -> `data` comes back
+    # `%{"Var1" => %{}}` instead of `%{"Var1" => :undefined}` -> red.
     test "namelist over a declared-but-unbound root puts :undefined in event data" do
       m = machine()
       ms = machine_state(m)

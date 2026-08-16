@@ -752,12 +752,17 @@ defmodule Statifier.SessionTest do
     # `null_check` is the state that makes the answer non-reversible by
     # accident.
     #
-    # sabotage: `SystemVariables.event/1`'s `"data" => event.data` clause is
-    # changed to `"data" => event.data || %{}` -> `_event.data.Var1` would
-    # evaluate as an unbound-identifier error against `%{}` instead of
-    # `:undefined`, and the session would halt in neither `pass` nor `fail`
-    # (an uncaught `error.execution` with no matching transition), reddening
-    # the configuration assertion below.
+    # sabotage: `Statifier.Machine.Content.Send`'s `resolve_params/2`
+    # translates `:undefined` to `nil` at the send boundary - the very
+    # translation this record rejected -> `_event.data.Var1` reads null,
+    # `null_check` takes its `=== null` branch, and the chart halts in
+    # `fail` -> red.
+    #
+    # Two shallower mutations deliberately do *not* reach this test, and
+    # neither is the one to write here: mapping the whole `data` to `%{}`
+    # leaves the answer intact, since a missing member of an empty map
+    # still reads undefined; and `event.data || %{}` is a no-op, because
+    # `||` falls back only on `nil`/`false` and `:undefined` is truthy.
     test "delivered _event.data.Var1 reads === undefined true and === null false" do
       machine = compile!(namelist_unbound_round_trip_doc())
       {:ok, session} = Session.start_link(machine)
