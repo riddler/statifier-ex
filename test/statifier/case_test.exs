@@ -4,24 +4,12 @@ defmodule Statifier.CaseTest do
   alias ExUnit.AssertionError
 
   describe "test_scxml/4 feature gate" do
-    # sabotage: n/a - asserts the harness's own flunk path, no lib/ behavior
-    test "flunks naming every unsupported feature the document uses" do
-      xml = """
-      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-        <state id="s1">
-          <onentry><send event="ev"/></onentry>
-        </state>
-      </scxml>
-      """
+    # sabotage: n/a - asserts the harness's gate is vacuous, no lib/ behavior
+    test "every feature the detector can emit is supported or partial" do
+      registry = Statifier.FeatureDetector.feature_registry()
 
-      error =
-        assert_raise AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "sends on entry", ["s1"], [])
-        end
-
-      assert error.message =~ "unsupported SCXML features"
-      assert error.message =~ "send_elements"
-      assert error.message =~ "sends on entry"
+      assert {:ok, _detected} =
+               Statifier.FeatureDetector.validate_features(MapSet.new(Map.keys(registry)))
     end
 
     # sabotage: n/a - asserts the harness fails rather than skips, no lib/ behavior

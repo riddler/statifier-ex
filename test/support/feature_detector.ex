@@ -17,9 +17,9 @@ defmodule Statifier.FeatureDetector do
   transitions, `<onentry>`/`<onexit>`, `<raise>`, `<log>`, static
   `<donedata>`, `<datamodel>`/`<data>`, `<assign>`, `cond`-guarded
   transitions (including `<if>`/`<elseif>`/`<else>`), `<foreach>`, and
-  `<script>` (`:partial` - see the registry entry).
-  `<send>`, `<invoke>`, `<cancel>`, and
-  their attributes stay `:unsupported`; see `feature_registry/0` for the
+  `<script>` (`:partial` - see the registry entry), `<send>`/`<invoke>`/
+  `<cancel>`/`<finalize>` and their attributes. `script_elements` is the only
+  entry that is not `:supported`; see `feature_registry/0` for the
   authoritative, up-to-date list.
   """
 
@@ -77,8 +77,8 @@ defmodule Statifier.FeatureDetector do
       # st-wju.3 (Statifier.Interpreter.NameMatch implements spec 3.13's
       # trailing wildcard)
       wildcard_events: :supported,
-      event_expressions: :unsupported,
-      target_expressions: :unsupported,
+      event_expressions: :supported,
+      target_expressions: :supported,
       # st-af3.3
       datamodel: :supported,
       # st-af3.3
@@ -103,14 +103,14 @@ defmodule Statifier.FeatureDetector do
       log_elements: :supported,
       # st-wju.5
       raise_elements: :supported,
-      send_elements: :unsupported,
-      send_content_elements: :unsupported,
-      send_param_elements: :unsupported,
-      send_delay_expressions: :unsupported,
-      send_idlocation: :unsupported,
-      cancel_elements: :unsupported,
-      invoke_elements: :unsupported,
-      finalize_elements: :unsupported,
+      send_elements: :supported,
+      send_content_elements: :supported,
+      send_param_elements: :supported,
+      send_delay_expressions: :supported,
+      send_idlocation: :supported,
+      cancel_elements: :supported,
+      invoke_elements: :supported,
+      finalize_elements: :supported,
       # st-wju.6 (static donedata only)
       donedata_elements: :supported
     }
@@ -171,11 +171,12 @@ defmodule Statifier.FeatureDetector do
   # blocks removed. Every other pattern, <donedata> included, still sees the
   # untouched source.
   #
-  # The two atoms keep their `send_`-prefixed names but now mean "outside
-  # <donedata>", which still lumps <invoke>'s children in with <send>'s. That
-  # costs nothing while invoke_elements is :unsupported - such a document
-  # flunks the gate on invoke_elements regardless - but the names will mislead
-  # once invoke lands, so renaming them belongs to that work rather than here.
+  # The two atoms keep their `send_`-prefixed names, which lump <invoke>'s
+  # children in with <send>'s, even though `<invoke>` is not a `<send>`
+  # child. The rename is declined: with send_elements and invoke_elements
+  # both :supported, the attribution can no longer change any gate outcome,
+  # and the atom names are emitted into every generated file's tag list, so
+  # renaming them would need a corpus regeneration for no behavioral gain.
   @send_child_features [
     {~r/<content(\s|>|\/>)/, :send_content_elements},
     {~r/<param(\s|>|\/>)/, :send_param_elements}

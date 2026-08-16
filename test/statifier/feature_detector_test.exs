@@ -276,7 +276,17 @@ defmodule Statifier.FeatureDetectorTest do
                         # st-af3.6
                         :foreach_elements,
                         # st-af3.8
-                        :conditional_transitions
+                        :conditional_transitions,
+                        :event_expressions,
+                        :target_expressions,
+                        :send_elements,
+                        :send_content_elements,
+                        :send_param_elements,
+                        :send_delay_expressions,
+                        :send_idlocation,
+                        :cancel_elements,
+                        :invoke_elements,
+                        :finalize_elements
                       ])
 
   describe "feature_registry/0" do
@@ -303,6 +313,13 @@ defmodule Statifier.FeatureDetectorTest do
       assert MapSet.new(Map.keys(FeatureDetector.feature_registry())) ==
                MapSet.new(Map.keys(@samples))
     end
+
+    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    test "no registry entry is :unsupported - the corpus feature gate is vacuous today" do
+      refute Enum.any?(FeatureDetector.feature_registry(), fn {_feature, status} ->
+               status == :unsupported
+             end)
+    end
   end
 
   describe "validate_features/1" do
@@ -313,11 +330,13 @@ defmodule Statifier.FeatureDetectorTest do
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
-    test "reports unsupported features by name" do
+    test "reports every missing feature by name" do
       assert {:error, unsupported} =
-               FeatureDetector.validate_features(MapSet.new([:invoke_elements, :send_elements]))
+               FeatureDetector.validate_features(
+                 MapSet.new([:not_a_real_feature, :another_missing_feature])
+               )
 
-      assert unsupported == MapSet.new([:invoke_elements, :send_elements])
+      assert unsupported == MapSet.new([:not_a_real_feature, :another_missing_feature])
     end
 
     # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
