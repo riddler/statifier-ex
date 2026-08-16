@@ -400,9 +400,9 @@ end
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits)
-- [ ] `mix test test/statifier/validator/` passes
-- [ ] `mix test.regression` passes
+- [x] Full `mix quality` passes (loop gate between edits)
+- [x] `mix test test/statifier/validator/` passes
+- [x] `mix test.regression` passes
 
 #### Manual Verification:
 - [ ] The touched functions match the W3C Appendix D pseudocode line for line -
@@ -710,6 +710,24 @@ before considering the plan fully landed.
 - [ ] The mechanical test-file rewrite changed only call arity - `git diff
       --stat` on `test/` shows one or two changed lines per file and no
       assertion edits
+- [ ] No regressions in related features
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      vacuously: validation has no Appendix D counterpart (ADR-0002)
+- [ ] The reported message reads correctly for a markup payload, not just a
+      text one - read one actual error string in IEx
 - [ ] No regressions in related features
 
 **Implementation Note**: Use the project's loop gate between edits while

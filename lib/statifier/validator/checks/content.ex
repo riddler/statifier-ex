@@ -1,26 +1,35 @@
 defmodule Statifier.Validator.Checks.Content do
   @moduledoc """
   Spec 5.6: a `<content>` element must not specify both an `expr`
-  attribute and inline text. Reports `{:content_expr_and_text, expr}` at the
-  `<content>` element's own `location`.
+  attribute and inline content, whether that content is text or markup
+  (ADR-0041). Reports `{:content_expr_and_text, expr}` at the `<content>`
+  element's own `location` - same reason, same shape, regardless of which
+  form the content takes.
 
-  `lib/statifier/document/content.ex` makes both fields nilable and both
-  representable at once precisely so this check can report the shape rather
-  than lowering refusing to build it - the same division of labour check 8
-  has with `<donedata>`.
+  `lib/statifier/document/content.ex` makes `expr`, `text`, and `markup` all
+  nilable and all representable at once precisely so this check can report
+  the shape rather than lowering refusing to build it - the same division of
+  labour check 8 has with `<donedata>`.
 
   **Whitespace-only text is not text.** `Statifier.Parser.DOM.text/1`
   concatenates `<content>`'s direct text children verbatim and untrimmed, so
   a pretty-printed `<content expr="x">\\n  </content>` carries a `text` of
   `"\\n  "`. That is source formatting, not a payload, and firing on it
-  would reject documents the spec allows.
+  would reject documents the spec allows. `markup`, when present, is never
+  blank - it is nil unless `<content>` has at least one element child - so
+  no equivalent whitespace carve-out applies to it.
 
   Two places today hold a `%Statifier.Document.Content{}`: a `<final>`'s
   `<donedata><content>` (`Statifier.Document.Donedata`) and any state's
   `<invoke><content>` (`Statifier.Document.Invoke`), so this check walks
-  both. When `<send>` gains a `<content>` child, this walk grows a third
-  arm; the rule itself is unchanged, since spec 5.6 states it on `<content>`
-  rather than on whichever parent holds it.
+  both. `<send>` has a `<content>` child too
+  (`lib/statifier/document/send.ex:54`, `lib/statifier/compiler.ex:1113`),
+  but it is executable content living inside a block's `content` list
+  (`lib/statifier/document/send.ex:27-30`), not a state field this walk
+  already reaches - reaching it needs a block walk this check does not have.
+  That gap predates this change and stays open here; the rule itself is
+  unchanged regardless, since spec 5.6 states it on `<content>` rather than
+  on whichever parent holds it.
 
   The `Content` alias below is `Statifier.Document.Content`, the document
   node - not this module.
@@ -66,8 +75,8 @@ defmodule Statifier.Validator.Checks.Content do
 
   defp check_content(%Content{expr: nil}), do: []
 
-  defp check_content(%Content{expr: expr, text: text, location: location}) do
-    if blank?(text) do
+  defp check_content(%Content{expr: expr, text: text, markup: markup, location: location}) do
+    if is_nil(markup) and blank?(text) do
       []
     else
       [Error.content_expr_and_text(expr, location)]
