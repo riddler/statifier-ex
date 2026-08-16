@@ -112,6 +112,36 @@ function and the mutation. It sits above the `test` line, above any `@tag`.
 make by mistake: invert a condition, drop a clause, skip a recursive call, return the
 input unchanged, use the wrong set operation, off-by-one a boundary. Deleting the
 function body or raising is not sabotage - everything fails, so nothing is learned.
+A mutation also has to actually fire: the note must name a change that demonstrably
+alters behavior for the case under test, not one that type-checks against the code
+but leaves every value it touches unchanged.
+
+**The truthy-sentinel trap.** `||` is the most common way to write a mutation that
+never fires. Elixir's `||` falls back to its right side only when the left side is
+`nil` or `false` - every other value, including `:undefined`, `:none`, `0`, and `""`,
+is truthy and short-circuits the fallback. A note that proposes `x || fallback`
+against a value that is one of these sentinels is a no-op: the mutated line runs,
+produces the exact same value as before, and the suite stays green - not because the
+test verified anything, but because nothing changed. That result is indistinguishable
+after the fact from a note whose mutation genuinely ran and was reverted, which is
+exactly the failure this section exists to prevent, and `mix quality`'s sabotage scan
+cannot catch it: the scan only checks that a `# sabotage:` note exists above the test,
+never that the mutation it names would actually change the value under test.
+
+A real case: a note claimed to break `resolve_params/2` by defaulting its params with
+`params || %{}`, where the incoming `params` was `:undefined`.
+
+```elixir
+# does NOT fire - :undefined is truthy, `||` never reaches the fallback
+params || %{}
+
+# fires - :undefined is mapped to a real default
+if params == :undefined, do: %{}, else: params
+```
+
+Before writing a `||`-shaped mutation, check what the left side actually is for the
+case under test. If it can be a truthy sentinel, use an explicit `if` or pattern match
+that maps the sentinel to the fallback instead.
 
 **Two failures worth catching.** If the test stays green, it is not testing what its
 name says; fix the test, do not weaken the sabotage. If a single mutation reddens
