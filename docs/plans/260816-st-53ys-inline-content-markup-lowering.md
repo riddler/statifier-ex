@@ -598,11 +598,11 @@ debt here. If anything is missing, fix it in this phase.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes - including `mix gate.check`, which sees no
+- [x] Full `mix quality` passes - including `mix gate.check`, which sees no
       guarded path in this diff
-- [ ] `grep -n "0041" docs/adr/README.md` returns the new index row
-- [ ] `test -f changelog.d/st-53ys.md`
-- [ ] `grep -rn "st-53ys" lib test` returns nothing (ADR-0018)
+- [x] `grep -n "0041" docs/adr/README.md` returns the new index row
+- [x] `test -f changelog.d/st-53ys.md`
+- [x] `grep -rn "st-53ys" lib test` returns nothing (ADR-0018)
 
 #### Manual Verification:
 - [ ] The ADR-0041 row's wording and status column match the table's
@@ -767,5 +767,20 @@ next phase. In looped (`--loop`) execution, this phase's Automated
 Verification gates advancement automatically (via `/wurk:commit --auto`), and
 Manual Verification items are deferred and surfaced once at the end instead
 of blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The ADR-0041 row's wording and status column match the table's
+      established style
+- [ ] Reading `changelog.d/st-53ys.md` and `changelog.d/st-cmq.7.md` back to
+      back, the assembled notes make one coherent statement about `<invoke>`
+      sources with no contradiction
+- [ ] No regressions in related features
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. This phase touches no Elixir
+behavior, so its gate is a formality; the review of the diff is the real bar.
 
 ---

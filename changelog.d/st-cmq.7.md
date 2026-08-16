@@ -19,10 +19,4 @@
   {:error, term()}` an embedder supplies to resolve `<invoke src="...">`.
   The library never fetches a `src` itself - with no `invoke_source`
   configured, a `src`-based `<invoke>` raises `error.communication` on the
-  parent, the same as any other failure to start the invoked child. An
-  `<invoke>` with an inline `<content><scxml>...</scxml></content>` child
-  does not start a session either - the document fails to compile at all,
-  independent of invoke - but a `<content>` holding the child document as
-  literal markup text (for example CDATA-wrapped) works today, and is the
-  supported way to embed a child document inline until element children of
-  `<content>` are supported.
+  parent, the same as any other failure to start the invoked child.
