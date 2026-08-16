@@ -136,11 +136,15 @@ defmodule Statifier.Session.Invocations do
   that match a top-level `<data>` id of `child_machine`, and drops the rest -
   "If the names do not match, the Processor MUST NOT add the value."
 
-  `params` is `nil` when the invocation carried no `<param>`/namelist at all
-  (`Statifier.EventData.coerce({:params, []})`'s own empty-is-`nil` rule) -
-  that seeds nothing, the same as an empty map would.
+  `params` is `:undefined` - "no data", ADR-0037's sentinel - when the
+  invocation carried no `<param>`/namelist at all
+  (`Statifier.EventData.coerce({:params, []})`'s own empty-is-`:undefined`
+  rule). That seeds nothing, the same as an empty map would. `nil` is
+  accepted for the same outcome but means predicator's *null* rather than
+  absence, and no coercion produces it here.
   """
-  @spec seed_datamodel(params :: map() | nil, child_machine :: Machine.t()) :: map()
+  @spec seed_datamodel(params :: map() | :undefined | nil, child_machine :: Machine.t()) :: map()
+  def seed_datamodel(:undefined, %Machine{}), do: %{}
   def seed_datamodel(nil, %Machine{}), do: %{}
 
   def seed_datamodel(params, %Machine{} = child_machine) when is_map(params) do
