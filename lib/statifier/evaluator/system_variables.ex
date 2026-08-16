@@ -45,6 +45,15 @@ defmodule Statifier.Evaluator.SystemVariables do
   whole lifetime (ADR-0008). `_event` is different: it is seeded here to
   `:undefined` and thereafter written only by `MachineState.put_event/2`.
 
+  `_name` binds `machine.name` (`String.t() | nil` on `Statifier.Machine`,
+  since a `<scxml>` element may omit the optional `name` attribute). Spec
+  5.10 only says the Processor "MUST bind the variable `_name` ... to the
+  value of the 'name' attribute", and is silent on an absent attribute; an
+  absent optional attribute is exactly "declared, no value yet", so a `nil`
+  `machine.name` runs through `absent/1` the same as an absent `_event`
+  field does, and `_name` reads as `:undefined` rather than as a datamodel
+  null.
+
   ## Why `_event` is seeded rather than left absent
 
   Spec 5.10's system variables are *declared* for the session's whole
@@ -67,7 +76,7 @@ defmodule Statifier.Evaluator.SystemVariables do
   def initial(%Machine{} = machine, session_id) when is_binary(session_id) do
     %{
       "_sessionid" => session_id,
-      "_name" => machine.name,
+      "_name" => absent(machine.name),
       "_event" => :undefined,
       "_ioprocessors" => %{
         @scxml_event_processor => %{"location" => scxml_location(session_id)}
@@ -81,9 +90,10 @@ defmodule Statifier.Evaluator.SystemVariables do
   `String.t() | nil` on `Statifier.Event` (a datamodel null can never be one
   of them, so `nil` there is unambiguous - `Statifier.Event`'s moduledoc
   makes the same argument); `absent/1` translates a `nil` to `:undefined`
-  here, at the one place they cross into the datamodel, so `_event`'s own
-  fields spell "declared, no value yet" the way every other datamodel
-  writer does. `data` is not translated - `Statifier.EventData.coerce/1`
+  here, where they cross into the datamodel (the same translation
+  `initial/2` reuses for `_name`), so `_event`'s own fields spell "declared,
+  no value yet" the way every other datamodel writer does. `data` is not
+  translated - `Statifier.EventData.coerce/1`
   already spells `:undefined` for "no data" and `nil` for a null payload, so
   it passes through verbatim.
   """
