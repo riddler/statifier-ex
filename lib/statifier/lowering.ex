@@ -6,13 +6,20 @@ defmodule Statifier.Lowering do
 
   ## The accumulator contract
 
-  `lower/1` performs one traversal. Every builder in
+  `lower/2` performs one traversal. Every builder in
   `Statifier.Lowering.Builders` lowers its children first via
   `walk_children/2`, appending each child's errors to its own in document
-  order; `lower/1` sorts the whole accumulated list by
+  order; `lower/2` sorts the whole accumulated list by
   `location.start_offset` before returning, so the report reads in document
   order regardless of the order a parent happened to emit its own error
   relative to its children's.
+
+  `ctx` also carries `:source` - the source binary being lowered, seeded by
+  `lower/2` and copied forward unchanged by `walk_child/4` to every builder
+  in the tree. `build_content/2` is the one builder that reads it, to slice
+  `<content>`'s markup children (ADR-0041) back out of the original bytes.
+  Lowering still never re-parses anything; slicing only reads spans it
+  already has.
 
   A builder that cannot place or build something still returns the best
   partial result it can (or nothing, when it cannot build one at all) so the
@@ -83,7 +90,9 @@ defmodule Statifier.Lowering do
   Lowers a generic `%Statifier.Parser.DOM.Element{}` tree - the parsed
   `<scxml>` root - into a typed `%Statifier.Document{}` tree, in one
   traversal that dispatches every child through `Statifier.Lowering.Builders`
-  by element name.
+  by element name. `source` is the same source binary
+  `Statifier.Validator.validate/2` takes; it is seeded into `ctx` under
+  `:source` for the one builder that slices bytes out of it.
 
   Returns `{:ok, document}` only when the whole walk accumulated no errors;
   any error at all, anywhere in the tree, produces `{:error, errors}` with
@@ -93,15 +102,17 @@ defmodule Statifier.Lowering do
   as `{:foreign_element, name, uri, location}`; a non-`<scxml>` root name is
   `{:unexpected_root, local_name, location}`.
   """
-  @spec lower(root :: Element.t()) :: {:ok, Document.t()} | {:error, [Error.t()]}
-  def lower(%Element{name: name, location: location} = root) do
+  @spec lower(root :: Element.t(), source :: binary()) ::
+          {:ok, Document.t()} | {:error, [Error.t()]}
+  def lower(%Element{name: name, location: location} = root, source)
+      when is_binary(source) do
     scope = Namespace.push(%{}, root)
     {uri, local_name} = Namespace.resolve(name, scope)
 
     if Namespace.scxml_vocabulary?(uri) do
       case Map.fetch(@dispatch, local_name) do
         {:ok, builder} ->
-          {document, errors} = builder.(root, %{ns_scope: scope})
+          {document, errors} = builder.(root, %{ns_scope: scope, source: source})
           finalize(%{document | namespace: uri}, errors)
 
         :error ->

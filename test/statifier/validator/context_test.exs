@@ -7,7 +7,7 @@ defmodule Statifier.Validator.ContextTest do
 
   defp build!(xml) do
     {:ok, root} = Parser.parse(xml)
-    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Lowering.lower(root, xml)
     Context.build(document, xml)
   end
 

@@ -15,7 +15,7 @@ defmodule Statifier.Lowering.UnsupportedTest do
   # `name`'s own start tag - not its parent's.
   defp assert_unsupported(xml, name) do
     assert {:error, [%Error{reason: {:unsupported_element, ^name}} = error]} =
-             xml |> parse!() |> Lowering.lower()
+             xml |> parse!() |> Lowering.lower(xml)
 
     slice = Location.slice(error.location, xml)
 

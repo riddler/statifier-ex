@@ -11,7 +11,7 @@ defmodule Statifier.MachineStateTest do
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
-    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Lowering.lower(root, xml)
     {:ok, document, _warnings} = Validator.validate(document, xml)
     {:ok, machine} = Compiler.compile(document)
     machine
@@ -322,14 +322,15 @@ defmodule Statifier.MachineStateTest do
     # `machine.name` -> `_name` no longer reflects the `<scxml name>`
     # attribute, reddening this assertion.
     test "_name is the <scxml name> attribute" do
-      {:ok, root} =
-        Parser.parse("""
-        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="my-machine" initial="a">
-            <state id="a"/>
-        </scxml>
-        """)
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="my-machine" initial="a">
+          <state id="a"/>
+      </scxml>
+      """
 
-      {:ok, document} = Lowering.lower(root)
+      {:ok, root} = Parser.parse(xml)
+
+      {:ok, document} = Lowering.lower(root, xml)
       {:ok, document, _warnings} = Validator.validate(document, "")
       {:ok, named_machine} = Compiler.compile(document)
 

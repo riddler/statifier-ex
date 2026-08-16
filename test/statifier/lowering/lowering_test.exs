@@ -13,7 +13,7 @@ defmodule Statifier.LoweringTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -104,7 +104,7 @@ defmodule Statifier.LoweringTest do
       </scxml>
       """
 
-      assert {:error, errors} = xml |> parse!() |> Lowering.lower()
+      assert {:error, errors} = xml |> parse!() |> Lowering.lower(xml)
 
       assert [
                %Error{reason: {:unsupported_element, "foo"}},
@@ -125,7 +125,7 @@ defmodule Statifier.LoweringTest do
       xml = "<scxml>hello</scxml>"
 
       assert {:error, [%Error{reason: {:stray_text, "hello"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert Location.slice(error.location, xml) == "hello"
     end
@@ -136,7 +136,7 @@ defmodule Statifier.LoweringTest do
     test "a whitespace-only run produces no error" do
       xml = "<scxml>\n    \n</scxml>"
 
-      assert {:ok, %Document{}} = xml |> parse!() |> Lowering.lower()
+      assert {:ok, %Document{}} = xml |> parse!() |> Lowering.lower(xml)
     end
   end
 
@@ -148,7 +148,7 @@ defmodule Statifier.LoweringTest do
       xml = ~s(<foo/>)
 
       assert {:error, [%Error{reason: {:unexpected_root, "foo"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert Location.slice(error.location, xml) == "<foo/>"
     end

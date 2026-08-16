@@ -51,7 +51,7 @@ defmodule Statifier.Lowering.LocationTest do
 
   defp lower! do
     {:ok, root} = Parser.parse(@source)
-    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Lowering.lower(root, @source)
     document
   end
 

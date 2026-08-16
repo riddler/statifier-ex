@@ -11,7 +11,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)
-    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Lowering.lower(root, xml)
     document
   end
 

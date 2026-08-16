@@ -3,11 +3,15 @@ defmodule Statifier.Lowering.ContentTest do
 
   alias Statifier.Document.Assign
   alias Statifier.Document.Block
+  alias Statifier.Document.Content
+  alias Statifier.Document.Donedata
   alias Statifier.Document.Foreach
   alias Statifier.Document.If
+  alias Statifier.Document.Invoke
   alias Statifier.Document.Log
   alias Statifier.Document.Raise
   alias Statifier.Document.Script
+  alias Statifier.Document.Send
   alias Statifier.Document.State
   alias Statifier.Document.Transition
   alias Statifier.Lowering
@@ -19,7 +23,7 @@ defmodule Statifier.Lowering.ContentTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -117,7 +121,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><raise/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "raise", "event"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -209,7 +213,7 @@ defmodule Statifier.Lowering.ContentTest do
         ~s(<scxml><state id="s"><onentry><assign location="x"><log label="hi"/></assign></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "log", "assign"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -224,7 +228,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><assign/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "assign", "location"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -241,7 +245,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><assign location="x" expr="1"/></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "assign", "state"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -269,7 +273,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><state id="nope"/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "state", "onentry"}}]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
     end
   end
 
@@ -374,7 +378,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><if/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "if", "cond"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -386,7 +390,7 @@ defmodule Statifier.Lowering.ContentTest do
         ~s(<scxml><state id="s"><onentry><if cond="a"><elseif/></if></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "elseif", "cond"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -401,7 +405,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><elseif cond="true"/></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "elseif", "state"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -508,7 +512,7 @@ defmodule Statifier.Lowering.ContentTest do
       </scxml>
       """
 
-      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
       state = only_state(document)
 
       assert [%Block{content: [%Foreach{array: "items", item: "x", index: nil, content: []}]}] =
@@ -524,7 +528,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><foreach item="x"/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "foreach", "array"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -534,7 +538,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><foreach array="items"/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:missing_attribute, "foreach", "item"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -551,7 +555,7 @@ defmodule Statifier.Lowering.ContentTest do
                 %Error{reason: {:missing_attribute, "foreach", "array"}},
                 %Error{reason: {:missing_attribute, "foreach", "item"}}
               ]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
     end
   end
 
@@ -574,7 +578,7 @@ defmodule Statifier.Lowering.ContentTest do
       </scxml>
       """
 
-      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
       state = only_state(document)
 
       assert [%Block{content: [%Foreach{content: [%Assign{location: "y"}]}]}] = state.onentry
@@ -677,7 +681,7 @@ defmodule Statifier.Lowering.ContentTest do
         ~s(<scxml><state id="s"><onentry><script><log label="hi"/></script></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "log", "script"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.message =~ "log"
       assert error.message =~ "script"
@@ -694,7 +698,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><onentry><script src="foo.js"/></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:unsupported_attribute, "script", "src"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.message =~ "src"
     end
@@ -710,7 +714,7 @@ defmodule Statifier.Lowering.ContentTest do
         ~s(<scxml><state id="s"><onentry><script src="foo.js">x = 1;</script></onentry></state></scxml>)
 
       assert {:error, [%Error{reason: {:unsupported_attribute, "script", "src"}}]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
     end
   end
 
@@ -724,7 +728,7 @@ defmodule Statifier.Lowering.ContentTest do
       xml = ~s(<scxml><state id="s"><script>x = 1;</script></state></scxml>)
 
       assert {:error, [%Error{reason: {:misplaced_element, "script", "state"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.message =~ "script"
       assert error.message =~ "state"
@@ -739,7 +743,7 @@ defmodule Statifier.Lowering.ContentTest do
     test "a <script> that is a direct child of <scxml> lands in document.scripts, not misplaced" do
       xml = ~s(<scxml><script>x = 1;</script><state id="s"/></scxml>)
 
-      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
 
       assert [%Script{text: "x = 1;"}] = document.scripts
     end
@@ -757,9 +761,217 @@ defmodule Statifier.Lowering.ContentTest do
       </scxml>
       """
 
-      assert {:ok, document} = xml |> parse!() |> Lowering.lower()
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
 
       assert [%Script{text: "x = 1;"}, %Script{text: "y = 2;"}] = document.scripts
+    end
+  end
+
+  describe "lower/2 - <content> markup" do
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> the slice
+    # runs one byte past the last significant child, reddening the
+    # exact-bytes assertion below.
+    test "an element child inside <content> lowers with no errors, markup holding the exact bytes" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"/></scxml></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
+
+      %State{invoke: [%Invoke{content: %Content{markup: markup}}]} = only_state(document)
+
+      assert markup ==
+               ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"/></scxml>)
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> the
+    # independently-computed offset assertions below redden (verified
+    # jointly with the sabotage above - one off-by-one, two doors).
+    test "markup_location bounds exactly the sliced bytes" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content>before <a/> after</content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      # Computed independently of `Location.slice/2` (the function under
+      # test uses to derive `markup`), so this does not just re-derive
+      # `markup` from `markup_location` and compare it to itself.
+      {start_index, _length} = :binary.match(xml, "before <a/> after")
+      expected_end = start_index + byte_size("before <a/> after")
+
+      document = lower!(xml)
+
+      %State{
+        invoke: [%Invoke{content: %Content{markup: markup, markup_location: markup_location}}]
+      } =
+        only_state(document)
+
+      assert markup == "before <a/> after"
+      assert markup_location.start_offset == start_index
+      assert markup_location.end_offset == expected_end
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` end is built one byte
+    # too wide (`end_offset: last.location.end_offset + 1`) -> the trailing
+    # newline this test exists to exclude leaks back in, reddening the
+    # exact-string assertion below.
+    test "indentation and a trailing newline around the child are excluded from markup" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content>
+                      <scxml version="1.0"><state id="a"/></scxml>
+                  </content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      document = lower!(xml)
+      %State{invoke: [%Invoke{content: %Content{markup: markup}}]} = only_state(document)
+
+      assert markup == ~s(<scxml version="1.0"><state id="a"/></scxml>)
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> the
+    # `markup` assertion below reddens with a stray trailing byte; `text`
+    # is untouched, since it comes from `DOM.text/1` rather than the slice.
+    test "a 5.6.2 mixture slices whole, text runs included, and text keeps DOM.text/1's value" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content>before <a/> after</content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      document = lower!(xml)
+      %State{invoke: [%Invoke{content: content}]} = only_state(document)
+
+      assert content.markup == "before <a/> after"
+      assert content.text == "before  after"
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> a stray
+    # trailing byte leaks into the slice, reddening the verbatim-bytes
+    # assertion below.
+    test "an entity reference and a CDATA section inside markup survive verbatim" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content><data>a &amp; b<![CDATA[<raw>]]></data></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      document = lower!(xml)
+      %State{invoke: [%Invoke{content: content}]} = only_state(document)
+
+      assert content.markup == ~s(<data>a &amp; b<![CDATA[<raw>]]></data>)
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> the slice
+    # runs one byte past the child's own end tag, reddening the exact-bytes
+    # assertion below. (This is a bytes check, not an error check: the
+    # foreign-namespace claim - no `foreign_element`/`misplaced_element`
+    # error - is already covered structurally, since `build_content/2`
+    # returns `[]` unconditionally and no dispatch call for `<foo:bar>`
+    # exists anywhere in `build_content/2`'s body for a mutation to reach.)
+    test "a foreign-namespace child produces no error - the slice is opaque at this layer" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content><foo:bar xmlns:foo="http://example.com/foo"/></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
+
+      %State{invoke: [%Invoke{content: content}]} = only_state(document)
+      assert content.markup == ~s(<foo:bar xmlns:foo="http://example.com/foo"/>)
+    end
+
+    # sabotage: `slice_markup/2`'s guard is inverted (`not
+    # Enum.any?(significant, &match?(%Element{}, &1))`) -> a text-only
+    # `<content>` (no element child at all) now takes the slicing branch
+    # instead of the `{nil, nil}` one, reddening the `markup == nil`
+    # assertion below (verified: `content.markup` came back `"payload"`).
+    test "a text-only <content> has markup: nil and markup_location: nil" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <invoke type="t">
+                  <content>payload</content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      document = lower!(xml)
+      %State{invoke: [%Invoke{content: content}]} = only_state(document)
+
+      assert content.markup == nil
+      assert content.markup_location == nil
+      assert content.text == "payload"
+    end
+
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> both
+    # assertions below redden with a stray trailing byte, confirming
+    # `<send>` and `<donedata>` go through the same `build_content/2` rule
+    # rather than a parent-specific one (5.6.2 states the content model on
+    # `<content>` itself).
+    test "<send><content> and <donedata><content> get markup on the same rule" do
+      send_xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <send event="e"><content><a/></content></send>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      donedata_xml = """
+      <scxml>
+          <final id="f">
+              <donedata><content><b/></content></donedata>
+          </final>
+      </scxml>
+      """
+
+      %State{onentry: [%Block{content: [%Send{content: send_content}]}]} =
+        send_xml |> lower!() |> only_state()
+
+      %State{donedata: %Donedata{content: donedata_content}} =
+        donedata_xml |> lower!() |> only_state()
+
+      assert send_content.markup == "<a/>"
+      assert donedata_content.markup == "<b/>"
     end
   end
 end

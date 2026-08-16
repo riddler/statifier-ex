@@ -317,13 +317,13 @@ same reason; confirm with a grep before touching `Error`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (`mix quality --profile loop` between edits;
+- [x] Full `mix quality` passes (`mix quality --profile loop` between edits;
       a loop run alone never satisfies this phase)
-- [ ] `mix test test/statifier/lowering/` passes
-- [ ] `mix test.regression` passes - the ratchet is unmoved
-- [ ] `grep -rn "Lowering.lower(" lib test` shows no remaining single-argument
+- [x] `mix test test/statifier/lowering/` passes
+- [x] `mix test.regression` passes - the ratchet is unmoved
+- [x] `grep -rn "Lowering.lower(" lib test` shows no remaining single-argument
       call
-- [ ] `grep -rn "misplaced.*\"content\"" lib test` returns nothing
+- [x] `grep -rn "misplaced.*\"content\"" lib test` returns nothing
 
 #### Manual Verification:
 - [ ] The touched functions match the W3C Appendix D pseudocode line for line -
@@ -692,3 +692,32 @@ clears it.
 - Slicing mechanism: `lib/statifier/parser/location.ex:68-72`
 - Existing binary path: `lib/statifier/invoke/source.ex:68-74`
 - Precedent for the second `source` argument: `lib/statifier/validator.ex:107`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      vacuously here: Appendix D models no parsing stage, so lowering has no
+      pseudocode counterpart and this phase introduces no interpreter
+      deviation (ADR-0002)
+- [ ] The slice is byte-exact against 5.6.2's "text, XML from any namespace, or
+      a mixture of both" for a hand-written mixture, checked in IEx
+- [ ] The mechanical test-file rewrite changed only call arity - `git diff
+      --stat` on `test/` shows one or two changed lines per file and no
+      assertion edits
+- [ ] No regressions in related features
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---

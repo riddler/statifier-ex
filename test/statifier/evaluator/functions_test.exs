@@ -17,7 +17,7 @@ defmodule Statifier.Evaluator.FunctionsTest do
 
   defp compile! do
     {:ok, root} = Parser.parse(@document)
-    {:ok, document} = Lowering.lower(root)
+    {:ok, document} = Lowering.lower(root, @document)
     {:ok, document, _warnings} = Validator.validate(document, @document)
     {:ok, machine} = Compiler.compile(document)
     machine

@@ -50,7 +50,7 @@ defmodule Statifier do
   Compiles SCXML source into a `Statifier.Machine`.
 
   Runs the full pipeline - `Statifier.Parser.parse/1`,
-  `Statifier.Lowering.lower/1`, `Statifier.Validator.validate/2`,
+  `Statifier.Lowering.lower/2`, `Statifier.Validator.validate/2`,
   `Statifier.Compiler.compile/1` - in that order, stopping at the first stage
   that fails. `Statifier.Parser.parse/1` is the one stage that reports a
   single error rather than a list; this function wraps it so every failure
@@ -68,7 +68,7 @@ defmodule Statifier do
   @spec compile(source :: binary()) :: {:ok, Machine.t()} | {:error, [error()]}
   def compile(source) when is_binary(source) do
     with {:ok, root} <- parse(source),
-         {:ok, document} <- Lowering.lower(root),
+         {:ok, document} <- Lowering.lower(root, source),
          {:ok, document, warnings} <- Validator.validate(document, source),
          {:ok, machine} <- Compiler.compile(document) do
       {:ok, %Machine{machine | warnings: warnings}}
