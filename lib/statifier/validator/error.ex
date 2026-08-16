@@ -436,23 +436,43 @@ defmodule Statifier.Validator.Error do
   end
 
   @doc """
-  Spec 5.6: a `<content>` element carries both an `expr` attribute
-  and inline text - the spec's "MUST NOT specify both" that
-  `lib/statifier/document/content.ex` deliberately leaves representable so
-  this check can report it. `expr` is the attribute's value as lowered, so
-  the message quotes the expression rather than the text, which has no span
-  of its own (`Statifier.Document.Content`'s moduledoc). Reported at the
-  `<content>` element's own `location`, the only span covering both halves
-  of the conflict.
+  Spec 5.6: a `<content>` element carries both an `expr` attribute and
+  inline content, whether that content is text or markup (ADR-0041) - the
+  spec's "MUST NOT specify both" that `lib/statifier/document/content.ex`
+  deliberately leaves representable so this check can report it. `expr` is
+  the attribute's value as lowered, and `payload` names which inline form
+  was actually present, `:text` or `:markup` - markup wins when both are
+  somehow present, since it is the more specific payload. The `reason` tuple
+  stays `{:content_expr_and_text, expr}` regardless of `payload`; only the
+  message varies. For `:text`, the message quotes the expression rather than
+  the text, which has no span of its own (`Statifier.Document.Content`'s
+  moduledoc); for `:markup`, the message quotes the expression and names
+  markup by kind, since markup DOES have a span of its own
+  (`markup_location`) even though this diagnostic does not use it. Reported
+  at the `<content>` element's own `location`, the only span covering both
+  halves of the conflict.
   """
-  @spec content_expr_and_text(expr :: binary(), location :: Location.t()) :: t()
-  def content_expr_and_text(expr, %Location{} = location) when is_binary(expr) do
+  @spec content_expr_and_text(
+          expr :: binary(),
+          location :: Location.t(),
+          payload :: :text | :markup
+        ) ::
+          t()
+  def content_expr_and_text(expr, %Location{} = location, payload)
+      when is_binary(expr) and payload in [:text, :markup] do
     %__MODULE__{
       reason: {:content_expr_and_text, expr},
-      message:
-        "<content> must not specify both an expr attribute (#{inspect(expr)}) and inline text",
+      message: content_expr_and_text_message(expr, payload),
       location: location
     }
+  end
+
+  defp content_expr_and_text_message(expr, :text) do
+    "<content> must not specify both an expr attribute (#{inspect(expr)}) and inline text"
+  end
+
+  defp content_expr_and_text_message(expr, :markup) do
+    "<content> must not specify both an expr attribute (#{inspect(expr)}) and inline markup"
   end
 
   @doc """

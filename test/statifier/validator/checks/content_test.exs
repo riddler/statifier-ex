@@ -22,6 +22,11 @@ defmodule Statifier.Validator.Checks.ContentTest do
     # suite gains an error, and here the reason's quoted expr goes wrong
     # first: this assertion reddens on the <content> below being reported
     # only because of the expr it actually carries
+    #
+    # sabotage: check_content/1's cond swaps the :markup and :text atoms
+    # passed to Error.content_expr_and_text/3 -> this text-only <content>'s
+    # message reads "inline markup" instead of "inline text", reddening the
+    # "inline text"/refute-"markup" assertions below
     test "a <content> with both expr and text is reported at the element's own line" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
@@ -38,6 +43,8 @@ defmodule Statifier.Validator.Checks.ContentTest do
 
       assert error.location.start_line == 4
       assert error.message =~ "expr"
+      assert error.message =~ "inline text"
+      refute error.message =~ "markup"
     end
 
     # sabotage: check_content/1 reports whenever `expr` is non-nil,
@@ -165,6 +172,11 @@ defmodule Statifier.Validator.Checks.ContentTest do
     # and keeps only `blank?(text)` -> the markup below carries no direct
     # text child, so `blank?(text)` reads true and the
     # {:content_expr_and_text, _} match reddens to {:ok, _}
+    #
+    # sabotage: check_content/1's cond swaps the :markup and :text atoms
+    # passed to Error.content_expr_and_text/3 -> this markup-only
+    # <content>'s message reads "inline text" instead of "inline markup",
+    # reddening the "inline markup"/refute-"inline text" assertions below
     test "a <content> with both expr and markup is reported at the element's own line" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
@@ -181,6 +193,8 @@ defmodule Statifier.Validator.Checks.ContentTest do
 
       assert error.location.start_line == 4
       assert error.message =~ "expr"
+      assert error.message =~ "inline markup"
+      refute error.message =~ "inline text"
     end
 
     # sabotage: check_content/1 drops its `%Content{expr: nil}` head clause,
