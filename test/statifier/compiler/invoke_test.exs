@@ -156,4 +156,53 @@ defmodule Statifier.Compiler.InvokeTest do
     assert %Error{reason: {:expression_compile_error, {:content, _c_index}, "1 +", _parse_error}} =
              error
   end
+
+  # test220's exact XML (test/scxml_tests/mandatory/invoke/test220_test.exs) -
+  # the bead's acceptance shape: `<invoke><content><scxml>...</scxml></content></invoke>`.
+  @test220_xml """
+  <?xml version="1.0" encoding="UTF-8"?>
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0" version="1.0" datamodel="predicator">
+      <state id="s0">
+          <onentry>
+              <send event="timeout" delay="5s" />
+          </onentry>
+          <invoke type="http://www.w3.org/TR/scxml/">
+              <content>
+                  <scxml initial="subFinal" version="1.0" datamodel="predicator">
+                      <final id="subFinal" />
+                  </scxml>
+              </content>
+          </invoke>
+          <transition event="done.invoke" target="pass" />
+          <transition event="*" target="fail" />
+      </state>
+      <final id="pass">
+          <onentry>
+              <log label="Outcome" expr="'pass'" />
+          </onentry>
+      </final>
+      <final id="fail">
+          <onentry>
+              <log label="Outcome" expr="'fail'" />
+          </onentry>
+      </final>
+  </scxml>
+  """
+
+  # sabotage: `Statifier.Compiler.build_content_expr/2`'s markup clause
+  # (`%DContent{expr: nil, markup: markup} when is_binary(markup)`) is
+  # changed to build `Expressions.static(nil)` instead of
+  # `Expressions.static(markup)` -> the `{:static, ^expected_markup}` match
+  # below reddens because the invoke's content folds to `{:static, nil}`.
+  test "test220's <invoke><content><scxml> compiles end to end, folding to {:static, markup}" do
+    machine = compile!(@test220_xml)
+    [invoke] = state_of(machine, "s0").invoke
+
+    [expected_markup] =
+      Regex.run(~r{<content>\s*(<scxml.*?</scxml>)\s*</content>}s, @test220_xml,
+        capture: :all_but_first
+      )
+
+    assert {:static, ^expected_markup} = invoke.content
+  end
 end

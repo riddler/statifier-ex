@@ -1631,11 +1631,16 @@ defmodule Statifier.Compiler do
   end
 
   # `<content>`'s folded value: the compiled arm from a written `expr`
-  # attribute, the static arm from its text body otherwise -
-  # validator check 9 (`Statifier.Validator.Checks.Content`) already
-  # guarantees the two are never both present.
+  # attribute, else the static arm from `markup` (ADR-0041's source slice)
+  # when element children are present, else the static arm from its text
+  # body - validator check 9 (`Statifier.Validator.Checks.Content`) already
+  # guarantees `expr` and content (text or markup) are never both present.
   @spec build_content_expr(content :: DContent.t(), owner :: Expressions.owner_ref()) ::
           {:ok, Machine.expr()} | {:error, Error.t()}
+  defp build_content_expr(%DContent{expr: nil, markup: markup}, _owner)
+       when is_binary(markup),
+       do: {:ok, Expressions.static(markup)}
+
   defp build_content_expr(%DContent{expr: nil, text: text}, _owner),
     do: {:ok, Expressions.static(text)}
 
@@ -1645,10 +1650,17 @@ defmodule Statifier.Compiler do
 
   # The compiled arm's diagnostic span is `attribute_locations[:expr]`'s
   # value span when the author wrote `expr` (mirrors `cond_location/1` and
-  # `expr_location/1`). The static arm's is the `<content>` node's own
+  # `expr_location/1`). The markup arm's is `markup_location`: unlike
+  # `text`, markup *has* a span - the exact slice `Location.slice/2` cut
+  # from the parent source (ADR-0041) - and that span is what ADR-0014's
+  # offset arithmetic needs to translate a child compile error back into
+  # parent coordinates. The plain-text arm's is the `<content>` node's own
   # `location`: `Content.text` has no span of its own by design
   # (`lib/statifier/document/content.ex:17-21`).
   @spec content_expr_location(content :: DContent.t()) :: Location.t()
+  defp content_expr_location(%DContent{expr: nil, markup_location: %Location{} = location}),
+    do: location
+
   defp content_expr_location(%DContent{expr: nil, location: location}), do: location
 
   defp content_expr_location(%DContent{
