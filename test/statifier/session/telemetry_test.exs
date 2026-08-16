@@ -13,6 +13,7 @@ defmodule Statifier.Session.TelemetryTest do
   alias Statifier.Effect.Trace
   alias Statifier.Event
   alias Statifier.Machine
+  alias Statifier.Session
   alias Statifier.Session.Telemetry
 
   # Handlers are global to the VM (`:telemetry.attach_many/4` registers on a
@@ -56,6 +57,55 @@ defmodule Statifier.Session.TelemetryTest do
       {event, ^ref, measurements, metadata} -> drain(ref, [{event, measurements, metadata} | acc])
     after
       0 -> Enum.reverse(acc)
+    end
+  end
+
+  # -- fixtures for the Phase 3 integration tests (a live Statifier.Session) --
+
+  defp two_state_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b"/>
+    </scxml>
+    """
+  end
+
+  defp final_on_event_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="finish" target="fin"/>
+        </state>
+        <final id="fin"/>
+    </scxml>
+    """
+  end
+
+  defp livelock_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition target="a"/>
+        </state>
+    </scxml>
+    """
+  end
+
+  defp wait_for_status(session, pred, attempts \\ 50)
+
+  defp wait_for_status(_session, _pred, 0), do: flunk("status/1 never satisfied the predicate")
+
+  defp wait_for_status(session, pred, attempts) do
+    status = Session.status(session)
+
+    if pred.(status) do
+      status
+    else
+      Process.sleep(2)
+      wait_for_status(session, pred, attempts - 1)
     end
   end
 
@@ -554,6 +604,232 @@ defmodule Statifier.Session.TelemetryTest do
           assert is_number(value)
         end
       end
+    end
+  end
+
+  # -- Phase 3: a live Statifier.Session wired to every emission seam -------
+
+  describe "Statifier.Session wires the bridge into every emission seam" do
+    # sabotage: `in_macrostep/4`'s `Telemetry.macrostep_stop(...)` call is
+    # dropped -> red, the `[:statifier, :session, :macrostep, :stop]`
+    # `assert_receive` below (`trigger: :initialize`) times out - reverted
+    # and confirmed green.
+    test "trace: false emits lifecycle and effect events, and no trace family", %{ref: ref} do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, trace: false)
+      session_id = Session.session_id(session)
+
+      assert_receive {[:statifier, :session, :init], ^ref, _measurements, init_metadata}
+      assert init_metadata.session_id == session_id
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements,
+                      %{trigger: :initialize}}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                      %{trigger: :initialize}}
+
+      Session.send_event(session, "finish")
+
+      assert_receive {[:statifier, :session, :effect, :done], ^ref, _measurements, _metadata}
+      assert_receive {[:statifier, :session, :halt], ^ref, _measurements, %{reason: :done}}
+
+      refute_receive {[:statifier, :session, :trace, _kind], ^ref, _measurements, _metadata}, 20
+    end
+
+    # sabotage: `perform_instruction({:notify, effect}, state, _override)`'s
+    # `Telemetry.effect/3` call is dropped from the non-`Done` clause -> red,
+    # `[:statifier, :session, :trace, :entry_set]` never arrives - reverted
+    # and confirmed green.
+    test "trace: true emits the same lifecycle events plus the trace family", %{ref: ref} do
+      machine = compile!(two_state_doc())
+      {:ok, _session} = Session.start_link(machine, trace: true)
+
+      assert_receive {[:statifier, :session, :init], ^ref, _measurements, _metadata}
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements,
+                      %{trigger: :initialize}}
+
+      assert_receive {[:statifier, :session, :trace, :entry_set], ^ref, _measurements, _metadata}
+
+      assert_receive {[:statifier, :session, :trace, :macrostep_stable], ^ref, _measurements,
+                      _metadata}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                      %{trigger: :initialize}}
+    end
+
+    # sabotage: `in_macrostep/4` hardcodes `trigger: :initialize` regardless
+    # of the caller's own `trigger` argument -> red, the `trigger: :event`
+    # `assert_receive` calls below never match because every `macrostep,
+    # :start`/`:stop` now reports `:initialize` - reverted and confirmed
+    # green.
+    test "the macrostep span fires once per accepted external event, trigger: :event", %{
+      ref: ref
+    } do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements,
+                      %{trigger: :initialize}}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                      %{trigger: :initialize}}
+
+      Session.send_event(session, "go")
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements,
+                      %{trigger: :event, event_name: "go"}}
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                      %{trigger: :event, event_name: "go"}}
+
+      refute_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements, _metadata},
+                     20
+    end
+
+    # sabotage: `drain_event/2` is changed to call `in_macrostep(state,
+    # :initialize, event, fn ... end)` instead of `:event` -> red, sending a
+    # second event pushes the count of `trigger: :initialize` `macrostep,
+    # :start` messages to 2, reddening the `== 1` assertion below - reverted
+    # and confirmed green.
+    test "trigger: :initialize fires exactly once, at session start", %{ref: ref} do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      Session.send_event(session, "go")
+      _status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+
+      initialize_starts =
+        ref
+        |> drain()
+        |> Enum.count(fn
+          {[:statifier, :session, :macrostep, :start], _measurements, %{trigger: :initialize}} ->
+            true
+
+          _other ->
+            false
+        end)
+
+      assert initialize_starts == 1
+    end
+
+    # sabotage: `drain_cancel/1` calls `in_macrostep(state, :event, nil, fn
+    # ... end)` instead of `:cancel` -> red, the `trigger: :cancel`
+    # `assert_receive` below never matches - reverted and confirmed green.
+    test "trigger: :cancel fires on Session.cancel/1", %{ref: ref} do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      Session.cancel(session)
+
+      assert_receive {[:statifier, :session, :macrostep, :start], ^ref, _measurements,
+                      %{trigger: :cancel}}
+
+      assert_receive {[:statifier, :session, :halt], ^ref, _measurements, %{reason: :cancelled}}
+    end
+
+    # sabotage: `macrostep_outcome/1`'s `defp macrostep_outcome(%State{halted:
+    # reason}), do: reason` clause is replaced with `do: :quiescent`
+    # unconditionally -> red, the `outcome: :budget_exhausted` assertion
+    # below reddens (every stop event now reports `:quiescent`) - this is
+    # Decision 2's own pinned case, the one `Trace.MacrostepStable` would
+    # have missed. Reverted and confirmed green.
+    test "a budget-exhausted machine emits outcome: :budget_exhausted on stop and halt", %{
+      ref: ref
+    } do
+      machine = compile!(livelock_doc())
+      {:ok, _session} = Session.start_link(machine, max_macrostep_rounds: 5)
+
+      assert_receive {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                      %{trigger: :initialize, outcome: :budget_exhausted}}
+
+      assert_receive {[:statifier, :session, :halt], ^ref, _measurements,
+                      %{reason: :budget_exhausted}}
+    end
+
+    # sabotage: `handle_cast({:interpret, effects}, state)`'s
+    # `Telemetry.interpret/3` call is dropped -> red, the
+    # `[:statifier, :session, :interpret]` `assert_receive` below times out -
+    # reverted and confirmed green.
+    test "Session.interpret/2 emits :interpret, and its injected effects are ordinary effect events (ADR-0029)",
+         %{ref: ref} do
+      machine = located_machine()
+      {:ok, session} = Session.start_link(machine)
+
+      assert_receive {[:statifier, :session, :effect, :log], ^ref, _measurements, core_metadata}
+
+      injected = %Log{label: "injected", c_index: nil, owner: nil, macrostep: 1, microstep: 1}
+      Session.interpret(session, [{:log, injected}])
+
+      assert_receive {[:statifier, :session, :interpret], ^ref, measurements, _metadata}
+      assert measurements.effect_count == 1
+
+      assert_receive {[:statifier, :session, :effect, :log], ^ref, _measurements,
+                      injected_metadata}
+
+      assert injected_metadata.effect == injected
+      # No key distinguishes the injected effect's metadata shape from the
+      # core-derived one - ADR-0029's indistinguishability, restated at the
+      # telemetry boundary.
+      assert MapSet.new(Map.keys(injected_metadata)) == MapSet.new(Map.keys(core_metadata))
+    end
+
+    # sabotage: `terminate/2`'s `Telemetry.terminate/4` call is dropped ->
+    # red, the `[:statifier, :session, :terminate]` `assert_receive` below
+    # times out - reverted and confirmed green.
+    test "[:statifier, :session, :terminate] fires on Session.stop/2", %{ref: ref} do
+      machine = compile!(two_state_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      Session.stop(session)
+
+      assert_receive {[:statifier, :session, :terminate], ^ref, _measurements, %{reason: :normal}}
+    end
+
+    # sabotage: `perform_instruction({:notify, effect}, state, _override)`'s
+    # `Telemetry.effect(state.session_id, state.machine_state.machine,
+    # effect)` call has its `machine` argument replaced with `nil` -> red:
+    # measurements/metadata are built eagerly at the call site whether or not
+    # a handler is attached (this bridge's own "cost paid either way"
+    # property), so `location/2` still calls
+    # `Statifier.Machine.content(nil, 0)` and raises, crashing `init/1`
+    # before `start_link/2` ever returns `{:ok, _}` even with the handler
+    # detached below - reverted and confirmed green.
+    test "a session with no telemetry handler attached still runs (the zero-handler path)", %{
+      ref: ref
+    } do
+      :telemetry.detach(ref)
+
+      machine = located_machine()
+      assert {:ok, session} = Session.start_link(machine)
+      assert Session.status(session).status == :running
+    end
+
+    # sabotage: `perform_instruction({:notify, effect}, state, _override)`
+    # passes `state.machine_state` (a `%MachineState{}`) instead of
+    # `state.machine_state.machine` (its `%Machine{}`) as `Telemetry.effect/3`'s
+    # `machine` argument -> red, `Statifier.Machine.content/2` inside
+    # `location/2` no longer receives a `%Machine{}`, so resolving the send
+    # effect's location raises instead of returning one, and the
+    # `assert_receive` below times out - reverted and confirmed green.
+    test "a send from a state with a known source location carries a resolved location", %{
+      ref: ref
+    } do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+            <state id="a">
+                <onentry>
+                    <send event="e" target="#_internal"/>
+                </onentry>
+            </state>
+        </scxml>
+        """)
+
+      {:ok, _session} = Session.start_link(machine)
+
+      assert_receive {[:statifier, :session, :effect, :send], ^ref, _measurements, metadata}
+      assert %Statifier.Parser.Location{} = metadata.location
     end
   end
 end

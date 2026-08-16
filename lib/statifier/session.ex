@@ -259,6 +259,7 @@ defmodule Statifier.Session do
   alias Statifier.Session.Invocations
   alias Statifier.Session.Recording
   alias Statifier.Session.Target
+  alias Statifier.Session.Telemetry
   alias Statifier.Session.Timers
 
   defmodule State do
@@ -277,7 +278,8 @@ defmodule Statifier.Session do
       subscribers: %{},
       halted: nil,
       recording: nil,
-      invocations: Invocations.new()
+      invocations: Invocations.new(),
+      macrostep_started_at: nil
     ]
 
     @type t :: %__MODULE__{
@@ -292,7 +294,14 @@ defmodule Statifier.Session do
             recording: Statifier.Session.Recording.t() | nil,
             invocations: Statifier.Session.Invocations.t(),
             invoke_source: (String.t() -> {:ok, Machine.t()} | {:error, term()}) | nil,
-            invoked_by: {pid(), String.t()} | nil
+            invoked_by: {pid(), String.t()} | nil,
+            # The monotonic timestamp (`System.monotonic_time/0`) of the
+            # currently open macrostep span - telemetry only, never recorded
+            # (ADR-0040, ADR-0034). `nil` outside `drain_event/2`,
+            # `drain_cancel/1`, and `deliver_internal/6`'s own spans;
+            # `init/1`'s span uses a local binding instead, since no
+            # `%State{}` exists yet when it opens (ADR-0040).
+            macrostep_started_at: integer() | nil
           }
   end
 
@@ -486,9 +495,16 @@ defmodule Statifier.Session do
 
   # -- callbacks ----------------------------------------------------------
 
+  # `Interpreter.initialize/2` runs before any `%State{}` exists (`session_id`
+  # itself is read back off its returned `machine_state`), so the
+  # `:initialize` macrostep span's start time is a local binding here rather
+  # than `%State{}.macrostep_started_at` - ADR-0040's one exception to that
+  # field's otherwise-uniform use in `drain_event/2`, `drain_cancel/1`, and
+  # `deliver_internal/6`.
   @impl GenServer
   def init({%Machine{} = machine, opts}) do
     machine_opts = Keyword.take(opts, [:session_id, :trace, :datamodel, :max_macrostep_rounds])
+    start_time = System.monotonic_time()
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
 
     subscribers =
@@ -499,13 +515,16 @@ defmodule Statifier.Session do
     session_id = machine_state.datamodel["_sessionid"]
     register_session(session_id)
 
+    invoked_by = Keyword.get(opts, :invoked_by)
+    monitor_parent(invoked_by)
+
+    Telemetry.init(session_id, machine, machine_state, invoked_by)
+    Telemetry.macrostep_start(session_id, :initialize, machine_state, nil)
+
     recording =
       if Keyword.get(opts, :record, false) do
         Recording.new(machine, Keyword.put(machine_opts, :session_id, session_id))
       end
-
-    invoked_by = Keyword.get(opts, :invoked_by)
-    monitor_parent(invoked_by)
 
     state = %State{
       machine_state: machine_state,
@@ -519,7 +538,18 @@ defmodule Statifier.Session do
       invoked_by: invoked_by
     }
 
-    {:ok, perform(state, effects), {:continue, :drain}}
+    state = perform(state, effects)
+
+    Telemetry.macrostep_stop(
+      session_id,
+      :initialize,
+      state.machine_state,
+      nil,
+      macrostep_outcome(state),
+      start_time
+    )
+
+    {:ok, state, {:continue, :drain}}
   end
 
   # `invoked_by` is `nil` for every session started as a plain document (the
@@ -672,6 +702,7 @@ defmodule Statifier.Session do
 
   def handle_cast({:interpret, effects}, state) do
     state = record(state, &Recording.put_interpret(&1, effects))
+    Telemetry.interpret(state.session_id, length(effects), state.machine_state)
     {:noreply, perform(state, effects), {:continue, :drain}}
   end
 
@@ -738,7 +769,7 @@ defmodule Statifier.Session do
   # monitor from Phase 2 (`monitor_parent/1`'s own comment): the child's own
   # `:DOWN` on its parent stops it without this session's help.
   @impl GenServer
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
     state.timers
     |> Timers.refs()
     |> Enum.each(fn ref ->
@@ -752,6 +783,9 @@ defmodule Statifier.Session do
     |> Invocations.entries()
     |> Enum.each(fn {_invoke_id, %{pid: pid}} -> cancel(pid) end)
 
+    {status, _configuration} = status_and_configuration(state)
+    Telemetry.terminate(state.session_id, reason, status, state.machine_state)
+
     :ok
   end
 
@@ -759,28 +793,81 @@ defmodule Statifier.Session do
 
   @spec drain_cancel(state :: State.t()) :: State.t()
   defp drain_cancel(state) do
-    case Interpreter.cancel(state.machine_state) do
-      {:ok, machine_state, effects} ->
-        %{state | machine_state: machine_state}
-        |> perform(effects, halt_override: :cancelled)
+    in_macrostep(state, :cancel, nil, fn state ->
+      case Interpreter.cancel(state.machine_state) do
+        {:ok, machine_state, effects} ->
+          %{state | machine_state: machine_state}
+          |> perform(effects, halt_override: :cancelled)
 
-      # A race: something else already stopped the core (e.g. natural
-      # termination reached it first). No crash, no further state change.
-      {:error, :not_running} ->
-        state
-    end
+        # A race: something else already stopped the core (e.g. natural
+        # termination reached it first). No crash, no further state change.
+        {:error, :not_running} ->
+          state
+      end
+    end)
   end
 
   @spec drain_event(state :: State.t(), event :: Event.t()) :: State.t()
   defp drain_event(state, event) do
-    case Interpreter.handle_event(state.machine_state, event) do
-      {:ok, machine_state, effects} ->
-        %{state | machine_state: machine_state} |> perform(effects)
+    in_macrostep(state, :event, event, fn state ->
+      case Interpreter.handle_event(state.machine_state, event) do
+        {:ok, machine_state, effects} ->
+          %{state | machine_state: machine_state} |> perform(effects)
 
-      {:error, :not_running} ->
-        state
-    end
+        {:error, :not_running} ->
+          state
+      end
+    end)
   end
+
+  # ADR-0040 Decision 2/3: opens the `[:statifier, :session, :macrostep,
+  # :start]`/`[..., :stop]` span pair around `drive`'s core-driving call
+  # (`Interpreter.handle_event/2`, `Interpreter.cancel/1`, or
+  # `Interpreter.deliver_internal/5`, per caller) plus the effect
+  # interpretation `perform/3` runs on its result - the span closes only once
+  # `state.halted` has whatever value that call produced, which is what
+  # `macrostep_outcome/1` reads. `state.macrostep_started_at` holds the open
+  # span's start time only for the span's own duration, reset to `nil` once
+  # it closes.
+  @spec in_macrostep(
+          state :: State.t(),
+          trigger :: :event | :cancel | :internal,
+          event :: Event.t() | nil,
+          drive :: (State.t() -> State.t())
+        ) :: State.t()
+  defp in_macrostep(state, trigger, event, drive) do
+    # `start_time` is captured in a local binding, not read back off
+    # `state.macrostep_started_at`, once `drive.()` returns: ADR-0039's
+    # re-entry path means `drive.()` can itself call `deliver_internal/6`,
+    # which opens and closes its own nested `in_macrostep/4` span before
+    # this (outer) one closes - the inner call's own `%{state |
+    # macrostep_started_at: nil}` would otherwise clobber the outer span's
+    # start time out from under it. The field still reflects the
+    # innermost currently-open span at any given instant (ADR-0040); this
+    # closure is what keeps each span's own duration correct regardless of
+    # nesting depth.
+    start_time = System.monotonic_time()
+    state = %{state | macrostep_started_at: start_time}
+    Telemetry.macrostep_start(state.session_id, trigger, state.machine_state, event)
+
+    state = drive.(state)
+
+    Telemetry.macrostep_stop(
+      state.session_id,
+      trigger,
+      state.machine_state,
+      event,
+      macrostep_outcome(state),
+      start_time
+    )
+
+    %{state | macrostep_started_at: nil}
+  end
+
+  @spec macrostep_outcome(state :: State.t()) ::
+          :quiescent | :done | :cancelled | :budget_exhausted
+  defp macrostep_outcome(%State{halted: nil}), do: :quiescent
+  defp macrostep_outcome(%State{halted: reason}), do: reason
 
   # -- performing (Statifier.Session.Effects plans; this performs) --------
 
@@ -800,11 +887,13 @@ defmodule Statifier.Session do
         ) :: State.t()
   defp perform_instruction({:notify, {:done, %Done{}} = effect}, state, _override) do
     notify(state, {:effect, effect})
+    Telemetry.effect(state.session_id, state.machine_state.machine, effect)
     %{state | done_effect: elem(effect, 1)}
   end
 
   defp perform_instruction({:notify, effect}, state, _override) do
     notify(state, {:effect, effect})
+    Telemetry.effect(state.session_id, state.machine_state.machine, effect)
     state
   end
 
@@ -919,6 +1008,7 @@ defmodule Statifier.Session do
 
   defp perform_instruction({:unroutable, effect}, state, _override) do
     notify(state, {:unroutable, effect})
+    Telemetry.unroutable(state.session_id, state.machine_state.machine, effect)
     state
   end
 
@@ -927,6 +1017,7 @@ defmodule Statifier.Session do
     state = %{state | halted: reason}
     return_done_event(reason, state)
     notify(state, {:halted, reason})
+    Telemetry.halt(state.session_id, reason, state.machine_state)
     state
   end
 
@@ -1213,13 +1304,15 @@ defmodule Statifier.Session do
   defp deliver_internal(kind, name, origin, opts, state, override) do
     state = record(state, &Recording.put_internal(&1, kind, name, origin, opts))
 
-    case Interpreter.deliver_internal(state.machine_state, kind, name, origin, opts) do
-      {:ok, machine_state, effects} ->
-        %{state | machine_state: machine_state} |> perform(effects, halt_override: override)
+    in_macrostep(state, :internal, nil, fn state ->
+      case Interpreter.deliver_internal(state.machine_state, kind, name, origin, opts) do
+        {:ok, machine_state, effects} ->
+          %{state | machine_state: machine_state} |> perform(effects, halt_override: override)
 
-      {:error, :not_running} ->
-        state
-    end
+        {:error, :not_running} ->
+          state
+      end
+    end)
   end
 
   # `Statifier.Effect.Send.owner/0`/`c_index` and

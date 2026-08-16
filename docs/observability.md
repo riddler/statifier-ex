@@ -147,9 +147,10 @@ promotion path.
 `Statifier.Session` is the session boundary. Two properties it preserves:
 
 - **Observation**: the session forwards its effect/trace stream to every
-  subscriber pid as `{:statifier, session_id, {:effect, effect}}` - a
-  `:telemetry` bridge attaches at that same boundary once it exists. Live
-  tooling attaches there; the core is untouched.
+  subscriber pid as `{:statifier, session_id, {:effect, effect}}`, and a
+  `:telemetry` bridge attaches at that same boundary - `Statifier.Session.Telemetry`,
+  the authoritative reference for every `[:statifier, :session, ...]` event
+  (ADR-0040). Live tooling attaches there; the core is untouched.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, cancel markers) in the
   session's serialized input order at the session boundary makes a run
