@@ -1,6 +1,7 @@
 # ADR-0040: Session telemetry event contract
 
-Status: accepted (2026-08-16)
+Status: accepted (2026-08-16) - amended 2026-08-16 (st-ii9v: singleton
+location carve-out withdrawn; no trace event carries a location)
 
 ## Context
 
@@ -173,6 +174,57 @@ singleton list - `TransitionsSelected` was the case this review actually
 raised, and generalizing to the other four is future work, not a decision
 this amendment makes for them.
 
+**Amendment (st-ii9v):** the open note above is now settled, in the
+withdraw direction: the singleton carve-out is removed from
+`TransitionsSelected` rather than extended to the other four, and no
+list-carrying trace effect carries a `location` key at any cardinality. The
+trace-family rule is uniform and fits in one line - no
+`[:statifier, :session, :trace, _]` event ever carries a `location` key.
+Locations on this surface live exclusively on the single-index core effect
+events and `:unroutable`, resolved by the rule at the top of this decision.
+Four arguments, in the order they carried the decision:
+
+- *A set-valued trace event names a phase, not a chart element.* The exit
+  set, the entry set, the invoke-pass walk, and a selection round's result
+  are each the subject of their event; a location resolved from a singleton
+  describes one member of a set that happened to have one member - a
+  coincidence of the chart and of the round, not a property of the event. A
+  selected transition is the closest thing to singular in the family, which
+  is why the carve-out started there, but even there the key's presence
+  flaps with runtime data: a consumer that wants transition locations must
+  handle the key-absent case anyway, so it already resolves from
+  `t_indexes` and a `Machine` handle, and the singleton value saves it
+  nothing it can build on.
+- *The extended rule cannot even be stated uniformly.* `InvokePass` carries
+  two lists (`state_indexes` and `invoke_ids`), so "a singleton list
+  resolves to a location" is ill-formed across the family without a
+  per-event footnote naming which list counts - which recreates exactly the
+  consult-a-table asymmetry the carve-out was criticized for, inside the
+  rule that was supposed to remove it.
+- *Cost never decided this.* The O(configuration) worst case above was
+  st-f6i9's opening for the carve-out, but the real per-microstep cost of
+  resolving singletons across all five is a handful of O(1) map reads -
+  negligible on a high-volume traced run. Extension was affordable; it
+  loses on shape, not on cost.
+- *Withdrawal is the reversible direction under the st-cmq.2 freeze.*
+  Adding a metadata key to a published event is additive and non-breaking;
+  removing one after the OpenTelemetry bridge ships against these shapes is
+  breaking. Before the freeze, withdrawing costs nothing and re-adding
+  stays open; extending is a commitment the semantic argument above does
+  not earn. Under genuine doubt, the direction that keeps the door open
+  wins.
+
+Withdrawal keeps the key-removal amendment's own rule honest: with the
+carve-out gone, no `trace_shape/2` clause can ever set `location`, so the
+key is absent from every trace event rather than present on one of them
+under a data-dependent condition. The open question this amendment records
+rather than resolves: whether a future consumer demand for a resolved
+"which line fired" attribute justifies re-adding a location to
+`transitions_selected`. If that demand materializes after st-cmq.2, the
+re-addition is additive and reopens only that event's table row, not this
+rule - the residual risk of withdrawing is a wanted key arriving late, not
+a breaking change.
+
 ### The trace-off policy is structural, not a bridge-side branch
 
 Everything except the `[:statifier, :session, :trace, _]` family fires
@@ -312,11 +364,10 @@ kill. `:halt` is the event to build a "session finished" metric on.
   list-carrying families (`exit_set`, `entry_set`, `transitions_selected`,
   `content_executed`, `invoke_pass`).
 - Metadata: `session_id`, `effect`, the index lists as carried, no
-  `location` key; plus `configuration` for `:done`, mirroring the core
-  `:done` effect's own resolution (both are built from the same
-  `configuration_at_exit` binding). `transitions_selected` is the single
-  exception (amendment above): it carries `location` when `t_indexes` is a
-  singleton, and no `location` key otherwise.
+  `location` key on any trace event, at any cardinality (st-ii9v amendment
+  above); plus `configuration` for `:done`, mirroring the core `:done`
+  effect's own resolution (both are built from the same
+  `configuration_at_exit` binding).
 
 ## Consequences
 

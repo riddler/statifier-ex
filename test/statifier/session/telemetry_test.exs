@@ -522,14 +522,14 @@ defmodule Statifier.Session.TelemetryTest do
     # span comes back - reverted and confirmed green.
     #
     # No core effect in the current vocabulary carries a bare `t_index` -
-    # only `Trace.TransitionsSelected.t_indexes`, a list. `trace_shape/2`'s
-    # singleton clause resolves a one-element `t_indexes` directly through
-    # `Machine.transition/2` rather than routing through this
-    # `location/2` function, so `location/2`'s own `t_index` clause still has
-    # no reachable caller through `effect/3`/`unroutable/3` today. It stays
-    # implemented per ADR-0040's resolver contract (`Machine.transition/2`
-    # is one of the three named readers) for whichever future effect names
-    # a bare `t_index`, and is not exercised by a test for that reason.
+    # only `Trace.TransitionsSelected.t_indexes`, a list, and no
+    # list-carrying trace effect ever resolves a location (the singleton
+    # carve-out is withdrawn - ADR-0040 Decision 4, amended). So
+    # `location/2`'s own `t_index` clause has no reachable caller through
+    # `effect/3`/`unroutable/3` today. It stays implemented per ADR-0040's
+    # resolver contract (`Machine.transition/2` is one of the three named
+    # readers) for whichever future effect names a bare `t_index`, and is
+    # not exercised by a test for that reason.
     test "resolves location from c_index and from state_index against a real machine", %{
       ref: ref
     } do
@@ -601,41 +601,14 @@ defmodule Statifier.Session.TelemetryTest do
       assert metadata.effect.indexes == [1, 2, 3]
     end
 
-    # sabotage: `trace_shape/2`'s `Trace.EventDequeued` clause is reverted to
-    # `%{location: nil}` -> red, `refute Map.has_key?(metadata, :location)`
-    # fails because the key is present (with a `nil` value, which
-    # `Map.has_key?/2` still counts as present) - reverted and confirmed
-    # green. `assert metadata.location == nil` would have passed on both the
-    # fixed and the unfixed code, which is why this asserts key absence
-    # instead.
-    test "a trace effect that never resolves a location carries no location key at all", %{
-      ref: ref
-    } do
-      machine = located_machine()
-
-      payload = %Trace.EventDequeued{
-        event: Event.external("e"),
-        from: :external,
-        macrostep: 1,
-        microstep: 1,
-        round: 0
-      }
-
-      Telemetry.effect("sess1", machine, {:trace, payload})
-
-      assert_received {[:statifier, :session, :trace, :event_dequeued], ^ref, _measurements,
-                       metadata}
-
-      refute Map.has_key?(metadata, :location)
-    end
-
-    # sabotage: `trace_shape/2`'s singleton `Trace.TransitionsSelected`
-    # clause (`t_indexes: [t_index]`) is deleted, leaving only the
-    # list-length clause -> red, the singleton case now falls through to the
-    # general clause and `metadata.location` no longer exists, failing the
-    # `%Statifier.Parser.Location{} = metadata.location` assertion below -
-    # reverted and confirmed green.
-    test "a singleton t_indexes resolves a real transition's location; zero or many carry no location key",
+    # sabotage: the withdrawn carve-out is reintroduced - `trace_shape/2`'s
+    # `Trace.TransitionsSelected` singleton clause
+    # (`%Trace.TransitionsSelected{t_indexes: [t_index]} -> %{location:
+    # Machine.transition(machine, t_index).location}`) is reintroduced ahead
+    # of the general list clause -> red, `refute Map.has_key?(one_metadata,
+    # :location)` fails because the singleton case now carries a resolved
+    # `location` again - reverted and confirmed green.
+    test "Trace.TransitionsSelected carries no location key at any cardinality (singleton, empty, multi)",
          %{ref: ref} do
       machine = located_machine()
       {:ok, a_index} = Machine.index(machine, "a")
@@ -657,8 +630,7 @@ defmodule Statifier.Session.TelemetryTest do
                        one_measurements, one_metadata}
 
       assert one_measurements.size == 1
-      assert %Statifier.Parser.Location{} = one_metadata.location
-      assert one_metadata.location == Machine.transition(machine, t_index).location
+      refute Map.has_key?(one_metadata, :location)
 
       zero =
         {:trace,
@@ -695,6 +667,244 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert many_measurements.size == 2
       refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.ExitSet` clause is changed to put
+    # `location: List.first(indexes) && Machine.at(machine, List.first(indexes)).location`
+    # into its metadata map -> red, `refute Map.has_key?(one_metadata,
+    # :location)` fails for the singleton case (`indexes: [a_index]`) -
+    # reverted and confirmed green.
+    test "Trace.ExitSet carries no location key at any cardinality (singleton, empty, multi)", %{
+      ref: ref
+    } do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+
+      one = {:trace, %Trace.ExitSet{indexes: [a_index], macrostep: 1, microstep: 1, round: 0}}
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :exit_set], ^ref, one_measurements,
+                       one_metadata}
+
+      assert one_measurements.size == 1
+      refute Map.has_key?(one_metadata, :location)
+
+      zero = {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}}
+      Telemetry.effect("sess1", machine, zero)
+
+      assert_received {[:statifier, :session, :trace, :exit_set], ^ref, zero_measurements,
+                       zero_metadata}
+
+      assert zero_measurements.size == 0
+      refute Map.has_key?(zero_metadata, :location)
+
+      many =
+        {:trace,
+         %Trace.ExitSet{indexes: [a_index, a_index], macrostep: 1, microstep: 1, round: 0}}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :exit_set], ^ref, many_measurements,
+                       many_metadata}
+
+      assert many_measurements.size == 2
+      refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.EntrySet` clause is changed to put
+    # `location: List.first(indexes) && Machine.at(machine, List.first(indexes)).location`
+    # into its metadata map -> red, `refute Map.has_key?(one_metadata,
+    # :location)` fails for the singleton case - reverted and confirmed
+    # green.
+    test "Trace.EntrySet carries no location key at any cardinality (singleton, empty, multi)", %{
+      ref: ref
+    } do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+
+      one = {:trace, %Trace.EntrySet{indexes: [a_index], macrostep: 1, microstep: 1, round: 0}}
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :entry_set], ^ref, one_measurements,
+                       one_metadata}
+
+      assert one_measurements.size == 1
+      refute Map.has_key?(one_metadata, :location)
+
+      zero = {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}}
+      Telemetry.effect("sess1", machine, zero)
+
+      assert_received {[:statifier, :session, :trace, :entry_set], ^ref, zero_measurements,
+                       zero_metadata}
+
+      assert zero_measurements.size == 0
+      refute Map.has_key?(zero_metadata, :location)
+
+      many =
+        {:trace,
+         %Trace.EntrySet{indexes: [a_index, a_index], macrostep: 1, microstep: 1, round: 0}}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :entry_set], ^ref, many_measurements,
+                       many_metadata}
+
+      assert many_measurements.size == 2
+      refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.ContentExecuted` clause is changed
+    # to put `location: List.first(c_indexes) &&
+    # Machine.content(machine, List.first(c_indexes)).location` into its
+    # metadata map -> red, `refute Map.has_key?(one_metadata, :location)`
+    # fails for the singleton case (`c_indexes: [0]`) - reverted and
+    # confirmed green.
+    test "Trace.ContentExecuted carries no location key at any cardinality (singleton, empty, multi)",
+         %{ref: ref} do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+      owner = {:onentry, a_index, 0}
+
+      one =
+        {:trace,
+         %Trace.ContentExecuted{
+           owner: owner,
+           c_indexes: [0],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :content_executed], ^ref, one_measurements,
+                       one_metadata}
+
+      assert one_measurements.size == 1
+      refute Map.has_key?(one_metadata, :location)
+
+      zero =
+        {:trace,
+         %Trace.ContentExecuted{owner: owner, c_indexes: [], macrostep: 1, microstep: 1, round: 0}}
+
+      Telemetry.effect("sess1", machine, zero)
+
+      assert_received {[:statifier, :session, :trace, :content_executed], ^ref, zero_measurements,
+                       zero_metadata}
+
+      assert zero_measurements.size == 0
+      refute Map.has_key?(zero_metadata, :location)
+
+      many =
+        {:trace,
+         %Trace.ContentExecuted{
+           owner: owner,
+           c_indexes: [0, 0],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :content_executed], ^ref, many_measurements,
+                       many_metadata}
+
+      assert many_measurements.size == 2
+      refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.InvokePass` clause is changed to
+    # put `location: List.first(state_indexes) &&
+    # Machine.at(machine, List.first(state_indexes)).location` into its
+    # metadata map -> red, `refute Map.has_key?(one_metadata, :location)`
+    # fails for the singleton case - reverted and confirmed green.
+    test "Trace.InvokePass carries no location key at any cardinality (singleton, empty, multi)",
+         %{ref: ref} do
+      machine = located_machine()
+      {:ok, a_index} = Machine.index(machine, "a")
+
+      one =
+        {:trace,
+         %Trace.InvokePass{
+           state_indexes: [a_index],
+           invoke_ids: ["i1"],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :invoke_pass], ^ref, one_measurements,
+                       one_metadata}
+
+      assert one_measurements.size == 1
+      refute Map.has_key?(one_metadata, :location)
+
+      zero =
+        {:trace,
+         %Trace.InvokePass{
+           state_indexes: [],
+           invoke_ids: [],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, zero)
+
+      assert_received {[:statifier, :session, :trace, :invoke_pass], ^ref, zero_measurements,
+                       zero_metadata}
+
+      assert zero_measurements.size == 0
+      refute Map.has_key?(zero_metadata, :location)
+
+      many =
+        {:trace,
+         %Trace.InvokePass{
+           state_indexes: [a_index, a_index],
+           invoke_ids: ["i1", "i2"],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :invoke_pass], ^ref, many_measurements,
+                       many_metadata}
+
+      assert many_measurements.size == 2
+      refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.EventDequeued` clause is reverted to
+    # `%{location: nil}` -> red, `refute Map.has_key?(metadata, :location)`
+    # fails because the key is present (with a `nil` value, which
+    # `Map.has_key?/2` still counts as present) - reverted and confirmed
+    # green. `assert metadata.location == nil` would have passed on both the
+    # fixed and the unfixed code, which is why this asserts key absence
+    # instead.
+    test "a trace effect that never resolves a location carries no location key at all", %{
+      ref: ref
+    } do
+      machine = located_machine()
+
+      payload = %Trace.EventDequeued{
+        event: Event.external("e"),
+        from: :external,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Telemetry.effect("sess1", machine, {:trace, payload})
+
+      assert_received {[:statifier, :session, :trace, :event_dequeued], ^ref, _measurements,
+                       metadata}
+
+      refute Map.has_key?(metadata, :location)
     end
   end
 

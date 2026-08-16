@@ -41,7 +41,7 @@
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 | [0038](0038-invoke-source-resolves-at-the-session-boundary.md) | `<invoke>`'s source resolves at the session boundary, never inside the library | accepted |
 | [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted |
-| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted |
+| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
