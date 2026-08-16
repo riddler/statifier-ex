@@ -125,7 +125,7 @@ non-defect rather than a latent one:
   of error events triggered by a failed attempt to send an event ... to
   the send id of the triggering <send> element", and 6.2.4 places that
   error on the *sending* session's internal queue - where `send_N` is
-  unique by construction. ADR-0037 (session-detected send failures) keeps
+  unique by construction. ADR-0039 (session-detected send failures) keeps
   the same routing.
 
 Were a real defect ever found here, the fix still could not be "make it a
