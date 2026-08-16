@@ -1,7 +1,9 @@
 # ADR-0041: `<content>` markup lowers to a source slice, compiled at invoke time
 
 Status: accepted (2026-08-16; amended 2026-08-16: the namespace-limitation
-bullet's claim that the corpus case compiles was wrong, corrected below)
+bullet's claim that the corpus case compiles was wrong, corrected below;
+amended in part by 0042: the no-declaration child compiles under the
+relaxed namespace rule)
 
 ## Context
 
@@ -184,7 +186,9 @@ ADR-0014 fixed for expression spans.
   This is not a reason to reopen options 1 or 2 - re-serializing a DOM subtree
   or re-parsing a span would both hit the same standalone-root check - but it
   is a real gap, tracked as st-ybuj, and st-cmq.9 must not assume these files
-  reach their assertions once its harness change lands.
+  reach their assertions once its harness change lands. ADR-0042 settles this
+  case: the invoke-time content compile applies the relaxed namespace rule,
+  so the no-declaration child compiles once that lands.
 
   A fragment whose root uses a prefix declared outside the slice compiles to a
   `foreign_element`/unresolved failure at invoke time instead. Nothing in the
