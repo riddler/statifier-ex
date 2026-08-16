@@ -151,7 +151,8 @@ through that `invoked_by` link directly, with no registry lookup needed;
 (`Statifier.Session.Invocations.fetch/2`) rather than the registry - a live
 entry's `pid` gets the event delivered to its external queue directly, and
 an `invokeid` naming no live invocation (never one, or since cancelled or
-exited) takes the ordinary `error.communication` path (st-xcgr). `{:autoforward, _}` forwards every external event the
+exited) takes the ordinary `error.communication` path (st-xcgr).
+`{:autoforward, _}` forwards every external event the
 parent removes from its queue to each autoforwarding invocation, unmodified,
 at the point the core's finalize/autoforward pass runs. `{:cancel_invoke, _}`
 stops the child via `Session.cancel/1` (not `stop/2`, so its `<onexit>`
