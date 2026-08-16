@@ -21,11 +21,61 @@ defmodule Statifier.Session.Telemetry do
   is metadata, including the ones that happen to be integers: an opaque
   index has no numeric meaning to average.
 
-  A `configuration` in metadata (on `:halt`, and on the `:macrostep, :stop`
-  event below) is translated from the raw `MapSet.t(non_neg_integer())` the
-  machine state carries into a `MapSet.t(String.t())` of state ids via
-  `Statifier.Machine.id/2`, so a subscriber never needs a `Machine` handle to
-  read a configuration out of an event.
+  A `configuration` in metadata (on `:halt`, on the `:macrostep, :stop` event,
+  and on the `:effect, :done`/`:trace, :done` events below) is translated
+  from the raw `MapSet.t(non_neg_integer())` the machine state or the
+  `Done`/`Trace.Done` payload's own `configuration` field carries into a
+  `MapSet.t(String.t())` of state ids via `Statifier.Machine.id/2`, so a
+  subscriber never needs a `Machine` handle to read a configuration out of an
+  event - including the terminal one, where `MachineState.configuration` is
+  already empty and the payload's own field is the only carrier left.
+
+  ## Span correlation
+
+  The macrostep span's start and stop halves both carry `span_ref`, a
+  `make_ref/0` reference generated once per span and passed unchanged from
+  `macrostep_start/4` to the matching `macrostep_stop/7` - the
+  `telemetry_span_context` convention `:telemetry.span/3` uses, so a
+  subscriber (including an OTel bridge) pairs a span's two halves on
+  `span_ref` rather than on `(session_id, macrostep)`, which is unusable for
+  this because `macrostep` is not stable across the span (below) and ADR-0039
+  re-entry can nest an `:internal` span inside an `:event` span already in
+  flight, producing `start, start, stop, stop` with no other way to tell
+  which start belongs to which stop. Each span - including a nested one - gets
+  its own `span_ref`. Both halves also carry `monotonic_time`
+  (`System.monotonic_time/0`), matching `:telemetry_metrics`/OTel convention.
+
+  The start half deliberately carries no `macrostep`. The counter this span
+  opens against advances *inside* the core call the span brackets
+  (`MachineState.begin_macrostep/1`, called from `Interpreter.handle_event/2`
+  among others), so a `macrostep` read at the start half can be the
+  pre-increment value while the stop half reports the post-increment one -
+  the two would silently disagree on a pairing key. `span_ref` is the
+  correlation mechanism; the stop half is the only place `macrostep` is
+  authoritative for this span.
+
+  This bridge hand-rolls the span pair rather than calling
+  `:telemetry.span/3`: that helper wraps its span function in a `rescue`, so
+  it always emits a matching `:exception` event, and this bridge has no
+  `:exception` half to offer (below) - forwarding decisions the session's
+  `perform/3` already made deterministically, not evaluating one under a
+  `rescue` of its own would invent a failure mode the session does not have.
+
+  ## Two consumer-facing caveats
+
+  There is deliberately no fourth, `:exception`-named member of the
+  `:macrostep` span family alongside `:start`/`:stop` (previous section): a
+  crash mid-span - inside `perform/3`, say - leaves that span's start
+  unmatched by any stop. A subscriber pairing on `span_ref` should not expect
+  every `span_ref` it sees on a start to arrive again on a stop.
+
+  The `:initialize` span's start event is emitted *after*
+  `Interpreter.initialize/2` has already returned (`Statifier.Session.init/1`
+  needs the `machine_state` that call produces before it can call
+  `Statifier.Session.Telemetry.init/4`, which happens first), so its
+  `system_time` is not the wall-clock instant the span actually opened at,
+  even though `duration` on the matching stop is still measured from a
+  `System.monotonic_time/0` reading taken before that call.
 
   ## Locations are resolved at emission, for single-index effects only
 
@@ -48,9 +98,9 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :init]` | `system_time` | `session_id`, `machine_name`, `trace`, `invoked_by` |
   | `[:statifier, :session, :halt]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `configuration` |
   | `[:statifier, :session, :terminate]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `status` |
-  | `[:statifier, :session, :macrostep, :start]` | `system_time` | `session_id`, `trigger`, `macrostep`, `event_name` |
-  | `[:statifier, :session, :macrostep, :stop]` | `duration`, `macrostep`, `microsteps`, `rounds` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration` |
-  | `[:statifier, :session, :interpret]` | `effect_count` | `session_id`, `macrostep`, `microstep` |
+  | `[:statifier, :session, :macrostep, :start]` | `system_time`, `monotonic_time` | `session_id`, `trigger`, `event_name`, `span_ref` |
+  | `[:statifier, :session, :macrostep, :stop]` | `duration`, `macrostep`, `microsteps`, `rounds`, `monotonic_time` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration`, `span_ref` |
+  | `[:statifier, :session, :interpret]` | `effect_count`, `macrostep`, `microstep` | `session_id` |
   | `[:statifier, :session, :unroutable]` | `macrostep`, `microstep` | `session_id`, `effect`, `target`, `send_id`, `location` |
 
   `[:statifier, :session, :unroutable]` names a routing failure the session
@@ -77,7 +127,7 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location` |
+  | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
 
   ## Trace effect events (9), emitted only under `trace: true`
@@ -95,7 +145,7 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :trace, :content_executed]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :trace, :entry_set]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :trace, :macrostep_stable]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :trace, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
+  | `[:statifier, :session, :trace, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :trace, :invoke_pass]` | `macrostep`, `microstep`, `round`, `size` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :trace, :finalize_autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location` |
 
@@ -252,22 +302,37 @@ defmodule Statifier.Session.Telemetry do
     )
   end
 
-  @doc "Emits `[:statifier, :session, :macrostep, :start]`."
+  @doc """
+  Emits `[:statifier, :session, :macrostep, :start]`. `span_ref` is a
+  `make_ref/0` reference generated once by the caller and passed unchanged
+  to the matching `macrostep_stop/7` - the pairing mechanism a subscriber
+  needs (Decision 2 below), since `macrostep` cannot serve that role here:
+  the counter this span opens against advances *inside* the core call the
+  span brackets, so the start half is emitted before the increment and the
+  stop half after it. Carrying the pre-increment value on start would look
+  paired with the wrong stop on every span whose trigger's core call
+  advances the counter (`:event`, and any other trigger with the same
+  shape); carrying the post-increment value on start would require reading
+  it out of a machine state the start half does not otherwise need. Rather
+  than pick one and leave the other case's start event silently wrong, the
+  start half carries no `macrostep` at all - `span_ref` is the only
+  correlation mechanism, and it is exact by construction.
+  """
   @spec macrostep_start(
           session_id :: String.t(),
           trigger :: :initialize | :event | :cancel | :internal,
-          machine_state :: MachineState.t(),
-          event :: Statifier.Event.t() | nil
+          event :: Statifier.Event.t() | nil,
+          span_ref :: reference()
         ) :: :ok
-  def macrostep_start(session_id, trigger, machine_state, event) do
+  def macrostep_start(session_id, trigger, event, span_ref) do
     :telemetry.execute(
       [:statifier, :session, :macrostep, :start],
-      %{system_time: System.system_time()},
+      %{system_time: System.system_time(), monotonic_time: System.monotonic_time()},
       %{
         session_id: session_id,
         trigger: trigger,
-        macrostep: machine_state.macrostep,
-        event_name: event_name(event)
+        event_name: event_name(event),
+        span_ref: span_ref
       }
     )
   end
@@ -276,6 +341,12 @@ defmodule Statifier.Session.Telemetry do
   Emits `[:statifier, :session, :macrostep, :stop]`. `start_time` is a
   `System.monotonic_time/0` reading taken at the matching
   `macrostep_start/4`; `duration` is the difference, in `:native` units.
+  `span_ref` is the same reference passed to that `macrostep_start/4` call,
+  carried again here so a subscriber can pair this stop with its start
+  (Decision 2) - nested spans (an `:internal` span opened by ADR-0039
+  re-entry inside an `:event` span already in flight) each get their own
+  reference, so `start, start, stop, stop` is disambiguated by `span_ref`
+  rather than by call order.
   """
   @spec macrostep_stop(
           session_id :: String.t(),
@@ -283,23 +354,26 @@ defmodule Statifier.Session.Telemetry do
           machine_state :: MachineState.t(),
           event :: Statifier.Event.t() | nil,
           outcome :: :quiescent | :done | :cancelled | :budget_exhausted,
-          start_time :: integer()
+          start_time :: integer(),
+          span_ref :: reference()
         ) :: :ok
-  def macrostep_stop(session_id, trigger, machine_state, event, outcome, start_time) do
+  def macrostep_stop(session_id, trigger, machine_state, event, outcome, start_time, span_ref) do
     :telemetry.execute(
       [:statifier, :session, :macrostep, :stop],
       %{
         duration: System.monotonic_time() - start_time,
         macrostep: machine_state.macrostep,
         microsteps: machine_state.microstep,
-        rounds: machine_state.round
+        rounds: machine_state.round,
+        monotonic_time: System.monotonic_time()
       },
       %{
         session_id: session_id,
         trigger: trigger,
         outcome: outcome,
         event_name: event_name(event),
-        configuration: configuration_ids(machine_state)
+        configuration: configuration_ids(machine_state),
+        span_ref: span_ref
       }
     )
   end
@@ -313,12 +387,12 @@ defmodule Statifier.Session.Telemetry do
   def interpret(session_id, effect_count, machine_state) do
     :telemetry.execute(
       [:statifier, :session, :interpret],
-      %{effect_count: effect_count},
       %{
-        session_id: session_id,
+        effect_count: effect_count,
         macrostep: machine_state.macrostep,
         microstep: machine_state.microstep
-      }
+      },
+      %{session_id: session_id}
     )
   end
 
@@ -328,9 +402,9 @@ defmodule Statifier.Session.Telemetry do
   `machine` resolves `location` per the moduledoc's single-index rule.
   """
   @spec effect(session_id :: String.t(), machine :: Machine.t(), effect :: Effect.t()) :: :ok
-  def effect(session_id, _machine, {:trace, payload}) do
+  def effect(session_id, machine, {:trace, payload}) do
     kind = trace_kind(payload)
-    {measurements, extra} = trace_shape(payload)
+    {measurements, extra} = trace_shape(machine, payload)
 
     :telemetry.execute(
       [:statifier, :session, :trace, kind],
@@ -444,7 +518,10 @@ defmodule Statifier.Session.Telemetry do
 
   defp core_shape(machine, %Done{} = done) do
     {%{macrostep: done.macrostep, microstep: done.microstep},
-     %{location: location(machine, done)}}
+     %{
+       location: location(machine, done),
+       configuration: resolve_configuration(machine, done.configuration)
+     }}
   end
 
   defp core_shape(machine, %Log{} = log) do
@@ -452,40 +529,41 @@ defmodule Statifier.Session.Telemetry do
      %{location: location(machine, log), label: log.label, c_index: log.c_index, owner: log.owner}}
   end
 
-  @spec trace_shape(payload :: trace_payload()) :: {map(), map()}
-  defp trace_shape(%Trace.EventDequeued{} = payload) do
+  @spec trace_shape(machine :: Machine.t(), payload :: trace_payload()) :: {map(), map()}
+  defp trace_shape(_machine, %Trace.EventDequeued{} = payload) do
     {counters(payload), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.TransitionsSelected{t_indexes: t_indexes} = payload) do
+  defp trace_shape(_machine, %Trace.TransitionsSelected{t_indexes: t_indexes} = payload) do
     {Map.put(counters(payload), :size, length(t_indexes)), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.ExitSet{indexes: indexes} = payload) do
+  defp trace_shape(_machine, %Trace.ExitSet{indexes: indexes} = payload) do
     {Map.put(counters(payload), :size, length(indexes)), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.ContentExecuted{c_indexes: c_indexes} = payload) do
+  defp trace_shape(_machine, %Trace.ContentExecuted{c_indexes: c_indexes} = payload) do
     {Map.put(counters(payload), :size, length(c_indexes)), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.EntrySet{indexes: indexes} = payload) do
+  defp trace_shape(_machine, %Trace.EntrySet{indexes: indexes} = payload) do
     {Map.put(counters(payload), :size, length(indexes)), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.MacrostepStable{} = payload) do
+  defp trace_shape(_machine, %Trace.MacrostepStable{} = payload) do
     {counters(payload), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.Done{} = payload) do
-    {counters(payload), %{location: nil}}
+  defp trace_shape(machine, %Trace.Done{} = payload) do
+    {counters(payload),
+     %{location: nil, configuration: resolve_configuration(machine, payload.configuration)}}
   end
 
-  defp trace_shape(%Trace.InvokePass{state_indexes: state_indexes} = payload) do
+  defp trace_shape(_machine, %Trace.InvokePass{state_indexes: state_indexes} = payload) do
     {Map.put(counters(payload), :size, length(state_indexes)), %{location: nil}}
   end
 
-  defp trace_shape(%Trace.FinalizeAutoforward{} = payload) do
+  defp trace_shape(_machine, %Trace.FinalizeAutoforward{} = payload) do
     {counters(payload), %{location: nil}}
   end
 
@@ -527,6 +605,23 @@ defmodule Statifier.Session.Telemetry do
 
   @spec configuration_ids(machine_state :: MachineState.t()) :: MapSet.t(String.t())
   defp configuration_ids(%MachineState{machine: machine, configuration: configuration}) do
+    resolve_configuration(machine, configuration)
+  end
+
+  # Shared by `configuration_ids/1` (a live `MachineState`'s own
+  # configuration) and `Effect.Done`/`Trace.Done`'s own `configuration`
+  # field (the full configuration as it stood at exit, carried on the
+  # payload itself rather than read off `machine_state` - by the time
+  # either `:done` effect is emitted, `MachineState.configuration` is
+  # already empty). Same translation either way: a raw
+  # `MapSet.t(non_neg_integer())` of constraint-3 indexes resolved to state
+  # ids via `Machine.id/2`.
+  @spec resolve_configuration(
+          machine :: Machine.t(),
+          configuration :: MapSet.t(non_neg_integer())
+        ) ::
+          MapSet.t(String.t())
+  defp resolve_configuration(machine, configuration) do
     configuration
     |> Enum.map(&Machine.id(machine, &1))
     |> Enum.reject(&is_nil/1)

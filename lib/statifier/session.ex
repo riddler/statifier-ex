@@ -505,6 +505,7 @@ defmodule Statifier.Session do
   def init({%Machine{} = machine, opts}) do
     machine_opts = Keyword.take(opts, [:session_id, :trace, :datamodel, :max_macrostep_rounds])
     start_time = System.monotonic_time()
+    span_ref = make_ref()
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
 
     subscribers =
@@ -519,7 +520,7 @@ defmodule Statifier.Session do
     monitor_parent(invoked_by)
 
     Telemetry.init(session_id, machine, machine_state, invoked_by)
-    Telemetry.macrostep_start(session_id, :initialize, machine_state, nil)
+    Telemetry.macrostep_start(session_id, :initialize, nil, span_ref)
 
     recording =
       if Keyword.get(opts, :record, false) do
@@ -546,7 +547,8 @@ defmodule Statifier.Session do
       state.machine_state,
       nil,
       macrostep_outcome(state),
-      start_time
+      start_time,
+      span_ref
     )
 
     {:ok, state, {:continue, :drain}}
@@ -847,8 +849,9 @@ defmodule Statifier.Session do
     # closure is what keeps each span's own duration correct regardless of
     # nesting depth.
     start_time = System.monotonic_time()
+    span_ref = make_ref()
     state = %{state | macrostep_started_at: start_time}
-    Telemetry.macrostep_start(state.session_id, trigger, state.machine_state, event)
+    Telemetry.macrostep_start(state.session_id, trigger, event, span_ref)
 
     state = drive.(state)
 
@@ -858,7 +861,8 @@ defmodule Statifier.Session do
       state.machine_state,
       event,
       macrostep_outcome(state),
-      start_time
+      start_time,
+      span_ref
     )
 
     %{state | macrostep_started_at: nil}
