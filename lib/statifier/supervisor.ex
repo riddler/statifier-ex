@@ -40,8 +40,9 @@ defmodule Statifier.Supervisor do
   caller. `Statifier.Registry` and `Statifier.SessionSupervisor` are fixed,
   module-qualified names; starting a second `Statifier.Supervisor` in the
   same node is a name collision, not a second isolated session population.
-  Tests `start_supervised!(Statifier.Supervisor)` the same module rather
-  than standing up a bespoke registry/supervisor pair.
+  The test suite places one runtime for the whole run in
+  `test/test_helper.exs`, for the same one-instance reason, rather than each
+  test standing up its own registry/supervisor pair.
   """
 
   use Supervisor

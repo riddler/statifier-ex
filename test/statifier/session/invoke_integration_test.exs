@@ -85,8 +85,6 @@ defmodule Statifier.Session.InvokeIntegrationTest do
     # just re-checking `done.invoke` delivery on its own. Reverted and
     # confirmed green.
     test "one <invoke> composes every obligation to the same child" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(full_cycle_parent_xml())
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)
@@ -183,7 +181,20 @@ defmodule Statifier.Session.InvokeIntegrationTest do
     # transition never fires, and the wait below flunks. Reverted and
     # confirmed green.
     test "the flat SessionSupervisor and invoked_by chain compose across two levels" do
-      start_supervised!(Statifier.Supervisor)
+      # `Statifier.SessionSupervisor` is the shared, module-qualified runtime
+      # `test/test_helper.exs` places once for the whole run, so it can
+      # already hold children other tests started and never stopped - and,
+      # since some of those are bare `Session.start_link/2` parents linked
+      # to a test process that has since exited, that population can also
+      # shrink between this baseline read and the assertion below. A pid
+      # *set* diff is what stays accurate under both directions of drift; a
+      # before/after count (even as a delta) is not, and
+      # `test/support/case.ex`'s own comment makes the same call for the
+      # corpus harness's routing decision for the same reason.
+      baseline_pids =
+        Statifier.SessionSupervisor
+        |> DynamicSupervisor.which_children()
+        |> MapSet.new(fn {_id, pid, _type, _modules} -> pid end)
 
       machine = compile!(nested_parent_xml())
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
@@ -208,8 +219,13 @@ defmodule Statifier.Session.InvokeIntegrationTest do
 
       # Both the child and the grandchild landed on the one flat
       # SessionSupervisor - no supervisor-per-parent nesting (ADR-0027).
-      children = DynamicSupervisor.which_children(Statifier.SessionSupervisor)
-      assert length(children) == 2
+      new_pids =
+        Statifier.SessionSupervisor
+        |> DynamicSupervisor.which_children()
+        |> Enum.map(fn {_id, pid, _type, _modules} -> pid end)
+        |> Enum.reject(&MapSet.member?(baseline_pids, &1))
+
+      assert length(new_pids) == 2
     end
   end
 
@@ -256,8 +272,6 @@ defmodule Statifier.Session.InvokeIntegrationTest do
     # where the assertion below expects it to stay 0. Reverted and confirmed
     # green.
     test "the one delivered event runs only its own invocation's finalize" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(two_invocation_parent_xml())
       {:ok, parent} = Session.start_link(machine)
 

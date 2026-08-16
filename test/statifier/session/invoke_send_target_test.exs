@@ -55,8 +55,6 @@ defmodule Statifier.Session.InvokeSendTargetTest do
     # reaches the child, so `run` never transitions to `pinged` and the wait
     # below flunks. Reverted and confirmed green.
     test "adds the event to that session's external queue" do
-      start_supervised!(Statifier.Supervisor)
-
       # "go" is a self-transition with no `target` - it stays inside "a", so
       # the invoking state is never exited and "child1" stays live for the
       # `<send>` to reach. A transition that left "a" would cancel "child1"
@@ -135,8 +133,6 @@ defmodule Statifier.Session.InvokeSendTargetTest do
     # below. Reverted and confirmed green (run together with the previous
     # test's sabotage, since both exercise the same branch).
     test "raises error.communication, the same as an invokeid that never existed" do
-      start_supervised!(Statifier.Supervisor)
-
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
           <state id="a">

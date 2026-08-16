@@ -81,8 +81,6 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
     # still arrives (the transition below still fires), but the `invokeid`
     # assertion reddens. Reverted and confirmed green.
     test "arrives at the parent as an external event carrying invokeid, origin, origintype" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc(invoke_with(pinging_child_xml("#_parent"))))
       {:ok, parent} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(parent)
@@ -126,8 +124,6 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
     # `ping` ever reaches the parent and the wait below flunks. Reverted and
     # confirmed green.
     test "behaves identically to #_parent" do
-      start_supervised!(Statifier.Supervisor)
-
       machine = compile!(parent_doc(invoke_with(pinging_child_xml("_parent"))))
       {:ok, parent} = Session.start_link(machine)
 
@@ -172,8 +168,6 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
     # `"done.invoke"` event, so the parent never leaves "a" and the wait
     # below flunks. Reverted and confirmed green.
     test "delivers done.invoke.<invoke_id> to the parent, carrying the child's donedata" do
-      start_supervised!(Statifier.Supervisor)
-
       invoke_body =
         ~s(<invoke id="child1" type="scxml">#{content_body(finalizing_child_xml())}</invoke>)
 
@@ -203,8 +197,6 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
     # confirmed green. This test's own job is proving the session-side
     # invokeid feed, not re-testing the core's matching rule.
     test "only the pinging invocation's <finalize> runs, and not its sibling's" do
-      start_supervised!(Statifier.Supervisor)
-
       invoke_body = """
       <invoke id="inv-a" type="scxml">
           <finalize><assign location="a_ran" expr="true"/></finalize>
