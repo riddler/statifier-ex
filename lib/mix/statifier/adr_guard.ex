@@ -75,7 +75,20 @@ defmodule Mix.Statifier.AdrGuard do
   # a second one, since registration, lookup, monitor and start_child calls
   # all still happen inside `session.ex`. Excluding both is the design, not a
   # hole in the check.
-  @effect_interpreter_paths ["lib/statifier/session.ex", "lib/statifier/supervisor.ex"]
+  # `lib/statifier/session/telemetry.ex` (ADR-0040) joins the same list for the
+  # same reason: it is not a second effect interpreter, it is the emission half
+  # of the one ADR-0003 names, split out of session.ex only because
+  # `.doctor.exs`'s 100% Doctor bar puts the event contract in a @moduledoc.
+  # It holds no state, drives no core function, and is called from nowhere but
+  # session.ex. ADR-0027's "argued, not defaulted" bar for a new exempt path is
+  # answered here rather than by an ADR-0003 escape comment on every
+  # :telemetry.execute/3 call site, which would be the same exemption spelled
+  # ~10 times with no record.
+  @effect_interpreter_paths [
+    "lib/statifier/session.ex",
+    "lib/statifier/supervisor.ex",
+    "lib/statifier/session/telemetry.ex"
+  ]
 
   @interpreter_pattern ~r{^lib/statifier/interpreter}
 
@@ -96,8 +109,8 @@ defmodule Mix.Statifier.AdrGuard do
 
   @effect_call_pattern ~r/
     use\s+GenServer\b | GenServer\. | Process\.(send|send_after|exit|monitor)\( |
-    :timer\. | Logger\.\w+\( | IO\.(puts|write|inspect)\( | File\.\w+!?\( |
-    System\.cmd\( | Node\.\w+\( | :ets\. | Agent\.\w+!?\( |
+    :timer\. | :telemetry\. | Logger\.\w+\( | IO\.(puts|write|inspect)\( |
+    File\.\w+!?\( | System\.cmd\( | Node\.\w+\( | :ets\. | Agent\.\w+!?\( |
     Task\.(start|async)\( | \bspawn\w*\( | \breceive\s+do\b
   /x
 

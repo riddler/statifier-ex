@@ -107,6 +107,49 @@ defmodule Mix.Statifier.AdrGuardTest do
     test "the mix-task machinery is not the pure core" do
       assert analyze("lib/mix/statifier/gate_guard.ex", ["    System.cmd(\"git\", args)"]) == []
     end
+
+    # ADR-0040: the pure core never calls :telemetry directly - the trace
+    # effects are the instrumentation stream, and Statifier.Session.Telemetry
+    # is the one interpreter of them.
+    # sabotage: drop the :telemetry\. alternative from @effect_call_pattern -> red
+    test "a :telemetry call in the core fires" do
+      assert [%{check: "adr-0003-effects", line: 10}] =
+               analyze("lib/statifier/interpreter.ex", [
+                 "    :telemetry.execute([:statifier, :session, :effect], measurements, metadata)"
+               ])
+    end
+
+    # The pre-existing exemption: session.ex is the effect interpreter ADR-0003
+    # names, so a :telemetry call there is the design, not a violation.
+    # sabotage: drop "lib/statifier/session.ex" from @effect_interpreter_paths -> red
+    test "a :telemetry call in session.ex is exempt" do
+      assert analyze("lib/statifier/session.ex", [
+               "    :telemetry.execute([:statifier, :session, :effect], measurements, metadata)"
+             ]) == []
+    end
+
+    # ADR-0040's new exemption: the :telemetry.execute/3 call sites live in
+    # session/telemetry.ex, the emission half of the same effect interpreter,
+    # split out only because .doctor.exs's 100% bar puts the event contract in
+    # a @moduledoc. This is what makes the exemption load-bearing rather than
+    # an unverified assertion.
+    # sabotage: drop "lib/statifier/session/telemetry.ex" from
+    #           @effect_interpreter_paths -> red
+    test "a :telemetry call in session/telemetry.ex is exempt" do
+      assert analyze("lib/statifier/session/telemetry.ex", [
+               "    :telemetry.execute([:statifier, :session, :effect], measurements, metadata)"
+             ]) == []
+    end
+
+    # The general inline-citation escape hatch also clears a :telemetry
+    # finding in a non-exempt path, same as any other @effect_call_pattern hit.
+    # sabotage: drop the entry.previous clause from cited?/1 -> red
+    test "a :telemetry call with an ADR-0003 citation above it is not a finding" do
+      assert analyze("lib/statifier/interpreter.ex", [
+               "    # ADR-0003: deviation, trace sink reads a counter for a bug report",
+               "    :telemetry.execute([:statifier, :session, :effect], measurements, metadata)"
+             ]) == []
+    end
   end
 
   describe "ADR-0004 - predicator as the datamodel" do
