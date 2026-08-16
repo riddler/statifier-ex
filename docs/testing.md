@@ -1,7 +1,7 @@
 # Testing strategy
 
 The conformance corpus is the contract for this rewrite. v1's most valuable asset is
-its test infrastructure, and it ports almost for free: the 186 SCION/W3C test files
+its test infrastructure, and it ports almost for free: the 281 SCION/W3C test files
 touch no library internals - everything goes through one `Statifier.Case` module
 ([ADR-0006](adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)).
 
@@ -10,10 +10,11 @@ touch no library internals - everything goes through one `Statifier.Case` module
 1. **Internal tests** (`test/statifier/...`) - unit tests for parser, machine
    compiler, interpreter functions, datamodel. Written fresh for v2, pattern-matching
    style. Run by default with `mix test`.
-2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 116 emitted tests out of
-   127 native upstream SCION cases (11 excluded, see `tools/corpus/README.md`).
-   Excluded by default.
-3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 159 emitted tests (156
+2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 119 emitted tests out of
+   127 native upstream SCION cases; the rest are excluded at generation time,
+   with the count and the reason per case in `tools/corpus/scion/exclusions.exs`
+   (see `tools/corpus/README.md`). Excluded by default.
+3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 162 emitted tests (159
    mandatory + 3 optional) out of 193 upstream W3C cases. Excluded by default.
    Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
    entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
