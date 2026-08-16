@@ -123,4 +123,21 @@ defmodule Mix.Tasks.Gate.VerifyTest do
              "Full gate green: scope all, no profile, 2 stages considered.\n" <>
                "Not checked by this project at all: Sobelow ()"
   end
+
+  # run/1 has no `opts` parameter to inject a stub `runner` through, and its
+  # real default (`mix_quality/1`) shells out to a full `mix quality --report
+  # -` - a nested run of the whole gate, including its own Tests stage, which
+  # would itself run this very file again. Driving run/1's real defaults down
+  # either of its two dispatch clauses is therefore not a cheap or safe
+  # in-process test the way it is for the git-backed tasks. This test
+  # exercises run/1's other real-default line instead - the
+  # `case execute(argv) do` dispatch itself - through an OptionParser
+  # failure, which raises before the case can match either arm.
+  # sabotage: change execute/2's `OptionParser.parse!/2` call to
+  #           `OptionParser.parse/2` (which does not raise on an unknown
+  #           switch) -> red (a MatchError from the 2-tuple/3-tuple mismatch
+  #           replaces the expected OptionParser.ParseError)
+  test "run/1 propagates an OptionParser error for an unrecognized switch" do
+    assert_raise OptionParser.ParseError, fn -> Verify.run(["--not-a-real-switch"]) end
+  end
 end

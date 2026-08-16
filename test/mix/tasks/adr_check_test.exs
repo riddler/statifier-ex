@@ -1,6 +1,8 @@
 defmodule Mix.Tasks.Adr.CheckTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureIO
+
   alias Mix.Tasks.Adr.Check
 
   # The task's only side effect is a `git` shell-out, so every test drives it
@@ -177,5 +179,22 @@ defmodule Mix.Tasks.Adr.CheckTest do
       assert text =~ "ADR check could not read git"
       assert text =~ "exited 128"
     end
+  end
+
+  # Exercises run/1 itself, not execute/2 - the only way to reach run/1's
+  # `{:ok, output} -> report(output, 0)` clause and report/2's own status-0
+  # clause, neither reachable through execute/2 alone. run/1 has no `opts`
+  # parameter to inject a stub runner through, so this uses the real `git`
+  # shell-out with `--base HEAD`: the diff between HEAD and itself is always
+  # empty, so this reaches the clean-pass branch deterministically regardless
+  # of what is dirty in this checkout. report/2's non-zero clause
+  # (`System.at_exit(fn _ -> exit({:shutdown, status}) end)`) is never
+  # reached on this path, so the `mix test` VM's own exit code stays
+  # untouched - verified separately that `mix adr.check --base HEAD` exits 0
+  # in this checkout before writing this test.
+  # sabotage: have report/2's status-0 clause return :error instead of :ok -> red
+  test "run/1 returns :ok for a real clean pass" do
+    output = capture_io(fn -> assert :ok = Check.run(["--base", "HEAD"]) end)
+    assert output =~ "No likely ADR violations"
   end
 end
