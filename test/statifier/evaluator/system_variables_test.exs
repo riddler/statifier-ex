@@ -45,7 +45,7 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
 
       assert %{
                "_sessionid" => "sess_abc",
-               "_name" => nil,
+               "_name" => :undefined,
                "_ioprocessors" => %{
                  "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{
                    "location" => "#_scxml_sess_abc"
@@ -56,9 +56,9 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
 
     # sabotage: `initial/2` reads `machine.id` instead of `machine.name` ->
     # this assertion reddens because `<scxml>` here writes no `name`.
-    test "_name is nil when <scxml> writes no name attribute" do
+    test "_name is :undefined when <scxml> writes no name attribute" do
       m = machine()
-      assert SystemVariables.initial(m, "sess_abc")["_name"] == nil
+      assert SystemVariables.initial(m, "sess_abc")["_name"] == :undefined
     end
   end
 
@@ -100,6 +100,44 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
 
       assert SystemVariables.event(Event.platform("done.state.s1", cause))["type"] ==
                "platform"
+    end
+  end
+
+  describe "_name evaluates as :undefined, not null, when <scxml> omits name (st-1bjz)" do
+    # sabotage: `initial/2`'s `"_name" => absent(machine.name)` clause is
+    # reverted to `"_name" => machine.name` -> an unnamed `<scxml>` binds
+    # `_name` to predicator's own null instead of `:undefined`, and the
+    # first assertion below flips - `_name === undefined` reddens to
+    # `{:ok, false}` and `_name === null` reddens to `{:ok, true}`.
+    test "_name === undefined is true and _name === null is false for an unnamed <scxml>" do
+      {:ok, machine} =
+        Statifier.compile("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">
+            <state id="s1"/>
+        </scxml>
+        """)
+
+      context = machine |> MachineState.new() |> Evaluator.context()
+
+      assert Evaluator.evaluate(context, compiled_expr("_name === undefined")) == {:ok, true}
+      assert Evaluator.evaluate(context, compiled_expr("_name === null")) == {:ok, false}
+    end
+
+    # sabotage: `initial/2` writes a bare `:undefined` for `"_name"` instead of
+    # `absent(machine.name)` -> the name attribute never reaches the datamodel
+    # and this reddens to `{:ok, :undefined}`, while the unnamed case above
+    # keeps passing.
+    test "_name equals the name attribute for a named <scxml>" do
+      {:ok, machine} =
+        Statifier.compile("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="chart1" initial="s1">
+            <state id="s1"/>
+        </scxml>
+        """)
+
+      context = machine |> MachineState.new() |> Evaluator.context()
+
+      assert Evaluator.evaluate(context, compiled_expr("_name")) == {:ok, "chart1"}
     end
   end
 

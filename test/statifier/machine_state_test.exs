@@ -133,7 +133,7 @@ defmodule Statifier.MachineStateTest do
 
       assert %{
                "_sessionid" => ^session_id,
-               "_name" => nil,
+               "_name" => :undefined,
                "_event" => :undefined,
                "_ioprocessors" => %{
                  "http://www.w3.org/TR/scxml/#SCXMLEventProcessor" => %{
