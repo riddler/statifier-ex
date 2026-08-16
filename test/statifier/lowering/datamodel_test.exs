@@ -13,7 +13,7 @@ defmodule Statifier.Lowering.DatamodelTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -219,7 +219,7 @@ defmodule Statifier.Lowering.DatamodelTest do
       """
 
       assert {:error, [%Error{reason: {:missing_attribute, "data", "id"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end
@@ -241,7 +241,7 @@ defmodule Statifier.Lowering.DatamodelTest do
       """
 
       assert {:error, [%Error{reason: {:misplaced_element, "state", "data"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end

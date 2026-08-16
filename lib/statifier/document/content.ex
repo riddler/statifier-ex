@@ -1,18 +1,23 @@
 defmodule Statifier.Document.Content do
   @moduledoc """
-  A `<content>` element: static text, or an `expr`, or (representably, if
-  not validly) both.
+  A `<content>` element: static text, an `expr`, markup, or (representably,
+  if not validly) any combination.
 
   Spec 5.6 allows `<content>` children to be "text, XML from any namespace,
   or a mixture of both". Preserving non-text markup would mean holding a DOM
   subtree inside a Document struct, crossing the layer boundary this rewrite
-  is organized around, and nothing in the conformance corpus needs it: every
-  static `<content>` there is plain text
-  (`test/scxml_tests/mandatory/content/test529_test.exs:30` is `21`,
-  `test/scxml_tests/mandatory/donedata/test294_test.exs:48` is `foo`).
-  Lowering is expected to error on an element child inside `<content>`
-  rather than silently drop it, the mirror image of lowering's rule for
-  stray non-whitespace text elsewhere.
+  is organized around - so `markup` holds a verbatim source slice instead
+  (ADR-0041), not a subtree: no DOM node ever reaches this struct. The slice
+  is opaque bytes here; the child document it describes is only compiled at
+  invoke time, from `markup`, through `Statifier.Invoke.Source.resolve/2`.
+
+  `markup` is `nil` unless `<content>` has at least one element child; when
+  present, it is the exact source bytes from the start of the first
+  non-whitespace child to the end of the last non-whitespace child, elements
+  and text runs alike, so a 5.6.2 "mixture" slices whole. `markup_location`
+  is that slice's own span in the parent source - its `start_offset` is what
+  makes a byte offset inside the child document translatable back into a
+  parent-document offset by plain arithmetic (ADR-0014).
 
   `text` is `Statifier.Parser.DOM.text/1`'s concatenation of the direct text
   children and has no span of its own: an entity reference or a CDATA
@@ -20,24 +25,34 @@ defmodule Statifier.Document.Content do
   source, so there is no single span to give it. This `Content` node's own
   `location` is what a diagnostic about the text points at instead.
 
-  `expr` and `text` are both nilable and both representable at the same
-  time, even though spec 5.6 says a document MUST NOT specify both. That
-  mutual exclusion is a validator concern, not this layer's - holding both
-  is exactly what lets `Statifier.Validator.Checks.Content` report a
-  document that violates it, as `{:content_expr_and_text, expr}` at this
-  node's own `location`. Whitespace-only `text` is source
-  formatting rather than a payload and is not reported.
+  `expr`, `text`, and `markup` are all nilable and all representable at the
+  same time, even though spec 5.6 says a document MUST NOT specify both
+  `expr` and content. That mutual exclusion is a validator concern, not this
+  layer's - holding all three is exactly what lets
+  `Statifier.Validator.Checks.Content` report a document that violates it,
+  as `{:content_expr_and_text, expr}` at this node's own `location`.
+  Whitespace-only `text` is source formatting rather than a payload and is
+  not reported.
   """
 
   alias Statifier.Document
   alias Statifier.Parser.Location
 
   @enforce_keys [:location]
-  defstruct [:location, expr: nil, text: nil, attribute_locations: %{}]
+  defstruct [
+    :location,
+    expr: nil,
+    text: nil,
+    markup: nil,
+    markup_location: nil,
+    attribute_locations: %{}
+  ]
 
   @type t :: %__MODULE__{
           expr: String.t() | nil,
           text: String.t() | nil,
+          markup: String.t() | nil,
+          markup_location: Location.t() | nil,
           location: Location.t(),
           attribute_locations: Document.attribute_locations()
         }

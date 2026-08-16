@@ -82,7 +82,7 @@ defmodule Statifier.Lowering.CoverageTest do
 
   defp lower(xml) do
     {:ok, root} = Parser.parse(xml)
-    Lowering.lower(root)
+    Lowering.lower(root, xml)
   end
 
   # sabotage: n/a - a completeness check on the test's own two hardcoded

@@ -15,7 +15,7 @@ defmodule Statifier.Lowering.SendTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 

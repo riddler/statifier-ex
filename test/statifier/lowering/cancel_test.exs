@@ -13,7 +13,7 @@ defmodule Statifier.Lowering.CancelTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 

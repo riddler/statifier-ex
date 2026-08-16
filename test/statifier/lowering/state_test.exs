@@ -14,7 +14,7 @@ defmodule Statifier.Lowering.StateTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -279,7 +279,7 @@ defmodule Statifier.Lowering.StateTest do
       xml = "<scxml><transition target=\"a\"/></scxml>"
 
       assert {:error, [%Error{reason: {:misplaced_element, "transition", "scxml"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert error.location != nil
     end

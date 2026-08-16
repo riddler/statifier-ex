@@ -15,7 +15,7 @@ defmodule Statifier.Lowering.DonedataTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -191,20 +191,18 @@ defmodule Statifier.Lowering.DonedataTest do
       """
 
       assert {:error, [%Error{reason: {:missing_attribute, "param", "name"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert %Parser.Location{start_line: 4} = error.location
     end
   end
 
   describe "lower/1 - element child inside <content>" do
-    # sabotage: `build_content/2` drops the `<content>`-exempt-from-stray-text
-    # special case, calling `Lowering.walk_children/2` on the content element
-    # instead of reading `element.children` directly -> the misplaced-element
-    # assertion below reddens (the child element would attempt normal
-    # dispatch, or the text run beside it would instead surface as
-    # `{:stray_text, _}`)
-    test "an element child inside <content> is misplaced, not silently dropped" do
+    # sabotage: `slice_markup/2`'s "has an element child" guard is inverted
+    # (`not Enum.any?(...)`) -> the element child no longer triggers a slice,
+    # so `markup` stays `nil` instead of the sliced child, reddening the
+    # assertion below (ADR-0041).
+    test "an element child inside <content> lowers, sliced into markup" do
       xml = """
       <scxml>
           <final id="f">
@@ -215,10 +213,11 @@ defmodule Statifier.Lowering.DonedataTest do
       </scxml>
       """
 
-      assert {:error, [%Error{reason: {:misplaced_element, "state", "content"}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
 
-      assert error.location != nil
+      content = hd(document.states).donedata.content
+      assert content.markup == ~s(<state id="s"/>)
+      assert content.markup_location != nil
     end
   end
 
@@ -244,7 +243,7 @@ defmodule Statifier.Lowering.DonedataTest do
       </scxml>
       """
 
-      assert {:error, errors} = xml |> parse!() |> Lowering.lower()
+      assert {:error, errors} = xml |> parse!() |> Lowering.lower(xml)
 
       assert [
                %Error{reason: {:misplaced_element, "invoke", "donedata"}},

@@ -37,6 +37,8 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Lowering.Error
   alias Statifier.Parser.DOM
   alias Statifier.Parser.DOM.Element
+  alias Statifier.Parser.DOM.Text
+  alias Statifier.Parser.Location
 
   @binding_values %{"early" => :early, "late" => :late}
   @history_type_values %{"shallow" => :shallow, "deep" => :deep}
@@ -346,20 +348,16 @@ defmodule Statifier.Lowering.Builders do
   rule (its text *is* its payload), so this builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, which
   would otherwise flag that same text as a stray-text error. An element
-  child is not silently dropped, though: each one produces
-  `{:misplaced_element, name, "content"}`
-  (`lib/statifier/document/content.ex:12-15`), not a build attempt of its
-  own - `<content>` does not hold a markup subtree.
+  child is no longer misplaced (ADR-0041): `markup`/`markup_location` are
+  set from a verbatim slice of `ctx.source` when `<content>` has at least
+  one element child, and the child is never dispatched or walked - the
+  slice is opaque bytes at this layer, so no `foreign_element` or
+  `misplaced_element` error is possible here either.
   """
   @spec build_content(element :: Element.t(), ctx :: map()) ::
           {{:content, Content.t()}, [Error.t()]}
-  def build_content(%Element{} = element, _ctx) do
-    errors =
-      element
-      |> DOM.elements()
-      |> Enum.map(fn %Element{name: name, location: location} ->
-        Error.misplaced(name, "content", location)
-      end)
+  def build_content(%Element{} = element, ctx) do
+    {markup, markup_location} = slice_markup(element, Map.fetch!(ctx, :source))
 
     attribute_locations = Attributes.put_location(%{}, :expr, element, "expr")
 
@@ -367,11 +365,42 @@ defmodule Statifier.Lowering.Builders do
       location: element.location,
       expr: Attributes.value(element, "expr"),
       text: DOM.text(element),
+      markup: markup,
+      markup_location: markup_location,
       attribute_locations: attribute_locations
     }
 
-    {{:content, content}, errors}
+    {{:content, content}, []}
   end
+
+  # `nil` when `element` has no element child; otherwise the verbatim source
+  # bytes spanning the first through last non-whitespace child (elements and
+  # `Text` runs alike), so a 5.6.2 "mixture" slices whole (ADR-0041).
+  @spec slice_markup(element :: Element.t(), source :: binary()) ::
+          {String.t() | nil, Location.t() | nil}
+  defp slice_markup(%Element{children: children}, source) do
+    significant = Enum.reject(children, &blank_text?/1)
+
+    if Enum.any?(significant, &match?(%Element{}, &1)) do
+      first = List.first(significant)
+      last = List.last(significant)
+
+      markup_location = %Location{
+        first.location
+        | end_line: last.location.end_line,
+          end_column: last.location.end_column,
+          end_offset: last.location.end_offset
+      }
+
+      {Location.slice(markup_location, source), markup_location}
+    else
+      {nil, nil}
+    end
+  end
+
+  @spec blank_text?(node :: Element.t() | Text.t()) :: boolean()
+  defp blank_text?(%Text{value: value}), do: String.trim(value) == ""
+  defp blank_text?(%Element{}), do: false
 
   @doc """
   Builds a `%Statifier.Document.Datamodel{}` from a `<datamodel>` element,
@@ -408,9 +437,10 @@ defmodule Statifier.Lowering.Builders do
   concatenation of `<data>`'s direct text children - a `<data>`'s text *is*
   its payload (spec 5.3.2), so this builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, the
-  same exemption `build_content/2` takes. An element child is not silently
-  dropped: each one produces `{:misplaced_element, name, "data"}` instead of
-  a build attempt of its own - `<data>` does not hold a markup subtree.
+  same stray-text exemption `<content>`'s own builder takes (ADR-0041). An
+  element child is not silently dropped: each one produces
+  `{:misplaced_element, name, "data"}` instead of a build attempt of its
+  own - `<data>` does not hold a markup subtree.
 
   A missing `id` means no struct can be built at all (`:id` is
   `@enforce_keys`'d on `Data`), following `build_raise/2`'s required-attribute
@@ -467,10 +497,10 @@ defmodule Statifier.Lowering.Builders do
   value source, an `<assign>`'s children "provide an in-line specification
   of the legal data value" (5.4.2, 5.9.3), so this builder reads
   `element.children` directly rather than calling
-  `Statifier.Lowering.walk_children/2`, the same exemption `build_data/2`
-  and `build_content/2` take. An element child is not silently dropped:
-  each one produces `{:misplaced_element, name, "assign"}` instead of a
-  build attempt of its own - `<assign>` does not hold a markup subtree.
+  `Statifier.Lowering.walk_children/2`, the same stray-text exemption
+  `build_data/2` takes. An element child is not silently dropped: each one
+  produces `{:misplaced_element, name, "assign"}` instead of a build
+  attempt of its own - `<assign>` does not hold a markup subtree.
   """
   @spec build_assign(element :: Element.t(), ctx :: map()) ::
           {{:content_node, Assign.t()} | nil, [Error.t()]}
@@ -565,8 +595,8 @@ defmodule Statifier.Lowering.Builders do
   at all. `<elseif>` takes no children of its own (4.4.1 gives it none, the
   same "empty element" shape `<else>` has); an element child is reported as
   `{:misplaced_element, name, "elseif"}` rather than built, the same
-  exemption `build_data/2` and `build_content/2` take for their own
-  childless/text-only content models.
+  exemption `build_data/2` takes for its own childless/text-only content
+  model.
   """
   @spec build_elseif(element :: Element.t(), ctx :: map()) ::
           {{:elseif, If.Branch.t()} | nil, [Error.t()]}
@@ -722,11 +752,10 @@ defmodule Statifier.Lowering.Builders do
   untrimmed concatenation of `<script>`'s direct text children - the
   predicator program body (5.8.2). This builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, the
-  same exemption `build_data/2`/`build_content/2`/`build_assign/2` take for
-  their own text-only content models. An element child is not silently
-  dropped: each one produces `{:misplaced_element, name, "script"}` instead
-  of a build attempt of its own - `<script>` does not hold a markup
-  subtree.
+  same stray-text exemption `build_data/2`/`build_assign/2` take for their
+  own text-only content models. An element child is not silently dropped:
+  each one produces `{:misplaced_element, name, "script"}` instead of a
+  build attempt of its own - `<script>` does not hold a markup subtree.
   """
   @spec build_script(element :: Element.t(), ctx :: map()) ::
           {{:content_node, Script.t()} | nil, [Error.t()]}

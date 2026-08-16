@@ -36,7 +36,7 @@ defmodule Statifier.Lowering.LayerTest do
   # attribute name that happens to collide with an element name
   # (`Attributes.put_location(:initial, element, "initial")` - "initial" is
   # both), a parent's own name threaded into a `misplaced_element` message
-  # (`Error.misplaced(name, "content", location)` inside `build_content/2`),
+  # (`Error.misplaced(name, "data", location)` inside `build_data/2`),
   # and `content_node_name/1` mapping a struct back to the element name it
   # came from for the same kind of message. None of those is a dispatch
   # clause - they are plain data flowing through ordinary function-call

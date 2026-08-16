@@ -13,7 +13,7 @@ defmodule Statifier.Lowering.NamespaceTest do
   end
 
   defp lower!(xml) do
-    {:ok, document} = xml |> parse!() |> Lowering.lower()
+    {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
     document
   end
 
@@ -86,7 +86,7 @@ defmodule Statifier.Lowering.NamespaceTest do
       """
 
       assert {:error, [%Error{reason: {:foreign_element, "html:div", uri}} = error]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert uri == "http://www.w3.org/1999/xhtml"
       assert error.location != nil
@@ -105,7 +105,7 @@ defmodule Statifier.Lowering.NamespaceTest do
       """
 
       assert {:error, [%Error{reason: {:foreign_element, "ns0:scxml", uri}}]} =
-               xml |> parse!() |> Lowering.lower()
+               xml |> parse!() |> Lowering.lower(xml)
 
       assert uri == "http://example.com/not-scxml"
     end
@@ -131,7 +131,7 @@ defmodule Statifier.Lowering.NamespaceTest do
       </scxml>
       """
 
-      assert {:error, errors} = xml |> parse!() |> Lowering.lower()
+      assert {:error, errors} = xml |> parse!() |> Lowering.lower(xml)
 
       # Inside <state id="A">, foo: resolves against foo's own declaration -
       # a genuinely foreign element bound to http://example.com/foo.
