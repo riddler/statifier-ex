@@ -404,4 +404,28 @@ defmodule Mix.Tasks.Adr.JudgeTest do
       assert text =~ "exited 128"
     end
   end
+
+  # run/1 has no `opts` parameter to inject a stub `caller` through, and the
+  # `:test`-build default caller (`AdrJudge.refuse_real_call/1`) raises
+  # rather than shelling out for real - deliberately, per its own moduledoc,
+  # so a test can never rack up a real `claude` CLI call or spend by
+  # forgetting to stub it. That rules out reaching run/1's
+  # `{:ok, output} -> report(output, 0)` clause from here: a real diff with
+  # an in-scope change would hit that raise the moment `analyze/2` called the
+  # real caller, and a diff with none hits the `:no_scoped_changes` skip,
+  # whose `report(output, 2)` clause calls `System.at_exit` and sets the
+  # whole `mix test` VM's own exit code - confirmed with `mix adr.judge
+  # --base HEAD`, which exits 2 in this checkout's clean tree, so that path
+  # is not available here the way it is for `mix adr.check`. This test
+  # exercises run/1's other real-default line instead - the
+  # `case execute(argv) do` dispatch itself - through an OptionParser
+  # failure, which raises before the case can match any arm, so report/2 is
+  # never reached at all.
+  # sabotage: change execute/2's `OptionParser.parse!/2` call to
+  #           `OptionParser.parse/2` (which does not raise on an unknown
+  #           switch) -> red (a MatchError from the 2-tuple/3-tuple mismatch
+  #           replaces the expected OptionParser.ParseError)
+  test "run/1 propagates an OptionParser error for an unrecognized switch" do
+    assert_raise OptionParser.ParseError, fn -> Judge.run(["--not-a-real-switch"]) end
+  end
 end
