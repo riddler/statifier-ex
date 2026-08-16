@@ -76,7 +76,7 @@ defmodule Statifier.Replay do
   `Statifier.Interpreter.deliver_internal/5` through
   `Statifier.Session`'s own private seam, and every one of those calls is
   recorded as an `{:internal, kind, name, origin, opts}` entry
-  (ADR-0037, ADR-0029) at its own position in the session's serialized
+  (ADR-0039, ADR-0029) at its own position in the session's serialized
   input order - interleaved with, not nested inside, the entry that
   triggered it. Performing the delivery again while re-deriving that
   triggering entry's own effects would raise the same internal event twice,
@@ -204,7 +204,7 @@ defmodule Statifier.Replay do
     {:ok, state |> perform(effects) |> drain()}
   end
 
-  # Mirrors the `{:event, _}` clause above: re-enter through the ADR-0037
+  # Mirrors the `{:event, _}` clause above: re-enter through the ADR-0039
   # seam, then drain to quiescence. Not an error-only path - Phase 4 routes
   # ordinary `<send target="#_internal">` through the same seam, so an
   # entirely successful run produces these entries too (see the moduledoc's

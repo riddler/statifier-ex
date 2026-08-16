@@ -39,6 +39,7 @@
 | [0035](0035-send-id-is-a-machinestate-counter.md) | The send id is `send_<n>` off a new `machine_state.send_counter` | accepted (amended 2026-08-15: cross-session sendid collision recorded harmless) |
 | [0036](0036-send-argument-failure-discards-the-message.md) | A failed `<send>` argument discards the message (amends 0021 in part) | accepted |
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
+| [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

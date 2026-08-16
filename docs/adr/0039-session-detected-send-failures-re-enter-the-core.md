@@ -1,4 +1,4 @@
-# ADR-0037: Session-detected send failures re-enter the core
+# ADR-0039: Session-detected send failures re-enter the core
 
 Status: accepted (2026-08-15)
 

@@ -26,7 +26,7 @@ defmodule Statifier.Session.Effects do
      to the sending session's own external queue.
   4. `:internal` (`#_internal`/`_internal`) -> `{:deliver, :internal, event,
      effect}`, resolved by `Statifier.Session` through
-     `Statifier.Interpreter.deliver_internal/5` (ADR-0037).
+     `Statifier.Interpreter.deliver_internal/5` (ADR-0039).
   5. `{:session, _}`, `:parent`, `{:invoke, _}` -> `{:deliver, route, event,
      effect}`; `Statifier.Session` resolves the route (self-addressing needs
      no registry, decision 10; everything else is `error.communication`
@@ -225,7 +225,7 @@ defmodule Statifier.Session.Effects do
   # *carrier* for `Statifier.Session` to read `name`/`data`/`sendid` back off
   # - the actual delivery re-raises through
   # `Statifier.Interpreter.deliver_internal/5`, which builds its own
-  # `Cause` from the machine's *current* counters at delivery time (ADR-0037,
+  # `Cause` from the machine's *current* counters at delivery time (ADR-0039,
   # decision 2), so this event's own `cause` is never read and its
   # macrostep/microstep/round are placeholders, not the delivered event's
   # real provenance.
