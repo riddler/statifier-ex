@@ -43,8 +43,10 @@ defmodule Statifier.Session.DatamodelReconstructionTest do
   # Decision 6's stated gap: the initial datamodel binding (this chart's own
   # <data> elements) is not on the effect stream - only writes are. A
   # consumer folding the effect stream alone still needs the starting map
-  # from some other channel; a follow-up bead covers emitting for <data>
-  # binding. This literal is that other channel, restated here rather than
+  # from some other channel. Putting the initial binding on the stream too -
+  # <data> binding, the environment seed, and the system variables - is
+  # separate work, tracked outside the code. This literal is that other
+  # channel, restated here rather than
   # read off `Session.snapshot/1`, so the reconstruction below never touches
   # the oracle it is meant to be checked against.
   @starting_datamodel %{"x" => 1, "a" => nil, "items" => [10, 20, 30]}
