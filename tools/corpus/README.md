@@ -87,15 +87,15 @@ Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
 `.scxml`, comments stripped), and a single `test_scxml/4` call. Of the 198
 downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
-runtime rather than conformance cases, leaving 193 cases; 159 of those emit
-(156 mandatory + 3 optional), and the rest are filtered out (see below).
+runtime rather than conformance cases, leaving 193 cases; 162 of those emit
+(159 mandatory + 3 optional), and the rest are filtered out (see below).
 `test/scxml_tests/` is populated.
 
 The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
 derived via `Statifier.FeatureDetector`, inline XML heredoc (4-space base
 indent, raw source unmodified - no xmerl re-serialization), and a single
-`test_scxml/4` call. 116 of the 127 native SCION cases emit; the rest are
+`test_scxml/4` call. 119 of the 127 native SCION cases emit; the rest are
 excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
 is populated.
 
@@ -115,10 +115,12 @@ path-shape invariant directly so that class of drift fails a gate instead of
 waiting for a case-sensitive filesystem to surface it.
 
 `mix test.regression` and `mix test.baseline` report per-corpus coverage
-against these emitted counts (118 SCION, 159 W3C), not the upstream suite
+against these emitted counts (119 SCION, 162 W3C), not the upstream suite
 sizes above - see `docs/testing.md`'s regression ratchet section - so an edit
 to either exclusions file that changes what emits also changes what those
-tasks report as the denominator.
+tasks report as the denominator. `test/corpus/readme_counts_test.exs` pins
+every count in this file against a fresh count of the emitted tree, so that
+drift fails a gate instead of sitting here unnoticed.
 
 Remaining work, tracked in beads:
 
@@ -143,12 +145,25 @@ Three filters apply before a W3C case is emitted, all in `scxml_w3/cases.exs`:
 
 One filter applies before a SCION case is emitted, in `scion/cases.exs`:
 
-- **exclusions.exs**: cases with no predicator equivalent (`<script>`,
-  `<script src>`), and the `w3c-ecma` tree - SCION's own untransformed
-  duplicate of the W3C IRP suite - recorded with a reason atom per ADR-0004.
-  `more-parallel/test10` and `test10b` are excluded too, for a different
-  reason: they assume a `<parallel>` can be the LCCA, which the REC forbids
-  (ADR-0022).
+- **exclusions.exs**: cases with no predicator equivalent (`<script src>`),
+  and the `w3c-ecma` tree - SCION's own untransformed duplicate of the W3C
+  IRP suite - recorded with a reason atom per ADR-0004. `more-parallel/test10`
+  and `test10b` are excluded too, for a different reason: they assume a
+  `<parallel>` can be the LCCA, which the REC forbids (ADR-0022).
+
+  The file holds 6 keys today. A key names either a whole spec directory
+  (every case under it is excluded) or one `spec/case` pair. `w3c-ecma` is a
+  directory key, but it excludes the separate 189-case duplicate tree, not
+  any of the 127 native cases - it plays no part in the 127-vs-119
+  reconciliation below. The other 5 keys account for all 8 native cases
+  the emitted count is short of 127: `script-src` is a directory key
+  matching 4 cases (`test0`-`test3`); `error` is a directory key matching 1
+  case; `assign-current-small-step/test0`, `more-parallel/test10`, and
+  `more-parallel/test10b` are single-case keys, 1 each. `4 + 1 + 1 + 1 + 1 =
+  8`, and `119 + 8 = 127`. (An earlier version of this file also excluded a
+  `script` directory - 3 more native cases - but st-af3.17 un-excluded it
+  once `conf:script` could compile under predicator's statement grammar; the
+  key is gone, not merely unmatched.)
 
 v1's generated corpus (`../statifier/test/scion_tests`, `.../scxml_tests`) is the
 reference for the target shape and for seeding `test/passing_tests.json`.
