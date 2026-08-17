@@ -1,8 +1,8 @@
-defmodule Statifier.Session.TargetTest do
+defmodule Statifier.Send.TargetTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Session.Target
+  alias Statifier.Send.Target
 
   describe "parse/1" do
     # sabotage: `parse/1`'s `def parse(nil), do: :self` clause is deleted,

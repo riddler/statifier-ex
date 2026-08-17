@@ -1,10 +1,13 @@
-defmodule Statifier.Session.Target do
+defmodule Statifier.Send.Target do
   @moduledoc """
   Spec 6.2.2's `target` attribute and C.1's special-target vocabulary,
-  parsed into a route `Statifier.Session.Effects` plans against, plus the
-  supported-`type` predicate 6.2.5 asks for. One pure module, no process, no
-  effect calls - `Mix.Statifier.AdrGuard` has nothing to say about it and no
-  exemption is needed.
+  parsed into a route, plus the supported-`type` predicate 6.2.5 asks for.
+  One pure module, no process, no effect calls - `Mix.Statifier.AdrGuard`
+  has nothing to say about it and no exemption is needed. It has two
+  consumers: the core's `<send>` node, which rejects a `{:invalid, _}`
+  target or an unsupported `type` under ADR-0047, and
+  `Statifier.Session.Effects`, which applies the same classification at
+  `Statifier.Session.interpret/2`'s boundary (ADR-0029).
 
   Resolving a route into an actual delivery (or `error.communication`) is
   `Statifier.Session`'s job, not this module's: this module only says *what
@@ -118,6 +121,10 @@ defmodule Statifier.Session.Target do
   Anything else - including `supported_type?/1`'s own processor URI - is
   unsupported: this engine implements only SCXML-typed invocations (see the
   plan's "What We're NOT Doing" on BasicHTTP and non-SCXML invoke types).
+
+  This predicate lives here, alongside `<send>`'s own, because it shares
+  6.4.2/6.2.5's short-form reasoning with its `<send>` sibling - not because
+  `<invoke>` is a send.
   """
   @spec supported_invoke_type?(type :: String.t() | nil) :: boolean()
   def supported_invoke_type?(nil), do: true

@@ -1069,7 +1069,7 @@ defmodule Statifier.SessionTest do
     # `delay_and_internal_target/2` check only fires on a literal
     # `target="#_internal"` (it cannot be evaluated until execute time when
     # `targetexpr` was written instead), so this is what actually reaches
-    # `Session.Target.parse/1`'s `:internal` route at runtime.
+    # `Send.Target.parse/1`'s `:internal` route at runtime.
     defp delayed_internal_doc do
       """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">

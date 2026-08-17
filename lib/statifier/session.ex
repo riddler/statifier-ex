@@ -144,7 +144,7 @@ defmodule Statifier.Session do
   returns `done.invoke.<invokeid>` to its parent's external queue the same
   direct way ("Starting an invocation's child session" below names the
   reciprocal obligation this halt-time delivery completes). See
-  `Statifier.Session.Effects` and `Statifier.Session.Target`.
+  `Statifier.Session.Effects` and `Statifier.Send.Target`.
 
   ## Autoforward delivery
 
@@ -288,11 +288,11 @@ defmodule Statifier.Session do
   alias Statifier.Invoke.Source
   alias Statifier.Machine
   alias Statifier.MachineState
+  alias Statifier.Send.Target
   alias Statifier.Session.Effects
   alias Statifier.Session.Inbox
   alias Statifier.Session.Invocations
   alias Statifier.Session.Recording
-  alias Statifier.Session.Target
   alias Statifier.Session.Telemetry
   alias Statifier.Session.Timers
 

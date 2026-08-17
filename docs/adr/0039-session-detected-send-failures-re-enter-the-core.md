@@ -1,6 +1,8 @@
 # ADR-0039: Session-detected send failures re-enter the core
 
-Status: accepted (2026-08-15)
+Status: accepted (2026-08-15) - amended in part by ADR-0047 (2026-08-17:
+the rejected "move target routing into the core" alternative is scoped to
+liveness; static target/type classification runs in the core)
 
 ## Context
 

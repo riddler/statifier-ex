@@ -210,7 +210,7 @@ defmodule Statifier.Validator.Checks.Send do
   # instead (see moduledoc). Both spellings match for decision 6's reason:
   # 6.2.2's attribute table spells it `_internal`, C.1 spells it
   # `#_internal`, and the two clauses of the spec disagree with each other -
-  # accepting both here is the same superset `Statifier.Session.Target.parse/1`
+  # accepting both here is the same superset `Statifier.Send.Target.parse/1`
   # accepts.
   defp delay_and_internal_target(
          %DSend{delay: delay, delayexpr: delayexpr, target: target},
