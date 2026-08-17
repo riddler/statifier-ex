@@ -4,15 +4,13 @@ defmodule Statifier.StreamOrder do
   Assertions over a drained `Statifier.Session` subscriber stream, for the
   ADR-0044 delivery-order contract.
 
-  `round` lives only on the `Effect.Trace.*` payloads and on
-  `Effect.BudgetExhausted` today (ADR-0044 decision 4 leaves stamping it
-  onto the rest as follow-on work), so `assert_monotone/1` evaluates
-  `(macrostep, round)` over exactly the effects that carry both, and
-  `macrostep` alone over the effects that carry only it. That is the whole
-  contract the shipped structs can express. `{:halted, _}` and
-  `{:unroutable, _}` are envelopes and carry no counters at all - they are
-  excluded from both checks (`assert_halted_last/1` covers the former
-  separately).
+  `round` used to live only on the `Effect.Trace.*` payloads and on
+  `Effect.BudgetExhausted`, with ADR-0044 decision 4 leaving the stamp on the
+  rest as follow-on work; ADR-0045 did that work, so every core effect now
+  carries `round` unconditionally. `assert_monotone/1` evaluates
+  `(macrostep, round)` over the whole counter-bearing stream. `{:halted, _}`
+  and `{:unroutable, _}` are envelopes and carry no counters at all - they
+  are excluded (`assert_halted_last/1` covers the former separately).
   """
 
   import ExUnit.Assertions
@@ -20,10 +18,8 @@ defmodule Statifier.StreamOrder do
   # drain/1  - receive every {:statifier, session_id, message}, envelope
   #            stripped, until a quiet window; preserves arrival order.
   # assert_monotone/1        - (macrostep, round) non-decreasing over the
-  #                            counter-bearing sub-stream, and macrostep
-  #                            non-decreasing over every counter-bearing
-  #                            effect. Flunks naming the first inversion and
-  #                            its two neighbours.
+  #                            whole counter-bearing stream. Flunks naming
+  #                            the first inversion and its two neighbours.
   # assert_stable_unique/1   - exactly one Trace.MacrostepStable per
   #                            (macrostep, round).
   # assert_halted_last/1     - a {:halted, _} message, if present, is the
@@ -48,9 +44,16 @@ defmodule Statifier.StreamOrder do
 
   @doc """
   Asserts `stream` arrives in non-decreasing `(macrostep, round)` order over
-  the sub-stream that carries `round`, and non-decreasing `macrostep` order
-  over every effect that carries a counter at all. Flunks naming the first
-  inversion found and the two neighbouring entries it inverted against.
+  the whole counter-bearing stream. Flunks naming the first inversion found
+  and the two neighbouring entries it inverted against.
+
+  # sabotage evidence: stamping `round: 0` at
+  # `lib/statifier/machine/content/send.ex`'s `Effect.Send` construction site
+  # reddened `test/statifier/session_test.exs:812`'s "both crossings' effects
+  # still arrive in non-decreasing (macrostep, round) order" - an inversion
+  # ({2, 2} then {2, 0}) that the old macrostep-only check could not have
+  # caught, since macrostep alone (2, 2) stayed non-decreasing. Reverted and
+  # confirmed green again.
   """
   @spec assert_monotone(stream :: [term()]) :: :ok
   def assert_monotone(stream) do
@@ -60,12 +63,8 @@ defmodule Statifier.StreamOrder do
       |> Enum.with_index()
       |> Enum.reject(fn {counters, _index} -> is_nil(counters) end)
 
-    check_non_decreasing(entries, fn {macrostep, _round} -> macrostep end, "macrostep")
-
-    rounded = Enum.reject(entries, fn {{_macrostep, round}, _index} -> is_nil(round) end)
-
     check_non_decreasing(
-      rounded,
+      entries,
       fn {macrostep, round} -> {macrostep, round} end,
       "(macrostep, round)"
     )
@@ -74,8 +73,8 @@ defmodule Statifier.StreamOrder do
   end
 
   @spec check_non_decreasing(
-          entries :: [{{non_neg_integer(), non_neg_integer() | nil}, non_neg_integer()}],
-          key_fun :: ({non_neg_integer(), non_neg_integer() | nil} -> term()),
+          entries :: [{{non_neg_integer(), non_neg_integer()}, non_neg_integer()}],
+          key_fun :: ({non_neg_integer(), non_neg_integer()} -> term()),
           label :: String.t()
         ) :: :ok
   defp check_non_decreasing(entries, key_fun, label) do
@@ -95,9 +94,8 @@ defmodule Statifier.StreamOrder do
     :ok
   end
 
-  @spec counters(message :: term()) :: {non_neg_integer(), non_neg_integer() | nil} | nil
+  @spec counters(message :: term()) :: {non_neg_integer(), non_neg_integer()} | nil
   defp counters({:effect, {_tag, %{macrostep: macrostep, round: round}}}), do: {macrostep, round}
-  defp counters({:effect, {_tag, %{macrostep: macrostep}}}), do: {macrostep, nil}
   defp counters(_message), do: nil
 
   @doc """

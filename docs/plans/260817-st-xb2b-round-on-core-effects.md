@@ -628,12 +628,12 @@ reverting. Record that one-line finding as a comment above `assert_monotone/1`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits (not a phase gate on its own)
-- [ ] Full `mix quality` passes, verified with `mix gate.verify`
-- [ ] Every existing `StreamOrder.assert_monotone/1` caller still passes with
+- [x] `mix quality --profile loop` green between edits (not a phase gate on its own)
+- [x] Full `mix quality` passes, verified with `mix gate.verify`
+- [x] Every existing `StreamOrder.assert_monotone/1` caller still passes with
       the one-tier check - `grep -rln "StreamOrder" test/` names them, and the
       full suite covers them
-- [ ] `grep -n "is_nil(round)\|rounded =" test/support/stream_order.ex`
+- [x] `grep -n "is_nil(round)\|rounded =" test/support/stream_order.ex`
       returns nothing - those are the two constructs the one-tier check
       removes, and a bare `nil` grep would not decide this, since the file
       legitimately keeps `| nil` in `counters/1`'s spec and a `nil ->` branch
@@ -832,6 +832,24 @@ items are deferred and surfaced once at the end instead of blocking here.
 - [ ] `lib/statifier/effect.ex`'s rewritten section still says what it was
       there to say about identities-not-structs
 - [ ] The changelog fragment's wording matches `changelog.d/README.md`'s bar
+- [ ] No regressions in related features
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 5
+
+- [ ] The stale-round mutation described above was run and confirmed to redden
+      a test that previously passed, then reverted - this is the evidence the
+      assertion strengthened rather than merely simplified
+- [ ] The rewritten moduledoc states the current contract without implying the
+      old two-tier behavior was wrong for its time
 - [ ] No regressions in related features
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
