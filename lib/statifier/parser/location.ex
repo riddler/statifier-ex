@@ -175,6 +175,55 @@ defmodule Statifier.Parser.Location do
     end
   end
 
+  @doc """
+  `value` with XML 1.0 2.11 line-break folding applied, guided by the raw
+  source.
+
+  `location` is the raw-source span of a character-data run (a text node's
+  whole run, coalesced across split events exactly as `Handler.add_text/2`
+  recomputes it) and `value` is Saxy's entity-expanded string for that run.
+  Saxy applies no 2.11 (same finding as `normalize_attribute_value/3`), so a
+  literal CRLF or lone CR survives into `value` verbatim - indistinguishable,
+  in that string alone, from a `\\r` decoded from `&#xD;`, which 2.11 must
+  never fold. XML 1.0 2.11 (End-of-Line Handling), quoted from
+  https://www.w3.org/TR/xml/#sec-line-ends as recorded in ADR-0045 (no local
+  cache holds the XML 1.0 REC - `mise run spec:fetch` only populates the
+  SCXML REC and its Appendix D extract - so this quote is carried from the
+  ADR's own fetch rather than re-fetched here):
+
+  > To simplify the tasks of applications, the XML processor MUST behave as
+  > if it normalized all line breaks in external parsed entities (including
+  > the document entity) on input, before parsing, by translating both the
+  > two-character sequence #xD #xA and any #xD that is not followed by #xA
+  > to a single #xA character.
+
+  Unlike `normalize_attribute_value/3`, this applies no 3.3.3
+  whitespace-to-space mapping - that rule is attribute-specific, so a TAB and
+  a folded newline are both kept in character data (ADR-0045 item 1).
+
+  The raw run can straddle constructs the scanner elides from `value`
+  entirely - `<!--`...`-->`, `<?`...`?>`, and the `<![CDATA[`/`]]>` delimiters
+  (`Markup.scan/1`, ADR-0045 item 2) - which contribute nothing to the
+  expanded side and must not be mistaken for character data. A CDATA
+  section's *interior* is not one of those: it is real character data, walked
+  verbatim with no reference decoding (`&amp;` inside a CDATA section is five
+  literal characters on both sides, never `"&"`), so a literal CR inside it
+  folds exactly as one outside does.
+
+  Degrades rather than raising: if the raw slice and `value` desync, `value`
+  is returned unfolded, the same posture `normalize_attribute_value/3` and
+  `resolve_span/4` take.
+  """
+  @spec normalize_character_data(location :: t(), value :: binary(), source :: binary()) ::
+          binary()
+  def normalize_character_data(%__MODULE__{} = location, value, source)
+      when is_binary(value) and is_binary(source) do
+    case walk_units(slice(location, source), value, :text, [], &next_text_unit/3) do
+      :desync -> value
+      {:ok, units} -> units |> Enum.reverse() |> fold_units([])
+    end
+  end
+
   # Same recursion shape as `walk_spans/7`, but carrying no cursors: it
   # accumulates `{:reference, decoded} | {:literal, raw_token}` units until
   # both sides are empty. Which element it keeps depends on the kind: a
@@ -188,20 +237,156 @@ defmodule Statifier.Parser.Location do
   # `next_unit/2`, which desyncs on it - the same rule `walk_spans/7` applies.
   # Units accumulate reversed, which is why `normalize_attribute_value/3`
   # reverses before folding.
-  defp walk_units("", "", units), do: {:ok, units}
+  #
+  # The arity-3 clause is the attribute path's entry point, unchanged in
+  # behavior from before this function grew a mode and a unit function: it
+  # threads a constant `:none` mode through `attribute_unit/3`, a thin adapter
+  # that gives `next_unit/2` the arity-3-in/7-tuple-out shape the shared
+  # recursion (arity 5, below) calls with. `normalize_character_data/3` is the
+  # other caller, threading a real `:text`/`:cdata` mode through
+  # `next_text_unit/3` instead - the text walk needs to know whether it is
+  # inside an unclosed `<![CDATA[`, which neither `raw` nor `value` alone
+  # carries.
+  defp walk_units(raw, value, units),
+    do: walk_units(raw, value, :none, units, &attribute_unit/3)
 
-  defp walk_units(raw, value, units) do
+  defp attribute_unit(raw, value, mode) do
     case next_unit(raw, value) do
       :desync ->
         :desync
 
-      {:ok, :reference, _raw_token, decoded, raw_rest, value_rest} ->
-        walk_units(raw_rest, value_rest, [{:reference, decoded} | units])
-
-      {:ok, :literal, raw_token, _expanded, raw_rest, value_rest} ->
-        walk_units(raw_rest, value_rest, [{:literal, raw_token} | units])
+      {:ok, kind, raw_token, expanded, raw_rest, value_rest} ->
+        {:ok, kind, raw_token, expanded, raw_rest, value_rest, mode}
     end
   end
+
+  defp walk_units("", "", _mode, units, _next), do: {:ok, units}
+
+  defp walk_units(raw, value, mode, units, next) do
+    case next.(raw, value, mode) do
+      :desync ->
+        :desync
+
+      # A raw-only construct (a comment, a PI, or a CDATA delimiter)
+      # contributes no *content* unit, but it does break raw adjacency: a
+      # `:boundary` marker goes on the list so `fold_units/2` cannot pair a
+      # `\r` before it with a `\n` after it as one CRLF, the way it would if
+      # the two literal units simply sat next to each other. This is what
+      # makes `i\r<!--c-->\nj` fold to `"i\n\nj"` (CR alone, then LF alone)
+      # rather than `"i\nj"` (CR+LF as one pair) - the case ADR-0045's
+      # investigation used to show a value-only fold is wrong. Only the mode
+      # may move across it (`:text` <-> `:cdata`).
+      {:ok, :skip, _raw_token, _expanded, raw_rest, value_rest, mode} ->
+        walk_units(raw_rest, value_rest, mode, [:boundary | units], next)
+
+      {:ok, :reference, _raw_token, decoded, raw_rest, value_rest, mode} ->
+        walk_units(raw_rest, value_rest, mode, [{:reference, decoded} | units], next)
+
+      {:ok, :literal, raw_token, _expanded, raw_rest, value_rest, mode} ->
+        walk_units(raw_rest, value_rest, mode, [{:literal, raw_token} | units], next)
+    end
+  end
+
+  # The text-walk unit rule: `(raw, value, mode)` where `mode` is `:text` or
+  # `:cdata`. In `:text` mode, the three raw-only constructs a text span can
+  # straddle (ADR-0045 item 2) are recognized first, each validated with
+  # `skip?/3` before being believed - the same validate-before-believing
+  # posture `next_unit/2` uses for a reference decode - and otherwise this
+  # delegates to `next_unit/2` for plain characters and entity references.
+  # `<![CDATA[` switches the mode to `:cdata` and contributes nothing; its
+  # matching `]]>` (recognized only in `:cdata` mode, below) switches back.
+  # DOCTYPE is on `Markup.scan/1`'s skip list too but not here: it can only
+  # appear in the prolog, never inside character data.
+  defp next_text_unit(raw, value, :text) do
+    cond do
+      skip?(raw, value, "<![CDATA[") ->
+        consume_skip(raw, value, "<![CDATA[", :cdata)
+
+      skip?(raw, value, "<!--") ->
+        skip_through(raw, value, "<!--", "-->", :text)
+
+      skip?(raw, value, "<?") ->
+        skip_through(raw, value, "<?", "?>", :text)
+
+      true ->
+        tag_mode(next_unit(raw, value), :text)
+    end
+  end
+
+  # Inside a CDATA section: `]]>` closes it (raw-only, switches back to
+  # `:text`); everything else is walked as identical codepoints on both
+  # sides, with no reference decoding. Routing the interior through
+  # `next_unit/2` would decode a raw `&amp;` to `"&"`, find that `value`
+  # (which spells `&amp;` out literally inside a CDATA section) does start
+  # with `"&"`, and consume five raw bytes against one value byte - a
+  # mispairing. The mode threaded by `walk_units/5` is what keeps the
+  # interior out of that path.
+  defp next_text_unit(raw, value, :cdata) do
+    if skip?(raw, value, "]]>") do
+      consume_skip(raw, value, "]]>", :text)
+    else
+      cdata_literal(raw, value)
+    end
+  end
+
+  # A construct is only taken as raw-only when the expanded value does not
+  # start with the same literal text - mirrors `next_unit/2`'s
+  # validate-before-believing rule (`String.starts_with?/2` there) and is what
+  # keeps this deterministic: a literal `<` cannot occur in well-formed
+  # character data outside these three constructs, so the check is normally
+  # vacuous, but it is the same discipline this module applies everywhere
+  # else rather than a rule this walk alone gets to skip.
+  defp skip?(raw, value, literal) do
+    String.starts_with?(raw, literal) and not String.starts_with?(value, literal)
+  end
+
+  defp consume_skip(raw, value, token, mode) do
+    raw_rest = binary_part(raw, byte_size(token), byte_size(raw) - byte_size(token))
+    {:ok, :skip, token, "", raw_rest, value, mode}
+  end
+
+  # Consumes from `open` through the first `close` found in `raw`, as one
+  # raw-only skip unit; `value` is untouched, since the scanner already
+  # elided the whole construct from it. `:nomatch` (an unterminated comment
+  # or PI) desyncs rather than consuming past the end of `raw` - the raw slice
+  # and `value` were built from the same completed parse, so this is not
+  # expected to fire on real input.
+  defp skip_through(raw, value, open, close, mode) do
+    after_open = binary_part(raw, byte_size(open), byte_size(raw) - byte_size(open))
+
+    case :binary.match(after_open, close) do
+      {index, close_length} ->
+        total = byte_size(open) + index + close_length
+        token = binary_part(raw, 0, total)
+        raw_rest = binary_part(raw, total, byte_size(raw) - total)
+        {:ok, :skip, token, "", raw_rest, value, mode}
+
+      :nomatch ->
+        :desync
+    end
+  end
+
+  # One codepoint from each side inside a CDATA section, which must be
+  # identical - no reference decoding, no TAB/LF/CR-versus-space
+  # normalization (that is 3.3.3, attribute-specific). Anything else desyncs.
+  defp cdata_literal(raw, value) do
+    with {raw_cp, raw_rest} <- String.next_codepoint(raw),
+         {value_cp, value_rest} <- String.next_codepoint(value),
+         true <- raw_cp == value_cp do
+      {:ok, :literal, raw_cp, value_cp, raw_rest, value_rest, :cdata}
+    else
+      _mismatch -> :desync
+    end
+  end
+
+  # `next_unit/2` never produces a `:skip` unit; the arity-6 clause gives it
+  # the arity-7-tuple shape `walk_units/5`'s recursion calls with, threading
+  # `mode` through unchanged (`:text` never becomes `:cdata` except through
+  # the `<![CDATA[` delimiter itself, handled above rather than here).
+  defp tag_mode(:desync, _mode), do: :desync
+
+  defp tag_mode({:ok, kind, raw_token, expanded, raw_rest, value_rest}, mode),
+    do: {:ok, kind, raw_token, expanded, raw_rest, value_rest, mode}
 
   defp normalize_units([], acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
 
@@ -229,6 +414,38 @@ defmodule Statifier.Parser.Location do
   # is the whole distinction this walk exists to preserve.
   defp normalize_units([{:reference, decoded} | rest], acc),
     do: normalize_units(rest, [decoded | acc])
+
+  defp fold_units([], acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  # A raw-only construct's boundary contributes no text of its own, but its
+  # presence in the list (rather than being dropped during the walk) is what
+  # stops the CRLF-pairing clauses below from matching across it - see
+  # `walk_units/5`'s `:skip` clause.
+  defp fold_units([:boundary | rest], acc), do: fold_units(rest, acc)
+
+  # 2.11 folds a literal CRLF and a lone literal CR to one #xA - nothing else
+  # is touched, since 3.3.3's whitespace-to-space mapping is
+  # attribute-specific and never applies to character data (ADR-0045 item 1),
+  # so a TAB and a folded newline both survive as themselves. Two clauses for
+  # the pair, for the same reason `normalize_units/2` has two: the pair
+  # arrives as two identical-codepoint units on a real parse (Saxy applies no
+  # 2.11, so raw "\r\n" pairs against a value that also spells "\r\n"), or as
+  # a single `"\r\n"` token, which cannot fire against Saxy's unfolded value
+  # but is matched anyway so the fold does not depend on that staying true.
+  defp fold_units([{:literal, "\r"}, {:literal, "\n"} | rest], acc),
+    do: fold_units(rest, ["\n" | acc])
+
+  defp fold_units([{:literal, "\r\n"} | rest], acc), do: fold_units(rest, ["\n" | acc])
+
+  # The lone-CR half of 2.11's clause.
+  defp fold_units([{:literal, "\r"} | rest], acc), do: fold_units(rest, ["\n" | acc])
+
+  defp fold_units([{:literal, other} | rest], acc), do: fold_units(rest, [other | acc])
+
+  # A `\r` decoded from `&#xD;` (or any other reference) is exempt from the
+  # fold - the literal-versus-reference distinction 2.11 draws, carried
+  # verbatim exactly as `normalize_units/2` carries a reference through 3.3.3.
+  defp fold_units([{:reference, decoded} | rest], acc), do: fold_units(rest, [decoded | acc])
 
   defp span_location({start_offset, start_line, start_column}, {end_offset, end_line, end_column}) do
     %__MODULE__{
