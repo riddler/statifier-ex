@@ -5,6 +5,7 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -24,7 +25,7 @@ defmodule Statifier.Session.EffectsTest do
   @origin SystemVariables.scxml_location(@session_id)
   @origintype SystemVariables.scxml_event_processor()
 
-  # Table-driven over the whole `Effect.t()` vocabulary (eighteen tags: nine
+  # Table-driven over the whole `Effect.t()` vocabulary (nineteen tags: ten
   # core plus nine trace), mirroring `test/statifier/effect_test.exs`'s
   # shape - a vocabulary member with no matching clause here falls through to
   # `plan_one/1`'s lack of a catch-all and raises a `FunctionClauseError`
@@ -204,6 +205,27 @@ defmodule Statifier.Session.EffectsTest do
      ]},
     {{:log, %Log{macrostep: 1, microstep: 1}},
      [{:notify, {:log, %Log{macrostep: 1, microstep: 1}}}]},
+    {{:datamodel_change,
+      %DatamodelChange{
+        location_path: ["x"],
+        location_source: "x",
+        new_value: 1,
+        prior_value: :undefined,
+        macrostep: 1,
+        microstep: 1
+      }},
+     [
+       {:notify,
+        {:datamodel_change,
+         %DatamodelChange{
+           location_path: ["x"],
+           location_source: "x",
+           new_value: 1,
+           prior_value: :undefined,
+           macrostep: 1,
+           microstep: 1
+         }}}
+     ]},
     {{:trace,
       %Trace.EventDequeued{event: nil, from: :external, macrostep: 1, microstep: 1, round: 0}},
      [
@@ -301,14 +323,17 @@ defmodule Statifier.Session.EffectsTest do
   describe "plan/1 over the whole vocabulary" do
     # sabotage: n/a - this test only checks that the fixture table above is
     # complete, not any lib/ behavior.
-    test "the table covers all twenty-one fixtures across the eighteen-tag vocabulary" do
-      assert length(@vocabulary) == 21
+    test "the table covers all twenty-two fixtures across the nineteen-tag vocabulary" do
+      assert length(@vocabulary) == 22
     end
 
     for {{{tag, payload} = effect, expected}, index} <- Enum.with_index(@vocabulary) do
       # sabotage: `plan_one/1`'s `{:log, _}` clause is dropped -> the whole
       # `plan/1` call raises `FunctionClauseError` for the `:log` fixture, and
-      # this test reddens instead of silently planning nothing for it.
+      # this test reddens instead of silently planning nothing for it. Also
+      # verified for the new `{:datamodel_change, _}` clause: commenting it
+      # out reddens the "datamodel_change" fixture case with the same
+      # `FunctionClauseError`, confirmed, and reverted.
       test "plans #{tag} carrying #{inspect(payload.__struct__)} (fixture #{index})" do
         assert Effects.plan([unquote(Macro.escape(effect))], @session_id) ==
                  unquote(Macro.escape(expected))

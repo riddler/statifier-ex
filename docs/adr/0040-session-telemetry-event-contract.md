@@ -1,7 +1,8 @@
 # ADR-0040: Session telemetry event contract
 
 Status: accepted (2026-08-16) - amended 2026-08-16 (st-ii9v: singleton
-location carve-out withdrawn; no trace event carries a location)
+location carve-out withdrawn; no trace event carries a location) - amended
+2026-08-16 (st-oef3: `:datamodel_change` joins the core effect events)
 
 ## Context
 
@@ -338,10 +339,10 @@ wants one name to attach to rather than a filter across nine effect names.
 therefore subject to the GenServer contract - it does not fire on a brutal
 kill. `:halt` is the event to build a "session finished" metric on.
 
-**Core effect events (9), emitted regardless of `trace`:**
+**Core effect events (10), emitted regardless of `trace`:**
 
 `[:statifier, :session, :effect, kind]` for
-`kind in [:send, :send_delayed, :cancel, :invoke, :cancel_invoke, :autoforward, :budget_exhausted, :done, :log]`.
+`kind in [:send, :send_delayed, :cancel, :invoke, :cancel_invoke, :autoforward, :budget_exhausted, :done, :log, :datamodel_change]`.
 
 - Measurements: `macrostep`, `microstep`; plus `round` and `budget` for
   `:budget_exhausted` only (the one core effect ADR-0020 stamps with a
@@ -353,7 +354,18 @@ kill. `:halt` is the event to build a "session finished" metric on.
   for `:done`, resolved from the `Effect.Done` struct's own `configuration`
   field (the full configuration as it stood at exit) rather than from
   `MachineState.configuration`, which is already empty by the time this
-  effect fires.
+  effect fires; for `:datamodel_change`, `location_path`, `location_source`,
+  `new_value`, and `prior_value` - the write itself, which fits no other
+  family's identities and gets its own clause here rather than being
+  appended to one.
+
+**Amendment (st-oef3):** `[:statifier, :session, :effect, :datamodel_change]`
+joins the core family above, at `Statifier.Effect.DatamodelChange`. Its
+`location` carries `metadata.location` under the existing single-index rule
+when `c_index` is non-nil, and no `location` key for the two runner-side
+writes (the empty-`<finalize>` auto-assign and `<invoke idlocation>`, both
+`c_index: nil`) - the rule already stated at the top of this decision, not a
+new carve-out for this event.
 
 **Trace effect events (9), emitted only under `trace: true`:**
 

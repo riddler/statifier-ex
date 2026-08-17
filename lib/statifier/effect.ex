@@ -32,6 +32,7 @@ defmodule Statifier.Effect do
   | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | `Statifier.Interpreter.macrostep/1` |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
+  | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | not yet produced (`Statifier.Interpreter.Datamodel.write_location/4`'s four call sites) |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
   | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected/3` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
@@ -44,8 +45,10 @@ defmodule Statifier.Effect do
 
   The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
   `:invoke`, `:cancel_invoke`, `:autoforward`, and all nine trace effects.
-  `:send`, `:send_delayed`, and `:cancel` remain unproduced, because nothing
-  in this core sends, delays, or cancels a delayed send yet.
+  `:send`, `:send_delayed`, `:cancel`, and `:datamodel_change` remain
+  unproduced, because nothing in this core sends, delays, or cancels a
+  delayed send yet, and nothing yet turns a `write_location/4` write into an
+  effect.
 
   ## Trace effects carry indexes and counters, never structs
 
@@ -103,6 +106,7 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -110,7 +114,7 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
 
-  @typedoc "The nine core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted` and this bead's `:cancel_invoke`/`:autoforward`."
+  @typedoc "The ten core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted`, `:cancel_invoke`/`:autoforward`, and this bead's `:datamodel_change`."
   @type core ::
           {:send, Send.t()}
           | {:send_delayed, SendDelayed.t()}
@@ -121,6 +125,7 @@ defmodule Statifier.Effect do
           | {:budget_exhausted, BudgetExhausted.t()}
           | {:done, Done.t()}
           | {:log, Log.t()}
+          | {:datamodel_change, DatamodelChange.t()}
 
   @typedoc "The nine trace effects - the seven `docs/observability.md` constraint-2 rows plus `InvokePass`/`FinalizeAutoforward` for the two Appendix-D-named phase boundaries `<invoke>` (this bead) added."
   @type trace ::
