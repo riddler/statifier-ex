@@ -92,11 +92,11 @@ Rules:
   macrostep and advances `round`, so its effects carry higher rounds than
   the outer batch's unsent tail; those effects are queued and drained after
   the batch that triggered them rather than delivered inline, which is what
-  keeps arrival order monotone (ADR-0044 decision 1). This is a guarantee
-  about delivery order rather than one a consumer can re-derive: `round` is
-  carried by the `Trace.*` payloads and by `BudgetExhausted` today and by no
-  other effect, so a mixed stream cannot be sorted back into this order once
-  its arrival order is lost (ADR-0044 decision 4).
+  keeps arrival order monotone (ADR-0044 decision 1). That live-arrival
+  guarantee is stronger than re-derivability, not a substitute for it: every
+  effect carries the counter triple (ADR-0045), so a consumer holding a mixed
+  stream whose arrival order was lost can still sort it back into
+  `(macrostep, round)` order offline, including under `trace: false`.
 - "Either selection function" is `select_eventless_transitions/1` and
   `select_transitions/2` both, with no exception - including the terminal
   eventless probe that ends a macrostep, which is why the round reporting

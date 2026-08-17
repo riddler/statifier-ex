@@ -559,12 +559,12 @@ Write the fragment naming both directions.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits (not a phase gate on its own)
-- [ ] Full `mix quality` passes, verified with `mix gate.verify`
-- [ ] `grep -rn "by no other effect\|No core effect carries\|only the seven trace payloads" lib/ docs/ test/`
+- [x] `mix quality --profile loop` green between edits (not a phase gate on its own)
+- [x] Full `mix quality` passes, verified with `mix gate.verify`
+- [x] `grep -rn "by no other effect\|No core effect carries\|only the seven trace payloads" lib/ docs/ test/`
       returns hits only under `docs/adr/` and `docs/research/` (historical
       records, which are never edited to match later decisions)
-- [ ] `changelog.d/st-xb2b.md` exists
+- [x] `changelog.d/st-xb2b.md` exists
 
 #### Manual Verification:
 - [ ] The rewritten constraint 2 paragraph does not weaken ADR-0044 decision
@@ -814,6 +814,24 @@ items are deferred and surfaced once at the end instead of blocking here.
 - [ ] The spec 5.3.3 / B.2.2 binding order the datamodel module implements is
       unchanged
 - [ ] Each new test's sabotage mutation was run, confirmed red, and reverted
+- [ ] No regressions in related features
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The rewritten constraint 2 paragraph does not weaken ADR-0044 decision
+      1's live-arrival guarantee while adding the offline one
+- [ ] `lib/statifier/effect.ex`'s rewritten section still says what it was
+      there to say about identities-not-structs
+- [ ] The changelog fragment's wording matches `changelog.d/README.md`'s bar
 - [ ] No regressions in related features
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run

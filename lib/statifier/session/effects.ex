@@ -275,11 +275,17 @@ defmodule Statifier.Session.Effects do
   # `Statifier.Interpreter.deliver_internal/5`, which builds its own
   # `Cause` from the machine's *current* counters at delivery time (ADR-0039,
   # decision 2), so this event's own `cause` is never read and its
-  # macrostep/microstep/round are placeholders, not the delivered event's
-  # real provenance.
+  # macrostep/microstep/round are placeholders - the send's own provenance,
+  # not the delivered event's real one.
   @spec internal_event(send :: Send.t() | SendDelayed.t()) :: Event.t()
   defp internal_event(send) do
-    cause = Cause.new({:content, send.c_index, send.owner}, send.macrostep, send.microstep, 0)
+    cause =
+      Cause.new(
+        {:content, send.c_index, send.owner},
+        send.macrostep,
+        send.microstep,
+        send.round
+      )
 
     Event.internal(send.event, cause,
       data: send.data,
