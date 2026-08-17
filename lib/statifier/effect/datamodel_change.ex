@@ -5,7 +5,13 @@ defmodule Statifier.Effect.DatamodelChange do
   alone, without ever calling `Session.snapshot/1` (plan decision 1).
   Emitted for every successful write `write_location/4` performs (decision
   2); a failed write emits nothing, since the datamodel did not change and
-  the failure is already observable on the error channel (decision 9).
+  the failure is already observable on the error channel (decision 9). One
+  exception: a `<send>`'s `idlocation` write that ADR-0047 goes on to reject
+  (an invalid target or unsupported type, classified after the write lands)
+  emits no effect either, because the composite error return that carries
+  the rejection has no effects slot. The write is in the datamodel
+  regardless - a consumer reading it back through `_event.sendid` sees it -
+  and live and replay agree because both derive from the core.
 
   `location_path` is `Predicator.ContextLocation.location_path()` - the
   resolved `[binary() | integer()]` path, the only shape a consumer can

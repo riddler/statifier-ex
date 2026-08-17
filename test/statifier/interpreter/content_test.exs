@@ -931,4 +931,82 @@ defmodule Statifier.Interpreter.ContentTest do
       refute Enum.any?(effects, &match?({:log, %Effect.Log{label: "never"}}, &1))
     end
   end
+
+  describe "<send>, through the real block runner - static target rejection (ADR-0047)" do
+    @send_reject_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <datamodel>
+            <data id="x" expr="0"/>
+            <data id="loc"/>
+        </datamodel>
+        <state id="a">
+            <onentry>
+                <send event="e" target="baz" idlocation="loc"/>
+                <assign location="x" expr="1"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # test159's mechanism at the unit level: a rejecting <send> is the
+    # first node of a block whose second node is an <assign> - 4.9's "MUST
+    # NOT process the remaining elements of the block" means the <assign>
+    # never runs.
+    #
+    # sabotage (three mutations, each confirmed red and reverted):
+    #
+    # 1. `Statifier.Machine.Content.Send`'s `reject_reason/2` changed to
+    #    unconditionally return `nil` -> the <send> would dispatch instead
+    #    of rejecting, so the <assign> would run (`x` becomes `1`),
+    #    `error.execution` would never be raised, and every assertion below
+    #    reddens.
+    # 2. `Send`'s rejection arm changed from the three-element
+    #    `{:error, new_context, {:send_rejected, send_id, reason}}` to the
+    #    two-element `{:error, {:send_rejected, send_id, reason}}` -> the
+    #    fold's fatal arm discards `new_context` (and the `idlocation`
+    #    write it carries) back to the pre-call context, so `"loc"` stays
+    #    unwritten while `error_event.sendid` is still the minted id,
+    #    reddening the `result.datamodel["loc"] == error_event.sendid`
+    #    assertion specifically.
+    # 3. `Send`'s rejection arm changed to `{:ok, new_context, []}` -> the
+    #    block no longer aborts, the <assign> runs, and `x` becomes `1`,
+    #    reddening `result.datamodel["x"] == 0`.
+    # 4. `Content.raise_execution_error/4`'s `{:send_rejected, _, _}` clause
+    #    deleted -> the general clause matches instead, `error_event.data`
+    #    becomes the whole `{:send_rejected, send_id, reason}` tuple instead
+    #    of `reason`, reddening `error_event.data == {:invalid_target, "baz"}`.
+    # sabotage: Content.raise_execution_error/4's {:send_rejected, _, _} clause deleted -> red (case 4 above)
+    test "a rejecting <send> aborts the block before the sibling <assign> runs" do
+      m = compile!(@send_reject_document)
+      a_idx = m |> Machine.index("a") |> elem(1)
+      [block] = Machine.at(m, a_idx).onentry
+      [send_c, _assign_c] = block.content
+      owner = {:onentry, a_idx, 0}
+
+      ms = machine_state(m)
+      ms = %{ms | datamodel: ms.datamodel |> Map.put("x", 0) |> Map.put("loc", nil)}
+
+      {result, effects} = Content.execute_block(ms, owner, block.content)
+
+      assert result.datamodel["x"] == 0
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, send_c, owner}
+      assert error_event.data == {:invalid_target, "baz"}
+      assert error_event.sendid != nil
+
+      # test332's own guard, at this unit level: the id minted before the
+      # rejection is not just carried by the raised event's `sendid`, it
+      # also actually landed in the datamodel - the composite error form
+      # keeps the write, it does not merely echo the id back.
+      assert result.datamodel["loc"] == error_event.sendid
+
+      # The rejection returns no effects of its own (ADR-0047: the composite
+      # error form has no effects slot) - the write above is only visible in
+      # the datamodel, never as a {:datamodel_change, _} effect.
+      assert [{:trace, %Effect.Trace.ContentExecuted{owner: ^owner, c_indexes: [^send_c]}}] =
+               effects
+    end
+  end
 end

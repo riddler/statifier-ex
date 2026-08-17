@@ -508,19 +508,19 @@ the block-abort assertion reddens. The two corpus files are exempt
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` is green (`mix quality --profile loop` while
+- [x] Full `mix quality` is green (`mix quality --profile loop` while
       iterating; loop/`--quick`/scoped runs never satisfy this phase).
-- [ ] `mix gate.verify` confirms the run was full and unscoped.
-- [ ] `mix test test/scxml_tests/mandatory/evaluationof_executable_content/test159_test.exs --include scxml_w3`
+- [x] `mix gate.verify` confirms the run was full and unscoped.
+- [x] `mix test test/scxml_tests/mandatory/evaluationof_executable_content/test159_test.exs --include scxml_w3`
       passes - test159 is green.
-- [ ] `mix test test/scxml_tests/mandatory/system_variables/test332_test.exs --include scxml_w3`
+- [x] `mix test test/scxml_tests/mandatory/system_variables/test332_test.exs --include scxml_w3`
       passes - the mint-before-reject ordering holds.
-- [ ] `mix test.regression` is green - no ratcheted test moves.
-- [ ] `mix test --include scion --include scxml_w3` shows no test that
+- [x] `mix test.regression` is green - no ratcheted test moves.
+- [x] `mix test --include scion --include scxml_w3` shows no test that
       passed before this phase failing after it (compare against a run taken
       on the phase's base commit; the ratchet only covers registered files,
       so this is the wider check).
-- [ ] `mix test test/statifier/interpreter/content_acceptance_test.exs`
+- [x] `mix test test/statifier/interpreter/content_acceptance_test.exs`
       passes - AC3's grep still finds no `error.execution` or `Event` in
       `lib/statifier/machine/content/`.
 

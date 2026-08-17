@@ -39,9 +39,12 @@ defprotocol Statifier.ExecutableContent do
     exactly one place regardless of how many node kinds exist.
   - `{:error, context, reason}` - the node failed, and state it had already
     legitimately produced (queued events, datamodel writes,
-    `pending_errors`) must not be discarded with it. A leaf node returns the
-    two-element form; a *composite* node - one that runs child content -
-    returns this one so that work done before the failure survives.
+    `pending_errors`) must not be discarded with it. A node returns this
+    form when it has already produced state that must not be discarded with
+    the failure - which is every *composite* node (one that runs child
+    content), and, per ADR-0047, `<send>`: a leaf that has minted a send id
+    and written `idlocation` before rejecting an invalid target or
+    unsupported type. Every other leaf still returns the two-element form.
 
   Both error forms keep the same rule: an implementation never constructs a
   `Statifier.Event` and never raises.
