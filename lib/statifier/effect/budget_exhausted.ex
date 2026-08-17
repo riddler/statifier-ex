@@ -19,8 +19,8 @@ defmodule Statifier.Effect.BudgetExhausted do
   exhaustion - and `microstep` may well be `0`, because a fold can livelock
   without any microstep ever running. `round` is the rounds-spent count:
   always equal to `budget` on this path, since exhaustion is reached only
-  after the fold has spent exactly that many rounds (ADR-0020) - carried by
-  the stamp rather than by a separate `rounds_spent` field.
+  after the fold has spent exactly that many rounds (ADR-0020) - which is
+  why there is no separate `rounds_spent` field.
 
   The machine_state returned alongside this effect is a complete, resumable
   position (ADR-0012): step it through
