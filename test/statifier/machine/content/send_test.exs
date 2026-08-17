@@ -517,6 +517,22 @@ defmodule Statifier.Machine.Content.SendTest do
       assert {:ok, _new_ctx, [{:send, %Effect.Send{}}]} =
                ExecutableContent.execute(node, context(ms))
     end
+
+    # sabotage: `Send`'s `datamodel_change_effects/4` builds the
+    # `%Effect.DatamodelChange{}` literal with a hardcoded `round: 0`
+    # instead of `round: ms.round` -> reddens against this machine state's
+    # round of 8. Confirmed red and reverted.
+    test "the idlocation :datamodel_change effect's round matches the machine state's round it was stamped from" do
+      m = machine()
+      ms = %{machine_state(m) | round: 8}
+      node = send_node(m, "idlocation")
+
+      assert {:ok, _new_ctx,
+              [
+                {:datamodel_change, %Effect.DatamodelChange{round: 8}},
+                {:send, %Effect.Send{round: 8}}
+              ]} = ExecutableContent.execute(node, context(ms))
+    end
   end
 
   describe "execute/2 - owner is carried from context for every block kind" do

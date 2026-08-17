@@ -292,6 +292,26 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert datamodel_change_effects(effects) == []
   end
 
+  # sabotage: `invoke_one/6`'s `datamodel_change_effects/5` builds the
+  # `%Effect.DatamodelChange{}` literal with a hardcoded `round: 0` instead
+  # of `round: machine_state.round` -> reddens against this fixture, whose
+  # invoke pass runs in the initial entry fold's own first round (round 1,
+  # not the anonymous round-0 baseline the mutation produces). Confirmed
+  # red and reverted.
+  test "idlocation's :datamodel_change effect's round matches the machine state's round it was stamped from" do
+    m = compile!(@idlocation_document)
+    {result, effects} = Interpreter.initialize(m)
+
+    assert [{:datamodel_change, change}, {:invoke, _invoke_effect}] =
+             for(
+               {tag, payload} = effect <- effects,
+               tag == :invoke or (tag == :datamodel_change and payload.owner != nil),
+               do: effect
+             )
+
+    assert change.round == result.round
+  end
+
   #  0 scxml (root)
   #  1   s0      (invoke typeexpr="undefined_var" fails; invoke type="fine" ok)
   @failing_sibling_document """

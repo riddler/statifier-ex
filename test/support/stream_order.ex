@@ -10,7 +10,12 @@ defmodule Statifier.StreamOrder do
   carries `round` unconditionally. `assert_monotone/1` evaluates
   `(macrostep, round)` over the whole counter-bearing stream. `{:halted, _}`
   and `{:unroutable, _}` are envelopes and carry no counters at all - they
-  are excluded (`assert_halted_last/1` covers the former separately).
+  are excluded (`assert_halted_last/1` covers the former separately). A
+  `{:effect, _}` message that carries `macrostep` but no `round` is neither
+  of those things - ADR-0045 makes the exemption list empty, so such a
+  payload is a defect, not a third envelope shape - and `assert_monotone/1`
+  flunks on it by name rather than silently excluding it the way an
+  envelope is.
   """
 
   import ExUnit.Assertions
@@ -19,7 +24,11 @@ defmodule Statifier.StreamOrder do
   #            stripped, until a quiet window; preserves arrival order.
   # assert_monotone/1        - (macrostep, round) non-decreasing over the
   #                            whole counter-bearing stream. Flunks naming
-  #                            the first inversion and its two neighbours.
+  #                            the first inversion and its two neighbours;
+  #                            also flunks naming any effect that carries
+  #                            `macrostep` but no `round` (ADR-0045's empty
+  #                            exemption list makes that combination a
+  #                            defect, never a value to skip).
   # assert_stable_unique/1   - exactly one Trace.MacrostepStable per
   #                            (macrostep, round).
   # assert_halted_last/1     - a {:halted, _} message, if present, is the
@@ -96,6 +105,16 @@ defmodule Statifier.StreamOrder do
 
   @spec counters(message :: term()) :: {non_neg_integer(), non_neg_integer()} | nil
   defp counters({:effect, {_tag, %{macrostep: macrostep, round: round}}}), do: {macrostep, round}
+
+  defp counters({:effect, {tag, %{macrostep: macrostep} = payload}}) do
+    flunk("""
+    #{inspect(tag)} effect at macrostep #{macrostep} carries no `round` field \
+    (payload: #{inspect(payload)}). ADR-0045 requires every core effect to \
+    carry `round`; this effect struct is missing it rather than merely lacking \
+    counters, so it is a defect, not a message to exclude.
+    """)
+  end
+
   defp counters(_message), do: nil
 
   @doc """

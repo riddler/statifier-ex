@@ -348,5 +348,18 @@ defmodule Statifier.Machine.Content.AssignTest do
 
       assert {:error, {:unbound_location, "undeclared"}} = ExecutableContent.execute(node, ctx)
     end
+
+    # sabotage: `Assign`'s `execute/2` step 4's `%DatamodelChange{}` literal
+    # is changed from `round: machine_state.round` to a hardcoded `round: 0`
+    # -> reddens against this context's round of 5 (`round: 0` !=
+    # `round: 5`). Confirmed red and reverted.
+    test "the :datamodel_change effect's round matches the machine state's round it was stamped from" do
+      ctx = context(%{"x" => 1})
+      ctx = %{ctx | machine_state: %{ctx.machine_state | round: 5}}
+      node = assign("x", compiled_expr("2"))
+
+      assert {:ok, _new_ctx, [{:datamodel_change, %DatamodelChange{round: 5}}]} =
+               ExecutableContent.execute(node, ctx)
+    end
   end
 end

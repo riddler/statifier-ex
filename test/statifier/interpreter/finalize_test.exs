@@ -421,5 +421,34 @@ defmodule Statifier.Interpreter.FinalizeTest do
       assert change.owner == {:finalize, s0_index, 0}
       assert result.datamodel["param_target"] == "hi"
     end
+
+    # `write_finalize_target/6` runs inside `apply_invoke_passes/2`, which
+    # `handle_event/2` calls immediately after its own `begin_macrostep/1`
+    # (which resets `round` to 0) and before any `begin_round/1` call -
+    # exactly the position this file's "the autoforward effect's round
+    # matches the machine state's round it was stamped from" test above
+    # documents for `autoforward_effect/5`. `machine_state.round` is
+    # therefore always 0 at this call site too, so this test asserts
+    # `round: 0` deliberately, not as a weak literal - the sabotage below
+    # still distinguishes "reads machine_state.round" from a hardcoded
+    # wrong constant.
+    #
+    # sabotage: `write_finalize_target/6`'s `%Effect.DatamodelChange{}`
+    # literal is changed from `round: machine_state.round` to a hardcoded
+    # `round: 3` -> reddens against the real (always-0) value at this call
+    # site. Confirmed red and reverted.
+    test "the auto-assign's :datamodel_change effect's round matches the machine state's round it was stamped from" do
+      m = compile!(@param_location_document)
+      {ms, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, _result, effects} =
+               Interpreter.handle_event(
+                 ms,
+                 %Event{name: "go", type: :external, invokeid: "inv-param", data: %{"p" => "hi"}}
+               )
+
+      assert [change] = datamodel_change_effects(effects)
+      assert change.round == 0
+    end
   end
 end
