@@ -192,12 +192,13 @@ defmodule Statifier.Parser.Location do
     end
   end
 
-  # The four-case unit rule: a decoded reference token (case 1), identical
-  # leading codepoints (case 2), a TAB/LF/CR-versus-space normalization pair
-  # (case 3), or desync (case 4). Every decode is validated against `value`
-  # before it is believed (`String.starts_with?/2` below), so a malformed or
-  # unexpected reference can only ever fall through to case 2/3/4, never
-  # produce a wrong answer.
+  # The five-case unit rule: a decoded reference token (case 1), identical
+  # leading codepoints (case 2), a raw CRLF pair versus a single expanded
+  # space (case 3, XML 2.11's line-break fold ahead of 3.3.3's normalization),
+  # a single TAB/LF/CR-versus-space normalization pair (case 4), or desync
+  # (case 5). Every decode is validated against `value` before it is believed
+  # (`String.starts_with?/2` below), so a malformed or unexpected reference
+  # can only ever fall through to case 2/3/4/5, never produce a wrong answer.
   defp next_unit(raw, value) do
     case match_reference(raw) do
       {token, decoded} ->
@@ -223,6 +224,13 @@ defmodule Statifier.Parser.Location do
       cond do
         raw_cp == value_cp ->
           {:ok, raw_cp, value_cp, raw_rest, value_rest}
+
+        # 2.11 folds a literal CRLF to one #xA before 3.3.3 maps it to one
+        # #x20, so two raw codepoints pair with a single expanded space. Must
+        # follow the identical-codepoint branch: an unnormalized value still
+        # spells "\r\n" and has to walk as two plain units.
+        raw_cp == "\r" and value_cp == " " and String.starts_with?(raw_rest, "\n") ->
+          {:ok, "\r\n", value_cp, binary_part(raw_rest, 1, byte_size(raw_rest) - 1), value_rest}
 
         raw_cp in ["\t", "\n", "\r"] and value_cp == " " ->
           {:ok, raw_cp, value_cp, raw_rest, value_rest}
@@ -273,9 +281,10 @@ defmodule Statifier.Parser.Location do
   defp codepoint_string(_codepoint), do: nil
 
   # Advances a {offset, line, column} raw cursor past `str`, one codepoint at
-  # a time - `str` is either a single plain codepoint or a whole reference
-  # token (`&lt;`, `&#10;`), neither of which ever contains an actual newline
-  # byte, so `\n` is only ever reached via the plain/normalize cases.
+  # a time - `str` is a single plain codepoint, a raw CRLF pair, or a whole
+  # reference token (`&lt;`, `&#10;`); a reference token never contains an
+  # actual newline byte, so `\n` is only ever reached via the plain/CRLF/
+  # normalize cases.
   defp raw_advance_string(cursor, str) do
     str
     |> String.codepoints()
