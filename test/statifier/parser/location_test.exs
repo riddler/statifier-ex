@@ -1,6 +1,8 @@
 defmodule Statifier.Parser.LocationTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Parser
+  alias Statifier.Parser.DOM
   alias Statifier.Parser.Location
 
   describe "at_offset/2" do
@@ -89,6 +91,242 @@ defmodule Statifier.Parser.LocationTest do
       location = Location.at_offset(source, 3)
 
       assert Location.slice(location, source) == ""
+    end
+  end
+
+  describe "resolve_span/4" do
+    # `cond`'s `value_location` (the raw source between the quotes) and
+    # `source` come from a real parsed document in every case below; `value`
+    # is the entity-expanded string `resolve_span/4` documents as its third
+    # argument - taken from the real `attribute.value` where the case is
+    # about what Saxy actually produces (undeclared entities), and built by
+    # hand where the case targets a code path Saxy's output can never reach
+    # (the `\r` and TAB-normalization clauses) - `resolve_span/4` takes
+    # `value` as a parameter precisely so a caller can supply either.
+    defp root_attribute(source, name \\ "cond") do
+      assert {:ok, root} = Parser.parse(source)
+      DOM.attribute(root, name)
+    end
+
+    # sabotage: next_unit_plain/2's `raw_cp == value_cp` guard inverted to
+    # `raw_cp != value_cp` -> the plain-text case never matches, so the walk
+    # desyncs immediately and resolve_span/4 falls back to the whole
+    # attribute value -> this test reddens (slice returns "score > 5")
+    test "plain ASCII with no references resolves a subexpression" do
+      source = ~s(<edge cond="score > 5"/>)
+      attribute = root_attribute(source)
+
+      resolved =
+        Location.resolve_span(attribute.value_location, {{1, 1}, {1, 6}}, attribute.value, source)
+
+      assert Location.slice(resolved, source) == "score"
+    end
+
+    # sabotage: the reference-consuming branch of next_unit/2 slices the raw
+    # rest by `byte_size(decoded)` instead of `byte_size(token)` -> only part
+    # of `&lt;` is consumed from the raw side, so every raw column after it
+    # is off by the difference and the walk desyncs -> this test reddens
+    # (slice returns the whole attribute value instead of "score")
+    test "a reference before the span shifts the raw columns" do
+      source = ~s(<edge cond="1 &lt; score"/>)
+      attribute = root_attribute(source)
+
+      # value expands to "1 < score"; "score" is expanded columns 5-9.
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 5}, {1, 10}},
+          attribute.value,
+          source
+        )
+
+      assert Location.slice(resolved, source) == "score"
+    end
+
+    # sabotage: expanded_advance/2's `"\n"` clause returns `{line + 1,
+    # column}` instead of `{line + 1, 1}` -> the expanded cursor's column
+    # never resets after the character-reference line break -> this test
+    # reddens (the target position is never reached, so the span clamps to
+    # the whole value instead of "after")
+    test "&#10; inside the value shifts an expanded line the raw source does not have" do
+      source = ~s(<edge cond="before&#10;after"/>)
+      attribute = root_attribute(source)
+
+      # value expands to "before\nafter"; "after" starts expanded line 2.
+      resolved =
+        Location.resolve_span(attribute.value_location, {{2, 1}, {2, 6}}, attribute.value, source)
+
+      assert Location.slice(resolved, source) == "after"
+    end
+
+    # sabotage: raw_advance_codepoint/2's non-newline clause advances the
+    # offset by `1` instead of `byte_size(codepoint)` -> the raw cursor
+    # undercounts every byte "é" costs beyond its first, so every column
+    # after it lands one byte short -> this test reddens (slice returns
+    # "core" instead of "score", off by the byte "é" was undercounted)
+    test "multi-byte text before the span keeps codepoint columns and byte offsets aligned" do
+      source = ~s(<edge cond="café score"/>)
+      attribute = root_attribute(source)
+
+      # value is "café score"; "score" is codepoint columns 6-10.
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 6}, {1, 11}},
+          attribute.value,
+          source
+        )
+
+      assert Location.slice(resolved, source) == "score"
+    end
+
+    # sabotage: raw_advance_codepoint/2's `"\n"` clause returns `{offset + 1,
+    # line, 1}` instead of `{offset + 1, line + 1, 1}` -> the raw cursor's
+    # line never advances past the literal newline inside the attribute
+    # value -> this test reddens (the resolved location's byte offset points
+    # at the wrong text, so the slice no longer reads "second")
+    test "a literal newline inside the raw attribute value resolves to the document's absolute line" do
+      source = """
+      <chart>
+          <edge cond="first
+      second" />
+      </chart>
+      """
+
+      assert {:ok, root} = Parser.parse(source)
+      [edge] = DOM.elements(root)
+      attribute = DOM.attribute(edge, "cond")
+
+      # value is "first\nsecond"; "second" is expanded line 2, columns 1-6.
+      resolved =
+        Location.resolve_span(attribute.value_location, {{2, 1}, {2, 7}}, attribute.value, source)
+
+      assert Location.slice(resolved, source) == "second"
+
+      # The absolute line is the document's third line, not the value's
+      # second - recomputed independently from the resolved byte offset
+      # rather than hardcoded, the way location_accuracy_test.exs does.
+      recomputed = Location.at_offset(source, resolved.start_offset)
+      assert recomputed.start_line == 3
+      assert resolved.start_line == recomputed.start_line
+    end
+
+    # sabotage: resolve_span/4's `{start_target, end_target} = span` swapped
+    # to `{end_target, start_target} = span` -> the walk captures the start
+    # and end raw positions in the wrong order -> this test reddens (the
+    # five-byte span's length assertion computes -5 instead of 5)
+    test "the exclusive end is preserved, including for a zero-width span" do
+      source = ~s(<edge cond="score > 5"/>)
+      attribute = root_attribute(source)
+
+      resolved =
+        Location.resolve_span(attribute.value_location, {{1, 1}, {1, 6}}, attribute.value, source)
+
+      assert resolved.end_offset - resolved.start_offset == byte_size("score")
+
+      zero_width =
+        Location.resolve_span(attribute.value_location, {{1, 3}, {1, 3}}, attribute.value, source)
+
+      assert zero_width.start_offset == zero_width.end_offset
+      assert Location.slice(zero_width, source) == ""
+    end
+
+    # sabotage: @reference_regex's named alternation gains a bare `foo` (as
+    # if it were a sixth predefined entity) with no matching
+    # `named_codepoint/1` clause -> match_reference/1 recognizes "&foo;" as
+    # a reference and crashes decoding it -> this test reddens with a
+    # FunctionClauseError instead of resolving "foo"
+    test "an undeclared entity kept verbatim is carried by the plain-match case" do
+      source = ~s(<edge cond="a &foo; b"/>)
+      attribute = root_attribute(source)
+
+      # Saxy keeps an undeclared entity verbatim rather than expanding it.
+      assert attribute.value == "a &foo; b"
+
+      resolved =
+        Location.resolve_span(attribute.value_location, {{1, 4}, {1, 7}}, attribute.value, source)
+
+      assert Location.slice(resolved, source) == "foo"
+    end
+
+    # sabotage: expanded_advance/2's `"\r"` clause returns `{line, column +
+    # 1}` instead of holding `{line, column}` -> the expanded cursor advances
+    # past the `\r`, so the span's end target is reached one raw character
+    # early -> this test reddens (slice returns "a\r" instead of "a\rb")
+    test "a \\r in the value holds the expanded column still, mirroring predicator's lexer" do
+      source = ~s(<edge cond="a\rb"/>)
+      attribute = root_attribute(source)
+
+      # Passed by hand: `\r` holding the expanded cursor still is a property
+      # of predicator's lexer, not of what Saxy returns for `attribute.value`.
+      value = "a\rb"
+
+      # The raw text is 3 bytes ("a", "\r", "b") but only 2 expanded columns
+      # ("\r" does not advance the expanded cursor), so the span covering
+      # both expanded columns must still resolve the full 3 raw bytes.
+      resolved = Location.resolve_span(attribute.value_location, {{1, 1}, {1, 3}}, value, source)
+
+      assert Location.slice(resolved, source) == "a\rb"
+    end
+
+    # sabotage: maybe_capture/5's `is_nil(Map.fetch!(captured, key))` guard
+    # replaced with `true`, so every step overwrites the capture instead of
+    # only the first -> this test reddens (the in-range start target no
+    # longer resolves to its own position, so the slice is wrong)
+    test "a target past the end of value clamps to value_location's end" do
+      source = ~s(<edge cond="score"/>)
+      attribute = root_attribute(source)
+
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 3}, {1, 100}},
+          attribute.value,
+          source
+        )
+
+      assert resolved.end_offset == attribute.value_location.end_offset
+      assert resolved.end_line == attribute.value_location.end_line
+      assert resolved.end_column == attribute.value_location.end_column
+      assert Location.slice(resolved, source) == "ore"
+    end
+
+    # sabotage: the `:desync` branch of resolve_span/4 returns
+    # `%{value_location | end_offset: value_location.end_offset - 1}`
+    # instead of `value_location` unchanged -> this test reddens (the
+    # resolved location no longer equals value_location exactly)
+    test "a value that does not describe the raw slice returns value_location whole" do
+      source = ~s(<edge cond="score"/>)
+      attribute = root_attribute(source)
+
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 1}, {1, 3}},
+          "totally different",
+          source
+        )
+
+      assert resolved == attribute.value_location
+    end
+
+    # sabotage: next_unit_plain/2's TAB/LF/CR-vs-space guard narrowed from
+    # `raw_cp in ["\t", "\n", "\r"]` to `raw_cp in ["\n"]` -> a raw TAB no
+    # longer normalizes against an expanded space, so the walk desyncs at
+    # the TAB -> this test reddens (slice returns the whole attribute value
+    # instead of "b")
+    test "a raw TAB paired with an expanded space exercises the normalization clause" do
+      source = ~s(<edge cond="a\tb"/>)
+      attribute = root_attribute(source)
+
+      # Passed by hand: no Saxy output pairs a raw TAB/LF/CR with an
+      # expanded space, since Saxy does not apply XML 1.0 3.3.3
+      # normalization - this is the only way to exercise the clause.
+      value = "a b"
+
+      resolved = Location.resolve_span(attribute.value_location, {{1, 3}, {1, 4}}, value, source)
+
+      assert Location.slice(resolved, source) == "b"
     end
   end
 end

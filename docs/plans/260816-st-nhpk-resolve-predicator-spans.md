@@ -398,16 +398,16 @@ numbers, and each carrying its `# sabotage:` line. Cases:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix quality --profile loop` while
+- [x] Full `mix quality` is green (`mix quality --profile loop` while
       iterating; a loop-profile green does not satisfy this phase)
-- [ ] `mix gate.verify` confirms the green run was a full, unscoped gate
-- [ ] `grep -n "start_offset + span" lib/` returns nothing
-- [ ] `mix docs` builds without a broken-reference warning for
+- [x] `mix gate.verify` confirms the green run was a full, unscoped gate
+- [x] `grep -n "start_offset + span" lib/` returns nothing
+- [x] `mix docs` builds without a broken-reference warning for
       `resolve_span/4` (dialyzer in the full gate covers the
       `Predicator.Types.span()` reference resolving)
-- [ ] Doctor's 100% thresholds still pass - the new public function carries a
+- [x] Doctor's 100% thresholds still pass - the new public function carries a
       `@doc` and a `@spec`
-- [ ] `changelog.d/st-nhpk.md` exists
+- [x] `changelog.d/st-nhpk.md` exists
 
 #### Manual Verification:
 - [ ] Spec judgment: Appendix D models no parsing, so the standard against
@@ -632,3 +632,35 @@ unknown it left standing.
   `test/statifier/parser/location_accuracy_test.exs:13-41,84-98`
 - Testing rules: `docs/testing.md`; changelog rules:
   `changelog.d/README.md`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Spec judgment: Appendix D models no parsing, so the standard against
+      which this code is read is not the pseudocode but the two coordinate
+      contracts it joins - `t:Predicator.Types.span/0`'s 1-based, exclusive-end
+      line/column pair and XML 1.0 3.3.3's attribute-value rules. Confirm by
+      reading the cached spec (`spec-cache/scxml-rec.html` is not the authority
+      here; XML 1.0 3.3.3 is) that treating TAB/LF/CR-versus-space as a 1:1
+      match is normalization-correct
+- [ ] The `\r` clause's inline comment cites
+      `deps/predicator/lib/predicator/lexer.ex:225-226`, and the behavior still
+      matches that code in the installed dep
+- [ ] Both moduledocs read as a description of `resolve_span/4`, with no
+      residual suggestion that adding to `start_offset` composes a span
+- [ ] No regressions in related features: the parser, lowering, and compiler
+      are untouched by inspection of the diff
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
