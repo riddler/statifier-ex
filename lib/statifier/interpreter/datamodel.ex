@@ -293,7 +293,8 @@ defmodule Statifier.Interpreter.Datamodel do
        %Effect.DatamodelInit{
          datamodel: machine_state.datamodel,
          macrostep: machine_state.macrostep,
-         microstep: machine_state.microstep
+         microstep: machine_state.microstep,
+         round: machine_state.round
        }}
 
     top_level_indexes = MapSet.new(Machine.at(machine, 0).data)
@@ -408,7 +409,8 @@ defmodule Statifier.Interpreter.Datamodel do
               c_index: nil,
               owner: nil,
               macrostep: machine_state.macrostep,
-              microstep: machine_state.microstep
+              microstep: machine_state.microstep,
+              round: machine_state.round
             }}
          ]}
 

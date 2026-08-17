@@ -25,7 +25,8 @@ defmodule Statifier.Effect.DatamodelChange do
   (constraint 3), `nil` for the two runner-side writes - the empty-`<finalize>`
   auto-assign and `<invoke idlocation>` - that write outside any content
   block; `owner` names which construct performed it (decision 3).
-  `macrostep`/`microstep` are the counters as they stood when the write ran.
+  `macrostep`/`microstep`/`round` are the counters as they stood when the
+  write ran.
 
   `d_index` and `c_index` are mutually exclusive identities on this payload
   (decision 3): a non-nil `d_index` means the write was a `<data>`
@@ -47,7 +48,8 @@ defmodule Statifier.Effect.DatamodelChange do
     :new_value,
     :prior_value,
     :macrostep,
-    :microstep
+    :microstep,
+    :round
   ]
   defstruct [
     :location_path,
@@ -58,7 +60,8 @@ defmodule Statifier.Effect.DatamodelChange do
     :c_index,
     :owner,
     :macrostep,
-    :microstep
+    :microstep,
+    :round
   ]
 
   @type t :: %__MODULE__{
@@ -70,6 +73,7 @@ defmodule Statifier.Effect.DatamodelChange do
           c_index: non_neg_integer() | nil,
           owner: owner() | nil,
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

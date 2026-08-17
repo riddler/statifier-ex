@@ -632,7 +632,8 @@ defmodule Statifier.Session.TelemetryTest do
         c_index: nil,
         owner: nil,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Telemetry.effect("sess1", machine, {:datamodel_change, payload})
@@ -662,7 +663,8 @@ defmodule Statifier.Session.TelemetryTest do
         c_index: 0,
         owner: nil,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Telemetry.effect("sess1", machine, {:datamodel_change, payload})
@@ -689,7 +691,8 @@ defmodule Statifier.Session.TelemetryTest do
       payload = %DatamodelInit{
         datamodel: %{"x" => :undefined, "_sessionid" => "sess1"},
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Telemetry.effect("sess1", machine, {:datamodel_init, payload})
@@ -701,6 +704,7 @@ defmodule Statifier.Session.TelemetryTest do
       assert metadata.effect == payload
       assert measurements.macrostep == 1
       assert measurements.microstep == 1
+      assert measurements.round == 0
 
       # ADR-0040 makes `location` a key every core-family event carries. This
       # payload names no document node, so `core_shape/2` sets it as a literal

@@ -463,11 +463,11 @@ carries the entering round, each with a verified sabotage line.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits (not a phase gate on its own)
-- [ ] Full `mix quality` passes, verified with `mix gate.verify`
-- [ ] `mix test test/statifier/interpreter/datamodel_test.exs test/statifier/session/datamodel_reconstruction_test.exs`
+- [x] `mix quality --profile loop` green between edits (not a phase gate on its own)
+- [x] Full `mix quality` passes, verified with `mix gate.verify`
+- [x] `mix test test/statifier/interpreter/datamodel_test.exs test/statifier/session/datamodel_reconstruction_test.exs`
       passes - datamodel reconstruction from the effect stream alone still works
-- [ ] After this phase: `grep -rn "microstep: non_neg_integer()" lib/statifier/effect/`
+- [x] After this phase: `grep -rn "microstep: non_neg_integer()" lib/statifier/effect/`
       shows a `round: non_neg_integer()` line following it in all eleven core
       payload modules
 
@@ -795,6 +795,24 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 - [ ] `<send>`, `<cancel>`, and `<log>` behavior against spec 6.2/6.3/4.7 is
       unchanged - the stamp is additive and nothing reads it in the executors
+- [ ] Each new test's sabotage mutation was run, confirmed red, and reverted
+- [ ] No regressions in related features
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] `Datamodel.initialize/1`'s emitted `DatamodelInit` carries `round: 0`,
+      confirmed by reading the value rather than assuming the default
+- [ ] The spec 5.3.3 / B.2.2 binding order the datamodel module implements is
+      unchanged
 - [ ] Each new test's sabotage mutation was run, confirmed red, and reverted
 - [ ] No regressions in related features
 

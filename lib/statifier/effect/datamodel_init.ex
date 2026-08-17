@@ -34,12 +34,13 @@ defmodule Statifier.Effect.DatamodelInit do
   statifier-ui's own half of the mirror.
   """
 
-  @enforce_keys [:datamodel, :macrostep, :microstep]
-  defstruct [:datamodel, :macrostep, :microstep]
+  @enforce_keys [:datamodel, :macrostep, :microstep, :round]
+  defstruct [:datamodel, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           datamodel: map(),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

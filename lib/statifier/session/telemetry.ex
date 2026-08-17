@@ -147,8 +147,8 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `d_index`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `datamodel` |
+  | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `d_index`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `datamodel` |
 
   ## Trace effect events (9), emitted only under `trace: true`
 
@@ -574,7 +574,7 @@ defmodule Statifier.Session.Telemetry do
   # clause placed first would match a binding's payload and answer `nil` for
   # every `<data>`. See that clause's own comment for the ordering rule.
   defp core_shape(machine, %DatamodelChange{} = change) do
-    {%{macrostep: change.macrostep, microstep: change.microstep},
+    {%{macrostep: change.macrostep, microstep: change.microstep, round: change.round},
      %{
        location: location(machine, change),
        location_path: change.location_path,
@@ -591,7 +591,7 @@ defmodule Statifier.Session.Telemetry do
   # no document node, so there is no index to resolve. The key is present
   # because ADR-0040's core family always carries it.
   defp core_shape(_machine, %DatamodelInit{} = init) do
-    {%{macrostep: init.macrostep, microstep: init.microstep},
+    {%{macrostep: init.macrostep, microstep: init.microstep, round: init.round},
      %{location: nil, datamodel: init.datamodel}}
   end
 

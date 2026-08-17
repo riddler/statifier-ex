@@ -455,6 +455,27 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
       assert [{:datamodel_init, %DatamodelInit{macrostep: 1, microstep: 1}} | _rest] = effects
     end
+
+    # sabotage: `Datamodel.initialize/1`'s `init_effect` stamps `round: 1`
+    # (a plausible-looking hardcode, matching `macrostep`/`microstep`'s own
+    # advanced-to-1 value in the test above) instead of reading
+    # `machine_state.round` -> red, since `round` never advances before
+    # `Datamodel.initialize/1` runs (only `begin_round/1` writes it, and
+    # nothing calls it this early) - ADR-0045's "round: 0 before the fold
+    # begins" case.
+    test "the baseline carries round: 0, even though macrostep/microstep have already advanced" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} = Interpreter.initialize(machine)
+
+      assert [{:datamodel_init, %DatamodelInit{macrostep: 1, microstep: 1, round: 0}} | _rest] =
+               effects
+    end
   end
 
   describe "the {:datamodel_change, %Effect.DatamodelChange{}} binding effect" do
@@ -872,6 +893,24 @@ defmodule Statifier.Interpreter.DatamodelTest do
         |> Datamodel.initialize()
 
       assert Datamodel.enter_state(ms, 0) == {ms, []}
+    end
+
+    # sabotage: `bind_value/4`'s `{:datamodel_change, _}` effect stamps
+    # `round: 0` unconditionally instead of reading `machine_state.round` ->
+    # red, since the round bumped to 2 below (simulating entry mid-fold) no
+    # longer matches the hardcoded 0.
+    test "a state-entry <data> binding carries the entering round, not round: 0" do
+      machine = late_machine()
+      s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
+
+      {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
+      # Simulate enter_state/2 running mid-fold, on the round that entered
+      # s0 - two rounds in, not the anonymous round: 0 the baseline uses.
+      ms = ms |> MachineState.begin_round() |> MachineState.begin_round()
+
+      {_ms, effects} = Datamodel.enter_state(ms, s0)
+
+      assert [{:datamodel_change, %DatamodelChange{round: 2}}] = effects
     end
   end
 
