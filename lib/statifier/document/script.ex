@@ -10,8 +10,9 @@ defmodule Statifier.Document.Script do
   `Statifier.Lowering.Builders.place/3` sorts the two by parent.
 
   `text` is `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
-  concatenation of `<script>`'s direct text children - the program source
-  predicator compiles, mirroring `Statifier.Document.Assign.text` and
+  concatenation of `<script>`'s direct text children (verbatim except for
+  the parser's XML 1.0 2.11 line-break fold - ADR-0045) - the program
+  source predicator compiles, mirroring `Statifier.Document.Assign.text` and
   `Statifier.Document.Data.text`.
 
   `location` is this element's own `Statifier.Parser.Location` span, the

@@ -14,13 +14,18 @@ defmodule Statifier.Document.Content do
   `markup` is `nil` unless `<content>` has at least one element child; when
   present, it is the exact source bytes from the start of the first
   non-whitespace child to the end of the last non-whitespace child, elements
-  and text runs alike, so a 5.6.2 "mixture" slices whole. `markup_location`
+  and text runs alike, so a 5.6.2 "mixture" slices whole. Unlike `text`
+  below, this slice does **not** fold line breaks - it keeps its raw CRLFs
+  and lone CRs exactly as written; the parser's XML 1.0 2.11 fold only
+  applies when the child document `markup` describes is itself parsed, at
+  invoke time (ADR-0045 decision item 5). `markup_location`
   is that slice's own span in the parent source - its `start_offset` is what
   makes a byte offset inside the child document translatable back into a
   parent-document offset by plain arithmetic (ADR-0014).
 
   `text` is `Statifier.Parser.DOM.text/1`'s concatenation of the direct text
-  children and has no span of its own: an entity reference or a CDATA
+  children, folded per the parser's XML 1.0 2.11 line-break fold
+  (ADR-0045), and has no span of its own: an entity reference or a CDATA
   section can split that concatenation across more than one run in the
   source, so there is no single span to give it. This `Content` node's own
   `location` is what a diagnostic about the text points at instead.
