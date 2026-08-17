@@ -72,11 +72,24 @@ defmodule Statifier.Session do
       instruction's position but its effects are queued and drained after
       the batch that triggered it, so a subscriber never sees a later
       round ahead of an earlier one. Trace effects are ordinary list
-      members here too, never a side channel. A macrostep may carry more
-      than one `Trace.MacrostepStable` - one per core drive that reached
-      quiescence - and there is exactly one per `(macrostep, round)`; the
-      last one within a macrostep is that macrostep's true quiescence
-      (ADR-0043 decision 3).
+      members here too, never a side channel.
+
+      This is a guarantee about **delivery order**, not one a subscriber
+      can re-derive from the structs: `round` is carried only by the
+      `Statifier.Effect.Trace.*` payloads and by
+      `Statifier.Effect.BudgetExhausted` today, so a mixed stream cannot
+      be sorted back into this order after the fact (ADR-0043 decision 4
+      leaves stamping `round` onto the rest as follow-on work). Take the
+      order as it arrives.
+
+      A macrostep may carry more than one `Trace.MacrostepStable` - one
+      per core drive that reached quiescence - and there is exactly one
+      per `(macrostep, round)` (ADR-0043 decision 3). Within a macrostep
+      the last one is that macrostep's last *quiescent* point, which is
+      not always where the macrostep ends: a macrostep that halts ends
+      with `Trace.Done` instead, either after its final
+      `Trace.MacrostepStable` or - when the halting drive is the only one
+      - with no `Trace.MacrostepStable` of its own at all.
     - `{:unroutable, effect}` - reserved for an effect this session cannot
       route; every `:send`/`:send_delayed`/`:invoke`/`:cancel_invoke`/
       `:autoforward` effect now routes (see `Statifier.Session.Effects`'s

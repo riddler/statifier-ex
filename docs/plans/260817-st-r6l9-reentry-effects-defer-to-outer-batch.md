@@ -690,9 +690,22 @@ not a guaranteed second level.
       sees one empty span plus nine parentless events, rather than a span
       whose contents arrive late. Accepted per ADR-0043; the consequence is
       recorded on st-aos7, which owns the `:internal` span's metadata.
-- [ ] The strengthened moduledoc reads as a promise a consumer can act on,
+- [x] The strengthened moduledoc reads as a promise a consumer can act on,
       and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
+
+      Reviewed, and two over-promises were found and fixed rather than
+      signed off. It stated non-decreasing `(macrostep, round)` delivery
+      with no caveat, but `round` is carried only by `Trace.*` and
+      `BudgetExhausted` (decision 4's follow-on), so a consumer would
+      reasonably try to sort a mixed stream by a key most effects do not
+      carry; it now says the guarantee is about delivery order and cannot
+      be re-derived. It also called the last `Trace.MacrostepStable` in a
+      macrostep "that macrostep's true quiescence", which is wrong for a
+      halting macrostep: measured on the Phase 2 chart the stables are
+      `[{1, 1}, {2, 1}]` and macrostep 2 then continues into the re-entry
+      and ends with `Trace.Done`, while a macrostep whose only drive halts
+      carries no stable at all.
 - [ ] No regressions in related features: internal sends, `<raise>`-driven
       `error.execution`, unreachable `<send>` targets, and `<invoke>`
       failures all still reach the same configurations.
@@ -851,13 +864,19 @@ ordering sentence.
 
 #### Manual Verification:
 
-- [ ] Each of the three edits says what ADR-0043 directs and cites the
-      decision number, without re-arguing the decision.
-- [ ] The prose matches the surrounding house style of
+- [x] Each of the three edits says what ADR-0043 directs and cites the
+      decision number, without re-arguing the decision. Confirmed for all
+      three.
+- [x] The prose matches the surrounding house style of
       `docs/observability.md` (it uses plain hyphens, not em dashes -
-      match what is there).
-- [ ] Constraints 2, 4, and 6 do not contradict each other or the
+      match what is there). Confirmed.
+- [x] Constraints 2, 4, and 6 do not contradict each other or the
       `Statifier.Session` moduledoc written in Phase 1.
+
+      Constraints 4 and 6 agree with the moduledoc as written. Constraint
+      2 carried the same missing `round` caveat the moduledoc did, and
+      would have contradicted it once the moduledoc was corrected, so the
+      caveat was added in both places in the same change.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -889,9 +908,11 @@ of blocking here.
   the whole stream and assert monotone arrival plus one
   `Trace.MacrostepStable` per `(macrostep, round)`; the success-path test
   additionally asserts `{:halted, :done}` last.
-- **Nesting depth** (Phase 1): the attempted two-level re-entry chart, with
-  its outcome recorded in a comment either way - ADR-0043 carries this as an
-  open question and asks the regression suite to try to construct one.
+- **Nesting depth** (Phase 1): the two-level re-entry chart, which does
+  reach a second level - ADR-0043 carried this as an open question and now
+  records it as settled. The chart's own ordering assertions would pass at
+  one level, so the evidence is the mutation: dropping `drain_deferred/1`'s
+  trailing recursion fails that test alone, and the run never reaches `d`.
 - **Live-vs-replay equality** (Phase 2): two seam-crossing charts through
   `round_trip/3`, one via `deliver(:internal, ...)` and one via
   `communication_error/4`.
@@ -1005,9 +1026,22 @@ before considering the plan fully landed.
       sees one empty span plus nine parentless events, rather than a span
       whose contents arrive late. Accepted per ADR-0043; the consequence is
       recorded on st-aos7, which owns the `:internal` span's metadata.
-- [ ] The strengthened moduledoc reads as a promise a consumer can act on,
+- [x] The strengthened moduledoc reads as a promise a consumer can act on,
       and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
+
+      Reviewed, and two over-promises were found and fixed rather than
+      signed off. It stated non-decreasing `(macrostep, round)` delivery
+      with no caveat, but `round` is carried only by `Trace.*` and
+      `BudgetExhausted` (decision 4's follow-on), so a consumer would
+      reasonably try to sort a mixed stream by a key most effects do not
+      carry; it now says the guarantee is about delivery order and cannot
+      be re-derived. It also called the last `Trace.MacrostepStable` in a
+      macrostep "that macrostep's true quiescence", which is wrong for a
+      halting macrostep: measured on the Phase 2 chart the stables are
+      `[{1, 1}, {2, 1}]` and macrostep 2 then continues into the re-entry
+      and ends with `Trace.Done`, while a macrostep whose only drive halts
+      carries no stable at all.
 - [ ] No regressions in related features: internal sends, `<raise>`-driven
       `error.execution`, unreachable `<send>` targets, and `<invoke>`
       failures all still reach the same configurations.
@@ -1062,13 +1096,19 @@ of blocking here.
 
 ### Phase 3
 
-- [ ] Each of the three edits says what ADR-0043 directs and cites the
-      decision number, without re-arguing the decision.
-- [ ] The prose matches the surrounding house style of
+- [x] Each of the three edits says what ADR-0043 directs and cites the
+      decision number, without re-arguing the decision. Confirmed for all
+      three.
+- [x] The prose matches the surrounding house style of
       `docs/observability.md` (it uses plain hyphens, not em dashes -
-      match what is there).
-- [ ] Constraints 2, 4, and 6 do not contradict each other or the
+      match what is there). Confirmed.
+- [x] Constraints 2, 4, and 6 do not contradict each other or the
       `Statifier.Session` moduledoc written in Phase 1.
+
+      Constraints 4 and 6 agree with the moduledoc as written. Constraint
+      2 carried the same missing `round` caveat the moduledoc did, and
+      would have contradicted it once the moduledoc was corrected, so the
+      caveat was added in both places in the same change.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

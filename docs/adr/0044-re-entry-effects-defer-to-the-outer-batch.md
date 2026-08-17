@@ -173,12 +173,20 @@ where the inline `perform/3` call used to be.
   `interpret/2` batches is unaffected - `handle_cast({:interpret, _}, _)`
   reaches `perform/3` directly and crosses no seam of its own, though an
   effect *it injects* that raises internally defers like any other.
-- Open questions this record carries rather than settles: whether a nested
-  re-entry (a re-entry whose own deferred batch raises again) is reachable
-  from a document today - the FIFO argument covers it either way, but the
-  regression suite should try to construct one; and whether statifier-ui's
-  timeline wants `round` on core effects soon enough to raise the follow-on
-  bead's priority - that call belongs to the sui tracker under ADR-0025.
+- **Settled since acceptance**: a nested re-entry - one whose own deferred
+  batch crosses the seam again - *is* reachable from a document, so the FIFO
+  argument is load-bearing rather than merely defensive.
+  `two_level_internal_send_doc/0` in `test/statifier/session_test.exs`
+  reaches depth 2: `b`'s `<onentry>` sends `#_internal` "ping", and draining
+  that batch enters `c`, whose own `<onentry>` sends "pong" while the first
+  entry is still being drained. The chart's ordering assertions would pass at
+  one level too, so the evidence is the mutation instead: dropping
+  `drain_deferred/1`'s trailing recursion fails that test alone, and the run
+  never reaches `d`.
+- Open question this record carries rather than settles: whether
+  statifier-ui's timeline wants `round` on core effects soon enough to raise
+  the follow-on bead's priority - that call belongs to the sui tracker under
+  ADR-0025.
 - What would reopen this record: a consumer with a demonstrated need for
   causal/nested delivery on the subscriber stream that the ADR-0040 spans
   cannot serve, or a change to ADR-0034's flat recording shape - either would
