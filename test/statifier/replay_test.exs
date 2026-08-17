@@ -84,7 +84,11 @@ defmodule Statifier.ReplayTest do
       assert {:ok, result} = Replay.run(recording)
       assert result.status == :running
       assert result.machine_state.configuration != MapSet.new()
-      assert result.stream == []
+      # `Interpreter.initialize/2`'s own `{:datamodel_init, _}` baseline
+      # is the one effect a fresh `initialize/2` always produces,
+      # "empty" recording or not - it is a core effect, not something the
+      # recording's own entries contributed.
+      assert [{:effect, {:datamodel_init, _init}}] = result.stream
     end
 
     # sabotage: `apply_entry({:event, event}, state)` drains without first
@@ -167,7 +171,9 @@ defmodule Statifier.ReplayTest do
         |> Recording.put_interpret([invoke_effect])
 
       assert {:ok, result} = Replay.run(recording)
-      assert result.stream == [{:effect, invoke_effect}]
+      # `Interpreter.initialize/2`'s own `{:datamodel_init, _}` baseline
+      # precedes the recorded interpret batch's own effect.
+      assert [{:effect, {:datamodel_init, _init}}, {:effect, ^invoke_effect}] = result.stream
     end
 
     # -- Decision 6: the live-invocation set --------------------------------
@@ -334,10 +340,13 @@ defmodule Statifier.ReplayTest do
 
       assert {:ok, result} = Replay.run(recording)
 
-      assert result.stream == [
-               {:effect, log_one},
-               {:effect, log_two}
-             ]
+      # `Interpreter.initialize/2`'s own `{:datamodel_init, _}` baseline
+      # precedes the recorded interpret batch's own two effects.
+      assert [
+               {:effect, {:datamodel_init, _init}},
+               {:effect, ^log_one},
+               {:effect, ^log_two}
+             ] = result.stream
     end
   end
 

@@ -228,10 +228,13 @@ defmodule StatifierTest do
 
       {machine_state, no_trace_effects} = Statifier.initialize(machine)
       assert Statifier.active_leaf_states(machine_state) == MapSet.new(["a1"])
-      assert no_trace_effects == []
+      # Core effects (the `{:datamodel_init, _}` baseline among them) are
+      # emitted regardless of `trace` - only the trace family is
+      # gated.
+      refute Enum.any?(no_trace_effects, &match?({:trace, _payload}, &1))
 
       {_machine_state, trace_effects} = Statifier.initialize(machine, trace: true)
-      assert trace_effects != []
+      assert Enum.any?(trace_effects, &match?({:trace, _payload}, &1))
     end
   end
 

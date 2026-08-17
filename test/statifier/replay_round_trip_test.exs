@@ -256,10 +256,16 @@ defmodule Statifier.ReplayRoundTripTest do
       assert [{:interpret, ^effects}] = Recording.entries(recording)
 
       # `trace: true` also emits the initialization trace effects ahead of
-      # the batch; filtering those out isolates the batch's own effect
-      # order, which is what this case is about (Decision 4 fixes `:trace`
-      # identically on both sides, so it is not what this assertion checks).
-      non_trace = Enum.reject(stream, &match?({:effect, {:trace, _effect}}, &1))
+      # the batch, and `Interpreter.initialize/2` always emits its own
+      # `{:datamodel_init, _}` baseline ahead of those; filtering
+      # both out isolates the batch's own effect order, which is what this
+      # case is about (Decision 4 fixes `:trace` identically on both sides,
+      # so it is not what this assertion checks).
+      non_trace =
+        Enum.reject(
+          stream,
+          &match?({:effect, {kind, _effect}} when kind in [:trace, :datamodel_init], &1)
+        )
 
       assert non_trace == [
                {:effect, {:log, log_effect}},

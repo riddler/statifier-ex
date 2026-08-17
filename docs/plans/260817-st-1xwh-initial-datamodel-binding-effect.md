@@ -614,23 +614,23 @@ ordering "The Appendix D rule" section fixes.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (use `mix quality --profile loop` between
+- [x] Full `mix quality` passes (use `mix quality --profile loop` between
       edits; a loop run alone never satisfies this phase).
-- [ ] `mix test test/statifier/effect_test.exs test/statifier/session/effects_test.exs test/statifier/session/telemetry_test.exs` passes - these three are the exhaustiveness proof.
-- [ ] `mix test test/statifier/interpreter/datamodel_test.exs` passes.
-- [ ] `Statifier.Session.Telemetry.events/0` returns 27 names, asserted by the
+- [x] `mix test test/statifier/effect_test.exs test/statifier/session/effects_test.exs test/statifier/session/telemetry_test.exs` passes - these three are the exhaustiveness proof.
+- [x] `mix test test/statifier/interpreter/datamodel_test.exs` passes.
+- [x] `Statifier.Session.Telemetry.events/0` returns 27 names, asserted by the
       updated test.
-- [ ] `mix adr.check` passes with the ADR-0040 amendment in place.
-- [ ] Dialyzer is clean, which proves the one **production** caller
+- [x] `mix adr.check` passes with the ADR-0040 amendment in place.
+- [x] Dialyzer is clean, which proves the one **production** caller
       (`lib/statifier/interpreter.ex:249`) was updated - the widened `@spec`
       makes a missed bare-`MachineState` match a typing violation. It proves
       nothing about `test/`, which dialyzer does not analyze; the three test
       files named above are what a full `mix test` covers, and they are listed
       rather than left to a red suite to find.
-- [ ] `mix test.regression` shows no ratchet movement, and
+- [x] `mix test.regression` shows no ratchet movement, and
       `test/passing_tests.json` is byte-identical: this phase adds an effect to
       a path that already ran and changes no SCXML semantics.
-- [ ] `mix quality --format json --report -` is available if a later agent
+- [x] `mix quality --format json --report -` is available if a later agent
       needs to route on results.
 
 #### Manual Verification:
@@ -1126,3 +1126,33 @@ because they belong to another repo or to a human:
   binding), 5.10 (system variables), B.2.2 (no ordering dependencies);
   Appendix D `:101-102` and `:311-313` (the two call sites, no procedure body)
 - Bead: st-1xwh (mirrors `sui-t36.1`)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The touched functions still match the W3C spec prose they port (5.3.2 /
+      5.3.3 / B.2.2) and the Appendix D call-site ordering at `:101-102`; no
+      pseudocode body is involved, per "The Appendix D rule" above.
+- [ ] The rewritten `initialize/1` `@doc` no longer predicts a trace row, and
+      states the core-effect reason instead.
+- [ ] The moduledoc table in `effect.ex`, the `@type core` union,
+      `plan_one/2`, `@effect_kinds`, `core_shape/2`, the telemetry moduledoc
+      table, and both fixture tables all name exactly the same eleven core
+      tags - read them side by side once.
+- [ ] The ADR-0040 amendment reads as an amendment in that document's
+      established voice, not as a re-argument of the settled location rule.
+- [ ] No regressions in existing telemetry subscribers.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end instead of blocking here.
+
+---

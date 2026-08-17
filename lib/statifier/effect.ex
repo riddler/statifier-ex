@@ -33,6 +33,7 @@ defmodule Statifier.Effect do
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
   | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | `Statifier.Interpreter.Datamodel.write_location/4`'s four call sites - `Statifier.Machine.Content.Assign`'s `execute/2` (`<assign>`), `Statifier.Machine.Content.Send`'s `execute/2` (`<send idlocation>`), `Statifier.Interpreter`'s `write_finalize_target/6` (the empty-`<finalize>` auto-assign), and `Statifier.Interpreter`'s `invoke_one/6` (`<invoke idlocation>`) |
+  | `:datamodel_init` | `Statifier.Effect.DatamodelInit` | `Statifier.Interpreter.Datamodel.initialize/1` |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
   | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected/3` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
@@ -44,10 +45,10 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.FinalizeAutoforward` | `Statifier.Interpreter.handle_event/2`'s finalize/autoforward pass (`apply_invoke_passes/2`, spec 6.4/6.5) |
 
   The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
-  `:invoke`, `:cancel_invoke`, `:autoforward`, `:datamodel_change`, and all
-  nine trace effects. `:send`, `:send_delayed`, and `:cancel` remain
-  unproduced, because nothing in this core sends, delays, or cancels a
-  delayed send yet.
+  `:invoke`, `:cancel_invoke`, `:autoforward`, `:datamodel_change`,
+  `:datamodel_init`, and all nine trace effects. `:send`, `:send_delayed`,
+  and `:cancel` remain unproduced, because nothing in this core sends,
+  delays, or cancels a delayed send yet.
 
   ## Trace effects carry indexes and counters, never structs
 
@@ -106,6 +107,7 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.DatamodelChange
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -113,7 +115,7 @@ defmodule Statifier.Effect do
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
 
-  @typedoc "The ten core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted`, `:cancel_invoke`/`:autoforward`, and this bead's `:datamodel_change`."
+  @typedoc "The eleven core effects - the ADR-0003 set plus ADR-0019's `:budget_exhausted`, `:cancel_invoke`/`:autoforward`, and the two datamodel effects: `:datamodel_change` (a write) and `:datamodel_init` (the starting baseline)."
   @type core ::
           {:send, Send.t()}
           | {:send_delayed, SendDelayed.t()}
@@ -125,6 +127,7 @@ defmodule Statifier.Effect do
           | {:done, Done.t()}
           | {:log, Log.t()}
           | {:datamodel_change, DatamodelChange.t()}
+          | {:datamodel_init, DatamodelInit.t()}
 
   @typedoc "The nine trace effects - the seven `docs/observability.md` constraint-2 rows plus `InvokePass`/`FinalizeAutoforward` for the two Appendix-D-named phase boundaries `<invoke>` (this bead) added."
   @type trace ::

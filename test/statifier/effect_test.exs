@@ -6,6 +6,7 @@ defmodule Statifier.EffectTest do
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.DatamodelChange
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -59,7 +60,9 @@ defmodule Statifier.EffectTest do
          prior_value: :undefined,
          macrostep: 1,
          microstep: 1
-       }}
+       }},
+      {:datamodel_init,
+       %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}}
     ]
 
     @trace_effects [
@@ -129,8 +132,8 @@ defmodule Statifier.EffectTest do
 
     # sabotage: n/a - this test only checks that the fixture tables above
     # are complete, not any lib/ behavior.
-    test "the table covers all nineteen effects" do
-      assert length(@core_effects) + length(@trace_effects) == 19
+    test "the table covers all twenty effects" do
+      assert length(@core_effects) + length(@trace_effects) == 20
     end
   end
 

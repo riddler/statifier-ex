@@ -133,7 +133,7 @@ defmodule Statifier.Session.Telemetry do
   own convention - unit conversion (`System.convert_time_unit/3`) is left to
   the consumer.
 
-  ## Core effect events (10), emitted regardless of `trace`
+  ## Core effect events (11), emitted regardless of `trace`
 
   | Event | Measurements | Metadata |
   |---|---|---|
@@ -147,6 +147,7 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `datamodel` |
 
   ## Trace effect events (9), emitted only under `trace: true`
 
@@ -180,6 +181,7 @@ defmodule Statifier.Session.Telemetry do
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.DatamodelChange
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -192,7 +194,7 @@ defmodule Statifier.Session.Telemetry do
   @typedoc "One `:telemetry` event name this module can emit."
   @type event_name :: [atom(), ...]
 
-  @typedoc "One of the ten core effect payload structs (`Statifier.Effect.core/0`, unwrapped)."
+  @typedoc "One of the eleven core effect payload structs (`Statifier.Effect.core/0`, unwrapped)."
   @type core_payload ::
           Send.t()
           | SendDelayed.t()
@@ -204,6 +206,7 @@ defmodule Statifier.Session.Telemetry do
           | Done.t()
           | Log.t()
           | DatamodelChange.t()
+          | DatamodelInit.t()
 
   @typedoc "One of the nine trace payload structs (`Statifier.Effect.trace/0`, unwrapped)."
   @type trace_payload ::
@@ -237,7 +240,8 @@ defmodule Statifier.Session.Telemetry do
     :budget_exhausted,
     :done,
     :log,
-    :datamodel_change
+    :datamodel_change,
+    :datamodel_init
   ]
 
   @trace_kinds [
@@ -254,7 +258,7 @@ defmodule Statifier.Session.Telemetry do
 
   @doc """
   Every event name this module can ever emit - the 7 lifecycle/span names,
-  the 10 `[:statifier, :session, :effect, kind]` names, and the 9
+  the 11 `[:statifier, :session, :effect, kind]` names, and the 9
   `[:statifier, :session, :trace, kind]` names, built from
   `@lifecycle_events`/`@effect_kinds`/`@trace_kinds`, the module's single
   definition site for the vocabulary.
@@ -565,6 +569,14 @@ defmodule Statifier.Session.Telemetry do
        c_index: change.c_index,
        owner: change.owner
      }}
+  end
+
+  # `location: nil` as a literal, not a `location/2` call: this payload names
+  # no document node, so there is no index to resolve. The key is present
+  # because ADR-0040's core family always carries it.
+  defp core_shape(_machine, %DatamodelInit{} = init) do
+    {%{macrostep: init.macrostep, microstep: init.microstep},
+     %{location: nil, datamodel: init.datamodel}}
   end
 
   @spec trace_shape(machine :: Machine.t(), payload :: trace_payload()) :: {map(), map()}
