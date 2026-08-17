@@ -85,6 +85,14 @@ Rules:
   (constraint 3), never bare structs that force tooling to re-derive context.
 - Trace effects are ordinary members of the effect list - same ordering
   guarantees, same delivery path. No side channel.
+- The ordering guarantee holds across batches too, not only within one:
+  delivery order to a subscriber is non-decreasing in `(macrostep, round)`
+  across the whole run, matching the order `Statifier.Replay` produces for
+  the same recording. A mid-batch ADR-0039 re-entry keeps the enclosing
+  macrostep and advances `round`, so its effects carry higher rounds than
+  the outer batch's unsent tail; those effects are queued and drained after
+  the batch that triggered them rather than delivered inline, which is what
+  keeps arrival order monotone (ADR-0043 decision 1).
 - "Either selection function" is `select_eventless_transitions/1` and
   `select_transitions/2` both, with no exception - including the terminal
   eventless probe that ends a macrostep, which is why the round reporting
@@ -132,6 +140,12 @@ them anyway:
   the ordering key for any timeline UI or log merge, and it advances on
   every round including those that run no microstep, so a fold that never
   reaches quiescence is still ordered and countable (ADR-0020).
+- A macrostep may carry more than one `Trace.MacrostepStable`: one per core
+  drive that reached quiescence, since a session may re-enter the core
+  mid-macrostep (ADR-0039). There is exactly one `MacrostepStable` per
+  `(macrostep, round)`, and under ADR-0043 decision 1 the last one arriving
+  within a macrostep is that macrostep's true quiescence (ADR-0043
+  decision 3).
 - Internally raised events carry cause metadata: which transition or
   executable-content node (by constraint-3 identity) raised them, at which
   step and round. The first consumer is a better `error.execution` - "raised
@@ -158,6 +172,11 @@ promotion path.
   `:telemetry` bridge attaches at that same boundary - `Statifier.Session.Telemetry`,
   the authoritative reference for every `[:statifier, :session, ...]` event
   (ADR-0040). Live tooling attaches there; the core is untouched.
+  `{:halted, :done | :cancelled | :budget_exhausted}` is the last message a
+  session sends its subscribers for the run, so a consumer may treat it as
+  end-of-stream (ADR-0043 decision 2) - constraint 2's cross-batch ordering
+  sentence is what makes that true, since it guarantees no later-round
+  effect can still be queued behind it.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, cancel markers) in the
   session's serialized input order at the session boundary makes a run
