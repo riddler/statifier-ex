@@ -505,14 +505,14 @@ user-observable behavior in `Script.text`, `Content.text`, `Data.text`, and
 
 #### Automated Verification:
 
-- [ ] `mix quality` (full, unprofiled, unscoped) is green.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `mix test --include scion --include scxml_w3` — the full conformance run.
-- [ ] `mix test.regression` — the ratchet's registry tests still pass.
-- [ ] `test/passing_tests.json` is unchanged, or grew via `mix test.baseline add`
+- [x] `mix quality` (full, unprofiled, unscoped) is green.
+- [x] `mix gate.verify` exits zero.
+- [x] `mix test --include scion --include scxml_w3` — the full conformance run.
+- [x] `mix test.regression` — the ratchet's registry tests still pass.
+- [x] `test/passing_tests.json` is unchanged, or grew via `mix test.baseline add`
       in this same commit. It must never shrink (see Corpus/Ratchet Notes).
-- [ ] `mix quality --format json --report -` if a later agent routes on results.
-- [ ] Every new test carries a `# sabotage:` line.
+- [x] `mix quality --format json --report -` if a later agent routes on results.
+- [x] Every new test carries a `# sabotage:` line.
 
 #### Manual Verification:
 
@@ -752,5 +752,34 @@ already-uncommitted direction-stage files on this branch —
 `docs/adr/0043-attribute-values-normalize-per-xml-3-3-3.md` (its open-question
 bullet marked resolved), and `docs/adr/README.md` (the index row). They are this
 bead's own work and belong with its first commit.
+
+---
+
+### Phase 2
+
+- [ ] In `iex -S mix`, `Statifier.Parser.parse("<r><t>a\\r\\nb</t></r>")` yields
+      `"a\nb"` and `Location.slice/2` over the same node still yields `"a\r\nb"`.
+      This is the bead's own reproduction, inverted.
+- [ ] `<x>i\r<!--c-->\nj</x>` yields `"i\n\nj"` — the case that proves the walk
+      reads the fold's followed-by rule off the raw text rather than the value.
+      A `"i\nj"` result means a value-only fold slipped in.
+- [ ] `<t>a&#xD;b</t>` still yields `"a\rb"` — the literal-versus-reference
+      distinction, the thing a `String.replace/3` would destroy.
+- [ ] An attribute value containing a literal newline still normalizes to a
+      single space, unchanged by this phase.
+- [ ] The moduledoc edits leave no stale statement of the old behavior: grep
+      `lib/statifier/parser` for "verbatim", "not normalized", and "Saxy
+      reported" and read every hit.
+- [ ] Read against the W3C Appendix D pseudocode rule: parser work only, no
+      Appendix D procedure touched, no deviation claimed (ADR-0002).
+- [ ] The conformance run's result set is compared to the pre-change run by eye,
+      not just by exit code — no member flipped in either direction.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
 
 ---

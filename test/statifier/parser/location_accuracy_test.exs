@@ -56,7 +56,10 @@ defmodule Statifier.Parser.LocationAccuracyTest do
   # entity reference, so its presence in the raw slice is exactly the signal
   # that `value` decoded something the slice did not spell out the same way.
   # Likewise a raw "<![CDATA[" only ever opens a CDATA section, which `value`
-  # reports unwrapped. Runs with neither decode to themselves.
+  # reports unwrapped, and a raw "\r" only ever survives an XML 1.0 2.11 fold
+  # (ADR-0045) - a literal CRLF or lone CR in the slice becomes a `\n` in
+  # `value`, so the two stop agreeing byte for byte the moment either fires.
+  # Runs with none of the three decode to themselves.
   defp assert_text_accurate(%DOM.Text{} = text, source) do
     slice = Location.slice(text.location, source)
 
@@ -78,7 +81,8 @@ defmodule Statifier.Parser.LocationAccuracyTest do
   end
 
   defp entity_or_cdata_free?(slice) do
-    not (String.contains?(slice, "&") or String.contains?(slice, "<![CDATA["))
+    not (String.contains?(slice, "&") or String.contains?(slice, "<![CDATA[") or
+           String.contains?(slice, "\r"))
   end
 
   # `location` covers `name="value"` and `value_location` covers the text
@@ -262,6 +266,19 @@ defmodule Statifier.Parser.LocationAccuracyTest do
           <node id="alpha"><edge event="go">before</edge>after</node>
       </chart>
       """
+
+      assert_locations_accurate(source)
+    end
+
+    # sabotage: `entity_or_cdata_free?/1` reverted to its pre-ADR-0045 form
+    # (no `String.contains?(slice, "\r")` disjunct) -> a raw CRLF is
+    # wrongly treated as decode-free, so `assert_text_accurate/2` demands
+    # byte-for-byte equality between the raw slice ("a\r\nb") and the
+    # 2.11-folded value ("a\nb") -> the sweep reddens on the exact-match
+    # assertion instead of falling through to the shortens-or-holds-steady
+    # branch
+    test "a text run with a raw CRLF is still swept as decode-changed, not exact-match" do
+      source = "<chart>\n    <node>a\r\nb</node>\n</chart>\n"
 
       assert_locations_accurate(source)
     end

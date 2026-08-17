@@ -38,6 +38,21 @@ defmodule Statifier.Parser.Handler do
   so the raw text is what disambiguates. When the scanner has no record for an
   attribute, or the record's `value_location` is `nil`, there is no raw slice
   to walk and Saxy's value stands unnormalized.
+
+  ## Character data
+
+  `add_text/2` folds each text run's `value` per XML 1.0 2.11 (ADR-0045),
+  walking the run's raw span (`text_span/1`) against an *unfolded*
+  accumulation of Saxy's characters with `Location.normalize_character_data/3`.
+  The accumulation, not `value` itself, is what gets re-walked on every event
+  of a coalescing run: `walk_units/3`'s raw-versus-expanded pairing requires
+  both sides to empty together, and a raw `\\r` no longer pairs against an
+  already-folded `\\n` the way it pairs against Saxy's still-unfolded `\\r\\n`.
+  State carries this accumulation in a `text` field, reset implicitly by the
+  coalescing check already in `add_text/2` - a fresh run starts from `""`
+  because its frame's head child is not a `DOM.Text`. When the raw slice and
+  the accumulation desync, `normalize_character_data/3` degrades to the
+  unfolded value, the same posture attribute normalization takes.
   """
 
   @behaviour Saxy.Handler
@@ -59,7 +74,8 @@ defmodule Statifier.Parser.Handler do
           source: binary(),
           markup: [Markup.t()],
           cursor: cursor(),
-          stack: [frame()]
+          stack: [frame()],
+          text: binary()
         }
 
   @doc """
@@ -69,6 +85,10 @@ defmodule Statifier.Parser.Handler do
   `:end_element` never has to special-case the root: the root element is
   appended to that frame like any other child, and `:end_document` reads it
   back out.
+
+  `text` starts empty; it is the unfolded accumulation `add_text/2` grows for
+  whichever run is currently open (see the moduledoc's "Character data"
+  section).
   """
   @spec init(source :: binary(), markup :: [Markup.t()]) :: t()
   def init(source, markup) when is_binary(source) and is_list(markup) do
@@ -76,7 +96,8 @@ defmodule Statifier.Parser.Handler do
       source: source,
       markup: markup,
       cursor: {0, 1, 1},
-      stack: [%{record: nil, attributes: [], children: []}]
+      stack: [%{record: nil, attributes: [], children: []}],
+      text: ""
     }
   end
 
@@ -140,17 +161,26 @@ defmodule Statifier.Parser.Handler do
     [frame | ancestors] = state.stack
     location = text_span(state)
 
-    children =
+    {unfolded, children} =
       case frame.children do
         [%DOM.Text{} = text | rest] ->
-          [%DOM.Text{text | value: text.value <> characters, location: location} | rest]
+          unfolded = state.text <> characters
+          folded = folded_value(state, location, unfolded)
+          {unfolded, [%DOM.Text{text | value: folded, location: location} | rest]}
 
         children ->
-          [%DOM.Text{value: characters, location: location} | children]
+          folded = folded_value(state, location, characters)
+          {characters, [%DOM.Text{value: folded, location: location} | children]}
       end
 
-    %{state | stack: [%{frame | children: children} | ancestors]}
+    %{state | text: unfolded, stack: [%{frame | children: children} | ancestors]}
   end
+
+  # `unfolded` is Saxy's accumulation for the run so far, never `value` -
+  # see the moduledoc's "Character data" section for why re-walking an
+  # already-folded value against the raw slice would desync.
+  defp folded_value(state, location, unfolded),
+    do: Location.normalize_character_data(location, unfolded, state.source)
 
   # A text run ends where the next markup construct begins. Recomputing this
   # for every event of a split run is deliberate: the cursor has not moved,
