@@ -543,13 +543,13 @@ and its sabotage comment updates to name the new count.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits).
-- [ ] `mix test test/statifier/effect_test.exs test/statifier/session/effects_test.exs test/statifier/session/telemetry_test.exs` passes - these three are the exhaustiveness proof.
-- [ ] `Telemetry.events/0` returns 26 names, asserted by the updated test.
-- [ ] `mix adr.check` passes with the ADR-0040 amendment in place.
-- [ ] Doctor's 100% thresholds still met (`.doctor.exs`) - the new module has a
+- [x] Full `mix quality` passes (loop gate between edits).
+- [x] `mix test test/statifier/effect_test.exs test/statifier/session/effects_test.exs test/statifier/session/telemetry_test.exs` passes - these three are the exhaustiveness proof.
+- [x] `Telemetry.events/0` returns 26 names, asserted by the updated test.
+- [x] `mix adr.check` passes with the ADR-0040 amendment in place.
+- [x] Doctor's 100% thresholds still met (`.doctor.exs`) - the new module has a
       moduledoc and every public type is documented.
-- [ ] `mix quality --format json --report -` is available if a later agent
+- [x] `mix quality --format json --report -` is available if a later agent
       needs to route on results.
 
 #### Manual Verification:
@@ -842,5 +842,22 @@ human to confirm the manual testing before moving to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically (via `/wurk:commit --auto`), and Manual Verification items are
 deferred and surfaced once at the end.
+
+---
+
+### Phase 2
+
+- [ ] The moduledoc table in `effect.ex`, the `@type core` union,
+      `plan_one/2`, `@effect_kinds`, `core_shape/2`, and both fixture tables
+      all name exactly the same ten core tags - read them side by side once.
+- [ ] The ADR-0040 amendment reads as an amendment in that document's
+      established voice, not as a re-argument of the settled location rule.
+- [ ] No regressions in existing telemetry subscribers.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically, and Manual Verification items are deferred to the end.
 
 ---

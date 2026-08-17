@@ -127,7 +127,7 @@ defmodule Statifier.Session.Telemetry do
   own convention - unit conversion (`System.convert_time_unit/3`) is left to
   the consumer.
 
-  ## Core effect events (9), emitted regardless of `trace`
+  ## Core effect events (10), emitted regardless of `trace`
 
   | Event | Measurements | Metadata |
   |---|---|---|
@@ -140,6 +140,7 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `c_index`, `owner` |
 
   ## Trace effect events (9), emitted only under `trace: true`
 
@@ -172,6 +173,7 @@ defmodule Statifier.Session.Telemetry do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -184,7 +186,7 @@ defmodule Statifier.Session.Telemetry do
   @typedoc "One `:telemetry` event name this module can emit."
   @type event_name :: [atom(), ...]
 
-  @typedoc "One of the nine core effect payload structs (`Statifier.Effect.core/0`, unwrapped)."
+  @typedoc "One of the ten core effect payload structs (`Statifier.Effect.core/0`, unwrapped)."
   @type core_payload ::
           Send.t()
           | SendDelayed.t()
@@ -195,6 +197,7 @@ defmodule Statifier.Session.Telemetry do
           | BudgetExhausted.t()
           | Done.t()
           | Log.t()
+          | DatamodelChange.t()
 
   @typedoc "One of the nine trace payload structs (`Statifier.Effect.trace/0`, unwrapped)."
   @type trace_payload ::
@@ -227,7 +230,8 @@ defmodule Statifier.Session.Telemetry do
     :autoforward,
     :budget_exhausted,
     :done,
-    :log
+    :log,
+    :datamodel_change
   ]
 
   @trace_kinds [
@@ -244,7 +248,7 @@ defmodule Statifier.Session.Telemetry do
 
   @doc """
   Every event name this module can ever emit - the 7 lifecycle/span names,
-  the 9 `[:statifier, :session, :effect, kind]` names, and the 9
+  the 10 `[:statifier, :session, :effect, kind]` names, and the 9
   `[:statifier, :session, :trace, kind]` names, built from
   `@lifecycle_events`/`@effect_kinds`/`@trace_kinds`, the module's single
   definition site for the vocabulary.
@@ -538,6 +542,23 @@ defmodule Statifier.Session.Telemetry do
   defp core_shape(machine, %Log{} = log) do
     {%{macrostep: log.macrostep, microstep: log.microstep},
      %{location: location(machine, log), label: log.label, c_index: log.c_index, owner: log.owner}}
+  end
+
+  # No `location/2` clause is needed for `%DatamodelChange{}`: the resolver
+  # below already dispatches on the `c_index` field name and already handles
+  # `c_index: nil` (the two runner-side writes), exactly as it does for
+  # `%Log{}`.
+  defp core_shape(machine, %DatamodelChange{} = change) do
+    {%{macrostep: change.macrostep, microstep: change.microstep},
+     %{
+       location: location(machine, change),
+       location_path: change.location_path,
+       location_source: change.location_source,
+       new_value: change.new_value,
+       prior_value: change.prior_value,
+       c_index: change.c_index,
+       owner: change.owner
+     }}
   end
 
   @spec trace_shape(machine :: Machine.t(), payload :: trace_payload()) :: {map(), map()}

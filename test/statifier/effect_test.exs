@@ -5,6 +5,7 @@ defmodule Statifier.EffectTest do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -49,7 +50,16 @@ defmodule Statifier.EffectTest do
          round: 0
        }},
       {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 1}},
-      {:log, %Log{macrostep: 1, microstep: 1}}
+      {:log, %Log{macrostep: 1, microstep: 1}},
+      {:datamodel_change,
+       %DatamodelChange{
+         location_path: ["x"],
+         location_source: "x",
+         new_value: 1,
+         prior_value: :undefined,
+         macrostep: 1,
+         microstep: 1
+       }}
     ]
 
     @trace_effects [
@@ -119,8 +129,8 @@ defmodule Statifier.EffectTest do
 
     # sabotage: n/a - this test only checks that the fixture tables above
     # are complete, not any lib/ behavior.
-    test "the table covers all eighteen effects" do
-      assert length(@core_effects) + length(@trace_effects) == 18
+    test "the table covers all nineteen effects" do
+      assert length(@core_effects) + length(@trace_effects) == 19
     end
   end
 

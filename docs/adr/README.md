@@ -41,7 +41,7 @@
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 | [0038](0038-invoke-source-resolves-at-the-session-boundary.md) | `<invoke>`'s source resolves at the session boundary, never inside the library | accepted |
 | [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted |
-| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location) |
+| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location; amended 2026-08-16: `:datamodel_change` joins the core effect events) |
 | [0041](0041-content-markup-lowers-to-a-source-slice.md) | `<content>` markup lowers to a source slice, compiled at invoke time | accepted (amended 2026-08-16: namespace limitation corrected - the corpus child documents do not compile standalone; amended in part by 0042) |
 | [0042](0042-invoke-content-compiles-under-the-relaxed-namespace-rule.md) | Invoke content markup compiles under the relaxed namespace rule | accepted (amends 0041 in part) |
 

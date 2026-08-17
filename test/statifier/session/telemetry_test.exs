@@ -220,12 +220,12 @@ defmodule Statifier.Session.TelemetryTest do
   ]
 
   describe "events/0" do
-    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 25`
-    # fails (24 names) - reverted and confirmed green.
-    test "returns exactly 25 names, all `[:statifier, :session | _]`" do
+    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 26`
+    # fails (25 names) - reverted and confirmed green.
+    test "returns exactly 26 names, all `[:statifier, :session | _]`" do
       events = Telemetry.events()
 
-      assert length(events) == 25
+      assert length(events) == 26
       assert Enum.uniq(events) == events
 
       assert Enum.all?(events, fn

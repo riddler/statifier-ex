@@ -1,0 +1,65 @@
+defmodule Statifier.Effect.DatamodelChange do
+  @moduledoc """
+  Payload for `{:datamodel_change, %__MODULE__{}}` - one successful datamodel
+  write, carrying enough to reconstruct the datamodel from the effect stream
+  alone, without ever calling `Session.snapshot/1` (plan decision 1).
+  Emitted for every successful write `write_location/4` performs (decision
+  2); a failed write emits nothing, since the datamodel did not change and
+  the failure is already observable on the error channel (decision 9).
+
+  `location_path` is `Predicator.ContextLocation.location_path()` - the
+  resolved `[binary() | integer()]` path, the only shape a consumer can
+  apply to reconstruct `items[i]` without the pre-assignment datamodel it
+  does not have. `location_source` is the raw author string that produced
+  it, kept alongside under a distinct name so neither is mistaken for the
+  other (decision 7).
+
+  `new_value` and `prior_value` are ordinary predicator values, or the atom
+  `:undefined` when nothing stood at the path before the write - ADR-0037's
+  single spelling for an unbound value. Neither field commits to a wire
+  format: `docs/observability.md:175` names "no wire format" as an explicit
+  non-goal for this repo, and per ADR-0025 serialization is statifier-ui's
+  own half of the mirror (decision 8).
+
+  `c_index` identifies the content node that performed the write
+  (constraint 3), `nil` for the two runner-side writes - the empty-`<finalize>`
+  auto-assign and `<invoke idlocation>` - that write outside any content
+  block; `owner` names which construct performed it (decision 3).
+  `macrostep`/`microstep` are the counters as they stood when the write ran.
+  """
+
+  alias Statifier.Machine.Content
+
+  @typedoc "Which construct performed the write - `Machine.Content.owner/0` widened with the `<invoke idlocation>` case, which belongs to no content block (see `Trace.ContentExecuted`'s owner typedoc for the same widening-at-the-payload precedent)."
+  @type owner :: Content.owner() | {:invoke, non_neg_integer(), non_neg_integer()}
+
+  @enforce_keys [
+    :location_path,
+    :location_source,
+    :new_value,
+    :prior_value,
+    :macrostep,
+    :microstep
+  ]
+  defstruct [
+    :location_path,
+    :location_source,
+    :new_value,
+    :prior_value,
+    :c_index,
+    :owner,
+    :macrostep,
+    :microstep
+  ]
+
+  @type t :: %__MODULE__{
+          location_path: Predicator.ContextLocation.location_path(),
+          location_source: String.t(),
+          new_value: term(),
+          prior_value: term(),
+          c_index: non_neg_integer() | nil,
+          owner: owner() | nil,
+          macrostep: non_neg_integer(),
+          microstep: non_neg_integer()
+        }
+end
