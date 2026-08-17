@@ -23,7 +23,8 @@ defmodule Statifier.Document.Assign do
   `expr` is the value source read from the `expr` attribute - raw,
   uncompiled predicator source, nilable. `text` is
   `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed concatenation of
-  `<assign>`'s direct text children (mirroring `Statifier.Document.Data.text`
+  `<assign>`'s direct text children (verbatim except for the parser's XML
+  1.0 2.11 line-break fold - ADR-0045), mirroring `Statifier.Document.Data.text`
   and `Statifier.Document.Content.text`); `expr` and `text` are both
   representable on this struct at once, on purpose, so
   `Statifier.Validator.Checks.Assign` can report the pair rather than

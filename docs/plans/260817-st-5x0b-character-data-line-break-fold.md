@@ -578,11 +578,11 @@ endings and the child document folds when it is parsed.
 
 #### Automated Verification:
 
-- [ ] `mix quality` (full, unprofiled, unscoped) is green — this phase's edits
+- [x] `mix quality` (full, unprofiled, unscoped) is green — this phase's edits
       are moduledoc text, so Doctor, Credo's doc checks, and the compiler's
       doc-attribute handling are what it exercises.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `git diff --stat` for this phase names only files under
+- [x] `mix gate.verify` exits zero.
+- [x] `git diff --stat` for this phase names only files under
       `lib/statifier/lowering/` and `lib/statifier/document/`.
 
 #### Manual Verification:
@@ -774,6 +774,27 @@ bead's own work and belong with its first commit.
       Appendix D procedure touched, no deviation claimed (ADR-0002).
 - [ ] The conformance run's result set is compared to the pre-change run by eye,
       not just by exit code — no member flipped in either direction.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Reading `Statifier.Document.Script`'s and `Statifier.Document.Content`'s
+      docs end to end, a caller can tell which of `text` and `markup` folds and
+      which does not, without opening an ADR.
+- [ ] No remaining hit for "verbatim, untrimmed" states the unqualified claim.
+- [ ] `git diff` is read in full and every changed line sits inside a
+      `@moduledoc` or `@doc` string — `--stat` reports counts, not what kind of
+      line moved, so this half of the path check is a human's read.
+- [ ] Read against the W3C Appendix D pseudocode rule: documentation only, no
+      Appendix D procedure touched (ADR-0002).
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for

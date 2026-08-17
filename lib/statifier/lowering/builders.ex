@@ -343,16 +343,18 @@ defmodule Statifier.Lowering.Builders do
 
   Reads `expr` and sets `text` to `Statifier.Parser.DOM.text/1`'s
   concatenation of `<content>`'s own direct text children, **verbatim and
-  untrimmed** - the struct's own moduledoc defines `text` as exactly that
+  untrimmed except for the parser's XML 1.0 2.11 line-break fold**
+  (ADR-0045) - the struct's own moduledoc defines `text` as exactly that
   concatenation. `<content>` is the one element exempt from the stray-text
   rule (its text *is* its payload), so this builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, which
   would otherwise flag that same text as a stray-text error. An element
   child is no longer misplaced (ADR-0041): `markup`/`markup_location` are
-  set from a verbatim slice of `ctx.source` when `<content>` has at least
-  one element child, and the child is never dispatched or walked - the
-  slice is opaque bytes at this layer, so no `foreign_element` or
-  `misplaced_element` error is possible here either.
+  set from a raw slice of `ctx.source` when `<content>` has at least one
+  element child - unlike `text`, this slice does **not** fold line breaks;
+  it is opaque source bytes, CR included, at this layer (ADR-0045 decision
+  item 5) - and the child is never dispatched or walked, so no
+  `foreign_element` or `misplaced_element` error is possible here either.
   """
   @spec build_content(element :: Element.t(), ctx :: map()) ::
           {{:content, Content.t()}, [Error.t()]}
@@ -373,9 +375,11 @@ defmodule Statifier.Lowering.Builders do
     {{:content, content}, []}
   end
 
-  # `nil` when `element` has no element child; otherwise the verbatim source
+  # `nil` when `element` has no element child; otherwise the raw source
   # bytes spanning the first through last non-whitespace child (elements and
-  # `Text` runs alike), so a 5.6.2 "mixture" slices whole (ADR-0041).
+  # `Text` runs alike), so a 5.6.2 "mixture" slices whole (ADR-0041). This
+  # slice does not fold line breaks - it is CR-included source bytes, never
+  # the parser's XML 1.0 2.11 fold (ADR-0045 decision item 5).
   @spec slice_markup(element :: Element.t(), source :: binary()) ::
           {String.t() | nil, Location.t() | nil}
   defp slice_markup(%Element{children: children}, source) do
@@ -434,7 +438,8 @@ defmodule Statifier.Lowering.Builders do
 
   Reads `id` (required - spec 5.3.1), `expr`, and `src`, all raw strings, and
   sets `text` to `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
-  concatenation of `<data>`'s direct text children - a `<data>`'s text *is*
+  concatenation of `<data>`'s direct text children (verbatim except for the
+  parser's XML 1.0 2.11 line-break fold - ADR-0045) - a `<data>`'s text *is*
   its payload (spec 5.3.2), so this builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, the
   same stray-text exemption `<content>`'s own builder takes (ADR-0041). An
@@ -493,7 +498,8 @@ defmodule Statifier.Lowering.Builders do
   "location", element.location)]}`.
 
   `text` is set to `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
-  concatenation of `<assign>`'s direct text children - spec 5.4.2's other
+  concatenation of `<assign>`'s direct text children (verbatim except for
+  the parser's XML 1.0 2.11 line-break fold - ADR-0045) - spec 5.4.2's other
   value source, an `<assign>`'s children "provide an in-line specification
   of the legal data value" (5.4.2, 5.9.3), so this builder reads
   `element.children` directly rather than calling
@@ -749,7 +755,8 @@ defmodule Statifier.Lowering.Builders do
   information.
 
   Otherwise `text` is set to `Statifier.Parser.DOM.text/1`'s verbatim,
-  untrimmed concatenation of `<script>`'s direct text children - the
+  untrimmed concatenation of `<script>`'s direct text children (verbatim
+  except for the parser's XML 1.0 2.11 line-break fold - ADR-0045) - the
   predicator program body (5.8.2). This builder reads `element.children`
   directly rather than calling `Statifier.Lowering.walk_children/2`, the
   same stray-text exemption `build_data/2`/`build_assign/2` take for their

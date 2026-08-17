@@ -6,8 +6,9 @@ defmodule Statifier.Document.Data do
   `expr` and `src` are raw, uncompiled strings - `lib/statifier/document.ex`'s
   moduledoc forbids `Predicator` anywhere under `lib/statifier/document/`, so
   neither is compiled here. `text` is `Statifier.Parser.DOM.text/1`'s
-  verbatim, untrimmed concatenation of `<data>`'s direct text children,
-  exactly as `Statifier.Document.Content.text` is defined.
+  verbatim, untrimmed concatenation of `<data>`'s direct text children
+  (verbatim except for the parser's XML 1.0 2.11 line-break fold -
+  ADR-0045), exactly as `Statifier.Document.Content.text` is defined.
 
   Spec 5.3.2 makes `expr`, `src`, and children mutually exclusive ("`<data>`
   MAY have either a 'src' or an 'expr' attribute, but MUST NOT have both...
