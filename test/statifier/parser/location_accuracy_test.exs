@@ -127,12 +127,16 @@ defmodule Statifier.Parser.LocationAccuracyTest do
   end
 
   # One past the last codepoint of `value`, in predicator's coordinate
-  # system: 1-based line/column, a line break resetting the column to 1 -
-  # the same rule `expanded_advance/2` applies while walking, computed here
-  # independently rather than reusing that private function.
+  # system: 1-based line/column, a line break resetting the column to 1 and a
+  # carriage return holding it still - the same rule `expanded_advance/2`
+  # applies while walking, computed here independently rather than reusing
+  # that private function. No fixture contains a carriage return today, so
+  # the `"\r"` clause only keeps this equivalent to the rule it restates
+  # rather than changing any current result.
   defp whole_value_end(value) do
     Enum.reduce(String.codepoints(value), {1, 1}, fn
       "\n", {line, _column} -> {line + 1, 1}
+      "\r", {line, column} -> {line, column}
       _codepoint, {line, column} -> {line, column + 1}
     end)
   end

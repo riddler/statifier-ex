@@ -328,5 +328,102 @@ defmodule Statifier.Parser.LocationTest do
 
       assert Location.slice(resolved, source) == "b"
     end
+
+    # sabotage: next_unit/2 believes every decode unconditionally, dropping
+    # the `String.starts_with?(value, decoded)` check and its else branch ->
+    # `&lt;` is consumed from the raw side against a value that still spells
+    # it out, so the walk desyncs -> this test reddens (slice returns the
+    # whole attribute value instead of "score")
+    test "a decode the value contradicts falls through to the plain case" do
+      source = ~s(<edge cond="1 &lt; score"/>)
+      attribute = root_attribute(source)
+
+      # Passed by hand: an unexpanded value, which Saxy never produces. It is
+      # what makes the reference check observable - `&lt;` decodes to "<" but
+      # the value's next codepoint is "&", so the decode is rejected and the
+      # token walks as four plain characters instead. This is the validation
+      # next_unit/2 documents: an unexpected decode degrades to the plain
+      # case rather than producing a wrong answer.
+      value = "1 &lt; score"
+
+      # "score" is columns 8-12 of the unexpanded value.
+      resolved = Location.resolve_span(attribute.value_location, {{1, 8}, {1, 13}}, value, source)
+
+      assert Location.slice(resolved, source) == "score"
+    end
+
+    # sabotage: decode_reference/1's `"#x" <> hex` clause parses the digits
+    # base 10 instead of base 16 -> String.to_integer("A", 10) raises ->
+    # this test reddens with an ArgumentError instead of resolving "after"
+    test "a hex character reference resolves like its decimal spelling" do
+      source = ~s(<edge cond="before&#xA;after"/>)
+      attribute = root_attribute(source)
+
+      assert attribute.value == "before\nafter"
+
+      resolved =
+        Location.resolve_span(attribute.value_location, {{2, 1}, {2, 6}}, attribute.value, source)
+
+      assert Location.slice(resolved, source) == "after"
+    end
+
+    # sabotage: named_codepoint/1's `"gt"` clause returns ">>" instead of
+    # ">" -> the two-codepoint decode no longer matches the expanded value,
+    # so the reference is rejected and the walk desyncs at the "&" -> this
+    # test reddens (slice returns the whole attribute value instead of
+    # "score")
+    test "gt, quot and apos decode like lt and amp" do
+      source = ~s(<edge cond="&gt;&quot;&apos; score"/>)
+      attribute = root_attribute(source)
+
+      assert attribute.value == ">\"' score"
+
+      # Each reference is one expanded column, so "score" is expanded
+      # columns 5-9 while its raw text starts 15 columns further along.
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 5}, {1, 10}},
+          attribute.value,
+          source
+        )
+
+      assert Location.slice(resolved, source) == "score"
+    end
+
+    # sabotage: codepoint_string/1 drops its range guard and builds
+    # `<<codepoint::utf8>>` for any integer -> the surrogate crashes the
+    # construction the same way it crashes Saxy -> this test reddens with an
+    # ArgumentError instead of resolving "x"
+    test "an out-of-range character reference degrades instead of crashing" do
+      source = ~s(<edge cond="&#55296;x"/>)
+      raw_value = "&#55296;x"
+
+      # Built rather than parsed: Saxy cannot parse this document at all. It
+      # constructs a character reference with `<<codepoint::utf8>>` and no
+      # range check, so `&#55296;` - a surrogate, excluded from Char by XML
+      # 1.0 4.1 - crashes it. That crash is what codepoint_string/1's guard
+      # exists to keep out of a diagnostic path, and the only way to reach
+      # the guard is a location this parser could not have handed us.
+      # Column and offset coincide here because every byte before the value
+      # is single-byte ASCII on line 1.
+      {start_offset, _length} = :binary.match(source, raw_value)
+
+      value_location = %Location{
+        start_line: 1,
+        start_column: start_offset + 1,
+        start_offset: start_offset,
+        end_line: 1,
+        end_column: start_offset + String.length(raw_value) + 1,
+        end_offset: start_offset + byte_size(raw_value)
+      }
+
+      # The decode returns nil, so the reference is never recognized and the
+      # nine raw characters walk 1:1 against a value that repeats them - "x"
+      # is expanded column 9.
+      resolved = Location.resolve_span(value_location, {{1, 9}, {1, 10}}, raw_value, source)
+
+      assert Location.slice(resolved, source) == "x"
+    end
   end
 end
