@@ -16,10 +16,10 @@ defmodule Statifier.Session.Effects do
   Every `<send>`/`<send_delayed>` effect is planned in this order (6.2.4,
   6.2.5, C.1):
 
-  1. An unsupported `type` (`Statifier.Session.Target.supported_type?/1`) ->
+  1. An unsupported `type` (`Statifier.Send.Target.supported_type?/1`) ->
      `{:raise, :platform, "error.execution", ...}` on the sender's own
      internal queue. No delivery, no timer.
-  2. An unparseable `target` (`Statifier.Session.Target.parse/1` returns
+  2. An unparseable `target` (`Statifier.Send.Target.parse/1` returns
      `{:invalid, _}`) -> the same `error.execution` (6.2.4's "not supported
      or invalid").
   3. `:self` (no `target`) -> `{:enqueue_event, event}`, delivered straight
@@ -43,7 +43,7 @@ defmodule Statifier.Session.Effects do
 
   `plan_invoke/2` checks `type` first, mirroring `<send>`'s own order
   (6.2.5's unsupported-`type` check ahead of target resolution): an
-  unsupported `type` (`Statifier.Session.Target.supported_invoke_type?/1`)
+  unsupported `type` (`Statifier.Send.Target.supported_invoke_type?/1`)
   plans `{:raise, :platform, "error.execution", {:invoke, state_index,
   invoke_index}, []}` and nothing else - 3.12.2 puts an unsupported `type`
   in `error.execution`'s class ("errors internal to the execution of the
@@ -81,7 +81,7 @@ defmodule Statifier.Session.Effects do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Event.Cause
-  alias Statifier.Session.Target
+  alias Statifier.Send.Target
 
   @typedoc "Which internal-queue writer `{:raise, ...}` should use - `Statifier.Interpreter.deliver_internal/5`'s own `kind`."
   @type raise_kind :: :internal | :platform

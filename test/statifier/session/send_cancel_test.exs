@@ -193,7 +193,7 @@ defmodule Statifier.Session.SendCancelTest do
 
   describe "a <send target=\"...\"> naming no recognized special target" do
     # The target vocabulary has a router: an unparseable target
-    # (`Statifier.Session.Target.parse/1` returns `{:invalid, _}`) is 6.2.4's
+    # (`Statifier.Send.Target.parse/1` returns `{:invalid, _}`) is 6.2.4's
     # "not supported or invalid" -> `error.execution` on the sender's own
     # internal queue, never `{:unroutable, _}` (that vocabulary member
     # survives only for `:invoke`/`:cancel_invoke`/`:autoforward`, later,

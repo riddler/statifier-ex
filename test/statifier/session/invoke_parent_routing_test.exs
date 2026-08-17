@@ -117,7 +117,7 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
   end
 
   describe "a child's <send target=\"_parent\"> (no #, 6.4.4's own spelling)" do
-    # sabotage: `Statifier.Session.Target.parse/1`'s `def parse("_parent"),
+    # sabotage: `Statifier.Send.Target.parse/1`'s `def parse("_parent"),
     # do: :parent` clause is deleted, falling through to the catch-all
     # `{:invalid, other}` clause -> the child's own `<send>` raises
     # `error.execution` on itself instead of routing to `:parent`, so no
