@@ -40,6 +40,7 @@ neither is `test/support/case.ex`.
 The three questions this document originally left open were reviewed by the
 maintainer on 2026-08-17; their resolutions are recorded under "Reviewer
 decisions" at the end, and the drafted wording below already reflects them.
+Applying that wording is tracked by **st-zebr**, which depends on this bead.
 
 ## Verification of the bead's claims
 
@@ -479,6 +480,17 @@ with their resolutions; the drafted wording above already reflects them.
 
 Nothing above has been landed. All three amendments remain a human's call,
 and this branch still touches no ADR and no harness file.
+
+**Landing is tracked by st-zebr**, which depends on this bead: "Land the
+ADR-0006/0027 amendments and the `Statifier.Case` moduledoc fix". It carries
+the paste targets, the acceptance criteria, and the reminder to stamp the
+landing date rather than this document's 2026-08-16 placeholders. That bead
+exists because a proposal with no successor is how decided-but-unlanded
+wording rots: the drift this document describes stays in the tree until
+someone applies the wording above, and merging this document does not do
+that. Note that st-zebr puts `test/support/case.ex` in its diff, so unlike
+this branch it carries a full `mix quality` run rather than the docs-only
+carve-out.
 
 The rejected alternative is kept on the record for whoever revisits this: both
 amendments could instead have ridden one small new ADR ("Corpus driving paths
