@@ -95,6 +95,46 @@ defmodule Statifier.Parser.LocationAccuracyTest do
 
     assert whole =~ pattern,
            "#{attribute.name}'s spans do not reconstruct: #{inspect(whole)} / #{inspect(raw_value)}"
+
+    assert_whole_value_span_is_identity(attribute, source)
+  end
+
+  # The strongest single statement of `resolve_span/4`'s contract: resolving
+  # the span that covers `value` in its own entirety - `{1, 1}` through one
+  # past its last codepoint - must return `value_location` exactly. Applied
+  # to every attribute of every fixture this file already parses, with no
+  # line number written down anywhere.
+  #
+  # sabotage: `maybe_capture/5`'s `expanded_pos >= target` comparison
+  # narrowed to `expanded_pos > target` -> the start target `{1, 1}` is never
+  # captured at the walk's initial position, so the resolved span's start
+  # drifts one unit late -> this test reddens (the resolved location no
+  # longer equals `attribute.value_location` exactly)
+  defp assert_whole_value_span_is_identity(attribute, source) do
+    {end_line, end_column} = whole_value_end(attribute.value)
+
+    resolved =
+      Location.resolve_span(
+        attribute.value_location,
+        {{1, 1}, {end_line, end_column}},
+        attribute.value,
+        source
+      )
+
+    assert resolved == attribute.value_location,
+           "#{attribute.name}'s whole-value span is not the identity: " <>
+             "#{inspect(resolved)} / #{inspect(attribute.value_location)}"
+  end
+
+  # One past the last codepoint of `value`, in predicator's coordinate
+  # system: 1-based line/column, a line break resetting the column to 1 -
+  # the same rule `expanded_advance/2` applies while walking, computed here
+  # independently rather than reusing that private function.
+  defp whole_value_end(value) do
+    Enum.reduce(String.codepoints(value), {1, 1}, fn
+      "\n", {line, _column} -> {line + 1, 1}
+      _codepoint, {line, column} -> {line, column + 1}
+    end)
   end
 
   # The scanner carries offset, line, and column in one cursor and advances

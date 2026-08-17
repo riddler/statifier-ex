@@ -507,15 +507,15 @@ full-value span is the identity.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix quality --profile loop` while
+- [x] Full `mix quality` is green (`mix quality --profile loop` while
       iterating)
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate
-- [ ] `mix test test/statifier/parser/location_span_resolution_test.exs
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate
+- [x] `mix test test/statifier/parser/location_span_resolution_test.exs
       test/statifier/parser/location_accuracy_test.exs` passes on its own
-- [ ] Every new test carries a `# sabotage:` line naming the mutation that
+- [x] Every new test carries a `# sabotage:` line naming the mutation that
       reddened it (or an explicit `# sabotage: n/a - ...` for the harness
       helper), per `docs/testing.md`
-- [ ] No conformance movement to ratchet: `mix test.regression` still passes
+- [x] No conformance movement to ratchet: `mix test.regression` still passes
       and `test/passing_tests.json` is unchanged by the diff
 
 #### Manual Verification:
@@ -655,6 +655,26 @@ before considering the plan fully landed.
       residual suggestion that adding to `start_offset` composes a span
 - [ ] No regressions in related features: the parser, lowering, and compiler
       are untouched by inspection of the diff
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec judgment: the resolved span underlines what a human reading the raw
+      XML would underline - checked by eye on the entity fixture, since "the
+      right span" is ultimately a rendering judgment no assertion fully
+      captures
+- [ ] The sabotage runs were actually performed (break the walk's reference
+      clause, confirm red, revert), not merely annotated
+- [ ] No regressions in related features: the existing location-accuracy sweep
+      still covers what it did before the extension
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
 full `mix quality` is the phase gate. In interactive execution, pause here for
