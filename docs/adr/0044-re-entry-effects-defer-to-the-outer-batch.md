@@ -1,4 +1,4 @@
-# ADR-0043: Re-entry effects defer to the outer batch
+# ADR-0044: Re-entry effects defer to the outer batch
 
 Status: accepted (2026-08-17)
 

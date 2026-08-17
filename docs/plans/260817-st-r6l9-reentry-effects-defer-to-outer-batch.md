@@ -10,13 +10,13 @@ round)`, more than one `Trace.MacrostepStable` can arrive per macrostep with
 the later one carrying the *lower* round, and trace effects can arrive after
 `{:halted, :done}`.
 
-This plan implements ADR-0043 (accepted 2026-08-17): the seam is still
+This plan implements ADR-0044 (accepted 2026-08-17): the seam is still
 crossed at its instruction's position, but the effects it returns are
 **enqueued** and drained FIFO by the outermost `perform/3` after its own
 instruction list is exhausted. It also makes `{:halted, reason}` a promised
 end-of-stream, documents the multiple-`MacrostepStable` rule with its
 `(macrostep, round)` uniqueness key, and lands the three regression tests
-ADR-0043's consequences name. Bead: st-r6l9.
+ADR-0044's consequences name. Bead: st-r6l9.
 
 ## Current State Analysis
 
@@ -28,7 +28,7 @@ the head of every effect's own instruction list
 per subscriber. Subscriber arrival order is exactly fold order - no
 buffering, no batching, nothing to reorder.
 
-**The four seam crossings** ADR-0043 names, all converging on the private
+**The four seam crossings** ADR-0044 names, all converging on the private
 `deliver_internal/6` - and all reached from inside that fold *except* on the
 fired-timer path, which Phase 1 change 4 handles separately:
 
@@ -79,7 +79,7 @@ case drives a seam-crossing chart, which is the only reason it is green.
 payloads and `Effect.BudgetExhausted` carry `round`; every other core effect
 carries `macrostep`/`microstep` only (`lib/statifier/effect.ex:52-63`).
 `{:halted, _}` and `{:unroutable, _}` are envelopes and carry no counters at
-all. ADR-0043 decision 4 leaves that gap open deliberately, so a `(macrostep,
+all. ADR-0044 decision 4 leaves that gap open deliberately, so a `(macrostep,
 round)` monotonicity assertion can only be evaluated over the counter-bearing
 sub-stream (see "Testing Strategy").
 
@@ -130,7 +130,7 @@ Verified by:
   fired-timer path from `handle_info({:statifier_delayed_send, ...}, state)`.
   A deferral with no drain there strands the effects. Phase 1 change 4 is
   that drain, and it is the single most likely thing to be missed while
-  implementing this - the four crossings ADR-0043 enumerates are all
+  implementing this - the four crossings ADR-0044 enumerates are all
   in-fold, so the enumeration does not lead you to it.
 - FIFO is monotone with no sorting, at any depth: each seam crossing's core
   drive happens at its instruction position, so rounds are stamped in the
@@ -139,7 +139,7 @@ Verified by:
 - The halt cannot escape the last batch: a drive that reaches a terminal
   configuration leaves the core not running, so a later seam crossing gets
   `{:error, :not_running}` from `Interpreter.deliver_internal/5`
-  (`lib/statifier/session.ex:1350`) and enqueues nothing. That is ADR-0043
+  (`lib/statifier/session.ex:1350`) and enqueues nothing. That is ADR-0044
   decision 2's argument, and the regression suite asserts it rather than
   trusting it. It holds *within* the halting batch too:
   `terminal_effects/2` emits `Trace.MacrostepStable` only when the machine
@@ -176,27 +176,27 @@ Verified by:
 - No Appendix D function moves. The deviation is session-side sequencing on
   the effect-interpreter side of ADR-0003's boundary, so no new ADR-0002
   mechanical-reason comment is owed in `lib/statifier/interpreter.ex` -
-  ADR-0043's "Documentation edits this record directs" says this outright.
+  ADR-0044's "Documentation edits this record directs" says this outright.
 
 ## What We're NOT Doing
 
-- **Stamping `round` onto core effects.** ADR-0043 decision 4 rules it out of
+- **Stamping `round` onto core effects.** ADR-0044 decision 4 rules it out of
   scope and files it as follow-on work; it reopens ADR-0040's struct-shape
   contract when taken. The tests here therefore evaluate `(macrostep,
   round)` over the counter-bearing sub-stream and `macrostep` alone over the
   rest, which is exactly what the shipped contract can promise today.
 - **Giving the `:internal` macrostep span a non-`nil` `event`**
-  (`lib/statifier/session.ex:1345`). Research open question 4; ADR-0043
+  (`lib/statifier/session.ex:1345`). Research open question 4; ADR-0044
   consequences file it separately. Deferral neither worsens nor fixes it.
 - **The stale "not yet produced" vocabulary note** at
   `lib/statifier/effect.ex:26-28`. Research open question 6, filed as a chore.
-- **Suppressing the intermediate `Trace.MacrostepStable`.** ADR-0043
+- **Suppressing the intermediate `Trace.MacrostepStable`.** ADR-0044
   decision 3 rejects it: it would hide a boundary the core genuinely crossed
   and would diverge from replay, which re-derives it.
 - **Sorting anywhere.** Decision 1 is a queue, not a sort. No buffering
   keyed on counters, no watermark.
 - **Amending ADR-0040.** The telemetry ordering shift is a noted consequence
-  of ADR-0043, not an amendment; ADR-0040 promised no inter-event ordering.
+  of ADR-0044, not an amendment; ADR-0040 promised no inter-event ordering.
 - **A `changelog.d/st-r6l9.md` fragment.** Judged against
   `changelog.d/README.md`'s "While v2 is unreleased" rule: a fragment is owed
   when v2 differs from v1. The subscriber effect stream is a v2-only
@@ -275,7 +275,7 @@ defstruct [
   deferred: []
 ]
 
-# ADR-0043 decision 1: effects returned by a mid-batch ADR-0039 seam
+# ADR-0044 decision 1: effects returned by a mid-batch ADR-0039 seam
 # crossing, queued in crossing order with the `halt_override` that was in
 # force when they were produced, and drained FIFO by the outermost
 # `perform/3` once its own instruction list is exhausted. Always `[]`
@@ -291,7 +291,7 @@ deferred: [{[Statifier.Effect.t()], :cancelled | nil}]
 moves into `perform_batch/3` so that the drain loop does not re-enter itself.
 
 ```elixir
-# ADR-0043 decision 1. `perform_batch/3` is the old body; the drain after it
+# ADR-0044 decision 1. `perform_batch/3` is the old body; the drain after it
 # is what makes subscriber arrival order non-decreasing in `(macrostep,
 # round)`. `deliver_internal/6` no longer calls this function at all, so
 # every call site is an outermost drive and `drain_deferred/1` never nests.
@@ -333,14 +333,14 @@ end
 **Changes**: the `{:ok, machine_state, effects}` arm appends to
 `state.deferred` rather than calling `perform/3`. The record call, the
 `in_macrostep/4` span, and the `{:error, :not_running}` no-op are unchanged.
-Rewrite the leading comment to cite ADR-0043 where the inline `perform/3`
-call used to be (ADR-0043's directed edit).
+Rewrite the leading comment to cite ADR-0044 where the inline `perform/3`
+call used to be (ADR-0044's directed edit).
 
 ```elixir
 # The one call site of `Interpreter.deliver_internal/5` - records the call
 # (ADR-0029, `docs/observability.md` constraint 6) before making it, then
 # **queues** whatever effects it returns instead of performing them here.
-# ADR-0043 decision 1: the seam is still crossed at this instruction's
+# ADR-0044 decision 1: the seam is still crossed at this instruction's
 # position - the core's `%MachineState{}` advances now, the recording entry
 # is written at its true position, and this nested ADR-0040 span still opens
 # and closes around the core drive - but notifying the returned effects
@@ -352,7 +352,7 @@ call used to be (ADR-0043's directed edit).
 # `:quiescent`, because a halt inside the deferred batch is performed later,
 # during the drain. That drain runs inside the *outermost* drive's span, so
 # the run's halt outcome is still reported - once, on the span that
-# encloses the batch that actually performed `{:halt, _}`. ADR-0043's
+# encloses the batch that actually performed `{:halt, _}`. ADR-0044's
 # consequences record the same shift for effect-vs-span event ordering.
 # `{:error, :not_running}` is a no-op: a halted session has no queue to
 # raise onto, and nothing is queued.
@@ -436,7 +436,7 @@ empty whenever control returns to the GenServer loop.** Any future caller of
 **Changes**: the comment still describes `drive.()` calling
 `deliver_internal/6` and nesting a span, which stays true. Add one sentence
 noting that the nested span no longer encloses the *performance* of the
-effects the crossing produced (ADR-0043), so its duration now measures the
+effects the crossing produced (ADR-0044), so its duration now measures the
 core drive alone.
 
 #### 6. The moduledoc's two promises
@@ -449,7 +449,7 @@ core drive alone.
   - `{:effect, effect}` - every effect the core (or an `interpret/2`
     caller) hands this session, trace effects included, in
     non-decreasing `(macrostep, round)` order - the same order
-    `Statifier.Replay` produces for the same recording (ADR-0043
+    `Statifier.Replay` produces for the same recording (ADR-0044
     decision 1). An ADR-0039 re-entry crosses the seam at its own
     instruction's position but its effects are queued and drained after
     the batch that triggered it, so a subscriber never sees a later
@@ -458,10 +458,10 @@ core drive alone.
     than one `Trace.MacrostepStable` - one per core drive that reached
     quiescence - and there is exactly one per `(macrostep, round)`; the
     last one within a macrostep is that macrostep's true quiescence
-    (ADR-0043 decision 3).
+    (ADR-0044 decision 3).
   - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
     message, following the effects that caused it, and the **last**
-    message this session sends its subscribers for the run (ADR-0043
+    message this session sends its subscribers for the run (ADR-0044
     decision 2).
 ```
 
@@ -476,10 +476,10 @@ plumbing, no lib/ behavior of its own` per `docs/testing.md`.
 defmodule Statifier.StreamOrder do
   @moduledoc """
   Assertions over a drained `Statifier.Session` subscriber stream, for the
-  ADR-0043 delivery-order contract.
+  ADR-0044 delivery-order contract.
 
   `round` lives only on the `Effect.Trace.*` payloads and on
-  `Effect.BudgetExhausted` today (ADR-0043 decision 4 leaves stamping it
+  `Effect.BudgetExhausted` today (ADR-0044 decision 4 leaves stamping it
   onto the rest as follow-on work), so `assert_monotone/1` evaluates
   `(macrostep, round)` over exactly the effects that carry both, and
   `macrostep` alone over the effects that carry only it. That is the whole
@@ -533,7 +533,7 @@ does `<send event="ping" target="#_internal"/>`, `b -ping-> c` where `c` is
 a top-level `<final>` - started with `trace: true, subscribers: [self()]`.
 Send `"go"`, wait for `:done`, drain, and assert all three: monotone,
 one stable per `(macrostep, round)`, and `{:halted, :done}` last. The third
-assertion is the one that covers ADR-0043 decision 2 and the "silently
+assertion is the one that covers ADR-0044 decision 2 and the "silently
 drops the tail" consequence the bead reports.
 
 Use the existing `internal_send_doc/1` shape as the model for the XML;
@@ -578,7 +578,7 @@ on `wait_for_status/2` alone, or this test cannot fail.
 
 **File**: whichever of the two test files above the chart fits (prefer
 `test/statifier/session_test.exs`)
-**Changes**: ADR-0043's open questions ask whether a re-entry whose own
+**Changes**: ADR-0044's open questions ask whether a re-entry whose own
 deferred batch crosses the seam again is reachable from a document. Attempt
 it with a chart whose `#_internal` send lands in a state whose `<onentry>`
 issues a second `#_internal` send, and assert the same three properties. If
@@ -688,10 +688,10 @@ not a guaranteed second level.
       its batch - and all nine of the deferred batch's trace events arrive
       afterwards at span depth zero. A span-building consumer therefore
       sees one empty span plus nine parentless events, rather than a span
-      whose contents arrive late. Accepted per ADR-0043; the consequence is
+      whose contents arrive late. Accepted per ADR-0044; the consequence is
       recorded on st-aos7, which owns the `:internal` span's metadata.
 - [x] The strengthened moduledoc reads as a promise a consumer can act on,
-      and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
+      and matches ADR-0044 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
 
       Reviewed, and two over-promises were found and fixed rather than
@@ -727,7 +727,7 @@ of blocking here.
 `round_trip/3` already asserts exact ordered stream equality between a
 drained live subscriber and `Statifier.Replay`'s reconstructed stream. Point
 it at a chart that crosses the ADR-0039 seam, so the live-vs-replay property
-guards ADR-0043 decision 1 mechanically from the other side.
+guards ADR-0044 decision 1 mechanically from the other side.
 
 ### Changes Required:
 
@@ -814,7 +814,7 @@ of blocking here.
 
 ### Overview
 
-ADR-0043 directs three edits to `docs/observability.md`. They land last, so
+ADR-0044 directs three edits to `docs/observability.md`. They land last, so
 no commit on this branch documents a promise the shipped code does not keep.
 This phase touches no Elixir code.
 
@@ -830,7 +830,7 @@ lists, which is exactly what a re-entry creates. Add the cross-batch half:
 delivery order to a subscriber is non-decreasing in `(macrostep, round)`
 across batches too, matching the order `Statifier.Replay` produces for the
 same recording, because a mid-batch ADR-0039 re-entry's effects are queued
-and drained after the batch that triggered them (ADR-0043 decision 1).
+and drained after the batch that triggered them (ADR-0044 decision 1).
 
 #### 2. Constraint 4 gains the `MacrostepStable` uniqueness key
 
@@ -839,8 +839,8 @@ and drained after the batch that triggered them (ADR-0043 decision 1).
 its wording; add that a macrostep may contain more than one
 `Trace.MacrostepStable` - one per core drive that reached quiescence, since
 a session may re-enter the core mid-macrostep - with exactly one per
-`(macrostep, round)`, and that under ADR-0043 decision 1 the last one within
-a macrostep is that macrostep's true quiescence. Name ADR-0043 decision 3.
+`(macrostep, round)`, and that under ADR-0044 decision 1 the last one within
+a macrostep is that macrostep's true quiescence. Name ADR-0044 decision 3.
 
 #### 3. Constraint 6 gains the end-of-stream promise
 
@@ -849,7 +849,7 @@ a macrostep is that macrostep's true quiescence. Name ADR-0043 decision 3.
 {:effect, effect}}` shape and makes no ordering claim. Add that
 `{:halted, :done | :cancelled | :budget_exhausted}` is the last message a
 session sends its subscribers for the run, so a consumer may treat it as
-end-of-stream (ADR-0043 decision 2), and cross-reference constraint 2's
+end-of-stream (ADR-0044 decision 2), and cross-reference constraint 2's
 ordering sentence.
 
 ### Success Criteria:
@@ -864,7 +864,7 @@ ordering sentence.
 
 #### Manual Verification:
 
-- [x] Each of the three edits says what ADR-0043 directs and cites the
+- [x] Each of the three edits says what ADR-0044 directs and cites the
       decision number, without re-arguing the decision. Confirmed for all
       three.
 - [x] The prose matches the surrounding house style of
@@ -896,7 +896,7 @@ of blocking here.
   `Effect.Trace.*` payloads and on `Effect.BudgetExhausted`
   (`lib/statifier/effect.ex:52-63`); every other core effect carries
   `macrostep`/`microstep` only, and `{:halted, _}`/`{:unroutable, _}` carry
-  nothing. ADR-0043 decision 4 keeps that gap out of scope, so
+  nothing. ADR-0044 decision 4 keeps that gap out of scope, so
   `assert_monotone/1` evaluates `(macrostep, round)` over the effects that
   carry both and `macrostep` alone over the rest. Stating this in the helper's
   moduledoc is what stops the next reader from thinking the assertion is
@@ -909,7 +909,7 @@ of blocking here.
   `Trace.MacrostepStable` per `(macrostep, round)`; the success-path test
   additionally asserts `{:halted, :done}` last.
 - **Nesting depth** (Phase 1): the two-level re-entry chart, which does
-  reach a second level - ADR-0043 carried this as an open question and now
+  reach a second level - ADR-0044 carried this as an open question and now
   records it as settled. The chart's own ordering assertions would pass at
   one level, so the evidence is the mutation: dropping `drain_deferred/1`'s
   trailing recursion fails that test alone, and the run never reaches `d`.
@@ -931,7 +931,7 @@ of blocking here.
 
 1. Start a `trace: true` session on the bead's success-path chart with
    `subscribers: [self()]`, drive it to `:done`, and read the drained
-   mailbox in order: confirm the arrival sequence is the one ADR-0043
+   mailbox in order: confirm the arrival sequence is the one ADR-0044
    describes, with the outer batch's `Trace.ContentExecuted` (m=2 r=0) and
    round-1 trio ahead of the re-entry's round-2/3 effects, and
    `{:halted, :done}` last - the exact inverse of the capture in the bead's
@@ -940,7 +940,7 @@ of blocking here.
    :start | :stop]` and `[:statifier, :session, :effect]` on the same run,
    and confirm the documented consequence: the nested `:internal` span's
    `:stop` now precedes its own batch's effect events, and its `outcome` is
-   `:quiescent`. Confirm this is a shift ADR-0043 named, not a surprise.
+   `:quiescent`. Confirm this is a shift ADR-0044 named, not a surprise.
 3. Repeat step 1 on the invoke-failure chart with
    `Statifier.SessionSupervisor` terminated, and confirm the round-1
    `Trace.InvokePass`/`Trace.MacrostepStable` pair no longer arrives after
@@ -1024,10 +1024,10 @@ before considering the plan fully landed.
       its batch - and all nine of the deferred batch's trace events arrive
       afterwards at span depth zero. A span-building consumer therefore
       sees one empty span plus nine parentless events, rather than a span
-      whose contents arrive late. Accepted per ADR-0043; the consequence is
+      whose contents arrive late. Accepted per ADR-0044; the consequence is
       recorded on st-aos7, which owns the `:internal` span's metadata.
 - [x] The strengthened moduledoc reads as a promise a consumer can act on,
-      and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
+      and matches ADR-0044 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
 
       Reviewed, and two over-promises were found and fixed rather than
@@ -1096,7 +1096,7 @@ of blocking here.
 
 ### Phase 3
 
-- [x] Each of the three edits says what ADR-0043 directs and cites the
+- [x] Each of the three edits says what ADR-0044 directs and cites the
       decision number, without re-arguing the decision. Confirmed for all
       three.
 - [x] The prose matches the surrounding house style of

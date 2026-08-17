@@ -92,11 +92,11 @@ Rules:
   macrostep and advances `round`, so its effects carry higher rounds than
   the outer batch's unsent tail; those effects are queued and drained after
   the batch that triggered them rather than delivered inline, which is what
-  keeps arrival order monotone (ADR-0043 decision 1). This is a guarantee
+  keeps arrival order monotone (ADR-0044 decision 1). This is a guarantee
   about delivery order rather than one a consumer can re-derive: `round` is
   carried by the `Trace.*` payloads and by `BudgetExhausted` today and by no
   other effect, so a mixed stream cannot be sorted back into this order once
-  its arrival order is lost (ADR-0043 decision 4).
+  its arrival order is lost (ADR-0044 decision 4).
 - "Either selection function" is `select_eventless_transitions/1` and
   `select_transitions/2` both, with no exception - including the terminal
   eventless probe that ends a macrostep, which is why the round reporting
@@ -147,9 +147,12 @@ them anyway:
 - A macrostep may carry more than one `Trace.MacrostepStable`: one per core
   drive that reached quiescence, since a session may re-enter the core
   mid-macrostep (ADR-0039). There is exactly one `MacrostepStable` per
-  `(macrostep, round)`, and under ADR-0043 decision 1 the last one arriving
-  within a macrostep is that macrostep's true quiescence (ADR-0043
-  decision 3).
+  `(macrostep, round)`, and under ADR-0044 decision 1 the last one arriving
+  within a macrostep is that macrostep's last quiescent point (ADR-0044
+  decision 3) - which is not always where the macrostep ends, since a
+  macrostep that halts ends with `Trace.Done` instead, either after its
+  final `MacrostepStable` or, when the halting drive is the only one, with
+  no `MacrostepStable` of its own at all.
 - Internally raised events carry cause metadata: which transition or
   executable-content node (by constraint-3 identity) raised them, at which
   step and round. The first consumer is a better `error.execution` - "raised
@@ -178,7 +181,7 @@ promotion path.
   (ADR-0040). Live tooling attaches there; the core is untouched.
   `{:halted, :done | :cancelled | :budget_exhausted}` is the last message a
   session sends its subscribers for the run, so a consumer may treat it as
-  end-of-stream (ADR-0043 decision 2) - constraint 2's cross-batch ordering
+  end-of-stream (ADR-0044 decision 2) - constraint 2's cross-batch ordering
   sentence is what makes that true, since it guarantees no later-round
   effect can still be queued behind it.
 - **Replay**: because the core is pure and timers are effects, recording the

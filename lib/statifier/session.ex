@@ -67,7 +67,7 @@ defmodule Statifier.Session do
     - `{:effect, effect}` - every effect the core (or an `interpret/2`
       caller) hands this session, trace effects included, in
       non-decreasing `(macrostep, round)` order - the same order
-      `Statifier.Replay` produces for the same recording (ADR-0043
+      `Statifier.Replay` produces for the same recording (ADR-0044
       decision 1). An ADR-0039 re-entry crosses the seam at its own
       instruction's position but its effects are queued and drained after
       the batch that triggered it, so a subscriber never sees a later
@@ -78,13 +78,13 @@ defmodule Statifier.Session do
       can re-derive from the structs: `round` is carried only by the
       `Statifier.Effect.Trace.*` payloads and by
       `Statifier.Effect.BudgetExhausted` today, so a mixed stream cannot
-      be sorted back into this order after the fact (ADR-0043 decision 4
+      be sorted back into this order after the fact (ADR-0044 decision 4
       leaves stamping `round` onto the rest as follow-on work). Take the
       order as it arrives.
 
       A macrostep may carry more than one `Trace.MacrostepStable` - one
       per core drive that reached quiescence - and there is exactly one
-      per `(macrostep, round)` (ADR-0043 decision 3). Within a macrostep
+      per `(macrostep, round)` (ADR-0044 decision 3). Within a macrostep
       the last one is that macrostep's last *quiescent* point, which is
       not always where the macrostep ends: a macrostep that halts ends
       with `Trace.Done` instead, either after its final
@@ -96,7 +96,7 @@ defmodule Statifier.Session do
       own moduledoc), so no message currently reaches a subscriber this way.
     - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
       message, following the effects that caused it, and the **last**
-      message this session sends its subscribers for the run (ADR-0043
+      message this session sends its subscribers for the run (ADR-0044
       decision 2).
 
   A subscriber that dies is dropped on its own `:DOWN`.
@@ -339,7 +339,7 @@ defmodule Statifier.Session do
             # carried in the continue term instead, since no `%State{}`
             # exists yet when it opens (ADR-0040).
             macrostep_started_at: integer() | nil,
-            # ADR-0043 decision 1: effects returned by a mid-batch ADR-0039
+            # ADR-0044 decision 1: effects returned by a mid-batch ADR-0039
             # seam crossing, queued in crossing order with the
             # `halt_override` that was in force when they were produced, and
             # drained FIFO by the outermost `perform/3` once its own
@@ -800,7 +800,7 @@ defmodule Statifier.Session do
     # `deliver_fired/4` -> `deliver/5` can reach `deliver_internal/6`
     # (`:internal` target or an unreachable route via `communication_error/4`)
     # entirely outside any `perform/3` call - the one caller of
-    # `deliver_internal/6` that is not inside a `perform/3` fold (ADR-0043's
+    # `deliver_internal/6` that is not inside a `perform/3` fold (ADR-0044's
     # change-4 seam). An unguarded deferral would strand those effects in
     # `state.deferred` forever, so drain explicitly here. `drain_deferred/1`
     # on an empty queue is a single pattern match, so the non-seam-crossing
@@ -808,7 +808,7 @@ defmodule Statifier.Session do
     # pay nothing for this. Unlike the in-fold paths, `handle_info/2` opens
     # no `in_macrostep/4` span of its own, so on this path the deferred
     # batch's `{:effect, _}` notifications and effect telemetry arrive with
-    # no enclosing macrostep span at all - accepted, not fixed, per ADR-0043.
+    # no enclosing macrostep span at all - accepted, not fixed, per ADR-0044.
     state = deliver_fired(route, event, effect, state) |> drain_deferred()
 
     {:noreply, state, {:continue, :drain}}
@@ -927,7 +927,7 @@ defmodule Statifier.Session do
     # start time out from under it. The field still reflects the
     # innermost currently-open span at any given instant (ADR-0040); this
     # closure is what keeps each span's own duration correct regardless of
-    # nesting depth. Since ADR-0043, the nested span no longer encloses the
+    # nesting depth. Since ADR-0044, the nested span no longer encloses the
     # *performance* of the effects the crossing produced - those are queued
     # and drained by the outermost `perform/3` after `drive.()` returns - so
     # this span's duration now measures the core drive alone.
@@ -958,7 +958,7 @@ defmodule Statifier.Session do
 
   # -- performing (Statifier.Session.Effects plans; this performs) --------
 
-  # ADR-0043 decision 1. `perform_batch/3` is the old body; the drain after
+  # ADR-0044 decision 1. `perform_batch/3` is the old body; the drain after
   # it is what makes subscriber arrival order non-decreasing in `(macrostep,
   # round)`. `deliver_internal/6` no longer calls this function at all, so
   # every call site is an outermost drive and `drain_deferred/1` never
@@ -1406,7 +1406,7 @@ defmodule Statifier.Session do
   # The one call site of `Interpreter.deliver_internal/5` - records the call
   # (ADR-0029, `docs/observability.md` constraint 6) before making it, then
   # **queues** whatever effects it returns instead of performing them here.
-  # ADR-0043 decision 1: the seam is still crossed at this instruction's
+  # ADR-0044 decision 1: the seam is still crossed at this instruction's
   # position - the core's `%MachineState{}` advances now, the recording
   # entry is written at its true position, and this nested ADR-0040 span
   # still opens and closes around the core drive - but notifying the
@@ -1418,7 +1418,7 @@ defmodule Statifier.Session do
   # `:quiescent`, because a halt inside the deferred batch is performed
   # later, during the drain. That drain runs inside the *outermost* drive's
   # span, so the run's halt outcome is still reported - once, on the span
-  # that encloses the batch that actually performed `{:halt, _}`. ADR-0043's
+  # that encloses the batch that actually performed `{:halt, _}`. ADR-0044's
   # consequences record the same shift for effect-vs-span event ordering.
   # `{:error, :not_running}` is a no-op: a halted session has no queue to
   # raise onto, and nothing is queued.
