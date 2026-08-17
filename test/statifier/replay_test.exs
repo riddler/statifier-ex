@@ -162,7 +162,8 @@ defmodule Statifier.ReplayTest do
            state_index: 0,
            invoke_index: 0,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       recording =
@@ -196,7 +197,8 @@ defmodule Statifier.ReplayTest do
            state_index: 0,
            invoke_index: 0,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       recording =
@@ -228,12 +230,19 @@ defmodule Statifier.ReplayTest do
            state_index: 0,
            invoke_index: 0,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       cancel_invoke_effect =
         {:cancel_invoke,
-         %Effect.CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}
+         %Effect.CancelInvoke{
+           invoke_id: "i1",
+           state_index: 0,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
 
       recording =
         machine

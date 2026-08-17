@@ -154,6 +154,27 @@ defmodule Statifier.Interpreter.FinalizeTest do
     assert autoforward.event == event
   end
 
+  # `apply_invoke_passes/2` runs immediately after `handle_event/2`'s own
+  # `MachineState.begin_macrostep/1` call and before any
+  # `MachineState.begin_round/1` call, so `machine_state.round` is always 0
+  # at the moment `autoforward_effect/5` stamps it - the pass's own position
+  # ahead of the round-counted fold, not a coincidence of this fixture.
+  #
+  # sabotage: `autoforward_effect/5`'s `%Effect.Autoforward{}` literal is
+  # changed from `round: machine_state.round` to a hardcoded `round: 7` ->
+  # reddens against the real (always-0) value at this call site. Confirmed
+  # red and reverted.
+  test "the autoforward effect's round matches the machine state's round it was stamped from" do
+    m = compile!(@autoforwarding_document)
+    {ms, _init_effects} = Interpreter.initialize(m)
+
+    event = Event.external("go", invokeid: "inv-a")
+    assert {:ok, _result, effects} = Interpreter.handle_event(ms, event)
+
+    assert [autoforward] = autoforward_effects(effects)
+    assert autoforward.round == 0
+  end
+
   # sabotage: `apply_invoke_passes/2`'s `forwarded = for {:autoforward,
   # %Effect.Autoforward{invoke_id: id}} <- effects, do: id` line is changed
   # to always produce `[]` -> `inv-a` disappears from `trace.forwarded`

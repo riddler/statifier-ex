@@ -13,8 +13,8 @@ defmodule Statifier.Effect.Invoke do
   attribute) on purpose - the two fields are two letters apart with
   unrelated meanings, and the original `source` name invited confusing them
   (post-review correction).
-  `macrostep`/`microstep` are the counters as they stand when the invoke is
-  produced.
+  `macrostep`/`microstep`/`round` are the counters as they stand when the
+  invoke is produced.
 
   `invoke_index` is the invoking state's `invoke` list position (document
   order) - the second half of `Statifier.Event.Cause.origin()`'s
@@ -43,7 +43,7 @@ defmodule Statifier.Effect.Invoke do
   effect payload treats identically, not one field that already has.
   """
 
-  @enforce_keys [:invoke_id, :state_index, :invoke_index, :macrostep, :microstep]
+  @enforce_keys [:invoke_id, :state_index, :invoke_index, :macrostep, :microstep, :round]
   defstruct [
     :invoke_id,
     :type,
@@ -54,7 +54,8 @@ defmodule Statifier.Effect.Invoke do
     :state_index,
     :invoke_index,
     :macrostep,
-    :microstep
+    :microstep,
+    :round
   ]
 
   @type t :: %__MODULE__{
@@ -67,6 +68,7 @@ defmodule Statifier.Effect.Invoke do
           state_index: non_neg_integer(),
           invoke_index: non_neg_integer(),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

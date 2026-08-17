@@ -12,19 +12,20 @@ defmodule Statifier.Effect.Done do
   `Statifier.Interpreter.exit_interpreter/1`.
 
   There is no `c_index`: this effect is produced by `exit_interpreter`
-  itself, not by one executable-content node. `macrostep`/`microstep` are
-  the counters as they stand at the moment of termination. See
+  itself, not by one executable-content node. `macrostep`/`microstep`/
+  `round` are the counters as they stand at the moment of termination. See
   `Statifier.Effect.Trace.Done` for the trace-effect counterpart, built from
   the same `configuration_at_exit` binding.
   """
 
-  @enforce_keys [:configuration, :macrostep, :microstep]
-  defstruct [:donedata, :configuration, :macrostep, :microstep]
+  @enforce_keys [:configuration, :macrostep, :microstep, :round]
+  defstruct [:donedata, :configuration, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           donedata: term() | nil,
           configuration: MapSet.t(non_neg_integer()),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

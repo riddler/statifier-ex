@@ -154,15 +154,24 @@ defmodule Statifier.Session.TelemetryTest do
      }},
     {:cancel, %Cancel{send_id: "s3", c_index: nil, owner: nil, macrostep: 1, microstep: 2}},
     {:invoke,
-     %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 2}},
-    {:cancel_invoke, %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 2}},
+     %Invoke{
+       invoke_id: "i1",
+       state_index: 0,
+       invoke_index: 0,
+       macrostep: 1,
+       microstep: 2,
+       round: 1
+     }},
+    {:cancel_invoke,
+     %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 2, round: 1}},
     {:autoforward,
      %Autoforward{
        invoke_id: "i1",
        state_index: 0,
        event: Event.external("e"),
        macrostep: 1,
-       microstep: 2
+       microstep: 2,
+       round: 1
      }},
     {:budget_exhausted,
      %BudgetExhausted{
@@ -173,7 +182,7 @@ defmodule Statifier.Session.TelemetryTest do
        microstep: 0,
        round: 5
      }},
-    {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 2}},
+    {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 2, round: 1}},
     {:log, %Log{label: "l", c_index: nil, owner: nil, macrostep: 1, microstep: 2}}
   ]
 
@@ -468,7 +477,12 @@ defmodule Statifier.Session.TelemetryTest do
       {:ok, a_index} = Machine.index(machine, "a")
       {:ok, b_index} = Machine.index(machine, "b")
 
-      payload = %Done{configuration: MapSet.new([a_index, b_index]), macrostep: 1, microstep: 2}
+      payload = %Done{
+        configuration: MapSet.new([a_index, b_index]),
+        macrostep: 1,
+        microstep: 2,
+        round: 1
+      }
 
       Telemetry.effect("sess1", machine, {:done, payload})
 
@@ -556,7 +570,8 @@ defmodule Statifier.Session.TelemetryTest do
         state_index: a_index,
         invoke_index: 0,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Telemetry.effect("sess1", machine, {:invoke, invoke_payload})

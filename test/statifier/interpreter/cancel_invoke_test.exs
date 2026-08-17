@@ -120,6 +120,22 @@ defmodule Statifier.Interpreter.CancelInvokeTest do
     refute result.running
   end
 
+  # sabotage: `ExitEntry.cancel_one_invocation/4`'s `%CancelInvoke{}` literal
+  # is changed from `round: machine_state.round` to `round: 0` -> reddens
+  # against this fixture, whose `machine_state.round` is set to a nonzero
+  # value before `Interpreter.cancel/1`'s exit walk runs. Confirmed red and
+  # reverted.
+  test "the cancel_invoke effect's round matches the machine state's round it was stamped from" do
+    m = compile!(@live_invocation_document)
+    {ms, _init_effects} = Interpreter.initialize(m)
+    ms = %{ms | round: 4}
+
+    assert {:ok, _result, effects} = Interpreter.cancel(ms)
+
+    assert [cancel] = cancel_invoke_effects(effects)
+    assert cancel.round == 4
+  end
+
   #  0 scxml (root)
   #  1   s0      (invoke typeexpr="undefined_var" fails; -> s1 on "go")
   #  2   s1

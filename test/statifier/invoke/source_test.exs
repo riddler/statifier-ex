@@ -28,7 +28,7 @@ defmodule Statifier.Invoke.SourceTest do
     struct!(
       Invoke,
       Keyword.merge(
-        [invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1],
+        [invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1, round: 0],
         fields
       )
     )

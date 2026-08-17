@@ -140,21 +140,50 @@ defmodule Statifier.Session.EffectsTest do
        {:cancel_timers, "s1"}
      ]},
     {{:invoke,
-      %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}},
+      %Invoke{
+        invoke_id: "i1",
+        state_index: 0,
+        invoke_index: 0,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }},
      [
        {:notify,
         {:invoke,
-         %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}},
+         %Invoke{
+           invoke_id: "i1",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}},
        {:start_child,
-        %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1},
+        %Invoke{
+          invoke_id: "i1",
+          state_index: 0,
+          invoke_index: 0,
+          macrostep: 1,
+          microstep: 1,
+          round: 0
+        },
         {:invoke,
-         %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}}}
+         %Invoke{
+           invoke_id: "i1",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}}
      ]},
-    {{:cancel_invoke, %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
+    {{:cancel_invoke,
+      %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1, round: 0}},
      [
        {:notify,
         {:cancel_invoke,
-         %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}}},
+         %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1, round: 0}}},
        {:stop_child, "i1"}
      ]},
     {{:autoforward,
@@ -163,7 +192,8 @@ defmodule Statifier.Session.EffectsTest do
         state_index: 0,
         event: Event.external("e"),
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }},
      [
        {:notify,
@@ -173,13 +203,15 @@ defmodule Statifier.Session.EffectsTest do
            state_index: 0,
            event: Event.external("e"),
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}},
        {:forward, "i1", Event.external("e")}
      ]},
-    {{:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}},
+    {{:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1, round: 0}},
      [
-       {:notify, {:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1}}},
+       {:notify,
+        {:done, %Done{configuration: MapSet.new([0]), macrostep: 1, microstep: 1, round: 0}}},
        {:halt, :done}
      ]},
     {{:budget_exhausted,
@@ -426,7 +458,8 @@ defmodule Statifier.Session.EffectsTest do
            state_index: 2,
            invoke_index: 3,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       assert [_notify, {:raise, :platform, "error.execution", {:invoke, 2, 3}, []}] =
@@ -445,7 +478,8 @@ defmodule Statifier.Session.EffectsTest do
            state_index: 0,
            invoke_index: 0,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       instructions = Effects.plan([effect], @session_id)
