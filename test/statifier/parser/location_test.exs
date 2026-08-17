@@ -329,6 +329,29 @@ defmodule Statifier.Parser.LocationTest do
       assert Location.slice(resolved, source) == "b"
     end
 
+    # sabotage: next_unit_plain/2's CRLF clause returns `raw_rest` unchanged
+    # instead of `binary_part(raw_rest, 1, byte_size(raw_rest) - 1)` -> the
+    # leading "\n" is never skipped, so it is walked again as its own raw
+    # unit and the raw cursor never reaches "b" -> this test reddens (slice
+    # returns "a\r\nb" instead of "b")
+    test "a raw CRLF pair paired with one expanded space walks as a single unit" do
+      source = ~s(<edge cond="a\r\nb"/>)
+      attribute = root_attribute(source)
+
+      # Passed by hand: attribute values are not yet normalized, so Saxy
+      # returns "a\r\nb" verbatim and the pair-versus-space unit has no real
+      # parse that produces it yet.
+      value = "a b"
+
+      resolved = Location.resolve_span(attribute.value_location, {{1, 3}, {1, 4}}, value, source)
+
+      assert Location.slice(resolved, source) == "b"
+
+      whole = Location.resolve_span(attribute.value_location, {{1, 1}, {1, 4}}, value, source)
+
+      assert Location.slice(whole, source) == "a\r\nb"
+    end
+
     # sabotage: next_unit/2 believes every decode unconditionally, dropping
     # the `String.starts_with?(value, decoded)` check and its else branch ->
     # `&lt;` is consumed from the raw side against a value that still spells
