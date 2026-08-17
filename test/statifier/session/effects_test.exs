@@ -274,7 +274,8 @@ defmodule Statifier.Session.EffectsTest do
         new_value: 1,
         prior_value: :undefined,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }},
      [
        {:notify,
@@ -285,15 +286,26 @@ defmodule Statifier.Session.EffectsTest do
            new_value: 1,
            prior_value: :undefined,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}}
      ]},
     {{:datamodel_init,
-      %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}},
+      %DatamodelInit{
+        datamodel: %{"_sessionid" => "sess_1"},
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }},
      [
        {:notify,
         {:datamodel_init,
-         %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}}}
+         %DatamodelInit{
+           datamodel: %{"_sessionid" => "sess_1"},
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}}
      ]},
     {{:trace,
       %Trace.EventDequeued{event: nil, from: :external, macrostep: 1, microstep: 1, round: 0}},

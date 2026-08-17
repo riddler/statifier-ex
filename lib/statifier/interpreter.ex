@@ -804,7 +804,8 @@ defmodule Statifier.Interpreter do
              c_index: nil,
              owner: {:finalize, state_index, invoke_index},
              macrostep: machine_state.macrostep,
-             microstep: machine_state.microstep
+             microstep: machine_state.microstep,
+             round: machine_state.round
            }}
 
         {machine_state, context, [effect]}
@@ -1539,7 +1540,8 @@ defmodule Statifier.Interpreter do
          c_index: nil,
          owner: {:invoke, state_index, invoke_index},
          macrostep: machine_state.macrostep,
-         microstep: machine_state.microstep
+         microstep: machine_state.microstep,
+         round: machine_state.round
        }}
     ]
   end

@@ -69,10 +69,16 @@ defmodule Statifier.EffectTest do
          prior_value: :undefined,
          d_index: 0,
          macrostep: 1,
-         microstep: 1
+         microstep: 1,
+         round: 0
        }},
       {:datamodel_init,
-       %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}}
+       %DatamodelInit{
+         datamodel: %{"_sessionid" => "sess_1"},
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }}
     ]
 
     @trace_effects [

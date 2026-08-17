@@ -102,7 +102,8 @@ defmodule Statifier.Machine.Content.Assign do
               c_index: node.c_index,
               owner: context.owner,
               macrostep: machine_state.macrostep,
-              microstep: machine_state.microstep
+              microstep: machine_state.microstep,
+              round: machine_state.round
             }}
          ]}
       end

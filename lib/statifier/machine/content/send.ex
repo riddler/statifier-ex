@@ -309,7 +309,8 @@ defmodule Statifier.Machine.Content.Send do
            c_index: c_index,
            owner: owner,
            macrostep: ms.macrostep,
-           microstep: ms.microstep
+           microstep: ms.microstep,
+           round: ms.round
          }}
       ]
     end
