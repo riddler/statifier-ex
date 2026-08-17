@@ -1,6 +1,6 @@
 # ADR-0006: Reuse the v1 conformance corpus and regression ratchet; commit a generator
 
-Status: accepted (2026-08-02)
+Status: accepted (2026-08-02) - amended 2026-08-17 (st-hgyu: the four-function constraint binds the synchronous driving path; the session path's coupling is a closed nine-function set)
 
 ## Context
 
@@ -30,4 +30,25 @@ not library surface).
 - The corpus can grow (upstream additions, ECMAScript-to-predicator rewrites)
   without archaeology.
 - `Statifier.Case`'s four-function contract is a hard API constraint on the v2
-  surface - deliberately so.
+  surface - deliberately so. *(Amended 2026-08-17, st-hgyu: this constraint now
+  binds per driving path rather than corpus-wide, and each path's set is closed.
+  st-cmq.9 gave `test_scxml/4` a second path: a document detecting any of the
+  ten send/invoke feature atoms (106 of the 281 generated files at that commit)
+  drives through a live `Statifier.Session`, because real delivery, wall-clock
+  timers, and child sessions have no synchronous equivalent. The synchronous
+  path - every other document, including every file ratcheted before st-cmq.9 -
+  still couples to exactly the four. The sanctioned driving surface is these
+  nine functions and no others: shared by both paths, `Statifier.compile/1` and
+  `Statifier.active_leaf_states/1`; synchronous path only,
+  `Statifier.initialize/2` and `Statifier.send_event/2`; session path only,
+  `Statifier.start_session/2`, `Statifier.Session.send_event/2`,
+  `Statifier.Session.snapshot/1`, `Statifier.Session.status/1` and
+  `Statifier.Session.stop/2` (ADR-0027, ADR-0029). One assertion-side read sits
+  outside that set by declaration rather than by exception:
+  `Statifier.MachineState.active_leaf_states/1`, read to compare cardinality
+  against the id-translated set, inspects a value the harness already holds and
+  is not a way to drive the chart. Adding a function to any of these lists, or
+  adding a third driving path, reopens this record - it is not a harness change
+  to be made in passing. The constraint's purpose is unchanged: the corpus
+  still cannot widen the library surface, because every function either path
+  touches is public API carried by its own record.)*

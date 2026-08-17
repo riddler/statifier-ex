@@ -478,8 +478,12 @@ with their resolutions; the drafted wording above already reflects them.
    triggering work, whoever lands these stamps the date they land, in both the
    status lines and the inline `*(Amended ...)*` markers.
 
-Nothing above has been landed. All three amendments remain a human's call,
-and this branch still touches no ADR and no harness file.
+**Landed 2026-08-17 by st-zebr.** All three amendments above are applied:
+`docs/adr/0006-reuse-conformance-corpus-and-regression-ratchet.md`'s status
+line and Consequences bullet, `docs/adr/0027-embedder-placed-session-runtime.md`'s
+status line and decision 1's `start_supervised!` sentence, and
+`test/support/case.ex:48-58`'s moduledoc section, all dated 2026-08-17 rather
+than this document's 2026-08-16 placeholders.
 
 **Landing is tracked by st-zebr**, which depends on this bead: "Land the
 ADR-0006/0027 amendments and the `Statifier.Case` moduledoc fix". It carries
