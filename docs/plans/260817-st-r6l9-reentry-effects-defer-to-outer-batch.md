@@ -645,25 +645,51 @@ not a guaranteed second level.
 
 #### Manual Verification:
 
-- [ ] Spec-conformance judgment: no Appendix D function moved. The change is
+- [x] Spec-conformance judgment: no Appendix D function moved. The change is
       entirely on the effect-interpreter side of ADR-0003's boundary, so
       `lib/statifier/interpreter.ex` is untouched and no new ADR-0002
-      mechanical-reason comment is owed - confirm by diff.
-- [ ] The `%State{}` `deferred` queue is empty at every GenServer callback
+      mechanical-reason comment is owed - confirm by diff. Confirmed:
+      `lib/statifier/session.ex` is the only `lib/` file the branch changes.
+- [x] The `%State{}` `deferred` queue is empty at every GenServer callback
       boundary. Check it by re-walking the callers of `deliver_internal/6`
       in the finished diff, not by trusting the plan's list: every one must
       be either inside a `perform/3` or followed by an explicit
       `drain_deferred/1` (today that exception is `deliver_fired/4` on the
       fired-timer path, change 4). This is the invariant the whole design
       rests on and the one a future caller can silently break.
-- [ ] The fired-timer path's telemetry shape is confirmed and accepted, not
+
+      Re-walked from the callers rather than from this list. The routes to
+      `deliver_internal/6` are `perform_instruction({:raise, ...})`;
+      `invoke_error/4` (from `perform_instruction({:start_child, ...})` and
+      `start_child/5`); and `deliver/5`, both directly and through
+      `communication_error/4`'s three clauses. All reach it inside a
+      `perform/3` fold except `deliver/5` via `deliver_fired/4` from
+      `handle_info/2`, which drains explicitly. `perform_batch/3` has
+      exactly two call sites - `perform/3`, which drains, and
+      `drain_deferred/1`, which recurses - so no path performs a batch
+      without draining after it.
+- [x] The fired-timer path's telemetry shape is confirmed and accepted, not
       discovered later: attach a handler to `[:statifier, :session,
-      macrostep, :start | :stop]` and `[:statifier, :session, :effect]`, fire
-      a delayed `#_internal` send, and confirm the deferred batch's effect
+      macrostep, :start | :stop]` and the effect/trace events, fire a
+      delayed `#_internal` send, and confirm the deferred batch's effect
       events land outside every macrostep span. `telemetry_test.exs` has no
       fired-timer `:internal` coverage today, so nothing else will surface
       this either way - which is why it is a manual check rather than an
       automated one, and why change 4's comment has to state it.
+
+      Confirmed, and the shape is sharper than this item assumed. Note the
+      event names when re-running it: the effect and trace events are
+      four-segment (`[:statifier, :session, :effect, :send]`,
+      `[:statifier, :session, :trace, :transitions_selected]`, ...), so a
+      handler attached to a three-segment `[:statifier, :session, :effect]`
+      silently never fires and the check appears to pass on an empty
+      sample. Measured on `delayed_internal_doc/0`: the `:internal`
+      macrostep span opens and closes **empty** - not merely closing before
+      its batch - and all nine of the deferred batch's trace events arrive
+      afterwards at span depth zero. A span-building consumer therefore
+      sees one empty span plus nine parentless events, rather than a span
+      whose contents arrive late. Accepted per ADR-0043; the consequence is
+      recorded on st-aos7, which owns the `:internal` span's metadata.
 - [ ] The strengthened moduledoc reads as a promise a consumer can act on,
       and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
@@ -735,15 +761,31 @@ subscriber and is the model for the document.
 
 #### Manual Verification:
 
-- [ ] Spec-conformance judgment: this phase touches only `test/`, so no
+- [x] Spec-conformance judgment: this phase touches only `test/`, so no
       Appendix D function is in scope; confirm by diff that
-      `lib/statifier/` is untouched.
-- [ ] The two charts genuinely cross the seam - confirm by observing the
+      `lib/statifier/` is untouched. Confirmed: the phase's commit touches
+      only `test/statifier/replay_round_trip_test.exs` and this plan.
+- [x] The two charts genuinely cross the seam - confirm by observing the
       `{:internal, ...}` entry in the recording each produces, not by
-      assuming the document shape is enough.
-- [ ] Replay's stream and the live stream match for a reason, not by
-      coincidence: spot-check that both contain more than one
-      `Trace.MacrostepStable` for the terminal macrostep.
+      assuming the document shape is enough. Confirmed: the recording
+      carries `{:internal, :internal, "ping", {:content, 0, {:onentry, 1,
+      0}}, [data: :undefined, sendid: nil]}`.
+- [x] Replay's stream and the live stream match for a reason, not by
+      coincidence: spot-check the `Trace.MacrostepStable` keys each stream
+      carries.
+
+      Corrected during verification. This item originally asked for "more
+      than one `Trace.MacrostepStable` for the terminal macrostep", which
+      neither chart can satisfy and which is not what decision 3 promises:
+      both end in `<final>`, so the re-entry drive emits `Trace.Done`
+      rather than a stable, and the measured keys are `[{1, 1}, {2, 1}]` -
+      one per macrostep. The property that actually holds is the one
+      `assert_stable_unique/1` asserts: exactly one stable per
+      `(macrostep, round)`. The multi-stable case decision 3 documents is
+      real, but it needs a re-entry that quiesces instead of finishing -
+      re-pointing this chart's `<final id="c"/>` at a plain
+      `<state id="c"/>` yields `[{1, 1}, {2, 1}, {2, 3}]`, two stables in
+      macrostep 2, still monotone and still unique per key.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
@@ -918,25 +960,51 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Spec-conformance judgment: no Appendix D function moved. The change is
+- [x] Spec-conformance judgment: no Appendix D function moved. The change is
       entirely on the effect-interpreter side of ADR-0003's boundary, so
       `lib/statifier/interpreter.ex` is untouched and no new ADR-0002
-      mechanical-reason comment is owed - confirm by diff.
-- [ ] The `%State{}` `deferred` queue is empty at every GenServer callback
+      mechanical-reason comment is owed - confirm by diff. Confirmed:
+      `lib/statifier/session.ex` is the only `lib/` file the branch changes.
+- [x] The `%State{}` `deferred` queue is empty at every GenServer callback
       boundary. Check it by re-walking the callers of `deliver_internal/6`
       in the finished diff, not by trusting the plan's list: every one must
       be either inside a `perform/3` or followed by an explicit
       `drain_deferred/1` (today that exception is `deliver_fired/4` on the
       fired-timer path, change 4). This is the invariant the whole design
       rests on and the one a future caller can silently break.
-- [ ] The fired-timer path's telemetry shape is confirmed and accepted, not
+
+      Re-walked from the callers rather than from this list. The routes to
+      `deliver_internal/6` are `perform_instruction({:raise, ...})`;
+      `invoke_error/4` (from `perform_instruction({:start_child, ...})` and
+      `start_child/5`); and `deliver/5`, both directly and through
+      `communication_error/4`'s three clauses. All reach it inside a
+      `perform/3` fold except `deliver/5` via `deliver_fired/4` from
+      `handle_info/2`, which drains explicitly. `perform_batch/3` has
+      exactly two call sites - `perform/3`, which drains, and
+      `drain_deferred/1`, which recurses - so no path performs a batch
+      without draining after it.
+- [x] The fired-timer path's telemetry shape is confirmed and accepted, not
       discovered later: attach a handler to `[:statifier, :session,
-      macrostep, :start | :stop]` and `[:statifier, :session, :effect]`, fire
-      a delayed `#_internal` send, and confirm the deferred batch's effect
+      macrostep, :start | :stop]` and the effect/trace events, fire a
+      delayed `#_internal` send, and confirm the deferred batch's effect
       events land outside every macrostep span. `telemetry_test.exs` has no
       fired-timer `:internal` coverage today, so nothing else will surface
       this either way - which is why it is a manual check rather than an
       automated one, and why change 4's comment has to state it.
+
+      Confirmed, and the shape is sharper than this item assumed. Note the
+      event names when re-running it: the effect and trace events are
+      four-segment (`[:statifier, :session, :effect, :send]`,
+      `[:statifier, :session, :trace, :transitions_selected]`, ...), so a
+      handler attached to a three-segment `[:statifier, :session, :effect]`
+      silently never fires and the check appears to pass on an empty
+      sample. Measured on `delayed_internal_doc/0`: the `:internal`
+      macrostep span opens and closes **empty** - not merely closing before
+      its batch - and all nine of the deferred batch's trace events arrive
+      afterwards at span depth zero. A span-building consumer therefore
+      sees one empty span plus nine parentless events, rather than a span
+      whose contents arrive late. Accepted per ADR-0043; the consequence is
+      recorded on st-aos7, which owns the `:internal` span's metadata.
 - [ ] The strengthened moduledoc reads as a promise a consumer can act on,
       and matches ADR-0043 decisions 1, 2, and 3 rather than paraphrasing
       them loosely.
@@ -956,15 +1024,31 @@ of blocking here.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment: this phase touches only `test/`, so no
+- [x] Spec-conformance judgment: this phase touches only `test/`, so no
       Appendix D function is in scope; confirm by diff that
-      `lib/statifier/` is untouched.
-- [ ] The two charts genuinely cross the seam - confirm by observing the
+      `lib/statifier/` is untouched. Confirmed: the phase's commit touches
+      only `test/statifier/replay_round_trip_test.exs` and this plan.
+- [x] The two charts genuinely cross the seam - confirm by observing the
       `{:internal, ...}` entry in the recording each produces, not by
-      assuming the document shape is enough.
-- [ ] Replay's stream and the live stream match for a reason, not by
-      coincidence: spot-check that both contain more than one
-      `Trace.MacrostepStable` for the terminal macrostep.
+      assuming the document shape is enough. Confirmed: the recording
+      carries `{:internal, :internal, "ping", {:content, 0, {:onentry, 1,
+      0}}, [data: :undefined, sendid: nil]}`.
+- [x] Replay's stream and the live stream match for a reason, not by
+      coincidence: spot-check the `Trace.MacrostepStable` keys each stream
+      carries.
+
+      Corrected during verification. This item originally asked for "more
+      than one `Trace.MacrostepStable` for the terminal macrostep", which
+      neither chart can satisfy and which is not what decision 3 promises:
+      both end in `<final>`, so the re-entry drive emits `Trace.Done`
+      rather than a stable, and the measured keys are `[{1, 1}, {2, 1}]` -
+      one per macrostep. The property that actually holds is the one
+      `assert_stable_unique/1` asserts: exactly one stable per
+      `(macrostep, round)`. The multi-stable case decision 3 documents is
+      real, but it needs a re-entry that quiesces instead of finishing -
+      re-pointing this chart's `<final id="c"/>` at a plain
+      `<state id="c"/>` yields `[{1, 1}, {2, 1}, {2, 3}]`, two stables in
+      macrostep 2, still monotone and still unique per key.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

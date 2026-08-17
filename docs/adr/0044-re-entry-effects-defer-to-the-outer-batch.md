@@ -94,9 +94,22 @@ is an argument about *spans*, and spans keep it.
 "one lifecycle message, following the effects that caused it" is strengthened
 to: the last message this session sends its subscribers for the run. Decision
 1 is what makes it true - the drive that halts is necessarily the last drive
-that produces effects (a later seam crossing finds the machine not running),
-so the batch carrying `{:halt, reason}` drains last, and `Effects.plan_one/2`
-already plans the halt instruction after the `{:done, _}` notify. The same
+that produces effects, so the batch carrying `{:halt, reason}` drains last,
+and `Effects.plan_one/2` already plans the halt instruction after the
+`{:done, _}` notify.
+
+The reason no crossing can defer a batch past the halt is stronger than
+"a later crossing finds the machine not running", and worth stating exactly,
+because the obvious doubt is a crossing sitting *earlier* in the halting
+batch than the halt instruction - its deferred batch would drain after
+`{:halt, reason}` was already notified. It cannot happen: a core drive runs
+to completion before the session performs any of the instructions it
+produced, so the halt is already decided by the time the first instruction
+is performed, and *every* crossing in the halting batch finds the machine
+not running - whatever its position in the list. Verified against the
+sharpest case available, a `<send target="#_internal">` in a `<final>`'s
+`<onentry>`, where the crossing precedes the `{:done, _}` notify in the same
+list: nothing is deferred and `{:halted, :done}` is last. The same
 holds for `:cancelled` and `:budget_exhausted`, whose `halt_override` threads
 through the same path. The regression suite asserts it rather than trusting
 the argument.
