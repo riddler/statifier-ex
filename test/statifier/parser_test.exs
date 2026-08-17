@@ -313,6 +313,123 @@ defmodule Statifier.ParserTest do
     end
   end
 
+  describe "parse/1 - character data folding" do
+    # sabotage: folded_value/3 returns `unfolded` unchanged instead of calling
+    # Location.normalize_character_data/3 -> the fold never applies, so the
+    # raw CRLF survives into value ("a\r\nb" instead of "a\nb"), reddening the
+    # value assertion
+    test "a literal CRLF folds to a single newline" do
+      xml = "<r><t>a\r\nb</t></r>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} =
+               parse!(xml) |> DOM.elements() |> hd()
+
+      assert value == "a\nb"
+      assert Location.slice(location, xml) == "a\r\nb"
+    end
+
+    # sabotage: folded_value/3 returns `unfolded` unchanged instead of calling
+    # Location.normalize_character_data/3 -> the lone CR is never folded, so
+    # value stays "c\rd" instead of "c\nd", reddening the value assertion
+    test "a lone CR folds to a single newline" do
+      xml = "<r><t>c\rd</t></r>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} =
+               parse!(xml) |> DOM.elements() |> hd()
+
+      assert value == "c\nd"
+      assert Location.slice(location, xml) == "c\rd"
+    end
+
+    # sabotage: Handler.folded_value/3 feeds the raw slice
+    # (`Location.slice(location, state.source)`) as the walk's expanded
+    # `value` argument instead of the unfolded Saxy accumulation -> the
+    # &#xD; reference's raw token "&#xD;" no longer matches a decoded "\r" at
+    # the head of the (now-raw) pseudo-value, so the walk falls through to
+    # the literal path and desyncs, reddening the value assertion below (the
+    # reference's decoded "\r" is lost)
+    test "a &#xD; character reference survives the fold, unlike a literal CR" do
+      xml = "<t>a&#xD;b</t>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} = parse!(xml)
+
+      assert value == "a\rb"
+      assert Location.slice(location, xml) == "a&#xD;b"
+    end
+
+    # sabotage: folded_value/3 returns `unfolded` unchanged instead of calling
+    # Location.normalize_character_data/3 -> a CR inside the CDATA section is
+    # never folded, so value stays "g\r\nh" instead of "g\nh", reddening the
+    # value assertion
+    test "a CR inside a CDATA section folds like any other" do
+      xml = "<t><![CDATA[g\r\nh]]></t>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} = parse!(xml)
+
+      assert value == "g\nh"
+      assert Location.slice(location, xml) == "<![CDATA[g\r\nh]]>"
+    end
+
+    # The case ADR-0045's investigation used to prove a value-only fold is
+    # wrong: the CR and the LF that follows it are on opposite sides of a
+    # comment the scanner elides from `value` entirely, so 2.11's
+    # followed-by rule must be read off the *raw* text - a naive fold over
+    # the coalesced value alone (which reads "i\r\nj") would fold the pair
+    # together into "i\nj" instead of the two lone folds this asserts.
+    #
+    # sabotage: folded_value/3 returns `unfolded` unchanged instead of calling
+    # Location.normalize_character_data/3 -> value stays "i\r\nj" (the
+    # coalesced, unfolded accumulation), reddening the value assertion
+    # (expected "i\n\nj")
+    test "a CR and LF straddling a comment fold separately, not as one pair" do
+      xml = "<x>i\r<!--c-->\nj</x>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} = parse!(xml)
+
+      assert value == "i\n\nj"
+      assert Location.slice(location, xml) == "i\r<!--c-->\nj"
+    end
+
+    # sabotage: n/a - `fold_units/2` (Phase 1, already sabotaged in
+    # `location_test.exs`) has no TAB-specific clause to break at this
+    # integration level: a TAB falls through its generic
+    # `{:literal, other}` pass-through, the same clause any unfolded
+    # character does. This test asserts the 3.3.3 contrast (character data
+    # is never whitespace-mapped the way an attribute value is), not a fold
+    # a one-line handler-level mutation could plausibly get wrong.
+    test "a TAB is preserved, unlike XML 1.0 3.3.3's attribute-value mapping" do
+      xml = "<t>a\tb</t>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: "a\tb", location: location}]} = parse!(xml)
+
+      assert Location.slice(location, xml) == "a\tb"
+    end
+
+    # A run split by a CDATA section is what actually exercises coalescing
+    # recomputation on a real parse: Saxy's `chardata` accumulator decodes a
+    # named or numeric character reference inline into the same
+    # `:characters` event rather than splitting on it (probed against this
+    # Saxy version - `&amp;` never produces a separate event, unlike a
+    # comment or a CDATA section, which do), so a CDATA section is the
+    # construct that reliably produces the multi-event run this case needs.
+    #
+    # sabotage: add_text/2's coalescing branch calls `folded_value(state,
+    # location, characters)` - the latest event's characters alone - instead
+    # of `folded_value(state, location, unfolded)`, the full accumulation ->
+    # the CDATA section splits the run into three events (`"a\r"`, cdata
+    # `"b"`, `"\r\nc"`), so the final event's fold only sees `"\r\nc"`
+    # against the whole-run raw span and the leading `"a"` and `"b"` go
+    # missing from value, reddening the value assertion
+    test "a run split by a CDATA section still folds on the final coalesced event" do
+      xml = "<t>a\r<![CDATA[b]]>\r\nc</t>"
+
+      assert %DOM.Element{children: [%DOM.Text{value: value, location: location}]} = parse!(xml)
+
+      assert value == "a\nb\nc"
+      assert Location.slice(location, xml) == "a\r<![CDATA[b]]>\r\nc"
+    end
+  end
+
   describe "parse/1 - namespaces" do
     # sabotage: the :end_element clause builds the element from the name
     # with any `prefix:` stripped off -> the qualified name is lost,

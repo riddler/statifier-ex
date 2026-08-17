@@ -14,19 +14,23 @@ defmodule Statifier.Parser do
   namespace declarations, and structurally nonsensical documents all parse
   successfully - "make invalid states unrepresentable" is the validator's
   principle to enforce, and it cannot enforce it against things the parser has
-  already thrown away. The one exception is attribute-value normalization: XML
-  1.0 3.3.3 and SCXML Appendix A.2 make it a processor obligation rather than
-  vocabulary knowledge, so `Statifier.Parser.DOM.Attribute.value` is
-  3.3.3-normalized and entity-expanded (ADR-0043); nothing else in this list
-  is touched. In particular:
+  already thrown away. The two exceptions are attribute-value normalization
+  and character-data line-break folding: XML 1.0 3.3.3, XML 1.0 2.11, and
+  SCXML Appendix A.2 make both a processor obligation rather than vocabulary
+  knowledge, so `Statifier.Parser.DOM.Attribute.value` is 3.3.3-normalized and
+  entity-expanded (ADR-0043) and `Statifier.Parser.DOM.Text.value` is
+  2.11-folded and entity-expanded (ADR-0045); nothing else in this list is
+  touched. In particular:
 
   - Names are the raw qualified bytes, prefix included. A namespace
     declaration is an ordinary attribute, reachable as
     `Statifier.Parser.DOM.attribute(root, "xmlns")`.
-  - Whitespace is preserved verbatim, including whitespace-only text runs.
-    Dropping them would need the parser to know which vocabulary treats
-    whitespace as significant, which is exactly the knowledge this layer does
-    not have. `Statifier.Parser.DOM.elements/1` is the filter.
+  - Whitespace is preserved verbatim as runs, including whitespace-only text
+    runs - dropping them would need the parser to know which vocabulary
+    treats whitespace as significant, which is exactly the knowledge this
+    layer does not have (`Statifier.Parser.DOM.elements/1` is the filter) -
+    but a run's line breaks are 2.11-folded (ADR-0045): a literal CRLF or
+    lone CR becomes a single `\n`, the same as any other character data.
   - Comments and processing instructions produce no nodes. Saxy emits no
     events for them, so surfacing them would mean driving the tree from the
     scanner instead of the event stream. The scanner still skips them
@@ -71,7 +75,12 @@ defmodule Statifier.Parser do
   `value_location` covers raw source, so a literal newline, tab, or carriage
   return in the raw text is a single space in `value`, and offsets *inside* a
   value whose raw text contains a reference or a normalized whitespace
-  character do not map 1:1 onto the document.
+  character do not map 1:1 onto the document. Character data has the same
+  split: a text node's `value` is XML 1.0 2.11-folded and entity-expanded
+  (ADR-0045) while its `location` covers raw source, so a literal CRLF or
+  lone CR in the raw text is a single `\n` in `value`, and offsets inside a
+  value whose raw text contains a reference, a CDATA delimiter, a comment, a
+  PI, or a folded line break do not map 1:1 onto the document either.
 
   ## Errors
 
