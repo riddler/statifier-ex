@@ -711,33 +711,71 @@ this bead; measure first if a real document ever shows it.
 Manual verification items are deferred during looped (`--loop`) execution and
 surfaced here once, rather than blocking after each phase. Confirm every Manual
 Verification item from Phases 1, 2, and 3 before considering the plan fully
-landed. The three that most deserve a human's eye:
+landed.
 
-- [ ] The CDATA-interior refinement (Phase 1, change 2) is the right reading of
+**Verification pass run 2026-08-17**, by a session other than the one that
+implemented the phases. Every item below is marked; each carries what was
+actually checked. Two carry a caveat worth reading rather than a plain tick:
+the spec-cache item, which was unsatisfiable as phrased and was verified
+against the live W3C source instead, and the sabotage item, which was checked
+structurally rather than by re-running all 17 mutations and so still rests on
+the implementing session's attestation. One question is deliberately left open
+for a human: whether ADR-0045 item 2 gets a clarifying sentence — a call on the
+record, not on the code, which nothing here blocks on.
+
+The three that most deserve a human's eye:
+
+- [x] The CDATA-interior refinement (Phase 1, change 2) is the right reading of
       ADR-0045 item 2. This plan decided it rather than asking, on the grounds
       that the record's own decision item 1 and test list require a CR inside
       CDATA to fold; if a human disagrees, the record needs a sentence, not the
-      code.
-- [ ] `<x>i\r<!--c-->\nj</x>` folds to `"i\n\nj"` on a real parse.
-- [ ] The conformance re-run moved nothing in either direction.
+      code. **Confirmed by parse** (2026-08-17): `<r><t><![CDATA[a\r\nb]]></t></r>`
+      yields `"a\nb"`, and `<r><t><![CDATA[&amp;]]></t></r>` yields `"&amp;"` —
+      the interior walks verbatim while only the delimiters are raw-only, which
+      is the reading that keeps both of the record's requirements true at once.
+      **Still open for a human**: whether ADR-0045 item 2's wording gets the
+      clarifying sentence, which is a call on the record, not on the code.
+- [x] `<x>i\r<!--c-->\nj</x>` folds to `"i\n\nj"` on a real parse. **Confirmed**
+      (2026-08-17): value is `"i\n\nj"`, raw slice is `"i\r<!--c-->\nj"`. Saxy
+      coalesces the comment-straddled run into one text node, so a value-only
+      fold would have produced `"i\nj"`; it did not.
+- [x] The conformance re-run moved nothing in either direction. **Confirmed by
+      re-run** (2026-08-17, independent of the implementing session):
+      `mix test --include scion --include scxml_w3` → 2,175 tests, 15 failures,
+      the same pre-existing set; `test/passing_tests.json` is absent from
+      `git diff --name-only origin/main...HEAD`, so the ratchet never moved.
 
 ### Phase 1
 
-- [ ] The XML 1.0 2.11 text quoted in the new `@doc` and comments is read from
+- [x] The XML 1.0 2.11 text quoted in the new `@doc` and comments is read from
       the local spec cache
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/`),
-      not from memory, and matches byte for byte.
-- [ ] The CDATA-interior refinement in change 2 is confirmed as a refinement of
+      not from memory, and matches byte for byte. **Resolved differently than
+      written** (2026-08-17): no local cache holds the XML 1.0 REC —
+      `mise run spec:fetch` populates only the SCXML REC and its Appendix D
+      extract — so this item was unsatisfiable as phrased. Verified instead by
+      fetching https://www.w3.org/TR/xml/#sec-line-ends directly: the quoted
+      sentence matches character for character. The `@doc` already discloses
+      its provenance rather than claiming a cache read.
+- [x] The CDATA-interior refinement in change 2 is confirmed as a refinement of
       ADR-0045 item 2 and not a contradiction of it: a CR inside CDATA folds,
       which is what the record's decision item 1 and its test list require.
-- [ ] Each sabotage mutation was actually applied and observed red, and none of
-      them is a truthy-sentinel no-op (`docs/testing.md`).
-- [ ] The raw-only skip is confirmed by reading to be unreachable for attribute
+      Confirmed by parse, as recorded above.
+- [~] Each sabotage mutation was actually applied and observed red, and none of
+      them is a truthy-sentinel no-op (`docs/testing.md`). **Structurally
+      checked, not reproduced**: 17 new `test "` lines and 17 added
+      `# sabotage:` lines across the three changed test files, so none is
+      missing. Whether each mutation was genuinely run and observed red is the
+      implementing session's attestation; re-running all 17 was not done here.
+      This is the one item still resting on a self-report.
+- [x] The raw-only skip is confirmed by reading to be unreachable for attribute
       values: `next_unit/2`'s behavior is untouched and `<` cannot occur
-      literally in a well-formed attribute value anyway.
-- [ ] Read against the W3C Appendix D pseudocode rule: this phase touches the
+      literally in a well-formed attribute value anyway. Corroborated by parse:
+      an attribute value with a literal newline still normalizes to `"a b"`.
+- [x] Read against the W3C Appendix D pseudocode rule: this phase touches the
       parser, not the interpreter, so no Appendix D procedure is involved and no
       deviation is claimed (ADR-0002 does not apply to `lib/statifier/parser/`).
+      Confirmed: the branch changes no file under `lib/statifier/interpreter`.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -757,23 +795,34 @@ bead's own work and belong with its first commit.
 
 ### Phase 2
 
-- [ ] In `iex -S mix`, `Statifier.Parser.parse("<r><t>a\\r\\nb</t></r>")` yields
+- [x] In `iex -S mix`, `Statifier.Parser.parse("<r><t>a\\r\\nb</t></r>")` yields
       `"a\nb"` and `Location.slice/2` over the same node still yields `"a\r\nb"`.
-      This is the bead's own reproduction, inverted.
-- [ ] `<x>i\r<!--c-->\nj</x>` yields `"i\n\nj"` — the case that proves the walk
+      This is the bead's own reproduction, inverted. **Confirmed** (2026-08-17),
+      both halves, plus the lone-CR case `<r><t>a\rb</t></r>` -> `"a\nb"` with
+      raw slice `"a\rb"`.
+- [x] `<x>i\r<!--c-->\nj</x>` yields `"i\n\nj"` — the case that proves the walk
       reads the fold's followed-by rule off the raw text rather than the value.
-      A `"i\nj"` result means a value-only fold slipped in.
-- [ ] `<t>a&#xD;b</t>` still yields `"a\rb"` — the literal-versus-reference
-      distinction, the thing a `String.replace/3` would destroy.
-- [ ] An attribute value containing a literal newline still normalizes to a
-      single space, unchanged by this phase.
-- [ ] The moduledoc edits leave no stale statement of the old behavior: grep
+      A `"i\nj"` result means a value-only fold slipped in. **Confirmed**
+      (2026-08-17): `"i\n\nj"`.
+- [x] `<t>a&#xD;b</t>` still yields `"a\rb"` — the literal-versus-reference
+      distinction, the thing a `String.replace/3` would destroy. **Confirmed**
+      (2026-08-17): value `"a\rb"`, raw slice `"a&#xD;b"`.
+- [x] An attribute value containing a literal newline still normalizes to a
+      single space, unchanged by this phase. **Confirmed** (2026-08-17):
+      `<r><t c="a\nb"/></r>` gives `c == "a b"`.
+- [x] The moduledoc edits leave no stale statement of the old behavior: grep
       `lib/statifier/parser` for "verbatim", "not normalized", and "Saxy
-      reported" and read every hit.
-- [ ] Read against the W3C Appendix D pseudocode rule: parser work only, no
-      Appendix D procedure touched, no deviation claimed (ADR-0002).
-- [ ] The conformance run's result set is compared to the pre-change run by eye,
-      not just by exit code — no member flipped in either direction.
+      reported" and read every hit. **Confirmed** (2026-08-17): 6 hits, each
+      either describing the raw slice (correctly still verbatim) or carrying
+      the 2.11 carve-out.
+- [x] Read against the W3C Appendix D pseudocode rule: parser work only, no
+      Appendix D procedure touched, no deviation claimed (ADR-0002). Confirmed
+      against `git diff --name-only origin/main...HEAD`.
+- [x] The conformance run's result set is compared to the pre-change run by eye,
+      not just by exit code — no member flipped in either direction. **Confirmed
+      by independent re-run** (2026-08-17): 15 failures, the known pre-existing
+      set; `test/passing_tests.json` untouched across all three commits, so the
+      ratchet stage would have caught any member that flipped to failing.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -786,15 +835,25 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] Reading `Statifier.Document.Script`'s and `Statifier.Document.Content`'s
+- [x] Reading `Statifier.Document.Script`'s and `Statifier.Document.Content`'s
       docs end to end, a caller can tell which of `text` and `markup` folds and
-      which does not, without opening an ADR.
-- [ ] No remaining hit for "verbatim, untrimmed" states the unqualified claim.
-- [ ] `git diff` is read in full and every changed line sits inside a
+      which does not, without opening an ADR. **Confirmed** (2026-08-17):
+      `content.ex:14-21` states outright that `markup` keeps raw line endings,
+      CR included, and folds only when the child document it names is itself
+      parsed; `text` carries the 2.11 carve-out.
+- [x] No remaining hit for "verbatim, untrimmed" states the unqualified claim.
+      **Confirmed** (2026-08-17): the phrase survives at five sites, each now
+      immediately followed by the "verbatim except for the parser's XML 1.0
+      2.11 line-break fold - ADR-0045" qualification. The phrase remaining is
+      correct; the unqualified claim is gone.
+- [x] `git diff` is read in full and every changed line sits inside a
       `@moduledoc` or `@doc` string — `--stat` reports counts, not what kind of
-      line moved, so this half of the path check is a human's read.
-- [ ] Read against the W3C Appendix D pseudocode rule: documentation only, no
-      Appendix D procedure touched (ADR-0002).
+      line moved, so this half of the path check is a human's read. **Confirmed**
+      (2026-08-17): every `lib/` line in `0dd5f97` is doc-string prose; the only
+      non-`lib/` change is this plan file.
+- [x] Read against the W3C Appendix D pseudocode rule: documentation only, no
+      Appendix D procedure touched (ADR-0002). Confirmed: `0dd5f97` changes only
+      moduledoc/doc strings.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
