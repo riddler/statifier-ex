@@ -197,14 +197,18 @@ defmodule Statifier.Session.SendCancelTest do
     # "not supported or invalid" -> `error.execution` on the sender's own
     # internal queue, never `{:unroutable, _}` (that vocabulary member
     # survives only for `:invoke`/`:cancel_invoke`/`:autoforward`, later,
-    # separate work).
+    # separate work). Per ADR-0047 the rejection happens in the core, in
+    # `Statifier.Machine.Content.Send`'s own `reject_reason/2`, before any
+    # `{:send, _}` effect is built - `Statifier.Session.Effects`'s own
+    # `{:invalid, _target}` arm is the `Session.interpret/2` boundary check
+    # ADR-0047 decision 4 keeps, not what decides this document's outcome.
     #
-    # sabotage: `Statifier.Session.Effects.plan_send/3`'s `{:invalid,
-    # _target} -> [execution_error(send)]` clause is changed to `[]`,
-    # dropping the raise entirely -> no `error.execution` ever reaches the
-    # transition, so the configuration stays at `a` instead of advancing to
-    # `caught`, reddening the assertion below. Reverted and confirmed green.
-    test "an unparseable target raises error.execution on the internal queue" do
+    # sabotage: `Send`'s `reject_reason/2` has its `match?({:invalid,
+    # _reason}, Target.parse(target))` clause changed to always return
+    # `nil` -> the invalid target would dispatch a `{:send, _}` effect
+    # instead of being rejected, so the `refute_receive` below would catch
+    # a real message and flunk. Reverted and confirmed green.
+    test "an unparseable target rejects with no Effect.Send reaching the subscriber" do
       machine =
         compile!("""
         <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -219,11 +223,10 @@ defmodule Statifier.Session.SendCancelTest do
       {:ok, session} = Session.start_link(machine, subscribers: [self()])
       session_id = Session.session_id(session)
 
-      assert_receive {:statifier, ^session_id,
-                      {:effect, {:send, %Effect.Send{event: "e", target: "whatever"}}}}
-
       status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
       assert status.configuration == MapSet.new(["caught"])
+
+      refute_receive {:statifier, ^session_id, {:effect, {:send, %Effect.Send{}}}}
     end
   end
 end

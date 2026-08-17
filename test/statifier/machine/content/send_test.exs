@@ -31,8 +31,8 @@ defmodule Statifier.Machine.Content.SendTest do
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="bare">
       <datamodel>
           <data id="ev" expr="'dyn_event'"/>
-          <data id="tgt" expr="'dyn_target'"/>
-          <data id="typ" expr="'dyn_type'"/>
+          <data id="tgt" expr="'#_dyn_target'"/>
+          <data id="typ" expr="'scxml'"/>
           <data id="p1" expr="10"/>
           <data id="p2" expr="20"/>
           <data id="loc"/>
@@ -40,9 +40,9 @@ defmodule Statifier.Machine.Content.SendTest do
       </datamodel>
       <state id="bare"><onentry><send event="ping"/></onentry></state>
       <state id="eventexpr"><onentry><send eventexpr="ev"/></onentry></state>
-      <state id="target"><onentry><send event="e" target="t1"/></onentry></state>
+      <state id="target"><onentry><send event="e" target="#_t1"/></onentry></state>
       <state id="targetexpr"><onentry><send event="e" targetexpr="tgt"/></onentry></state>
-      <state id="type"><onentry><send event="e" type="ty1"/></onentry></state>
+      <state id="type"><onentry><send event="e" type="scxml"/></onentry></state>
       <state id="typeexpr"><onentry><send event="e" typeexpr="typ"/></onentry></state>
       <state id="namelist"><onentry><send event="e" namelist="p1 p2"/></onentry></state>
       <state id="namelist_unbound"><onentry><send event="e" namelist="Var1"/></onentry></state>
@@ -82,6 +82,23 @@ defmodule Statifier.Machine.Content.SendTest do
           <onentry><send event="e"><content expr="nope"/></send></onentry>
       </state>
       <state id="fail_idlocation"><onentry><send event="e" idlocation="_sessionid"/></onentry></state>
+      <state id="reject_target"><onentry><send event="e" target="baz"/></onentry></state>
+      <state id="reject_target_idloc">
+          <onentry><send event="e" target="baz" idlocation="loc"/></onentry>
+      </state>
+      <state id="reject_type_over_target">
+          <onentry><send event="e" target="baz" type="http://example.com/bogus"/></onentry>
+      </state>
+      <state id="reject_delay">
+          <onentry><send event="e" target="baz" delay="100ms"/></onentry>
+      </state>
+      <state id="valid_internal"><onentry><send event="e" target="#_internal"/></onentry></state>
+      <state id="valid_session">
+          <onentry><send event="e" target="#_scxml_x"/></onentry>
+      </state>
+      <state id="valid_invoke">
+          <onentry><send event="e" target="#_someinvoke"/></onentry>
+      </state>
   </scxml>
   """
 
@@ -138,25 +155,25 @@ defmodule Statifier.Machine.Content.SendTest do
       m = machine()
       ms = machine_state(m)
 
-      assert {:ok, _ctx, [{:send, %Effect.Send{target: "t1"}}]} =
+      assert {:ok, _ctx, [{:send, %Effect.Send{target: "#_t1"}}]} =
                ExecutableContent.execute(send_node(m, "target"), context(ms))
 
-      assert {:ok, _ctx, [{:send, %Effect.Send{target: "dyn_target"}}]} =
+      assert {:ok, _ctx, [{:send, %Effect.Send{target: "#_dyn_target"}}]} =
                ExecutableContent.execute(send_node(m, "targetexpr"), context(ms))
     end
 
     # sabotage: `Send`'s `execute/2` `with` clause for `type` reads
-    # `node.target` instead of `node.type` -> `type="ty1"` would resolve to
-    # `nil` (the "type" fixture writes no `target`) instead of `"ty1"`,
-    # reddening this test's first assertion.
+    # `node.target` instead of `node.type` -> `type="scxml"` would resolve
+    # to `nil` (the "type" fixture writes no `target`) instead of
+    # `"scxml"`, reddening this test's first assertion.
     test "type and typeexpr both resolve" do
       m = machine()
       ms = machine_state(m)
 
-      assert {:ok, _ctx, [{:send, %Effect.Send{type: "ty1"}}]} =
+      assert {:ok, _ctx, [{:send, %Effect.Send{type: "scxml"}}]} =
                ExecutableContent.execute(send_node(m, "type"), context(ms))
 
-      assert {:ok, _ctx, [{:send, %Effect.Send{type: "dyn_type"}}]} =
+      assert {:ok, _ctx, [{:send, %Effect.Send{type: "scxml"}}]} =
                ExecutableContent.execute(send_node(m, "typeexpr"), context(ms))
     end
   end
@@ -610,6 +627,106 @@ defmodule Statifier.Machine.Content.SendTest do
       node = send_node(m, "fail_idlocation")
 
       assert {:error, _reason} = ExecutableContent.execute(node, context(ms))
+    end
+  end
+
+  describe "execute/2 - static target/type rejection (ADR-0047)" do
+    # sabotage: `reject_reason/2`'s `cond` is changed to unconditionally
+    # return `nil` -> the invalid target below would dispatch a `{:send,
+    # _}` effect instead of rejecting, reddening this test's match.
+    # Confirmed red (the pattern match failed against `{:ok, _, [...]}`)
+    # and reverted.
+    test "an invalid target rejects with the composite error form and no effect" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "reject_target")
+
+      assert {:error, _new_ctx, {:send_rejected, send_id, {:invalid_target, "baz"}}} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert send_id != nil
+    end
+
+    # sabotage: same mutation as above (`reject_reason/2`'s `cond` forced
+    # to `nil`) -> `execute/2` returns `{:ok, _, _}` instead of the
+    # `{:error, new_ctx, _}` this test matches on, reddening it too.
+    # Confirmed red and reverted.
+    test "the send_counter still advances even though the send is rejected" do
+      m = machine()
+      ms = machine_state(m)
+      before_counter = ms.send_counter
+      node = send_node(m, "reject_target")
+
+      assert {:error, new_ctx, {:send_rejected, _send_id, {:invalid_target, "baz"}}} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert new_ctx.machine_state.send_counter == before_counter + 1
+    end
+
+    # sabotage: same mutation as above (`reject_reason/2`'s `cond` forced
+    # to `nil`) -> `execute/2` returns `{:ok, _, _}` instead of the
+    # `{:error, new_ctx, _}` this test matches on, reddening it too.
+    # Confirmed red and reverted.
+    test "idlocation is still written, and the reason's send_id matches it" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "reject_target_idloc")
+
+      assert {:error, new_ctx, {:send_rejected, send_id, {:invalid_target, "baz"}}} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert new_ctx.machine_state.datamodel["loc"] == send_id
+    end
+
+    # sabotage: `reject_reason/2`'s `cond` clauses are swapped (target
+    # checked before type) -> this document's simultaneous unsupported type
+    # and invalid target would reject as `{:invalid_target, "baz"}` instead
+    # of `{:unsupported_type, _}`, reddening this test's match (only this
+    # test - the other four cases in this describe stayed green under the
+    # same mutation, confirming it is order-specific). Confirmed red and
+    # reverted.
+    test "an unsupported type takes priority over a simultaneously-invalid target" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "reject_type_over_target")
+
+      assert {:error, _new_ctx,
+              {:send_rejected, _send_id, {:unsupported_type, "http://example.com/bogus"}}} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: same mutation as the first two tests above
+    # (`reject_reason/2`'s `cond` forced to `nil`) -> `execute/2` returns
+    # `{:ok, _, [{:send_delayed, _}]}` instead of the `{:error, _, _}` this
+    # test matches on, reddening it - proof the delayed path runs through
+    # the same check as the immediate one. Confirmed red and reverted.
+    test "a delay-bearing send with an invalid target rejects with no Effect.SendDelayed" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "reject_delay")
+
+      assert {:error, _new_ctx, {:send_rejected, _send_id, {:invalid_target, "baz"}}} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    for {state, target} <- [
+          {"bare", nil},
+          {"valid_internal", "#_internal"},
+          {"valid_session", "#_scxml_x"},
+          {"valid_invoke", "#_someinvoke"}
+        ] do
+      # sabotage: `reject_reason/2`'s `not Target.supported_type?(type) ->`
+      # clause changed to always fire (`true ->`) -> every one of these
+      # routes rejects instead of dispatching, reddening every case of this
+      # test -> red. Confirmed red and reverted.
+      test "a valid target #{inspect(target)} still dispatches" do
+        m = machine()
+        ms = machine_state(m)
+        node = send_node(m, unquote(state))
+
+        assert {:ok, _new_ctx, [{:send, %Effect.Send{target: unquote(target)}}]} =
+                 ExecutableContent.execute(node, context(ms))
+      end
     end
   end
 end

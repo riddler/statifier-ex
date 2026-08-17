@@ -14,7 +14,13 @@ defmodule Statifier.Session.Effects do
   ## `<send>` routing
 
   Every `<send>`/`<send_delayed>` effect is planned in this order (6.2.4,
-  6.2.5, C.1):
+  6.2.5, C.1). Steps 1 and 2 are a boundary check, not the primary
+  enforcement: ADR-0047 decision 4 keeps them because
+  `Statifier.Session.interpret/2` is public (ADR-0029) and an embedder can
+  hand in an effect the core itself never produced, but an effect the core
+  *did* produce never reaches these two arms - the core already rejected an
+  invalid target or unsupported type in `Statifier.Machine.Content.Send`
+  before any `{:send, _}`/`{:send_delayed, _}` effect was built.
 
   1. An unsupported `type` (`Statifier.Send.Target.supported_type?/1`) ->
      `{:raise, :platform, "error.execution", ...}` on the sender's own
@@ -223,7 +229,12 @@ defmodule Statifier.Session.Effects do
   # unconditionally (5.10.1's "the Processor MUST set this field to the send
   # id of the triggering `<send>` element" carries no "if the author
   # specified id", unlike C.1's rule for a *delivered* event's `sendid` -
-  # decision 3). No delivery, no timer, for either.
+  # decision 3). No delivery, no timer, for either. As with `plan_send/3`
+  # and `plan_send_delayed/3` above, this is the `Session.interpret/2`
+  # boundary check ADR-0047 decision 4 keeps: a core-produced `<send>`
+  # effect never reaches here with an invalid target or unsupported type,
+  # because `Statifier.Machine.Content.Send` already rejected it before
+  # building the effect.
   @spec execution_error(send :: Send.t() | SendDelayed.t()) :: instruction()
   defp execution_error(send) do
     {:raise, :platform, "error.execution", {:content, send.c_index, send.owner},

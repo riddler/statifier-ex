@@ -1008,13 +1008,22 @@ defmodule Statifier.SessionTest do
       """
     end
 
-    # sabotage: `Session.Effects.plan_send_delayed/3`'s
-    # `not Target.supported_type?(send.type) ->` clause is dropped, falling
-    # through to the ordinary route/schedule clauses -> the send schedules a
-    # real timer instead of raising immediately, so `pending_timers` reads 1
-    # (not 0) and the configuration has not yet reached `b`, reddening both
-    # assertions below (checked well before the 200ms delay could have
-    # elapsed on its own). Reverted and confirmed green.
+    # Under ADR-0047 the rejection now happens in the core
+    # (`Statifier.Machine.Content.Send`'s `reject_reason/2`), before any
+    # `{:send_delayed, _}` effect is ever built - `Session.Effects`'s own
+    # `plan_send_delayed/3` check is only the `Session.interpret/2`
+    # boundary arm ADR-0047 decision 4 keeps and never actually decides
+    # this document's outcome, since the core already halted the block.
+    #
+    # sabotage: `Statifier.Interpreter.Content`'s `raise_execution_error/4`
+    # clause that destructures `{:send_rejected, send_id, reason}` into
+    # `data: reason, sendid: send_id` is deleted, leaving only the generic
+    # clause that puts the whole tuple in `data` and sets no `sendid` opt
+    # -> `_event.sendid` comes back `:undefined` instead of `"send1"`,
+    # reddening the third assertion below (the other two still pass, since
+    # the block still aborts and no timer is ever scheduled - this
+    # mutation isolates the sendid-bearing conversion specifically).
+    # Confirmed red and reverted.
     test "the check happens at plan time, not fire time, and schedules nothing" do
       machine = compile!(unsupported_type_doc())
       {:ok, session} = Session.start_link(machine)

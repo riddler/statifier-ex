@@ -49,6 +49,7 @@ defmodule Statifier.Machine.Content.Send do
   alias Statifier.Machine.Param
   alias Statifier.MachineState
   alias Statifier.Parser.Location
+  alias Statifier.Send.Target
 
   @enforce_keys [:c_index, :location]
   defstruct [
@@ -95,11 +96,15 @@ defmodule Statifier.Machine.Content.Send do
     # (`lib/statifier/interpreter.ex:1278-1313`) - same order, same
     # delegation to `resolve_expr/2`/`resolve_params/2`/`resolve_content/2`
     # and `Interpreter.Datamodel.write_location/4` - so a reader who knows
-    # one recognizes the other. `<send>` is a leaf, so a failure returns the
-    # two-element `{:error, reason}` form; the block runner is the sole
-    # execution-failure conversion site (ADR-0003), and per ADR-0036 every
-    # argument failure here - `<content expr>` included - discards the
-    # message: no effect is produced.
+    # one recognizes the other. An argument failure - `<content expr>`
+    # included - still returns the two-element `{:error, reason}` form and
+    # discards the message per ADR-0036; the block runner is the sole
+    # execution-failure conversion site (ADR-0003). A resolved `target`/
+    # `type` that classifies as invalid or unsupported (ADR-0047) is a
+    # different case: the send id has already been minted and `idlocation`
+    # already written by then, so that rejection returns the three-element
+    # `{:error, context, reason}` form instead, carrying the context that
+    # work landed in.
     @spec execute(node :: Send.t(), context :: Context.t()) ::
             {:ok, Context.t(),
              [
@@ -108,8 +113,9 @@ defmodule Statifier.Machine.Content.Send do
                | {:send_delayed, Effect.SendDelayed.t()}
              ]}
             | {:error, term()}
+            | {:error, Context.t(), term()}
     def execute(%Send{} = node, %Context{} = context) do
-      %{owner: owner, datamodel_context: datamodel_context} = context
+      %{datamodel_context: datamodel_context} = context
 
       with {:ok, event} <- resolve_expr(datamodel_context, node.event),
            {:ok, target} <- resolve_expr(datamodel_context, node.target),
@@ -121,31 +127,80 @@ defmodule Statifier.Machine.Content.Send do
 
         case maybe_write_idlocation(machine_state, datamodel_context, node.idlocation, send_id) do
           {:ok, machine_state, datamodel_context, write} ->
-            fields = %{
-              event: event,
-              target: target,
-              type: type,
-              data: data(node, raw_params, content)
-            }
-
-            effect = build_effect(node, fields, send_id, delay_ms, owner, machine_state)
-
             new_context = %{
               context
               | machine_state: machine_state,
                 datamodel_context: datamodel_context
             }
 
-            # The datamodel write, when there is one, precedes the
-            # :send/:send_delayed effect it accompanies - the write happens
-            # before the send is dispatched, and Session performs
-            # instructions in the core's effect order.
-            {:ok, new_context,
-             datamodel_change_effects(write, node, owner, machine_state) ++ [effect]}
+            fields = %{event: event, target: target, type: type}
+
+            dispatch_or_reject(
+              node,
+              new_context,
+              fields,
+              raw_params,
+              content,
+              send_id,
+              delay_ms,
+              write
+            )
 
           {:error, reason} ->
             {:error, reason}
         end
+      end
+    end
+
+    # `reject_reason/2` decides between the two outcomes `execute/2` may
+    # return once the send id is minted and `idlocation` is written: build
+    # and return the effect, or reject with the composite error form.
+    # Pulled out of `execute/2` itself to keep that function's own nesting
+    # shallow.
+    @spec dispatch_or_reject(
+            node :: Send.t(),
+            new_context :: Context.t(),
+            fields :: %{event: term(), target: term(), type: term()},
+            raw_params :: [{String.t(), term()}],
+            content :: term(),
+            send_id :: String.t(),
+            delay_ms :: non_neg_integer() | nil,
+            write :: Datamodel.Write.t() | nil
+          ) ::
+            {:ok, Context.t(), [tuple()]} | {:error, Context.t(), term()}
+    defp dispatch_or_reject(
+           node,
+           new_context,
+           fields,
+           raw_params,
+           content,
+           send_id,
+           delay_ms,
+           write
+         ) do
+      %{owner: owner, machine_state: machine_state} = new_context
+
+      case reject_reason(fields.target, fields.type) do
+        nil ->
+          fields = Map.put(fields, :data, data(node, raw_params, content))
+          effect = build_effect(node, fields, send_id, delay_ms, owner, machine_state)
+
+          # The datamodel write, when there is one, precedes the
+          # :send/:send_delayed effect it accompanies - the write happens
+          # before the send is dispatched, and Session performs
+          # instructions in the core's effect order.
+          {:ok, new_context,
+           datamodel_change_effects(write, node, owner, machine_state) ++ [effect]}
+
+        reason ->
+          # ADR-0047: 6.2.4's invalid target and 6.2.5's unsupported type
+          # are rejected here, in the core, so 4.9's block abort is
+          # honored. The id was minted and idlocation written first
+          # (5.10.1's unconditional MUST), and the composite error form is
+          # what keeps both: the advanced send_counter and the datamodel
+          # write are in new_context's machine_state, which the block
+          # runner keeps on its fatal arm.
+          {:error, new_context, {:send_rejected, send_id, reason}}
       end
     end
 
@@ -157,6 +212,23 @@ defmodule Statifier.Machine.Content.Send do
             {:ok, term()} | {:error, term()}
     defp resolve_expr(_datamodel_context, nil), do: {:ok, nil}
     defp resolve_expr(datamodel_context, expr), do: Evaluator.evaluate(datamodel_context, expr)
+
+    # ADR-0047: 6.2.5's type check runs ahead of 6.2.4's target check,
+    # matching the order `Statifier.Session.Effects` applies at its own
+    # boundary. `nil` means the send is well-formed and dispatches. Both
+    # `target` and `type` here are already-resolved values (the `with`
+    # above ran `resolve_expr/2` on each), so a `targetexpr` that fails to
+    # evaluate never reaches this function - that is still ADR-0036's
+    # argument-failure path.
+    @spec reject_reason(target :: term(), type :: term()) ::
+            {:unsupported_type, term()} | {:invalid_target, term()} | nil
+    defp reject_reason(target, type) do
+      cond do
+        not Target.supported_type?(type) -> {:unsupported_type, type}
+        match?({:invalid, _reason}, Target.parse(target)) -> {:invalid_target, target}
+        true -> nil
+      end
+    end
 
     # `delay`/`delayexpr` (6.2.2), resolved to whole milliseconds via
     # `Statifier.Duration.to_ms/1`. `nil` (neither attribute) -> `{:ok, nil}`
