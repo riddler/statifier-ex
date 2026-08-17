@@ -310,10 +310,10 @@ sabotage line.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits (not a phase gate on its own)
-- [ ] Full `mix quality` passes, verified with `mix gate.verify`
-- [ ] `grep -rn "No core effect carries" lib/` returns nothing
-- [ ] `mix test test/statifier/replay_round_trip_test.exs` passes - the
+- [x] `mix quality --profile loop` green between edits (not a phase gate on its own)
+- [x] Full `mix quality` passes, verified with `mix gate.verify`
+- [x] `grep -rn "No core effect carries" lib/` returns nothing
+- [x] `mix test test/statifier/replay_round_trip_test.exs` passes - the
       ADR-0034 stream-equality obligation still holds with the new field
 
 #### Manual Verification:
@@ -763,3 +763,30 @@ plan follows.
   (the one core payload already carrying the field) and
   `lib/statifier/session/telemetry.ex:536-543` (its measurements clause)
 - Bead: `st-xb2b`
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The touched interpreter functions (`autoforward_effect/5`,
+      `invoke_one/6`, `exit_interpreter/1`,
+      `ExitEntry.cancel_one_invocation/4`) still match their W3C Appendix D
+      pseudocode line for line - read against
+      `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`,
+      not from memory
+- [ ] Each new test's sabotage mutation was actually run and confirmed red,
+      then reverted
+- [ ] No regressions in related features
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---

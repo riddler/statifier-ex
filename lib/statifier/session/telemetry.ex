@@ -141,11 +141,11 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :send]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `delay_ms` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index` |
-  | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
-  | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
+  | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index` |
+  | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
+  | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `session_id`, `effect`, `location` |
-  | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `configuration` |
+  | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `d_index`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `datamodel` |
@@ -506,7 +506,7 @@ defmodule Statifier.Session.Telemetry do
   end
 
   defp core_shape(machine, %Invoke{} = invoke) do
-    {%{macrostep: invoke.macrostep, microstep: invoke.microstep},
+    {%{macrostep: invoke.macrostep, microstep: invoke.microstep, round: invoke.round},
      %{
        location: location(machine, invoke),
        invoke_id: invoke.invoke_id,
@@ -516,7 +516,11 @@ defmodule Statifier.Session.Telemetry do
   end
 
   defp core_shape(machine, %CancelInvoke{} = cancel_invoke) do
-    {%{macrostep: cancel_invoke.macrostep, microstep: cancel_invoke.microstep},
+    {%{
+       macrostep: cancel_invoke.macrostep,
+       microstep: cancel_invoke.microstep,
+       round: cancel_invoke.round
+     },
      %{
        location: location(machine, cancel_invoke),
        invoke_id: cancel_invoke.invoke_id,
@@ -525,7 +529,11 @@ defmodule Statifier.Session.Telemetry do
   end
 
   defp core_shape(machine, %Autoforward{} = autoforward) do
-    {%{macrostep: autoforward.macrostep, microstep: autoforward.microstep},
+    {%{
+       macrostep: autoforward.macrostep,
+       microstep: autoforward.microstep,
+       round: autoforward.round
+     },
      %{
        location: location(machine, autoforward),
        invoke_id: autoforward.invoke_id,
@@ -543,7 +551,7 @@ defmodule Statifier.Session.Telemetry do
   end
 
   defp core_shape(machine, %Done{} = done) do
-    {%{macrostep: done.macrostep, microstep: done.microstep},
+    {%{macrostep: done.macrostep, microstep: done.microstep, round: done.round},
      %{
        location: location(machine, done),
        configuration: resolve_configuration(machine, done.configuration)

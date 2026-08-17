@@ -30,16 +30,24 @@ defmodule Statifier.EffectTest do
       {:send_delayed, %SendDelayed{event: "e", delay_ms: 100, macrostep: 1, microstep: 1}},
       {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}},
       {:invoke,
-       %Invoke{invoke_id: "i1", state_index: 0, invoke_index: 0, macrostep: 1, microstep: 1}},
+       %Invoke{
+         invoke_id: "i1",
+         state_index: 0,
+         invoke_index: 0,
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
       {:cancel_invoke,
-       %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1}},
+       %CancelInvoke{invoke_id: "i1", state_index: 0, macrostep: 1, microstep: 1, round: 0}},
       {:autoforward,
        %Autoforward{
          invoke_id: "i1",
          state_index: 0,
          event: Event.external("e"),
          macrostep: 1,
-         microstep: 1
+         microstep: 1,
+         round: 0
        }},
       {:budget_exhausted,
        %BudgetExhausted{
@@ -50,7 +58,7 @@ defmodule Statifier.EffectTest do
          microstep: 1,
          round: 0
        }},
-      {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 1}},
+      {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}},
       {:log, %Log{macrostep: 1, microstep: 1}},
       {:datamodel_change,
        %DatamodelChange{

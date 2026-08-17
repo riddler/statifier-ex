@@ -175,7 +175,14 @@ defmodule Statifier.MachineStateAcceptanceTest do
     {:send_delayed, %Effect.SendDelayed{event: "e", delay_ms: 1, macrostep: 0, microstep: 0}},
     {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0}},
     {:invoke,
-     %Effect.Invoke{invoke_id: "i", state_index: 0, invoke_index: 0, macrostep: 0, microstep: 0}},
+     %Effect.Invoke{
+       invoke_id: "i",
+       state_index: 0,
+       invoke_index: 0,
+       macrostep: 0,
+       microstep: 0,
+       round: 0
+     }},
     {:budget_exhausted,
      %Effect.BudgetExhausted{
        configuration: MapSet.new(),
@@ -185,7 +192,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
        microstep: 0,
        round: 0
      }},
-    {:done, %Effect.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0}},
+    {:done, %Effect.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}},
     {:log, %Effect.Log{macrostep: 0, microstep: 0}}
   ]
 

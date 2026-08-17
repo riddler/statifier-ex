@@ -197,6 +197,21 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert result1.invoke_counter == result2.invoke_counter
   end
 
+  # sabotage: `invoke_one/6`'s `%Effect.Invoke{}` literal is changed from
+  # `round: machine_state.round` to `round: 0` -> reddens against this
+  # fixture, whose invoke effects are all stamped `round: 1` (the initial
+  # entry fold's own first round, not the anonymous round-0 baseline).
+  # Confirmed red and reverted.
+  test "each invoke effect's round matches the machine state's round it was stamped from" do
+    m = compile!(@parallel_document)
+    {result, effects} = Interpreter.initialize(m)
+
+    assert [alpha_effect, beta1_effect, beta2_effect] = invoke_effects(effects)
+    assert alpha_effect.round == result.round
+    assert beta1_effect.round == result.round
+    assert beta2_effect.round == result.round
+  end
+
   #  0 scxml (root)
   #  1   s0      (invoke idlocation="myid")
   @idlocation_document """

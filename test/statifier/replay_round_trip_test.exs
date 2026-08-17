@@ -229,7 +229,8 @@ defmodule Statifier.ReplayRoundTripTest do
         invoke_id: "a.inv_1",
         state_index: 1,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       send_delayed = %Effect.SendDelayed{

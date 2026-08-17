@@ -674,7 +674,8 @@ defmodule Statifier.Interpreter do
          state_index: state_index,
          event: event,
          macrostep: machine_state.macrostep,
-         microstep: machine_state.microstep
+         microstep: machine_state.microstep,
+         round: machine_state.round
        }}
     ]
   end
@@ -1369,7 +1370,8 @@ defmodule Statifier.Interpreter do
                state_index: state_index,
                invoke_index: invoke_index,
                macrostep: machine_state.macrostep,
-               microstep: machine_state.microstep
+               microstep: machine_state.microstep,
+               round: machine_state.round
              }}
 
           # The datamodel write, when there is one, precedes the :invoke
@@ -1677,7 +1679,8 @@ defmodule Statifier.Interpreter do
          donedata: donedata,
          configuration: configuration_at_exit,
          macrostep: machine_state.macrostep,
-         microstep: machine_state.microstep
+         microstep: machine_state.microstep,
+         round: machine_state.round
        }}
 
     machine_state = %{machine_state | status: :done}

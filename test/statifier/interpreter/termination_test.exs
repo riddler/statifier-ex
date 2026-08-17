@@ -137,6 +137,21 @@ defmodule Statifier.Interpreter.TerminationTest do
     end
   end
 
+  describe "exit_interpreter/1 - round" do
+    # sabotage: `exit_interpreter/1`'s `%Effect.Done{}` literal is changed
+    # from `round: machine_state.round` to `round: 0` -> reddens against
+    # this fixture, whose `machine_state.round` is set to a nonzero value
+    # before the call. Confirmed red and reverted.
+    test "the done effect's round matches the machine state's round it was stamped from" do
+      m = machine()
+      ms = %{machine_state(m, [idx(:done)]) | round: 3}
+
+      {_result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert {:done, %Effect.Done{round: 3}} = List.last(effects)
+    end
+  end
+
   describe "exit_interpreter/1 - donedata" do
     # sabotage: `exit_interpreter/1`'s `ExitEntry.donedata(ms, state_index)`
     # call is replaced with `{ms, :undefined}` -> the static `42` and

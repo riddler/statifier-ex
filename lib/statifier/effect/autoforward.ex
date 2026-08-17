@@ -5,8 +5,8 @@ defmodule Statifier.Effect.Autoforward do
   in `mainEventLoop`'s finalize/autoforward pass (`:152-158`). `invoke_id`
   names the invocation to forward to; `state_index` is the constraint-3
   identity of the invoking state; `event` is the external event that
-  triggered the pass, carried verbatim; `macrostep`/`microstep` are the
-  counters as they stood at the moment of the pass.
+  triggered the pass, carried verbatim; `macrostep`/`microstep`/`round` are
+  the counters as they stood at the moment of the pass.
 
   ## Not `Statifier.Effect.Send` to `"#_" <> invoke_id`
 
@@ -28,24 +28,19 @@ defmodule Statifier.Effect.Autoforward do
   (`Effect.Invoke` is one-per-`<invoke>`, `Effect.CancelInvoke` is
   one-per-cancelled invocation); a state with two autoforwarding invocations
   therefore emits two `Autoforward` effects, never one carrying a list.
-
-  ## No `round` field
-
-  No core effect carries `round` - only the seven trace payloads do
-  (`Statifier.Effect`'s own moduledoc, "Trace effects carry indexes and
-  counters, never structs"). This payload keeps that split.
   """
 
   alias Statifier.Event
 
-  @enforce_keys [:invoke_id, :state_index, :event, :macrostep, :microstep]
-  defstruct [:invoke_id, :state_index, :event, :macrostep, :microstep]
+  @enforce_keys [:invoke_id, :state_index, :event, :macrostep, :microstep, :round]
+  defstruct [:invoke_id, :state_index, :event, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           invoke_id: String.t(),
           state_index: non_neg_integer(),
           event: Event.t(),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

@@ -4,8 +4,8 @@ defmodule Statifier.Effect.CancelInvoke do
   D's `exitStates` and `exitInterpreter` both perform with `for inv in
   s.invoke: cancelInvoke(inv)` when a state carrying live invocations
   exits. `invoke_id` names the invocation to cancel; `state_index` is the
-  constraint-3 identity of the state that owned it. `macrostep`/`microstep`
-  are the counters as they stood at the moment of the cancel.
+  constraint-3 identity of the state that owned it. `macrostep`/`microstep`/
+  `round` are the counters as they stood at the moment of the cancel.
 
   ## Not `Statifier.Effect.Cancel`
 
@@ -24,22 +24,16 @@ defmodule Statifier.Effect.CancelInvoke do
   one-per-action (`Effect.Invoke` is one-per-`<invoke>`, `Effect.Log` is
   one-per-`<log>`). A state with two live invocations therefore emits two
   `CancelInvoke` effects, never one carrying a list.
-
-  ## No `round` field
-
-  No core effect carries `round` - only the seven trace payloads do
-  (`Statifier.Effect`'s own moduledoc, "Trace effects carry indexes and
-  counters, never structs"). This payload keeps that split rather than
-  becoming the first exception.
   """
 
-  @enforce_keys [:invoke_id, :state_index, :macrostep, :microstep]
-  defstruct [:invoke_id, :state_index, :macrostep, :microstep]
+  @enforce_keys [:invoke_id, :state_index, :macrostep, :microstep, :round]
+  defstruct [:invoke_id, :state_index, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           invoke_id: String.t(),
           state_index: non_neg_integer(),
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end
