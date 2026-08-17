@@ -729,10 +729,15 @@ defmodule Statifier.Interpreter.ExitEntry do
       | entered_states: MapSet.put(machine_state.entered_states, state_index)
     }
 
-    machine_state =
+    # `initializeDataModel(datamodel.s, doc.s)` precedes the onentry loop
+    # (Appendix D `:311-313`), and spec 5.3.3 says so directly: "before any
+    # <onentry> markup". `data_effects` is threaded first in the final
+    # concatenation below for the same reason - see "The Appendix D rule" in
+    # the initial-datamodel-binding-effect plan.
+    {machine_state, data_effects} =
       if first_entry?,
         do: Datamodel.enter_state(machine_state, state_index),
-        else: machine_state
+        else: {machine_state, []}
 
     {machine_state, onentry_effects} = run_onentry_blocks(machine_state, state_index)
 
@@ -741,7 +746,8 @@ defmodule Statifier.Interpreter.ExitEntry do
 
     {machine_state, completion_effects} = raise_completion_events(machine_state, state_index)
 
-    {machine_state, onentry_effects ++ default_entry_effects ++ completion_effects}
+    {machine_state,
+     data_effects ++ onentry_effects ++ default_entry_effects ++ completion_effects}
   end
 
   # `state.onentry` in document order, each block through the

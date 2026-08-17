@@ -5,6 +5,7 @@ defmodule Statifier.Session.TelemetryTest do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -579,6 +580,72 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert_received {[:statifier, :session, :effect, :log], ^ref, _measurements, metadata}
       assert metadata.location == nil
+    end
+
+    # sabotage: the d_index location/2 clause is placed below the c_index
+    # clauses -> a %DatamodelChange{} carrying both a d_index and a c_index:
+    # nil matches `location(_machine, %{c_index: nil})` first and resolves to
+    # `nil` instead of the <data> element's own location, reddening this
+    # assertion.
+    test "resolves location from a non-nil d_index through Machine.data/2", %{ref: ref} do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+            <datamodel>
+                <data id="x" expr="1"/>
+            </datamodel>
+            <state id="a"/>
+        </scxml>
+        """)
+
+      payload = %DatamodelChange{
+        location_path: ["x"],
+        location_source: "x",
+        new_value: 1,
+        prior_value: :undefined,
+        d_index: 0,
+        c_index: nil,
+        owner: nil,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      Telemetry.effect("sess1", machine, {:datamodel_change, payload})
+
+      assert_received {[:statifier, :session, :effect, :datamodel_change], ^ref, _measurements,
+                       metadata}
+
+      assert metadata.location == Machine.data(machine, 0).location
+    end
+
+    # sabotage: `location/2`'s `d_index` clause's guard is dropped
+    # (`when is_integer(d_index)`), so it becomes `defp location(machine,
+    # %{d_index: d_index}), do: Machine.data(machine, d_index).location` and
+    # matches *every* payload carrying a `d_index` field, `nil` included ->
+    # a write's `d_index: nil` would call `Machine.data(machine, nil)` instead
+    # of falling through to the `c_index` clause below, crashing rather than
+    # resolving through `Machine.content/2` as this test expects.
+    test "a write's d_index: nil still resolves location through Machine.content/2", %{ref: ref} do
+      machine = located_machine()
+
+      payload = %DatamodelChange{
+        location_path: ["x"],
+        location_source: "x",
+        new_value: 1,
+        prior_value: :undefined,
+        d_index: nil,
+        c_index: 0,
+        owner: nil,
+        macrostep: 1,
+        microstep: 1
+      }
+
+      Telemetry.effect("sess1", machine, {:datamodel_change, payload})
+
+      assert_received {[:statifier, :session, :effect, :datamodel_change], ^ref, _measurements,
+                       metadata}
+
+      assert metadata.location == Machine.content(machine, 0).location
     end
 
     # sabotage: two mutations, each confirmed independently. (1)

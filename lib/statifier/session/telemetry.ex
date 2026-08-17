@@ -81,8 +81,9 @@ defmodule Statifier.Session.Telemetry do
 
   An effect carrying exactly one resolvable index gets `metadata.location`,
   resolved through `Statifier.Machine.content/2`, `Statifier.Machine.at/2`,
-  or `Statifier.Machine.transition/2` as appropriate, and carried as the
-  `%Statifier.Parser.Location{}` struct verbatim. Where no index resolves - an
+  `Statifier.Machine.transition/2`, or `Statifier.Machine.data/2` as
+  appropriate, and carried as the `%Statifier.Parser.Location{}` struct
+  verbatim. Where no index resolves - an
   effect with no index field at all, or an index field present but `nil` -
   the two families answer differently, and the difference is the contract, not
   an inconsistency to smooth over. A **core** effect still carries the key,
@@ -146,7 +147,7 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `session_id`, `effect`, `location` |
   | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `configuration` |
   | `[:statifier, :session, :effect, :log]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `label`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `d_index`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep` | `session_id`, `effect`, `location`, `datamodel` |
 
   ## Trace effect events (9), emitted only under `trace: true`
@@ -554,10 +555,11 @@ defmodule Statifier.Session.Telemetry do
      %{location: location(machine, log), label: log.label, c_index: log.c_index, owner: log.owner}}
   end
 
-  # No `location/2` clause is needed for `%DatamodelChange{}`: the resolver
-  # below already dispatches on the `c_index` field name and already handles
-  # `c_index: nil` (the two runner-side writes), exactly as it does for
-  # `%Log{}`.
+  # A `location/2` clause for `d_index` is needed, and must precede the
+  # `c_index` clauses below: `%DatamodelChange{}` now carries both fields, and
+  # the resolver dispatches on field name in clause order, so a `c_index`
+  # clause placed first would match a binding's payload and answer `nil` for
+  # every `<data>`. See that clause's own comment for the ordering rule.
   defp core_shape(machine, %DatamodelChange{} = change) do
     {%{macrostep: change.macrostep, microstep: change.microstep},
      %{
@@ -566,6 +568,7 @@ defmodule Statifier.Session.Telemetry do
        location_source: change.location_source,
        new_value: change.new_value,
        prior_value: change.prior_value,
+       d_index: change.d_index,
        c_index: change.c_index,
        owner: change.owner
      }}
@@ -634,13 +637,22 @@ defmodule Statifier.Session.Telemetry do
   defp trace_kind(%Trace.InvokePass{}), do: :invoke_pass
   defp trace_kind(%Trace.FinalizeAutoforward{}), do: :finalize_autoforward
 
-  # The single-index resolver (Decision 4): whichever of `c_index`/
+  # The single-index resolver (Decision 4): whichever of `d_index`/`c_index`/
   # `state_index`/`t_index` `payload` carries, resolved through the matching
   # `Machine` reader and its `.location`; `nil` for a `nil` index or an
-  # effect with none of the three fields (a list-carrying effect, or one
+  # effect with none of the four fields (a list-carrying effect, or one
   # with no index at all, like `Effect.Done`/`Effect.BudgetExhausted`).
   @spec location(machine :: Machine.t(), payload :: struct()) ::
           Statifier.Parser.Location.t() | nil
+  # Must precede the `c_index` clauses: `%DatamodelChange{}` carries both
+  # fields and the resolver dispatches on field name in clause order, so a
+  # `c_index` clause placed first would match a binding's payload and answer
+  # `nil` for every `<data>`. The guard, rather than a `%{d_index: nil}`
+  # clause, is what lets a write's payload (`d_index: nil`) fall through to
+  # the `c_index` clauses below.
+  defp location(machine, %{d_index: d_index}) when is_integer(d_index),
+    do: Machine.data(machine, d_index).location
+
   defp location(_machine, %{c_index: nil}), do: nil
   defp location(machine, %{c_index: c_index}), do: Machine.content(machine, c_index).location
   defp location(_machine, %{state_index: nil}), do: nil

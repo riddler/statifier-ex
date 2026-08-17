@@ -1,6 +1,7 @@
 # ADR-0012: Debuggability is designed into the core
 
-Status: accepted (2026-08-04)
+Status: accepted (2026-08-04) - amended 2026-08-17 (st-1xwh: `d_index` named a
+third identity under item 3)
 
 ## Context
 
@@ -45,6 +46,20 @@ this ADR makes binding. In summary:
 
 No stepper API, debug protocol, or UI is built now. Items 1-4 are constraints
 on code being written anyway.
+
+**Amendment (st-1xwh):** item 3's document-order-index sentence named two
+indexes, `t_index` and `c_index`. A third has existed on the compiler and on
+`Statifier.Machine.Data` since before this sentence was written
+(`lib/statifier/machine/data.ex:4-5` already cited this ADR's item 3 for it),
+and neither this item nor `docs/observability.md` constraint 3 enumerated it.
+`d_index` is that third index: a `<data>` element's own stable, dense-from-0,
+document-order identity, assigned by the compiler the same way `t_index` and
+`c_index` are and resolved back to its `%Statifier.Machine.Data{}` -
+`location` and `value_location` included - through `Statifier.Machine.data/2`.
+This amendment completes the enumeration item 3 had already fallen behind; it
+mints no new identity kind and the original sentence is left standing above,
+unedited, for the same reason ADR-0040's amendments explain rather than
+rewrite the rule they amend.
 
 ## Consequences
 

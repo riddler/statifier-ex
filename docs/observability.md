@@ -106,6 +106,13 @@ them anyway:
 - SCXML transitions and executable content have no IDs, so the compiler assigns
   each a stable document-order index (per machine). Trace effects and error
   metadata reference these indexes; tooling maps them back to locations.
+- A `<data>` element gets the same treatment, as a third document-order index:
+  `d_index`, dense from 0, assigned by the compiler alongside `t_index` and
+  `c_index` (`Statifier.Compiler`) and resolved back to its
+  `%Statifier.Machine.Data{}` - carrying its own `location` and
+  `value_location` - through `Statifier.Machine.data/2`. This completes an
+  enumeration the compiler had already outgrown: `d_index` existed on
+  `Machine.Data` and cited this ADR before this list named it (st-1xwh).
 - Locations and indexes are compile-time-immutable Machine data - no runtime
   cost beyond memory, no invalidation story.
 - Expression-level locations are in scope, not just SCXML element locations:
@@ -187,7 +194,7 @@ promotion path.
 | trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
 | compiler retains locations on states, transitions, executable content | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content` |
 | compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |
-| compiler assigns document-order indexes to transitions and executable-content nodes (`t_index`/`c_index`, dense from 0) | `Statifier.Compiler` |
+| compiler assigns document-order indexes to transitions, executable-content nodes, and `<data>` elements (`t_index`/`c_index`/`d_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
 | Appendix D query functions take/return plain values, unfused | `Statifier.Interpreter.Selection`, `Statifier.Interpreter.ExitEntry`, `Statifier.Interpreter.Content` |
 | validator warnings retained on the compiled Machine (ADR-0033) | `Statifier.Validator.Warning`, `Statifier.Machine.warnings` |

@@ -865,20 +865,20 @@ clause-ordering hazard, asserted rather than assumed.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits).
-- [ ] `mix test test/statifier/interpreter/ test/statifier/session/telemetry_test.exs` passes.
-- [ ] `mix adr.check` passes with the ADR-0012 amendment and the extended
+- [x] Full `mix quality` passes (loop gate between edits).
+- [x] `mix test test/statifier/interpreter/ test/statifier/session/telemetry_test.exs` passes.
+- [x] `mix adr.check` passes with the ADR-0012 amendment and the extended
       ADR-0040 amendment in place.
-- [ ] Dialyzer clean - the widened `enter_state/2` and `bind_value/4` specs
+- [x] Dialyzer clean - the widened `enter_state/2` and `bind_value/4` specs
       make a missed caller a typing violation, which is what proves
       `ExitEntry.arrive/3` was updated.
-- [ ] `mix test.regression` is green and `test/passing_tests.json` is
+- [x] `mix test.regression` is green and `test/passing_tests.json` is
       byte-identical; `mix test --include scion --include scxml_w3` shows no
       new failures. Emission changes no SCXML semantics, so no movement is the
       expected result; movement is a finding to report, not to ratchet away
       silently.
-- [ ] Doctor's 100% thresholds still met (`.doctor.exs`).
-- [ ] `mix quality --format json --report -` is available if a later agent
+- [x] Doctor's 100% thresholds still met (`.doctor.exs`).
+- [x] `mix quality --format json --report -` is available if a later agent
       needs to route on results.
 
 #### Manual Verification:
@@ -1154,5 +1154,29 @@ human to confirm the manual testing before moving to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically (via `/wurk:commit --auto`), and Manual Verification items are
 deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions still match the W3C spec text they port - 5.3.2
+      (environment override), 5.3.3 (early/late binding and "before any
+      `<onentry>` markup"), B.2.2 (no ordering dependencies) - line for line,
+      with no control-flow change beyond the added return value, and the
+      Appendix D call-site ordering at `:311-313` preserved.
+- [ ] `d_index`'s admission reads as completing an enumeration the compiler
+      had already outgrown, not as minting a new identity kind, in both
+      `docs/observability.md` and the ADR-0012 amendment.
+- [ ] The `location/2` clause ordering is correct by reading, not only by the
+      test: a `%DatamodelChange{}` with a `d_index` must not reach the
+      `c_index` clauses.
+- [ ] No regressions in early/late binding behavior, the environment-override
+      skip, or the `error.execution` raised by a failed binding.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically, and Manual Verification items are deferred to the end.
 
 ---

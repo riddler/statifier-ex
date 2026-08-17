@@ -58,6 +58,7 @@ defmodule Statifier.EffectTest do
          location_source: "x",
          new_value: 1,
          prior_value: :undefined,
+         d_index: 0,
          macrostep: 1,
          microstep: 1
        }},
