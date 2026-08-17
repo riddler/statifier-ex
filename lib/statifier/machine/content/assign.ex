@@ -78,7 +78,7 @@ defmodule Statifier.Machine.Content.Assign do
             {:ok, Context.t(), []} | {:error, term()}
     def execute(%Assign{location: location} = node, %Context{} = context) do
       with {:ok, value} <- evaluate_value(node, context),
-           {:ok, machine_state, datamodel_context} <-
+           {:ok, machine_state, datamodel_context, _write} <-
              Datamodel.write_location(
                context.machine_state,
                context.datamodel_context,

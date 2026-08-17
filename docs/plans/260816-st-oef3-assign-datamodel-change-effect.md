@@ -366,12 +366,12 @@ a sabotage line, e.g.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (use `mix quality --profile loop` between
+- [x] Full `mix quality` passes (use `mix quality --profile loop` between
       edits; a loop run alone never satisfies this phase).
-- [ ] `mix test test/statifier/interpreter/datamodel_test.exs` passes.
-- [ ] Dialyzer is clean, which is what proves all four callers were updated -
+- [x] `mix test test/statifier/interpreter/datamodel_test.exs` passes.
+- [x] Dialyzer is clean, which is what proves all four callers were updated -
       the widened `@spec` makes a missed 3-tuple match a typing violation.
-- [ ] `mix test.regression` shows no ratchet movement (this phase changes no
+- [x] `mix test.regression` shows no ratchet movement (this phase changes no
       observable behavior, so the conformance results must be identical).
 
 #### Manual Verification:
@@ -818,3 +818,29 @@ one.
   `lib/statifier/machine/content/log.ex:49-68` - the only other content node
   whose result reaches a consumer
 - Bead: st-oef3 (mirrors `sui-t36.1`)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The touched functions still match the W3C spec prose they port (5.4.2 /
+      5.9.2 / 5.10); no Appendix D pseudocode is involved, per "The Appendix D
+      rule" above.
+- [ ] `read_path/2`'s `:undefined` is genuinely indistinguishable from a
+      stored `:undefined` and that is documented as accepted (decision 4), not
+      silently glossed.
+- [ ] No regressions in `<send idlocation>` / `<invoke idlocation>` /
+      `<finalize>` behavior.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end.
+
+---

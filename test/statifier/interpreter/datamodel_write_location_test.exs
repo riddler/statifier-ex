@@ -47,7 +47,7 @@ defmodule Statifier.Interpreter.DatamodelWriteLocationTest do
   test "happy path: a flat write lands the value at the top-level key and rebinds the context" do
     {machine_state, context} = state_and_context(%{"x" => nil})
 
-    assert {:ok, new_machine_state, new_context} =
+    assert {:ok, new_machine_state, new_context, _write} =
              Datamodel.write_location(machine_state, context, "x", 2)
 
     assert new_machine_state.datamodel["x"] == 2
@@ -87,7 +87,7 @@ defmodule Statifier.Interpreter.DatamodelWriteLocationTest do
   test "deep vivification creates intermediate maps under a declared root" do
     {machine_state, context} = state_and_context(%{"a" => nil})
 
-    assert {:ok, new_machine_state, new_context} =
+    assert {:ok, new_machine_state, new_context, _write} =
              Datamodel.write_location(machine_state, context, "a.b.c", 1)
 
     assert new_machine_state.datamodel["a"] == %{"b" => %{"c" => 1}}
