@@ -5,10 +5,10 @@ git_commit: 8015033ab029fb81788a2f55b8d014e201cdd03b
 branch: st-hgyu-adr-amendment-proposal
 repository: statifier-ex
 beads_issue: st-hgyu
-topic: "Proposed amendments to ADR-0006 (four-function corpus constraint) and ADR-0027 decision 1 (start_supervised! test pattern) implied by st-cmq.9's session harness"
+topic: "Proposed amendments to ADR-0006 (four-function corpus constraint), ADR-0027 decision 1 (start_supervised! test pattern), and the Statifier.Case moduledoc that must agree with the first, implied by st-cmq.9's session harness"
 tags: [research, adr, corpus, session, test-harness, amendment-proposal]
 status: complete
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 last_updated_by: Claude
 ---
 
@@ -28,9 +28,18 @@ document is that proposal: for each of the two, the current ADR text, what the
 code does today, drafted replacement wording a reviewer can paste after
 review, the scope that stays untouched, and the arguments both ways.
 
+A third item was found while verifying the first two: the harness moduledoc
+that ADR-0006's amendment has to agree with does not currently describe the
+session path correctly either. It is written up as Amendment 3.
+
 **This document proposes; it lands nothing.** Per this repo's CLAUDE.md an
 ADR edit is a direction-level call that belongs to a human. Neither
-`docs/adr/0006-*.md` nor `docs/adr/0027-*.md` is touched on this branch.
+`docs/adr/0006-*.md` nor `docs/adr/0027-*.md` is touched on this branch, and
+neither is `test/support/case.ex`.
+
+The three questions this document originally left open were reviewed by the
+maintainer on 2026-08-17; their resolutions are recorded under "Reviewer
+decisions" at the end, and the drafted wording below already reflects them.
 
 ## Verification of the bead's claims
 
@@ -68,7 +77,9 @@ Every claim in st-hgyu's description was checked against the tree at commit
   ADR. The proposed wording below quotes what the ADR actually says.
 - **Confirmed: ADR-0027 decision 1's sentence.** "Tests `start_supervised!`
   the same supervisor." appears verbatim at
-  `docs/adr/0027-embedder-placed-session-runtime.md:84`.
+  `docs/adr/0027-embedder-placed-session-runtime.md:83-84` - the sentence
+  spans two lines, opening with "Tests" at the end of `:83`, which is the
+  paste target rather than `:84` alone.
 - **Confirmed: the run-scoped placement.** `test/test_helper.exs:1-9` places
   `Statifier.Supervisor.start_link([])` once, before `ExUnit.start/1`, with a
   comment block explaining why (fixed module-qualified child names, one
@@ -81,7 +92,26 @@ Every claim in st-hgyu's description was checked against the tree at commit
   moduledoc now says "The test suite places one runtime for the whole run in
   `test/test_helper.exs`, for the same one-instance reason"
   (`lib/statifier/supervisor.ex:43-45`). Only the ADR still states the old
-  mechanism, which narrows this proposal to exactly one file per amendment.
+  mechanism, which narrows Amendment 2 to exactly one file.
+- **One correction found while verifying, not raised by the bead at all: the
+  harness moduledoc undercounts the session coupling.**
+  `test/support/case.ex:48-58` is headed "Two driving paths, one four-function
+  contract" and says the session path "replaces two of the four - `initialize`
+  becomes `Statifier.start_session/2`, `send_event` becomes
+  `Statifier.Session.send_event/2` - while `Statifier.compile/1` and
+  `Statifier.active_leaf_states/1` stay exactly as they were." That accounts
+  for two of the five session calls and is silent on `Session.snapshot/1`,
+  `Session.status/1` and `Session.stop/2`, which the same file calls at
+  `:186`, `:239`, `:240` and `:272`. The session path is seven functions, not
+  four-with-two-substituted. This matters here because it is the document
+  Amendment 1 has to agree with: ADR-0006 amended to the honest set would
+  contradict the moduledoc as written. Written up as Amendment 3.
+- **Confirmed independently: the count.** 281 generated files under
+  `test/scion_tests` and `test/scxml_tests`, of which 106 name one of the ten
+  atoms. Worth recording for whoever re-checks it: some `required_features:`
+  tags are emitted multi-line, so grepping the tag line alone undercounts -
+  the 106 is a content-wide match for the atom names, which appear nowhere
+  else in a generated file.
 
 ## The amendment convention this repo already has
 
@@ -108,7 +138,8 @@ record is never silently rewritten. Neither of this proposal's changes
 reverses a decision or needs new argumentation of ADR size (ADR-0006's change
 is a scope clarification; ADR-0027's is a mechanism swap under an unchanged
 principle), so **form 2 is proposed for both**, in the ADR-0008 style with
-the original text preserved.
+the original text preserved. The reviewer took this on 2026-08-17; see
+"Reviewer decisions".
 
 ---
 
@@ -155,7 +186,7 @@ surface.
 Status line (`0006:3`) becomes:
 
 ```
-Status: accepted (2026-08-02) - amended 2026-08-16 (st-hgyu: the four-function constraint binds the synchronous driving path; session-routed files couple to the ADR-0027/0029 session surface)
+Status: accepted (2026-08-02) - amended 2026-08-16 (st-hgyu: the four-function constraint binds the synchronous driving path; the session path's coupling is a closed nine-function set)
 ```
 
 The Consequences bullet at `0006:32-33` becomes:
@@ -163,21 +194,32 @@ The Consequences bullet at `0006:32-33` becomes:
 ```
 - `Statifier.Case`'s four-function contract is a hard API constraint on the v2
   surface - deliberately so. *(Amended 2026-08-16, st-hgyu: this constraint now
-  binds per driving path rather than corpus-wide. st-cmq.9 gave `test_scxml/4`
-  a second path: a document detecting any of the ten send/invoke feature atoms
-  (106 of the 281 generated files at that commit) drives through a live
-  `Statifier.Session`, because real delivery, wall-clock timers, and child
-  sessions have no synchronous equivalent. The synchronous path - every other
-  document, including all files ratcheted before st-cmq.9 - still couples to
-  exactly the four functions. The session path couples to five functions on
-  the already-public session surface: `Statifier.start_session/2`,
-  `Session.send_event/2`, `Session.snapshot/1`, `Session.status/1`,
-  `Session.stop/2` (ADR-0027, ADR-0029), while `Statifier.compile/1` and
-  `Statifier.active_leaf_states/1` stay shared by both paths. The constraint's
-  purpose is unchanged: the corpus still cannot widen the library surface,
-  because every function either path touches is public API carried by its own
-  record.)*
+  binds per driving path rather than corpus-wide, and each path's set is closed.
+  st-cmq.9 gave `test_scxml/4` a second path: a document detecting any of the
+  ten send/invoke feature atoms (106 of the 281 generated files at that commit)
+  drives through a live `Statifier.Session`, because real delivery, wall-clock
+  timers, and child sessions have no synchronous equivalent. The synchronous
+  path - every other document, including every file ratcheted before st-cmq.9 -
+  still couples to exactly the four. The sanctioned driving surface is these
+  nine functions and no others: shared by both paths, `Statifier.compile/1` and
+  `Statifier.active_leaf_states/1`; synchronous path only,
+  `Statifier.initialize/2` and `Statifier.send_event/2`; session path only,
+  `Statifier.start_session/2`, `Statifier.Session.send_event/2`,
+  `Statifier.Session.snapshot/1`, `Statifier.Session.status/1` and
+  `Statifier.Session.stop/2` (ADR-0027, ADR-0029). One assertion-side read sits
+  outside that set by declaration rather than by exception:
+  `Statifier.MachineState.active_leaf_states/1`, read to compare cardinality
+  against the id-translated set, inspects a value the harness already holds and
+  is not a way to drive the chart. Adding a function to any of these lists, or
+  adding a third driving path, reopens this record - it is not a harness change
+  to be made in passing. The constraint's purpose is unchanged: the corpus
+  still cannot widen the library surface, because every function either path
+  touches is public API carried by its own record.)*
 ```
+
+The nine are enumerated rather than delegated to "the public session surface"
+on the reviewer's 2026-08-17 call - see "Reviewer decisions" below, and the
+"against" argument that decided it.
 
 ### What stays untouched
 
@@ -201,16 +243,27 @@ distrust the harness; ADR-0001 exists so that neither happens. The amendment
 is also cheap: it reverses nothing, and every function it adds to the
 sanctioned coupling set is already public API under ADR-0027/0029.
 
-**Against, worth a reviewer's attention.** The original one-line constraint
-had teeth precisely because it was blunt: any new function call in
+**Against, and how it was resolved.** The original one-line constraint had
+teeth precisely because it was blunt: any new function call in
 `Statifier.Case` was a violation on its face. "Per driving path" is a softer
-rule - a future harness change could add a third path and cite this amendment
-as precedent for widening again. If the reviewer wants the teeth kept sharp,
-the amendment could instead enumerate the closed set (four synchronous + five
-session + two shared) and state that adding any function to either list
-reopens the record. The drafted wording above names the exact five for that
-reason; a reviewer preferring the stricter closed-set phrasing can tighten
-"the already-public session surface" to "exactly these five and no others".
+rule - a future harness change could add a third path and cite the amendment
+as precedent for widening again. The first draft of this proposal delegated
+the session half to "the already-public session surface (ADR-0027, ADR-0029)",
+which carries that risk.
+
+The verification pass produced the evidence that settled it: the harness
+moduledoc had *already* softened the constraint by understating it, describing
+a seven-function path as "two of the four" substituted (Amendment 3). A rule
+that leaks in the very file it governs, before the ADR is even amended, is not
+a rule with teeth. The reviewer's 2026-08-17 call is therefore the enumerated
+closed set, which the wording above now carries: nine named functions, one
+declared assertion-side carve-out, and an explicit statement that growth or a
+third path reopens the record.
+
+The cost of that choice, stated so it is not a surprise later: a sixth session
+call in the harness now requires an ADR edit rather than a code review. That
+is the intended friction, but it is friction, and it will be paid by whoever
+next extends the session path.
 
 ---
 
@@ -218,8 +271,9 @@ reason; a reviewer preferring the stricter closed-set phrasing can tighten
 
 ### The current text
 
-`docs/adr/0027-embedder-placed-session-runtime.md:84`, the last sentence of
-decision 1:
+`docs/adr/0027-embedder-placed-session-runtime.md:83-84`, the last sentence of
+decision 1 (it opens at the end of `:83`, so the paste target is both lines,
+not `:84` alone):
 
 > Tests `start_supervised!` the same supervisor.
 
@@ -309,25 +363,125 @@ recorded deviations is doing decision work, and should say the true thing.
 
 ---
 
-## Open questions for the reviewer
+## Amendment 3: the harness moduledoc must agree with the amended ADR-0006
 
-Recorded rather than resolved, since no human was available during this pass:
+This one is not in the bead. It surfaced during the 2026-08-17 verification
+pass and is included on the reviewer's call, because Amendment 1 cannot land
+correctly without it: the moduledoc is where a test author actually reads the
+constraint, and an ADR that disagrees with it just moves the contradiction.
 
-1. **In-place amendment vs. a new ADR.** ADR-0001:16 says decisions are
-   "amended by a new ADR that supersedes it"; practice (ADR-0002, ADR-0008)
-   has bead-driven in-place amendments for changes below ADR size, with the
-   original text preserved. This proposal recommends the in-place form for
-   both amendments on that precedent, but if the reviewer reads ADR-0001
-   strictly, both amendments could instead ride one small new ADR
-   ("Corpus driving paths and the test-placed session runtime") that amends
-   0006 and 0027 the way ADR-0026 amends ADR-0004. The content above is
-   usable either way.
-2. **How sharp to keep ADR-0006's teeth.** See "against" under Amendment 1:
-   the drafted wording sanctions "the already-public session surface"; a
-   stricter reviewer may prefer an enumerated closed set whose growth reopens
-   the record. Both phrasings are drafted-for above; the choice is a
-   direction call.
-3. **The amendment dates.** Both drafts use 2026-08-16 (this proposal's
-   date). If the human lands them later, the status-line and inline dates
-   should be the landing date, per the ADR-0008 precedent of dating the
-   amendment, not the triggering work.
+### The current text
+
+`test/support/case.ex:48-58`, the section headed "Two driving paths, one
+four-function contract":
+
+> The session path replaces two of the four - `initialize` becomes
+> `Statifier.start_session/2`, `send_event` becomes
+> `Statifier.Session.send_event/2` - while `Statifier.compile/1` and
+> `Statifier.active_leaf_states/1` stay exactly as they were. Either way the
+> corpus still cannot widen the library surface beyond those calls (ADR-0006).
+
+### What the code does today
+
+Five session functions, not two. Beyond `Statifier.start_session/2` (`:175`)
+and `Session.send_event/2` (`:182`), the same path calls `Session.stop/2`
+(`:186`), `Session.snapshot/1` (`:239`), and `Session.status/1` (`:240`,
+`:272`). Counting the shared `Statifier.compile/1` and
+`Statifier.active_leaf_states/1`, the session path touches seven functions
+against the synchronous path's four.
+
+The heading's claim - "one four-function contract" - and the closing sentence
+"the corpus still cannot widen the library surface beyond those calls" are
+both true in spirit and false as written: the surface is wider than the four,
+it is simply still all public API. That is exactly the distinction Amendment 1
+makes precise.
+
+### Proposed change
+
+Retitle the section from "Two driving paths, one four-function contract" to
+"Two driving paths, one closed contract", and replace the substitution
+sentence with the honest set, deferring to the ADR as the authority:
+
+```
+The session path keeps `Statifier.compile/1` and
+`Statifier.active_leaf_states/1` exactly as they were and replaces the other
+two with five: `initialize` becomes `Statifier.start_session/2`, `send_event`
+becomes `Statifier.Session.send_event/2`, and driving a live session
+additionally needs `Statifier.Session.snapshot/1` to read a configuration,
+`Statifier.Session.status/1` to know when it has settled, and
+`Statifier.Session.stop/2` to tear it down. Nine functions across the two
+paths, enumerated in ADR-0006 and closed: adding a tenth, or a third driving
+path, reopens that record rather than being a harness change. Either way the
+corpus still cannot widen the library surface, because every one of the nine
+is public API carried by its own record.
+```
+
+The `assert_every_leaf_named/2` carve-out already documented at `:35-40` is
+correct as written and stays - Amendment 1's wording adopts its reasoning
+rather than replacing it.
+
+### What stays untouched
+
+- Every other section of the moduledoc, including the four-function opening
+  at `:15-18` (which describes the synchronous path and is accurate for it)
+  and the `MachineState.active_leaf_states/1` carve-out at `:35-40`.
+- All harness behavior. This is a comment change; no function moves.
+
+### For and against
+
+**For.** The moduledoc is the proximate cause of the drift this whole bead
+exists to fix: it is what a test author reads, and it currently licenses a
+belief ("the session path is just two substitutions") that the code has never
+matched. Landing ADR-0006's enumerated set while leaving the moduledoc at
+"two of the four" would put the repo's two statements of the same constraint
+in open disagreement, which is worse than the single stale statement it
+started with.
+
+**Against, worth a reviewer's attention.** This is the one item of the three
+that touches a file under `test/`, so it carries a real quality gate rather
+than riding the docs carve-out, and it widens the bead past the two ADRs its
+title names. A reviewer who wants st-hgyu to stay exactly the ADR bead it was
+filed as could split this into its own bead instead - the write-up above is
+self-contained enough to move. The recommendation is to keep it here, because
+the correction is only discoverable from the enumeration work Amendment 1 did,
+and separating them invites landing the ADR without it.
+
+---
+
+## Reviewer decisions (2026-08-17)
+
+The three questions below were left open by the 2026-08-16 pass because no
+human was available. They were reviewed on 2026-08-17 and are recorded here
+with their resolutions; the drafted wording above already reflects them.
+
+1. **In-place amendment vs. a new ADR -> in-place, both records.** ADR-0001:16
+   says decisions are "amended by a new ADR that supersedes it", but the
+   practiced convention has two forms and the second is bead-driven in-place
+   amendment for changes below ADR size, with the original text preserved
+   (ADR-0002:3 and `:30`; ADR-0008:3 and `:28-32`, the latter driven by
+   st-mvna and quoting the sentence it replaced). Neither of these amendments
+   reverses a decision or needs new argumentation of ADR size, so both take
+   the in-place form in the ADR-0008 style. ADR-0001's real point - that the
+   path taken stays visible and the record is never silently rewritten - is
+   honored by the preserved-original notes.
+2. **How sharp to keep ADR-0006's teeth -> the enumerated closed set.** The
+   softer "already-public session surface" phrasing was rejected on the
+   evidence that the harness moduledoc had already leaked under exactly that
+   kind of rule. The amendment names nine functions, one declared
+   assertion-side carve-out, and states that growth or a third path reopens
+   the record. The cost is recorded under Amendment 1's "against": a sixth
+   session call now needs an ADR edit.
+3. **The amendment dates -> unchanged, and still the landing date.** The
+   drafts carry 2026-08-16. That is deliberate placeholder text, not a claim:
+   per the ADR-0008 precedent of dating the amendment rather than the
+   triggering work, whoever lands these stamps the date they land, in both the
+   status lines and the inline `*(Amended ...)*` markers.
+
+Nothing above has been landed. All three amendments remain a human's call,
+and this branch still touches no ADR and no harness file.
+
+The rejected alternative is kept on the record for whoever revisits this: both
+amendments could instead have ridden one small new ADR ("Corpus driving paths
+and the test-placed session runtime") amending 0006 and 0027 the way ADR-0026
+amends ADR-0004. The content above is usable that way with no rewriting, if
+the in-place form is ever judged to have been the wrong call.
