@@ -98,7 +98,13 @@ defmodule Statifier.Session.DatamodelReconstructionTest do
     session_id = Session.session_id(session)
 
     changes = collect_datamodel_changes(session_id)
-    assert length(changes) == 3
+    # 3 <data> bindings (ahead of the 3 <assign>s below in the stream) + the
+    # 3 <assign>s themselves. The bindings' own new_values
+    # equal @starting_datamodel's literal exactly, so folding them is a
+    # no-op on the reconstruction below - this count moves again, and the
+    # literal above is retired, in the phase that puts the baseline on the
+    # stream instead.
+    assert length(changes) == 6
 
     reconstructed = reconstruct(@starting_datamodel, changes)
 

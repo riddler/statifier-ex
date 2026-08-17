@@ -233,10 +233,14 @@ defmodule Statifier.Interpreter.InvokePassTest do
     {:ok, s0_index} = Statifier.Machine.index(m, "s0")
     {result, effects} = Interpreter.initialize(m)
 
+    # `<data id="myid"/>` also binds at initialization, emitting its own
+    # `{:datamodel_change, %{d_index: 0, owner: nil}}` ahead of this one -
+    # filtered out here since this test is about the idlocation write's own
+    # `owner`, not the binding.
     assert [{:datamodel_change, change}, {:invoke, invoke_effect}] =
              for(
-               {tag, _payload} = effect <- effects,
-               tag in [:datamodel_change, :invoke],
+               {tag, payload} = effect <- effects,
+               tag == :invoke or (tag == :datamodel_change and payload.owner != nil),
                do: effect
              )
 

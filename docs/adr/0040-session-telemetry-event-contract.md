@@ -387,6 +387,18 @@ any binding, not a write attributable to one construct, so there is no index
 of any kind for the resolution rule to apply to. This is the existing rule
 applied to a payload with no identity field, not a carve-out from it.
 
+`[:statifier, :session, :effect, :datamodel_change]`'s metadata clause above
+also gains `d_index`, for the binding-effect half of the same bead:
+`Statifier.Interpreter.Datamodel.bind_value/4` now emits a
+`%DatamodelChange{}` per successful `<data>` binding, carrying a non-nil
+`d_index` and `c_index: nil` (plan decision 3), the mirror image of a write's
+`c_index: <n>`/`d_index: nil`. The location-resolution rule above gains
+`Statifier.Machine.data/2` as a fourth resolver alongside `content/2`, `at/2`,
+and `transition/2`: a binding's `metadata.location` resolves through it,
+ahead of the `c_index` clauses in `Statifier.Session.Telemetry`'s `location/2`
+- the ordering is load-bearing, since `%DatamodelChange{}` now carries both
+fields and the resolver dispatches on field name in clause order.
+
 **Trace effect events (9), emitted only under `trace: true`:**
 
 `[:statifier, :session, :trace, kind]` for

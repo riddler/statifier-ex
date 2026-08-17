@@ -269,12 +269,15 @@ defmodule Statifier.Interpreter.Datamodel do
   `machine_state` right after `seed/2` and before the binding fold - the
   datamodel as it stands the instant every declared `<data>` exists but
   before any of them has a value (see `Statifier.Effect.DatamodelInit`'s own
-  moduledoc for what the map does and does not carry). Binding itself
-  produces no effect of its own - no trace effect (`docs/observability.md`'s
-  minimum trace vocabulary is a closed table and datamodel binding is not a
-  member of it) and no core effect either; the one observable event a
-  binding pass can produce, `error.execution`, is already an ordinary
-  internal event that travels on `machine_state`'s own queue.
+  moduledoc for what the map does and does not carry). Every effect after it,
+  in ascending `d_index` order, is a `{:datamodel_change,
+  %Effect.DatamodelChange{}}` for one successful `<data>` binding
+  (`bind_value/4`, decision 3) - a failed or environment-skipped
+  binding emits nothing (decision 5). No trace effect is produced either way
+  (`docs/observability.md`'s minimum trace vocabulary is a closed table and
+  datamodel binding is not a member of it); the one observable event a failed
+  binding can produce, `error.execution`, is already an ordinary internal
+  event that travels on `machine_state`'s own queue.
   """
   @spec initialize(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
   def initialize(%MachineState{machine: machine} = machine_state) do
@@ -307,12 +310,13 @@ defmodule Statifier.Interpreter.Datamodel do
     # no <data>'s value may read another <data> in the same pass.
     context = Evaluator.context(machine_state)
 
-    machine_state =
-      Enum.reduce(d_indexes, machine_state, fn d_index, ms ->
-        bind(ms, machine, context, d_index, top_level_indexes, env_ids)
+    {machine_state, binding_effects} =
+      Enum.reduce(d_indexes, {machine_state, []}, fn d_index, {ms, effects} ->
+        {ms, new_effects} = bind(ms, machine, context, d_index, top_level_indexes, env_ids)
+        {ms, effects ++ new_effects}
       end)
 
-    {machine_state, [init_effect]}
+    {machine_state, [init_effect | binding_effects]}
   end
 
   # Every declared <data> id, seeded to :undefined - 5.3.3's
@@ -350,12 +354,16 @@ defmodule Statifier.Interpreter.Datamodel do
           d_index :: non_neg_integer(),
           top_level_indexes :: MapSet.t(),
           env_ids :: MapSet.t()
-        ) :: MachineState.t()
+        ) :: {MachineState.t(), [Effect.t()]}
   defp bind(machine_state, machine, context, d_index, top_level_indexes, env_ids) do
     data = Machine.data(machine, d_index)
 
     if MapSet.member?(top_level_indexes, d_index) and MapSet.member?(env_ids, data.id) do
-      machine_state
+      # Environment-supplied top-level <data> - decision 5's other half. The
+      # environment's value is already on the datamodel (5.3.2's override),
+      # and the baseline effect already carries it, so no
+      # {:datamodel_change, _} is emitted for a value nothing here wrote.
+      {machine_state, []}
     else
       bind_value(machine_state, context, d_index, data)
     end
@@ -366,19 +374,46 @@ defmodule Statifier.Interpreter.Datamodel do
           context :: Predicator.Context.t(),
           d_index :: non_neg_integer(),
           data :: Machine.Data.t()
-        ) :: MachineState.t()
+        ) :: {MachineState.t(), [Effect.t()]}
+  # Decision 5: a failed or short-circuited binding emits no effect - the
+  # datamodel did not change beyond the :undefined the baseline already
+  # reported, and the failure is already observable as error.execution.
   defp bind_value(machine_state, _context, d_index, %{value: {:invalid, error}}) do
-    raise_binding_error(machine_state, d_index, error)
+    {raise_binding_error(machine_state, d_index, error), []}
   end
 
   defp bind_value(machine_state, _context, d_index, %{value: {:src, uri}}) do
-    raise_binding_error(machine_state, d_index, {:src, uri})
+    {raise_binding_error(machine_state, d_index, {:src, uri}), []}
   end
 
   defp bind_value(machine_state, context, d_index, %{id: id} = data) do
     case Evaluator.evaluate(context, data.value) do
-      {:ok, value} -> %{machine_state | datamodel: Map.put(machine_state.datamodel, id, value)}
-      {:error, reason} -> raise_binding_error(machine_state, d_index, reason)
+      {:ok, value} ->
+        # A binding writes at the root key, so the prior value is one
+        # Map.get/3 - no read_path/2 walk is needed, and :undefined is
+        # ADR-0037's spelling for the seed seed/2 wrote. Under
+        # binding="late" this is not always the seed: an <assign> may have
+        # written the id before the containing state was first entered.
+        prior_value = Map.get(machine_state.datamodel, id, :undefined)
+
+        {%{machine_state | datamodel: Map.put(machine_state.datamodel, id, value)},
+         [
+           {:datamodel_change,
+            %Effect.DatamodelChange{
+              location_path: [id],
+              location_source: id,
+              new_value: value,
+              prior_value: prior_value,
+              d_index: d_index,
+              c_index: nil,
+              owner: nil,
+              macrostep: machine_state.macrostep,
+              microstep: machine_state.microstep
+            }}
+         ]}
+
+      {:error, reason} ->
+        {raise_binding_error(machine_state, d_index, reason), []}
     end
   end
 
@@ -398,11 +433,11 @@ defmodule Statifier.Interpreter.Datamodel do
   `entered_states` mutation, which `arrive/3` already owns for every other
   step of the same pseudocode body.
 
-  A no-op, returning `machine_state` unchanged with no allocation, in three
-  cases: under `binding == :early` (every `d_index` was already bound at
-  `initialize/1`, before any state was entered), under `binding == :late`
-  on a state whose own `<datamodel>` is empty (`data == []` - nothing to
-  bind), and on `state_index == 0` for the reason below.
+  A no-op, returning `{machine_state, []}` unchanged, in three cases: under
+  `binding == :early` (every `d_index` was already bound at `initialize/1`,
+  before any state was entered), under `binding == :late` on a state whose
+  own `<datamodel>` is empty (`data == []` - nothing to bind), and on
+  `state_index == 0` for the reason below.
 
   ## Why `state_index == 0` is a no-op
 
@@ -434,13 +469,14 @@ defmodule Statifier.Interpreter.Datamodel do
   (B.2.2's "no ordering dependencies" licenses this exactly as it does in
   `initialize/1`), each `d_index` bound through the same `bind_value/4` this
   module's `initialize/1` uses - same seeded-`:undefined`-on-failure,
-  `raise_platform/4` shape, Decision 2/3 unchanged. There is no environment
-  override on this path: Decision 1 scopes that skip to top-level `<data>`
-  only, and a state-scoped `<data>` on any state but the root is never
-  top-level.
+  `raise_platform/4` shape, Decision 2/3 unchanged, and the same
+  `{:datamodel_change, %Effect.DatamodelChange{}}` emission per successful
+  binding (decision 3). There is no environment override on this
+  path: Decision 1 scopes that skip to top-level `<data>` only, and a
+  state-scoped `<data>` on any state but the root is never top-level.
   """
   @spec enter_state(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
-          MachineState.t()
+          {MachineState.t(), [Effect.t()]}
   # Not a re-derivation of enterStates: that name stays on
   # Statifier.Interpreter.ExitEntry.enter_states/2, the actual Appendix D
   # port. This is the state-scoped datamodel pass ADR-0002's "no procedure
@@ -456,24 +492,25 @@ defmodule Statifier.Interpreter.Datamodel do
           machine :: Machine.t(),
           binding :: :early | :late,
           state_index :: non_neg_integer()
-        ) :: MachineState.t()
-  defp bind_state_data(machine_state, _machine, :early, _state_index), do: machine_state
+        ) :: {MachineState.t(), [Effect.t()]}
+  defp bind_state_data(machine_state, _machine, :early, _state_index), do: {machine_state, []}
 
   # The root's own data is the top-level data, already bound by initialize/1 -
   # see this function's "Why `state_index == 0` is a no-op" section. Must
   # precede the general :late clause.
-  defp bind_state_data(machine_state, _machine, :late, 0), do: machine_state
+  defp bind_state_data(machine_state, _machine, :late, 0), do: {machine_state, []}
 
   defp bind_state_data(machine_state, machine, :late, state_index) do
     case Machine.at(machine, state_index).data do
       [] ->
-        machine_state
+        {machine_state, []}
 
       d_indexes ->
         context = Evaluator.context(machine_state)
 
-        Enum.reduce(d_indexes, machine_state, fn d_index, ms ->
-          bind_value(ms, context, d_index, Machine.data(machine, d_index))
+        Enum.reduce(d_indexes, {machine_state, []}, fn d_index, {ms, effects} ->
+          {ms, new_effects} = bind_value(ms, context, d_index, Machine.data(machine, d_index))
+          {ms, effects ++ new_effects}
         end)
     end
   end

@@ -26,6 +26,14 @@ defmodule Statifier.Effect.DatamodelChange do
   auto-assign and `<invoke idlocation>` - that write outside any content
   block; `owner` names which construct performed it (decision 3).
   `macrostep`/`microstep` are the counters as they stood when the write ran.
+
+  `d_index` and `c_index` are mutually exclusive identities on this payload
+  (decision 3): a non-nil `d_index` means the write was a `<data>`
+  binding performed by `Statifier.Interpreter.Datamodel.bind_value/4`, which
+  belongs to no content block and therefore always carries `owner: nil`. A
+  `<data>` element is not executable content, so `Machine.content/2` could
+  never resolve it - `Statifier.Machine.data/2` is its resolver instead, the
+  same relationship `c_index` has to `Machine.content/2`.
   """
 
   alias Statifier.Machine.Content
@@ -46,6 +54,7 @@ defmodule Statifier.Effect.DatamodelChange do
     :location_source,
     :new_value,
     :prior_value,
+    :d_index,
     :c_index,
     :owner,
     :macrostep,
@@ -57,6 +66,7 @@ defmodule Statifier.Effect.DatamodelChange do
           location_source: String.t(),
           new_value: term(),
           prior_value: term(),
+          d_index: non_neg_integer() | nil,
           c_index: non_neg_integer() | nil,
           owner: owner() | nil,
           macrostep: non_neg_integer(),

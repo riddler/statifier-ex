@@ -2,8 +2,10 @@ defmodule Statifier.Interpreter.DatamodelTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.DatamodelInit
   alias Statifier.Evaluator
+  alias Statifier.Event
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter
@@ -408,7 +410,9 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
       {ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
-      assert [{:datamodel_init, %DatamodelInit{datamodel: datamodel}}] = effects
+      assert [{:datamodel_init, %DatamodelInit{datamodel: datamodel}} | _binding_effects] =
+               effects
+
       assert datamodel["Var1"] == :undefined
       # The live machine_state, by contrast, has the bound value - proving
       # the baseline is a snapshot taken before the fold, not the same map.
@@ -453,6 +457,286 @@ defmodule Statifier.Interpreter.DatamodelTest do
     end
   end
 
+  describe "the {:datamodel_change, %Effect.DatamodelChange{}} binding effect" do
+    # sabotage: `bind_value/4`'s success clause is changed to build the
+    # effect with `d_index: nil` instead of `d_index: d_index` -> the
+    # `== 0` assertion below reddens.
+    test "binding=\"early\", a top-level <data expr> emits one :datamodel_change with d_index set" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="x" expr="1"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}, {:datamodel_change, change}] = effects
+      assert change.d_index == 0
+      assert change.c_index == nil
+      assert change.owner == nil
+      assert change.location_path == ["x"]
+      assert change.location_source == "x"
+      assert change.new_value == 1
+      assert change.prior_value == :undefined
+    end
+
+    # sabotage: `Datamodel.d_indexes_to_bind/2`'s `:early` clause is changed
+    # to `MapSet.to_list(top_level_indexes)` (top-level only) instead of the
+    # full `d_index` range -> "Local1"'s binding effect never appears,
+    # reddening the three-element match below.
+    test "binding=\"early\", a state-scoped <data> is also bound at initialize/1 and also emitted" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="Root1" expr="1"/>
+            </datamodel>
+            <state id="s0">
+                <datamodel>
+                    <data id="Local1" expr="2"/>
+                </datamodel>
+            </state>
+        </scxml>
+        """)
+
+      {_ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [
+               {:datamodel_init, _init},
+               {:datamodel_change, root_change},
+               {:datamodel_change, local_change}
+             ] = effects
+
+      assert root_change.d_index == 0
+      assert root_change.location_path == ["Root1"]
+      assert local_change.d_index == 1
+      assert local_change.location_path == ["Local1"]
+      assert local_change.new_value == 2
+    end
+
+    # sabotage: `Datamodel.d_indexes_to_bind/2`'s `:late` clause is changed
+    # to the `:early` clause's own body (`0..(tuple_size(machine.data_elements)
+    # - 1)//1`) -> "Local1" would also be bound and emitted at `initialize/1`,
+    # reddening the two-element match below.
+    test "binding=\"late\", only the top-level <data> emits from initialize/1" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <datamodel>
+                <data id="Root1" expr="1"/>
+            </datamodel>
+            <state id="s0">
+                <datamodel>
+                    <data id="Local1" expr="2"/>
+                </datamodel>
+            </state>
+        </scxml>
+        """)
+
+      {_ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}, {:datamodel_change, change}] = effects
+      assert change.location_path == ["Root1"]
+    end
+
+    # sabotage: `bind/6`'s environment-skip branch is changed to call
+    # `bind_value(machine_state, context, d_index, data)` unconditionally
+    # instead of returning `{machine_state, []}` -> the environment's "Var1"
+    # would emit a spurious :datamodel_change, reddening the one-element
+    # match below.
+    test "an environment-overridden top-level <data> emits no :datamodel_change" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="Var1" expr="1"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} =
+        machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}] = effects
+    end
+
+    # sabotage: `bind_value/4`'s `{:invalid, error}` clause is changed to
+    # return `{raise_binding_error(machine_state, d_index, error), [{:ok,
+    # :sabotage}]}` instead of `{..., []}` -> a spurious element appears,
+    # reddening the one-element match below.
+    test "a {:invalid, _} value emits no :datamodel_change while still raising error.execution" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="o1" expr="{p1: 'v1'"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}] = effects
+      assert [event] = MachineState.internal_events(ms)
+      assert event.name == "error.execution"
+    end
+
+    # sabotage: `bind_value/4`'s `{:src, uri}` clause is changed to return
+    # `{raise_binding_error(machine_state, d_index, {:src, uri}), [{:ok,
+    # :sabotage}]}` instead of `{..., []}` -> a spurious element appears,
+    # reddening the one-element match below.
+    test "a src value emits no :datamodel_change while still raising error.execution" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="Var1" src="file:x.txt"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}] = effects
+      assert [event] = MachineState.internal_events(ms)
+      assert event.name == "error.execution"
+    end
+
+    # sabotage: `bind_value/4`'s catch-all clause's `{:error, reason} ->
+    # {raise_binding_error(...), []}` branch is changed to `{raise_binding_error(...),
+    # [{:ok, :sabotage}]}` -> a spurious element appears, reddening the
+    # one-element match below.
+    test "an evaluation failure emits no :datamodel_change while still raising error.execution" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="Var1" expr="return"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init}] = effects
+      assert [event] = MachineState.internal_events(ms)
+      assert event.name == "error.execution"
+    end
+
+    # sabotage: `initialize/1`'s `Enum.reduce/3` binding fold is changed to
+    # `effects ++ new_effects` reversed to `new_effects ++ effects` -> the
+    # accumulated order would put every later d_index's effect ahead of
+    # earlier ones instead of after, reddening the ascending-order
+    # assertion below.
+    test "binding effects arrive in ascending d_index order, after the baseline" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="a" expr="1"/>
+                <data id="b" expr="2"/>
+                <data id="c" expr="3"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, _init} | changes] = effects
+      assert Enum.map(changes, fn {:datamodel_change, c} -> c.d_index end) == [0, 1, 2]
+    end
+  end
+
+  describe "the binding effect through a full chart (Interpreter.initialize/2 + handle_event/2)" do
+    # sabotage: `ExitEntry.arrive/3`'s final concatenation drops
+    # `data_effects`, reverting to `onentry_effects ++ default_entry_effects
+    # ++ completion_effects` -> "c"'s late-bound `<data id="X">` would still
+    # bind (the write happens either way) but its `:datamodel_change` effect
+    # would never reach the returned effect list, reddening the "exactly one"
+    # assertion on first entry.
+    test "a late-bound state-scoped <data> emits its :datamodel_change on first entry only" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <state id="s0">
+                <transition event="go" target="c"/>
+            </state>
+            <state id="c">
+                <datamodel>
+                    <data id="X" expr="1"/>
+                </datamodel>
+                <transition event="back" target="s0"/>
+            </state>
+        </scxml>
+        """)
+
+      {ms, init_effects} = Interpreter.initialize(machine)
+
+      refute Enum.any?(init_effects, &binding_change_for?(&1, "X"))
+
+      {:ok, ms, go_effects} = Interpreter.handle_event(ms, Event.external("go"))
+      assert Enum.count(go_effects, &binding_change_for?(&1, "X")) == 1
+      assert ms.datamodel["X"] == 1
+
+      {:ok, ms, back_effects} = Interpreter.handle_event(ms, Event.external("back"))
+      refute Enum.any?(back_effects, &binding_change_for?(&1, "X"))
+
+      {:ok, _ms, reentry_effects} = Interpreter.handle_event(ms, Event.external("go"))
+      refute Enum.any?(reentry_effects, &binding_change_for?(&1, "X"))
+    end
+
+    # sabotage: `bind_value/4`'s success clause's `prior_value = Map.get(...)`
+    # binding is changed to `prior_value = :undefined` unconditionally ->
+    # the `== 42` assertion below reddens, since the seeded-then-assigned
+    # value would be misreported as never-bound.
+    test "a pre-existing <assign> makes prior_value the assigned value, not :undefined" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0" binding="late">
+            <state id="s0">
+                <onentry>
+                    <assign location="Y" expr="42"/>
+                </onentry>
+                <transition event="go" target="c"/>
+            </state>
+            <state id="c">
+                <datamodel>
+                    <data id="Y" expr="1"/>
+                </datamodel>
+            </state>
+        </scxml>
+        """)
+
+      {ms, _init_effects} = Interpreter.initialize(machine)
+      assert ms.datamodel["Y"] == 42
+
+      {:ok, _ms, go_effects} = Interpreter.handle_event(ms, Event.external("go"))
+
+      assert [change] =
+               for(
+                 {:datamodel_change, %DatamodelChange{location_path: ["Y"]} = c} <- go_effects,
+                 do: c
+               )
+
+      assert change.prior_value == 42
+      assert change.new_value == 1
+    end
+
+    defp binding_change_for?({:datamodel_change, %DatamodelChange{location_path: [id]}}, id),
+      do: true
+
+    defp binding_change_for?(_effect, _id), do: false
+  end
+
   describe "enter_state/2 (Phase 5's per-state late-binding step)" do
     defp late_machine do
       compile!("""
@@ -477,7 +761,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
       assert ms.datamodel["Var1"] == :undefined
 
-      ms = Datamodel.enter_state(ms, s0)
+      {ms, _effects} = Datamodel.enter_state(ms, s0)
       assert ms.datamodel["Var1"] == 1
     end
 
@@ -505,9 +789,10 @@ defmodule Statifier.Interpreter.DatamodelTest do
       # write an <assign>-equivalent left afterward.
       ms = %{ms | datamodel: Map.put(ms.datamodel, "Var1", "kept")}
 
-      result = Datamodel.enter_state(ms, s0)
+      {result, effects} = Datamodel.enter_state(ms, s0)
 
       assert result == ms
+      assert effects == []
       assert result.datamodel["Var1"] == "kept"
     end
 
@@ -534,9 +819,10 @@ defmodule Statifier.Interpreter.DatamodelTest do
       s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
       {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
-      result = Datamodel.enter_state(ms, s0)
+      {result, effects} = Datamodel.enter_state(ms, s0)
 
       assert result == ms
+      assert effects == []
       assert result.datamodel["Other1"] == :undefined
     end
 
@@ -585,7 +871,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
         |> MachineState.new(datamodel: %{"Var1" => 99})
         |> Datamodel.initialize()
 
-      assert Datamodel.enter_state(ms, 0) == ms
+      assert Datamodel.enter_state(ms, 0) == {ms, []}
     end
   end
 
