@@ -21,7 +21,7 @@
 | [0017](0017-judgment-not-scriptable-in-wurk-extensions.md) | Judgment is not scriptable, scoped to the wurk extension surface | accepted (supersedes 0015; amends 0016 in part) |
 | [0018](0018-no-process-jargon-in-code-comments.md) | Process artifacts are not code comments | accepted |
 | [0019](0019-macrostep-round-budget.md) | A round budget bounds the macrostep fold | accepted (amended in part by 0020: round ordinal; amended in part by 0032: invoke re-entry) |
-| [0020](0020-round-ordinal-joins-the-step-counters.md) | A round ordinal joins the step counters | accepted (amends 0019 in part; amended in part by 0045: the core-effect exemption is withdrawn) |
+| [0020](0020-round-ordinal-joins-the-step-counters.md) | A round ordinal joins the step counters | accepted (amends 0019 in part; amended in part by 0046: the core-effect exemption is withdrawn) |
 | [0021](0021-donedata-content-expr-failure-yields-no-data.md) | A failed donedata content expr yields no data | accepted |
 | [0022](0022-parallel-is-never-the-lcca.md) | A parallel is never the LCCA; SCION's contrary tests leave the corpus | accepted |
 | [0023](0023-numeric-type-fixes-upstream-not-boundary-coercion.md) | Numeric-type gaps are fixed in predicator, never coerced at the boundary | accepted |
@@ -41,13 +41,13 @@
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 | [0038](0038-invoke-source-resolves-at-the-session-boundary.md) | `<invoke>`'s source resolves at the session boundary, never inside the library | accepted |
 | [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted |
-| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location; amended 2026-08-16: `:datamodel_change` joins the core effect events; amended in part by 0045: `round` joins every core-effect event's measurements) |
+| [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location; amended 2026-08-16: `:datamodel_change` joins the core effect events; amended in part by 0046: `round` joins every core-effect event's measurements) |
 | [0041](0041-content-markup-lowers-to-a-source-slice.md) | `<content>` markup lowers to a source slice, compiled at invoke time | accepted (amended 2026-08-16: namespace limitation corrected - the corpus child documents do not compile standalone; amended in part by 0042) |
 | [0042](0042-invoke-content-compiles-under-the-relaxed-namespace-rule.md) | Invoke content markup compiles under the relaxed namespace rule | accepted (amends 0041 in part) |
 | [0043](0043-attribute-values-normalize-per-xml-3-3-3.md) | Attribute values normalize per XML 1.0 3.3.3, guided by the raw source | accepted |
 | [0044](0044-re-entry-effects-defer-to-the-outer-batch.md) | Re-entry effects defer to the outer batch; subscriber delivery is monotone in `(macrostep, round)` and `{:halted, _}` is end-of-stream | accepted |
 | [0045](0045-character-data-folds-line-breaks-per-xml-2-11.md) | Character data folds line breaks per XML 1.0 2.11, guided by the raw source (resolves 0043's open question) | accepted |
-| [0045](0045-round-on-every-core-effect.md) | Every core effect carries `round`; the ADR-0020 exemption is withdrawn and `round` joins the core-effect event measurements | accepted (amends 0020 in part; amends 0040 in part) |
+| [0046](0046-round-on-every-core-effect.md) | Every core effect carries `round`; the ADR-0020 exemption is withdrawn and `round` joins the core-effect event measurements | accepted (amends 0020 in part; amends 0040 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

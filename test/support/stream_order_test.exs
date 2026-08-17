@@ -4,7 +4,7 @@ defmodule Statifier.StreamOrderTest do
   alias Statifier.StreamOrder
 
   # sabotage: n/a - this test asserts test/support/stream_order.ex's own
-  # harness behavior (Gap 2 of ADR-0045's post-implementation review), not
+  # harness behavior (Gap 2 of ADR-0046's post-implementation review), not
   # lib/ behavior. `counters/1`'s new clause is exercised directly through
   # `assert_monotone/1`'s public surface below. Verified anyway: with the
   # new `{:effect, {tag, %{macrostep: macrostep} = payload}}` flunk clause

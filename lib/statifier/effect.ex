@@ -53,7 +53,7 @@ defmodule Statifier.Effect do
   ## Trace effects carry indexes and counters, never structs
 
   Every effect in this vocabulary, core and trace alike, carries
-  `macrostep`/`microstep`/`round` (constraint 4, ADR-0045); trace payloads
+  `macrostep`/`microstep`/`round` (constraint 4, ADR-0046); trace payloads
   additionally carry, wherever one names an entity, a constraint-3
   *identity* - a state index, a `t_index`, a `c_index` - never a
   `%Statifier.Machine.State{}`, `%Statifier.Machine.Transition{}`, or a

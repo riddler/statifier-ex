@@ -104,7 +104,7 @@ defmodule Statifier.Machine.Content.CancelTest do
     # hardcoded to `round: 0` -> this test's `round == 9` assertion reddens
     # against a machine state whose round has actually advanced past 0.
     # Reverted and confirmed green.
-    test "round is stamped from machine_state.round (ADR-0045)" do
+    test "round is stamped from machine_state.round (ADR-0046)" do
       m = machine()
       ms = %{machine_state(m) | round: 9}
       node = cancel_node(m, "bare")

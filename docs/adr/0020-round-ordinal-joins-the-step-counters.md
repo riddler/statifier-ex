@@ -1,7 +1,7 @@
 # ADR-0020: A round ordinal joins the step counters
 
 Status: accepted (2026-08-13) - amends ADR-0019 in part - amended in part by
-ADR-0045 (2026-08-17: the core-effect exemption is withdrawn; every core
+ADR-0046 (2026-08-17: the core-effect exemption is withdrawn; every core
 effect carries `round`)
 
 ## Context

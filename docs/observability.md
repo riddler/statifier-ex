@@ -94,7 +94,7 @@ Rules:
   the batch that triggered them rather than delivered inline, which is what
   keeps arrival order monotone (ADR-0044 decision 1). That live-arrival
   guarantee is stronger than re-derivability, not a substitute for it: every
-  effect carries the counter triple (ADR-0045), so a consumer holding a mixed
+  effect carries the counter triple (ADR-0046), so a consumer holding a mixed
   stream whose arrival order was lost can still sort it back into
   `(macrostep, round)` order offline, including under `trace: false`.
 - "Either selection function" is `select_eventless_transitions/1` and

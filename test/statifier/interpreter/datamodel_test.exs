@@ -461,7 +461,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
     # advanced-to-1 value in the test above) instead of reading
     # `machine_state.round` -> red, since `round` never advances before
     # `Datamodel.initialize/1` runs (only `begin_round/1` writes it, and
-    # nothing calls it this early) - ADR-0045's "round: 0 before the fold
+    # nothing calls it this early) - ADR-0046's "round: 0 before the fold
     # begins" case.
     test "the baseline carries round: 0, even though macrostep/microstep have already advanced" do
       machine =
