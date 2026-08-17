@@ -6,6 +6,7 @@ defmodule Statifier.Session.TelemetryTest do
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.DatamodelChange
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -646,6 +647,44 @@ defmodule Statifier.Session.TelemetryTest do
                        metadata}
 
       assert metadata.location == Machine.content(machine, 0).location
+    end
+
+    # sabotage: `core_shape/2`'s `DatamodelInit` clause drops `datamodel` from
+    # its metadata map (leaving `%{location: nil}`) -> red, `metadata.datamodel`
+    # raises `KeyError` and the baseline never reaches a telemetry subscriber
+    # at all, which is the whole point of the tag. Confirmed red and reverted.
+    #
+    # `:datamodel_init` is deliberately not in `@core_fixtures` above, for the
+    # same reason `:datamodel_change` is not: that table's loop asserts a
+    # uniform `(macrostep, microstep, effect)` shape, and both datamodel tags
+    # carry a payload-specific metadata key that the uniform loop cannot see.
+    # The generic contract is covered there; the specific key is covered here.
+    test "the :datamodel_init baseline carries its starting map as metadata", %{ref: ref} do
+      machine = located_machine()
+
+      payload = %DatamodelInit{
+        datamodel: %{"x" => :undefined, "_sessionid" => "sess1"},
+        macrostep: 1,
+        microstep: 1
+      }
+
+      Telemetry.effect("sess1", machine, {:datamodel_init, payload})
+
+      assert_received {[:statifier, :session, :effect, :datamodel_init], ^ref, measurements,
+                       metadata}
+
+      assert metadata.datamodel == %{"x" => :undefined, "_sessionid" => "sess1"}
+      assert metadata.effect == payload
+      assert measurements.macrostep == 1
+      assert measurements.microstep == 1
+
+      # ADR-0040 makes `location` a key every core-family event carries. This
+      # payload names no document node, so `core_shape/2` sets it as a literal
+      # `nil` rather than calling `location/2` - asserted here alongside the
+      # metadata above rather than in a test of its own, because a literal
+      # cannot be broken by any `location/2` clause and a separate test would
+      # be green by construction.
+      assert metadata.location == nil
     end
 
     # sabotage: two mutations, each confirmed independently. (1)

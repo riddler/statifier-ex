@@ -1135,18 +1135,31 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The touched functions still match the W3C spec prose they port (5.3.2 /
+- [x] The touched functions still match the W3C spec prose they port (5.3.2 /
       5.3.3 / B.2.2) and the Appendix D call-site ordering at `:101-102`; no
       pseudocode body is involved, per "The Appendix D rule" above.
-- [ ] The rewritten `initialize/1` `@doc` no longer predicts a trace row, and
+- [x] The rewritten `initialize/1` `@doc` no longer predicts a trace row, and
       states the core-effect reason instead.
-- [ ] The moduledoc table in `effect.ex`, the `@type core` union,
+- [x] The moduledoc table in `effect.ex`, the `@type core` union,
       `plan_one/2`, `@effect_kinds`, `core_shape/2`, the telemetry moduledoc
       table, and both fixture tables all name exactly the same eleven core
       tags - read them side by side once.
-- [ ] The ADR-0040 amendment reads as an amendment in that document's
+
+      **Verified 2026-08-17, and this item did not pass as written.**
+      `telemetry_test.exs`'s `@core_fixtures` names nine, not eleven: it
+      omits `:datamodel_init` and has omitted `:datamodel_change` since
+      st-oef3. That table's loop asserts a uniform
+      `(macrostep, microstep, effect)` shape, which cannot see either
+      datamodel tag's payload-specific metadata key, so both are covered by
+      dedicated tests instead - which is why the gate stayed green while
+      `core_shape/2`'s `DatamodelInit` clause had no telemetry assertion at
+      all. Closed by adding that dedicated test rather than by growing
+      `@core_fixtures`, following st-oef3's precedent. The item's premise
+      that all eight enumerations are parallel is wrong about
+      `@core_fixtures` specifically; the other seven do agree at eleven.
+- [x] The ADR-0040 amendment reads as an amendment in that document's
       established voice, not as a re-argument of the settled location rule.
-- [ ] No regressions in existing telemetry subscribers.
+- [x] No regressions in existing telemetry subscribers.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
 full gate as the phase gate. In interactive execution, pause here for the
@@ -1159,18 +1172,18 @@ deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions still match the W3C spec text they port - 5.3.2
+- [x] The touched functions still match the W3C spec text they port - 5.3.2
       (environment override), 5.3.3 (early/late binding and "before any
       `<onentry>` markup"), B.2.2 (no ordering dependencies) - line for line,
       with no control-flow change beyond the added return value, and the
       Appendix D call-site ordering at `:311-313` preserved.
-- [ ] `d_index`'s admission reads as completing an enumeration the compiler
+- [x] `d_index`'s admission reads as completing an enumeration the compiler
       had already outgrown, not as minting a new identity kind, in both
       `docs/observability.md` and the ADR-0012 amendment.
-- [ ] The `location/2` clause ordering is correct by reading, not only by the
+- [x] The `location/2` clause ordering is correct by reading, not only by the
       test: a `%DatamodelChange{}` with a `d_index` must not reach the
       `c_index` clauses.
-- [ ] No regressions in early/late binding behavior, the environment-override
+- [x] No regressions in early/late binding behavior, the environment-override
       skip, or the `error.execution` raised by a failed binding.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
@@ -1183,15 +1196,15 @@ automatically, and Manual Verification items are deferred to the end.
 
 ### Phase 3
 
-- [ ] The reconstruction genuinely uses no other channel: read the fold and
+- [x] The reconstruction genuinely uses no other channel: read the fold and
       confirm it touches only effect payload fields, no `%Machine{}`, no
       `%MachineState{}`.
-- [ ] The late-binding test would have failed against an init-time-snapshot-only
+- [x] The late-binding test would have failed against an init-time-snapshot-only
       design - i.e. it is testing decision 1's actual load-bearing case, not a
       restatement of test 1.
-- [ ] `docs/datamodel.md`'s new paragraph is accurate about both bindings and
+- [x] `docs/datamodel.md`'s new paragraph is accurate about both bindings and
       does not overclaim a wire format (`docs/observability.md:173-179`).
-- [ ] No regressions in `<assign>`, `<send idlocation>`, `<invoke idlocation>`,
+- [x] No regressions in `<assign>`, `<send idlocation>`, `<invoke idlocation>`,
       or `<finalize>` emission from st-oef3.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
