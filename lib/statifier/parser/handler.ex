@@ -28,6 +28,16 @@ defmodule Statifier.Parser.Handler do
   Every pop advances `cursor` to the popped record's end, which is what makes
   text spans computable: a run of character data covers everything between
   the cursor and the start of the next queued record, raw source included.
+
+  ## Attribute values
+
+  `build_attributes/3` normalizes each attribute's value per XML 1.0 3.3.3
+  (ADR-0043), walking the raw slice (`Location.slice(value_location, source)`)
+  against Saxy's expanded value with `Location.normalize_attribute_value/3` -
+  Saxy's value alone cannot tell a literal newline from an expanded `&#10;`,
+  so the raw text is what disambiguates. When the scanner has no record for an
+  attribute, or the record's `value_location` is `nil`, there is no raw slice
+  to walk and Saxy's value stands unnormalized.
   """
 
   @behaviour Saxy.Handler
@@ -82,7 +92,7 @@ defmodule Statifier.Parser.Handler do
     with {:ok, record, markup} <- pop(state, :start, name) do
       frame = %{
         record: record,
-        attributes: build_attributes(attributes, record.attributes),
+        attributes: build_attributes(state, attributes, record.attributes),
         children: []
       }
 
@@ -159,7 +169,7 @@ defmodule Statifier.Parser.Handler do
   # Saxy reports names and expanded values; the scanner reports where each
   # attribute sat. They are the same attributes in the same order, so the
   # join is by index.
-  defp build_attributes(event_attributes, scanned_attributes) do
+  defp build_attributes(state, event_attributes, scanned_attributes) do
     event_attributes
     |> Enum.with_index()
     |> Enum.map(fn {{name, value}, index} ->
@@ -167,12 +177,21 @@ defmodule Statifier.Parser.Handler do
 
       %DOM.Attribute{
         name: name,
-        value: value,
+        value: normalized_value(state, scanned, value),
         location: scanned && scanned.location,
         value_location: scanned && scanned.value_location
       }
     end)
   end
+
+  # No scanner record, or one without a value span, means no raw text to
+  # disambiguate a literal from a reference - so Saxy's value stands
+  # unnormalized rather than being guessed at (ADR-0043).
+  defp normalized_value(_state, nil, value), do: value
+  defp normalized_value(_state, %{value_location: nil}, value), do: value
+
+  defp normalized_value(state, %{value_location: value_location}, value),
+    do: Location.normalize_attribute_value(value_location, value, state.source)
 
   defp cursor_after(%Markup{location: location}) do
     {location.end_offset, location.end_line, location.end_column}
