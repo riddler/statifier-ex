@@ -45,17 +45,24 @@ defmodule Statifier.Case do
   (`:scion`, `:scxml_w3`), so `mix test` stays green while `test.regression`'s
   ratchet is the thing that grows.
 
-  ## Two driving paths, one four-function contract
+  ## Two driving paths, one closed contract
 
   `test_scxml/4` routes each document, on the same detected feature set, to
   one of two private paths. Documents that need real delivery, wall-clock
   timers, or child sessions (`@session_features` below) drive through a
   `Statifier.Session`; every other document drives synchronously through the
-  four functions this moduledoc opens with. The session path replaces two of
-  the four - `initialize` becomes `Statifier.start_session/2`, `send_event`
-  becomes `Statifier.Session.send_event/2` - while `Statifier.compile/1` and
-  `Statifier.active_leaf_states/1` stay exactly as they were. Either way the
-  corpus still cannot widen the library surface beyond those calls (ADR-0006).
+  four functions this moduledoc opens with. The session path keeps
+  `Statifier.compile/1` and `Statifier.active_leaf_states/1` exactly as they
+  were and replaces the other two with five: `initialize` becomes
+  `Statifier.start_session/2`, `send_event` becomes
+  `Statifier.Session.send_event/2`, and driving a live session additionally
+  needs `Statifier.Session.snapshot/1` to read a configuration,
+  `Statifier.Session.status/1` to know when it has settled, and
+  `Statifier.Session.stop/2` to tear it down. Nine functions across the two
+  paths, enumerated in ADR-0006 and closed: adding a tenth, or a third
+  driving path, reopens that record rather than being a harness change.
+  Either way the corpus still cannot widen the library surface, because every
+  one of the nine is public API carried by its own record.
 
   v1's `StateMachine` and logging helpers are deliberately not ported: the
   subsystems they drove do not exist in v2, and reintroducing them here would

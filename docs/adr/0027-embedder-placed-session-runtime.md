@@ -1,6 +1,6 @@
 # ADR-0027: Embedder-placed session runtime with a named registry
 
-Status: accepted (2026-08-14)
+Status: accepted (2026-08-14) - amended 2026-08-17 (st-hgyu: the test suite places one run-scoped runtime in test_helper.exs; start_supervised! could not be shared by async corpus files)
 
 ## Context
 
@@ -80,8 +80,18 @@ supervisor are `restart: :temporary`.** Four numbered decisions:
    amnesiacs; the embedder observes the loss through monitors). One
    default-named instance; multiple named runtimes are mechanism with no
    caller and stay out, per the same standing rule that kept
-   `states_to_invoke` off `MachineState` until st-cmq.6. Tests
-   `start_supervised!` the same supervisor.
+   `states_to_invoke` off `MachineState` until st-cmq.6. The test suite is
+   itself an embedder under this decision: it places one runtime for the
+   whole run in `test/test_helper.exs`, before `ExUnit.start/1`. *(Amended
+   2026-08-17, st-hgyu: this sentence originally read "Tests
+   `start_supervised!` the same supervisor." st-cmq.9's corpus harness made
+   that mechanism impossible to keep: `start_supervised!` binds the runtime's
+   lifetime to one test process, the children are fixed module-qualified
+   names so only one instance can exist per node, and the generated corpus is
+   `async: true` unconditionally, so no two corpus files could share a
+   runtime placed that way. The principle is untouched - the embedder places
+   the runtime, the library never does, and nothing in `lib/` starts a
+   process; only the stated test mechanism moved.)*
 
 2. **The registry is `Statifier.Registry`: a named, library-owned `Registry`
    with unique keys, keyed by the session id string.** Registration happens
