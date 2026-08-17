@@ -95,7 +95,8 @@ defmodule Statifier.Machine.Content.SendTest do
   end
 
   defp machine_state(m, opts \\ []) do
-    m |> MachineState.new(opts) |> Datamodel.initialize()
+    {ms, _effects} = m |> MachineState.new(opts) |> Datamodel.initialize()
+    ms
   end
 
   defp context(ms, owner \\ {:onentry, 0, 0}) do

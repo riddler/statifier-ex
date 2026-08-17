@@ -6,6 +6,7 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
   alias Statifier.Effect.DatamodelChange
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -25,7 +26,7 @@ defmodule Statifier.Session.EffectsTest do
   @origin SystemVariables.scxml_location(@session_id)
   @origintype SystemVariables.scxml_event_processor()
 
-  # Table-driven over the whole `Effect.t()` vocabulary (nineteen tags: ten
+  # Table-driven over the whole `Effect.t()` vocabulary (twenty tags: eleven
   # core plus nine trace), mirroring `test/statifier/effect_test.exs`'s
   # shape - a vocabulary member with no matching clause here falls through to
   # `plan_one/1`'s lack of a catch-all and raises a `FunctionClauseError`
@@ -226,6 +227,13 @@ defmodule Statifier.Session.EffectsTest do
            microstep: 1
          }}}
      ]},
+    {{:datamodel_init,
+      %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}},
+     [
+       {:notify,
+        {:datamodel_init,
+         %DatamodelInit{datamodel: %{"_sessionid" => "sess_1"}, macrostep: 1, microstep: 1}}}
+     ]},
     {{:trace,
       %Trace.EventDequeued{event: nil, from: :external, macrostep: 1, microstep: 1, round: 0}},
      [
@@ -323,8 +331,8 @@ defmodule Statifier.Session.EffectsTest do
   describe "plan/1 over the whole vocabulary" do
     # sabotage: n/a - this test only checks that the fixture table above is
     # complete, not any lib/ behavior.
-    test "the table covers all twenty-two fixtures across the nineteen-tag vocabulary" do
-      assert length(@vocabulary) == 22
+    test "the table covers all twenty-three fixtures across the twenty-tag vocabulary" do
+      assert length(@vocabulary) == 23
     end
 
     for {{{tag, payload} = effect, expected}, index} <- Enum.with_index(@vocabulary) do

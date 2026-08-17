@@ -2,6 +2,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Evaluator
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
@@ -41,7 +42,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert Map.has_key?(ms.datamodel, "Var1")
     assert ms.datamodel["Var1"] == nil
@@ -64,7 +65,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
     context = Evaluator.context(ms)
 
     assert Evaluator.evaluate(context, compiled_expr("Var1 === null")) == {:ok, true}
@@ -97,7 +98,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
     context = Evaluator.context(ms)
 
     assert Evaluator.evaluate(context, compiled_expr("Var1 === undefined")) == {:ok, true}
@@ -118,7 +119,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert ms.datamodel["Var1"] == 1
   end
@@ -139,7 +140,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert ms.datamodel["Var1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
@@ -164,7 +165,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert ms.datamodel["o1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
@@ -188,7 +189,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert ms.datamodel["Var1"] == :undefined
     assert [event] = MachineState.internal_events(ms)
@@ -212,7 +213,8 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
+    {ms, _effects} =
+      machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
 
     assert ms.datamodel["Var1"] == "from-env"
   end
@@ -234,7 +236,8 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
+    {ms, _effects} =
+      machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
 
     assert ms.datamodel["Var1"] == 1
   end
@@ -259,7 +262,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     assert ms.datamodel["Root1"] == 1
     assert Map.has_key?(ms.datamodel, "Local1")
@@ -284,7 +287,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       </scxml>
       """)
 
-    ms = machine |> MachineState.new() |> Datamodel.initialize()
+    {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
     node = %Assign{
       c_index: 0,
@@ -359,10 +362,94 @@ defmodule Statifier.Interpreter.DatamodelTest do
         </scxml>
         """)
 
-      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
       assert Map.keys(ms.datamodel) |> Enum.sort() ==
                Enum.sort(["_event", "_ioprocessors", "_name", "_sessionid"])
+    end
+  end
+
+  describe "the {:datamodel_init, %Effect.DatamodelInit{}} baseline effect" do
+    # sabotage: `Datamodel.initialize/1`'s `init_effect` carries `datamodel:
+    # %{}` instead of `machine_state.datamodel` -> the baseline's map is
+    # empty instead of holding the four system variables, reddening the
+    # equality below.
+    test "a document with no <datamodel> still emits exactly one baseline effect holding the four system variables" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, %DatamodelInit{datamodel: datamodel}}] = effects
+
+      assert Map.keys(datamodel) |> Enum.sort() ==
+               Enum.sort(["_event", "_ioprocessors", "_name", "_sessionid"])
+    end
+
+    # sabotage: `Datamodel.initialize/1`'s `init_effect` is built after the
+    # `Enum.reduce/3` binding fold instead of before it -> "Var1" would read
+    # `1` (the bound expr value) instead of `:undefined` in the baseline's
+    # own map, reddening the `== :undefined` assertion below - the baseline
+    # is genuinely pre-binding, not merely pre-effect (decision 1).
+    test "under binding=\"early\", every declared id appears as :undefined in the baseline, never the bound value" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <datamodel>
+                <data id="Var1" expr="1"/>
+            </datamodel>
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {ms, effects} = machine |> MachineState.new() |> Datamodel.initialize()
+
+      assert [{:datamodel_init, %DatamodelInit{datamodel: datamodel}}] = effects
+      assert datamodel["Var1"] == :undefined
+      # The live machine_state, by contrast, has the bound value - proving
+      # the baseline is a snapshot taken before the fold, not the same map.
+      assert ms.datamodel["Var1"] == 1
+    end
+
+    # sabotage: `Datamodel.initialize/1`'s `init_effect` carries `datamodel:
+    # %{}` instead of `machine_state.datamodel` -> an author-supplied
+    # `:datamodel` option's keys/values go missing from the baseline,
+    # reddening this assertion (decision 4).
+    test "an author :datamodel option's keys and values appear verbatim in the baseline" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} =
+        machine |> MachineState.new(datamodel: %{"Var1" => "from-env"}) |> Datamodel.initialize()
+
+      assert [{:datamodel_init, %DatamodelInit{datamodel: datamodel}}] = effects
+      assert datamodel["Var1"] == "from-env"
+    end
+
+    # sabotage: `Datamodel.initialize/1`'s `init_effect` stamps
+    # `machine_state.macrostep`/`.microstep` with hardcoded `0`s instead of
+    # reading them off `machine_state` -> this assertion reddens once
+    # `Interpreter.initialize/2` has already advanced both counters to 1
+    # before calling `Datamodel.initialize/1`.
+    test "macrostep/microstep on the baseline are the counters initialize/2 has already advanced" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+            <state id="s0"/>
+        </scxml>
+        """)
+
+      {_ms, effects} = Interpreter.initialize(machine)
+
+      assert [{:datamodel_init, %DatamodelInit{macrostep: 1, microstep: 1}} | _rest] = effects
     end
   end
 
@@ -387,7 +474,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
       machine = late_machine()
       s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
 
-      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
       assert ms.datamodel["Var1"] == :undefined
 
       ms = Datamodel.enter_state(ms, s0)
@@ -413,7 +500,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
 
       s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
 
-      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
       # Var1 was already bound to 1 by initialize/1 under :early; simulate a
       # write an <assign>-equivalent left afterward.
       ms = %{ms | datamodel: Map.put(ms.datamodel, "Var1", "kept")}
@@ -445,7 +532,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
         """)
 
       s0 = elem(Statifier.Machine.index(machine, "s0"), 1)
-      ms = machine |> MachineState.new() |> Datamodel.initialize()
+      {ms, _effects} = machine |> MachineState.new() |> Datamodel.initialize()
 
       result = Datamodel.enter_state(ms, s0)
 
@@ -493,7 +580,7 @@ defmodule Statifier.Interpreter.DatamodelTest do
         </scxml>
         """)
 
-      ms =
+      {ms, _effects} =
         machine
         |> MachineState.new(datamodel: %{"Var1" => 99})
         |> Datamodel.initialize()

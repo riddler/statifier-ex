@@ -246,7 +246,7 @@ defmodule Statifier.Interpreter do
     # `Datamodel.initialize/1` seeds every declared id unconditionally and
     # binds every d_index under :early, only the root's own under :late -
     # see its own moduledoc.
-    machine_state = Datamodel.initialize(machine_state)
+    {machine_state, datamodel_effects} = Datamodel.initialize(machine_state)
 
     # `executeGlobalScriptElement(doc)` (Appendix D `interpret`, prose
     # quoted below - the procedure has no body of its own in Appendix D,
@@ -272,7 +272,10 @@ defmodule Statifier.Interpreter do
     # return-site concatenation is the one place this ordering needs to be
     # readable: `global_effects ++ enter_effects ++ loop_effects` reads as
     # the same before-enterStates ordering this call site already documents,
-    # with no separate accumulator threading required.
+    # with no separate accumulator threading required. `datamodel_effects`
+    # (above) precedes all three at that same return site - it is
+    # `interpret`'s datamodel preamble, which Appendix D `:101-102` (quoted
+    # above) places ahead of both the global script and enterStates.
     {machine_state, global_effects} = run_global_scripts(machine_state, machine.global_scripts)
 
     {machine_state, enter_effects} =
@@ -280,7 +283,7 @@ defmodule Statifier.Interpreter do
 
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
-    {machine_state, global_effects ++ enter_effects ++ loop_effects}
+    {machine_state, datamodel_effects ++ global_effects ++ enter_effects ++ loop_effects}
   end
 
   # `expandScxmlSource(doc)` (Appendix D's own normalization step) is what

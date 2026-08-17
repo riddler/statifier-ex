@@ -82,6 +82,7 @@ defmodule Statifier.Interpreter.Datamodel do
   `Statifier.Interpreter.Selection.raise_cond_errors/2`).
   """
 
+  alias Statifier.Effect
   alias Statifier.Evaluator
   alias Statifier.Interpreter.Datamodel.Write
   alias Statifier.Machine
@@ -262,23 +263,35 @@ defmodule Statifier.Interpreter.Datamodel do
   binding to a state entry that never happens would leave it permanently
   unassigned - a spec violation, not a conforming late-binding delay.
 
-  Returns a bare `MachineState.t()`, never `{machine_state, [effect]}` like
-  every other function in `Statifier.Interpreter`: binding a `<data>`
-  produces no trace effect today
-  (`docs/observability.md`'s minimum trace vocabulary is a closed table and
-  datamodel binding is not a member of it) and no core effect either - the
-  one observable event a binding pass can produce, `error.execution`, is
-  already an ordinary internal event that travels on `machine_state`'s own
-  queue. Inventing a permanently-empty effect list at every call site would
-  be a shape built for symmetry with this module's siblings, not for a
-  caller that has anything to do with it; a future trace row would add the
-  second return value at that point, with its own caller.
+  Returns `{MachineState.t(), [Effect.t()]}`, like every other function in
+  `Statifier.Interpreter`: the first effect on the list is always the
+  `{:datamodel_init, %Effect.DatamodelInit{}}` baseline, built from
+  `machine_state` right after `seed/2` and before the binding fold - the
+  datamodel as it stands the instant every declared `<data>` exists but
+  before any of them has a value (see `Statifier.Effect.DatamodelInit`'s own
+  moduledoc for what the map does and does not carry). Binding itself
+  produces no effect of its own - no trace effect (`docs/observability.md`'s
+  minimum trace vocabulary is a closed table and datamodel binding is not a
+  member of it) and no core effect either; the one observable event a
+  binding pass can produce, `error.execution`, is already an ordinary
+  internal event that travels on `machine_state`'s own queue.
   """
-  @spec initialize(machine_state :: MachineState.t()) :: MachineState.t()
+  @spec initialize(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
   def initialize(%MachineState{machine: machine} = machine_state) do
     env_ids = MapSet.new(Map.keys(machine_state.datamodel))
 
     machine_state = seed(machine_state, machine)
+
+    # Built here, deliberately, before the binding fold below - decision 1's
+    # "the baseline is taken pre-binding" - so it carries exactly the three
+    # contributions no {:datamodel_change, _} effect could ever describe.
+    init_effect =
+      {:datamodel_init,
+       %Effect.DatamodelInit{
+         datamodel: machine_state.datamodel,
+         macrostep: machine_state.macrostep,
+         microstep: machine_state.microstep
+       }}
 
     top_level_indexes = MapSet.new(Machine.at(machine, 0).data)
     d_indexes = d_indexes_to_bind(machine, top_level_indexes)
@@ -294,9 +307,12 @@ defmodule Statifier.Interpreter.Datamodel do
     # no <data>'s value may read another <data> in the same pass.
     context = Evaluator.context(machine_state)
 
-    Enum.reduce(d_indexes, machine_state, fn d_index, ms ->
-      bind(ms, machine, context, d_index, top_level_indexes, env_ids)
-    end)
+    machine_state =
+      Enum.reduce(d_indexes, machine_state, fn d_index, ms ->
+        bind(ms, machine, context, d_index, top_level_indexes, env_ids)
+      end)
+
+    {machine_state, [init_effect]}
   end
 
   # Every declared <data> id, seeded to :undefined - 5.3.3's

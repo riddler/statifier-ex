@@ -326,6 +326,38 @@ defmodule Statifier.InterpreterTest do
     assert content_executed_index < entry_set_index
   end
 
+  # AC: "the {:datamodel_init, _} baseline effect is first, ahead of any
+  # global-<script> effect" - `interpret`'s datamodel preamble
+  # (Appendix D `:101-102`) precedes `executeGlobalScriptElement`, and
+  # `Datamodel.initialize/1`'s effect list is threaded ahead of
+  # `global_effects` at the return-site concatenation.
+  #
+  # sabotage: `initialize/2`'s final tuple is changed from
+  # `{machine_state, datamodel_effects ++ global_effects ++ enter_effects ++
+  # loop_effects}` to `{machine_state, global_effects ++ datamodel_effects ++
+  # enter_effects ++ loop_effects}` -> confirmed red: the global script's
+  # `Trace.ContentExecuted` now lands before `:datamodel_init` instead of
+  # after it, reddening the ordering assertion below. Reverted and confirmed
+  # green.
+  test "the :datamodel_init baseline effect is first, ahead of any global-<script> effect" do
+    machine =
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <script>x = 1;</script>
+          <state id="a"/>
+      </scxml>
+      """)
+
+    {_result, effects} = Interpreter.initialize(machine, trace: true)
+
+    assert [{:datamodel_init, %Effect.DatamodelInit{}} | rest] = effects
+
+    content_executed_index =
+      Enum.find_index(rest, &match?({:trace, %Effect.Trace.ContentExecuted{}}, &1))
+
+    assert is_integer(content_executed_index)
+  end
+
   describe "cancel/1" do
     defp cancel_document do
       """

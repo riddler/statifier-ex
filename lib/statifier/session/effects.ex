@@ -105,8 +105,8 @@ defmodule Statifier.Session.Effects do
   Plans `effects`, the core's own order preserved, into the instructions
   `Statifier.Session` performs. `session_id` is the sending session's own id
   (spec 5.10's `_sessionid`), needed to build a delivered event's `origin`.
-  `:log`, `:datamodel_change`, and `:trace` effects plan to nothing but their
-  own `{:notify, effect}`.
+  `:log`, `:datamodel_change`, `:datamodel_init`, and `:trace` effects plan
+  to nothing but their own `{:notify, effect}`.
   """
   @spec plan(effects :: [Effect.t()], session_id :: String.t()) :: [instruction()]
   def plan(effects, session_id) when is_list(effects) and is_binary(session_id) do
@@ -148,6 +148,7 @@ defmodule Statifier.Session.Effects do
 
   defp plan_one({:log, _log} = effect, _session_id), do: [{:notify, effect}]
   defp plan_one({:datamodel_change, _change} = effect, _session_id), do: [{:notify, effect}]
+  defp plan_one({:datamodel_init, _init} = effect, _session_id), do: [{:notify, effect}]
   defp plan_one({:trace, _payload} = effect, _session_id), do: [{:notify, effect}]
 
   # An immediate `<send>`'s own routing (see moduledoc's numbered list).

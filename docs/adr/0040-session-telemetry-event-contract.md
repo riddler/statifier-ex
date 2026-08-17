@@ -2,7 +2,8 @@
 
 Status: accepted (2026-08-16) - amended 2026-08-16 (st-ii9v: singleton
 location carve-out withdrawn; no trace event carries a location) - amended
-2026-08-16 (st-oef3: `:datamodel_change` joins the core effect events)
+2026-08-16 (st-oef3: `:datamodel_change` joins the core effect events) -
+amended 2026-08-17 (st-1xwh: `:datamodel_init` joins the core effect events)
 
 ## Context
 
@@ -345,10 +346,10 @@ wants one name to attach to rather than a filter across nine effect names.
 therefore subject to the GenServer contract - it does not fire on a brutal
 kill. `:halt` is the event to build a "session finished" metric on.
 
-**Core effect events (10), emitted regardless of `trace`:**
+**Core effect events (11), emitted regardless of `trace`:**
 
 `[:statifier, :session, :effect, kind]` for
-`kind in [:send, :send_delayed, :cancel, :invoke, :cancel_invoke, :autoforward, :budget_exhausted, :done, :log, :datamodel_change]`.
+`kind in [:send, :send_delayed, :cancel, :invoke, :cancel_invoke, :autoforward, :budget_exhausted, :done, :log, :datamodel_change, :datamodel_init]`.
 
 - Measurements: `macrostep`, `microstep`; plus `round` and `budget` for
   `:budget_exhausted` only (the one core effect ADR-0020 stamps with a
@@ -363,7 +364,8 @@ kill. `:halt` is the event to build a "session finished" metric on.
   effect fires; for `:datamodel_change`, `location_path`, `location_source`,
   `new_value`, and `prior_value` - the write itself, which fits no other
   family's identities and gets its own clause here rather than being
-  appended to one.
+  appended to one; for `:datamodel_init`, `datamodel` - the starting map,
+  which fits no existing family's identities either.
 
 **Amendment (st-oef3):** `[:statifier, :session, :effect, :datamodel_change]`
 joins the core family above, at `Statifier.Effect.DatamodelChange`. It
@@ -375,6 +377,15 @@ behavior for a global `<script>`, followed rather than varied from, and it is
 the core family's rule, not the trace family's key-absence: the two are
 distinct, and the paragraph at the top of this decision was corrected on this
 branch to stop reading as though key-absence governed both.
+
+**Amendment (st-1xwh):** `[:statifier, :session, :effect, :datamodel_init]`
+joins the core family above, at `Statifier.Effect.DatamodelInit`. It carries
+`location: nil` unconditionally - the key present, per the core family's
+key-always-present rule above - because this payload names no document node
+at all: it is the datamodel as it stood after `<data>` creation and before
+any binding, not a write attributable to one construct, so there is no index
+of any kind for the resolution rule to apply to. This is the existing rule
+applied to a payload with no identity field, not a carve-out from it.
 
 **Trace effect events (9), emitted only under `trace: true`:**
 

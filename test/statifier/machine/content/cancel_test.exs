@@ -47,7 +47,8 @@ defmodule Statifier.Machine.Content.CancelTest do
   end
 
   defp machine_state(m, opts \\ []) do
-    m |> MachineState.new(opts) |> Datamodel.initialize()
+    {ms, _effects} = m |> MachineState.new(opts) |> Datamodel.initialize()
+    ms
   end
 
   defp context(ms, owner \\ {:onexit, 0, 0}) do
