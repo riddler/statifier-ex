@@ -136,9 +136,15 @@ resolved through `Machine.content/2`, `Machine.at/2`, or `Machine.transition/2`
 as appropriate, and carried as the `%Statifier.Parser.Location{}` struct
 verbatim - not flattened into ad hoc `line`/`column` keys, which would invent
 a key set the library does not otherwise have and would silently drop
-whatever `Location` gains later. An effect with no index, or an index field
-present but `nil` (`Effect.Log.c_index` is `nil` for a global `<script>`),
-carries no `location` key at all. `cond_location` is never resolved: no
+whatever `Location` gains later. Where no index resolves - an effect with no
+index field at all, or an index field present but `nil` (`Effect.Log.c_index`
+is `nil` for a global `<script>`) - the *core* family still carries the key,
+resolving to `location: nil`: every `core_shape/2` clause sets it
+unconditionally, and a consumer of a core event may read `metadata.location`
+without a `Map.has_key?/2` guard. Key-absence is the *trace* family's rule
+alone, and the amendments below are where it was decided; a reader who takes
+this paragraph as governing both families will misread them. `cond_location`
+is never resolved: no
 effect in the vocabulary is emitted from guard evaluation, so a resolved
 `cond_location` would always describe a condition that did not produce the
 event carrying it. An effect carrying a *list* of indexes (the list-carrying
@@ -360,12 +366,15 @@ kill. `:halt` is the event to build a "session finished" metric on.
   appended to one.
 
 **Amendment (st-oef3):** `[:statifier, :session, :effect, :datamodel_change]`
-joins the core family above, at `Statifier.Effect.DatamodelChange`. Its
-`location` carries `metadata.location` under the existing single-index rule
-when `c_index` is non-nil, and no `location` key for the two runner-side
-writes (the empty-`<finalize>` auto-assign and `<invoke idlocation>`, both
-`c_index: nil`) - the rule already stated at the top of this decision, not a
-new carve-out for this event.
+joins the core family above, at `Statifier.Effect.DatamodelChange`. It
+resolves `metadata.location` under the existing single-index rule when
+`c_index` is non-nil, and carries `location: nil` - the key present - for the
+two runner-side writes (the empty-`<finalize>` auto-assign and
+`<invoke idlocation>`, both `c_index: nil`). That is `%Log{}`'s existing
+behavior for a global `<script>`, followed rather than varied from, and it is
+the core family's rule, not the trace family's key-absence: the two are
+distinct, and the paragraph at the top of this decision was corrected on this
+branch to stop reading as though key-absence governed both.
 
 **Trace effect events (9), emitted only under `trace: true`:**
 

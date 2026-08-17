@@ -82,11 +82,17 @@ defmodule Statifier.Session.Telemetry do
   An effect carrying exactly one resolvable index gets `metadata.location`,
   resolved through `Statifier.Machine.content/2`, `Statifier.Machine.at/2`,
   or `Statifier.Machine.transition/2` as appropriate, and carried as the
-  `%Statifier.Parser.Location{}` struct verbatim. An effect with no index, or
-  an index field present but `nil`, carries no `location` key at all - a key
-  that can never hold a value is contract noise a consumer would otherwise
-  have to learn to ignore, so it is simply absent rather than present and
-  `nil`. An effect carrying a *list* of indexes carries the list in metadata
+  `%Statifier.Parser.Location{}` struct verbatim. Where no index resolves - an
+  effect with no index field at all, or an index field present but `nil` -
+  the two families answer differently, and the difference is the contract, not
+  an inconsistency to smooth over. A **core** effect still carries the key,
+  resolving to `location: nil`: every `core_shape/2` clause sets it
+  unconditionally, so `metadata.location` is safe to read without a
+  `Map.has_key?/2` guard. A **trace** effect omits the key entirely - there, a
+  key that can never hold a value is contract noise a consumer would otherwise
+  have to learn to ignore, so it is absent rather than present and `nil`
+  (ADR-0040 and its amendments). An effect carrying a *list* of
+  indexes carries the list in metadata
   (nested in the `effect` struct) and its length as a `size` measurement,
   with no `location` key, at any cardinality - zero, one, or many entries.
   No `[:statifier, :session, :trace, _]` event ever carries a `location`
