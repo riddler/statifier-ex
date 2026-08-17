@@ -727,11 +727,11 @@ subscriber and is the model for the document.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while
+- [x] Full `mix quality` passes (`mix quality --profile loop` while
       iterating).
-- [ ] Both new round-trip cases pass, and both were confirmed red under the
+- [x] Both new round-trip cases pass, and both were confirmed red under the
       sabotage mutation before it was reverted.
-- [ ] `mix gate.verify` confirms the run was a full gate.
+- [x] `mix gate.verify` confirms the run was a full gate.
 
 #### Manual Verification:
 
@@ -943,6 +943,28 @@ before considering the plan fully landed.
 - [ ] No regressions in related features: internal sends, `<raise>`-driven
       `error.execution`, unreachable `<send>` targets, and `<invoke>`
       failures all still reach the same configurations.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment: this phase touches only `test/`, so no
+      Appendix D function is in scope; confirm by diff that
+      `lib/statifier/` is untouched.
+- [ ] The two charts genuinely cross the seam - confirm by observing the
+      `{:internal, ...}` entry in the recording each produces, not by
+      assuming the document shape is enough.
+- [ ] Replay's stream and the live stream match for a reason, not by
+      coincidence: spot-check that both contain more than one
+      `Trace.MacrostepStable` for the terminal macrostep.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
