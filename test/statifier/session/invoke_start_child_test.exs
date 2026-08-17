@@ -318,4 +318,94 @@ defmodule Statifier.Session.InvokeStartChildTest do
       assert Process.alive?(parent)
     end
   end
+
+  # -- the deadlocking path: parent started through the runtime -------------
+
+  describe "a parent started through the runtime (Statifier.start_session/2)" do
+    # sabotage: `perform(state, effects)` and the `:initialize`
+    # `Telemetry.macrostep_stop/7` call are moved back into `init/1` ahead of
+    # its return (the pre-fix shape) -> the parent's `init/1` calls
+    # `DynamicSupervisor.start_child/2` on the `Statifier.SessionSupervisor`
+    # that is still serving its own start, and `Statifier.start_session/2`
+    # below never returns, reddening this test on its 10_000ms timeout
+    # instead of an assertion. Reverted and confirmed green.
+    @tag timeout: 10_000
+    test "starts its initial state's <invoke> without deadlocking the supervisor" do
+      # parent_doc/2 already puts <invoke> in the initial state "a".
+      machine = compile!(parent_doc(content_body(), invoke_attrs: " autoforward=\"true\""))
+      {:ok, parent} = Statifier.start_session(machine, subscribers: [self()])
+      session_id = Session.session_id(parent)
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:invoke, %Effect.Invoke{invoke_id: invoke_id}}}}
+
+      %{invocations: invocations} = :sys.get_state(parent)
+      assert Invocations.count(invocations) == 1
+
+      assert {:ok, %{pid: child_pid, autoforward: true, session_id: child_session_id}} =
+               Invocations.fetch(invocations, invoke_id)
+
+      assert is_binary(child_session_id)
+      assert Session.status(child_pid).configuration == MapSet.new(["run"])
+    end
+
+    # sabotage: same mutation as above (perform/3 + the `:initialize` span
+    # close moved back into `init/1`) -> the *parent's* own `init/1` already
+    # carries an `<invoke>` in its initial state "a" (`parent_doc/2`), so it
+    # wedges `Statifier.SessionSupervisor` on its own start the same way the
+    # first test's parent does, before this test ever reaches the child's or
+    # grandchild's start; `Statifier.start_session/2` never returns and this
+    # test times out at 10_000ms instead of asserting. Reverted and confirmed
+    # green.
+    @tag timeout: 10_000
+    test "nests: a child whose own initial state invokes a grandchild" do
+      grandchild_xml =
+        ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="run" version="1.0"><state id="run"/></scxml>)
+
+      child_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <invoke type="scxml">
+                  <content><![CDATA[#{grandchild_xml}]]></content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      # `child_xml` already contains its own `]]>` (from the grandchild's
+      # CDATA-wrapped `<content>`), and CDATA sections do not nest - the
+      # first `]]>` this outer section meets closes it early, truncating
+      # the child document. The standard XML CDATA-splitting escape (close,
+      # emit a literal `]]>`, reopen) keeps the whole string as one
+      # CDATA-carried binary despite that.
+      escaped_child_xml = String.replace(child_xml, "]]>", "]]]]><![CDATA[>")
+      parent_xml = parent_doc("<content><![CDATA[#{escaped_child_xml}]]></content>")
+
+      machine = compile!(parent_xml)
+      {:ok, parent} = Statifier.start_session(machine, subscribers: [self()])
+      session_id = Session.session_id(parent)
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:invoke, %Effect.Invoke{invoke_id: child_invoke_id}}}}
+
+      %{invocations: parent_invocations} = :sys.get_state(parent)
+      assert Invocations.count(parent_invocations) == 1
+
+      assert {:ok, %{pid: child_pid}} = Invocations.fetch(parent_invocations, child_invoke_id)
+
+      wait_until(fn ->
+        Invocations.count(:sys.get_state(child_pid).invocations) == 1
+      end)
+
+      %{invocations: child_invocations} = :sys.get_state(child_pid)
+      assert Invocations.count(child_invocations) == 1
+
+      [grandchild_invoke_id] = Invocations.invoke_ids(child_invocations)
+
+      assert {:ok, %{pid: grandchild_pid}} =
+               Invocations.fetch(child_invocations, grandchild_invoke_id)
+
+      assert Session.status(grandchild_pid).configuration == MapSet.new(["run"])
+    end
+  end
 end

@@ -136,8 +136,16 @@ defmodule Statifier.Session do
   ## Starting an invocation's child session
 
   `{:invoke, %Effect.Invoke{}}` with a supported `type` plans
-  `{:start_child, invoke, effect}` (`Statifier.Session.Effects`). Performing
-  it resolves `invoke.content`/`invoke.src` through `Statifier.Invoke.Source`
+  `{:start_child, invoke, effect}` (`Statifier.Session.Effects`). This is
+  never performed from `init/1`: an initial configuration's own `<invoke>`
+  would otherwise start the child through `Statifier.start_session/2` while
+  this session's own start is still being served by the same
+  `Statifier.SessionSupervisor`, and that supervisor process cannot answer
+  the inner call until it has answered the outer one. Every
+  planned instruction - this one included, at whatever position
+  `Statifier.Session.Effects.plan/2` gave it - performs from
+  `handle_continue/2`, one message-loop turn after `init/1` returns.
+  Performing it resolves `invoke.content`/`invoke.src` through `Statifier.Invoke.Source`
   (`state.invoke_source`, the embedder-supplied resolver from `start_link/2`
   ADR-0038 hands off to), seeds the resolved child `Machine.t()`'s datamodel
   through `Statifier.Session.Invocations.seed_datamodel/2` (spec 6.4.3's
@@ -299,9 +307,11 @@ defmodule Statifier.Session do
             # The monotonic timestamp (`System.monotonic_time/0`) of the
             # currently open macrostep span - telemetry only, never recorded
             # (ADR-0040, ADR-0034). `nil` outside `drain_event/2`,
-            # `drain_cancel/1`, and `deliver_internal/6`'s own spans;
-            # `init/1`'s span uses a local binding instead, since no
-            # `%State{}` exists yet when it opens (ADR-0040).
+            # `drain_cancel/1`, and `deliver_internal/6`'s own spans; the
+            # `:initialize` span opened in `init/1` and closed in
+            # `handle_continue({:initialize, ...}, _)` uses a local binding
+            # carried in the continue term instead, since no `%State{}`
+            # exists yet when it opens (ADR-0040).
             macrostep_started_at: integer() | nil
           }
   end
@@ -501,7 +511,10 @@ defmodule Statifier.Session do
   # `:initialize` macrostep span's start time is a local binding here rather
   # than `%State{}.macrostep_started_at` - ADR-0040's one exception to that
   # field's otherwise-uniform use in `drain_event/2`, `drain_cancel/1`, and
-  # `deliver_internal/6`.
+  # `deliver_internal/6`. `start_time` and `span_ref` travel on into the
+  # `{:continue, {:initialize, ...}}` term below, since the span
+  # does not close until `handle_continue/2` has performed the effects that
+  # this callback only plans - still never a `%State{}` field.
   @impl GenServer
   def init({%Machine{} = machine, opts}) do
     machine_opts = Keyword.take(opts, [:session_id, :trace, :datamodel, :max_macrostep_rounds])
@@ -540,19 +553,17 @@ defmodule Statifier.Session do
       invoked_by: invoked_by
     }
 
-    state = perform(state, effects)
-
-    Telemetry.macrostep_stop(
-      session_id,
-      :initialize,
-      state.machine_state,
-      nil,
-      macrostep_outcome(state),
-      start_time,
-      span_ref
-    )
-
-    {:ok, state, {:continue, :drain}}
+    # `perform/3` runs from `handle_continue/2` rather than here, and the
+    # `:initialize` span closes there with it. `Statifier.start_session/2`
+    # blocks the `Statifier.SessionSupervisor` process for the whole of this
+    # callback, and performing a `{:start_child, %Invoke{}, _}` from inside it
+    # would call `DynamicSupervisor.start_child/2` on that same busy
+    # supervisor - neither call could ever return. A `handle_continue`
+    # runs before any message reaches this process, so nothing observes the
+    # split; the whole planned instruction list still runs as one ordered fold,
+    # which is what keeps ADR-0039's re-entry and `{:halt, _}` in the order
+    # `Statifier.Session.Effects.plan/2` produced them.
+    {:ok, state, {:continue, {:initialize, effects, start_time, span_ref}}}
   end
 
   # `invoked_by` is `nil` for every session started as a plain document (the
@@ -595,6 +606,28 @@ defmodule Statifier.Session do
     _error -> :ok
   catch
     :exit, _reason -> :ok
+  end
+
+  # The tail of `init/1`, deferred one message-loop turn. `start_time` and
+  # `span_ref` ride in the continue term rather than in `%State{}`: ADR-0040
+  # already makes the `:initialize` span the one span whose start time is not
+  # a `%State{}` field, and a field would be `nil` everywhere but the gap
+  # between these two callbacks.
+  @impl GenServer
+  def handle_continue({:initialize, effects, start_time, span_ref}, state) do
+    state = perform(state, effects)
+
+    Telemetry.macrostep_stop(
+      state.session_id,
+      :initialize,
+      state.machine_state,
+      nil,
+      macrostep_outcome(state),
+      start_time,
+      span_ref
+    )
+
+    {:noreply, state, {:continue, :drain}}
   end
 
   # `mainEventLoop`'s dequeue tail (Appendix D), with `Statifier.Session.Inbox`
