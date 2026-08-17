@@ -4,9 +4,12 @@ defmodule Statifier.Parser.DOM.Element do
   list, and the source span it occupies.
 
   Nothing here knows what any name means. The element is whatever the XML
-  said - no validation, no normalization, no namespace resolution - and
-  giving it meaning is the lowering pass's job
-  (`docs/architecture.md`, "Parser: DOM first, then lowering").
+  said - no validation, no namespace resolution - and giving it meaning is
+  the lowering pass's job (`docs/architecture.md`, "Parser: DOM first, then
+  lowering"). Nothing on the element itself is normalized either; the one
+  normalization the parser does perform is XML 1.0 3.3.3 on attribute
+  *values*, which an XML processor owes its application before a value
+  exists at all (ADR-0043) - see `Statifier.Parser.DOM.Attribute`.
 
   - `name` is the raw qualified name exactly as it appeared, prefix included.
   - `attributes` are in document order, with duplicates preserved: a document

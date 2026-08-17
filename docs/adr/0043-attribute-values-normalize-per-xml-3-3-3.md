@@ -163,5 +163,8 @@ Concretely:
   instead, better.
 - Open question, recorded and deliberately not blocking: whether character
   data deserves 2.11 treatment too (decision item 4). No corpus document
-  is known to depend on it either way; whoever hits a CRLF-sensitive
-  `<script>` body or `<content>` slice first opens the bead.
+  is known to depend on it either way. This branch's verification pass
+  confirmed the deviation is live rather than hypothetical - `<r><t>a\r\nb
+  </t></r>` parses to `"a\r\nb"` where 2.11 requires `"a\nb"` - and filed
+  **st-5x0b** to own the call, so the question is tracked rather than
+  waiting on whoever hits a CRLF-sensitive `<script>` body first.
