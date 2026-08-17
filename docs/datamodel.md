@@ -31,6 +31,15 @@ continuity with v1's converted W3C tests).
   themselves and supply it via environment-provided values for top-level
   `<data>` ids. test552 is the one corpus file this reddens, kept failing and
   visible by design.
+- The starting datamodel is on the effect stream, not only reachable through
+  `Session.snapshot/1`: one `{:datamodel_init, %Statifier.Effect.DatamodelInit{}}`
+  baseline is emitted once per session, before any `<data>` value is
+  evaluated, followed by one `{:datamodel_change, %Statifier.Effect.DatamodelChange{}}`
+  per `<data>` actually bound. A subscriber that folds the stream alone -
+  seeding from the baseline and applying each binding at its `location_path` -
+  reconstructs the whole datamodel under both `binding="early"` and
+  `binding="late"`, including a state-scoped `<data>` bound arbitrarily far
+  into the run.
 - `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
   auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
   v1 refused to create intermediates). The root segment of the path must

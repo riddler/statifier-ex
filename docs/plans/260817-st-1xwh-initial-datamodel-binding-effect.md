@@ -984,15 +984,15 @@ capability now that it is true.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits).
-- [ ] `mix test test/statifier/session/datamodel_reconstruction_test.exs`
+- [x] Full `mix quality` passes (loop gate between edits).
+- [x] `mix test test/statifier/session/datamodel_reconstruction_test.exs`
       passes - the bead's acceptance criterion, with all four tests.
-- [ ] `grep -c "Session.snapshot" test/statifier/session/datamodel_reconstruction_test.exs`
+- [x] `grep -c "Session.snapshot" test/statifier/session/datamodel_reconstruction_test.exs`
       finds it only inside the separately labeled oracle test, and
       `grep "@starting_datamodel"` finds nothing.
-- [ ] `mix test.regression` is green and `test/passing_tests.json` is
+- [x] `mix test.regression` is green and `test/passing_tests.json` is
       byte-identical.
-- [ ] `mix quality --format json --report -` is available if a later agent
+- [x] `mix quality --format json --report -` is available if a later agent
       needs to route on results.
 
 #### Manual Verification:
@@ -1178,5 +1178,26 @@ full gate as the phase gate. In interactive execution, pause here for the
 human to confirm the manual testing before moving to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically, and Manual Verification items are deferred to the end.
+
+---
+
+### Phase 3
+
+- [ ] The reconstruction genuinely uses no other channel: read the fold and
+      confirm it touches only effect payload fields, no `%Machine{}`, no
+      `%MachineState{}`.
+- [ ] The late-binding test would have failed against an init-time-snapshot-only
+      design - i.e. it is testing decision 1's actual load-bearing case, not a
+      restatement of test 1.
+- [ ] `docs/datamodel.md`'s new paragraph is accurate about both bindings and
+      does not overclaim a wire format (`docs/observability.md:173-179`).
+- [ ] No regressions in `<assign>`, `<send idlocation>`, `<invoke idlocation>`,
+      or `<finalize>` emission from st-oef3.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing. In looped (`--loop`) execution, this
+phase's Automated Verification gates advancement automatically, and Manual
+Verification items are surfaced at the end.
 
 ---
