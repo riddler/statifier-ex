@@ -388,9 +388,9 @@ machine state's `round` - `test/statifier/machine/content/send_test.exs` and
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits (not a phase gate on its own)
-- [ ] Full `mix quality` passes, verified with `mix gate.verify`
-- [ ] `mix test test/statifier/session_test.exs test/statifier/replay_round_trip_test.exs`
+- [x] `mix quality --profile loop` green between edits (not a phase gate on its own)
+- [x] Full `mix quality` passes, verified with `mix gate.verify`
+- [x] `mix test test/statifier/session_test.exs test/statifier/replay_round_trip_test.exs`
       passes - the session's timer/cancel paths and the recorded round trip
       both still round-trip with the wider structs
 
@@ -780,6 +780,22 @@ before considering the plan fully landed.
       not from memory
 - [ ] Each new test's sabotage mutation was actually run and confirmed red,
       then reverted
+- [ ] No regressions in related features
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] `<send>`, `<cancel>`, and `<log>` behavior against spec 6.2/6.3/4.7 is
+      unchanged - the stamp is additive and nothing reads it in the executors
+- [ ] Each new test's sabotage mutation was run, confirmed red, and reverted
 - [ ] No regressions in related features
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run

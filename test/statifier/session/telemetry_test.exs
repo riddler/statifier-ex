@@ -139,7 +139,8 @@ defmodule Statifier.Session.TelemetryTest do
        c_index: nil,
        owner: nil,
        macrostep: 1,
-       microstep: 2
+       microstep: 2,
+       round: 1
      }},
     {:send_delayed,
      %SendDelayed{
@@ -150,9 +151,11 @@ defmodule Statifier.Session.TelemetryTest do
        c_index: nil,
        owner: nil,
        macrostep: 1,
-       microstep: 2
+       microstep: 2,
+       round: 1
      }},
-    {:cancel, %Cancel{send_id: "s3", c_index: nil, owner: nil, macrostep: 1, microstep: 2}},
+    {:cancel,
+     %Cancel{send_id: "s3", c_index: nil, owner: nil, macrostep: 1, microstep: 2, round: 1}},
     {:invoke,
      %Invoke{
        invoke_id: "i1",
@@ -183,7 +186,7 @@ defmodule Statifier.Session.TelemetryTest do
        round: 5
      }},
     {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 2, round: 1}},
-    {:log, %Log{label: "l", c_index: nil, owner: nil, macrostep: 1, microstep: 2}}
+    {:log, %Log{label: "l", c_index: nil, owner: nil, macrostep: 1, microstep: 2, round: 1}}
   ]
 
   @trace_fixtures [
@@ -402,7 +405,10 @@ defmodule Statifier.Session.TelemetryTest do
     # sabotage: `core_shape/2`'s `Send` clause reports `microstep: 0`
     # unconditionally -> red, `measurements.microstep == payload.microstep`
     # fails for `:send` (payload's own `microstep` is `2`) - reverted and
-    # confirmed green.
+    # confirmed green. Also verified for `round`: `core_shape/2`'s `Log`
+    # clause changed to report `round: 0` unconditionally -> red,
+    # `measurements.round == payload.round` fails for `:log` (payload's own
+    # `round` is `1`) - reverted and confirmed green.
     test "emits the matching name, step counters, and the struct itself", %{ref: ref} do
       machine = located_machine()
 
@@ -412,6 +418,7 @@ defmodule Statifier.Session.TelemetryTest do
         assert_received {[:statifier, :session, :effect, ^kind], ^ref, measurements, metadata}
         assert measurements.macrostep == payload.macrostep
         assert measurements.microstep == payload.microstep
+        assert measurements.round == payload.round
         assert metadata.effect == payload
         assert metadata.session_id == "sess1"
       end
@@ -433,7 +440,8 @@ defmodule Statifier.Session.TelemetryTest do
         c_index: nil,
         owner: nil,
         macrostep: 3,
-        microstep: 4
+        microstep: 4,
+        round: 2
       }
 
       Telemetry.effect("sess1", machine, {:send_delayed, payload})
@@ -557,7 +565,8 @@ defmodule Statifier.Session.TelemetryTest do
         c_index: 0,
         owner: {:onentry, a_index, 0},
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Telemetry.effect("sess1", machine, {:log, log_payload})
@@ -590,7 +599,7 @@ defmodule Statifier.Session.TelemetryTest do
     # green.
     test "carries location: nil for an effect with no resolvable index", %{ref: ref} do
       machine = located_machine()
-      payload = %Log{label: nil, c_index: nil, owner: nil, macrostep: 1, microstep: 1}
+      payload = %Log{label: nil, c_index: nil, owner: nil, macrostep: 1, microstep: 1, round: 0}
 
       Telemetry.effect("sess1", machine, {:log, payload})
 
@@ -1044,7 +1053,8 @@ defmodule Statifier.Session.TelemetryTest do
         c_index: 0,
         owner: {:onentry, a_index, 0},
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       assert :ok = Telemetry.unroutable("sess1", machine, {:send, payload})
@@ -1094,7 +1104,7 @@ defmodule Statifier.Session.TelemetryTest do
       Telemetry.unroutable(
         "sess1",
         machine,
-        {:send, %Send{event: "e", c_index: nil, owner: nil, macrostep: 1, microstep: 1}}
+        {:send, %Send{event: "e", c_index: nil, owner: nil, macrostep: 1, microstep: 1, round: 0}}
       )
 
       messages = drain(ref)
@@ -1259,7 +1269,15 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert_receive {[:statifier, :session, :effect, :log], ^ref, _measurements, core_metadata}
 
-      injected = %Log{label: "injected", c_index: nil, owner: nil, macrostep: 1, microstep: 1}
+      injected = %Log{
+        label: "injected",
+        c_index: nil,
+        owner: nil,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
       Session.interpret(session, [{:log, injected}])
 
       assert_receive {[:statifier, :session, :interpret], ^ref, measurements, _metadata}

@@ -108,6 +108,20 @@ defmodule Statifier.Interpreter.ContentTest do
              effects
   end
 
+  # sabotage: `Machine.Content.Log`'s `execute/2` drops `round:
+  # machine_state.round` from its effect literal, hardcoding `round: 0` ->
+  # this test's `round == 6` assertion reddens against a machine state whose
+  # round has actually advanced past 0. Reverted and confirmed green.
+  test "<log> stamps the effect's round from machine_state.round (ADR-0045)" do
+    m = machine()
+    ms = %{machine_state(m) | round: 6}
+    [block1, _block2] = a_onentry_blocks(m)
+
+    {_result, effects} = Content.execute_block(ms, @owner, block1.content)
+
+    assert [{:log, %Effect.Log{round: 6}}, {:trace, %Effect.Trace.ContentExecuted{}}] = effects
+  end
+
   # sabotage: `execute_block/3` prepends new effects instead of appending
   # (`node_effects ++ effects` instead of `effects ++ node_effects`) -> the
   # two logs would come back reversed, reddening this assertion.

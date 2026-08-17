@@ -9,7 +9,7 @@ defmodule Statifier.Effect.SendDelayed do
   `c_index` identifies the `<send>` content node (constraint 3, never a
   compiled content-node struct); `owner` names which block emitted the send
   (the same gap `Statifier.Effect.Log`'s own moduledoc describes for
-  `c_index` alone). `macrostep`/`microstep` are the counters
+  `c_index` alone). `macrostep`/`microstep`/`round` are the counters
   as they stood when the send was scheduled, not when the timer fires.
 
   `id_from_author?` is `true` when the document wrote `id` or `idlocation`
@@ -22,7 +22,7 @@ defmodule Statifier.Effect.SendDelayed do
   @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
-  @enforce_keys [:event, :delay_ms, :macrostep, :microstep]
+  @enforce_keys [:event, :delay_ms, :macrostep, :microstep, :round]
   defstruct [
     :event,
     :target,
@@ -34,6 +34,7 @@ defmodule Statifier.Effect.SendDelayed do
     :owner,
     :macrostep,
     :microstep,
+    :round,
     id_from_author?: false
   ]
 
@@ -48,6 +49,7 @@ defmodule Statifier.Effect.SendDelayed do
           owner: owner() | nil,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
+          round: non_neg_integer(),
           id_from_author?: boolean()
         }
 end

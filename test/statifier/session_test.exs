@@ -320,7 +320,8 @@ defmodule Statifier.SessionTest do
         send_id: "s1",
         delay_ms: 40,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -347,13 +348,14 @@ defmodule Statifier.SessionTest do
         send_id: "s1",
         delay_ms: 30,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "s1", macrostep: 1, microstep: 1}}
+        {:cancel, %Effect.Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}
       ])
 
       Process.sleep(60)
@@ -369,7 +371,7 @@ defmodule Statifier.SessionTest do
       {:ok, session} = Session.start_link(machine)
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "no-such-id", macrostep: 1, microstep: 1}}
+        {:cancel, %Effect.Cancel{send_id: "no-such-id", macrostep: 1, microstep: 1, round: 0}}
       ])
 
       status = Session.status(session)
@@ -395,7 +397,8 @@ defmodule Statifier.SessionTest do
           send_id: "shared",
           delay_ms: 200,
           macrostep: 1,
-          microstep: 1
+          microstep: 1,
+          round: 0
         }
 
         Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -404,7 +407,7 @@ defmodule Statifier.SessionTest do
       assert Session.status(session).pending_timers == 2
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "shared", macrostep: 1, microstep: 1}}
+        {:cancel, %Effect.Cancel{send_id: "shared", macrostep: 1, microstep: 1, round: 0}}
       ])
 
       status = wait_for_status(session, fn s -> s.pending_timers == 0 end)
@@ -433,7 +436,8 @@ defmodule Statifier.SessionTest do
         send_id: "s1",
         delay_ms: 1_000,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -1129,7 +1133,8 @@ defmodule Statifier.SessionTest do
         event: "e",
         target: "not a recognized target",
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       Session.interpret(session, [{:send, send_effect}])
@@ -1212,7 +1217,8 @@ defmodule Statifier.SessionTest do
         send_id: "s1",
         delay_ms: 200,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       effects = [{:send_delayed, send_delayed}]
@@ -1241,7 +1247,8 @@ defmodule Statifier.SessionTest do
         send_id: "s1",
         delay_ms: 20,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       effects = [{:send_delayed, send_delayed}]

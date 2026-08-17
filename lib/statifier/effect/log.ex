@@ -11,7 +11,7 @@ defmodule Statifier.Effect.Log do
   (`lib/statifier/event/cause.ex:13-26`) - it resolves to the node's own
   `Location` but names nothing about which `<onentry>`/`<onexit>` block or
   transition emitted it - so `owner` rides alongside it. `macrostep`/
-  `microstep` are the counters as they stood when the log ran.
+  `microstep`/`round` are the counters as they stood when the log ran.
   This is the only effect the interpreter produces today.
   """
 
@@ -20,8 +20,8 @@ defmodule Statifier.Effect.Log do
   @typedoc "Which block emitted the log - `Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
-  @enforce_keys [:macrostep, :microstep]
-  defstruct [:label, :value, :c_index, :owner, :macrostep, :microstep]
+  @enforce_keys [:macrostep, :microstep, :round]
+  defstruct [:label, :value, :c_index, :owner, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           label: String.t() | nil,
@@ -29,6 +29,7 @@ defmodule Statifier.Effect.Log do
           c_index: non_neg_integer() | nil,
           owner: owner() | nil,
           macrostep: non_neg_integer(),
-          microstep: non_neg_integer()
+          microstep: non_neg_integer(),
+          round: non_neg_integer()
         }
 end

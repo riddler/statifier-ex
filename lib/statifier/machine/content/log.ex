@@ -57,7 +57,8 @@ defmodule Statifier.Machine.Content.Log do
             c_index: node.c_index,
             owner: owner,
             macrostep: machine_state.macrostep,
-            microstep: machine_state.microstep
+            microstep: machine_state.microstep,
+            round: machine_state.round
           }
 
           {:ok, context, [{:log, log_effect}]}

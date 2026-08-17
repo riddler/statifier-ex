@@ -99,6 +99,19 @@ defmodule Statifier.Machine.Content.CancelTest do
 
       assert c_index == node.c_index
     end
+
+    # sabotage: `execute/2`'s `effect` literal has `round: machine_state.round`
+    # hardcoded to `round: 0` -> this test's `round == 9` assertion reddens
+    # against a machine state whose round has actually advanced past 0.
+    # Reverted and confirmed green.
+    test "round is stamped from machine_state.round (ADR-0045)" do
+      m = machine()
+      ms = %{machine_state(m) | round: 9}
+      node = cancel_node(m, "bare")
+
+      assert {:ok, _ctx, [{:cancel, %Effect.Cancel{round: 9}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
   end
 
   describe "execute/2 - an unmatched send_id is emitted anyway" do

@@ -346,6 +346,7 @@ defmodule Statifier.Machine.Content.Send do
          owner: owner,
          macrostep: ms.macrostep,
          microstep: ms.microstep,
+         round: ms.round,
          id_from_author?: id_from_author?(node)
        }}
     end
@@ -364,6 +365,7 @@ defmodule Statifier.Machine.Content.Send do
          owner: owner,
          macrostep: ms.macrostep,
          microstep: ms.microstep,
+         round: ms.round,
          id_from_author?: id_from_author?(node)
        }}
     end

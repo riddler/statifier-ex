@@ -171,9 +171,10 @@ defmodule Statifier.MachineStateAcceptanceTest do
   end
 
   @core_effects [
-    {:send, %Effect.Send{event: "e", macrostep: 0, microstep: 0}},
-    {:send_delayed, %Effect.SendDelayed{event: "e", delay_ms: 1, macrostep: 0, microstep: 0}},
-    {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0}},
+    {:send, %Effect.Send{event: "e", macrostep: 0, microstep: 0, round: 0}},
+    {:send_delayed,
+     %Effect.SendDelayed{event: "e", delay_ms: 1, macrostep: 0, microstep: 0, round: 0}},
+    {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0, round: 0}},
     {:invoke,
      %Effect.Invoke{
        invoke_id: "i",
@@ -193,7 +194,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
        round: 0
      }},
     {:done, %Effect.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}},
-    {:log, %Effect.Log{macrostep: 0, microstep: 0}}
+    {:log, %Effect.Log{macrostep: 0, microstep: 0, round: 0}}
   ]
 
   @trace_effects [

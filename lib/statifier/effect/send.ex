@@ -15,8 +15,8 @@ defmodule Statifier.Effect.Send do
   content-node struct. `owner` names which block emitted the send (the same
   gap `Statifier.Effect.Log`'s own moduledoc describes: `c_index` alone does
   not say which `<onentry>`/`<onexit>` block or transition it belongs to).
-  `macrostep`/`microstep` are the step counters as they stand at the moment
-  of the send.
+  `macrostep`/`microstep`/`round` are the step counters as they stand at the
+  moment of the send.
 
   `id_from_author?` is `true` when the document wrote `id` or `idlocation`
   on this `<send>`, `false` when `send_id` was generated. It exists for
@@ -45,7 +45,7 @@ defmodule Statifier.Effect.Send do
   @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
-  @enforce_keys [:event, :macrostep, :microstep]
+  @enforce_keys [:event, :macrostep, :microstep, :round]
   defstruct [
     :event,
     :target,
@@ -56,6 +56,7 @@ defmodule Statifier.Effect.Send do
     :owner,
     :macrostep,
     :microstep,
+    :round,
     id_from_author?: false
   ]
 
@@ -69,6 +70,7 @@ defmodule Statifier.Effect.Send do
           owner: owner() | nil,
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
+          round: non_neg_integer(),
           id_from_author?: boolean()
         }
 end
