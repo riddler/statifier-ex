@@ -405,7 +405,12 @@ defmodule Statifier.Interpreter.ContentTest do
 
       {_result, effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
 
-      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      # <assign> now also emits a leading {:datamodel_change, _} effect
+      # - filtered to :log here, since this test's own point is
+      # the block's threaded datamodel_context, not the effect list shape.
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}}] =
+               Enum.filter(effects, &match?({:log, _entry}, &1))
+
       assert Evaluator.evaluate(datamodel_context, compiled_expr("x")) == {:ok, 2}
     end
 
@@ -668,7 +673,7 @@ defmodule Statifier.Interpreter.ContentTest do
       names = result |> MachineState.internal_events() |> Enum.map(& &1.name)
       refute "never" in names
 
-      refute Enum.any?(effects, &match?({:log, _}, &1))
+      refute Enum.any?(effects, &match?({:log, _entry}, &1))
 
       assert [{:trace, %Effect.Trace.ContentExecuted{owner: @owner, c_indexes: [^log_c]}}] =
                effects
@@ -708,7 +713,12 @@ defmodule Statifier.Interpreter.ContentTest do
 
       {_result, effects} = Content.execute_block(ms, @owner, block.content)
 
-      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      # <assign> now also emits a leading {:datamodel_change, _} effect
+      # - filtered to :log here, since this test's own point is
+      # the block's threaded datamodel_context, not the effect list shape.
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}}] =
+               Enum.filter(effects, &match?({:log, _entry}, &1))
+
       assert Evaluator.evaluate(datamodel_context, compiled_expr("x")) == {:ok, 2}
     end
 
@@ -818,7 +828,13 @@ defmodule Statifier.Interpreter.ContentTest do
 
       {_result, effects} = Content.execute_block(ms, @owner, block.content)
 
-      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}} | _rest] = effects
+      # <assign> now also emits a leading {:datamodel_change, _} effect per
+      # iteration - filtered to :log here, since this test's own
+      # point is the block's threaded datamodel_context, not the effect list
+      # shape.
+      assert [{:log, %Effect.Log{label: "r2", value: datamodel_context}}] =
+               Enum.filter(effects, &match?({:log, _entry}, &1))
+
       assert Evaluator.evaluate(datamodel_context, compiled_expr("sum")) == {:ok, 6}
     end
 

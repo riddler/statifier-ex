@@ -299,7 +299,8 @@ defmodule Statifier.Interpreter.DatamodelTest do
       datamodel_context: Evaluator.context(ms)
     }
 
-    assert {:ok, new_context, []} = ExecutableContent.execute(node, context)
+    assert {:ok, new_context, [{:datamodel_change, _change}]} =
+             ExecutableContent.execute(node, context)
 
     assert new_context.machine_state.datamodel["Var1"] == 1
     assert Map.has_key?(new_context.machine_state.datamodel, "Other")

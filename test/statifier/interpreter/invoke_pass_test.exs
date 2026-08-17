@@ -28,6 +28,10 @@ defmodule Statifier.Interpreter.InvokePassTest do
     for {:invoke, %Effect.Invoke{} = payload} <- effects, do: payload
   end
 
+  defp datamodel_change_effects(effects) do
+    for {:datamodel_change, %Effect.DatamodelChange{} = payload} <- effects, do: payload
+  end
+
   defp invoke_pass_traces(effects) do
     for {:trace, %Effect.Trace.InvokePass{} = payload} <- effects, do: payload
   end
@@ -217,6 +221,56 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert [invoke_effect] = invoke_effects(effects)
     assert result.datamodel["myid"] == invoke_effect.invoke_id
     assert invoke_effect.invoke_id =~ ~r/^s0\.inv_/
+  end
+
+  # sabotage: `invoke_one/6`'s effect list is built as `[effect |
+  # datamodel_change_effects(...)]` instead of `datamodel_change_effects(...)
+  # ++ [effect]` -> the `:datamodel_change` effect would land *after*
+  # `:invoke` instead of before it, reddening this test's ordering
+  # assertion. Confirmed red and reverted.
+  test "idlocation emits a :datamodel_change before :invoke, naming the path, values, and owner" do
+    m = compile!(@idlocation_document)
+    {:ok, s0_index} = Statifier.Machine.index(m, "s0")
+    {result, effects} = Interpreter.initialize(m)
+
+    assert [{:datamodel_change, change}, {:invoke, invoke_effect}] =
+             for(
+               {tag, _payload} = effect <- effects,
+               tag in [:datamodel_change, :invoke],
+               do: effect
+             )
+
+    assert change.location_path == ["myid"]
+    assert change.location_source == "myid"
+    assert change.new_value == invoke_effect.invoke_id
+    assert change.prior_value == nil
+    assert change.c_index == nil
+    assert change.owner == {:invoke, s0_index, 0}
+    assert result.datamodel["myid"] == invoke_effect.invoke_id
+  end
+
+  #  0 scxml (root)
+  #  1   s0      (invoke idlocation="_sessionid" - a system-variable root, always rejected)
+  @failing_idlocation_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <invoke idlocation="_sessionid" type="t"/>
+      </state>
+  </scxml>
+  """
+
+  # sabotage: `invoke_one/6`'s `{:error, reason} -> {abort_invocation(...),
+  # context, []}` branch is changed to also append
+  # `datamodel_change_effects(...)` (folding the failure and success
+  # branches' effect-building together) -> this test's empty-list assertion
+  # reddens, since the failed write would still surface a
+  # `:datamodel_change`. Confirmed red and reverted.
+  test "a failing idlocation write emits no :datamodel_change effect" do
+    m = compile!(@failing_idlocation_document)
+    {_result, effects} = Interpreter.initialize(m)
+
+    assert invoke_effects(effects) == []
+    assert datamodel_change_effects(effects) == []
   end
 
   #  0 scxml (root)
