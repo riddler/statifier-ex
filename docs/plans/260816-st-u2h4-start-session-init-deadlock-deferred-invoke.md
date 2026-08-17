@@ -385,49 +385,53 @@ already filed `st-lz1c`, `st-yizi`, `st-vwdg`, `st-2dht`, `st-5577`,
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` is green, proven by `mix gate.verify` exiting zero
+- [x] Full `mix quality` is green, proven by `mix gate.verify` exiting zero
       (not a profiled, scoped, `--quick`, or `--skip`-ed run). Use
       `mix quality --profile loop` while iterating; it never satisfies this
       criterion on its own.
-- [ ] `mix test test/statifier/session/invoke_start_child_test.exs` passes,
+- [x] `mix test test/statifier/session/invoke_start_child_test.exs` passes,
       including the two new tests, with no test hitting its 10_000ms timeout.
-- [ ] `mix test test/scxml_tests/mandatory/invoke/test220_test.exs --include
+- [x] `mix test test/scxml_tests/mandatory/invoke/test220_test.exs --include
       scxml_w3 --timeout 15000` terminates - it runs to an assertion (pass or
       an ordinary ExUnit failure) rather than timing out. This is the bead's
       first acceptance criterion.
-- [ ] `mix test test/statifier/session_test.exs
+- [x] `mix test test/statifier/session_test.exs
       test/statifier/session/telemetry_test.exs
       test/statifier/session/recording_test.exs` passes unchanged, with no
       edits to those files - the tests that encode the old `init/1` timing
       still hold.
-- [ ] `mix test --include scion --include scxml_w3` **completes** - the run
+- [x] `mix test --include scion --include scxml_w3` **completes** - the run
       terminates and prints a summary. This is the bead's second acceptance
       criterion; the pre-fix baseline is 106 tests timing out at 60000ms each.
-- [ ] The run is repeated with a second, different `--seed`, and both runs
+- [x] The run is repeated with a second, different `--seed`, and both runs
       report the same test count and the same set of failing files. A failure
       set that differs between seeds means an order dependence and blocks this
       phase.
-- [ ] Neither run's output contains an ExUnit timeout failure, at any
+- [x] Neither run's output contains an ExUnit timeout failure, at any
       duration.
-- [ ] `mix test.baseline` (scan, no `--add`) reports the newly passing set;
+- [~] `mix test.baseline` (scan, no `--add`) reports the newly passing set;
       then `mix test.baseline --add` writes it. The registry's `scion_tests` +
       `w3c_tests` count strictly increases from 247.
-- [ ] `mix test.regression` is green against the grown registry, and its
+      **Premise changed, criterion met against the new one.** The starting
+      count is 245, not 247: st-cmq.9's Phase 3 commit was amended to hold
+      `test187` and `test242` out (see the resolution note below). The count
+      went 245 -> 266, strictly increasing.
+- [x] `mix test.regression` is green against the grown registry, and its
       per-corpus coverage block prints.
-- [ ] `git diff test/passing_tests.json` shows additions only - no line
+- [x] `git diff test/passing_tests.json` shows additions only - no line
       removed. A shrunk registry is an ADR-0011 gate-guard condition and must
       not be produced here.
-- [ ] `bd list` shows an open bead for every conformance test still failing
+- [x] `bd list` shows an open bead for every conformance test still failing
       after the runs.
-- [ ] `git diff --name-only` shows no file under `lib/statifier/interpreter*`,
+- [x] `git diff --name-only` shows no file under `lib/statifier/interpreter*`,
       `lib/statifier/effect/`, `lib/mix/statifier/adr_guard.ex`, or
       `docs/quality-gate-changes.md`.
-- [ ] `mix quality --format json --report -` produces the machine-readable
+- [x] `mix quality --format json --report -` produces the machine-readable
       stage results, for any later agent that routes on them.
 
 #### Manual Verification:
 
-- [ ] Spec-conformance judgment (required for any phase touching
+- [x] Spec-conformance judgment (required for any phase touching
       `lib/statifier/`): read Appendix D's `interpret()` and `mainEventLoop()`
       from
       `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`
@@ -437,37 +441,48 @@ already filed `st-lz1c`, `st-yizi`, `st-vwdg`, `st-2dht`, `st-5577`,
       session's performance of the platform-specific `invoke(inv)` body now
       falls between the macrostep and `handle_continue(:drain, _)`'s dequeue
       tail. Confirm no new ADR-0002 deviation comment is owed.
-- [ ] Attach `:telemetry` to `Statifier.Session.Telemetry.events/0` for a
+- [x] Attach `:telemetry` to `Statifier.Session.Telemetry.events/0` for a
       document with an `<invoke>` in its initial state, start it through
       `Statifier.start_session/2`, and confirm by eye that exactly one
       `trigger: :initialize` `macrostep, :start`/`:stop` pair fires, in that
       order, with the `:stop` carrying a plausible non-zero `duration` and the
       correct `outcome`.
-- [ ] Read the three corrected comment sites and confirm each describes what
+- [x] Read the three corrected comment sites and confirm each describes what
       the code now does, with no surviving sentence claiming effects are
       performed inside `init/1`.
-- [ ] Walk the newly ratcheted file list and confirm each one is a test the
+- [x] Walk the newly ratcheted file list and confirm each one is a test the
       deadlock was blocking (an initial-configuration `<invoke>`, or a test
       wedged behind one on the shared runtime), not a test that passes for an
       unrelated and possibly accidental reason.
-- [ ] Confirm by inspection that no remaining red is a *new* failure
+- [x] Confirm by inspection that no remaining red is a *new* failure
       introduced by this phase - compare the failure set against st-cmq.9's
       recorded baseline of 34 failures over 2074 tests
       (`docs/plans/260816-st-cmq.9-corpus-flip-send-invoke-session-harness-ratchet.md:1257-1308`),
       accounting for the 23 files `st-ybuj` unblocked.
-- [ ] Confirm the bead's third acceptance criterion by reading, not by
+- [x] Confirm the bead's third acceptance criterion by reading, not by
       running: no test in `test/` reaches an `<invoke>` in an initial
       configuration only because its parent was started with a bare
       `Session.start_link/2`. This phase's new `describe` block is the
       deliberate counter-example; the rest of the file's use of
       `start_link/2` stays, since it covers the unregistered-session path
       ADR-0027 decision 2 sanctions.
-- [ ] No regressions in related features: an embedder-visible behavior spot
+- [~] No regressions in related features: an embedder-visible behavior spot
       check that `Statifier.start_session/2` still returns `{:ok, pid}` for a
       document with no `<invoke>`, and `{:error, _}` (never a hang) when
       `Statifier.Supervisor` was never placed; plus one previously ratcheted
       `test/scion_tests/` file and one `test/scxml_tests/optional/` file still
       passing.
+      **One half of this criterion was wrong when it was written.** `{:ok,
+      pid}` for a document with no `<invoke>`: confirmed. Never a hang:
+      confirmed - it returns in microseconds. But with no runtime placed it
+      **exits** rather than returning `{:error, _}`:
+      `** (exit) exited in: GenServer.call(Statifier.SessionSupervisor, ...)
+      ** (EXIT) no process`. That is not a defect - `Statifier.start_session/2`'s
+      moduledoc promises `DynamicSupervisor.start_child/2`'s own return value,
+      and calling a `DynamicSupervisor` that was never started exits by
+      design. The criterion overstated the contract; the behavior matches what
+      the function documents. Left as observed rather than "fixed", since
+      changing it would be an API decision this bead has no mandate for.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the full `mix quality` as the phase gate. In interactive
@@ -545,26 +560,26 @@ denominators of 119 SCION and 162 W3C files on disk (the W3C figure being 159
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` is green, proven by `mix gate.verify` exiting zero
+- [x] Full `mix quality` is green, proven by `mix gate.verify` exiting zero
       (not a profiled, scoped, `--quick`, or `--skip`-ed run). Use
       `mix quality --profile loop` while iterating.
-- [ ] `mix test.regression` is green and its per-corpus coverage block prints;
+- [x] `mix test.regression` is green and its per-corpus coverage block prints;
       every figure `docs/testing.md` states about corpus counts appears in
       that block or in `mix test.baseline`'s, with no number in the document
       that no command produces.
-- [ ] `git diff --name-only` shows `docs/testing.md` and nothing else - no
+- [x] `git diff --name-only` shows `docs/testing.md` and nothing else - no
       `lib/`, no `test/`, no `test/passing_tests.json`.
 
 #### Manual Verification:
 
-- [ ] Read the changed paragraphs end to end and confirm each number is the
+- [x] Read the changed paragraphs end to end and confirm each number is the
       one its own sentence claims (a denominator stayed a denominator, a
       ratcheted numerator stayed a numerator) - a find-and-replace that swaps
       a target figure for a current one is the failure mode here.
-- [ ] Confirm the document still reads as guidance rather than as a
+- [x] Confirm the document still reads as guidance rather than as a
       changelog: no sentence added that will be stale the next time the
       ratchet moves.
-- [ ] No regressions in related features: `docs/testing.md`'s ratchet and
+- [x] No regressions in related features: `docs/testing.md`'s ratchet and
       sabotage sections are unchanged in substance, since nothing in this work
       revises either policy.
 
@@ -681,3 +696,93 @@ surfaced once at the end instead of blocking here.
   sabotage discipline), `docs/architecture.md`
 - Harness: `test/support/case.ex:173-190` (`drive_through_session/3`),
   `test/test_helper.exs:7` (the run-scoped `Statifier.Supervisor`)
+
+## Verification Record - 2026-08-16
+
+Both phases' criteria were walked after the fact, since the loop stopped
+before its own check-off step. What was run, so it can be re-run.
+
+### Resolution of the open question the loop recorded
+
+The loop's Phase 1 note asked whether to fix the two newly-exposed session
+bugs or treat this as a registry correction. Neither, as it turned out: a
+third option the note did not consider is the one taken. `test187` and
+`test242` were ratcheted in by **st-cmq.9's own Phase 3 commit, on this same
+branch**, while `st-ybuj`'s namespace gap left their `<invoke>` children
+inert - so they passed for a reason that was about to disappear. Those
+entries had never been pushed. Phase 3's commit was amended to hold both out
+(now `1dc8109`), which keeps the branch's net diff against `origin/main`
+additions-only: no `GateGuard` shrink finding, and no
+`docs/quality-gate-changes.md` entry owed. `st-dmfg` and `st-vy97` stay filed
+as the real bugs, and neither was papered over.
+
+### Phase 1 measurements
+
+- Full gate green and attested (`scope all, no profile, 13 stages`);
+  `mix gate.verify` exit 0. `Gate guard`: no findings.
+- `mix test test/statifier/session/invoke_start_child_test.exs`: 11 tests, 0
+  failures, nothing near its 10_000ms timeout.
+- `test220_test.exs`: terminates in 0.04s, passing. Pre-fix it hung.
+- `session_test.exs` + `session/telemetry_test.exs` +
+  `session/recording_test.exs`: 84 tests, 0 failures, and `git diff` shows
+  none of the three edited on this branch - the tests encoding the old
+  `init/1` timing still hold untouched.
+- Two full seeded runs (`--seed 31337`, `--seed 80085`): both **2082 tests,
+  15 failures**, identical failing-file sets, and `grep -c TimeoutError` is
+  **0** in each. The pre-fix baseline was 106 tests timing out at 60000ms.
+- Registry: 245 -> 266 (119 SCION, 147 W3C). Against `origin/main` the entry
+  **set difference is 0 removed, 92 added**. Note that the raw line diff
+  shows two `-` lines; both are artifacts (`last_updated`, and the trailing
+  comma the previous last element gained), which is why the set difference
+  rather than the line count is the check that answers this criterion.
+- Coverage: **SCION 119/119 (100%), W3C 147/162 (90.7%)**, against v1's
+  90/127 and 27/59.
+- Every one of the 15 remaining reds has an open bead: `st-yizi` (test159,
+  test496), `st-dmfg` (test187), `st-lz1c` (test201, test216, test226,
+  test239, test276, test552), `st-vfmb` (test236), `st-vy97` (test242),
+  `st-2dht` (test330), `st-5577` (test530), `st-vwdg` (test553, test554).
+- `git diff --name-only origin/main...HEAD` touches nothing under
+  `lib/statifier/interpreter*`, `lib/statifier/effect/`,
+  `lib/mix/statifier/adr_guard.ex`, or `docs/quality-gate-changes.md`.
+
+### Phase 1 judgments
+
+- **Appendix D.** `spec-cache/appendix-d.txt:137` reads "Here we invoke
+  whatever needs to be invoked. The implementation of 'invoke' is
+  platform-specific" - quoted, not recalled. `lib/statifier/interpreter.ex` is
+  **unchanged on this branch**, so `run_invoke_pass/1` keeps the pseudocode
+  position its own comment cites. The session's performance of the
+  platform-specific body now sits in `handle_continue({:initialize, ...}, _)`,
+  which returns `{:continue, :drain}` - between the macrostep and the dequeue
+  tail. No new ADR-0002 deviation comment is owed, because the pseudocode
+  gives `invoke(inv)` no body to deviate from.
+- **Telemetry.** For a document invoking from its initial state, the parent
+  emits exactly one `trigger: :initialize` `macrostep` `:start`/`:stop` pair,
+  in that order, `:stop` carrying `duration: 12_356_083` and
+  `outcome: :quiescent`. Filtering by the parent's `session_id` is required
+  to see this: unfiltered, the invoked child's own `:initialize` pair
+  (`outcome: :done`) also arrives, which is correct rather than a duplicate.
+- **Comment sites.** All three describe the new behavior. The one grep hit
+  for effects and `init/1` in the same sentence is `session.ex:140`, which is
+  the corrected text - "This is never performed from `init/1`".
+- **Newly ratcheted files.** All 21 invoke from their initial configuration:
+  19 from a plain initial `<state>`, `test234` from an initial `<parallel>`
+  whose regions each carry an `<invoke>`, `test422` from `s1`. None is an
+  accidental pass.
+- **No new failures.** Against st-cmq.9's recorded 34-over-2074 baseline, 21
+  reds are fixed and the only two additions are `test187` and `test242` -
+  both accounted for by ADR-0042 landing on main, both filed, both held out
+  of the ratchet rather than silenced.
+- **The bead's third criterion**, by reading: the registered path is covered
+  by this phase's new `describe` block, which is the deliberate
+  counter-example. The remaining `Session.start_link/2` sites cover the
+  unregistered-session path ADR-0027 decision 2 sanctions, so no test reaches
+  an initial-configuration `<invoke>` *only* through a bare `start_link/2`.
+
+### Phase 2: no-op, as the phase itself anticipated
+
+`docs/testing.md` hard-codes no ratcheted numerator. Its corpus figures are
+the denominators 119 SCION and 162 W3C, both of which appear in the coverage
+block the tasks print, and v1's 90/127 and 27/59 reference targets, which
+this work does not move. The suite-description figures that *were* stale were
+corrected earlier under st-cmq.9 (commit `2651c45`). No edit invented.
