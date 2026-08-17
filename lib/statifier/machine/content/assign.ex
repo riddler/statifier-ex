@@ -28,10 +28,13 @@ defmodule Statifier.Machine.Content.Assign do
   root-existence, and write mechanics (spec 5.4.2/5.9.2/5.10) live in
   `Statifier.Interpreter.Datamodel.write_location/4` - extracted so
   `idlocation` (6.4.1) and the empty-`<finalize>` auto-assign (6.5) can call
-  the same mechanics without duplicating them here.
+  the same mechanics without duplicating them here. A successful write also
+  produces one `{:datamodel_change, _}` core effect - the one place a
+  `<assign>`'s written location and value reach a consumer.
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
+  alias Statifier.Effect
   alias Statifier.Evaluator
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter.Datamodel
@@ -75,17 +78,33 @@ defmodule Statifier.Machine.Content.Assign do
     # `{:error, reason}`, never a raise and never a platform notification of
     # its own - the runner is the sole conversion site for that (ADR-0003).
     @spec execute(node :: Assign.t(), context :: Context.t()) ::
-            {:ok, Context.t(), []} | {:error, term()}
+            {:ok, Context.t(), [Effect.t()]} | {:error, term()}
     def execute(%Assign{location: location} = node, %Context{} = context) do
       with {:ok, value} <- evaluate_value(node, context),
-           {:ok, machine_state, datamodel_context, _write} <-
+           {:ok, machine_state, datamodel_context, write} <-
              Datamodel.write_location(
                context.machine_state,
                context.datamodel_context,
                location,
                value
              ) do
-        {:ok, %{context | machine_state: machine_state, datamodel_context: datamodel_context}, []}
+        # The counters are read from the post-write machine_state - the same
+        # value the pre-write one carries for macrostep/microstep, since the
+        # write touches only `datamodel`.
+        {:ok, %{context | machine_state: machine_state, datamodel_context: datamodel_context},
+         [
+           {:datamodel_change,
+            %Effect.DatamodelChange{
+              location_path: write.path,
+              location_source: location,
+              new_value: write.new_value,
+              prior_value: write.prior_value,
+              c_index: node.c_index,
+              owner: context.owner,
+              macrostep: machine_state.macrostep,
+              microstep: machine_state.microstep
+            }}
+         ]}
       end
     end
 

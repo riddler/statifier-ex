@@ -701,7 +701,7 @@ defmodule Statifier.Interpreter do
          invoke_index,
          event
        ) do
-    {auto_assign_finalize(machine_state, state_index, invoke, invoke_index, event), []}
+    auto_assign_finalize(machine_state, state_index, invoke, invoke_index, event)
   end
 
   defp apply_finalize(
@@ -730,26 +730,32 @@ defmodule Statifier.Interpreter do
           invoke :: MInvoke.t(),
           invoke_index :: non_neg_integer(),
           event :: Event.t()
-        ) :: MachineState.t()
+        ) :: {MachineState.t(), [Effect.t()]}
   defp auto_assign_finalize(machine_state, state_index, invoke, invoke_index, %Event{data: data})
        when is_map(data) do
     context = Evaluator.context(machine_state)
 
-    {machine_state, _context} =
+    {machine_state, _context, effects} =
       (invoke.namelist ++ invoke.params)
       |> Enum.filter(&(&1.kind == :location))
-      |> Enum.reduce({machine_state, context}, fn param, {ms, ctx} ->
+      |> Enum.reduce({machine_state, context, []}, fn param, {ms, ctx, effects} ->
         case Map.fetch(data, param.name) do
-          {:ok, value} -> write_finalize_target(ms, ctx, state_index, invoke_index, param, value)
-          :error -> {ms, ctx}
+          {:ok, value} ->
+            {ms, ctx, new_effects} =
+              write_finalize_target(ms, ctx, state_index, invoke_index, param, value)
+
+            {ms, ctx, effects ++ new_effects}
+
+          :error ->
+            {ms, ctx, effects}
         end
       end)
 
-    machine_state
+    {machine_state, effects}
   end
 
   defp auto_assign_finalize(machine_state, _state_index, _invoke, _invoke_index, %Event{}),
-    do: machine_state
+    do: {machine_state, []}
 
   # The write itself, through the same `Datamodel.write_location/4` an
   # `<assign>` uses, factored out of `Statifier.Machine.Content.Assign` so
@@ -773,7 +779,7 @@ defmodule Statifier.Interpreter do
           invoke_index :: non_neg_integer(),
           param :: Param.t(),
           value :: term()
-        ) :: {MachineState.t(), Predicator.Context.t()}
+        ) :: {MachineState.t(), Predicator.Context.t(), [Effect.t()]}
   defp write_finalize_target(
          machine_state,
          context,
@@ -783,8 +789,21 @@ defmodule Statifier.Interpreter do
          value
        ) do
     case Datamodel.write_location(machine_state, context, source, value) do
-      {:ok, machine_state, context, _write} ->
-        {machine_state, context}
+      {:ok, machine_state, context, write} ->
+        effect =
+          {:datamodel_change,
+           %Effect.DatamodelChange{
+             location_path: write.path,
+             location_source: source,
+             new_value: write.new_value,
+             prior_value: write.prior_value,
+             c_index: nil,
+             owner: {:finalize, state_index, invoke_index},
+             macrostep: machine_state.macrostep,
+             microstep: machine_state.microstep
+           }}
+
+        {machine_state, context, [effect]}
 
       {:error, reason} ->
         machine_state =
@@ -795,7 +814,7 @@ defmodule Statifier.Interpreter do
             data: reason
           )
 
-        {machine_state, context}
+        {machine_state, context, []}
     end
   end
 
@@ -1331,7 +1350,7 @@ defmodule Statifier.Interpreter do
       {invoke_id, machine_state} = generate_invoke_id(machine_state, state, invoke)
 
       case maybe_write_idlocation(machine_state, context, invoke.idlocation, invoke_id) do
-        {:ok, machine_state, context, _write} ->
+        {:ok, machine_state, context, write} ->
           machine_state =
             record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
 
@@ -1350,7 +1369,20 @@ defmodule Statifier.Interpreter do
                microstep: machine_state.microstep
              }}
 
-          {machine_state, context, [effect]}
+          # The datamodel write, when there is one, precedes the :invoke
+          # effect it accompanies - same ordering rule <send idlocation>
+          # follows.
+          effects =
+            datamodel_change_effects(
+              write,
+              invoke.idlocation,
+              state_index,
+              invoke_index,
+              machine_state
+            ) ++
+              [effect]
+
+          {machine_state, context, effects}
 
         {:error, reason} ->
           {abort_invocation(machine_state, state_index, invoke_index, reason), context, []}
@@ -1469,6 +1501,43 @@ defmodule Statifier.Interpreter do
 
   defp maybe_write_idlocation(machine_state, context, idlocation, invoke_id),
     do: Datamodel.write_location(machine_state, context, idlocation, invoke_id)
+
+  # `nil` (no idlocation, or the write failed and never reached here) -> no
+  # effect; a %Datamodel.Write{} -> one {:datamodel_change, _} effect.
+  # `c_index: nil` and `owner: {:invoke, state_index, invoke_index}` - the
+  # widened case DatamodelChange's own `owner/0` declares, since this write
+  # belongs to no content block.
+  @spec datamodel_change_effects(
+          write :: Datamodel.Write.t() | nil,
+          idlocation :: String.t() | nil,
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          machine_state :: MachineState.t()
+        ) :: [{:datamodel_change, Effect.DatamodelChange.t()}]
+  defp datamodel_change_effects(nil, _idlocation, _state_index, _invoke_index, _machine_state),
+    do: []
+
+  defp datamodel_change_effects(
+         %Datamodel.Write{} = write,
+         idlocation,
+         state_index,
+         invoke_index,
+         machine_state
+       ) do
+    [
+      {:datamodel_change,
+       %Effect.DatamodelChange{
+         location_path: write.path,
+         location_source: idlocation,
+         new_value: write.new_value,
+         prior_value: write.prior_value,
+         c_index: nil,
+         owner: {:invoke, state_index, invoke_index},
+         macrostep: machine_state.macrostep,
+         microstep: machine_state.microstep
+       }}
+    ]
+  end
 
   # `active_invocations[{state_index, invoke_index}] = inv.invokeid`
   # (Appendix D stores this on `inv` itself; see `MachineState`'s own

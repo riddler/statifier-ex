@@ -32,7 +32,7 @@ defmodule Statifier.Effect do
   | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | `Statifier.Interpreter.macrostep/1` |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
-  | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | not yet produced (`Statifier.Interpreter.Datamodel.write_location/4`'s four call sites) |
+  | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | `Statifier.Interpreter.Datamodel.write_location/4`'s four call sites - `Statifier.Machine.Content.Assign`'s `execute/2` (`<assign>`), `Statifier.Machine.Content.Send`'s `execute/2` (`<send idlocation>`), `Statifier.Interpreter`'s `write_finalize_target/6` (the empty-`<finalize>` auto-assign), and `Statifier.Interpreter`'s `invoke_one/6` (`<invoke idlocation>`) |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
   | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected/3` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
@@ -44,11 +44,10 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.FinalizeAutoforward` | `Statifier.Interpreter.handle_event/2`'s finalize/autoforward pass (`apply_invoke_passes/2`, spec 6.4/6.5) |
 
   The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
-  `:invoke`, `:cancel_invoke`, `:autoforward`, and all nine trace effects.
-  `:send`, `:send_delayed`, `:cancel`, and `:datamodel_change` remain
+  `:invoke`, `:cancel_invoke`, `:autoforward`, `:datamodel_change`, and all
+  nine trace effects. `:send`, `:send_delayed`, and `:cancel` remain
   unproduced, because nothing in this core sends, delays, or cancels a
-  delayed send yet, and nothing yet turns a `write_location/4` write into an
-  effect.
+  delayed send yet.
 
   ## Trace effects carry indexes and counters, never structs
 

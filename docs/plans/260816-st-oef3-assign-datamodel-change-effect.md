@@ -699,16 +699,16 @@ collecting effects. The test then:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (loop gate between edits).
-- [ ] `mix test test/statifier/session/datamodel_reconstruction_test.exs` passes - the bead's acceptance criterion.
-- [ ] The per-site tests pass, including the failed-write-emits-nothing test.
-- [ ] `mix test.regression` is green and `test/passing_tests.json` is
+- [x] Full `mix quality` passes (loop gate between edits).
+- [x] `mix test test/statifier/session/datamodel_reconstruction_test.exs` passes - the bead's acceptance criterion.
+- [x] The per-site tests pass, including the failed-write-emits-nothing test.
+- [x] `mix test.regression` is green and `test/passing_tests.json` is
       unchanged, or any newly passing conformance test is added with
       `mix test.baseline add`. Emission changes no SCXML semantics, so no
       movement is the expected result; movement is a finding to report, not to
       ratchet away silently.
-- [ ] `mix test --include scion --include scxml_w3` shows no new failures.
-- [ ] Dialyzer clean on the widened `execute/2` `@spec`.
+- [x] `mix test --include scion --include scxml_w3` shows no new failures.
+- [x] Dialyzer clean on the widened `execute/2` `@spec`.
 
 #### Manual Verification:
 - [ ] The touched interpreter functions still match the W3C spec text they
@@ -859,5 +859,26 @@ full gate as the phase gate. In interactive execution, pause here for the
 human to confirm the manual testing before moving to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically, and Manual Verification items are deferred to the end.
+
+---
+
+### Phase 3
+
+- [ ] The touched interpreter functions still match the W3C spec text they
+      port - 5.4.2/5.9.2 for `<assign>`, 6.2.1 for `<send idlocation>`, 6.4.1
+      for `<invoke idlocation>`, 6.5 for `<finalize>` - line for line, with no
+      control-flow change beyond the added return value.
+- [ ] Effect ordering reads correctly at each site: the datamodel change
+      precedes the `:send`/`:invoke` it accompanies, and
+      `Trace.ContentExecuted` still comes after the block's effects.
+- [ ] The reconstruction test's stated gap (decision 6) is written in the test
+      file itself, not only in this plan.
+- [ ] No regressions in `<send>`, `<invoke>`, or `<finalize>` behavior.
+
+**Implementation Note**: Use the project's loop gate between edits; run the
+full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing. In looped (`--loop`) execution, this
+phase's Automated Verification gates advancement automatically, and Manual
+Verification items are surfaced at the end.
 
 ---

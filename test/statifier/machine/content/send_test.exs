@@ -420,7 +420,8 @@ defmodule Statifier.Machine.Content.SendTest do
       ms = machine_state(m)
       node = send_node(m, "idlocation")
 
-      assert {:ok, _new_ctx, [{:send, %Effect.Send{id_from_author?: true}}]} =
+      assert {:ok, _new_ctx,
+              [{:datamodel_change, _change}, {:send, %Effect.Send{id_from_author?: true}}]} =
                ExecutableContent.execute(node, context(ms))
     end
   end
@@ -435,11 +436,56 @@ defmodule Statifier.Machine.Content.SendTest do
       ms = machine_state(m)
       node = send_node(m, "idlocation")
 
-      assert {:ok, new_ctx, [{:send, %Effect.Send{send_id: send_id}}]} =
+      assert {:ok, new_ctx,
+              [
+                {:datamodel_change, %Effect.DatamodelChange{}},
+                {:send, %Effect.Send{send_id: send_id}}
+              ]} =
                ExecutableContent.execute(node, context(ms))
 
       assert new_ctx.machine_state.datamodel["loc"] == send_id
       assert send_id != nil
+    end
+
+    # sabotage: `Send`'s `execute/2` builds the returned effect list as
+    # `[effect | datamodel_change_effects(...)]` instead of
+    # `datamodel_change_effects(...) ++ [effect]` -> the `:datamodel_change`
+    # effect would land *after* `:send` instead of before it, reddening this
+    # test's ordering assertion (the datamodel write must precede the send it
+    # accompanies, since Session performs instructions in the core's effect
+    # order). Confirmed red and reverted.
+    test "the :datamodel_change effect precedes :send and names the raw idlocation, c_index, and owner" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "idlocation")
+      owner = {:onexit, 3, 0}
+
+      assert {:ok, _new_ctx,
+              [
+                {:datamodel_change, %Effect.DatamodelChange{} = change},
+                {:send, %Effect.Send{send_id: send_id}}
+              ]} = ExecutableContent.execute(node, context(ms, owner))
+
+      assert change.location_path == ["loc"]
+      assert change.location_source == "loc"
+      assert change.new_value == send_id
+      assert change.prior_value == nil
+      assert change.c_index == node.c_index
+      assert change.owner == owner
+    end
+
+    # sabotage: `maybe_write_idlocation/4`'s `nil`-idlocation clause is
+    # changed to return a `%Datamodel.Write{}` record instead of `nil` ->
+    # this "bare" (no idlocation) send would wrongly gain a
+    # `:datamodel_change` effect, reddening this test's single-element match.
+    # Confirmed red and reverted.
+    test "no idlocation emits no :datamodel_change effect" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "bare")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{}}]} =
+               ExecutableContent.execute(node, context(ms))
     end
   end
 

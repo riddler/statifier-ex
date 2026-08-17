@@ -86,8 +86,11 @@ defmodule Statifier.Machine.Content.Send do
 
     # spec 6.2's <send>: resolve every argument (event, target, type, delay,
     # namelist/<param>, <content>), mint or read the send id, write
-    # idlocation, then emit exactly one effect - `{:send, %Effect.Send{}}`
-    # with no delay, `{:send_delayed, %Effect.SendDelayed{}}` with one. This
+    # idlocation, then emit `{:send, %Effect.Send{}}` with no delay or
+    # `{:send_delayed, %Effect.SendDelayed{}}` with one - preceded by
+    # `{:datamodel_change, _}` when `idlocation` was written: the datamodel
+    # write happens before the send is dispatched, and effects are performed
+    # in the core's own order. This
     # `with` is deliberately shaped like `invoke_one/6`
     # (`lib/statifier/interpreter.ex:1278-1313`) - same order, same
     # delegation to `resolve_expr/2`/`resolve_params/2`/`resolve_content/2`
@@ -99,7 +102,11 @@ defmodule Statifier.Machine.Content.Send do
     # message: no effect is produced.
     @spec execute(node :: Send.t(), context :: Context.t()) ::
             {:ok, Context.t(),
-             [{:send, Effect.Send.t()} | {:send_delayed, Effect.SendDelayed.t()}]}
+             [
+               {:datamodel_change, Effect.DatamodelChange.t()}
+               | {:send, Effect.Send.t()}
+               | {:send_delayed, Effect.SendDelayed.t()}
+             ]}
             | {:error, term()}
     def execute(%Send{} = node, %Context{} = context) do
       %{owner: owner, datamodel_context: datamodel_context} = context
@@ -113,7 +120,7 @@ defmodule Statifier.Machine.Content.Send do
         {send_id, machine_state} = generate_send_id(context.machine_state, node)
 
         case maybe_write_idlocation(machine_state, datamodel_context, node.idlocation, send_id) do
-          {:ok, machine_state, datamodel_context, _write} ->
+          {:ok, machine_state, datamodel_context, write} ->
             fields = %{
               event: event,
               target: target,
@@ -129,7 +136,12 @@ defmodule Statifier.Machine.Content.Send do
                 datamodel_context: datamodel_context
             }
 
-            {:ok, new_context, [effect]}
+            # The datamodel write, when there is one, precedes the
+            # :send/:send_delayed effect it accompanies - the write happens
+            # before the send is dispatched, and Session performs
+            # instructions in the core's effect order.
+            {:ok, new_context,
+             datamodel_change_effects(write, node, owner, machine_state) ++ [effect]}
 
           {:error, reason} ->
             {:error, reason}
@@ -267,6 +279,40 @@ defmodule Statifier.Machine.Content.Send do
 
     defp maybe_write_idlocation(machine_state, datamodel_context, idlocation, send_id),
       do: Datamodel.write_location(machine_state, datamodel_context, idlocation, send_id)
+
+    # `nil` (no idlocation was written, or the write failed and never
+    # reached here) -> no effect; a %Datamodel.Write{} -> one
+    # {:datamodel_change, _} effect, carrying this node's own c_index/owner
+    # and the post-write counters (immaterial, since the write touches only
+    # `datamodel`).
+    @spec datamodel_change_effects(
+            write :: Datamodel.Write.t() | nil,
+            node :: Send.t(),
+            owner :: Machine.Content.owner(),
+            machine_state :: MachineState.t()
+          ) :: [{:datamodel_change, Effect.DatamodelChange.t()}]
+    defp datamodel_change_effects(nil, %Send{}, _owner, _machine_state), do: []
+
+    defp datamodel_change_effects(
+           %Datamodel.Write{} = write,
+           %Send{c_index: c_index} = node,
+           owner,
+           ms
+         ) do
+      [
+        {:datamodel_change,
+         %Effect.DatamodelChange{
+           location_path: write.path,
+           location_source: node.idlocation,
+           new_value: write.new_value,
+           prior_value: write.prior_value,
+           c_index: c_index,
+           owner: owner,
+           macrostep: ms.macrostep,
+           microstep: ms.microstep
+         }}
+      ]
+    end
 
     # `nil` delay -> `{:send, %Effect.Send{}}`; a resolved delay ->
     # `{:send_delayed, %Effect.SendDelayed{}}`. Both carry `c_index`,

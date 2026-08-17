@@ -2,6 +2,7 @@ defmodule Statifier.Machine.Content.AssignTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Compiler
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Evaluator
   alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
@@ -61,7 +62,7 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"x" => nil})
     node = assign("x", compiled_expr("1 + 1"))
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert new_ctx.machine_state.datamodel["x"] == 2
   end
 
@@ -73,7 +74,7 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"a" => nil})
     node = assign("a.b.c", compiled_expr("1"))
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert new_ctx.machine_state.datamodel["a"] == %{"b" => %{"c" => 1}}
   end
 
@@ -86,7 +87,7 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"items" => [1]})
     node = assign("items[2]", compiled_expr("99"))
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert new_ctx.machine_state.datamodel["items"] == [1, :undefined, 99]
   end
 
@@ -184,7 +185,7 @@ defmodule Statifier.Machine.Content.AssignTest do
       ctx = context(%{"my_var" => nil})
       node = assign("my_var", compiled_expr("1"))
 
-      assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+      assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
       assert new_ctx.machine_state.datamodel["my_var"] == 1
     end
   end
@@ -260,7 +261,7 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"x" => nil})
     node = assign("x", {:static, [1, 2, 3]})
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert new_ctx.machine_state.datamodel["x"] == [1, 2, 3]
   end
 
@@ -274,7 +275,7 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"x" => nil})
     node = assign("x", compiled_expr("42"))
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("x")) == {:ok, 42}
   end
 
@@ -288,10 +289,64 @@ defmodule Statifier.Machine.Content.AssignTest do
     ctx = context(%{"a" => %{"b" => 1}, "other" => "untouched"})
     node = assign("a.b", compiled_expr("99"))
 
-    assert {:ok, new_ctx, []} = ExecutableContent.execute(node, ctx)
+    assert {:ok, new_ctx, [{:datamodel_change, _change}]} = ExecutableContent.execute(node, ctx)
     assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("a.b")) == {:ok, 99}
 
     assert Evaluator.evaluate(new_ctx.datamodel_context, compiled_expr("other")) ==
              {:ok, "untouched"}
+  end
+
+  describe "the :datamodel_change effect" do
+    # sabotage: `Assign`'s `execute/2` returns `[]` instead of the
+    # `{:datamodel_change, _}` effect -> this test's `[{:datamodel_change,
+    # change}]` pattern match reddens, since the effect list would be empty.
+    # Confirmed red and reverted.
+    test "an overwrite emits a :datamodel_change naming the path, both values, c_index, and owner" do
+      ctx = context(%{"x" => 1})
+      node = %{assign("x", compiled_expr("2")) | c_index: 7}
+
+      assert {:ok, new_ctx, [{:datamodel_change, %DatamodelChange{} = change}]} =
+               ExecutableContent.execute(node, ctx)
+
+      assert change.location_path == ["x"]
+      assert change.location_source == "x"
+      assert change.new_value == 2
+      assert change.prior_value == 1
+      assert change.c_index == 7
+      assert change.owner == @owner
+      assert change.macrostep == new_ctx.machine_state.macrostep
+      assert change.microstep == new_ctx.machine_state.microstep
+    end
+
+    # sabotage: `Datamodel.write_location/4`'s `prior_value = read_path(...)`
+    # step is moved to *after* the `write/4` call, so it reads the
+    # just-written value instead of the pre-write one -> `prior_value` would
+    # come back `2` (the new value) instead of `:undefined`, reddening this
+    # assertion. Confirmed red and reverted.
+    test "a fresh write over a seeded-but-unbound id reports prior_value :undefined" do
+      ctx = context(%{"x" => :undefined})
+      node = assign("x", compiled_expr("2"))
+
+      assert {:ok, _new_ctx, [{:datamodel_change, %DatamodelChange{prior_value: :undefined}}]} =
+               ExecutableContent.execute(node, ctx)
+    end
+
+    # A failed write emits no {:datamodel_change, _} at all (decision 9) -
+    # the error tuple carries no effect list, so there is nothing to assert
+    # beyond the shape itself. This is the same failure this file's
+    # "an undeclared root yields {:error, ...}" test above already exercises;
+    # restated here under this describe block so the negative case for this
+    # effect is easy to find alongside its positive ones.
+    #
+    # sabotage: n/a - this restates an existing, already-sabotaged assertion
+    # (see "an undeclared root yields {:error, {:unbound_location, _}}
+    # without writing" above) under this describe block for discoverability;
+    # it exercises no new lib/ behavior of its own.
+    test "a failed write emits no :datamodel_change effect" do
+      ctx = context(%{})
+      node = assign("undeclared", compiled_expr("1"))
+
+      assert {:error, {:unbound_location, "undeclared"}} = ExecutableContent.execute(node, ctx)
+    end
   end
 end

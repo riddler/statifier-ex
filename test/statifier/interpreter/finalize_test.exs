@@ -3,6 +3,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
 
   alias Statifier.Compiler
   alias Statifier.Effect.Autoforward
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.Trace.FinalizeAutoforward
   alias Statifier.Event
   alias Statifier.Interpreter
@@ -20,6 +21,10 @@ defmodule Statifier.Interpreter.FinalizeTest do
 
   defp autoforward_effects(effects) do
     for {:autoforward, %Autoforward{} = payload} <- effects, do: payload
+  end
+
+  defp datamodel_change_effects(effects) do
+    for {:datamodel_change, %DatamodelChange{} = payload} <- effects, do: payload
   end
 
   defp finalize_autoforward_traces(effects) do
@@ -337,5 +342,63 @@ defmodule Statifier.Interpreter.FinalizeTest do
              Interpreter.handle_event(ms, Event.external("go", invokeid: "abc"))
 
     assert MapSet.member?(result.configuration, s1_index)
+  end
+
+  describe "the empty-<finalize> auto-assign's :datamodel_change effect" do
+    #  0 scxml (root)
+    #  1   s0      (invoke id="inv-fail"; <param name="p" location="_sessionid"/>; empty <finalize/>)
+    @failing_param_location_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+        <state id="s0">
+            <invoke id="inv-fail" type="t">
+                <param name="p" location="_sessionid"/>
+                <finalize/>
+            </invoke>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `write_finalize_target/6`'s success clause builds the
+    # `{:datamodel_change, _}` effect unconditionally, even on the `{:error,
+    # reason}` branch (folding both clauses into one) -> the system-variable
+    # write failure below would still emit an effect, reddening this test's
+    # empty-list assertion. Confirmed red and reverted.
+    test "a failed auto-assign write emits no :datamodel_change effect" do
+      m = compile!(@failing_param_location_document)
+      {ms, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, _result, effects} =
+               Interpreter.handle_event(
+                 ms,
+                 %Event{name: "go", type: :external, invokeid: "inv-fail", data: %{"p" => "hi"}}
+               )
+
+      assert datamodel_change_effects(effects) == []
+    end
+
+    # sabotage: `write_finalize_target/6`'s success clause hardcodes
+    # `owner: {:finalize, 0, 0}` instead of `{:finalize, state_index,
+    # invoke_index}` -> since `s0` is not index `0` (the root is), this
+    # test's `owner` assertion reddens. Confirmed red and reverted.
+    test "a successful auto-assign write emits a :datamodel_change naming the path, both values, and owner" do
+      m = compile!(@param_location_document)
+      {:ok, s0_index} = Statifier.Machine.index(m, "s0")
+      {ms, _init_effects} = Interpreter.initialize(m)
+
+      assert {:ok, result, effects} =
+               Interpreter.handle_event(
+                 ms,
+                 %Event{name: "go", type: :external, invokeid: "inv-param", data: %{"p" => "hi"}}
+               )
+
+      assert [change] = datamodel_change_effects(effects)
+      assert change.location_path == ["param_target"]
+      assert change.location_source == "param_target"
+      assert change.new_value == "hi"
+      assert change.prior_value == nil
+      assert change.c_index == nil
+      assert change.owner == {:finalize, s0_index, 0}
+      assert result.datamodel["param_target"] == "hi"
+    end
   end
 end
