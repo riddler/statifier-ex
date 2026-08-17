@@ -453,4 +453,86 @@ defmodule Statifier.ReplayRoundTripTest do
       assert result.machine_state.datamodel["loc"] == live_send_id
     end
   end
+
+  # -- case 8: a seam-crossing #_internal send (ADR-0043 decision 1) -------
+
+  defp internal_send_to_final_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b">
+            <onentry>
+                <send event="ping" target="#_internal"/>
+            </onentry>
+            <transition event="ping" target="c"/>
+        </state>
+        <final id="c"/>
+    </scxml>
+    """
+  end
+
+  describe "a run that crosses the ADR-0039 seam via #_internal (ADR-0043 decision 1)" do
+    # sabotage: `deliver_internal/6`'s deferral is reverted to the inline
+    # `perform/3` call -> the live stream interleaves the re-entry ahead of
+    # the outer batch's tail while replay keeps the recording's flat order,
+    # so `round_trip/3`'s `result.stream == stream` fails on order alone -
+    # same multiset, same terminal `%MachineState{}`. Reverted and confirmed
+    # green.
+    test "the recording carries the #_internal crossing and the drained stream ends :halted, :done" do
+      machine = compile!(internal_send_to_final_doc())
+
+      {recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          Session.send_event(session, "go")
+          wait_for_status(session, fn s -> s.status == :done end)
+        end)
+
+      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _}, &1))
+      assert List.last(stream) == {:halted, :done}
+      assert result.status == :done
+    end
+  end
+
+  # -- case 9: a seam-crossing error.communication (the other door) --------
+
+  defp communication_error_to_final_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b">
+            <onentry>
+                <send event="e" target="#_scxml_nonexistent"/>
+            </onentry>
+            <transition event="error.communication" target="c"/>
+        </state>
+        <final id="c"/>
+    </scxml>
+    """
+  end
+
+  describe "a run that crosses the ADR-0039 seam via communication_error/4 (the other door)" do
+    # sabotage: same mutation as the #_internal case above - reverting
+    # `deliver_internal/6`'s deferral back to the inline `perform/3` call ->
+    # the live stream interleaves the `error.communication` re-entry ahead of
+    # the outer batch's tail while replay stays flat, reddening
+    # `round_trip/3`'s `result.stream == stream` on order alone. Reverted and
+    # confirmed green.
+    test "an unreachable #_scxml_ target's error.communication crossing also round-trips in order" do
+      machine = compile!(communication_error_to_final_doc())
+
+      {recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          Session.send_event(session, "go")
+          wait_for_status(session, fn s -> s.status == :done end)
+        end)
+
+      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _}, &1))
+      assert List.last(stream) == {:halted, :done}
+      assert result.status == :done
+    end
+  end
 end
