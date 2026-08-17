@@ -113,7 +113,7 @@ defmodule Statifier.Machine.Content.Send do
         {send_id, machine_state} = generate_send_id(context.machine_state, node)
 
         case maybe_write_idlocation(machine_state, datamodel_context, node.idlocation, send_id) do
-          {:ok, machine_state, datamodel_context} ->
+          {:ok, machine_state, datamodel_context, _write} ->
             fields = %{
               event: event,
               target: target,
@@ -259,9 +259,11 @@ defmodule Statifier.Machine.Content.Send do
             datamodel_context :: Predicator.Context.t(),
             idlocation :: String.t() | nil,
             send_id :: String.t()
-          ) :: {:ok, MachineState.t(), Predicator.Context.t()} | {:error, term()}
+          ) ::
+            {:ok, MachineState.t(), Predicator.Context.t(), Datamodel.Write.t() | nil}
+            | {:error, term()}
     defp maybe_write_idlocation(machine_state, datamodel_context, nil, _send_id),
-      do: {:ok, machine_state, datamodel_context}
+      do: {:ok, machine_state, datamodel_context, nil}
 
     defp maybe_write_idlocation(machine_state, datamodel_context, idlocation, send_id),
       do: Datamodel.write_location(machine_state, datamodel_context, idlocation, send_id)

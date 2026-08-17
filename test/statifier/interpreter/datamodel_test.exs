@@ -500,4 +500,86 @@ defmodule Statifier.Interpreter.DatamodelTest do
       assert Datamodel.enter_state(ms, 0) == ms
     end
   end
+
+  describe "write_location/4's fourth element (the %Datamodel.Write{} report)" do
+    @document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+        <state id="s0"/>
+    </scxml>
+    """
+
+    defp write_context(datamodel) do
+      ms = %{(compile!(@document) |> MachineState.new()) | datamodel: datamodel}
+      {ms, Evaluator.context(ms)}
+    end
+
+    # sabotage: `write_location/4`'s `prior_value = read_path(...)` binding is
+    # changed to `prior_value = nil` unconditionally -> a seeded-:undefined
+    # id's prior_value would still read :undefined by coincidence (nil !=
+    # :undefined though, so this reddens directly: the assertion expects the
+    # atom :undefined, not nil).
+    test "a fresh write over a seeded-:undefined id reports prior_value: :undefined" do
+      {ms, ctx} = write_context(%{"Var1" => :undefined})
+
+      assert {:ok, _ms, _ctx, write} = Datamodel.write_location(ms, ctx, "Var1", 1)
+      assert write.path == ["Var1"]
+      assert write.prior_value == :undefined
+      assert write.new_value == 1
+    end
+
+    # sabotage: `read_path/2`'s `Map.fetch/2` clause is changed to always
+    # `{:halt, :undefined}` regardless of the fetch result -> an overwrite's
+    # prior_value would read :undefined instead of the old value, reddening
+    # the `== "old"` assertion.
+    test "an overwrite reports the old value as prior_value" do
+      {ms, ctx} = write_context(%{"Var1" => "old"})
+
+      assert {:ok, _ms, _ctx, write} = Datamodel.write_location(ms, ctx, "Var1", "new")
+      assert write.path == ["Var1"]
+      assert write.prior_value == "old"
+      assert write.new_value == "new"
+    end
+
+    # sabotage: `write_location/4`'s `%Write{path: path, ...}` literal is
+    # changed to `%Write{path: [root | _rest] = path; [root], ...}` (reporting
+    # only the root segment `["a"]` instead of the full resolved path) -> the
+    # `== ["a", "b", "c"]` assertion reddens.
+    test "a deep path a.b.c reports the full path and the leaf's prior value" do
+      {ms, ctx} = write_context(%{"a" => %{"b" => %{"c" => "old-leaf"}}})
+
+      assert {:ok, _ms, _ctx, write} = Datamodel.write_location(ms, ctx, "a.b.c", "new-leaf")
+      assert write.path == ["a", "b", "c"]
+      assert write.prior_value == "old-leaf"
+      assert write.new_value == "new-leaf"
+    end
+
+    # sabotage: `read_path/2`'s integer-index clause guard is changed from
+    # `is_integer(segment) and is_list(container)` to
+    # `is_binary(segment) and is_list(container)` (never matches an integer
+    # segment) -> falls through to the catch-all, reddening prior_value from
+    # 20 to :undefined.
+    test "a bracket path items[1] carries an integer segment and reports the indexed prior value" do
+      {ms, ctx} = write_context(%{"items" => [10, 20, 30]})
+
+      assert {:ok, _ms, _ctx, write} = Datamodel.write_location(ms, ctx, "items[1]", 99)
+      assert write.path == ["items", 1]
+      assert write.prior_value == 20
+      assert write.new_value == 99
+    end
+
+    # sabotage: `read_path/2`'s catch-all clause is changed to `{:halt, nil}`
+    # instead of `{:halt, :undefined}` -> a vivified intermediate container's
+    # prior_value would read nil instead of :undefined, reddening the
+    # assertion (and not crashing, which is exactly what this test is here to
+    # confirm read_path/2 does not do against a nil/non-container root).
+    test "a vivified intermediate container reports prior_value: :undefined, not a crash" do
+      {ms, ctx} = write_context(%{"a" => nil})
+
+      assert {:ok, _ms, _ctx, write} = Datamodel.write_location(ms, ctx, "a.b.c", 1)
+      assert write.path == ["a", "b", "c"]
+      assert write.prior_value == :undefined
+      assert write.new_value == 1
+      assert write.__struct__ == Datamodel.Write
+    end
+  end
 end

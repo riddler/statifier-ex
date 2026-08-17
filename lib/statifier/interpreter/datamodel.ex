@@ -83,6 +83,7 @@ defmodule Statifier.Interpreter.Datamodel do
   """
 
   alias Statifier.Evaluator
+  alias Statifier.Interpreter.Datamodel.Write
   alias Statifier.Machine
   alias Statifier.MachineState
 
@@ -111,13 +112,20 @@ defmodule Statifier.Interpreter.Datamodel do
 
   Every predicator failure returns as a bare `{:error, term()}` - the caller
   is the sole `error.execution` conversion site (ADR-0003).
+
+  On success, the fourth element is a `Statifier.Interpreter.Datamodel.Write`
+  report of the write - the resolved `path`, the `prior_value` read at that
+  full path immediately before the write, and the `new_value` written.
+  Reporting is all this function does; building an effect from the report is
+  each caller's own job.
   """
   @spec write_location(
           machine_state :: MachineState.t(),
           datamodel_context :: Predicator.Context.t(),
           path_source :: String.t(),
           value :: term()
-        ) :: {:ok, MachineState.t(), Predicator.Context.t()} | {:error, term()}
+        ) ::
+          {:ok, MachineState.t(), Predicator.Context.t(), Write.t()} | {:error, term()}
   def write_location(
         %MachineState{} = machine_state,
         %Predicator.Context{} = datamodel_context,
@@ -128,13 +136,48 @@ defmodule Statifier.Interpreter.Datamodel do
     with {:ok, path} <- resolve_location(path_source, datamodel_context),
          :ok <- check_system_variable(path),
          :ok <- check_root(machine_state, path_source, path),
+         prior_value = read_path(machine_state.datamodel, path),
          {:ok, new_datamodel} <- write(machine_state, path_source, path, value) do
       new_machine_state = %{machine_state | datamodel: new_datamodel}
       [root | _rest] = path
 
       {:ok, new_machine_state,
-       Evaluator.bind(datamodel_context, root, Map.fetch!(new_datamodel, root))}
+       Evaluator.bind(datamodel_context, root, Map.fetch!(new_datamodel, root)),
+       %Write{path: path, prior_value: prior_value, new_value: value}}
     end
+  end
+
+  # The value at the resolved `path`, read from the *pre-write* datamodel -
+  # placed before `write/4` runs (deliberately: reading after would see the
+  # value just written, defeating the whole point of a prior read).
+  # `Predicator.ContextLocation` has `put/3` but no getter
+  # (`deps/predicator/lib/predicator/context_location.ex:210`), so this is a
+  # local walk: `Map.fetch/2` on a binary key against a map, `Enum.fetch/2` on
+  # an integer index against a list, `:undefined` on any miss or on a
+  # non-container - ADR-0037's single spelling for an unbound value, at the
+  # full path rather than the whole root. This walk deliberately reads the
+  # *full* path, so it conflates "nothing was ever written here" with
+  # "`:undefined` was written here" - accepted, since `prior_value` is never
+  # consulted for reconstruction, only for diffing/undo.
+  @spec read_path(datamodel :: map(), path :: Predicator.ContextLocation.location_path()) ::
+          term()
+  defp read_path(datamodel, path) do
+    Enum.reduce_while(path, datamodel, fn
+      segment, container when is_binary(segment) and is_map(container) ->
+        case Map.fetch(container, segment) do
+          {:ok, value} -> {:cont, value}
+          :error -> {:halt, :undefined}
+        end
+
+      segment, container when is_integer(segment) and is_list(container) ->
+        case Enum.fetch(container, segment) do
+          {:ok, value} -> {:cont, value}
+          :error -> {:halt, :undefined}
+        end
+
+      _segment, _container ->
+        {:halt, :undefined}
+    end)
   end
 
   # Step 1: resolve `path_source` into a path. Resolution reads

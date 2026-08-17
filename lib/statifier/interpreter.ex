@@ -783,7 +783,7 @@ defmodule Statifier.Interpreter do
          value
        ) do
     case Datamodel.write_location(machine_state, context, source, value) do
-      {:ok, machine_state, context} ->
+      {:ok, machine_state, context, _write} ->
         {machine_state, context}
 
       {:error, reason} ->
@@ -1331,7 +1331,7 @@ defmodule Statifier.Interpreter do
       {invoke_id, machine_state} = generate_invoke_id(machine_state, state, invoke)
 
       case maybe_write_idlocation(machine_state, context, invoke.idlocation, invoke_id) do
-        {:ok, machine_state, context} ->
+        {:ok, machine_state, context, _write} ->
           machine_state =
             record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
 
@@ -1461,9 +1461,11 @@ defmodule Statifier.Interpreter do
           context :: Predicator.Context.t(),
           idlocation :: String.t() | nil,
           invoke_id :: String.t()
-        ) :: {:ok, MachineState.t(), Predicator.Context.t()} | {:error, term()}
+        ) ::
+          {:ok, MachineState.t(), Predicator.Context.t(), Datamodel.Write.t() | nil}
+          | {:error, term()}
   defp maybe_write_idlocation(machine_state, context, nil, _invoke_id),
-    do: {:ok, machine_state, context}
+    do: {:ok, machine_state, context, nil}
 
   defp maybe_write_idlocation(machine_state, context, idlocation, invoke_id),
     do: Datamodel.write_location(machine_state, context, idlocation, invoke_id)
