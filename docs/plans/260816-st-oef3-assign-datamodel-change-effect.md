@@ -375,13 +375,13 @@ a sabotage line, e.g.
       observable behavior, so the conformance results must be identical).
 
 #### Manual Verification:
-- [ ] The touched functions still match the W3C spec prose they port (5.4.2 /
+- [x] The touched functions still match the W3C spec prose they port (5.4.2 /
       5.9.2 / 5.10); no Appendix D pseudocode is involved, per "The Appendix D
       rule" above.
-- [ ] `read_path/2`'s `:undefined` is genuinely indistinguishable from a
+- [x] `read_path/2`'s `:undefined` is genuinely indistinguishable from a
       stored `:undefined` and that is documented as accepted (decision 4), not
       silently glossed.
-- [ ] No regressions in `<send idlocation>` / `<invoke idlocation>` /
+- [x] No regressions in `<send idlocation>` / `<invoke idlocation>` /
       `<finalize>` behavior.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
@@ -553,12 +553,12 @@ and its sabotage comment updates to name the new count.
       needs to route on results.
 
 #### Manual Verification:
-- [ ] The moduledoc table in `effect.ex`, the `@type core` union,
+- [x] The moduledoc table in `effect.ex`, the `@type core` union,
       `plan_one/2`, `@effect_kinds`, `core_shape/2`, and both fixture tables
       all name exactly the same ten core tags - read them side by side once.
-- [ ] The ADR-0040 amendment reads as an amendment in that document's
+- [x] The ADR-0040 amendment reads as an amendment in that document's
       established voice, not as a re-argument of the settled location rule.
-- [ ] No regressions in existing telemetry subscribers.
+- [x] No regressions in existing telemetry subscribers.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
 full gate as the phase gate. In interactive execution, pause here for the
@@ -711,16 +711,16 @@ collecting effects. The test then:
 - [x] Dialyzer clean on the widened `execute/2` `@spec`.
 
 #### Manual Verification:
-- [ ] The touched interpreter functions still match the W3C spec text they
+- [x] The touched interpreter functions still match the W3C spec text they
       port - 5.4.2/5.9.2 for `<assign>`, 6.2.1 for `<send idlocation>`, 6.4.1
       for `<invoke idlocation>`, 6.5 for `<finalize>` - line for line, with no
       control-flow change beyond the added return value.
-- [ ] Effect ordering reads correctly at each site: the datamodel change
+- [x] Effect ordering reads correctly at each site: the datamodel change
       precedes the `:send`/`:invoke` it accompanies, and
       `Trace.ContentExecuted` still comes after the block's effects.
-- [ ] The reconstruction test's stated gap (decision 6) is written in the test
+- [x] The reconstruction test's stated gap (decision 6) is written in the test
       file itself, not only in this plan.
-- [ ] No regressions in `<send>`, `<invoke>`, or `<finalize>` behavior.
+- [x] No regressions in `<send>`, `<invoke>`, or `<finalize>` behavior.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
 full gate as the phase gate. In interactive execution, pause here for the
@@ -825,15 +825,28 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**All ten confirmed on 2026-08-17**, walked one at a time against the code and
+against the locally cached spec text rather than from memory. Eight held as
+written. The two that did not were both the same prose defect, in Phase 2's
+first and second items: ADR-0040 and `Session.Telemetry`'s moduledoc each
+stated the trace family's key-absence rule as though it governed the core
+family too, so the `:datamodel_change` amendment inherited it and described
+`location` as absent for the two runner-side writes when every `core_shape/2`
+clause in fact carries the key resolving to `nil`. The defect predates this
+plan - the amendment that made trace clauses key-absent narrowed the behavior
+without narrowing the sentence above it - and is corrected in a commit of its
+own. No code changed; the implementation was right in all three places the
+prose was wrong.
+
 ### Phase 1
 
-- [ ] The touched functions still match the W3C spec prose they port (5.4.2 /
+- [x] The touched functions still match the W3C spec prose they port (5.4.2 /
       5.9.2 / 5.10); no Appendix D pseudocode is involved, per "The Appendix D
       rule" above.
-- [ ] `read_path/2`'s `:undefined` is genuinely indistinguishable from a
+- [x] `read_path/2`'s `:undefined` is genuinely indistinguishable from a
       stored `:undefined` and that is documented as accepted (decision 4), not
       silently glossed.
-- [ ] No regressions in `<send idlocation>` / `<invoke idlocation>` /
+- [x] No regressions in `<send idlocation>` / `<invoke idlocation>` /
       `<finalize>` behavior.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
@@ -847,12 +860,12 @@ deferred and surfaced once at the end.
 
 ### Phase 2
 
-- [ ] The moduledoc table in `effect.ex`, the `@type core` union,
+- [x] The moduledoc table in `effect.ex`, the `@type core` union,
       `plan_one/2`, `@effect_kinds`, `core_shape/2`, and both fixture tables
       all name exactly the same ten core tags - read them side by side once.
-- [ ] The ADR-0040 amendment reads as an amendment in that document's
+- [x] The ADR-0040 amendment reads as an amendment in that document's
       established voice, not as a re-argument of the settled location rule.
-- [ ] No regressions in existing telemetry subscribers.
+- [x] No regressions in existing telemetry subscribers.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
 full gate as the phase gate. In interactive execution, pause here for the
@@ -864,16 +877,16 @@ automatically, and Manual Verification items are deferred to the end.
 
 ### Phase 3
 
-- [ ] The touched interpreter functions still match the W3C spec text they
+- [x] The touched interpreter functions still match the W3C spec text they
       port - 5.4.2/5.9.2 for `<assign>`, 6.2.1 for `<send idlocation>`, 6.4.1
       for `<invoke idlocation>`, 6.5 for `<finalize>` - line for line, with no
       control-flow change beyond the added return value.
-- [ ] Effect ordering reads correctly at each site: the datamodel change
+- [x] Effect ordering reads correctly at each site: the datamodel change
       precedes the `:send`/`:invoke` it accompanies, and
       `Trace.ContentExecuted` still comes after the block's effects.
-- [ ] The reconstruction test's stated gap (decision 6) is written in the test
+- [x] The reconstruction test's stated gap (decision 6) is written in the test
       file itself, not only in this plan.
-- [ ] No regressions in `<send>`, `<invoke>`, or `<finalize>` behavior.
+- [x] No regressions in `<send>`, `<invoke>`, or `<finalize>` behavior.
 
 **Implementation Note**: Use the project's loop gate between edits; run the
 full gate as the phase gate. In interactive execution, pause here for the
