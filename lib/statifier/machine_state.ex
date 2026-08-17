@@ -518,6 +518,15 @@ defmodule Statifier.MachineState do
   @spec offending_key?(key :: term()) :: boolean()
   defp offending_key?(key), do: is_atom(key) and not is_boolean(key)
 
+  # Predicator.Duration.new/1's eight unit keys (predicator 9.0,
+  # `deps/predicator/lib/predicator/duration.ex`) - a native duration value
+  # is a plain map with exactly these atom keys, so it fails this guard the
+  # same way any other atom-keyed map would. `duration_hint/1` names that
+  # specific, plausible cause without asserting it: an unrelated map that
+  # happens to use one of these eight names as a key is possible too, and
+  # the hint's wording ("if this came from...") stays true either way.
+  @duration_unit_keys ~w(years months weeks days hours minutes seconds milliseconds)a
+
   @spec key_message(key :: term(), path :: [term()]) :: String.t()
   defp key_message(key, path) do
     location =
@@ -529,8 +538,20 @@ defmodule Statifier.MachineState do
     "the :datamodel option must not contain the key #{inspect(key)} at #{location}: " <>
       "datamodel keys must be strings at every level, and an atom key would be " <>
       "rewritten (or dropped, if a string key of the same name is present) by the " <>
-      "expression context this datamodel is evaluated against"
+      "expression context this datamodel is evaluated against" <> duration_hint(key)
   end
+
+  @spec duration_hint(key :: term()) :: String.t()
+  defp duration_hint(key) when key in @duration_unit_keys do
+    " (if this came from a Predicator.Duration.t() - Predicator.Duration.new/1, " <>
+      "or a duration-typed expression result - seed it after conversion instead: " <>
+      "durations use atom keys internally by design and cannot be passed through " <>
+      "the :datamodel option as-is; Statifier.Duration.to_ms/1 converts one to " <>
+      "milliseconds, or evaluate the expression through <data>/<assign> instead, " <>
+      "which do not check this option's keys)"
+  end
+
+  defp duration_hint(_key), do: ""
 
   @doc """
   The active *leaf* states - `configuration` filtered by

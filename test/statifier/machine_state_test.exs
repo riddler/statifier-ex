@@ -244,6 +244,33 @@ defmodule Statifier.MachineStateTest do
       assert error.message =~ "user"
     end
 
+    # sabotage: `duration_hint/1`'s guard clause `key in @duration_unit_keys`
+    # is changed to `key == :bogus_key_never_matches` -> this reddens, since
+    # the hint text never gets appended for `:milliseconds`.
+    test "the raised message names Predicator.Duration as a plausible cause for a duration-shaped key" do
+      duration = Predicator.Duration.new(seconds: 1, milliseconds: 500)
+
+      error =
+        assert_raise ArgumentError, fn ->
+          new_machine_state(datamodel: %{"timeout" => duration})
+        end
+
+      assert error.message =~ "Predicator.Duration"
+    end
+
+    # sabotage: `duration_hint/1`'s catch-all clause is changed from
+    # `defp duration_hint(_key), do: ""` to always return the duration hint
+    # text regardless of key -> this reddens, since an unrelated atom key
+    # would then also mention "Predicator.Duration".
+    test "the raised message says nothing about durations for an unrelated atom key" do
+      error =
+        assert_raise ArgumentError, fn ->
+          new_machine_state(datamodel: %{"user" => %{name: "Ada"}})
+        end
+
+      refute error.message =~ "Predicator.Duration"
+    end
+
     # sabotage: `offending_key?/1` inverts to `is_binary(key)` -> a
     # well-formed string-keyed map is refused, reddening this assertion
     # (a raise where none is expected).
