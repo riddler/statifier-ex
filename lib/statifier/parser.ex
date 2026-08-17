@@ -9,11 +9,16 @@ defmodule Statifier.Parser do
 
   ## What it does not do
 
-  Nothing is validated, normalized, or resolved. Unknown names, duplicate
-  attributes, missing namespace declarations, and structurally nonsensical
-  documents all parse successfully - "make invalid states unrepresentable" is
-  the validator's principle to enforce, and it cannot enforce it against
-  things the parser has already thrown away. In particular:
+  Nothing is validated, or resolved beyond what an XML processor must do
+  before a value exists at all. Unknown names, duplicate attributes, missing
+  namespace declarations, and structurally nonsensical documents all parse
+  successfully - "make invalid states unrepresentable" is the validator's
+  principle to enforce, and it cannot enforce it against things the parser has
+  already thrown away. The one exception is attribute-value normalization: XML
+  1.0 3.3.3 and SCXML Appendix A.2 make it a processor obligation rather than
+  vocabulary knowledge, so `Statifier.Parser.DOM.Attribute.value` is
+  3.3.3-normalized and entity-expanded (ADR-0043); nothing else in this list
+  is touched. In particular:
 
   - Names are the raw qualified bytes, prefix included. A namespace
     declaration is an ordinary attribute, reachable as
@@ -62,9 +67,11 @@ defmodule Statifier.Parser do
   upstream has never discussed.
 
   One consequence is worth stating where callers will read it: an attribute's
-  `value` is entity-expanded while its `value_location` covers raw source, so
-  offsets *inside* a value whose raw text contains a reference do not map 1:1
-  onto the document.
+  `value` is XML 1.0 3.3.3-normalized and entity-expanded (ADR-0043) while its
+  `value_location` covers raw source, so a literal newline, tab, or carriage
+  return in the raw text is a single space in `value`, and offsets *inside* a
+  value whose raw text contains a reference or a normalized whitespace
+  character do not map 1:1 onto the document.
 
   ## Errors
 

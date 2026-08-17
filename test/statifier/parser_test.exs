@@ -174,6 +174,72 @@ defmodule Statifier.ParserTest do
       assert Location.slice(attribute.location, xml) == "id='r1'"
       assert Location.slice(attribute.value_location, xml) == "r1"
     end
+
+    # sabotage: Location.normalize_units/2's whitespace clause guard
+    # `ws in [" ", "\t", "\n", "\r"]` narrowed to `ws in [" "]` -> a literal
+    # LF/CR/CRLF/TAB no longer normalizes to a space -> this test reddens
+    # (the values keep their raw whitespace characters instead of "a b")
+    test "a literal LF, CR, CRLF, and TAB each normalize to one space" do
+      for {xml, value_location_raw} <- [
+            {~s(<root cond="a\nb"/>), "a\nb"},
+            {~s(<root cond="a\rb"/>), "a\rb"},
+            {~s(<root cond="a\r\nb"/>), "a\r\nb"},
+            {~s(<root cond="a\tb"/>), "a\tb"}
+          ] do
+        attribute = DOM.attribute(parse!(xml), "cond")
+
+        assert attribute.value == "a b"
+        assert Location.slice(attribute.value_location, xml) == value_location_raw
+      end
+    end
+
+    # sabotage: Location.next_unit/2's reference branch tags its unit
+    # `:literal` instead of `:reference` -> a decoded reference is folded by
+    # normalize_units/2's whitespace rule same as a literal -> this test
+    # reddens (the reference's newline collapses to a space too, so the
+    # value reads "a b c" instead of "a\nb c")
+    test "a literal newline and a character reference diverge in the same value" do
+      xml = ~s(<edge cond="a&#10;b\nc"/>)
+
+      assert %DOM.Attribute{value: "a\nb c"} = DOM.attribute(parse!(xml), "cond")
+    end
+
+    # sabotage: Location.normalize_units/2's `{:reference, decoded}` clause
+    # duplicated as a two-unit clause matching `[{:reference, "\r"},
+    # {:reference, "\n"} | rest]` and folding it to `" "`, mirroring the
+    # literal CRLF fold -> this test reddens (value becomes "a b" instead of
+    # "a\r\nb")
+    test "&#13;&#10; does not fold - character references are exempt from 2.11" do
+      xml = ~s(<edge cond="a&#13;&#10;b"/>)
+
+      assert %DOM.Attribute{value: "a\r\nb"} = DOM.attribute(parse!(xml), "cond")
+    end
+
+    # sabotage: Location.normalize_units/2 gains a
+    # `{:reference, "\r"} -> " "` clause ahead of the generic
+    # `{:reference, decoded}` pass-through, folding a reference-decoded CR to
+    # a space same as a literal one -> this test reddens (the reference CR
+    # loses its own character: "a  b" instead of "a\r b")
+    test "a reference CR next to a literal LF, and the mirror image, fold only the literal half" do
+      assert %DOM.Attribute{value: "a\r b"} =
+               ~s(<edge cond="a&#13;\nb"/>) |> parse!() |> DOM.attribute("cond")
+
+      assert %DOM.Attribute{value: "a \nb"} =
+               ~s(<edge cond="a\r&#10;b"/>) |> parse!() |> DOM.attribute("cond")
+    end
+
+    # sabotage: Location.normalize_units/2 gains a
+    # `[{:literal, " "}, {:literal, " "} | rest] -> " "` clause ahead of the
+    # single-whitespace collapse rule, folding two adjacent literal spaces
+    # into one -> this test reddens (each double space collapses to one:
+    # " a b " instead of "  a  b  ")
+    test "no trim, no collapse - every space and every literal newline is kept one-for-one" do
+      assert %DOM.Attribute{value: "  a  b  "} =
+               ~s(<root cond="  a  b  "/>) |> parse!() |> DOM.attribute("cond")
+
+      assert %DOM.Attribute{value: "a  b"} =
+               "<root cond=\"a\n\nb\"/>" |> parse!() |> DOM.attribute("cond")
+    end
   end
 
   describe "parse/1 - text" do

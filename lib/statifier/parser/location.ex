@@ -103,6 +103,13 @@ defmodule Statifier.Parser.Location do
 
   A `nil` `value_location` or a `nil` span has nothing to resolve; the caller
   falls back to the owning node's own `location` rather than calling this.
+
+  `value` is `Attribute.value`, which by the time this is called is already
+  XML 1.0 3.3.3-normalized (`normalize_attribute_value/3`, ADR-0043): a
+  literal TAB/LF/CR in the raw slice appears here as a space, a raw CRLF pair
+  as one space, and a character reference as its decoded character. This walk
+  pairs both against the raw slice exactly as the normalization walk does,
+  which is what keeps a normalized span resolving to the right raw text.
   """
   @spec resolve_span(
           value_location :: t(),
@@ -139,6 +146,90 @@ defmodule Statifier.Parser.Location do
     end
   end
 
+  @doc """
+  `value` with XML 1.0 3.3.3 attribute-value normalization applied.
+
+  `value_location` is the raw-source span of the attribute's value and `value`
+  is Saxy's entity-expanded string. Saxy applies neither 3.3.3 nor 2.11, so a
+  literal TAB/LF/CR survives into `value` verbatim - indistinguishable, in that
+  string alone, from an expanded `&#9;`/`&#10;`/`&#13;`, which 3.3.3 requires be
+  kept as-is. The raw slice is what draws the distinction, so the two are walked
+  in lockstep by the same unit rule `resolve_span/4` uses.
+
+  Literal `#x20`/`#x9`/`#xA`/`#xD` each append one space; a literal `\\r\\n`
+  pair appends one space between them (2.11 folds before 3.3.3 maps); a
+  reference appends its decoded character verbatim. CDATA treatment only -
+  statifier reads no attribute declarations, so nothing is trimmed or
+  collapsed (ADR-0043).
+
+  Degrades rather than raising: if the raw slice and `value` desync, `value` is
+  returned unnormalized.
+  """
+  @spec normalize_attribute_value(value_location :: t(), value :: binary(), source :: binary()) ::
+          binary()
+  def normalize_attribute_value(%__MODULE__{} = value_location, value, source)
+      when is_binary(value) and is_binary(source) do
+    case walk_units(slice(value_location, source), value, []) do
+      :desync -> value
+      {:ok, units} -> units |> Enum.reverse() |> normalize_units([])
+    end
+  end
+
+  # Same recursion shape as `walk_spans/7`, but carrying no cursors: it
+  # accumulates `{:reference, decoded} | {:literal, raw_token}` units until
+  # both sides are empty. Which element it keeps depends on the kind: a
+  # reference contributes its *expanded* text (`&#10;` -> `"\n"`, exempt from
+  # 3.3.3's whitespace rule); a literal contributes its *raw* text (`"\r\n"`,
+  # which on this pre-normalization pass is also its expanded text, since Saxy
+  # applies no 2.11 either).
+  #
+  # The `("", "", units)` base clause must come first: a `raw` and `value`
+  # that empty together are done, and one that empties alone falls through to
+  # `next_unit/2`, which desyncs on it - the same rule `walk_spans/7` applies.
+  # Units accumulate reversed, which is why `normalize_attribute_value/3`
+  # reverses before folding.
+  defp walk_units("", "", units), do: {:ok, units}
+
+  defp walk_units(raw, value, units) do
+    case next_unit(raw, value) do
+      :desync ->
+        :desync
+
+      {:ok, :reference, _raw_token, decoded, raw_rest, value_rest} ->
+        walk_units(raw_rest, value_rest, [{:reference, decoded} | units])
+
+      {:ok, :literal, raw_token, _expanded, raw_rest, value_rest} ->
+        walk_units(raw_rest, value_rest, [{:literal, raw_token} | units])
+    end
+  end
+
+  defp normalize_units([], acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  # 2.11: a literal CRLF is one line break, so one space - never two. Two
+  # clauses because the pair can arrive either way: as two units, which is
+  # what happens on this pass (Saxy applies no 2.11, so raw "\r\n" pairs
+  # against a value that also spells "\r\n" and walks as two
+  # identical-codepoint units), or as `resolve_span/4`'s single pair token,
+  # which cannot fire against an unnormalized value but is matched so the
+  # fold does not depend on that staying true.
+  defp normalize_units([{:literal, "\r"}, {:literal, "\n"} | rest], acc),
+    do: normalize_units(rest, [" " | acc])
+
+  defp normalize_units([{:literal, "\r\n"} | rest], acc), do: normalize_units(rest, [" " | acc])
+
+  # 3.3.3: "For a white space character (#x20, #xD, #xA, #x9), append a space
+  # character (#x20) to the normalized value."
+  defp normalize_units([{:literal, ws} | rest], acc) when ws in [" ", "\t", "\n", "\r"],
+    do: normalize_units(rest, [" " | acc])
+
+  defp normalize_units([{:literal, other} | rest], acc), do: normalize_units(rest, [other | acc])
+
+  # 3.3.3: "For a character reference, append the referenced character to the
+  # normalized value." A reference is exempt from the whitespace rule - that
+  # is the whole distinction this walk exists to preserve.
+  defp normalize_units([{:reference, decoded} | rest], acc),
+    do: normalize_units(rest, [decoded | acc])
+
   defp span_location({start_offset, start_line, start_column}, {end_offset, end_line, end_column}) do
     %__MODULE__{
       start_line: start_line,
@@ -170,7 +261,7 @@ defmodule Statifier.Parser.Location do
         :desync ->
           :desync
 
-        {:ok, raw_token, expanded_codepoint, raw_rest, value_rest} ->
+        {:ok, _kind, raw_token, expanded_codepoint, raw_rest, value_rest} ->
           walk_spans(
             raw_rest,
             value_rest,
@@ -194,11 +285,19 @@ defmodule Statifier.Parser.Location do
 
   # The five-case unit rule: a decoded reference token (case 1), identical
   # leading codepoints (case 2), a raw CRLF pair versus a single expanded
-  # space (case 3, XML 2.11's line-break fold ahead of 3.3.3's normalization),
-  # a single TAB/LF/CR-versus-space normalization pair (case 4), or desync
-  # (case 5). Every decode is validated against `value` before it is believed
-  # (`String.starts_with?/2` below), so a malformed or unexpected reference
-  # can only ever fall through to case 2/3/4/5, never produce a wrong answer.
+  # space (case 3, XML 2.11's line-break fold ahead of 3.3.3's normalization -
+  # reachable through a real parse since `Attribute.value` is normalized,
+  # ADR-0043), a single TAB/LF/CR-versus-space normalization pair (case 4), or
+  # desync (case 5). Every decode is validated against `value` before it is
+  # believed (`String.starts_with?/2` below), so a malformed or unexpected
+  # reference can only ever fall through to case 2/3/4/5, never produce a
+  # wrong answer.
+  #
+  # Tagged `:reference` or `:literal` so `normalize_attribute_value/3` can
+  # tell a literal `\n` (must normalize) from an expanded `&#10;` (must not) -
+  # a distinction the expanded codepoint alone cannot carry, since both
+  # produce `"\n"`. `resolve_span/4`'s walk (`walk_spans/7`) does not need the
+  # kind and ignores it.
   defp next_unit(raw, value) do
     case match_reference(raw) do
       {token, decoded} ->
@@ -208,15 +307,25 @@ defmodule Statifier.Parser.Location do
           value_rest =
             binary_part(value, byte_size(decoded), byte_size(value) - byte_size(decoded))
 
-          {:ok, token, decoded, raw_rest, value_rest}
+          {:ok, :reference, token, decoded, raw_rest, value_rest}
         else
-          next_unit_plain(raw, value)
+          tag_literal(next_unit_plain(raw, value))
         end
 
       nil ->
-        next_unit_plain(raw, value)
+        tag_literal(next_unit_plain(raw, value))
     end
   end
+
+  # `next_unit_plain/2` never produces a reference, so the tag is a constant
+  # here. The kind is what lets the normalization fold apply 3.3.3's
+  # whitespace rule to a literal `\n` while exempting an expanded `&#10;` -
+  # the expanded codepoint is identical in both cases, so the distinction
+  # cannot be recovered downstream.
+  defp tag_literal(:desync), do: :desync
+
+  defp tag_literal({:ok, raw_token, expanded_codepoint, raw_rest, value_rest}),
+    do: {:ok, :literal, raw_token, expanded_codepoint, raw_rest, value_rest}
 
   defp next_unit_plain(raw, value) do
     with {raw_cp, raw_rest} <- String.next_codepoint(raw),

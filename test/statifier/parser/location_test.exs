@@ -197,15 +197,26 @@ defmodule Statifier.Parser.LocationTest do
       [edge] = DOM.elements(root)
       attribute = DOM.attribute(edge, "cond")
 
-      # value is "first\nsecond"; "second" is expanded line 2, columns 1-6.
+      # The literal newline normalizes to a space (XML 1.0 3.3.3, ADR-0043),
+      # so the value is one expanded line: "first second".
+      assert attribute.value == "first second"
+
+      # "second" is expanded columns 7-13 of the single-line value.
       resolved =
-        Location.resolve_span(attribute.value_location, {{2, 1}, {2, 7}}, attribute.value, source)
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 7}, {1, 13}},
+          attribute.value,
+          source
+        )
 
       assert Location.slice(resolved, source) == "second"
 
-      # The absolute line is the document's third line, not the value's
-      # second - recomputed independently from the resolved byte offset
-      # rather than hardcoded, the way location_accuracy_test.exs does.
+      # The absolute line is the document's third line, even though the
+      # normalized value has only one line - recomputed independently from
+      # the resolved byte offset rather than hardcoded, the way
+      # location_accuracy_test.exs does. This is exactly what proves the raw
+      # cursor still crosses the physical newline.
       recomputed = Location.at_offset(source, resolved.start_offset)
       assert recomputed.start_line == 3
       assert resolved.start_line == recomputed.start_line
@@ -254,19 +265,27 @@ defmodule Statifier.Parser.LocationTest do
     # past the `\r`, so the span's end target is reached one raw character
     # early -> this test reddens (slice returns "a\r" instead of "a\rb")
     test "a \\r in the value holds the expanded column still, mirroring predicator's lexer" do
-      source = ~s(<edge cond="a\rb"/>)
+      # A literal `\r` normalizes to a space (XML 1.0 3.3.3, ADR-0043), so a
+      # literal `\r` alone is no longer reachable through a real parse for
+      # this case; `&#13;` is a character reference, exempt from
+      # normalization, so it is the real way to get a `\r` into `value`.
+      source = ~s(<edge cond="a&#13;b"/>)
       attribute = root_attribute(source)
 
-      # Passed by hand: `\r` holding the expanded cursor still is a property
-      # of predicator's lexer, not of what Saxy returns for `attribute.value`.
-      value = "a\rb"
+      assert attribute.value == "a\rb"
 
-      # The raw text is 3 bytes ("a", "\r", "b") but only 2 expanded columns
-      # ("\r" does not advance the expanded cursor), so the span covering
-      # both expanded columns must still resolve the full 3 raw bytes.
-      resolved = Location.resolve_span(attribute.value_location, {{1, 1}, {1, 3}}, value, source)
+      # The raw text is 8 bytes ("a", "&#13;", "b") but only 2 expanded
+      # columns ("\r" does not advance the expanded cursor), so the span
+      # covering both expanded columns must still resolve the full raw text.
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 1}, {1, 3}},
+          attribute.value,
+          source
+        )
 
-      assert Location.slice(resolved, source) == "a\rb"
+      assert Location.slice(resolved, source) == "a&#13;b"
     end
 
     # sabotage: maybe_capture/5's `is_nil(Map.fetch!(captured, key))` guard
@@ -319,12 +338,15 @@ defmodule Statifier.Parser.LocationTest do
       source = ~s(<edge cond="a\tb"/>)
       attribute = root_attribute(source)
 
-      # Passed by hand: no Saxy output pairs a raw TAB/LF/CR with an
-      # expanded space, since Saxy does not apply XML 1.0 3.3.3
-      # normalization - this is the only way to exercise the clause.
-      value = "a b"
+      assert attribute.value == "a b"
 
-      resolved = Location.resolve_span(attribute.value_location, {{1, 3}, {1, 4}}, value, source)
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 3}, {1, 4}},
+          attribute.value,
+          source
+        )
 
       assert Location.slice(resolved, source) == "b"
     end
@@ -338,16 +360,25 @@ defmodule Statifier.Parser.LocationTest do
       source = ~s(<edge cond="a\r\nb"/>)
       attribute = root_attribute(source)
 
-      # Passed by hand: attribute values are not yet normalized, so Saxy
-      # returns "a\r\nb" verbatim and the pair-versus-space unit has no real
-      # parse that produces it yet.
-      value = "a b"
+      assert attribute.value == "a b"
 
-      resolved = Location.resolve_span(attribute.value_location, {{1, 3}, {1, 4}}, value, source)
+      resolved =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 3}, {1, 4}},
+          attribute.value,
+          source
+        )
 
       assert Location.slice(resolved, source) == "b"
 
-      whole = Location.resolve_span(attribute.value_location, {{1, 1}, {1, 4}}, value, source)
+      whole =
+        Location.resolve_span(
+          attribute.value_location,
+          {{1, 1}, {1, 4}},
+          attribute.value,
+          source
+        )
 
       assert Location.slice(whole, source) == "a\r\nb"
     end
@@ -447,6 +478,27 @@ defmodule Statifier.Parser.LocationTest do
       resolved = Location.resolve_span(value_location, {{1, 9}, {1, 10}}, raw_value, source)
 
       assert Location.slice(resolved, source) == "x"
+    end
+  end
+
+  describe "normalize_attribute_value/3" do
+    # sabotage: normalize_attribute_value/3's `:desync -> value` branch
+    # replaced with `:desync -> String.upcase(value)` -> the fallback no
+    # longer returns Saxy's value unchanged -> this test reddens (the
+    # returned string is upcased instead of equal to the contradicting value)
+    test "a value that does not describe the raw slice returns value unnormalized" do
+      source = ~s(<edge cond="score"/>)
+      assert {:ok, root} = Parser.parse(source)
+      attribute = DOM.attribute(root, "cond")
+
+      # "totally different" does not describe the raw slice "score" at all,
+      # so the walk desyncs on the very first unit and the fallback returns
+      # it verbatim - not normalized, not truncated, not raised on.
+      assert Location.normalize_attribute_value(
+               attribute.value_location,
+               "totally different",
+               source
+             ) == "totally different"
     end
   end
 end

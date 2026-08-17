@@ -728,24 +728,24 @@ names outright.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating (not a phase gate).
-- [ ] Full `mix quality` green.
-- [ ] `mix gate.verify` confirms the run was a full, unscoped, unskipped gate.
-- [ ] `mix test --include scion --include scxml_w3` run in full; its result
+- [x] `mix quality --profile loop` green while iterating (not a phase gate).
+- [x] Full `mix quality` green.
+- [x] `mix gate.verify` confirms the run was a full, unscoped, unskipped gate.
+- [x] `mix test --include scion --include scxml_w3` run in full; its result
       recorded in the commit body whether or not it moved.
-- [ ] `mix test.regression` green. If any test's status moved,
+- [x] `mix test.regression` green. If any test's status moved,
       `mix test.baseline add` runs and `test/passing_tests.json` is staged in
       **this same commit** - and a shrink additionally needs a
       `docs/quality-gate-changes.md` entry, which is a human's call, so stop and
       report instead of writing one.
-- [ ] `mix test test/scion_tests/send_data/send1_test.exs
+- [x] `mix test test/scion_tests/send_data/send1_test.exs
       test/scion_tests/send_internal/test0_test.exs --include scion` green -
       the two known multi-line-attribute corpus members, named so their result
       is checked rather than inferred from the aggregate.
-- [ ] Every new test's sabotage mutation was applied, observed red, and
+- [x] Every new test's sabotage mutation was applied, observed red, and
       reverted; each mutation is described in the line above its test.
-- [ ] `changelog.d/st-6ans.md` exists.
-- [ ] `mix test test/statifier/parser/location_accuracy_test.exs` green - the
+- [x] `changelog.d/st-6ans.md` exists.
+- [x] `mix test test/statifier/parser/location_accuracy_test.exs` green - the
       every-attribute whole-value-span identity property, which now runs over
       normalized values across every fixture.
 
@@ -868,6 +868,34 @@ before considering the plan fully landed.
 - [ ] `resolve_span/4`'s documented degrade-don't-raise posture is unchanged -
       the new branch can only turn a former `:desync` into a resolution, never
       the reverse.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] `normalize_units/2`'s clauses match XML 1.0 3.3.3's algorithm clause by
+      clause, read from the local spec cache rather than memory, with the
+      quoted text in the comments checked against it. All four whitespace
+      characters `#x20`, `#xD`, `#xA`, `#x9` are present and the character-
+      reference clause is exempt from them.
+- [ ] The CRLF fold is checked against XML 1.0 2.11 as quoted, and confirmed
+      not to apply to `&#13;&#10;`.
+- [ ] The two corpus `cond`s are read by hand after the change and confirmed to
+      be semantically identical strings (whitespace-only difference), not merely
+      still-passing tests.
+- [ ] The four moduledocs no longer state the old behavior anywhere - grep for
+      "Saxy's entity-expanded" and for "normalized" across `lib/statifier/parser`
+      and read each hit.
+- [ ] Diagnostic rendering of a wrapped `cond` looks right by eye: the resolved
+      span underlines the intended subexpression in the raw source across the
+      physical line break.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
