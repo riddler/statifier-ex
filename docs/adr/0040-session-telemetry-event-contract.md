@@ -4,6 +4,10 @@ Status: accepted (2026-08-16) - amended 2026-08-16 (st-ii9v: singleton
 location carve-out withdrawn; no trace event carries a location) - amended
 2026-08-16 (st-oef3: `:datamodel_change` joins the core effect events) -
 amended 2026-08-17 (st-1xwh: `:datamodel_init` joins the core effect events)
+- amended in part by ADR-0045 (2026-08-17, st-xb2b: every core effect struct
+gains `round`, and `round` joins every core-effect event's measurements; the
+`:budget_exhausted`-only exception in the core-effect measurements line below
+is superseded)
 
 ## Context
 
