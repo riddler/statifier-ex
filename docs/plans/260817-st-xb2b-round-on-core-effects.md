@@ -2,7 +2,7 @@
 
 ## Overview
 
-ADR-0045 withdraws ADR-0020's core-effect exemption: every effect in the
+ADR-0046 withdraws ADR-0020's core-effect exemption: every effect in the
 vocabulary, core and trace, carries `macrostep`/`microstep`/`round`. This plan
 implements it - the ten core payloads that lack `round` gain an enforced field
 stamped from `%Statifier.MachineState{}` at their existing construction sites,
@@ -38,7 +38,7 @@ The other ten core payloads carry only `macrostep`/`microstep`:
 | `DatamodelInit` | `lib/statifier/effect/datamodel_init.ex:37` | `[:datamodel, :macrostep, :microstep]` |
 
 The construction sites, re-derived from the codebase rather than taken from
-ADR-0045's itemization (the record said "~13"; the verified count is **13**,
+ADR-0046's itemization (the record said "~13"; the verified count is **13**,
 in eight files):
 
 | # | Site | Payload | Counter source in scope |
@@ -58,7 +58,7 @@ in eight files):
 | 13 | `lib/statifier/machine/content/assign.ex:97-105` (`Assign.execute/2`) | `DatamodelChange` | `machine_state` |
 | 14 | `lib/statifier/machine/content/cancel.ex:64-69` (`Cancel.execute/2`) | `Cancel` | `machine_state` |
 
-That is fourteen rows, not thirteen: ADR-0045's estimate undercounted by one
+That is fourteen rows, not thirteen: ADR-0046's estimate undercounted by one
 (`machine/content/send.ex` has three sites, not two - a `DatamodelChange` for
 `<send idlocation>` plus the two `build_effect/6` clauses). **Every one has a
 `%MachineState{}` in scope already**, so all fourteen edits are the single
@@ -70,7 +70,7 @@ Two seams that could have been non-mechanical, checked and found not to be:
 - **`Statifier.Replay`** (`lib/statifier/replay.ex`) constructs no effect
   payload at all - it drives the pure core and re-derives effects through the
   interpreter, so the stamp arrives for free and the ADR-0034 round-trip
-  stream equality is preserved by construction. This is exactly why ADR-0045
+  stream equality is preserved by construction. This is exactly why ADR-0046
   rejected the session-side-wrapper alternative.
 - **`Statifier.Session`** constructs no core effect either. Its only counter
   read is `build_status/1` (`lib/statifier/session.ex:1501-1510`), which
@@ -131,7 +131,7 @@ passing across the existing ADR-0044 delivery-order suite.
 
 ### Key Discoveries:
 
-- ADR-0045 (`docs/adr/0045-round-on-every-core-effect.md`) is the
+- ADR-0046 (`docs/adr/0046-round-on-every-core-effect.md`) is the
   specification; its Decision section fixes the stamp semantics
   (`round: 0` for anything emitted before the fold begins, per ADR-0020's
   counter contract) and its Consequences section itemizes the work.
@@ -167,24 +167,24 @@ passing across the existing ADR-0044 delivery-order suite.
   family has one because `Effect.trace/3` needs a uniform entry point behind
   the emission gate; the core family is built inline at fourteen sites with
   payload-specific field sets and no gate. Adding constructors would be a
-  refactor of ADR-0003's vocabulary shape, not this bead, and ADR-0045 asks for
+  refactor of ADR-0003's vocabulary shape, not this bead, and ADR-0046 asks for
   the field "stamped from `%MachineState{}` at their existing construction
   sites exactly as `macrostep`/`microstep` are stamped today".
-- **Not adding `round` to `[:statifier, :session, :unroutable]`.** ADR-0045
+- **Not adding `round` to `[:statifier, :session, :unroutable]`.** ADR-0046
   amends ADR-0040's *core-effect* measurements line and names
   `[:statifier, :session, :effect, kind]` specifically; `:unroutable` is a
   routing failure the session detected, with its own contract row
   (`lib/statifier/session/telemetry.ex:122-127`). Widening a second event's
-  measurements is a contract change ADR-0045 did not decide. Recorded as open
+  measurements is a contract change ADR-0046 did not decide. Recorded as open
   question 1 below.
 - **Not touching `docs/adr/`.** The amendment notes on ADR-0020 and ADR-0040
-  landed with ADR-0045 itself, and ADR-0045 is explicit that the amended
+  landed with ADR-0046 itself, and ADR-0046 is explicit that the amended
   records' body text stands as written.
 - **Not changing `%Statifier.Event.Cause{}`, the counter definitions, the
-  reset points, or `begin_round/1`.** ADR-0045 leaves all of ADR-0020's
+  reset points, or `begin_round/1`.** ADR-0046 leaves all of ADR-0020's
   mechanism untouched.
 - **Not attempting within-round interleave across separately recorded logs.**
-  ADR-0045's "What this record does not promise" section: `(macrostep, round)`
+  ADR-0046's "What this record does not promise" section: `(macrostep, round)`
   places an effect between rounds, and finer ordering across two channels is
   out of scope by decision, not by omission.
 - **Not correcting `lib/statifier/effect.ex:47-51`'s "`:send`, `:send_delayed`,
@@ -415,7 +415,7 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 `DatamodelChange` and `DatamodelInit` - two payloads with five construction
 sites between them, spread across the interpreter, the datamodel module, and
-two content executors. This is the family where ADR-0045's "`round: 0` before
+two content executors. This is the family where ADR-0046's "`round: 0` before
 the fold begins" clause actually bites: `Datamodel.initialize/1` runs inside
 `Statifier.Interpreter.initialize/2`, before any macrostep, so its
 `machine_state.round` is `0` by `MachineState.new/2`
@@ -456,7 +456,7 @@ this phase, every row of the `## Core effect events` table reads
 `test/statifier/effect_test.exs`,
 `test/statifier/machine_state_acceptance_test.exs`, plus compiler-named sites.
 **Changes**: literal builds gain `round:`. Add one behavior test asserting
-`DatamodelInit` carries `round: 0` (the pre-fold case ADR-0045 names
+`DatamodelInit` carries `round: 0` (the pre-fold case ADR-0046 names
 explicitly) and one asserting a `<data>` binding performed on state entry
 carries the entering round, each with a verified sabotage line.
 
@@ -525,7 +525,7 @@ always equals `budget`, which is why there is no separate `rounds_spent` field.
 a consumer can re-derive: `round` is carried by the `Trace.*` payloads and by
 `BudgetExhausted` today and by no other effect, so a mixed stream cannot be
 sorted back into this order once its arrival order is lost (ADR-0044 decision
-4)" with the new fact: every effect carries the counter triple (ADR-0045), so a
+4)" with the new fact: every effect carries the counter triple (ADR-0046), so a
 consumer holding a mixed stream whose arrival order was lost **can** sort it
 back into `(macrostep, round)` order offline, including under `trace: false`.
 Keep ADR-0044 decision 1's live-arrival guarantee as stated - it is a stronger
@@ -607,7 +607,7 @@ always the third clause's job. `assert_monotone/1` (`:56-74`) drops the
 `rounded` filter and the second `check_non_decreasing/3` call, running one
 check over `{macrostep, round}` for the whole counter-bearing stream. The
 moduledoc's `:6-15` paragraph is rewritten: the two-tier split existed because
-ADR-0044 decision 4 left the stamp as follow-on work, and ADR-0045 did it.
+ADR-0044 decision 4 left the stamp as follow-on work, and ADR-0046 did it.
 
 ```elixir
 @spec counters(message :: term()) :: {non_neg_integer(), non_neg_integer()} | nil
@@ -673,7 +673,7 @@ items are deferred and surfaced once at the end instead of blocking here.
   `<data>`-binding case (Phase 3). Each of these asserts `lib/` behavior and
   therefore needs a verified sabotage line naming the mutation that reddens it.
 - **The `round: 0` pre-fold case.** `DatamodelInit` and the effects
-  `initialize/2` performs directly are ADR-0045's named boundary; assert the
+  `initialize/2` performs directly are ADR-0046's named boundary; assert the
   value rather than trusting the default (Phase 3).
 - **Telemetry measurements.** `test/statifier/session/telemetry_test.exs`
   already has the pattern at `:440-460` (the `BudgetExhausted` `round`
@@ -689,11 +689,11 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 1. Start a session with `trace: false` on a chart that logs and assigns, drain
    the subscriber stream, and confirm every delivered effect carries a
-   `round` - this is the `trace: false` configuration ADR-0045's Context names
+   `round` - this is the `trace: false` configuration ADR-0046's Context names
    as the one the trace-join recipe could not serve.
 2. Record a run (`record: true`), replay it with `Statifier.Replay`, and
    compare the two effect streams field for field, including `round`. Equality
-   here is ADR-0034's obligation and the reason ADR-0045 put the stamp in the
+   here is ADR-0034's obligation and the reason ADR-0046 put the stamp in the
    core rather than in the session.
 3. On a chart with an ADR-0039 mid-macrostep re-entry, confirm the re-entered
    effects carry a higher `round` than the outer batch's tail at the same
@@ -712,7 +712,7 @@ a defect in the change, not a ratchet update to record.
 
 ## Performance Considerations
 
-ADR-0045 accepted the bill explicitly: one extra map read per core-effect
+ADR-0046 accepted the bill explicitly: one extra map read per core-effect
 emission and one small integer per payload. Core effects are emitted far less
 often than trace effects, which already pay it. The untraced hot path is
 unaffected in shape - `Effect.trace/3`'s gate is untouched, and the core
@@ -730,9 +730,9 @@ plan follows.
    reads `payload.macrostep`/`payload.microstep` off whatever core payload
    failed to route, and after this change every such payload carries `round`
    too. ADR-0040's "counters are numbers, so they are measurements" rule would
-   put it there; ADR-0045 amends only the *core-effect* measurements line and
+   put it there; ADR-0046 amends only the *core-effect* measurements line and
    names `[:statifier, :session, :effect, kind]` specifically. **Default taken:
-   leave `:unroutable` unchanged**, on the reading that ADR-0045 decided the
+   leave `:unroutable` unchanged**, on the reading that ADR-0046 decided the
    scope of its own amendment and widening a second event's contract is a
    separate decision. If the answer is "add it", it is a one-line change plus
    one contract-table row and can land as a follow-on without disturbing
@@ -744,11 +744,11 @@ plan follows.
    defensible (an envelope is not an effect) but is now the sole remaining
    asymmetry. **Default taken: leave them alone** - ADR-0044 decision 2 already
    gives `{:halted, _}` a positional guarantee (it is last), which is stronger
-   than a sort key, and ADR-0045 says nothing about envelopes.
+   than a sort key, and ADR-0046 says nothing about envelopes.
 
 ## References
 
-- Source document: `docs/adr/0045-round-on-every-core-effect.md` (the
+- Source document: `docs/adr/0046-round-on-every-core-effect.md` (the
   specification for this plan; commit `9ab61fb`)
 - Related ADRs: `docs/adr/0020-round-ordinal-joins-the-step-counters.md`
   (amended in part), `docs/adr/0040-session-telemetry-event-contract.md`

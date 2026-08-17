@@ -1,4 +1,4 @@
-# ADR-0045: Every core effect carries `round`
+# ADR-0046: Every core effect carries `round`
 
 Status: accepted (2026-08-17) - amends 0020 in part; amends 0040 in part
 
@@ -145,7 +145,7 @@ effect, trace included, in one monotone sequence.
 
 - The st-xb2b acceptance criterion is met in the "every effect" direction:
   no exemption list survives, so no record has to maintain one.
-- ADR-0020's status line gains "amended in part by 0045"; ADR-0040's status
+- ADR-0020's status line gains "amended in part by 0046"; ADR-0040's status
   line gains an amendment note pointing here. Both edits land with this
   record; the amended records' body text stands as written, with this
   record as the narrowing, the same way ADR-0020 narrowed ADR-0019.

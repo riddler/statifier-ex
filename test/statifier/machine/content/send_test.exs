@@ -161,7 +161,7 @@ defmodule Statifier.Machine.Content.SendTest do
     end
   end
 
-  describe "execute/2 - round is stamped from the machine state (ADR-0045)" do
+  describe "execute/2 - round is stamped from the machine state (ADR-0046)" do
     # sabotage: `build_effect/6`'s `:send` clause drops `round: ms.round`
     # (the field simply omitted from the literal, `Effect.Send`'s own
     # default from `@enforce_keys` making that impossible to compile without
