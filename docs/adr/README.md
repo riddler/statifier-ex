@@ -46,6 +46,7 @@
 | [0042](0042-invoke-content-compiles-under-the-relaxed-namespace-rule.md) | Invoke content markup compiles under the relaxed namespace rule | accepted (amends 0041 in part) |
 | [0043](0043-attribute-values-normalize-per-xml-3-3-3.md) | Attribute values normalize per XML 1.0 3.3.3, guided by the raw source | accepted |
 | [0044](0044-re-entry-effects-defer-to-the-outer-batch.md) | Re-entry effects defer to the outer batch; subscriber delivery is monotone in `(macrostep, round)` and `{:halted, _}` is end-of-stream | accepted |
+| [0045](0045-character-data-folds-line-breaks-per-xml-2-11.md) | Character data folds line breaks per XML 1.0 2.11, guided by the raw source (resolves 0043's open question) | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

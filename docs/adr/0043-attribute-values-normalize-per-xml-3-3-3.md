@@ -168,3 +168,5 @@ Concretely:
   </t></r>` parses to `"a\r\nb"` where 2.11 requires `"a\nb"` - and filed
   **st-5x0b** to own the call, so the question is tracked rather than
   waiting on whoever hits a CRLF-sensitive `<script>` body first.
+  *Resolved by ADR-0045 (st-5x0b's outcome): character data folds line
+  breaks per 2.11, guided by the raw source, extending this record.*

@@ -501,4 +501,134 @@ defmodule Statifier.Parser.LocationTest do
              ) == "totally different"
     end
   end
+
+  describe "normalize_character_data/3" do
+    # Each case hand-builds a `%Location{}` spanning the whole synthetic
+    # `source` string, mirroring how `Handler.add_text/2` calls this with a
+    # run's whole-run span (`text_span/1`) rather than through a real parse -
+    # `normalize_character_data/3` has no call site yet (Phase 1), so there is
+    # no `Handler`/`Parser` path to drive it through. `value` stands in for
+    # Saxy's unfolded, entity-expanded accumulation for the run.
+    defp whole_span(source) do
+      %Location{
+        start_line: 1,
+        start_column: 1,
+        start_offset: 0,
+        end_line: 1,
+        end_column: String.length(source) + 1,
+        end_offset: byte_size(source)
+      }
+    end
+
+    # sabotage: fold_units/2's two-unit CRLF clause
+    # (`[{:literal, "\r"}, {:literal, "\n"} | rest]`) deleted, leaving only
+    # the lone-CR clause to fire on each half separately -> this test
+    # reddens ("a\n\nb" instead of "a\nb")
+    test "a literal CRLF folds to one \\n" do
+      source = "a\r\nb"
+
+      assert Location.normalize_character_data(whole_span(source), source, source) == "a\nb"
+    end
+
+    # sabotage: fold_units/2's lone-CR clause (`[{:literal, "\r"} | rest]`)
+    # changed to pass the CR through unfolded (`[other | acc]` instead of
+    # `["\n" | acc]`) -> this test reddens ("a\rb" instead of "a\nb")
+    test "a literal lone CR folds to one \\n" do
+      source = "a\rb"
+
+      assert Location.normalize_character_data(whole_span(source), source, source) == "a\nb"
+    end
+
+    # sabotage: fold_units/2's reference clause changed to fold a decoded
+    # "\r" the same as a literal one (`"\n"` instead of `decoded`) -> this
+    # test reddens ("a\nb" instead of "a\rb") - the literal-versus-reference
+    # distinction 2.11 draws, the reason a blind `String.replace/3` is wrong
+    test "a \\r decoded from &#xD; is not folded" do
+      raw = "a&#xD;b"
+      value = "a\rb"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) == "a\rb"
+    end
+
+    # sabotage: next_text_unit/3's `<![CDATA[` branch passes `:text` instead
+    # of `:cdata` as the mode it switches to -> the walk never actually
+    # enters CDATA mode, so the section is walked as ordinary text; the "]]>"
+    # closing delimiter then has no correspondent in the (unfolded) value and
+    # the walk desyncs -> this test reddens (falls back to the unfolded value
+    # "a\r\nb" instead of the folded "a\nb")
+    test "a CR inside a CDATA section folds" do
+      raw = "<![CDATA[a\r\nb]]>"
+      value = "a\r\nb"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) == "a\nb"
+    end
+
+    # sabotage: next_text_unit/3's :cdata clause changed to delegate to
+    # `next_unit/2` (via `tag_mode/2`) instead of `cdata_literal/2` -> a plain
+    # `"a&amp;b"` case does NOT redden under this mutation: raw "&amp;"
+    # decodes to "&", which does start the value, so it wrongly consumes five
+    # raw bytes against one value byte, desyncs shortly after, and the
+    # desync fallback happens to return the untouched `value` argument
+    # unchanged - which for a CR-free case is indistinguishable from the
+    # correct answer (a truthy-sentinel no-op the first attempt at this test
+    # missed). Pairing the entity with a lone CR that must still fold makes
+    # the two paths diverge: the mutant's desync fallback returns the whole
+    # run *unfolded* ("&amp;\rb"), while the correct CDATA-verbatim walk
+    # still applies 2.11 to the CR it never mistook for part of the entity
+    # ("&amp;\nb") -> this test reddens on the mutant (asserts the folded
+    # form, gets the unfolded one)
+    test "&amp; inside a CDATA section survives intact, not decoded" do
+      raw = "<![CDATA[&amp;\rb]]>"
+      value = "&amp;\rb"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) == "&amp;\nb"
+    end
+
+    # sabotage: walk_units/5's :skip clause pushes `units` unchanged instead
+    # of `[:boundary | units]` -> the raw-only comment no longer breaks
+    # adjacency between the CR before it and the LF after it, so fold_units/2
+    # mispairs them as one CRLF -> this test reddens ("i\nj" instead of
+    # "i\n\nj") - the case ADR-0045's investigation used to show a
+    # value-only fold is wrong: the raw text is not merely a disambiguator,
+    # it is the only place the fold's followed-by rule can be read off
+    test "a comment straddling a CR and its LF folds each alone" do
+      raw = "i\r<!--c-->\nj"
+      value = "i\r\nj"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) == "i\n\nj"
+    end
+
+    # sabotage: walk_units/5's :skip clause pushes `units` unchanged instead
+    # of `[:boundary | units]` -> same defect as the comment-straddle test
+    # above, exercised through the PI branch instead -> this test reddens
+    # ("i\nj" instead of "i\n\nj")
+    test "a PI straddling a CR and its LF folds each alone" do
+      raw = "i\r<?pi?>\nj"
+      value = "i\r\nj"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) == "i\n\nj"
+    end
+
+    # sabotage: fold_units/2's plain-literal clause narrowed with a guard
+    # that maps "\t" to " " (3.3.3's attribute mapping, wrongly applied to
+    # character data) -> this test reddens ("a b" instead of "a\tb") - 3.3.3
+    # is attribute-specific and never touches character data (ADR-0045
+    # item 1, the contrast with normalize_attribute_value/3)
+    test "a TAB is preserved, unlike in attribute normalization" do
+      source = "a\tb"
+
+      assert Location.normalize_character_data(whole_span(source), source, source) == "a\tb"
+    end
+
+    # sabotage: normalize_character_data/3's `:desync -> value` branch
+    # changed to `:desync -> String.upcase(value)` -> this test reddens (the
+    # returned string is upcased instead of equal to the contradicting value)
+    test "a value that does not describe the raw slice returns value unfolded" do
+      raw = "abc"
+      value = "totally different"
+
+      assert Location.normalize_character_data(whole_span(raw), value, raw) ==
+               "totally different"
+    end
+  end
 end
