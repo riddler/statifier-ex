@@ -410,19 +410,24 @@ numbers, and each carrying its `# sabotage:` line. Cases:
 - [x] `changelog.d/st-nhpk.md` exists
 
 #### Manual Verification:
-- [ ] Spec judgment: Appendix D models no parsing, so the standard against
+
+Verified 2026-08-17; the evidence for each is recorded once under
+[Deferred Manual Verification](#deferred-manual-verification) rather than
+duplicated here.
+
+- [x] Spec judgment: Appendix D models no parsing, so the standard against
       which this code is read is not the pseudocode but the two coordinate
       contracts it joins - `t:Predicator.Types.span/0`'s 1-based, exclusive-end
       line/column pair and XML 1.0 3.3.3's attribute-value rules. Confirm by
       reading the cached spec (`spec-cache/scxml-rec.html` is not the authority
       here; XML 1.0 3.3.3 is) that treating TAB/LF/CR-versus-space as a 1:1
       match is normalization-correct
-- [ ] The `\r` clause's inline comment cites
+- [x] The `\r` clause's inline comment cites
       `deps/predicator/lib/predicator/lexer.ex:225-226`, and the behavior still
       matches that code in the installed dep
-- [ ] Both moduledocs read as a description of `resolve_span/4`, with no
+- [x] Both moduledocs read as a description of `resolve_span/4`, with no
       residual suggestion that adding to `start_offset` composes a span
-- [ ] No regressions in related features: the parser, lowering, and compiler
+- [x] No regressions in related features: the parser, lowering, and compiler
       are untouched by inspection of the diff
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -519,13 +524,18 @@ full-value span is the identity.
       and `test/passing_tests.json` is unchanged by the diff
 
 #### Manual Verification:
-- [ ] Spec judgment: the resolved span underlines what a human reading the raw
+
+Verified 2026-08-17; the evidence for each is recorded once under
+[Deferred Manual Verification](#deferred-manual-verification) rather than
+duplicated here.
+
+- [x] Spec judgment: the resolved span underlines what a human reading the raw
       XML would underline - checked by eye on the entity fixture, since "the
       right span" is ultimately a rendering judgment no assertion fully
       captures
-- [ ] The sabotage runs were actually performed (break the walk's reference
+- [x] The sabotage runs were actually performed (break the walk's reference
       clause, confirm red, revert), not merely annotated
-- [ ] No regressions in related features: the existing location-accuracy sweep
+- [x] No regressions in related features: the existing location-accuracy sweep
       still covers what it did before the extension
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -611,7 +621,8 @@ unknown it left standing.
    Saxy's actual output; case 3 of the unit rule keeps it exact if Saxy's
    behavior ever changes. Worth a separate bead against the parser if
    normalization is ever wanted for spec conformance - filing it is a human's
-   call, not this plan's.
+   call, not this plan's. **Filed 2026-08-17 as `st-6ans`**, which owns the
+   decision between normalizing and documenting the deviation.
 
 ## References
 
@@ -639,22 +650,59 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**Verified 2026-08-17**, walking both phases item by item after the loop
+finished. Every item held as written. The pass also found two things the
+automated gate did not, both fixed in `d48c9ee`: `location.ex` sat at 88.8%
+with six uncovered lines in the reference-decoding layer - including the
+validation fallthrough `next_unit/2` documents as a safety property - and the
+sweep's `whole_value_end/1` claimed to restate `expanded_advance/2`'s rule
+while diverging from it on `\r`.
+
 ### Phase 1
 
-- [ ] Spec judgment: Appendix D models no parsing, so the standard against
+- [x] Spec judgment: Appendix D models no parsing, so the standard against
       which this code is read is not the pseudocode but the two coordinate
       contracts it joins - `t:Predicator.Types.span/0`'s 1-based, exclusive-end
       line/column pair and XML 1.0 3.3.3's attribute-value rules. Confirm by
       reading the cached spec (`spec-cache/scxml-rec.html` is not the authority
       here; XML 1.0 3.3.3 is) that treating TAB/LF/CR-versus-space as a 1:1
-      match is normalization-correct
-- [ ] The `\r` clause's inline comment cites
+      match is normalization-correct.
+
+      **Confirmed**, reading 3.3.3 directly rather than from memory. Its rules
+      map onto the walk's cases one for one: a white space character appends
+      "a space character (#x20)" (case 3), a character reference appends "the
+      referenced character" (the reference branch - which is why `&#10;`
+      contributes a real newline, and why the branch must be tried ahead of
+      case 3), and any other character appends itself (case 2).
+      `t:Predicator.Types.span/0` reads
+      `{start :: position(), end_exclusive :: position()}`, so the
+      exclusive-end premise the composition rests on is upstream-stated rather
+      than assumed. One limit worth recording: 3.3.3's non-CDATA clause
+      (discard leading and trailing space, collapse runs of space) would break
+      the walk's 1:1 unit correspondence, and never fires only because SCXML
+      has no DTD, so every attribute is CDATA. If it ever did, the walk
+      desyncs and degrades to the whole value - the documented failure mode,
+      not a wrong underline.
+- [x] The `\r` clause's inline comment cites
       `deps/predicator/lib/predicator/lexer.ex:225-226`, and the behavior still
-      matches that code in the installed dep
-- [ ] Both moduledocs read as a description of `resolve_span/4`, with no
-      residual suggestion that adding to `start_offset` composes a span
-- [ ] No regressions in related features: the parser, lowering, and compiler
-      are untouched by inspection of the diff
+      matches that code in the installed dep.
+
+      **Confirmed** line for line: 225 is `?\r ->` and 226 is
+      `tokenize_chars(rest, line, col, tokens)` in the installed dep.
+- [x] Both moduledocs read as a description of `resolve_span/4`, with no
+      residual suggestion that adding to `start_offset` composes a span.
+
+      **Confirmed.** The four-line false claim is the only deletion in
+      `location.ex`, and its replacement states the negative outright ("there
+      is no offset in it, so no arithmetic on `start_offset` stands in for the
+      composition") rather than merely dropping it. `attribute.ex` keeps its
+      true expanded-versus-raw caveat and points at `resolve_span/4` for it.
+- [x] No regressions in related features: the parser, lowering, and compiler
+      are untouched by inspection of the diff.
+
+      **Confirmed mechanically:** the `lib/` diff is confined to `location.ex`
+      and `dom/attribute.ex`, `at_offset/2` and `slice/2` are unchanged, and
+      no lowering or compiler file appears in the diff at all.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
 full `mix quality` is the phase gate. In interactive execution, pause here for
@@ -667,14 +715,37 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] Spec judgment: the resolved span underlines what a human reading the raw
+- [x] Spec judgment: the resolved span underlines what a human reading the raw
       XML would underline - checked by eye on the entity fixture, since "the
       right span" is ultimately a rendering judgment no assertion fully
-      captures
-- [ ] The sabotage runs were actually performed (break the walk's reference
-      clause, confirm red, revert), not merely annotated
-- [ ] No regressions in related features: the existing location-accuracy sweep
-      still covers what it did before the extension
+      captures.
+
+      **Confirmed** on five cases, rendering the raw document line with the
+      resolved span underlined beneath it: the `&lt;` entity fixture, the
+      `&#10;` line shift, a value carrying `&lt;`/`&amp;`/`&amp;`, the
+      malformed-`cond` `ParseError`, and a multi-line document whose failing
+      identifier sits past three references that shift its raw column by 11.
+      All five underline exactly the intended text, on the correct absolute
+      line.
+- [x] The sabotage runs were actually performed (break the walk's reference
+      clause, confirm red, revert), not merely annotated.
+
+      **Confirmed by re-running them**, rather than by trusting the notes.
+      Three of Phase 1's eleven mutations were re-applied: the reference
+      branch slicing by `byte_size(decoded)` (4 red, exactly the annotated
+      set), `expanded_advance/2`'s `\r` clause returning `column + 1` (1 red),
+      and the TAB/LF/CR guard narrowed to drop `"\t"` (1 red). Each reverted
+      to green. That also settled a doubt raised during the pass: the
+      normalization clause is unreachable through real Saxy output but is
+      covered synthetically, which is the right call rather than dead code.
+      The four cases added in `d48c9ee` were each sabotaged before their notes
+      were written.
+- [x] No regressions in related features: the existing location-accuracy sweep
+      still covers what it did before the extension.
+
+      **Confirmed:** the extension is purely additive - the original
+      `assert whole =~ pattern` is intact, with the identity call appended
+      after it.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
 full `mix quality` is the phase gate. In interactive execution, pause here for
