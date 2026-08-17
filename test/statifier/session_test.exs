@@ -10,6 +10,7 @@ defmodule Statifier.SessionTest do
   alias Statifier.Parser
   alias Statifier.Session
   alias Statifier.Session.Recording
+  alias Statifier.StreamOrder
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -721,6 +722,104 @@ defmodule Statifier.SessionTest do
     end
   end
 
+  describe "the internal-send success path delivers effects in delivery order (ADR-0043)" do
+    # A document-local helper rather than widening `internal_send_doc/1`
+    # above, whose three existing callers assert on `_event` fields and
+    # should not change: `a -go-> b`, `b`'s `<onentry>` raises an
+    # `#_internal` "ping", `b -ping-> c` where `c` is a top-level `<final>` -
+    # the bead's 2026-08-16 chart.
+    defp internal_send_to_final_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="go" target="b"/>
+          </state>
+          <state id="b">
+              <onentry>
+                  <send event="ping" target="#_internal"/>
+              </onentry>
+              <transition event="ping" target="c"/>
+          </state>
+          <final id="c"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: same mutation as the invoke-failure test -> the outer
+    # batch's `Trace.ContentExecuted` (m=2 r=0) and the round-1
+    # `TransitionsSelected`/`InvokePass`/`MacrostepStable` trio arrive after
+    # `{:halted, :done}`, reddening both `assert_monotone/1` and
+    # `assert_halted_last/1`.
+    test "the re-entry's effects arrive after the outer batch's tail, and {:halted, :done} is last" do
+      machine = compile!(internal_send_to_final_doc())
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      Session.send_event(session, "go")
+      status = wait_for_status(session, fn s -> s.status == :done end)
+      assert status.status == :done
+
+      stream = StreamOrder.drain(session_id)
+      StreamOrder.assert_monotone(stream)
+      StreamOrder.assert_stable_unique(stream)
+      StreamOrder.assert_halted_last(stream)
+    end
+  end
+
+  describe "a re-entry whose own deferred batch crosses the seam again (nesting depth)" do
+    # ADR-0043's open question: can a re-entry's deferred batch itself
+    # cross the seam a second time? `a -go-> b`, `b`'s `<onentry>` raises
+    # `#_internal` "ping" (first crossing, deferred at the outer batch); when
+    # the drain performs that deferred batch, `b -ping-> c` runs `c`'s own
+    # `<onentry>`, which raises a second `#_internal` "pong" (second
+    # crossing, appended to `state.deferred` *while the first entry is being
+    # drained*) before `c -pong-> d`, a top-level `<final>`, is ever reached.
+    # This document does reach a second level - `drain_deferred/1`'s
+    # recursive clause is what performs it.
+    defp two_level_internal_send_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="go" target="b"/>
+          </state>
+          <state id="b">
+              <onentry>
+                  <send event="ping" target="#_internal"/>
+              </onentry>
+              <transition event="ping" target="c"/>
+          </state>
+          <state id="c">
+              <onentry>
+                  <send event="pong" target="#_internal"/>
+              </onentry>
+              <transition event="pong" target="d"/>
+          </state>
+          <final id="d"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `drain_deferred/1`'s recursive clause drops its trailing
+    # `|> drain_deferred()` so the drain performs only the first queued
+    # batch -> the second-level re-entry's effects are never delivered and
+    # the drained stream is missing its highest-round trace effects (the
+    # run also never reaches `d`, so `wait_for_status/2` itself times out).
+    test "both crossings' effects still arrive in non-decreasing (macrostep, round) order" do
+      machine = compile!(two_level_internal_send_doc())
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      Session.send_event(session, "go")
+      status = wait_for_status(session, fn s -> s.status == :done end)
+      assert status.status == :done
+
+      stream = StreamOrder.drain(session_id)
+      StreamOrder.assert_monotone(stream)
+      StreamOrder.assert_stable_unique(stream)
+      StreamOrder.assert_halted_last(stream)
+    end
+  end
+
   describe "a namelist over a declared-but-unbound root round-trips as :undefined (ADR-0037 open question 1)" do
     # `Var1` is declared with `src` (never fetched, ADR-0003) so it stays
     # genuinely unbound at the seed. A value-less `<data id="Var1"/>`
@@ -957,6 +1056,52 @@ defmodule Statifier.SessionTest do
       refute_receive {:statifier, ^session_id, {:effect, {:trace, %Effect.Trace.EntrySet{}}}}, 5
       status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
       assert status.configuration == MapSet.new(["b"])
+    end
+  end
+
+  describe "a delayed #_internal send crosses the ADR-0039 seam outside any perform/3" do
+    # `targetexpr`, not the literal `target` attribute: the validator's
+    # `delay_and_internal_target/2` check only fires on a literal
+    # `target="#_internal"` (it cannot be evaluated until execute time when
+    # `targetexpr` was written instead), so this is what actually reaches
+    # `Session.Target.parse/1`'s `:internal` route at runtime.
+    defp delayed_internal_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="e" delay="10ms" targetexpr="'#_internal'"/>
+              </onentry>
+              <transition event="e" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `handle_info({:statifier_delayed_send, ...}, state)`'s
+    # `|> drain_deferred()` is removed -> the fired `#_internal` delivery's
+    # effects sit in `state.deferred` forever, the subscriber never receives
+    # the transition's trace effects, and the drain assertion times out.
+    #
+    # Note: the chart still reaches its target configuration without the
+    # drain, because the *core* advanced at the seam. Only the subscriber
+    # stream is missing the effects, so this asserts on the drained stream,
+    # not on `wait_for_status/2` alone.
+    test "the fired timer's effects reach the subscriber in non-decreasing (macrostep, round) order" do
+      machine = compile!(delayed_internal_doc())
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      stream = StreamOrder.drain(session_id)
+
+      assert Enum.any?(stream, &match?({:effect, {:trace, %Effect.Trace.EventDequeued{}}}, &1)),
+             "expected the fired #_internal delivery's trace effects to reach the subscriber"
+
+      StreamOrder.assert_monotone(stream)
     end
   end
 
