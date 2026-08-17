@@ -722,7 +722,7 @@ defmodule Statifier.SessionTest do
     end
   end
 
-  describe "the internal-send success path delivers effects in delivery order (ADR-0043)" do
+  describe "the internal-send success path delivers effects in delivery order (ADR-0044)" do
     # A document-local helper rather than widening `internal_send_doc/1`
     # above, whose three existing callers assert on `_event` fields and
     # should not change: `a -go-> b`, `b`'s `<onentry>` raises an
@@ -767,7 +767,7 @@ defmodule Statifier.SessionTest do
   end
 
   describe "a re-entry whose own deferred batch crosses the seam again (nesting depth)" do
-    # ADR-0043's open question: can a re-entry's deferred batch itself
+    # ADR-0044's open question: can a re-entry's deferred batch itself
     # cross the seam a second time? `a -go-> b`, `b`'s `<onentry>` raises
     # `#_internal` "ping" (first crossing, deferred at the outer batch); when
     # the drain performs that deferred batch, `b -ping-> c` runs `c`'s own

@@ -454,7 +454,7 @@ defmodule Statifier.ReplayRoundTripTest do
     end
   end
 
-  # -- case 8: a seam-crossing #_internal send (ADR-0043 decision 1) -------
+  # -- case 8: a seam-crossing #_internal send (ADR-0044 decision 1) -------
 
   defp internal_send_to_final_doc do
     """
@@ -473,7 +473,7 @@ defmodule Statifier.ReplayRoundTripTest do
     """
   end
 
-  describe "a run that crosses the ADR-0039 seam via #_internal (ADR-0043 decision 1)" do
+  describe "a run that crosses the ADR-0039 seam via #_internal (ADR-0044 decision 1)" do
     # sabotage: `deliver_internal/6`'s deferral is reverted to the inline
     # `perform/3` call -> the live stream interleaves the re-entry ahead of
     # the outer batch's tail while replay keeps the recording's flat order,

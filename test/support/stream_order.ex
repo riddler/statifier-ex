@@ -2,10 +2,10 @@
 defmodule Statifier.StreamOrder do
   @moduledoc """
   Assertions over a drained `Statifier.Session` subscriber stream, for the
-  ADR-0043 delivery-order contract.
+  ADR-0044 delivery-order contract.
 
   `round` lives only on the `Effect.Trace.*` payloads and on
-  `Effect.BudgetExhausted` today (ADR-0043 decision 4 leaves stamping it
+  `Effect.BudgetExhausted` today (ADR-0044 decision 4 leaves stamping it
   onto the rest as follow-on work), so `assert_monotone/1` evaluates
   `(macrostep, round)` over exactly the effects that carry both, and
   `macrostep` alone over the effects that carry only it. That is the whole
@@ -102,7 +102,7 @@ defmodule Statifier.StreamOrder do
 
   @doc """
   Asserts `stream` carries exactly one `Trace.MacrostepStable` per
-  `(macrostep, round)` (ADR-0043 decision 3).
+  `(macrostep, round)` (ADR-0044 decision 3).
   """
   @spec assert_stable_unique(stream :: [term()]) :: :ok
   def assert_stable_unique(stream) do
@@ -126,7 +126,7 @@ defmodule Statifier.StreamOrder do
 
   @doc """
   Asserts a `{:halted, _}` message, if present anywhere in `stream`, is the
-  final element (ADR-0043 decision 2's end-of-stream promise).
+  final element (ADR-0044 decision 2's end-of-stream promise).
   """
   @spec assert_halted_last(stream :: [term()]) :: :ok
   def assert_halted_last(stream) do
