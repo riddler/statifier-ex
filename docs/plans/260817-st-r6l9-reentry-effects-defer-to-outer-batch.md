@@ -801,11 +801,11 @@ ordering sentence.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes. This phase touches no Elixir code, so per
+- [x] Full `mix quality` passes. This phase touches no Elixir code, so per
       `CLAUDE.md` it may commit on review of the diff alone if the gate has
       nothing to run - but run it anyway, since the branch has Elixir
       changes from Phases 1 and 2 in the tree.
-- [ ] `git diff --stat` on this phase shows only `docs/observability.md`.
+- [x] `git diff --stat` on this phase shows only `docs/observability.md`.
 
 #### Manual Verification:
 
@@ -965,6 +965,26 @@ of blocking here.
 - [ ] Replay's stream and the live stream match for a reason, not by
       coincidence: spot-check that both contain more than one
       `Trace.MacrostepStable` for the terminal macrostep.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Each of the three edits says what ADR-0043 directs and cites the
+      decision number, without re-arguing the decision.
+- [ ] The prose matches the surrounding house style of
+      `docs/observability.md` (it uses plain hyphens, not em dashes -
+      match what is there).
+- [ ] Constraints 2, 4, and 6 do not contradict each other or the
+      `Statifier.Session` moduledoc written in Phase 1.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,
