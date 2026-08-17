@@ -45,6 +45,7 @@
 | [0041](0041-content-markup-lowers-to-a-source-slice.md) | `<content>` markup lowers to a source slice, compiled at invoke time | accepted (amended 2026-08-16: namespace limitation corrected - the corpus child documents do not compile standalone; amended in part by 0042) |
 | [0042](0042-invoke-content-compiles-under-the-relaxed-namespace-rule.md) | Invoke content markup compiles under the relaxed namespace rule | accepted (amends 0041 in part) |
 | [0043](0043-attribute-values-normalize-per-xml-3-3-3.md) | Attribute values normalize per XML 1.0 3.3.3, guided by the raw source | accepted |
+| [0044](0044-re-entry-effects-defer-to-the-outer-batch.md) | Re-entry effects defer to the outer batch; subscriber delivery is monotone in `(macrostep, round)` and `{:halted, _}` is end-of-stream | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

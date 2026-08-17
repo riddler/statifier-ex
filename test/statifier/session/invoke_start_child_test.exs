@@ -16,6 +16,7 @@ defmodule Statifier.Session.InvokeStartChildTest do
   alias Statifier.Parser
   alias Statifier.Session
   alias Statifier.Session.Invocations
+  alias Statifier.StreamOrder
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -257,6 +258,30 @@ defmodule Statifier.Session.InvokeStartChildTest do
 
       %{invocations: invocations} = :sys.get_state(parent)
       assert Invocations.count(invocations) == 0
+    end
+
+    # sabotage: `deliver_internal/6`'s `deferred: state.deferred ++
+    # [{effects, override}]` is changed back to `|> perform(effects,
+    # halt_override: override)` -> the invoke re-entry's `Trace.InvokePass`/
+    # `Trace.MacrostepStable` at round 3 arrive before the outer batch's
+    # round 1 pair, reddening `assert_monotone/1`.
+    test "the invoke-failure path delivers effects in non-decreasing (macrostep, round) order" do
+      :ok = Supervisor.terminate_child(Statifier.Supervisor, Statifier.SessionSupervisor)
+
+      try do
+        machine = compile!(parent_doc(content_body()))
+        {:ok, parent} = Session.start_link(machine, trace: true, subscribers: [self()])
+        session_id = Session.session_id(parent)
+
+        status = wait_for_status(parent, fn s -> s.configuration == MapSet.new(["failed"]) end)
+        assert status.configuration == MapSet.new(["failed"])
+
+        stream = StreamOrder.drain(session_id)
+        StreamOrder.assert_monotone(stream)
+        StreamOrder.assert_stable_unique(stream)
+      after
+        {:ok, _pid} = Supervisor.restart_child(Statifier.Supervisor, Statifier.SessionSupervisor)
+      end
     end
   end
 
