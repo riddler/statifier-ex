@@ -26,9 +26,10 @@ defmodule Statifier.EffectTest do
 
   describe "trace?/1" do
     @core_effects [
-      {:send, %Send{event: "e", macrostep: 1, microstep: 1}},
-      {:send_delayed, %SendDelayed{event: "e", delay_ms: 100, macrostep: 1, microstep: 1}},
-      {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}},
+      {:send, %Send{event: "e", macrostep: 1, microstep: 1, round: 0}},
+      {:send_delayed,
+       %SendDelayed{event: "e", delay_ms: 100, macrostep: 1, microstep: 1, round: 0}},
+      {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}},
       {:invoke,
        %Invoke{
          invoke_id: "i1",
@@ -59,7 +60,7 @@ defmodule Statifier.EffectTest do
          round: 0
        }},
       {:done, %Done{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}},
-      {:log, %Log{macrostep: 1, microstep: 1}},
+      {:log, %Log{macrostep: 1, microstep: 1, round: 0}},
       {:datamodel_change,
        %DatamodelChange{
          location_path: ["x"],
@@ -151,9 +152,9 @@ defmodule Statifier.EffectTest do
     # to `owner: :bogus` -> this reddens, since a `%Send{}` built with no
     # `:owner` key would default to `:bogus` instead of `nil`.
     test "Send defaults owner to nil and accepts one" do
-      assert %Send{event: "e", macrostep: 1, microstep: 1}.owner == nil
+      assert %Send{event: "e", macrostep: 1, microstep: 1, round: 0}.owner == nil
 
-      assert %Send{event: "e", macrostep: 1, microstep: 1, owner: {:transition, 0}}.owner ==
+      assert %Send{event: "e", macrostep: 1, microstep: 1, round: 0, owner: {:transition, 0}}.owner ==
                {:transition, 0}
     end
 
@@ -161,13 +162,15 @@ defmodule Statifier.EffectTest do
     # `:owner` to `owner: :bogus` -> this reddens, since a `%SendDelayed{}`
     # built with no `:owner` key would default to `:bogus` instead of `nil`.
     test "SendDelayed defaults owner to nil and accepts one" do
-      assert %SendDelayed{event: "e", delay_ms: 1, macrostep: 1, microstep: 1}.owner == nil
+      assert %SendDelayed{event: "e", delay_ms: 1, macrostep: 1, microstep: 1, round: 0}.owner ==
+               nil
 
       assert %SendDelayed{
                event: "e",
                delay_ms: 1,
                macrostep: 1,
                microstep: 1,
+               round: 0,
                owner: {:onentry, 0, 0}
              }.owner == {:onentry, 0, 0}
     end
@@ -176,9 +179,9 @@ defmodule Statifier.EffectTest do
     # to `owner: :bogus` -> this reddens, since a `%Cancel{}` built with no
     # `:owner` key would default to `:bogus` instead of `nil`.
     test "Cancel defaults owner to nil and accepts one" do
-      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1}.owner == nil
+      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}.owner == nil
 
-      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1, owner: {:onexit, 0, 0}}.owner ==
+      assert %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, owner: {:onexit, 0, 0}}.owner ==
                {:onexit, 0, 0}
     end
   end

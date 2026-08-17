@@ -67,7 +67,9 @@ defmodule Statifier.TestContent do
 
     def execute(%TestContent{label: label, pending: pending}, %Context{} = context) do
       context = %{context | pending_errors: context.pending_errors ++ pending}
-      {:ok, context, [{:log, %Statifier.Effect.Log{label: label, macrostep: 0, microstep: 0}}]}
+
+      {:ok, context,
+       [{:log, %Statifier.Effect.Log{label: label, macrostep: 0, microstep: 0, round: 0}}]}
     end
   end
 end

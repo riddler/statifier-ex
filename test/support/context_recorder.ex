@@ -66,7 +66,8 @@ defmodule Statifier.ContextRecorder do
             label: label,
             value: datamodel_context,
             macrostep: 0,
-            microstep: 0
+            microstep: 0,
+            round: 0
           }}
        ]}
     end
@@ -88,7 +89,8 @@ defmodule Statifier.ContextRecorder do
             label: label,
             value: datamodel_context,
             macrostep: 0,
-            microstep: 0
+            microstep: 0,
+            round: 0
           }}
        ]}
     end

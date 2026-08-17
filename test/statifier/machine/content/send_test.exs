@@ -161,6 +161,35 @@ defmodule Statifier.Machine.Content.SendTest do
     end
   end
 
+  describe "execute/2 - round is stamped from the machine state (ADR-0045)" do
+    # sabotage: `build_effect/6`'s `:send` clause drops `round: ms.round`
+    # (the field simply omitted from the literal, `Effect.Send`'s own
+    # default from `@enforce_keys` making that impossible to compile without
+    # a further edit, so the mutation instead hardcodes `round: 0`) -> this
+    # test's `round == 7` assertion reddens against a machine state whose
+    # round has actually advanced past 0. Reverted and confirmed green.
+    test "a bare <send> stamps the effect's round from machine_state.round" do
+      m = machine()
+      ms = %{machine_state(m) | round: 7}
+      node = send_node(m, "bare")
+
+      assert {:ok, _ctx, [{:send, %Effect.Send{round: 7}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: same mutation as above, applied to `build_effect/6`'s
+    # `:send_delayed` clause instead -> this test's `round == 4` assertion
+    # reddens. Reverted and confirmed green.
+    test "a delayed <send> stamps the effect's round from machine_state.round" do
+      m = machine()
+      ms = %{machine_state(m) | round: 4}
+      node = send_node(m, "delay_frac")
+
+      assert {:ok, _ctx, [{:send_delayed, %Effect.SendDelayed{round: 4}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+  end
+
   describe "execute/2 - data (namelist, <param>, <content>)" do
     # sabotage: `resolve_params/2`'s accumulator is changed from
     # `[{name, value} | pairs]` to `pairs` (dropping the pair) -> `data`

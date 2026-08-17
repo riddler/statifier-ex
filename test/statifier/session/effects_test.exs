@@ -32,10 +32,11 @@ defmodule Statifier.Session.EffectsTest do
   # `plan_one/1`'s lack of a catch-all and raises a `FunctionClauseError`
   # rather than silently planning nothing, so the table stays exhaustive.
   @vocabulary [
-    {{:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1}},
+    {{:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1, round: 0}},
      [
        {:notify,
-        {:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1}}},
+        {:send,
+         %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1, round: 0}}},
        {:enqueue_event,
         Event.external("e",
           data: %{k: 1},
@@ -44,12 +45,13 @@ defmodule Statifier.Session.EffectsTest do
           sendid: nil
         )}
      ]},
-    {{:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}},
+    {{:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1, round: 0}},
      [
-       {:notify, {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}},
+       {:notify,
+        {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1, round: 0}}},
        {:deliver, :internal,
         Event.internal("e", Cause.new({:content, nil, nil}, 1, 1, 0), data: nil, sendid: nil),
-        {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}}
+        {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1, round: 0}}}
      ]},
     {{:send_delayed,
       %SendDelayed{
@@ -59,7 +61,8 @@ defmodule Statifier.Session.EffectsTest do
         send_id: "s1",
         delay_ms: 30,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }},
      [
        {:notify,
@@ -71,7 +74,8 @@ defmodule Statifier.Session.EffectsTest do
            send_id: "s1",
            delay_ms: 30,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}},
        {:schedule, "s1", 30, :self,
         Event.external("e",
@@ -88,7 +92,8 @@ defmodule Statifier.Session.EffectsTest do
            send_id: "s1",
            delay_ms: 30,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}}
      ]},
     {{:send_delayed,
@@ -98,7 +103,8 @@ defmodule Statifier.Session.EffectsTest do
         send_id: nil,
         delay_ms: 30,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }},
      [
        {:notify,
@@ -109,7 +115,8 @@ defmodule Statifier.Session.EffectsTest do
            send_id: nil,
            delay_ms: 30,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}},
        {:schedule, nil, 30, :self,
         Event.external("e", data: nil, origin: @origin, origintype: @origintype, sendid: nil),
@@ -120,23 +127,45 @@ defmodule Statifier.Session.EffectsTest do
            send_id: nil,
            delay_ms: 30,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}}
      ]},
     {{:send_delayed,
-      %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}},
+      %SendDelayed{
+        event: "e",
+        target: "#_internal",
+        delay_ms: 30,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }},
      [
        {:notify,
         {:send_delayed,
-         %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}}},
+         %SendDelayed{
+           event: "e",
+           target: "#_internal",
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}},
        {:schedule, nil, 30, :internal,
         Event.internal("e", Cause.new({:content, nil, nil}, 1, 1, 0), data: nil, sendid: nil),
         {:send_delayed,
-         %SendDelayed{event: "e", target: "#_internal", delay_ms: 30, macrostep: 1, microstep: 1}}}
+         %SendDelayed{
+           event: "e",
+           target: "#_internal",
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}}
      ]},
-    {{:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}},
+    {{:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}},
      [
-       {:notify, {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}}},
+       {:notify, {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}},
        {:cancel_timers, "s1"}
      ]},
     {{:invoke,
@@ -236,8 +265,8 @@ defmodule Statifier.Session.EffectsTest do
          }}},
        {:halt, :budget_exhausted}
      ]},
-    {{:log, %Log{macrostep: 1, microstep: 1}},
-     [{:notify, {:log, %Log{macrostep: 1, microstep: 1}}}]},
+    {{:log, %Log{macrostep: 1, microstep: 1, round: 0}},
+     [{:notify, {:log, %Log{macrostep: 1, microstep: 1, round: 0}}}]},
     {{:datamodel_change,
       %DatamodelChange{
         location_path: ["x"],
@@ -385,9 +414,9 @@ defmodule Statifier.Session.EffectsTest do
     # sabotage: `plan_one/1`'s `:send` clause drops its own `{:notify, effect}`
     # element -> the assertion below on `:notify` count reddens
     test "a mixed list preserves order and emits one notify per effect" do
-      log = {:log, %Log{macrostep: 1, microstep: 1}}
-      send_effect = {:send, %Send{event: "e", target: nil, macrostep: 1, microstep: 1}}
-      cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1}}
+      log = {:log, %Log{macrostep: 1, microstep: 1, round: 0}}
+      send_effect = {:send, %Send{event: "e", target: nil, macrostep: 1, microstep: 1, round: 0}}
+      cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}
 
       instructions = Effects.plan([log, send_effect, cancel], @session_id)
 
@@ -402,7 +431,8 @@ defmodule Statifier.Session.EffectsTest do
     # plans an `:enqueue_event` instruction instead of `:deliver`, and this
     # refute reddens
     test "no :enqueue_event instruction appears for a targeted send" do
-      effect = {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1}}
+      effect =
+        {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1, round: 0}}
 
       instructions = Effects.plan([effect], @session_id)
 
@@ -416,7 +446,9 @@ defmodule Statifier.Session.EffectsTest do
     # the `data:` option) -> the enqueued event's `data` field is `nil`
     # instead of the fixture's payload, and this assertion reddens
     test "the enqueued event's data matches the send effect's data" do
-      effect = {:send, %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1}}
+      effect =
+        {:send,
+         %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1, round: 0}}
 
       assert [_notify, {:enqueue_event, %Event{data: %{k: 1}}}] =
                Effects.plan([effect], @session_id)
@@ -437,7 +469,8 @@ defmodule Statifier.Session.EffectsTest do
            send_id: nil,
            delay_ms: 30,
            macrostep: 1,
-           microstep: 1
+           microstep: 1,
+           round: 0
          }}
 
       assert [_notify, {:schedule, nil, 30, :self, %Event{name: "e"}, ^effect}] =

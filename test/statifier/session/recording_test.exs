@@ -67,7 +67,7 @@ defmodule Statifier.Session.RecordingTest do
     # sabotage: `entries/1` drops the `Enum.reverse/1` call -> this assertion
     # reddens because the four kinds come back in reverse append order
     test "entries come back in append order across all four kinds interleaved" do
-      log_effect = {:log, %Log{label: "l", value: nil, macrostep: 0, microstep: 0}}
+      log_effect = {:log, %Log{label: "l", value: nil, macrostep: 0, microstep: 0, round: 0}}
 
       recording =
         compile!()
@@ -92,8 +92,8 @@ defmodule Statifier.Session.RecordingTest do
     # entry -> this assertion reddens on the entry count
     test "a multi-effect interpret/2 batch stays one entry" do
       effects = [
-        {:log, %Log{label: "one", value: nil, macrostep: 0, microstep: 0}},
-        {:log, %Log{label: "two", value: nil, macrostep: 0, microstep: 0}}
+        {:log, %Log{label: "one", value: nil, macrostep: 0, microstep: 0, round: 0}},
+        {:log, %Log{label: "two", value: nil, macrostep: 0, microstep: 0, round: 0}}
       ]
 
       recording =
@@ -134,7 +134,7 @@ defmodule Statifier.Session.RecordingTest do
         |> Recording.put_cancel()
         |> Recording.put_timer(nil, event("b"))
         |> Recording.put_interpret([
-          {:log, %Log{label: "l", value: nil, macrostep: 0, microstep: 0}}
+          {:log, %Log{label: "l", value: nil, macrostep: 0, microstep: 0, round: 0}}
         ])
 
       round_tripped =

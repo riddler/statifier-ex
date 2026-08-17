@@ -173,10 +173,17 @@ defmodule Statifier.ReplayRoundTripTest do
         send_id: "s1",
         delay_ms: 30,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
-      log_effect = %Effect.Log{label: "batch-log", value: nil, macrostep: 1, microstep: 1}
+      log_effect = %Effect.Log{
+        label: "batch-log",
+        value: nil,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
 
       {recording, _stream, result} =
         round_trip(machine, [], fn session ->
@@ -223,7 +230,7 @@ defmodule Statifier.ReplayRoundTripTest do
     test "batch boundaries survive: one interpret/2 call is one recorded entry, in order" do
       machine = compile!(two_state_doc())
 
-      log_effect = %Effect.Log{label: "multi", value: nil, macrostep: 1, microstep: 1}
+      log_effect = %Effect.Log{label: "multi", value: nil, macrostep: 1, microstep: 1, round: 0}
 
       cancel_invoke_effect = %Effect.CancelInvoke{
         invoke_id: "a.inv_1",
@@ -239,7 +246,8 @@ defmodule Statifier.ReplayRoundTripTest do
         send_id: "s1",
         delay_ms: 5_000,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       effects = [
@@ -336,7 +344,8 @@ defmodule Statifier.ReplayRoundTripTest do
         send_id: "s1",
         delay_ms: 20,
         macrostep: 1,
-        microstep: 1
+        microstep: 1,
+        round: 0
       }
 
       effects = [{:send_delayed, send_delayed}]

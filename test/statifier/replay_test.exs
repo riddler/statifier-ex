@@ -60,12 +60,13 @@ defmodule Statifier.ReplayTest do
       send_id: send_id,
       delay_ms: delay_ms,
       macrostep: 1,
-      microstep: 1
+      microstep: 1,
+      round: 0
     }
   end
 
   defp cancel_effect(send_id) do
-    %Effect.Cancel{send_id: send_id, macrostep: 1, microstep: 1}
+    %Effect.Cancel{send_id: send_id, macrostep: 1, microstep: 1, round: 0}
   end
 
   defp state_index(machine, id) do
@@ -133,7 +134,7 @@ defmodule Statifier.ReplayTest do
       machine = compile!(two_state_doc())
 
       send_effect =
-        {:send, %Effect.Send{event: "go", target: nil, macrostep: 1, microstep: 1}}
+        {:send, %Effect.Send{event: "go", target: nil, macrostep: 1, microstep: 1, round: 0}}
 
       recording =
         machine
@@ -339,8 +340,11 @@ defmodule Statifier.ReplayTest do
     test "a multi-effect batch preserves effect order in the stream" do
       machine = compile!(two_state_doc())
 
-      log_one = {:log, %Effect.Log{label: "one", value: nil, macrostep: 1, microstep: 1}}
-      log_two = {:log, %Effect.Log{label: "two", value: nil, macrostep: 1, microstep: 1}}
+      log_one =
+        {:log, %Effect.Log{label: "one", value: nil, macrostep: 1, microstep: 1, round: 0}}
+
+      log_two =
+        {:log, %Effect.Log{label: "two", value: nil, macrostep: 1, microstep: 1, round: 0}}
 
       recording =
         machine
