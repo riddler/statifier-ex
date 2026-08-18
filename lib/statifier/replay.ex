@@ -189,15 +189,17 @@ defmodule Statifier.Replay do
       |> perform(effects)
       |> drain()
 
-    recording
-    |> Recording.entries()
-    |> Enum.reduce_while(state, fn entry, state ->
-      case apply_entry(entry, state) do
-        {:ok, state} -> {:cont, state}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    entries = Recording.entries(recording)
+
+    result =
+      Enum.reduce_while(entries, state, fn entry, state ->
+        case apply_entry(entry, state) do
+          {:ok, state} -> {:cont, state}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case result do
       %State{} = state -> {:ok, to_result(state)}
       {:error, _reason} = error -> error
     end

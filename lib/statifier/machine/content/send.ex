@@ -298,13 +298,15 @@ defmodule Statifier.Machine.Content.Send do
     @spec resolve_params(datamodel_context :: Predicator.Context.t(), params :: [Param.t()]) ::
             {:ok, [{String.t(), term()}]} | {:error, term()}
     defp resolve_params(datamodel_context, params) do
-      Enum.reduce_while(params, {:ok, []}, fn %Param{name: name, expr: expr}, {:ok, pairs} ->
-        case Evaluator.evaluate(datamodel_context, expr) do
-          {:ok, value} -> {:cont, {:ok, [{name, value} | pairs]}}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-      end)
-      |> case do
+      result =
+        Enum.reduce_while(params, {:ok, []}, fn %Param{name: name, expr: expr}, {:ok, pairs} ->
+          case Evaluator.evaluate(datamodel_context, expr) do
+            {:ok, value} -> {:cont, {:ok, [{name, value} | pairs]}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+
+      case result do
         {:ok, pairs} -> {:ok, Enum.reverse(pairs)}
         {:error, reason} -> {:error, reason}
       end

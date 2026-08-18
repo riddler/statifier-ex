@@ -93,8 +93,9 @@ defmodule Statifier.Validator.Checks.History do
       location = Map.get(transition.attribute_locations, :target, transition.location)
 
       transition.target
-      |> Enum.filter(&Map.has_key?(context.states, &1))
-      |> Enum.reject(&Context.descendant?(context, parent_id, &1))
+      |> Enum.filter(
+        &(Map.has_key?(context.states, &1) and not Context.descendant?(context, parent_id, &1))
+      )
       |> Enum.map(&Error.initial_not_descendant(&1, parent_id, location))
     end)
   end

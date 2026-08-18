@@ -383,15 +383,15 @@ inlining makes the guard unreadable, extract a named `defp`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix credo --strict --enable-disabled-checks Readability.SingleFunctionToBlockPipe`
+- [x] `mix credo --strict --enable-disabled-checks Readability.SingleFunctionToBlockPipe`
       reports zero findings.
-- [ ] `mix credo --strict --enable-disabled-checks Readability.BlockPipe`
+- [x] `mix credo --strict --enable-disabled-checks Readability.BlockPipe`
       reports zero findings.
-- [ ] `mix credo --strict --enable-disabled-checks Refactor.FilterReject`
+- [x] `mix credo --strict --enable-disabled-checks Refactor.FilterReject`
       reports zero findings.
-- [ ] Full `mix quality` passes.
-- [ ] `mix test.regression` passes.
-- [ ] `mix gate.check` is green - no guarded path touched.
+- [x] Full `mix quality` passes.
+- [x] `mix test.regression` passes.
+- [x] `mix gate.check` is green - no guarded path touched.
 
 #### Manual Verification:
 - [ ] `interpreter.ex:1425` and `selection.ex:589` are Appendix D ports: the
@@ -1195,5 +1195,20 @@ before considering the plan fully landed.
 `mix quality` as the phase gate. In `--loop` execution the Automated
 Verification list gates advancement via `/wurk:commit --auto`; Manual items are
 deferred and surfaced at the end.
+
+---
+
+### Phase 2
+
+- [ ] `interpreter.ex:1425` and `selection.ex:589` are Appendix D ports: the
+      rewritten functions still read line-for-line against the pseudocode, and
+      any deviation carries an inline comment naming the mechanical reason
+      (ADR-0002).
+- [ ] The two `FilterReject` rewrites preserve the exact predicate semantics -
+      `filter(a) |> reject(b)` is `a and not b`, and the combined predicate has
+      not accidentally become `a and b` or short-circuited differently on nil.
+
+**Implementation Note**: loop gate while iterating; full gate as the phase gate.
+`--loop` defers the Manual items.
 
 ---
