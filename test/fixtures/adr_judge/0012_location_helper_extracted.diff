@@ -1,7 +1,7 @@
 diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/checks/data.ex
 --- a/lib/statifier/validator/checks/data.ex
 +++ b/lib/statifier/validator/checks/data.ex
-@@ -85,7 +85,7 @@ defmodule Statifier.Validator.Checks.Data do
+@@ -82,7 +82,7 @@ defmodule Statifier.Validator.Checks.Data do
    defp expr_and_src_errors(%Data{src: nil}), do: []
  
    defp expr_and_src_errors(%Data{id: id} = data) do
@@ -10,7 +10,7 @@ diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/ch
    end
  
    defp value_and_children_errors(%Data{expr: nil, src: nil}), do: []
-@@ -94,13 +94,13 @@ defmodule Statifier.Validator.Checks.Data do
+@@ -91,13 +91,13 @@ defmodule Statifier.Validator.Checks.Data do
      if blank?(text) do
        []
      else
@@ -26,7 +26,7 @@ diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/ch
      else
        []
      end
-@@ -120,8 +120,8 @@ defmodule Statifier.Validator.Checks.Data do
+@@ -117,8 +117,8 @@ defmodule Statifier.Validator.Checks.Data do
  
    defp bad_parent?(%State{}), do: false
  
