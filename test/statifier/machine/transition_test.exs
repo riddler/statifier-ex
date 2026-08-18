@@ -286,6 +286,36 @@ defmodule Statifier.Machine.TransitionTest do
     end
   end
 
+  describe "attribute_locations struct default" do
+    # sabotage: the `attribute_locations: %{}` default is dropped from
+    # `Statifier.Machine.Transition`'s `defstruct` entry (bare `:attribute_locations`
+    # instead) -> the field defaults to `nil`, reddening this equality
+    # assertion. This is the only reachable assertion about the
+    # interpreter-synthesized initial transition (`lib/statifier/interpreter.ex`'s
+    # `initial_transition/1`, private and never returned as a value), so it
+    # pins the default the synthesized transition also writes explicitly.
+    test "attribute_locations defaults to %{} on a struct built from only @enforce_keys" do
+      transition = %Transition{
+        t_index: 0,
+        source: 0,
+        targets: [],
+        events: [],
+        type: :external,
+        content: [],
+        location: %Statifier.Parser.Location{
+          start_offset: 0,
+          end_offset: 0,
+          start_line: 1,
+          start_column: 1,
+          end_line: 1,
+          end_column: 1
+        }
+      }
+
+      assert transition.attribute_locations == %{}
+    end
+  end
+
   describe "Machine.transition/2" do
     # sabotage: `Machine.transition/2` reads `elem(transitions, t_index + 1)`
     # instead of `elem(transitions, t_index)` -> every lookup reads one slot

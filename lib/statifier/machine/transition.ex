@@ -39,6 +39,24 @@ defmodule Statifier.Machine.Transition do
   retained so a runtime `cond` failure can point inside the expression
   (ADR-0014 item 4). Both are `nil` exactly when `cond` was not written.
 
+  `attribute_locations` is `Statifier.Document.Transition`'s own map, carried
+  through unchanged rather than distilled into per-attribute `*_location`
+  fields - the escape hatch `Statifier.Machine.Invoke`'s moduledoc describes,
+  applied here because `event`, `target` and `type` each have a diagnostic
+  use (an attribute-level hover target) and none has a distinct enough one to
+  pay for a field of its own. `cond_location` above is the deliberate
+  exception, retained because it also carries a fallback the raw map does not:
+  the transition's own `location` when `cond` was written without a recorded
+  span.
+
+  The map keeps `Statifier.Document`'s key-presence contract verbatim: an
+  entry exists only for an attribute the author actually wrote, so
+  `Map.has_key?(transition.attribute_locations, :type)` is the "was `type`
+  written" question that `type`'s own value cannot answer once lowering has
+  applied the `:external` default. `%{}` when the element wrote no
+  attributes at all, and on the synthesized initial transition
+  (`Statifier.Interpreter`), which no author wrote.
+
   `content` is `[c_index]`, the transition's own executable content in
   document order - `[]` until the compiler's executable-content pass
   populates it.
@@ -49,7 +67,7 @@ defmodule Statifier.Machine.Transition do
   element, so it has no document-order index.
   """
 
-  alias Statifier.Machine
+  alias Statifier.{Document, Machine}
   alias Statifier.Parser.Location
 
   @enforce_keys [:t_index, :source, :targets, :events, :type, :content, :location]
@@ -62,7 +80,8 @@ defmodule Statifier.Machine.Transition do
     :type,
     :content,
     :location,
-    :cond_location
+    :cond_location,
+    attribute_locations: %{}
   ]
 
   @type t :: %__MODULE__{
@@ -74,6 +93,7 @@ defmodule Statifier.Machine.Transition do
           type: :internal | :external,
           content: [non_neg_integer()],
           location: Location.t(),
-          cond_location: Location.t() | nil
+          cond_location: Location.t() | nil,
+          attribute_locations: Document.attribute_locations()
         }
 end

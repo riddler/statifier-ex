@@ -342,16 +342,16 @@ must redden it; for the default test, removing the `%{}` default from the
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating (not a phase gate on
+- [x] `mix quality --profile loop` green while iterating (not a phase gate on
       its own)
-- [ ] Full `mix quality` green, unscoped, with `mix gate.verify` confirming
+- [x] Full `mix quality` green, unscoped, with `mix gate.verify` confirming
       the run was not profiled, scoped, `--quick`-ed or `--skip`-ed
-- [ ] `mix test test/statifier/compiler/location_test.exs` passes on its own
-- [ ] `mix test test/statifier/machine/transition_test.exs` passes on its own
-- [ ] Each new test's sabotage mutation was applied, observed red, and
+- [x] `mix test test/statifier/compiler/location_test.exs` passes on its own
+- [x] `mix test test/statifier/machine/transition_test.exs` passes on its own
+- [x] Each new test's sabotage mutation was applied, observed red, and
       reverted, and the mutation is recorded in the one-line comment above
       the test
-- [ ] `mix test --include scion --include scxml_w3` shows no change in
+- [x] `mix test --include scion --include scxml_w3` shows no change in
       pass/fail counts against `test/passing_tests.json` (`mix test.regression`
       green, no `mix test.baseline add` needed)
 
@@ -731,3 +731,33 @@ accept.
 - Test style: `test/statifier/lowering/location_test.exs:52-65`,
   `test/statifier/parser/location_accuracy_test.exs:13-41` (st-18y's harness)
 - Amendment precedent: ADR-0012's st-1xwh amendment (2026-08-17)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Spec-conformance judgment: `Statifier.Interpreter.initial_transition/1`
+      still matches Appendix D's `expandScxmlSource(doc)` normalization line
+      for line. The only ADR-0002 deviation on this path remains the existing
+      one - a synthesized transition is not a document element - and the
+      comment now names both of its consequences (`t_index: nil`,
+      `attribute_locations: %{}`) rather than one. No new deviation is
+      introduced.
+- [ ] The moduledoc paragraph reads as a sibling of `Machine.Invoke`'s, not a
+      restatement of it: it says why *this* node takes the escape hatch and
+      why `cond_location` stays out of it.
+- [ ] A compiled transition from a real fixture, inspected in IEx, shows the
+      map keys the source actually wrote and no others.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
