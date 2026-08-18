@@ -449,11 +449,11 @@ and a sentence in the comment - flagged in "Open questions".
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix credo --strict --enable-disabled-checks Readability.UnusedFunctionParameterPattern`
+- [x] `mix credo --strict --enable-disabled-checks Readability.UnusedFunctionParameterPattern`
       reports zero findings.
-- [ ] Full `mix quality` passes (this is also what proves no unused-variable
+- [x] Full `mix quality` passes (this is also what proves no unused-variable
       warning was introduced, since `warnings_as_errors` is on).
-- [ ] `mix gate.check` is green - no guarded path touched. Note
+- [x] `mix gate.check` is green - no guarded path touched. Note
       `lib/mix/statifier/gate_guard.ex` is *not* itself guarded, and this phase
       does not change its behavior.
 
@@ -1210,5 +1210,16 @@ deferred and surfaced at the end.
 
 **Implementation Note**: loop gate while iterating; full gate as the phase gate.
 `--loop` defers the Manual items.
+
+---
+
+### Phase 3
+
+- [ ] Each affected function still reads unambiguously: a reader can tell what
+      the bare `true` / `false` means from the added comment or from the call
+      sites.
+- [ ] No clause ordering changed - dropping a name must not reorder heads.
+
+**Implementation Note**: loop gate while iterating; full gate as the phase gate.
 
 ---

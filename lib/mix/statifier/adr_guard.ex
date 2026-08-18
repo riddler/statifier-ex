@@ -388,7 +388,8 @@ defmodule Mix.Statifier.AdrGuard do
     |> elem(1)
   end
 
-  defp doc_context_step(entry, {true = _in_heredoc?, acc}) do
+  # second element of the accumulator tuple: inside a doc heredoc?
+  defp doc_context_step(entry, {true, acc}) do
     trimmed = String.trim(entry.text)
     {trimmed != "\"\"\"", [{entry, entry.text} | acc]}
   end
