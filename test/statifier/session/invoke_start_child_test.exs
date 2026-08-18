@@ -103,6 +103,68 @@ defmodule Statifier.Session.InvokeStartChildTest do
     end
   end
 
+  describe "Session.invocations/1" do
+    # sabotage: `Statifier.Session`'s `handle_call(:invocations, ...)` clause
+    # is changed to `{:reply, [], state}` (ignores the table) -> the
+    # assertion below that `Session.invocations/1` reports the same
+    # invoke_id/session_id/pid `:sys.get_state/1` shows reddens (expects one
+    # entry, gets `[]`). Reverted and confirmed green.
+    test "names the same invoke_id, session_id, and pid :sys.get_state/1 shows" do
+      machine = compile!(parent_doc(content_body(), invoke_attrs: " autoforward=\"true\""))
+      {:ok, parent} = Session.start_link(machine, subscribers: [self()])
+      session_id = Session.session_id(parent)
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:invoke, %Effect.Invoke{invoke_id: invoke_id}}}}
+
+      %{invocations: invocations} = :sys.get_state(parent)
+
+      assert {:ok, %{pid: child_pid, session_id: child_session_id}} =
+               Invocations.fetch(invocations, invoke_id)
+
+      assert Session.invocations(parent) == [
+               %{invoke_id: invoke_id, session_id: child_session_id, pid: child_pid}
+             ]
+    end
+
+    # sabotage: `perform_instruction({:stop_child, invoke_id}, state, _)`'s
+    # hit clause is changed from `%{state | invocations: invocations}` to
+    # `state` (drops the popped table, keeping the cancelled invocation's
+    # stale entry) -> `Session.invocations/1` keeps reporting the cancelled
+    # invocation instead of `[]`, reddening the assertion below. Reverted
+    # and confirmed green.
+    test "the entry disappears once the invocation is cancelled" do
+      parent_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <invoke type="scxml">
+                  #{content_body()}
+              </invoke>
+              <transition event="leave" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+
+      {:ok, parent} = Session.start_link(compile!(parent_xml), subscribers: [self()])
+      session_id = Session.session_id(parent)
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:invoke, %Effect.Invoke{invoke_id: invoke_id}}}}
+
+      assert [%{invoke_id: ^invoke_id}] = Session.invocations(parent)
+
+      Session.send_event(parent, Statifier.Event.external("leave"))
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:cancel_invoke, %Effect.CancelInvoke{invoke_id: ^invoke_id}}}}
+
+      wait_for_status(parent, fn s -> s.configuration == MapSet.new(["b"]) end)
+
+      assert Session.invocations(parent) == []
+    end
+  end
+
   # -- 6.4.3 name-matched seeding --------------------------------------------
 
   describe "6.4.3 name-matched <param> seeding" do

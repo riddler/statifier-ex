@@ -429,15 +429,15 @@ each module's own `compile!/1`, `content_body/0`, and `wait_for_status/3`.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating;
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating;
       a loop-profile green does not satisfy this phase).
-- [ ] `mix test test/statifier/session/invocations_test.exs
+- [x] `mix test test/statifier/session/invocations_test.exs
       test/statifier/session/invoke_start_child_test.exs
       test/statifier/session/invoke_cancel_test.exs` passes.
-- [ ] Every new `test "..."` added in this phase has a `# sabotage:` line above
+- [x] Every new `test "..."` added in this phase has a `# sabotage:` line above
       it, and the mutation described was actually run and confirmed red.
-- [ ] `changelog.d/st-fd7n.md` exists.
-- [ ] `mix adr.check` reports no finding (in particular no `adr-0018-bead-id`
+- [x] `changelog.d/st-fd7n.md` exists.
+- [x] `mix adr.check` reports no finding (in particular no `adr-0018-bead-id`
       finding - the string `st-fd7n` appears in no file under `lib/` or
       `test/`).
 
@@ -776,6 +776,29 @@ before considering the plan fully landed.
 - [ ] The ADR is reviewed at the direction level per `docs/workflow.md` before
       the branch is opened for merge.
 - [ ] No regressions in related features: nothing outside `docs/` changed.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+the full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      vacuously here, since this phase touches no Appendix D procedure; confirm
+      by reading the diff that `lib/statifier/interpreter*` is untouched.
+- [ ] In IEx over a document with two `<invoke>`s, `Session.invocations/1`
+      returns both entries sorted, each `pid` is alive, and
+      `Session.session_id/1` on each pid equals the reported `session_id`.
+- [ ] `Session.invocations/1` on a session with no `<invoke>` returns `[]`
+      rather than raising, and on a halted session returns `[]` once
+      `terminate/2`-adjacent cancellation has emptied the table.
+- [ ] No regressions in related features: `#_<invokeid>` routing, autoforward,
+      and cancellation behave as before.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the

@@ -392,6 +392,13 @@ defmodule Statifier.Session do
           pending_timers: non_neg_integer()
         }
 
+  @typedoc """
+  One live invocation, as `invocations/1` reports it: the author-or-core
+  `invoke_id` this session knows the invocation by, the child's own `sess_`
+  id, and its pid.
+  """
+  @type invocation :: Statifier.Session.Invocations.public_entry()
+
   # -- client -----------------------------------------------------------------
 
   @doc """
@@ -552,6 +559,28 @@ defmodule Statifier.Session do
   """
   @spec status(server :: server()) :: status()
   def status(server), do: GenServer.call(server, :status)
+
+  @doc """
+  This session's live invocations - one entry per `<invoke>` whose child
+  session is still running under it, sorted by `invoke_id`, and `[]` for a
+  session with none. The counterpart to `status/1` for the invoke tree: an
+  observer holding a parent can name each child and `subscribe/2` to it, or
+  recurse with `invocations/1` again for a grandchild.
+
+  An entry is present from the moment the child is started until the
+  invocation is cancelled or the child exits - the same liveness
+  `#_<invokeid>` routing is judged against. A caller reading this against a
+  running session is reading a value that may already have changed; it is a
+  snapshot, not a subscription.
+
+  A child started before this session opted into `:inherit_observers` (or
+  one under a session that never did) has its own subscriber set, so
+  attaching to it here observes it only from the moment of the
+  `subscribe/2` - see `start_link/2`'s `:inherit_observers` for the reason
+  that is not equivalent to inheriting from the start (ADR-0049).
+  """
+  @spec invocations(server :: server()) :: [invocation()]
+  def invocations(server), do: GenServer.call(server, :invocations)
 
   @doc """
   Adds `pid` to this session's monitored subscriber set. Idempotent - a
@@ -879,6 +908,10 @@ defmodule Statifier.Session do
   def handle_call(:session_id, _from, state), do: {:reply, state.session_id, state}
   def handle_call(:snapshot, _from, state), do: {:reply, state.machine_state, state}
   def handle_call(:status, _from, state), do: {:reply, build_status(state), state}
+
+  def handle_call(:invocations, _from, state) do
+    {:reply, Invocations.list(state.invocations), state}
+  end
 
   def handle_call(:recording, _from, %State{recording: nil} = state) do
     {:reply, {:error, :not_recording}, state}

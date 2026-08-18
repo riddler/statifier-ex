@@ -145,6 +145,51 @@ defmodule Statifier.Session.InvocationsTest do
     end
   end
 
+  describe "list/1" do
+    # sabotage: n/a - asserts only the empty-table shape, which the
+    # decision-bearing cases below (key shape, sort order) already cover
+    test "an empty table returns []" do
+      assert Invocations.list(Invocations.new()) == []
+    end
+
+    # sabotage: `list/1`'s `Enum.map/2` projection is changed to also
+    # include `monitor_ref` and `autoforward` in the returned map (spread
+    # the raw `entry` instead of building `%{invoke_id:, session_id:,
+    # pid:}`) -> the refute below on `Map.keys/1` reddens
+    test "each entry carries exactly invoke_id, session_id, and pid" do
+      pid = self()
+
+      invocations =
+        Invocations.put(Invocations.new(), "i1", entry(pid, %{autoforward: true}))
+
+      assert [projected] = Invocations.list(invocations)
+      assert Map.keys(projected) |> Enum.sort() == [:invoke_id, :pid, :session_id]
+      assert projected == %{invoke_id: "i1", session_id: "sess_child", pid: pid}
+    end
+
+    # sabotage: `list/1`'s `Enum.sort_by(& &1.invoke_id)` is changed to
+    # `Enum.sort_by(& &1.invoke_id, :desc)` -> this test's ascending-order
+    # assertion reddens (removing the sort entirely does not redden it:
+    # Erlang's small flat maps already iterate in key-sorted order, so the
+    # sort direction is the only mutation that actually exercises this line)
+    test "results are sorted by invoke_id regardless of insertion order" do
+      pid1 = spawn(fn -> Process.sleep(:infinity) end)
+      pid2 = spawn(fn -> Process.sleep(:infinity) end)
+      pid3 = self()
+
+      invocations =
+        Invocations.new()
+        |> Invocations.put("i3", entry(pid3, %{session_id: "sess_c"}))
+        |> Invocations.put("i1", entry(pid1, %{session_id: "sess_a"}))
+        |> Invocations.put("i2", entry(pid2, %{session_id: "sess_b"}))
+
+      assert Invocations.list(invocations) |> Enum.map(& &1.invoke_id) == ["i1", "i2", "i3"]
+
+      Process.exit(pid1, :kill)
+      Process.exit(pid2, :kill)
+    end
+  end
+
   describe "seed_datamodel/2" do
     @child_xml """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s1" version="1.0" datamodel="predicator">

@@ -126,6 +126,27 @@ defmodule Statifier.Session.Invocations do
   @spec entries(invocations :: t()) :: %{String.t() => entry()}
   def entries(%__MODULE__{entries: entries}), do: entries
 
+  @typedoc """
+  The public projection of one live invocation - `invoke_id` plus the child's
+  own session id and pid, and deliberately not the parent's `monitor_ref` or
+  the `<invoke autoforward>` flag (ADR-0049 decision 1).
+  """
+  @type public_entry :: %{invoke_id: String.t(), session_id: String.t(), pid: pid()}
+
+  @doc """
+  Every live invocation as its public projection, sorted by `invoke_id` - a
+  stable order across reads, which `invoke_ids/1`'s map-key order is not
+  (ADR-0049 decision 1).
+  """
+  @spec list(invocations :: t()) :: [public_entry()]
+  def list(%__MODULE__{entries: entries}) do
+    entries
+    |> Enum.map(fn {invoke_id, %{session_id: session_id, pid: pid}} ->
+      %{invoke_id: invoke_id, session_id: session_id, pid: pid}
+    end)
+    |> Enum.sort_by(& &1.invoke_id)
+  end
+
   @doc "The number of live invocations."
   @spec count(invocations :: t()) :: non_neg_integer()
   def count(%__MODULE__{entries: entries}), do: map_size(entries)
