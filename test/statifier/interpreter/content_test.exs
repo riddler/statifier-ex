@@ -551,6 +551,26 @@ defmodule Statifier.Interpreter.ContentTest do
       assert error_event.name == "error.execution"
       assert error_event.type == :platform
     end
+
+    # sabotage: `Statifier.Machine.Content.Script`'s `execute/2` wraps the
+    # mid-program error in a `{:sabotage, error}` tuple instead of passing
+    # `error` through opaquely -> `error_event.data` would come back
+    # `{:sabotage, {:system_variable, "_sessionid"}}` instead of
+    # `{:system_variable, "_sessionid"}`, reddening the payload-equivalence
+    # assertion below (the same shape the sibling `<assign>` test asserts).
+    test "a script writing a system variable raises error.execution and halts the block" do
+      m = machine() |> machine_with_node(5, script_node(5, "_sessionid = 1;"))
+      ms = machine_state(m)
+      [block] = b_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, 5, {:onentry, b_index(m), 0}}
+      assert error_event.data == {:system_variable, "_sessionid"}
+    end
   end
 
   describe "execute_block/3 - non-fatal errors" do

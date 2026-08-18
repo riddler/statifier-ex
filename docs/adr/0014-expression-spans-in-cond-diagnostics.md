@@ -1,6 +1,6 @@
 # ADR-0014: Expression-level spans are part of the retained-location constraint
 
-Status: accepted (2026-08-06) - amended 2026-08-15 (item 4 stops at the predicator seam; engine policy checks are not expression failures) - amended 2026-08-17 (item 4: a protected-root refusal reported through predicator's `protected_roots:` option is a policy check, not a predicator error)
+Status: accepted (2026-08-06) - amended 2026-08-15 (item 4 stops at the predicator seam; engine policy checks are not expression failures) - amended 2026-08-18 (item 4: a protected-root refusal reported through predicator's `protected_roots:` option is a policy check, not a predicator error)
 
 ## Context
 
@@ -120,12 +120,13 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
    (`docs/observability.md` constraint 4) - the same division of labor that
    keeps `Evaluator.Error` itself owner-free.
 
-   *(Amended 2026-08-17, st-i9d: a third member of the policy-tuple list.)*
+   *(Amended 2026-08-18, st-i9d: a third member of the policy-tuple list.)*
    `Statifier.Evaluator.run_program/2` adds a third member beside
    `write_location/4`'s two: the spec 5.10 rejection of a `<script>` write to
    a `_`-rooted system variable, reported as `{:error, machine_state,
-   {:system_variable, root}, post_context}`. Predicator 9.0's
-   `protected_roots:` option on `Predicator.execute/3` makes predicator
+   {:system_variable, root}, post_context}`. Predicator 8.0.0's
+   `protected_roots:` option on `Predicator.execute/3`, consumed here under
+   this repo's current `~> 9.0` pin, makes predicator
    itself refuse the write, so the 2026-08-15 mechanical test above -
    "predicator returned `{:error, error}`" - is no longer sufficient on its
    own to tell an expression failure from a policy check: both now arrive as
