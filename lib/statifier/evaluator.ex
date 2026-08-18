@@ -137,6 +137,7 @@ defmodule Statifier.Evaluator do
   run against.
   """
 
+  alias Predicator.Errors.EvaluationError
   alias Statifier.Evaluator.Error
   alias Statifier.Evaluator.Functions
   alias Statifier.Machine
@@ -341,32 +342,40 @@ defmodule Statifier.Evaluator do
   and a write in one, which is what W3C test302/test304 assert (ADR-0026
   decision 2, `Statifier.Machine.Content.Script`'s moduledoc).
 
-  A changed root beginning with `_` is a system-variable write (spec
-  5.10) and is never merged; if the diff finds one, this returns
+  Spec 5.10 is enforced primarily by passing `protected_roots:` (derived by
+  `protected_roots/1` below) to `Predicator.execute/3`, so a write to a
+  system root **fails at the attempt**: the run halts at that statement,
+  no later statement in the program runs, and a write-then-restore cannot
+  hide the attempt because no write ever lands. The list is derived rather
+  than fixed, reconciling this repo's `_`-prefix rule
+  (`Statifier.Interpreter.Datamodel.check_system_variable/1`) against
+  predicator's membership-only API - see `protected_roots/1`'s own comment
+  for the reasoning.
+
+  The post-run diff below (`partition_changed_roots/2`) is retained as the
+  residual catch-all for the one class `protected_roots/1` structurally
+  cannot name: a `_` root the program creates fresh, absent from
+  `before_data`. `store` never deletes a root, so such a root can never be
+  restored to absence and is always visible to this diff as a changed
+  root. If the diff finds a changed root beginning with `_`, this returns
   `{:error, machine_state, {:system_variable, root}, post_context}` - the
-  same reason tuple `Statifier.Machine.Content.Assign.check_system_variable/1`
+  same reason tuple `Statifier.Interpreter.Datamodel.check_system_variable/1`
   produces, so `error.execution`'s `data:` reads identically whichever
   element attempted the write - with every non-system changed root from
   the *same* program still merged into the returned `machine_state` (spec
-  4.9's stop-and-keep model, applied to the one statement that failed this
-  check). When several changed roots are system roots, the one reported is
-  the alphabetically first - the diff makes no claim about which
-  assignment statement ran first, only about which roots differ.
+  4.9's stop-and-keep model: writes made *before* the refused statement
+  still merge, now applied at the statement that failed rather than after
+  the whole program). When several changed roots are system roots, the one
+  reported is the alphabetically first - the diff makes no claim about
+  which assignment statement ran first, only about which roots differ.
 
-  Known and accepted gap: a program that writes a system root and then
-  writes it back to its original value is unobservable to this diff and
-  is not caught, and 5.10 wants the write to fail *at the attempt* so
-  later statements never observe it - this diff only refuses to merge
-  it. Two things a pre-execution scan of assignment targets would not
-  fix. It would fire on an assignment inside an `if` branch that never
-  runs, while 5.10 owes the error only "when such an attempt is made";
-  and it cannot make the write fail, only report it after the fact.
-  (The scan itself would be complete, not bypassable: predicator's
-  `location` grammar roots every target in a literal IDENTIFIER, and
-  this check is root-only, so a computed bracket key never hides a
-  root.) Closing the gap exactly needs a hook inside predicator's
-  `store` - a protected-roots option on `Predicator.execute/3` - which
-  is upstream work, not a shape this diff can reach.
+  One edge case follows from keeping both mechanisms: a program that first
+  creates a fresh `_foo` and then writes a pre-existing root such as
+  `_event` produces both a `system_changed` entry for `_foo` and a
+  protected-root halt on `_event`. The reported reason names `_event` (the
+  statement that halted the run), but `_foo` is still in `system_changed`
+  and therefore still never merged - only the reported root differs,
+  either name is a truthful `{:system_variable, _}`.
 
   A `Predicator.execute/3` failure (a bad statement mid-program, or a
   program that never parsed - `Statifier.Compiler.Expressions.
@@ -396,9 +405,18 @@ defmodule Statifier.Evaluator do
     before_data = predicator_context.data
 
     {post_context, run_error} =
-      case Predicator.execute(compiled, predicator_context) do
-        {:ok, %Predicator.Context{} = post_context} -> {post_context, nil}
-        {:error, error, %Predicator.Context{} = post_context} -> {post_context, error}
+      case Predicator.execute(compiled, predicator_context,
+             protected_roots: protected_roots(before_data)
+           ) do
+        {:ok, %Predicator.Context{} = post_context} ->
+          {post_context, nil}
+
+        {:error, %EvaluationError{reason: "protected_root", details: %{root: root}},
+         %Predicator.Context{} = post_context} ->
+          {post_context, {:system_variable, root}}
+
+        {:error, error, %Predicator.Context{} = post_context} ->
+          {post_context, error}
       end
 
     {system_changed, non_system_changed} = partition_changed_roots(before_data, post_context.data)
@@ -409,6 +427,9 @@ defmodule Statifier.Evaluator do
     }
 
     cond do
+      match?({:system_variable, _root}, run_error) ->
+        {:error, new_machine_state, run_error, post_context}
+
       run_error != nil ->
         {:error, new_machine_state, Error.new(source, run_error), post_context}
 
@@ -419,6 +440,26 @@ defmodule Statifier.Evaluator do
       true ->
         {:ok, new_machine_state, post_context}
     end
+  end
+
+  # Spec 5.10's rule in this repo is a *prefix* test on `_`
+  # (`Statifier.Interpreter.Datamodel.check_system_variable/1`), and
+  # predicator's `protected_roots:` is a *membership* list of binaries with
+  # no prefix mode (`deps/predicator/lib/predicator/evaluator.ex:1567`). So
+  # the list is derived per run from the roots the context already carries.
+  # It covers all four 5.10 variables without naming them:
+  # `MachineState.new/2` merges `SystemVariables.initial/2` over the author
+  # datamodel, so every one of them is in `before_data` by construction.
+  # The roots this list cannot name are exactly those a program creates
+  # fresh - and `store` never deletes, so a fresh `_` root can never be
+  # restored to absence and is therefore always visible to
+  # `partition_changed_roots/2` below. The two together leave no residual
+  # case.
+  @spec protected_roots(before_data :: map()) :: [String.t()]
+  defp protected_roots(before_data) do
+    for {root, _value} <- before_data,
+        String.starts_with?(root, "_"),
+        do: root
   end
 
   # Decisions 3 and 4: the top-level diff `execute/2` builds its merge and

@@ -299,18 +299,70 @@ defmodule Statifier.EvaluatorTest do
       assert new_ms.datamodel["newvar"] == 42
     end
 
-    # sabotage: swap partition_changed_roots/2's `String.starts_with?(root,
-    # "_")` predicate for its negation -> a system root merges while a
-    # non-system root from the same program is rejected instead, and this
-    # test's shape inverts.
-    test "a system-variable write is rejected, keeping the same program's other writes" do
+    # sabotage: drop the `protected_roots:` option from `run_program/2`'s
+    # `Predicator.execute/3` call -> `_event = 1` succeeds inside the program,
+    # `x = 2` runs after it, and `new_ms.datamodel["x"] == nil` reddens
+    # (the post-hoc diff still reports `{:system_variable, "_event"}`, so only
+    # the halt assertion catches it).
+    test "a system-variable write halts the program at the attempt" do
       ms = new_machine_state(datamodel: %{"x" => nil})
 
       assert {:error, new_ms, {:system_variable, "_event"}} =
                Evaluator.execute(ms, program("_event = 1; x = 2;"))
 
-      assert new_ms.datamodel["x"] == 2
+      assert new_ms.datamodel["x"] == nil
       assert new_ms.datamodel["_event"] == :undefined
+    end
+
+    # AC: the case the post-hoc diff structurally cannot see - a
+    # write to a protected root followed by a write of the original value
+    # back. Under the diff alone, `_name` is byte-identical before and after,
+    # so nothing is reported at all.
+    #
+    # sabotage: drop the `protected_roots:` option from `run_program/2`'s
+    # `Predicator.execute/3` call -> `partition_changed_roots/2` sees `_name`
+    # unchanged, `run_program/2` returns `{:ok, _, _}`, and this test's
+    # `{:error, ...}` match reddens.
+    test "a write-then-restore of a system variable is caught" do
+      ms = new_machine_state(datamodel: %{})
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "_name", "chart")}
+
+      assert {:error, _new_ms, {:system_variable, "_name"}} =
+               Evaluator.execute(ms, program("_name = 'other'; _name = 'chart';"))
+    end
+
+    # AC: 5.10 wants the write to fail *at the attempt*, so a later
+    # statement in the same body must never read the written value.
+    #
+    # sabotage: drop the `protected_roots:` option from `run_program/2`'s
+    # `Predicator.execute/3` call -> the `_name` write lands inside the
+    # program, `seen` reads 'other' and merges as a non-system root, so
+    # `new_ms.datamodel["seen"] == nil` reddens.
+    test "a later statement in the same body does not observe the write" do
+      ms = new_machine_state(datamodel: %{"seen" => nil})
+      ms = %{ms | datamodel: Map.put(ms.datamodel, "_name", "chart")}
+
+      assert {:error, new_ms, {:system_variable, "_name"}} =
+               Evaluator.execute(ms, program("_name = 'other'; seen = _name;"))
+
+      assert new_ms.datamodel["seen"] == nil
+    end
+
+    # AC: the one case `protected_roots:` cannot cover - a `_` root
+    # absent from the pre-run context, so the derived list never names it.
+    # `partition_changed_roots/2` is retained exactly for this, and this test
+    # is what would notice if it were dropped as "belt and braces".
+    #
+    # sabotage: delete the `map_size(system_changed) > 0` arm from
+    # `run_program/2`'s `cond` -> the program succeeds, `_created` merges into
+    # the datamodel, and the `{:error, ...}` match reddens.
+    test "a program-created _ root is still caught by the retained diff" do
+      ms = new_machine_state(datamodel: %{})
+
+      assert {:error, new_ms, {:system_variable, "_created"}} =
+               Evaluator.execute(ms, program("_created = 1;"))
+
+      refute Map.has_key?(new_ms.datamodel, "_created")
     end
 
     # sabotage: in execute/2, merge `after_data` wholesale instead of just
