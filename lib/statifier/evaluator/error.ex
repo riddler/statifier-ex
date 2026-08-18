@@ -12,7 +12,7 @@ defmodule Statifier.Evaluator.Error do
   message string, so a caller that wants to pattern-match the specific
   failure still can.
 
-  `span` is lifted out of `error` for convenience (`Predicator.Errors.ParseError`
+  `span` is lifted out of `error` for convenience (`Predicator.Errors.LocationError`
   has no `:span` field, hence `Map.get/2` rather than `error.span`) and is
   `nil` exactly when predicator itself could not attribute one - ADR-0014
   item 4's own "nil when predicator cannot attribute one", not a sentinel

@@ -5,6 +5,7 @@ defmodule Statifier.Interpreter.ContentTest do
   alias Statifier.ContextRecorder
   alias Statifier.Effect
   alias Statifier.Evaluator
+  alias Statifier.Evaluator.Error, as: EvaluatorError
   alias Statifier.Interpreter.Content
   alias Statifier.Interpreter.ExitEntry
   alias Statifier.Lowering
@@ -570,6 +571,40 @@ defmodule Statifier.Interpreter.ContentTest do
       assert error_event.type == :platform
       assert error_event.cause.origin == {:content, 5, {:onentry, b_index(m), 0}}
       assert error_event.data == {:system_variable, "_sessionid"}
+    end
+
+    # sabotage: `Statifier.Evaluator.Error.new/2` hardcodes `span: nil`
+    # instead of `Map.get(error, :span)` -> even though the underlying
+    # %UndefinedVariableError{} carries a real span (script_node/2 compiles
+    # with Predicator.compile_program_with_spans/1, mirroring
+    # compile_program/3's post-Phase-1 call), Evaluator.Error never lifts it
+    # and the span assertion below goes red with `span: nil`. (Reverting
+    # script_node/2 itself to compile_program_with_positions/1 was tried
+    # first and also reddens the same assertion for the same underlying
+    # reason - no span on the predicator error struct to lift - but
+    # script_node/2 is a harness fixture, not lib/ code, so the sabotage
+    # recorded here targets the lib/ mechanism instead.)
+    test "a failed <script> statement's error.execution data carries the failing subexpression's span" do
+      source = "x = 1;\ny = zzz + 1;"
+      m = machine() |> machine_with_node(5, script_node(5, source))
+      ms = machine_state(m)
+      ms = %{ms | datamodel: ms.datamodel |> Map.put("x", nil) |> Map.put("y", nil)}
+      [block] = b_onentry_blocks(m)
+
+      {result, _effects} = Content.execute_block(ms, {:onentry, b_index(m), 0}, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.execution"
+      assert error_event.cause.origin == {:content, 5, {:onentry, b_index(m), 0}}
+
+      assert %EvaluatorError{
+               source: ^source,
+               span: {{start_line, _start_col}, {end_line, _end_col}}
+             } =
+               error_event.data
+
+      assert start_line == 2
+      assert end_line == 2
     end
   end
 
