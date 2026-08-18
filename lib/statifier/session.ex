@@ -283,8 +283,7 @@ defmodule Statifier.Session do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Source
-  alias Statifier.Send.Routes
-  alias Statifier.Send.Target
+  alias Statifier.Send.{Routes, Target}
   alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
 
   defmodule State do

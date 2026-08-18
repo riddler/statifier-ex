@@ -7,7 +7,6 @@ defmodule Statifier.Interpreter.ContentTest do
   alias Statifier.{Machine, MachineState, Parser, TestContent, Validator}
   alias Statifier.Machine.Content.{Assign, Script}
   alias Statifier.Parser.Location
-  alias Statifier.Send.Routes
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
