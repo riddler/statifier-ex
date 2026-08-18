@@ -14,24 +14,28 @@ defmodule Statifier.Lowering.Builders do
   """
 
   alias Statifier.{Document, Lowering}
-  alias Statifier.Document.Assign
-  alias Statifier.Document.Block
-  alias Statifier.Document.Cancel
-  alias Statifier.Document.Content
-  alias Statifier.Document.Data
-  alias Statifier.Document.Datamodel
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Foreach
-  alias Statifier.Document.If
-  alias Statifier.Document.Initial
-  alias Statifier.Document.Invoke
-  alias Statifier.Document.Log
-  alias Statifier.Document.Param
-  alias Statifier.Document.Raise
-  alias Statifier.Document.Script
-  alias Statifier.Document.Send
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
+
+  alias Statifier.Document.{
+    Assign,
+    Block,
+    Cancel,
+    Content,
+    Data,
+    Datamodel,
+    Donedata,
+    Foreach,
+    If,
+    Initial,
+    Invoke,
+    Log,
+    Param,
+    Raise,
+    Script,
+    Send,
+    State,
+    Transition
+  }
+
   alias Statifier.Lowering.{Attributes, Error}
   alias Statifier.Parser.{DOM, Location}
   alias Statifier.Parser.DOM.{Element, Text}
