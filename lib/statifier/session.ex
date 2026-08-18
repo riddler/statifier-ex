@@ -442,6 +442,11 @@ defmodule Statifier.Session do
   @doc """
   The `Statifier.Session.Recording.t()` this session has captured so far, or
   `{:error, :not_recording}` if it was not started with `record: true`.
+  Note the neighbouring atom: `subscribe/3` answers the *same* condition
+  with `{:error, :not_recorded}`. The two are one letter apart and are
+  deliberately not unified here - each reads correctly in its own sentence
+  ("this session is not recording"; "that material was not recorded") - so
+  match on the one belonging to the function you called.
 
   Call this only after the run has quiesced relative to whatever this caller
   is waiting on - a timer firing arrives as a message with no ordering
@@ -582,7 +587,10 @@ defmodule Statifier.Session do
   returns `{:error, :not_recorded}` and **does not add `pid`** - there is
   nothing to re-derive from, and this record adds no second retention
   mechanism (ADR-0049 decision 2). A caller for whom live-only delivery is
-  acceptable falls back to `subscribe/2`.
+  acceptable falls back to `subscribe/2`. Note the neighbouring atom:
+  `recording/1` answers the same condition with `{:error, :not_recording}`,
+  one letter apart and deliberately not unified - match on the one belonging
+  to the function you called.
   """
   @spec subscribe(server :: server(), pid :: pid(), opts :: subscribe_opts()) ::
           :ok | {:ok, Recording.t()} | {:error, :not_recorded}
