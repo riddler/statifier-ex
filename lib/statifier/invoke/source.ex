@@ -87,11 +87,18 @@ defmodule Statifier.Invoke.Source do
     end
   end
 
-  def resolve(%Invoke{content: content}, _opts) when not is_nil(content) do
-    {:error, {:content_not_markup, content}}
-  end
-
   def resolve(%Invoke{content: nil, src: nil}, _opts) do
     {:error, :no_source}
+  end
+
+  # No guard needed: `content: nil` is already fully handled by the two
+  # clauses above (`is_binary(src)` and `src: nil` between them exhaust
+  # `src`'s `String.t() | nil` type), and `is_binary(content)` is fully
+  # handled by the `resolve/2` clause above that. Whatever reaches here has
+  # `content` present and not a binary - `content` is `term()`, so that is
+  # not expressible as a structural pattern the way a `String.t() | nil`
+  # field would be.
+  def resolve(%Invoke{content: content}, _opts) do
+    {:error, {:content_not_markup, content}}
   end
 end

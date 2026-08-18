@@ -92,15 +92,15 @@ defmodule Statifier.Validator.Checks.Script do
   defp initial_scripts(nil), do: []
   defp initial_scripts(%Initial{transitions: transitions}), do: transition_scripts(transitions)
 
-  defp check_script(%DScript{src: src}) when not is_nil(src), do: []
-
-  defp check_script(%DScript{text: text, location: location}) do
+  defp check_script(%DScript{src: nil, text: text, location: location}) do
     if blank?(text) do
       [Error.script_no_src_or_text(location)]
     else
       []
     end
   end
+
+  defp check_script(%DScript{}), do: []
 
   defp blank?(nil), do: true
   defp blank?(text) when is_binary(text), do: String.trim(text) == ""
