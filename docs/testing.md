@@ -89,6 +89,13 @@ from the three above in kind, not just in tag:
   `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
   measurement section for the full per-fixture numbers and the decision.
 
+  A `:subtle` tier (ten fixtures, five per-registry-entry pairs) now exists in
+  the corpus alongside the original eight `:blatant` fixtures
+  (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`), but it has
+  not yet been measured - the paid runs are deferred to a human under that
+  plan's Phase 5. The blatant-tier numbers above are unchanged by st-2ts's
+  Phases 1-4.
+
 ## Sabotage testing
 
 A test that passes on its first run has proven nothing yet. It might be asserting
