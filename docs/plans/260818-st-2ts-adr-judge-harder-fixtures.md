@@ -920,14 +920,44 @@ the corpus reproduces the same measurement rather than inventing one.
 - **Any fixture that flapped on all three runs of both models.** Its wording is
   ambiguous rather than its verdict wrong; name it and recommend a rewrite.
 
+#### Phase 5 measurement (recorded)
+
+**No paid run has been made yet.** The automated part of Phase 5 (this record's
+structure, the tier/model scorecard templates below, the findings section, and
+the `docs/testing.md` note) was written without executing
+`mix test --only adr_judge_corpus`, `--only tier:subtle`, `--only tier:blatant`,
+or `--only fixture:<name>` at any point. The tables below are templates, not
+measurements - every cell is empty on purpose. They exist so a human running
+the paid corpus under Decision 2's repeat policy has a place to paste results
+without inventing the shape first. Filling them in is exactly the "Paid corpus
+runs (Phase 5)" checklist under `## Deferred Manual Verification`.
+
+**`claude-sonnet-5`**
+
+| Tier | Model | FN (majority) | FP (majority) | Flaps | Wall (mean) |
+|---|---|---|---|---|---|
+| blatant | claude-sonnet-5 | NOT YET RUN | NOT YET RUN | NOT YET RUN | NOT YET RUN |
+| subtle | claude-sonnet-5 | NOT YET RUN | NOT YET RUN | NOT YET RUN | NOT YET RUN |
+
+**`claude-haiku-4-5-20251001`**
+
+| Tier | Model | FN (majority) | FP (majority) | Flaps | Wall (mean) |
+|---|---|---|---|---|---|
+| blatant | claude-haiku-4-5-20251001 | NOT YET RUN | NOT YET RUN | NOT YET RUN | NOT YET RUN |
+| subtle | claude-haiku-4-5-20251001 | NOT YET RUN | NOT YET RUN | NOT YET RUN | NOT YET RUN |
+
+Per-fixture verdict matrices across the three seeds are owed alongside these
+summary rows once the runs happen; none are recorded here because none exist
+yet.
+
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix test` still reports zero `adr_judge_corpus` tests executed - the
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix test` still reports zero `adr_judge_corpus` tests executed - the
       measurement changed nothing about what the ordinary suite runs
-- [ ] `lib/` is untouched by this phase: `git diff --stat` shows no `lib/` path
-- [ ] Use `mix quality --profile loop` between edits
+- [x] `lib/` is untouched by this phase: `git diff --stat` shows no `lib/` path
+- [x] Use `mix quality --profile loop` between edits
 
 #### Manual Verification:
 - [ ] Every finding above is written down with its evidence, and no
@@ -950,6 +980,56 @@ full `mix quality` as the phase gate. In looped execution this phase's Manual
 and Deferred Manual items do not block advancement and are surfaced at the end;
 the phase is complete as an automated matter once the record is written, and
 complete as a matter of fact only once the paid runs above have filled it in.
+
+---
+
+## Findings for a maintainer
+
+Written at the point where Phase 5's automated part (this record's structure,
+the scorecard templates, and this section) is done but its paid runs are not.
+Each item below is stated to the extent it can be without paid-run evidence;
+where evidence is missing, that is said plainly rather than guessed at.
+
+- **`@default_model`.** No accuracy-separating evidence exists yet - no
+  subtle-tier run has been made under either model, so no recommendation can
+  be made until the paid runs in `## Deferred Manual Verification` happen. The
+  current value, `claude-sonnet-5` (`adr_judge.ex:214`), was a human's call
+  made directly on wall time, with accuracy tied at 0/4-0/4 on the blatant-only
+  corpus (`docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
+  measurement). Whether the harder, subtler corpus separates the two models on
+  accuracy - and if so which way - remains open until Phase 5's paid runs are
+  actually done. `STATIFIER_ADR_JUDGE_MODEL` stays the escape hatch in either
+  direction in the meantime.
+- **The `adr-0015-swallowed-judgment` key.** The registry key names a
+  superseded ADR (ADR-0015) while the entry it labels ships ADR-0017's text,
+  label, scope and focus. This is a mislabel a reader trips over. The rename
+  is mechanical - it touches the registry, the `read_adr_source/1` clause, the
+  manifest, ten fixture filenames (the original eight plus the two added in
+  Phase 4), and the recorded baselines' vocabulary, for no behavior change -
+  and is recommended, but it is out of scope for st-2ts per "What We're NOT
+  Doing" above. This finding needs no paid-run evidence; it is a fact about
+  the registry as it stands at HEAD.
+- **Cross-scope fixtures.** Shape invariant 4 (the shape test's "empty chunks
+  in a differing scope" assertion) forbids a fixture touching both
+  `lib/statifier` and `.claude/wurk` at once. That means the judge's real
+  one-propose-call-per-registry-entry path over a genuine multi-scope branch
+  has no fixture in this corpus at all - a gap, not a bug. Relaxing the
+  invariant to allow a cross-scope fixture would change what the free shape
+  test guarantees, which is why Phase 1-4 did not attempt it. Recorded here as
+  a gap for a maintainer to weigh; no paid-run evidence needed to state it.
+- **`test/test_helper.exs` as a guarded path.** Restated from st-6f7's
+  voluntary ledger entry: `mix gate.check`'s guarded-path list does not
+  include `test/test_helper.exs`, and this branch adds no new exclusion to it
+  (the `:adr_judge_corpus` tag exclusion already existed before st-2ts).
+  Whether that file should become a guarded path - so that widening what the
+  ordinary suite excludes needs a `docs/quality-gate-changes.md` entry the way
+  narrowing a coverage threshold does - remains an open question for a
+  maintainer. No paid-run evidence bears on it.
+- **Any fixture that flapped.** Cannot be stated. No paid runs were made in
+  this phase, so there is no per-fixture verdict data across three seeds to
+  check for a flap, and this finding is explicitly left blank rather than
+  guessed at. It is the first thing to fill in once the paid runs in
+  `## Deferred Manual Verification` happen.
 
 ---
 
@@ -1125,6 +1205,31 @@ full `mix quality` as the phase gate. Take particular care that only the fixture
 *files* change - a fixture is a text file describing a hypothetical diff, and
 this phase must not edit the real `.claude/wurk.json` or
 `.claude/wurk/commit.md`.
+
+---
+
+### Phase 5
+
+- [ ] Every finding above is written down with its evidence, and no
+      recommendation was acted on
+- [ ] The scorecard tables in this plan and the summary rows in
+      `docs/testing.md` hold real measured numbers, not a template. A command
+      can see a table; only a reader can see whether its cells came from a run,
+      which is why this is not an automated criterion - a `--loop` pass must not
+      be able to satisfy Phase 5 with an empty table
+- [ ] The spend ceiling of Decision 3 was respected, and the actual number of
+      corpus-equivalent runs is recorded next to the ceiling
+
+The paid runs this phase's record is filled in from are listed once, at the end
+of this document under `## Deferred Manual Verification`. They are deliberately
+not repeated here: no phase's Automated Verification may depend on them, and
+keeping them in one place is what makes that visible.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full `mix quality` as the phase gate. In looped execution this phase's Manual
+and Deferred Manual items do not block advancement and are surfaced at the end;
+the phase is complete as an automated matter once the record is written, and
+complete as a matter of fact only once the paid runs above have filled it in.
 
 ---
 ## Open Questions
