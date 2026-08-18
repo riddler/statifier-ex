@@ -147,7 +147,7 @@ starts it on `Statifier.SessionSupervisor` with `invoked_by: {parent_pid,
 invoke_id}`, monitored in both directions; `Statifier.Session.start_link/2`'s
 `:inherit_observers` opt-in carries the parent's `:trace` and subscribers down
 onto that same child start
-([ADR-0049](adr/0049-invoked-children-inherit-observation-by-opt-in.md)), and
+([ADR-0050](adr/0050-invoked-children-inherit-observation-by-opt-in.md)), and
 `Statifier.Session.invocations/1` names a session's live children for an
 observer attaching after the fact. `#_parent`/`_parent` and a live
 invocation's `done.invoke.<invokeid>` (carrying its donedata) both resolve

@@ -13,7 +13,7 @@ send back.
 This plan lands both halves the bead asks for: a public accessor naming a
 session's live invocations, and a documented, opt-in, transitively inherited
 start option that starts each invoked child with the parent's `:trace` and
-subscriber set. It also records the inheritance decision as ADR-0049 and folds
+subscriber set. It also records the inheritance decision as ADR-0050 and folds
 the invoke tree into `docs/observability.md` constraint 6, which today describes
 observation at a single session boundary only. Bead: st-fd7n.
 
@@ -167,7 +167,7 @@ session ids.
 Three phases, ordered decision-then-code, each independently committable and
 each green on a full `mix quality` on its own.
 
-Phase 1 is documents only: ADR-0049 records the inheritance decision and its
+Phase 1 is documents only: ADR-0050 records the inheritance decision and its
 `docs/adr/README.md` row. Writing it first is what this repo's workflow asks for
 (`docs/workflow.md`: ADRs are drafted or reviewed at the direction level, and
 there is no `proposed` state - the human gate is the review of the branch the
@@ -195,7 +195,7 @@ pass are untouched; every change is in `Statifier.Session`, the effect
 interpreter, and in a pure table module the spec has no counterpart for. There
 is no deviation to declare.
 
-## Phase 1: Record the inheritance decision as ADR-0049
+## Phase 1: Record the inheritance decision as ADR-0050
 
 ### Overview
 
@@ -206,9 +206,9 @@ no Elixir changes, so nothing in the gate can move.
 
 #### 1. The ADR
 
-**File**: `docs/adr/0049-invoked-children-inherit-observation-by-opt-in.md`
+**File**: `docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md`
 **Changes**: New record, in the three-section format
-(`## Context`, `## Decision`, `## Consequences`), `# ADR-0049: ...` on line 1
+(`## Context`, `## Decision`, `## Consequences`), `# ADR-0050: ...` on line 1
 and `Status: accepted (2026-08-18)` on line 3.
 
 `## Context` states the gap - a child's effects reach only the child's own
@@ -268,7 +268,7 @@ propagation, which would supersede decision 5 rather than amend it.
 **Changes**: One table row after 0048.
 
 ```
-| [0049](0049-invoked-children-inherit-observation-by-opt-in.md) | Invoked children inherit the parent's observers by opt-in; the invocation table gets a public accessor | accepted |
+| [0050](0050-invoked-children-inherit-observation-by-opt-in.md) | Invoked children inherit the parent's observers by opt-in; the invocation table gets a public accessor | accepted |
 ```
 
 ### Success Criteria:
@@ -277,12 +277,12 @@ propagation, which would supersede decision 5 rather than amend it.
 
 - [x] Full `mix quality` passes (`mix quality --profile loop` while iterating,
       but a loop-profile green never satisfies this phase).
-- [x] `docs/adr/0049-invoked-children-inherit-observation-by-opt-in.md` exists,
-      line 1 is `# ADR-0049: ...`, line 3 begins `Status: accepted (`, and it
+- [x] `docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md` exists,
+      line 1 is `# ADR-0050: ...`, line 3 begins `Status: accepted (`, and it
       contains exactly the headings `## Context`, `## Decision`,
       `## Consequences`.
 - [x] `docs/adr/README.md` contains a row linking
-      `0049-invoked-children-inherit-observation-by-opt-in.md`.
+      `0050-invoked-children-inherit-observation-by-opt-in.md`.
 - [x] `git diff --name-only origin/main` for this phase names no path under
       `lib/` or `test/`.
 
@@ -326,14 +326,14 @@ reads this table only through its API.
 @typedoc """
 The public projection of one live invocation - `invoke_id` plus the child's
 own session id and pid, and deliberately not the parent's `monitor_ref` or
-the `<invoke autoforward>` flag (ADR-0049 decision 1).
+the `<invoke autoforward>` flag (ADR-0050 decision 1).
 """
 @type public_entry :: %{invoke_id: String.t(), session_id: String.t(), pid: pid()}
 
 @doc """
 Every live invocation as its public projection, sorted by `invoke_id` - a
 stable order across reads, which `invoke_ids/1`'s map-key order is not
-(ADR-0049 decision 1).
+(ADR-0050 decision 1).
 """
 @spec list(invocations :: t()) :: [public_entry()]
 def list(%__MODULE__{entries: entries}) do
@@ -378,7 +378,7 @@ A child started before this session opted into `:inherit_observers` (or
 one under a session that never did) has its own subscriber set, so
 attaching to it here observes it only from the moment of the
 `subscribe/2` - see `start_link/2`'s `:inherit_observers` for the reason
-that is not equivalent to inheriting from the start (ADR-0049).
+that is not equivalent to inheriting from the start (ADR-0050).
 """
 @spec invocations(server :: server()) :: [invocation()]
 def invocations(server), do: GenServer.call(server, :invocations)
@@ -480,7 +480,7 @@ rather than an implementation detail.
 **Changes**: `%State{}` gains `inherit_observers: false` in its `defstruct`
 (`lib/statifier/session.ex:292-308`) and `inherit_observers: boolean()` in its
 `@type t` (`lib/statifier/session.ex:310-343`), with a short comment citing
-ADR-0049 decisions 2 and 4.
+ADR-0050 decisions 2 and 4.
 
 #### 2. Reading the option
 
@@ -501,7 +501,7 @@ inherited options onto the three it already builds. The new private helper is
 the whole of the decision.
 
 ```elixir
-# ADR-0049 decisions 2-5: off by default, so a session that never opted in
+# ADR-0050 decisions 2-5: off by default, so a session that never opted in
 # starts its children exactly as before. When on, the child gets this
 # session's `trace` (read off `%MachineState{}`, where `new/2` fixed it) and
 # this session's subscriber pids *as of now* - a snapshot, not a live link -
@@ -543,7 +543,7 @@ The `@doc` bullet says: `:inherit_observers` - when `true`, every child session
 this session starts for an `<invoke>` is started with this session's `:trace`
 setting, this session's subscriber pids as of the moment the child starts, and
 `inherit_observers: true` of its own, so one opt-in at the root traces the whole
-invoke tree (ADR-0049). Default `false`, which starts children exactly as
+invoke tree (ADR-0050). Default `false`, which starts children exactly as
 before. Each inherited subscriber receives the child's messages under the
 child's own `session_id` in the `{:statifier, session_id, message}` envelope, so
 a mixed stream demultiplexes on that field; `{:halted, _}` is still
@@ -563,7 +563,7 @@ knowable has already missed that child's `Trace.EntrySet`,
 **File**: `docs/observability.md`
 **Changes**: Constraint 6's Observation bullet (`docs/observability.md:177-186`)
 gains a sentence: observation is per session, and an invoke tree is a tree of
-sessions - `Statifier.Session.start_link/2`'s `:inherit_observers` (ADR-0049)
+sessions - `Statifier.Session.start_link/2`'s `:inherit_observers` (ADR-0050)
 starts each invoked child with the parent's `:trace` and subscribers so one
 attach at the root covers the tree, with each session's messages carrying its
 own `session_id` in the envelope; `Statifier.Session.invocations/1` names the
@@ -574,7 +574,7 @@ necessarily misses each child's initialize burst.
 **Changes**: The "Sessions and invoke" `{:invoke, _}` paragraph
 (`docs/architecture.md:140-147`) gains one sentence naming `:inherit_observers`
 and `invocations/1` beside the existing `invoked_by:` sentence, linking
-ADR-0049.
+ADR-0050.
 
 #### 6. Changelog fragment
 
@@ -746,7 +746,7 @@ does move, that is a finding to stop on rather than to ratchet.
   `:invoke_source` inheritance is a separate question),
   `docs/adr/0002-literal-w3c-appendix-d-port.md` (no Appendix D procedure is
   touched, so no deviation is declared), and the new
-  `docs/adr/0049-invoked-children-inherit-observation-by-opt-in.md`
+  `docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md`
 - Related documents: `docs/observability.md` constraint 6,
   `docs/architecture.md` "Sessions and invoke", `docs/testing.md` (sabotage)
 - Similar implementation: `lib/statifier/session.ex:510` (`status/1`, the

@@ -129,14 +129,14 @@ defmodule Statifier.Session.Invocations do
   @typedoc """
   The public projection of one live invocation - `invoke_id` plus the child's
   own session id and pid, and deliberately not the parent's `monitor_ref` or
-  the `<invoke autoforward>` flag (ADR-0049 decision 1).
+  the `<invoke autoforward>` flag (ADR-0050 decision 1).
   """
   @type public_entry :: %{invoke_id: String.t(), session_id: String.t(), pid: pid()}
 
   @doc """
   Every live invocation as its public projection, sorted by `invoke_id` - a
   stable order across reads, which `invoke_ids/1`'s map-key order is not
-  (ADR-0049 decision 1).
+  (ADR-0050 decision 1).
   """
   @spec list(invocations :: t()) :: [public_entry()]
   def list(%__MODULE__{entries: entries}) do

@@ -178,4 +178,23 @@ defmodule Statifier.Session.InvokeObserverInheritanceTest do
 
     assert StreamOrder.drain(child_session_id) == []
   end
+
+  # sabotage: `inherited_observer_opts/1`'s `true`-shaped clause gains
+  # `record: true` alongside `trace`/`subscribers` (the ADR-0050 decision 3
+  # alternative) -> the inherited child starts recording, so `catch_up: true`
+  # answers `{:ok, recording}` and adds the pid, and both assertions below
+  # redden. Reverted and confirmed green.
+  test "decision 3's gap: catch-up is unavailable on an inherited child" do
+    machine = compile!(parent_doc(content_body(@simple_child_xml)))
+
+    {:ok, parent} =
+      Session.start_link(machine, trace: true, subscribers: [self()], inherit_observers: true)
+
+    wait_until(fn -> one_invocation(:sys.get_state(parent)) end)
+    [%{pid: child_pid}] = Session.invocations(parent)
+
+    watcher = spawn(fn -> Process.sleep(:infinity) end)
+    assert Session.subscribe(child_pid, watcher, catch_up: true) == {:error, :not_recorded}
+    refute Map.has_key?(:sys.get_state(child_pid).subscribers, watcher)
+  end
 end
