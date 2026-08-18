@@ -38,26 +38,30 @@ defmodule Statifier.Validator do
   """
 
   alias Statifier.Document
-  alias Statifier.Validator.Checks.Assign
-  alias Statifier.Validator.Checks.Boilerplate
-  alias Statifier.Validator.Checks.Cancel
-  alias Statifier.Validator.Checks.Content
-  alias Statifier.Validator.Checks.Data
-  alias Statifier.Validator.Checks.DefaultEntry
-  alias Statifier.Validator.Checks.Donedata
-  alias Statifier.Validator.Checks.Enums
-  alias Statifier.Validator.Checks.Final
-  alias Statifier.Validator.Checks.FinalParent
-  alias Statifier.Validator.Checks.History
-  alias Statifier.Validator.Checks.Ids
-  alias Statifier.Validator.Checks.If
-  alias Statifier.Validator.Checks.InitialElement
-  alias Statifier.Validator.Checks.InitialTargets
-  alias Statifier.Validator.Checks.Invoke
-  alias Statifier.Validator.Checks.Param
-  alias Statifier.Validator.Checks.Script
-  alias Statifier.Validator.Checks.Send
-  alias Statifier.Validator.Checks.Targets
+
+  alias Statifier.Validator.Checks.{
+    Assign,
+    Boilerplate,
+    Cancel,
+    Content,
+    Data,
+    DefaultEntry,
+    Donedata,
+    Enums,
+    Final,
+    FinalParent,
+    History,
+    Ids,
+    If,
+    InitialElement,
+    InitialTargets,
+    Invoke,
+    Param,
+    Script,
+    Send,
+    Targets
+  }
+
   alias Statifier.Validator.{Context, Error, Warning}
 
   @checks [

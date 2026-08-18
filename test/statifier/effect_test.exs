@@ -1,18 +1,21 @@
 defmodule Statifier.EffectTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Effect.Autoforward
-  alias Statifier.Effect.BudgetExhausted
-  alias Statifier.Effect.Cancel
-  alias Statifier.Effect.CancelInvoke
-  alias Statifier.Effect.DatamodelChange
-  alias Statifier.Effect.DatamodelInit
-  alias Statifier.Effect.Done
-  alias Statifier.Effect.Invoke
-  alias Statifier.Effect.Log
-  alias Statifier.Effect.Send
-  alias Statifier.Effect.SendDelayed
-  alias Statifier.Effect.Trace
+  alias Statifier.Effect.{
+    Autoforward,
+    BudgetExhausted,
+    Cancel,
+    CancelInvoke,
+    DatamodelChange,
+    DatamodelInit,
+    Done,
+    Invoke,
+    Log,
+    Send,
+    SendDelayed,
+    Trace
+  }
+
   alias Statifier.{Event, MachineState}
 
   require Statifier.Effect, as: Effect
