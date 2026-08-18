@@ -195,6 +195,13 @@ promotion path.
   notified so far - which generalizes the end-of-run equality
   `test/statifier/replay_round_trip_test.exs` asserts to every quiescent
   point.
+  Observation is per session, and an invoke tree is a tree of sessions: `Statifier.Session.start_link/2`'s
+  `:inherit_observers` (ADR-0050) starts each invoked child with the
+  parent's `:trace` and subscribers so one attach at the root covers the
+  whole tree, with each session's messages still carrying its own
+  `session_id` in the envelope. `Statifier.Session.invocations/1` names the
+  live children for an observer attaching to a tree already running, which
+  necessarily misses each child's initialize burst.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, cancel markers) in the
   session's serialized input order at the session boundary makes a run

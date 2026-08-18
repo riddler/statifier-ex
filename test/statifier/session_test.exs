@@ -138,6 +138,40 @@ defmodule Statifier.SessionTest do
 
       assert Session.snapshot(session).datamodel["_name"] == "my-session"
     end
+
+    # sabotage: `init/1`'s `inherit_observers: Keyword.get(opts,
+    # :inherit_observers, false)` is changed to `Keyword.fetch!(opts,
+    # :inherit_observers)` -> `plain`, started with no `:inherit_observers`
+    # key at all, crashes inside `init/1` with a `KeyError` instead of
+    # coming up, reddening the `{:ok, _}` match below. Reverted and
+    # confirmed green.
+    test "inherit_observers: true is inert with no <invoke> - a session's own stream is unaffected" do
+      machine = compile!(two_state_doc())
+      {:ok, plain} = Session.start_link(machine, trace: true, subscribers: [self()])
+      Session.send_event(plain, "go")
+      Session.send_event(plain, "go")
+      plain_session_id = Session.session_id(plain)
+      # `_sessionid`/`_ioprocessors` in the `DatamodelInit` payload carry
+      # each session's own generated id, so only the tag-and-shape-carrying
+      # `{:effect, {:trace, _}}` entries - which never mention it - are
+      # compared for equality below.
+      plain_trace = Enum.filter(StreamOrder.drain(plain_session_id), &trace_effect?/1)
+
+      {:ok, inheriting} =
+        Session.start_link(machine,
+          trace: true,
+          subscribers: [self()],
+          inherit_observers: true
+        )
+
+      Session.send_event(inheriting, "go")
+      Session.send_event(inheriting, "go")
+      inheriting_session_id = Session.session_id(inheriting)
+      inheriting_trace = Enum.filter(StreamOrder.drain(inheriting_session_id), &trace_effect?/1)
+
+      assert plain_trace == inheriting_trace
+      assert Session.status(plain).configuration == Session.status(inheriting).configuration
+    end
   end
 
   # -- the event loop -------------------------------------------------------
@@ -1604,4 +1638,7 @@ defmodule Statifier.SessionTest do
       wait_for_status(session, pred, attempts - 1)
     end
   end
+
+  defp trace_effect?({:effect, {:trace, _payload}}), do: true
+  defp trace_effect?(_message), do: false
 end

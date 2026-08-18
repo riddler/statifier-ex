@@ -225,6 +225,15 @@ defmodule Statifier.Session do
   monitored child's own `:DOWN` pops its entry from `state.invocations` -
   both checked ahead of the ordinary subscriber `:DOWN` clause.
 
+  `start_link/2`'s `:inherit_observers` starts a child with this session's
+  `:trace` and subscriber pids at the moment it starts (ADR-0049), rather than
+  leaving observation to a post-hoc attach, because an attach cannot
+  substitute here: `start_link/2` runs `Interpreter.initialize/2` to
+  quiescence, and the child is started from inside the parent's own invoke
+  pass, so a subscriber added after the child's pid is knowable has already
+  missed that child's `Trace.EntrySet`, `Trace.ContentExecuted`,
+  `Trace.InvokePass`, and `Trace.MacrostepStable`.
+
   ## Cancelling an invocation
 
   `{:cancel_invoke, %Effect.CancelInvoke{}}` - the core's own reaction to a
@@ -338,7 +347,12 @@ defmodule Statifier.Session do
       recording: nil,
       invocations: Invocations.new(),
       macrostep_started_at: nil,
-      deferred: []
+      deferred: [],
+      # ADR-0049 decisions 2 and 4: off by default, so a session that never
+      # opted in starts its own children exactly as before. `true` carries
+      # forward into every child this session starts for an `<invoke>`, which
+      # is what makes the opt-in transitive down the whole invoke tree.
+      inherit_observers: false
     ]
 
     @type t :: %__MODULE__{
@@ -370,7 +384,12 @@ defmodule Statifier.Session do
             # instruction list is exhausted. Always `[]` outside a
             # `perform/3` call - every callback that reads `%State{}` sees
             # an empty queue.
-            deferred: [{[Statifier.Effect.t()], :cancelled | nil}]
+            deferred: [{[Statifier.Effect.t()], :cancelled | nil}],
+            # ADR-0049 decisions 2 and 4: whether a child this session starts
+            # for an `<invoke>` inherits this session's `:trace` and
+            # subscriber pids, and the flag itself, so one opt-in at the root
+            # traces the whole invoke tree.
+            inherit_observers: boolean()
           }
   end
 
@@ -435,6 +454,19 @@ defmodule Statifier.Session do
       (never set by an ordinary caller). Makes this session monitor
       `parent_pid`, so a dead parent stops it in turn ("Starting an
       invocation's child session" above).
+    - `:inherit_observers` - when `true`, every child session this session
+      starts for an `<invoke>` is started with this session's `:trace`
+      setting, this session's subscriber pids as of the moment the child
+      starts, and `inherit_observers: true` of its own, so one opt-in at the
+      root traces the whole invoke tree (ADR-0049). Default `false`, which
+      starts children exactly as before. Each inherited subscriber receives
+      the child's messages under the child's own `session_id` in the
+      `{:statifier, session_id, message}` envelope, so a mixed stream
+      demultiplexes on that field; `{:halted, _}` is still end-of-stream per
+      session id (ADR-0044 decision 2), not for the mailbox as a whole. It is
+      a snapshot: `subscribe/2` and `unsubscribe/2` after a child has started
+      do not reach that child, and `invocations/1` plus `subscribe/2` on the
+      child is how an already-running child is attached to.
   """
   @spec start_link(machine :: Machine.t(), opts :: keyword()) :: GenServer.on_start()
   def start_link(%Machine{} = machine, opts \\ []) do
@@ -696,7 +728,8 @@ defmodule Statifier.Session do
       recording: recording,
       invocations: Invocations.new(),
       invoke_source: Keyword.get(opts, :invoke_source),
-      invoked_by: invoked_by
+      invoked_by: invoked_by,
+      inherit_observers: Keyword.get(opts, :inherit_observers, false)
     }
 
     # `perform/3` runs from `handle_continue/2` rather than here, and the
@@ -1389,7 +1422,7 @@ defmodule Statifier.Session do
   defp start_child(machine, invoke, effect, state, override) do
     datamodel = Invocations.seed_datamodel(invoke.params, machine)
 
-    case start_session(machine, invoke, datamodel) do
+    case start_session(machine, invoke, datamodel, state) do
       {:ok, pid} ->
         entry = %{
           session_id: session_id(pid),
@@ -1417,15 +1450,37 @@ defmodule Statifier.Session do
   # the same for the session-start call, so a bare parent (no
   # `Statifier.Supervisor` anywhere) reaches `invoke_error/4` above instead of
   # crashing.
-  @spec start_session(machine :: Machine.t(), invoke :: Invoke.t(), datamodel :: map()) ::
-          {:ok, pid()} | {:error, term()}
-  defp start_session(machine, invoke, datamodel) do
-    Statifier.start_session(machine,
-      invoked_by: {self(), invoke.invoke_id},
-      datamodel: datamodel
+  @spec start_session(
+          machine :: Machine.t(),
+          invoke :: Invoke.t(),
+          datamodel :: map(),
+          state :: State.t()
+        ) :: {:ok, pid()} | {:error, term()}
+  defp start_session(machine, invoke, datamodel, state) do
+    Statifier.start_session(
+      machine,
+      [invoked_by: {self(), invoke.invoke_id}, datamodel: datamodel] ++
+        inherited_observer_opts(state)
     )
   catch
     :exit, reason -> {:error, reason}
+  end
+
+  # ADR-0049 decisions 2-5: off by default, so a session that never opted in
+  # starts its children exactly as before. When on, the child gets this
+  # session's `trace` (read off `%MachineState{}`, where `new/2` fixed it) and
+  # this session's subscriber pids *as of now* - a snapshot, not a live link -
+  # plus the flag itself, which is what carries the opt-in the rest of the way
+  # down the invoke tree.
+  @spec inherited_observer_opts(state :: State.t()) :: keyword()
+  defp inherited_observer_opts(%State{inherit_observers: false}), do: []
+
+  defp inherited_observer_opts(%State{} = state) do
+    [
+      trace: state.machine_state.trace,
+      subscribers: Map.keys(state.subscribers),
+      inherit_observers: true
+    ]
   end
 
   # Decision 4's `error.communication` write: the same ADR-0039

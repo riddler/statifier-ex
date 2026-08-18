@@ -144,7 +144,12 @@ the library never fetches `src` itself; an embedder-supplied `invoke_source`
 resolver does, or the invocation raises `error.communication`), seeds the
 child's datamodel per 6.4.3's name-matched `<param>`/namelist rule, and
 starts it on `Statifier.SessionSupervisor` with `invoked_by: {parent_pid,
-invoke_id}`, monitored in both directions. `#_parent`/`_parent` and a live
+invoke_id}`, monitored in both directions; `Statifier.Session.start_link/2`'s
+`:inherit_observers` opt-in carries the parent's `:trace` and subscribers down
+onto that same child start
+([ADR-0049](adr/0049-invoked-children-inherit-observation-by-opt-in.md)), and
+`Statifier.Session.invocations/1` names a session's live children for an
+observer attaching after the fact. `#_parent`/`_parent` and a live
 invocation's `done.invoke.<invokeid>` (carrying its donedata) both resolve
 through that `invoked_by` link directly, with no registry lookup needed;
 `#_<invokeid>` resolves through that same invocation table
