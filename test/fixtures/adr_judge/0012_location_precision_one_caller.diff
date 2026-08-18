@@ -1,0 +1,6 @@
+diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/checks/data.ex
+--- a/lib/statifier/validator/checks/data.ex
++++ b/lib/statifier/validator/checks/data.ex
+@@ -103,1 +103,1 @@
+-      [Error.data_reserved_id(id, id_location(data))]
++      [Error.data_reserved_id(id, data.location)]

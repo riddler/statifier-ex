@@ -1,0 +1,18 @@
+diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/checks/data.ex
+--- a/lib/statifier/validator/checks/data.ex
++++ b/lib/statifier/validator/checks/data.ex
+@@ -88,1 +88,1 @@
+-    [Error.data_expr_and_src(id, id_location(data))]
++    [Error.data_expr_and_src(id, attribute_location(data, :id))]
+@@ -97,1 +97,1 @@
+-      [Error.data_value_and_children(id, id_location(data))]
++      [Error.data_value_and_children(id, attribute_location(data, :id))]
+@@ -103,1 +103,1 @@
+-      [Error.data_reserved_id(id, id_location(data))]
++      [Error.data_reserved_id(id, attribute_location(data, :id))]
+@@ -123,3 +123,3 @@
+-  defp id_location(%Data{attribute_locations: attribute_locations, location: location}) do
+-    Map.get(attribute_locations, :id, location)
++  defp attribute_location(%Data{attribute_locations: locations, location: location}, attribute) do
++    Map.get(locations, attribute, location)
+   end
