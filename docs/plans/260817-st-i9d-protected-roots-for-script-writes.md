@@ -744,17 +744,17 @@ pass over any of them.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green (the ADR guard and any markdown stages run over
+- [x] Full `mix quality` green (the ADR guard and any markdown stages run over
       a docs-only diff; no `lib/` file is touched, so `mix adr.check` passes
       trivially).
-- [ ] `mix gate.verify` exits zero.
-- [ ] `grep -c "Amendment (st-i9d)" docs/plans/260814-st-af3.17-script-statement-bodies.md`
+- [x] `mix gate.verify` exits zero.
+- [x] `grep -c "Amendment (st-i9d)" docs/plans/260814-st-af3.17-script-statement-bodies.md`
       returns 2.
-- [ ] `grep -c "protected_roots" docs/datamodel.md` returns at least 1.
-- [ ] `grep -c "st-i9d" docs/adr/0014-expression-spans-in-cond-diagnostics.md`
+- [x] `grep -c "protected_roots" docs/datamodel.md` returns at least 1.
+- [x] `grep -c "st-i9d" docs/adr/0014-expression-spans-in-cond-diagnostics.md`
       returns at least 1, and `grep -n "2026-08-17"` matches both that file's
       `Status:` line and ADR-0014's row in `docs/adr/README.md`.
-- [ ] `git diff --stat docs/adr/` lists only
+- [x] `git diff --stat docs/adr/` lists only
       `0014-expression-spans-in-cond-diagnostics.md` and `README.md` - no
       other ADR is touched.
 
@@ -888,6 +888,26 @@ before considering the plan fully landed.
       a diff against the old one - no "previously", no "used to".
 - [ ] No regression in `<script>` behavior exercised through
       `Statifier.Interpreter.Content`.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The amendments read as additions to a historical record, not as edits
+      that rewrite what was decided in August.
+- [ ] ADR-0026's text is byte-identical on this branch - the only ADR this
+      plan amends is 0014, and only its item 4 and `Status:` line.
+- [ ] The ADR-0014 amendment reads as the existing reasoning meeting a case
+      it had not met, not as a new rule invented to license Phase 1's code.
+      This is the judgment call a human should confirm; see the note under
+      "Mapping the upstream error".
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for

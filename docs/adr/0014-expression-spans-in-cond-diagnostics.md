@@ -1,6 +1,6 @@
 # ADR-0014: Expression-level spans are part of the retained-location constraint
 
-Status: accepted (2026-08-06) - amended 2026-08-15 (item 4 stops at the predicator seam; engine policy checks are not expression failures)
+Status: accepted (2026-08-06) - amended 2026-08-15 (item 4 stops at the predicator seam; engine policy checks are not expression failures) - amended 2026-08-17 (item 4: a protected-root refusal reported through predicator's `protected_roots:` option is a policy check, not a predicator error)
 
 ## Context
 
@@ -119,6 +119,27 @@ Expression-level source locations are **in scope** for ADR-0012 item 3, in the
    every `error.execution` alike, from the raise site's origin stamp
    (`docs/observability.md` constraint 4) - the same division of labor that
    keeps `Evaluator.Error` itself owner-free.
+
+   *(Amended 2026-08-17, st-i9d: a third member of the policy-tuple list.)*
+   `Statifier.Evaluator.run_program/2` adds a third member beside
+   `write_location/4`'s two: the spec 5.10 rejection of a `<script>` write to
+   a `_`-rooted system variable, reported as `{:error, machine_state,
+   {:system_variable, root}, post_context}`. Predicator 9.0's
+   `protected_roots:` option on `Predicator.execute/3` makes predicator
+   itself refuse the write, so the 2026-08-15 mechanical test above -
+   "predicator returned `{:error, error}`" - is no longer sufficient on its
+   own to tell an expression failure from a policy check: both now arrive as
+   a predicator error return. The test this amendment does not touch is the
+   substantive one - no failing subexpression exists to underline, the root
+   is the whole diagnostic - which is why this third member belongs beside
+   the other two rather than reopening the item's Decision sentence. The
+   mechanical test narrows instead: whether the error is predicator's own
+   judgment that the *expression* failed to evaluate, or a refusal predicator
+   performed on the host's instruction - a policy check that happens to run
+   inside the call rather than after it. This is an amendment in ADR-0026's
+   stated sense (`docs/adr/0026-*:139-144`), not a supersession: the
+   Decision sentence, the Consequences section, and every other item stand
+   unchanged.
 5. **Unbound variables are errors, not sentinels.** Cond evaluation passes
    `on_unbound: :error`, so a cond referencing a missing datamodel location
    fails with a `UndefinedVariableError` naming the variable and carrying its
