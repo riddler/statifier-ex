@@ -629,7 +629,7 @@ rewritten sabotage line.
       `## Corpus/Ratchet Notes`).
 
 #### Manual Verification:
-- [ ] Spec judgment: read 5.10 from the local cache
+- [x] Spec judgment: read 5.10 from the local cache
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`,
       running `mise run spec:fetch` if absent) and confirm the new behavior -
       halt at the attempt, no later statement runs - is what the clause asks
@@ -637,12 +637,12 @@ rewritten sabotage line.
       Appendix D procedure, so there is no pseudocode to match line for line;
       the equivalent judgment is this 5.10 reading plus confirming 4.9's
       stop-and-keep still holds for the writes that preceded the refusal.
-- [ ] The derived-list argument holds against the code as written: no
+- [x] The derived-list argument holds against the code as written: no
       `_`-prefixed root reachable by a program escapes both the list and the
       diff.
-- [ ] The rewritten docstring reads as a description of the mechanism, not as
+- [x] The rewritten docstring reads as a description of the mechanism, not as
       a diff against the old one - no "previously", no "used to".
-- [ ] No regression in `<script>` behavior exercised through
+- [x] No regression in `<script>` behavior exercised through
       `Statifier.Interpreter.Content`.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
@@ -762,11 +762,11 @@ pass over any of them.
       other ADR is touched.
 
 #### Manual Verification:
-- [ ] The amendments read as additions to a historical record, not as edits
+- [x] The amendments read as additions to a historical record, not as edits
       that rewrite what was decided in August.
-- [ ] ADR-0026's text is byte-identical on this branch - the only ADR this
+- [x] ADR-0026's text is byte-identical on this branch - the only ADR this
       plan amends is 0014, and only its item 4 and `Status:` line.
-- [ ] The ADR-0014 amendment reads as the existing reasoning meeting a case
+- [x] The ADR-0014 amendment reads as the existing reasoning meeting a case
       it had not met, not as a new rule invented to license Phase 1's code.
       This is the judgment call a human should confirm; see the note under
       "Mapping the upstream error".
@@ -874,9 +874,16 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**Verified 2026-08-18 (st-i9d).** All seven items were walked with the code
+and the spec in hand. Four passed as written; three passed only with a
+finding, and each finding was fixed on this branch before the boxes were
+ticked - see the notes inline below. The fixes landed as a third commit
+rather than as amendments to the two phase commits, so the record of what
+was wrong stays readable.
+
 ### Phase 1
 
-- [ ] Spec judgment: read 5.10 from the local cache
+- [x] Spec judgment: read 5.10 from the local cache
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`,
       running `mise run spec:fetch` if absent) and confirm the new behavior -
       halt at the attempt, no later statement runs - is what the clause asks
@@ -884,13 +891,48 @@ before considering the plan fully landed.
       Appendix D procedure, so there is no pseudocode to match line for line;
       the equivalent judgment is this 5.10 reading plus confirming 4.9's
       stop-and-keep still holds for the writes that preceded the refusal.
-- [ ] The derived-list argument holds against the code as written: no
+
+      *Verified.* 5.10: "The Processor MUST cause any attempt to change the
+      value of a system variable to fail and MUST place the error
+      'error.execution' on the internal event queue when such an attempt is
+      made." Both obligations hold for the seeded roots. The same section
+      also supplies the normative basis for this repo's prefix rule over a
+      four-name list: "Variable names beginning with '_' are reserved for
+      system use." 4.9 forbids processing the remaining *elements of the
+      block* and says nothing about undoing writes already made, so merging
+      the pre-refusal writes stays consistent with it. *Finding:* the item
+      asked for the clause to be quoted in the commit body and it was
+      paraphrased instead; the quotation is recorded here.
+- [x] The derived-list argument holds against the code as written: no
       `_`-prefixed root reachable by a program escapes both the list and the
       diff.
-- [ ] The rewritten docstring reads as a description of the mechanism, not as
+
+      *Verified, with a finding.* Detection is complete: the four seeded
+      roots are always in `before_data`, and a fresh `_` root can never be
+      restored to absence, so nothing escapes both mechanisms. But the
+      *timing* guarantee is not complete, which this item's wording does not
+      distinguish. Probed directly: `"_created = 1; seen = _created;"`
+      returns `{:system_variable, "_created"}` with `_created` unmerged and
+      `seen == 1` - the later statement did observe the write. The docstring
+      claimed the attempt-time halt without qualification; it now states
+      which mechanism gives which guarantee.
+- [x] The rewritten docstring reads as a description of the mechanism, not as
       a diff against the old one - no "previously", no "used to".
-- [ ] No regression in `<script>` behavior exercised through
+
+      *Verified, with a finding.* No "previously" or "used to" anywhere, but
+      one phrase - "now applied at the statement that failed rather than
+      after the whole program" - was a diff against the old behavior in
+      everything but vocabulary. Restated as current-state prose.
+- [x] No regression in `<script>` behavior exercised through
       `Statifier.Interpreter.Content`.
+
+      *Verified, with a finding.* No regression: the suite is green and
+      `Script.execute/2` passes the reason tuple through opaquely on the same
+      path `<assign>` uses, so the payload equivalence follows structurally.
+      But nothing *asserted* it - `content_test.exs` covered the `<assign>`
+      half only, leaving the bead's payload-equivalence criterion measured
+      nowhere. A `<script>` counterpart now asserts it through the real block
+      runner.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -903,14 +945,30 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The amendments read as additions to a historical record, not as edits
+- [x] The amendments read as additions to a historical record, not as edits
       that rewrite what was decided in August.
-- [ ] ADR-0026's text is byte-identical on this branch - the only ADR this
+
+      *Verified.* All four amendments are dated, labelled `**Amendment
+      (st-i9d)**`, and appended below text left intact. *Finding:* ADR-0014's
+      stamp read 2026-08-17, the date the plan was written rather than the
+      date the amendment was; corrected to 2026-08-18 in the `Status:` line,
+      the inline note, and the `docs/adr/README.md` row.
+- [x] ADR-0026's text is byte-identical on this branch - the only ADR this
       plan amends is 0014, and only its item 4 and `Status:` line.
-- [ ] The ADR-0014 amendment reads as the existing reasoning meeting a case
+
+      *Verified.* `git diff` against the branch point names only
+      `docs/adr/0014-*.md` and `docs/adr/README.md` under `docs/adr/`.
+- [x] The ADR-0014 amendment reads as the existing reasoning meeting a case
       it had not met, not as a new rule invented to license Phase 1's code.
       This is the judgment call a human should confirm; see the note under
       "Mapping the upstream error".
+
+      *Confirmed.* The amendment leaves item 4's substantive test untouched -
+      no failing subexpression exists to underline, the root is the whole
+      diagnostic - and narrows only the mechanical test, which the
+      2026-08-15 amendment had made insufficient by assuming a policy check
+      never arrives as a predicator error. That is the pre-existing reasoning
+      meeting a case it had not met.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
