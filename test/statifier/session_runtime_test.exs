@@ -16,6 +16,7 @@ defmodule Statifier.SessionRuntimeTest do
   alias Statifier.Compiler
   alias Statifier.Lowering
   alias Statifier.Parser
+  alias Statifier.Send.Routes
   alias Statifier.Session
   alias Statifier.Validator
 
@@ -44,6 +45,27 @@ defmodule Statifier.SessionRuntimeTest do
         <state id="a">
             <onentry>
                 <send event="ping" target="#{target}" id="send1"/>
+            </onentry>
+            <transition event="error.communication" target="failed"/>
+        </state>
+        <state id="failed"/>
+    </scxml>
+    """
+  end
+
+  # ADR-0048 decision 6 exempts a delayed send from the plan-time
+  # reachability check outright, so its route is always resolved at fire
+  # time, on `Statifier.Session`'s own `deliver_fired/4` - regardless of
+  # whether the target was ever reachable when the `<send>` itself ran. This
+  # is what makes a delayed send to a target that dies later a deterministic
+  # way to exercise ADR-0048 decision 5's residual path, with no dependency
+  # on `Statifier.Registry`'s own deregistration timing.
+  defp delayed_sender_doc(target) do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <send event="ping" target="#{target}" id="send1" delay="10ms"/>
             </onentry>
             <transition event="error.communication" target="failed"/>
         </state>
@@ -113,16 +135,20 @@ defmodule Statifier.SessionRuntimeTest do
   end
 
   describe "an unknown or dead session id raises error.communication on the sender" do
-    # sabotage: `registry_lookup/1`'s `rescue ArgumentError -> []` clause is
-    # deleted -> unreachable here (the registry *is* running for this test,
-    # so `Registry.lookup/2` never raises), which is why the mutation that
-    # actually reddens this test is `communication_error/4`'s call being
-    # swapped for `Inbox.enqueue_event/2` (mirroring the sabotage on the
-    # cross-session delivery test above, on the empty-lookup branch instead
-    # of the hit branch) -> the sender's own inbox gets the never-delivered
-    # `ping` event instead of `error.communication`, so it stays on `"a"`
-    # rather than reaching `"failed"`, reddening the assertion below.
-    # Reverted and confirmed green.
+    # sabotage (ADR-0048): "#_scxml_totally-unknown-session" was never in
+    # this sender's own snapshot - dead (never live) *before* the sender's
+    # very first stamp, at `init/1` - so
+    # `Statifier.Machine.Content.Send`'s reachability arm catches it before
+    # `deliver/5` (and `communication_error/4`) ever run; sabotaging either
+    # of those, or `registry_lookup/1`'s own rescue clause, now leaves this
+    # test green, since the residual path is simply unreached. The mutation
+    # that actually reddens it lives one layer up: `reject_reason/2`'s
+    # reachability `cond` arm in `lib/statifier/machine/content/send.ex` is
+    # changed from `{:communication, {:unreachable_target, target}}` to
+    # `{:execution, {:unreachable_target, target}}` -> the core raises
+    # `error.execution` instead of `error.communication`, so the
+    # `<transition event="error.communication">` never fires and the wait
+    # below flunks. Reverted and confirmed green.
     test "a send to an id that never existed raises error.communication" do
       {:ok, sender} =
         Statifier.start_session(compile!(sender_doc("#_scxml_totally-unknown-session")),
@@ -134,20 +160,40 @@ defmodule Statifier.SessionRuntimeTest do
       assert Session.snapshot(sender).datamodel["_event"]["sendid"] == "send1"
     end
 
-    # sabotage: this shares the empty-lookup branch with the test above, so
-    # the same mutation reddens it - `deliver/5`'s `{:session, sid}` clause
-    # has its `[] -> communication_error/4` branch swapped for a bare `state`
-    # (a silent drop) -> the sender never leaves `"a"`, and the wait below
-    # flunks with "status/1 never satisfied the predicate". Confirmed red on
-    # this test specifically, reverted, confirmed green. What it adds over
-    # its sibling is not a second branch but two properties that branch alone
-    # does not prove: that a *dead* pid reaches the empty-lookup path at all
-    # (a `GenServer.cast/2` to a dead pid succeeds silently, so a stale
-    # registry hit would hang here rather than fail), and that the lookup
-    # never crashes on one.
+    # ADR-0048 decision 5's staleness reading, given a live witness: unlike
+    # the sibling test above, this target is alive when the sender starts
+    # (and stays alive long enough to confirm the timer is actually
+    # scheduled), then dies *after* - a delayed send never gets a plan-time
+    # reachability determination at all (decision 6), so its route is always
+    # resolved this way, at fire time, on the residual `deliver_fired/4` ->
+    # `deliver/5` -> `communication_error/4` path, regardless of when the
+    # target died relative to any stamp.
+    #
+    # sabotage: `registry_lookup/1`'s `rescue ArgumentError -> []` clause is
+    # deleted -> unreachable here (the registry *is* running for this test,
+    # so `Registry.lookup/2` never raises), which is why the mutation that
+    # actually reddens this test is `communication_error/4`'s call being
+    # swapped for `Inbox.enqueue_event/2` (mirroring the sabotage on the
+    # cross-session delivery test above, on the empty-lookup branch instead
+    # of the hit branch) -> the sender's own inbox gets the never-delivered
+    # `ping` event instead of `error.communication`, so it stays on `"a"`
+    # rather than reaching `"failed"`, reddening the assertion below.
+    # Reverted and confirmed green.
     test "a send to a session that has since died raises error.communication, not a crash" do
       {:ok, receiver} =
         Statifier.start_session(compile!(receiver_doc()), session_id: "sess_b-dead-test")
+
+      {:ok, sender} =
+        Statifier.start_session(compile!(delayed_sender_doc("#_scxml_sess_b-dead-test")),
+          session_id: "sess_a-dead-test"
+        )
+
+      # Confirms the timer is actually armed (the target was reachable, and
+      # decision 6 exempted the plan-time check either way) before the
+      # target dies - the send has already been stamped and scheduled at
+      # this point, so anything that happens to the target from here on is
+      # strictly "after the stamping".
+      wait_for_status(sender, fn s -> s.pending_timers == 1 end)
 
       Session.stop(receiver)
 
@@ -157,11 +203,6 @@ defmodule Statifier.SessionRuntimeTest do
       # than assuming it already has, keeping the test from racing the
       # very thing it means to exercise.
       wait_until(fn -> Registry.lookup(Statifier.Registry, "sess_b-dead-test") == [] end)
-
-      {:ok, sender} =
-        Statifier.start_session(compile!(sender_doc("#_scxml_sess_b-dead-test")),
-          session_id: "sess_a-dead-test"
-        )
 
       status = wait_for_status(sender, fn s -> s.configuration == MapSet.new(["failed"]) end)
       assert status.configuration == MapSet.new(["failed"])
@@ -203,6 +244,42 @@ defmodule Statifier.SessionRuntimeTest do
 
       status = wait_for_status(sender, fn s -> s.configuration == MapSet.new(["failed"]) end)
       assert status.configuration == MapSet.new(["failed"])
+    end
+  end
+
+  describe "ADR-0048: a live registered peer is reachable through the stamped snapshot" do
+    # sabotage: `Statifier.Session`'s `routes/3` is changed to always pass an
+    # empty `MapSet.new()` for `:sessions` instead of
+    # `MapSet.put(registry_keys(), session_id)` -> the sender's own stamped
+    # snapshot names no session at all, so `Statifier.Machine.Content.Send`'s
+    # reachability arm now rejects even this *live*, registered peer as
+    # unreachable, raising `error.communication` instead of delivering -
+    # the receiver never leaves "a" and the wait below flunks. Reverted and
+    # confirmed green.
+    test "a live peer's id is in the sender's own stamped snapshot, and the event is delivered with no error" do
+      {:ok, receiver} =
+        Statifier.start_session(compile!(receiver_doc()), session_id: "sess_b-live-test")
+
+      {:ok, sender} =
+        Statifier.start_session(compile!(sender_doc("#_scxml_sess_b-live-test")),
+          session_id: "sess_a-live-test"
+        )
+
+      receiver_status =
+        wait_for_status(receiver, fn s -> s.configuration == MapSet.new(["b"]) end)
+
+      assert receiver_status.configuration == MapSet.new(["b"])
+
+      # The sender never leaves "a" (no `error.communication` transition
+      # exists there to move it, and none fired), so the only witnesses of
+      # success are the receiver's own transition above and the sender's own
+      # stamped snapshot below naming the receiver as reachable.
+      sender_status = Session.status(sender)
+      assert sender_status.configuration == MapSet.new(["a"])
+
+      sender_snapshot = Session.snapshot(sender)
+      assert %Routes{sessions: sessions} = sender_snapshot.routes
+      assert MapSet.member?(sessions, "sess_b-live-test")
     end
   end
 end

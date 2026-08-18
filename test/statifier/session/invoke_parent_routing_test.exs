@@ -133,12 +133,20 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
   end
 
   describe "an uninvoked session" do
-    # sabotage: `Statifier.Session`'s `deliver(:parent, event, effect, state,
-    # override)` fallback clause (`invoked_by: nil`) is changed from
-    # `communication_error(event, effect, state, override)` to `state` (a
-    # silent drop) -> this session never leaves "a", flunking the wait below
-    # with neither a crash nor a hang elsewhere to explain why. Reverted and
-    # confirmed green.
+    # sabotage (ADR-0048): `parent?` is `false` in this session's snapshot
+    # from its very first stamp (`invoked_by` is `nil` for the session's
+    # whole lifetime, never set after `init/1`), so
+    # `Statifier.Machine.Content.Send`'s reachability arm catches this send
+    # before `deliver/5`'s `:parent` fallback clause ever runs - sabotaging
+    # that clause (the pre-bead mutation here) now leaves this test green,
+    # since the residual path is simply unreached. The mutation that
+    # actually reddens it lives one layer up: `reject_reason/2`'s
+    # reachability `cond` arm in `lib/statifier/machine/content/send.ex` is
+    # changed from `{:communication, {:unreachable_target, target}}` to
+    # `{:execution, {:unreachable_target, target}}` -> the core raises
+    # `error.execution` instead of `error.communication`, so the
+    # `<transition event="error.communication">` below never fires and the
+    # wait flunks. Reverted and confirmed green.
     test "#_parent still raises error.communication" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">

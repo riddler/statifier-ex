@@ -214,6 +214,7 @@
     "test/scxml_tests/mandatory/scxml_event_processor/test352_test.exs",
     "test/scxml_tests/mandatory/scxml_event_processor/test354_test.exs",
     "test/scxml_tests/mandatory/scxml_event_processor/test495_test.exs",
+    "test/scxml_tests/mandatory/scxml_event_processor/test496_test.exs",
     "test/scxml_tests/mandatory/scxml_event_processor/test500_test.exs",
     "test/scxml_tests/mandatory/scxml_event_processor/test501_test.exs",
     "test/scxml_tests/mandatory/selecting_transitions/test403a_test.exs",
