@@ -789,20 +789,20 @@ note.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating
-- [ ] Full `mix quality` green
-- [ ] `mix gate.verify` confirms a full, unscoped, unskipped run
-- [ ] `mix test --include scxml_w3 test/scxml_tests/mandatory/scxml_event_processor/test496_test.exs`
+- [x] `mix quality --profile loop` green while iterating
+- [x] Full `mix quality` green
+- [x] `mix gate.verify` confirms a full, unscoped, unskipped run
+- [x] `mix test --include scxml_w3 test/scxml_tests/mandatory/scxml_event_processor/test496_test.exs`
       passes
-- [ ] `mix test.baseline add test/scxml_tests/mandatory/scxml_event_processor/test496_test.exs`
+- [x] `mix test.baseline add test/scxml_tests/mandatory/scxml_event_processor/test496_test.exs`
       succeeds and `test/passing_tests.json` contains that path
-- [ ] `mix test.regression` green with test496 in the registry, and test159 and
+- [x] `mix test.regression` green with test496 in the registry, and test159 and
       test332 still listed and passing
-- [ ] `mix test --include scxml_w3 --include scion` shows no file newly red
+- [x] `mix test --include scxml_w3 --include scion` shows no file newly red
       against the pre-branch run
-- [ ] `mix gate.check` passes with no ledger entry required (the registry grew;
+- [x] `mix gate.check` passes with no ledger entry required (the registry grew;
       no guarded file moved)
-- [ ] `changelog.d/st-72dn.md` exists
+- [x] `changelog.d/st-72dn.md` exists
 
 #### Manual Verification:
 - [ ] The touched functions match the W3C Appendix D pseudocode line for line;
@@ -979,6 +979,30 @@ items are deferred and surfaced once at the end instead of blocking here.
       four-input tuple: entries got richer, the input set did not grow
 - [ ] The widened `entry()` typedoc and `Statifier.Replay`'s clauses agree
       shape for shape, with no clause silently ignoring its snapshot
+- [ ] Each sabotage note was actually verified red
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line;
+      `Statifier.Session` is outside Appendix D by construction (ADR-0003), and
+      the reviewer confirms no interpreter procedure changed in this phase
+- [ ] C.1's two paragraphs and 4.9's block rule are re-read from the local
+      spec cache and the behavior matches both - the error lands on the
+      *sending* session's internal queue, and the rest of the block does not run
+- [ ] Each existing test listed under "Tests that will need updating" was read
+      and re-decided, not edited until green
+- [ ] The residual ADR-0039 path is exercised by at least one test after the
+      change (a session that dies after the stamping), so decision 5's staleness
+      reading has a live witness
 - [ ] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and

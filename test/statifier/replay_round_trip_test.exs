@@ -7,6 +7,7 @@ defmodule Statifier.ReplayRoundTripTest do
   alias Statifier.Lowering
   alias Statifier.Parser
   alias Statifier.Replay
+  alias Statifier.Send.Routes
   alias Statifier.Session
   alias Statifier.Session.Recording
   alias Statifier.Validator
@@ -122,11 +123,12 @@ defmodule Statifier.ReplayRoundTripTest do
 
   describe "a run with no interpret/2" do
     # sabotage: `Statifier.Session.init/1`'s
-    # `Recording.new(machine, Keyword.put(machine_opts, :session_id,
-    # session_id))` call is changed to `Recording.new(machine, machine_opts)`
-    # -> the recorded opts carry `session_id: nil` instead of the session's
-    # resolved id, so `Recording.opts/1`'s `:session_id` key stays `nil` (not
-    # merely defaulted, since it was explicitly requested) and
+    # `Keyword.put(machine_opts, :session_id, session_id)` step is changed to
+    # skip that put, leaving `machine_opts` without a `:session_id` entry at
+    # all -> the recorded opts carry `session_id: nil` (via
+    # `Recording.new/2`'s own `Keyword.put_new/3` default) instead of the
+    # session's resolved id, so `Recording.opts/1`'s `:session_id` key stays
+    # `nil` and
     # `MachineState.new/2`'s `is_binary(session_id)` guard on
     # `SystemVariables.initial/2` raises a `FunctionClauseError` inside
     # `Statifier.Replay.run/1`, which `round_trip/3`'s
@@ -196,9 +198,9 @@ defmodule Statifier.ReplayRoundTripTest do
       effects = [{:send_delayed, send_delayed}, {:log, log_effect}]
 
       assert [
-               {:interpret, ^effects, nil},
-               {:timer, "s1", %Event{name: "go"}, nil},
-               {:event, %Event{name: "go"}, nil}
+               {:interpret, ^effects, %Routes{}},
+               {:timer, "s1", %Event{name: "go"}, %Routes{}},
+               {:event, %Event{name: "go"}, %Routes{}}
              ] = Recording.entries(recording)
 
       # What catches a double delivery is `round_trip/3`'s full ordered
@@ -262,7 +264,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.pending_timers == 1 end)
         end)
 
-      assert [{:interpret, ^effects, nil}] = Recording.entries(recording)
+      assert [{:interpret, ^effects, %Routes{}}] = Recording.entries(recording)
 
       # `trace: true` also emits the initialization trace effects ahead of
       # the batch, and `Interpreter.initialize/2` always emits its own
@@ -307,9 +309,9 @@ defmodule Statifier.ReplayRoundTripTest do
         end)
 
       assert [
-               {:event, %Event{name: "go"}, nil},
-               {:event, %Event{name: "go"}, nil},
-               {:cancel, nil}
+               {:event, %Event{name: "go"}, %Routes{}},
+               {:event, %Event{name: "go"}, %Routes{}},
+               {:cancel, %Routes{}}
              ] = Recording.entries(recording)
 
       assert length(stream) > 1
@@ -364,10 +366,10 @@ defmodule Statifier.ReplayRoundTripTest do
       # the session-level reading of "serialized input order" that the
       # per-kind cases each cover only a slice of.
       assert [
-               {:interpret, ^effects, nil},
-               {:timer, "s1", %Event{name: "go"}, nil},
-               {:event, %Event{name: "go"}, nil},
-               {:cancel, nil}
+               {:interpret, ^effects, %Routes{}},
+               {:timer, "s1", %Event{name: "go"}, %Routes{}},
+               {:event, %Event{name: "go"}, %Routes{}},
+               {:cancel, %Routes{}}
              ] = Recording.entries(recording)
 
       assert length(stream) > 1
@@ -505,9 +507,70 @@ defmodule Statifier.ReplayRoundTripTest do
     end
   end
 
-  # -- case 9: a seam-crossing error.communication (the other door) --------
+  # -- case 9: a seam-crossing error.communication (the residual door) -----
 
-  defp communication_error_to_final_doc do
+  defp communication_error_transition_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition event="error.communication" target="c"/>
+        </state>
+        <final id="c"/>
+    </scxml>
+    """
+  end
+
+  describe "a run that crosses the ADR-0039 seam via communication_error/4 (the residual door)" do
+    # ADR-0048 decision 5's own caseload: an `interpret/2`-injected effect
+    # never passes through `Statifier.Machine.Content.Send.execute/2` at all
+    # (that arm lives inside the pure core, and `interpret/2` hands the
+    # session raw effects no core drive produced), so no route this bead adds
+    # ever judges it. `#_scxml_nonexistent` still reaches
+    # `Statifier.Session.deliver/5`'s own registry lookup unchanged, and its
+    # miss still crosses the ADR-0039 seam through `communication_error/4`
+    # exactly as it always has - the one caseload item phase 4 does not move.
+    #
+    # sabotage: `deliver_internal/6`'s `record(state, &Recording.put_internal(...))`
+    # call is dropped -> the crossing this test is about is never recorded,
+    # so `Recording.entries/1` carries no `{:internal, _}` entry at all,
+    # reddening the first assertion below directly (this batch has only one
+    # effect, so the #_internal case's own interleaving mutation has no
+    # ordering to disturb here and leaves this test green - a different
+    # mutation is needed). Reverted and confirmed green.
+    test "an interpret/2-injected send to an unreachable target still crosses via communication_error/4" do
+      machine = compile!(communication_error_transition_doc())
+
+      send_effect = %Effect.Send{
+        event: "e",
+        target: "#_scxml_nonexistent",
+        send_id: "s1",
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      {recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          Session.interpret(session, [{:send, send_effect}])
+          wait_for_status(session, fn s -> s.status == :done end)
+        end)
+
+      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
+      assert List.last(stream) == {:halted, :done}
+      assert result.status == :done
+    end
+  end
+
+  # -- case 10: an immediate unreachable send no longer crosses the seam ---
+
+  # ADR-0048's own point: this is `communication_error_to_final_doc` from
+  # before the bead, unchanged, but the send is now *immediate* rather than
+  # delayed - `Statifier.Machine.Content.Send`'s reachability arm catches it
+  # at the `<send>`'s own position, raises `error.communication` straight
+  # onto the internal queue, and the effect never reaches
+  # `Statifier.Session.deliver/5` (nor, therefore, `communication_error/4`'s
+  # own `deliver_internal/6` re-entry) at all.
+  defp immediate_communication_error_to_final_doc do
     """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
         <state id="a">
@@ -524,15 +587,15 @@ defmodule Statifier.ReplayRoundTripTest do
     """
   end
 
-  describe "a run that crosses the ADR-0039 seam via communication_error/4 (the other door)" do
-    # sabotage: same mutation as the #_internal case above - reverting
-    # `deliver_internal/6`'s deferral back to the inline `perform/3` call ->
-    # the live stream interleaves the `error.communication` re-entry ahead of
-    # the outer batch's tail while replay stays flat, reddening
-    # `round_trip/3`'s `result.stream == stream` on order alone. Reverted and
-    # confirmed green.
-    test "an unreachable #_scxml_ target's error.communication crossing also round-trips in order" do
-      machine = compile!(communication_error_to_final_doc())
+  describe "a run whose unreachable send is core-detected (ADR-0048)" do
+    # sabotage: `Statifier.Machine.Content.Send`'s `reject_reason/2`
+    # reachability `cond` arm has its `{:communication,
+    # {:unreachable_target, target}}` result changed to `nil` (never reject)
+    # -> the send is dispatched as an ordinary effect instead, so this
+    # session never reaches "c" and the wait below flunks instead of the
+    # round trip ever running. Reverted and confirmed green.
+    test "the crossing carries no {:internal, _} entry, and the run still round-trips" do
+      machine = compile!(immediate_communication_error_to_final_doc())
 
       {recording, stream, result} =
         round_trip(machine, [], fn session ->
@@ -540,7 +603,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.status == :done end)
         end)
 
-      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
+      refute Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
       assert List.last(stream) == {:halted, :done}
       assert result.status == :done
     end

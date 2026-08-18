@@ -288,6 +288,7 @@ defmodule Statifier.Session do
   alias Statifier.Invoke.Source
   alias Statifier.Machine
   alias Statifier.MachineState
+  alias Statifier.Send.Routes
   alias Statifier.Send.Target
   alias Statifier.Session.Effects
   alias Statifier.Session.Inbox
@@ -540,18 +541,29 @@ defmodule Statifier.Session do
 
   # -- callbacks ----------------------------------------------------------
 
-  # `Interpreter.initialize/2` runs before any `%State{}` exists (`session_id`
-  # itself is read back off its returned `machine_state`), so the
-  # `:initialize` macrostep span's start time is a local binding here rather
-  # than `%State{}.macrostep_started_at` - ADR-0040's one exception to that
-  # field's otherwise-uniform use in `drain_event/2`, `drain_cancel/1`, and
-  # `deliver_internal/6`. `start_time` and `span_ref` travel on into the
-  # `{:continue, {:initialize, ...}}` term below, since the span
-  # does not close until `handle_continue/2` has performed the effects that
-  # this callback only plans - still never a `%State{}` field.
+  # ADR-0048 decision 2's initialization stamping needs the session's own id
+  # before `Interpreter.initialize/2` runs (the snapshot names its own
+  # session, mirroring `deliver/5`'s self-clause), so this callback resolves
+  # `session_id` and registers under it *first* - see `register_session/1`'s
+  # own comment for why registering ahead of `initialize/2` is still safe.
+  # `start_time` and `span_ref` for the `:initialize` macrostep span still
+  # travel in a local binding rather than `%State{}.macrostep_started_at`
+  # (ADR-0040's one exception, unchanged by this reordering): no `%State{}`
+  # exists yet, and the span does not close until `handle_continue/2` has
+  # performed the effects this callback only plans.
   @impl GenServer
   def init({%Machine{} = machine, opts}) do
-    machine_opts = Keyword.take(opts, [:session_id, :trace, :datamodel, :max_macrostep_rounds])
+    session_id = Keyword.get_lazy(opts, :session_id, &MachineState.generate_session_id/0)
+    register_session(session_id)
+
+    invoked_by = Keyword.get(opts, :invoked_by)
+
+    machine_opts =
+      opts
+      |> Keyword.take([:trace, :datamodel, :max_macrostep_rounds])
+      |> Keyword.put(:session_id, session_id)
+      |> Keyword.put(:routes, init_routes(session_id, invoked_by))
+
     start_time = System.monotonic_time()
     span_ref = make_ref()
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
@@ -561,10 +573,6 @@ defmodule Statifier.Session do
       |> Keyword.get(:subscribers, [])
       |> Enum.reduce(%{}, fn pid, acc -> Map.put(acc, pid, Process.monitor(pid)) end)
 
-    session_id = machine_state.datamodel["_sessionid"]
-    register_session(session_id)
-
-    invoked_by = Keyword.get(opts, :invoked_by)
     monitor_parent(invoked_by)
 
     Telemetry.init(session_id, machine, machine_state, invoked_by)
@@ -572,7 +580,7 @@ defmodule Statifier.Session do
 
     recording =
       if Keyword.get(opts, :record, false) do
-        Recording.new(machine, Keyword.put(machine_opts, :session_id, session_id))
+        Recording.new(machine, machine_opts)
       end
 
     state = %State{
@@ -616,9 +624,19 @@ defmodule Statifier.Session do
   end
 
   # ADR-0027 decision 2: registration happens here, not by a caller-supplied
-  # `:name`, because the `sess_` id this session registers under does not
-  # exist until `Interpreter.initialize/2` (above) has run - no `{:via,
-  # ...}` tuple can name a session before it starts. There is no separate
+  # `:name`. It now runs *before* `Interpreter.initialize/2` rather than
+  # after it (ADR-0048 decision 2): the initialization drive's own route
+  # snapshot has to name this session's own id in its `sessions` set before
+  # that drive runs, and `session_id` is resolved locally in `init/1` now
+  # (`MachineState.generate_session_id/0`, made public for exactly this) -
+  # there is no `Interpreter.initialize/2` result left to read it back from
+  # first. Registering ahead of `init/1` returning is safe: `init/1`
+  # processes no message of its own, so anything another session casts at
+  # this newly registered name simply waits in the mailbox until this
+  # callback (and the `handle_continue({:initialize, ...}, _)` that follows
+  # it) has finished - the ordinary GenServer guarantee that a process
+  # answers no message until `init/1` returns, unaffected by registering
+  # one step earlier inside it. There is no separate
   # `Statifier.Registry`-running check ahead of the call: `Registry.register/3`
   # itself raises when the named registry does not exist, and that raise is
   # rescued into the same no-op every other registration failure gets, so a
@@ -640,6 +658,71 @@ defmodule Statifier.Session do
     _error -> :ok
   catch
     :exit, _reason -> :ok
+  end
+
+  # -- ADR-0048 route snapshots -------------------------------------------
+
+  # `init/1`'s own call: no `%State{}` exists yet (this *is* the snapshot for
+  # the drive that creates one), so `routes/3` below is given the three facts
+  # directly rather than reading them off a struct - a session just starting
+  # has never invoked anything yet, hence the empty `invokes` set.
+  @spec init_routes(session_id :: String.t(), invoked_by :: {pid(), String.t()} | nil) ::
+          Routes.t()
+  defp init_routes(session_id, invoked_by) do
+    routes(session_id, invoked_by != nil, [])
+  end
+
+  # ADR-0048 decision 1/4: exactly what `deliver/5` below resolves - the
+  # registry's keys plus this session's own id (a session is accessible to
+  # itself whether or not it is registered, the mirror of `deliver/5`'s own
+  # self-clause), whether a parent exists, and the live invoke ids passed in.
+  # Point-in-time truth by definition (decision 5); the registry enumeration
+  # is O(live sessions) per stamping, accepted in the record's consequences.
+  # Takes the three facts as plain values, not a `%State{}`, since `init/1`
+  # calls this before any `%State{}` exists (`init_routes/2` above) - `stamp/1`
+  # below is the one caller that already holds a `%State{}` and reads them
+  # off it.
+  @spec routes(
+          session_id :: String.t(),
+          parent? :: boolean(),
+          invoke_ids :: [String.t()] | MapSet.t(String.t())
+        ) :: Routes.t()
+  defp routes(session_id, parent?, invoke_ids) do
+    Routes.new(
+      sessions: MapSet.put(registry_keys(), session_id),
+      parent?: parent?,
+      invokes: MapSet.new(invoke_ids)
+    )
+  end
+
+  # `Registry.select/2` over a `keys: :unique` registry, with the same
+  # `ArgumentError` rescue `registry_lookup/1` already carries for the
+  # "no runtime placed" case - a bare `start_link/2` sender is allowed to be
+  # in it, and it simply declares no reachable peers.
+  @spec registry_keys() :: MapSet.t(String.t())
+  defp registry_keys do
+    Statifier.Registry
+    |> Registry.select([{{:"$1", :_, :_}, [], [:"$1"]}])
+    |> MapSet.new()
+  rescue
+    ArgumentError -> MapSet.new()
+  end
+
+  # ADR-0048's per-drive stamping site, shared by every recordable input
+  # boundary: `handle_cast`'s `{:enqueue_event, _}`,
+  # `{:enqueue_invoked_event, _, _}`, `:enqueue_cancel`, `{:interpret, _}`,
+  # `handle_info`'s `{:statifier_delayed_send, ...}`, and
+  # `deliver_internal/6`. Each site calls this immediately before recording
+  # its entry, so the recorded entry and the stamped `%MachineState{}` carry
+  # the same value by construction - a derived drive inside the same drain
+  # (a `:self` route's re-enqueue) reads whatever snapshot is already on
+  # `%MachineState{}` rather than triggering a stamp of its own.
+  @spec stamp(state :: State.t()) :: State.t()
+  defp stamp(%State{} = state) do
+    new_routes =
+      routes(state.session_id, state.invoked_by != nil, Invocations.invoke_ids(state.invocations))
+
+    %{state | machine_state: MachineState.put_routes(state.machine_state, new_routes)}
   end
 
   # The tail of `init/1`, deferred one message-loop turn. `start_time` and
@@ -754,11 +837,14 @@ defmodule Statifier.Session do
 
   @impl GenServer
   def handle_cast({:enqueue_event, event}, state) do
+    state = stamp(state)
     state = record(state, &Recording.put_event(&1, event, state.machine_state.routes))
     {:noreply, %{state | inbox: Inbox.enqueue_event(state.inbox, event)}, {:continue, :drain}}
   end
 
   def handle_cast({:enqueue_invoked_event, invoke_id, event}, state) do
+    state = stamp(state)
+
     state =
       record(
         state,
@@ -770,11 +856,13 @@ defmodule Statifier.Session do
   end
 
   def handle_cast(:enqueue_cancel, state) do
+    state = stamp(state)
     state = record(state, &Recording.put_cancel(&1, state.machine_state.routes))
     {:noreply, %{state | inbox: Inbox.enqueue_cancel(state.inbox)}, {:continue, :drain}}
   end
 
   def handle_cast({:interpret, effects}, state) do
+    state = stamp(state)
     state = record(state, &Recording.put_interpret(&1, effects, state.machine_state.routes))
     Telemetry.interpret(state.session_id, length(effects), state.machine_state)
     {:noreply, perform(state, effects), {:continue, :drain}}
@@ -793,6 +881,7 @@ defmodule Statifier.Session do
   # check decides whether it is drained now or stays queued.
   @impl GenServer
   def handle_info({:statifier_delayed_send, ref, send_id, route, event, effect}, state) do
+    state = stamp(state)
     state = record(state, &Recording.put_timer(&1, send_id, event, state.machine_state.routes))
 
     state = %{
@@ -1384,10 +1473,35 @@ defmodule Statifier.Session do
     ArgumentError -> []
   end
 
-  # C.1's mandated path for a route this phase cannot resolve: "a session
-  # that does not exist or is inaccessible" -> `error.communication` on the
-  # *sending* session's own internal queue, carrying the failing send's
-  # `sendid`. One private resolver so a later bead's registry/invocation
+  # C.1's mandated path for a route the ADR-0048 snapshot could not (or did
+  # not) rule out at plan time - `Statifier.Machine.Content.Send`'s
+  # reachability arm catches every route the *stamped* snapshot names as
+  # unreachable, at the `<send>`'s own position, before this module ever sees
+  # the effect; this resolver is what remains once that arm has had its say
+  # (ADR-0048 decision 5), and it still has a real caseload:
+  #
+  #   - a **stale snapshot** - the route was live when this drive was
+  #     stamped and the core let the effect through, but the session that
+  #     died before delivery was actually attempted (e.g. a `<invoke>`
+  #     cancelled earlier in the same macrostep's own fold, popping
+  #     `state.invocations` before this effect's own `{:deliver, ...}`
+  #     instruction runs).
+  #   - a **`nil`-snapshot drive** - the caller stamped nothing (a hand-built
+  #     `%MachineState{}`, or a replayed recording captured before this ADR
+  #     landed), so the core's arm made no determination and emitted the
+  #     effect exactly as it did before ADR-0048.
+  #   - an **`interpret/2`-injected effect** - a caller-supplied effect never
+  #     passed through `Statifier.Machine.Content.Send.execute/2` at all, so
+  #     no core arm ever judged it against any snapshot.
+  #   - a **delayed send's route miss at fire time** - ADR-0048 decision 6
+  #     exempts every delayed send from the plan-time check outright (6.2.3
+  #     governs argument evaluation, not reachability), so its route is
+  #     always resolved here, at `deliver_fired/4`, regardless of whether the
+  #     target was ever live.
+  #
+  # "a session that does not exist or is inaccessible" -> `error.communication`
+  # on the *sending* session's own internal queue, carrying the failing
+  # send's `sendid`. One private resolver so a later bead's registry/invocation
   # table changes this function, not the `{:deliver, ...}` clause or the
   # planner.
   @spec communication_error(
@@ -1435,6 +1549,8 @@ defmodule Statifier.Session do
           override :: :cancelled | nil
         ) :: State.t()
   defp deliver_internal(kind, name, origin, opts, state, override) do
+    state = stamp(state)
+
     state =
       record(
         state,

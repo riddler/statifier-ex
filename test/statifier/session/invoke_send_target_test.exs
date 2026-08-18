@@ -99,11 +99,19 @@ defmodule Statifier.Session.InvokeSendTargetTest do
   # -- #_invokeid naming no live invocation -----------------------------
 
   describe "<send target=\"#_invokeid\"> naming an invokeid that was never invoked" do
-    # sabotage: the same clause's `:error -> communication_error(event, effect,
-    # state, override)` branch is replaced with `:error -> state` (a silent
-    # drop) -> the parent never leaves "a", flunking the wait below with
-    # neither a crash nor a hang elsewhere to explain why. Reverted and
-    # confirmed green.
+    # sabotage (ADR-0048): "#_nonexistent" was never a live invocation from
+    # this session's very first stamped snapshot, so
+    # `Statifier.Machine.Content.Send`'s reachability arm catches it before
+    # `deliver/5`'s `{:invoke, _}` clause ever runs - sabotaging that clause
+    # (the pre-bead mutation here) now leaves this test green, since the
+    # residual path is simply unreached. The mutation that actually reddens
+    # it lives one layer up: `reject_reason/2`'s reachability `cond` arm in
+    # `lib/statifier/machine/content/send.ex` is changed from
+    # `{:communication, {:unreachable_target, target}}` to
+    # `{:execution, {:unreachable_target, target}}` -> the core raises
+    # `error.execution` instead of `error.communication`, so the
+    # `<transition event="error.communication">` below never fires and the
+    # wait flunks. Reverted and confirmed green.
     test "raises error.communication on the sending session" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">

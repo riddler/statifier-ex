@@ -367,17 +367,32 @@ defmodule Statifier.ReplayTest do
   # -- <send> routing (ADR-0039) -------------------------------------------
 
   describe "run/1 over a recorded <send> routing run" do
+    # ADR-0048: `#_scxml_foo` is unreachable from this session's very first
+    # stamped snapshot, so `Statifier.Machine.Content.Send`'s reachability
+    # arm now catches it inside the core, at the `<send>`'s own position -
+    # putting both sends in state "a"'s own `onentry` (the pre-ADR-0048 shape
+    # of this fixture) would raise `error.communication` while "a" is still
+    # the active state, where it matches no transition and is silently
+    # dropped (spec 3.13's ordinary discard of an unmatched internal event) -
+    # never reaching "c" at all. Splitting the two sends across "a" and "b"
+    # keeps both crossings genuine: `#_internal` still crosses the ADR-0039
+    # seam through `Statifier.Session`'s own re-entry (unrelated to this ADR),
+    # and by the time `#_scxml_foo`'s core-raised `error.communication` is
+    # dequeued, "b" - the state that listens for it - is already active,
+    # within that same re-entry's own internal-queue fold.
     defp internal_and_communication_error_doc do
       """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
           <state id="a">
               <onentry>
                   <send event="e1" target="#_internal"/>
-                  <send event="e2" target="#_scxml_foo"/>
               </onentry>
               <transition event="e1" target="b"/>
           </state>
           <state id="b">
+              <onentry>
+                  <send event="e2" target="#_scxml_foo"/>
+              </onentry>
               <transition event="error.communication" target="c"/>
           </state>
           <state id="c"/>

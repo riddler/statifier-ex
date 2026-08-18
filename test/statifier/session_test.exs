@@ -8,6 +8,7 @@ defmodule Statifier.SessionTest do
   alias Statifier.Lowering
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Send.Routes
   alias Statifier.Session
   alias Statifier.Session.Recording
   alias Statifier.StreamOrder
@@ -977,11 +978,21 @@ defmodule Statifier.SessionTest do
       """
     end
 
-    # sabotage: `deliver/5`'s `{:session, _sid}` (non-self) clause is
-    # changed to `Inbox.enqueue_event/2` unconditionally instead of calling
-    # `communication_error/4` -> no `error.communication` is ever raised, so
-    # the transition to `b` never fires and both assertions below time out
-    # (via `wait_for_status/3`'s own flunk). Reverted and confirmed green.
+    # sabotage (ADR-0048): this send's route is unreachable from this
+    # session's very first stamped snapshot (`#_scxml_no-such-session` never
+    # exists), so it is caught by `Statifier.Machine.Content.Send`'s
+    # reachability arm before `deliver/5` ever runs at all - the send effect
+    # never reaches the session layer, and even a sabotage of `deliver/5`
+    # itself would leave this test green (the residual path is simply
+    # unreached). The mutation that actually reddens it lives one layer up:
+    # `reject_reason/2`'s reachability `cond` arm in
+    # `lib/statifier/machine/content/send.ex` is changed from
+    # `{:communication, {:unreachable_target, target}}` to
+    # `{:execution, {:unreachable_target, target}}` -> the core raises
+    # `error.execution` instead of `error.communication`, so the
+    # `<transition event="error.communication">` below never fires and both
+    # assertions time out (via `wait_for_status/3`'s own flunk). Reverted and
+    # confirmed green.
     test "an unresolvable session id raises error.communication carrying the failing send's id" do
       machine = compile!(unknown_session_doc(~s(id="send1")))
       {:ok, session} = Session.start_link(machine)
@@ -1170,13 +1181,14 @@ defmodule Statifier.SessionTest do
     end
 
     # sabotage: `handle_cast({:enqueue_event, event}, state)`'s `record(state,
-    # &Recording.put_event(&1, event))` call is dropped -> the two `go` events
-    # below never reach the recording, so `Recording.entries/1` comes back
-    # empty instead of two `{:event, _}` entries, reddening the assertion.
-    # Reverted and confirmed green.
+    # &Recording.put_event(&1, event, state.machine_state.routes))` call is
+    # dropped -> the two `go` events below never reach the recording, so
+    # `Recording.entries/1` comes back empty instead of two `{:event, _}`
+    # entries, reddening the assertion. Reverted and confirmed green.
     test "with record: true, events sent via send_event/2 are recorded in order" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, record: true)
+      session_id = Session.session_id(session)
 
       Session.send_event(session, "go")
       Session.send_event(session, "go")
@@ -1186,16 +1198,23 @@ defmodule Statifier.SessionTest do
       {:ok, recording} = Session.recording(session)
 
       assert [
-               {:event, %Event{name: "go"}, nil},
-               {:event, %Event{name: "go"}, nil}
+               {:event, %Event{name: "go"}, %Routes{} = routes1},
+               {:event, %Event{name: "go"}, %Routes{} = routes2}
              ] = Recording.entries(recording)
+
+      # ADR-0048 decision 4: each drive's stamped snapshot names this
+      # session's own id, so a self-addressed send is reachable with no
+      # registry involved.
+      assert MapSet.member?(routes1.sessions, session_id)
+      assert MapSet.member?(routes2.sessions, session_id)
     end
 
     # sabotage: `handle_cast(:enqueue_cancel, state)`'s `record(state,
-    # &Recording.put_cancel/1)` call is dropped -> the cancel marker never
-    # reaches the recording, so the entry list below comes back with only the
-    # one `{:event, _}` entry instead of the event followed by `:cancel`,
-    # reddening the pattern match. Reverted and confirmed green.
+    # &Recording.put_cancel(&1, state.machine_state.routes))` call is dropped
+    # -> the cancel marker never reaches the recording, so the entry list
+    # below comes back with only the one `{:event, _}` entry instead of the
+    # event followed by `{:cancel, _}`, reddening the pattern match. Reverted
+    # and confirmed green.
     test "cancel/1 records the cancel marker in queue position relative to events" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, record: true, subscribers: [self()])
@@ -1208,14 +1227,15 @@ defmodule Statifier.SessionTest do
 
       {:ok, recording} = Session.recording(session)
 
-      assert [{:event, %Event{name: "go"}, nil}, {:cancel, nil}] = Recording.entries(recording)
+      assert [{:event, %Event{name: "go"}, %Routes{}}, {:cancel, %Routes{}}] =
+               Recording.entries(recording)
     end
 
     # sabotage: `handle_cast({:interpret, effects}, state)`'s `record(state,
-    # &Recording.put_interpret(&1, effects))` call is dropped -> the
-    # interpret/2 batch below is never recorded, so the entry list comes back
-    # empty instead of one `{:interpret, _}` entry, reddening the assertion.
-    # Reverted and confirmed green.
+    # &Recording.put_interpret(&1, effects, state.machine_state.routes))` call
+    # is dropped -> the interpret/2 batch below is never recorded, so the
+    # entry list comes back empty instead of one `{:interpret, _}` entry,
+    # reddening the assertion. Reverted and confirmed green.
     test "an interpret/2 call records its batch" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, record: true)
@@ -1236,16 +1256,17 @@ defmodule Statifier.SessionTest do
       _status = wait_for_status(session, fn s -> s.pending_timers == 1 end)
 
       {:ok, recording} = Session.recording(session)
-      assert [{:interpret, ^effects, nil}] = Recording.entries(recording)
+      assert [{:interpret, ^effects, %Routes{}}] = Recording.entries(recording)
     end
 
-    # sabotage: `handle_info({:statifier_delayed_send, ref, send_id, event},
-    # state)`'s `record(state, &Recording.put_timer(&1, send_id, event))` call
-    # is moved to after the `inbox: Inbox.enqueue_event(...)` update instead of
-    # before it, and `send_id` is reverted to the ignored `_send_id` binding
-    # used before this bead so the appended entry's `send_id` field is always
-    # `nil` -> the assertion below (matching the real "s1") reddens. Reverted
-    # and confirmed green.
+    # sabotage: `handle_info({:statifier_delayed_send, ref, send_id, route,
+    # event, effect}, state)`'s `record(state, &Recording.put_timer(&1,
+    # send_id, event, state.machine_state.routes))` call is moved to after the
+    # `inbox: Inbox.enqueue_event(...)` update instead of before it, and
+    # `send_id` is reverted to the ignored `_send_id` binding used before this
+    # bead so the appended entry's `send_id` field is always `nil` -> the
+    # assertion below (matching the real "s1") reddens. Reverted and
+    # confirmed green.
     test "a fired delayed send records a {:timer, send_id, event} entry after the interpret/2 entry that scheduled it" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, record: true, subscribers: [self()])
@@ -1272,16 +1293,17 @@ defmodule Statifier.SessionTest do
       {:ok, recording} = Session.recording(session)
 
       assert [
-               {:interpret, ^effects, nil},
-               {:timer, "s1", %Event{name: "go"}, nil}
+               {:interpret, ^effects, %Routes{}},
+               {:timer, "s1", %Event{name: "go"}, %Routes{}}
              ] = Recording.entries(recording)
     end
 
-    # sabotage: `init/1`'s `Recording.new(machine, Keyword.put(machine_opts,
-    # :session_id, session_id))` call is changed to pass `machine_opts`
-    # unchanged (dropping the `Keyword.put/3`) -> `Recording.opts/1` carries
-    # `session_id: nil` instead of the session's resolved `sess_` id,
-    # reddening the assertion below. Reverted and confirmed green.
+    # sabotage: `init/1`'s `Keyword.put(machine_opts, :session_id, session_id)`
+    # step is changed to leave `machine_opts` unbuilt from `session_id`
+    # (reading the option straight from `opts` instead) -> `Recording.opts/1`
+    # carries `session_id: nil` instead of the session's resolved `sess_` id
+    # when the caller supplies none, reddening the assertion below. Reverted
+    # and confirmed green.
     test "the recorded opts carry the resolved session id when none was supplied" do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine, record: true)
@@ -1290,6 +1312,154 @@ defmodule Statifier.SessionTest do
       {:ok, recording} = Session.recording(session)
 
       assert Recording.opts(recording)[:session_id] == session_id
+    end
+  end
+
+  describe "ADR-0048: the session builds and stamps a real route snapshot" do
+    # test496's own shape (spec 4.9, C.1): a `<send>` to an unreachable
+    # target followed by a sibling instruction in the *same* `<onentry>`
+    # block. The core's reachability arm rejects the send at its own
+    # position, after the send id is minted, and 4.9 aborts the rest of the
+    # block - the sibling `<raise>` never runs, so "c" is never reached and
+    # the machine sits in "failed" (matched by the `error.communication`
+    # transition) carrying the failing send's own `sendid`.
+    defp block_abort_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send target="#_scxml_no-such-session" id="send1"/>
+                  <raise event="sibling"/>
+              </onentry>
+              <transition event="sibling" target="c"/>
+              <transition event="error.communication" target="failed"/>
+          </state>
+          <state id="c"/>
+          <state id="failed"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `Statifier.Machine.Content.Content.execute_block/3`'s
+    # three-element `{:error, new_context, reason}` arm (the one ADR-0047
+    # rejection and ADR-0048 unreachability share) is changed to keep
+    # running the rest of the block instead of aborting it -> the sibling
+    # `<raise event="sibling"/>` below now runs too, so the machine reaches
+    # "c" (via the "sibling" transition, which fires because it is queued
+    # *before* the dropped `error.communication`) instead of "failed",
+    # reddening the assertion. Reverted and confirmed green.
+    test "a send to an unreachable target aborts its block (test496's own shape)" do
+      machine = compile!(block_abort_doc())
+      {:ok, session} = Session.start_link(machine)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["failed"]) end)
+      assert status.configuration == MapSet.new(["failed"])
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # ADR-0048 decision 4: a session's own snapshot always names its own id,
+    # so `#_scxml_<self>` is reachable with no registry involved at all -
+    # `init_routes/2`'s own point. Pinning `:session_id` lets the document
+    # name the target statically.
+    defp own_self_send_doc(session_id) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send target="#_scxml_#{session_id}" event="ping"/>
+              </onentry>
+              <transition event="ping" target="b"/>
+          </state>
+          <state id="b"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: two changes together, since either alone leaves this test
+    # green (this session's own id would still reach its snapshot's
+    # `sessions` set through one path or the other): `register_session/1`'s
+    # body is replaced with a bare `:ok` (never actually registers), *and*
+    # `routes/3`'s own `MapSet.put(registry_keys(), session_id)` is changed
+    # to `registry_keys()` alone (dropping the explicit add). With both
+    # mutations in place, this session's own id is in neither
+    # `Statifier.Registry` nor the snapshot's `sessions` set, so the
+    # reachability arm now rejects the self-send as unreachable - `ping`
+    # never reaches "b", and the wait below flunks with the session stuck
+    # in "a". This is exactly ADR-0048 decision 4's point: with only the
+    # first mutation (no registration, snapshot still explicit) or only the
+    # second (still registered, snapshot not explicit), self-addressing
+    # keeps working either way - it takes killing *both* paths at once to
+    # break it. Reverted and confirmed green.
+    test "#_scxml_<own session id> still delivers to self with no registry involved" do
+      machine = compile!(own_self_send_doc("sess_self-test-496"))
+      {:ok, session} = Session.start_link(machine, session_id: "sess_self-test-496")
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+    end
+
+    # A self-send triggered from `<state id="a">`'s own initial `<onentry>`
+    # is a *derived* drive (the design note above `Statifier.Session`'s own
+    # `stamp/1`): it enqueues onto the inbox directly from `perform_instruction/3`,
+    # never through `handle_cast({:enqueue_event, _}, _)`, so it produces no
+    # recorded entry of its own - only the external `"go"` that triggers "b"'s
+    # entry (and, with it, the self-send) is itself a recordable input
+    # boundary. This doc's self-send therefore lives in "b", not "a", so the
+    # recording this test inspects has something to assert on.
+    defp external_triggered_self_send_doc(session_id) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="go" target="b"/>
+          </state>
+          <state id="b">
+              <onentry>
+                  <send target="#_scxml_#{session_id}" event="ping"/>
+              </onentry>
+              <transition event="ping" target="c"/>
+          </state>
+          <state id="c"/>
+      </scxml>
+      """
+    end
+
+    # The phase-3 recording/replay machinery, now carrying a real (non-`nil`)
+    # snapshot end to end: a recorded run that self-sends mid-drive round-trips
+    # to the same terminal configuration through `Statifier.Replay.run/1`.
+    #
+    # sabotage: `Statifier.Session`'s `stamp/1` is changed to always write
+    # `nil` (`MachineState.put_routes(state.machine_state, nil)`) rather than
+    # the computed snapshot -> the recorded `{:event, _, _}` entry's own
+    # trailing field comes back `nil` instead of a `%Routes{}`, reddening the
+    # first pattern match below directly (this session's self-send still
+    # dispatches either way, since `nil` routes mean "no determination" and
+    # the effect is emitted unchecked - so only the entry's own snapshot,
+    # not the replayed outcome, catches this). Reverted and confirmed green.
+    test "a recorded run carries a non-nil snapshot and replays to the same configuration" do
+      machine = compile!(external_triggered_self_send_doc("sess_self-replay-test"))
+
+      {:ok, session} =
+        Session.start_link(machine, session_id: "sess_self-replay-test", record: true)
+
+      Session.send_event(session, "go")
+
+      live_status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+      {:ok, recording} = Session.recording(session)
+
+      assert [{:event, %Event{name: "go"}, %Routes{sessions: sessions}}] =
+               Recording.entries(recording)
+
+      assert MapSet.member?(sessions, "sess_self-replay-test")
+
+      assert {:ok, result} = Statifier.Replay.run(recording)
+
+      replayed_configuration =
+        result.machine_state.configuration
+        |> Enum.map(&Statifier.Machine.id(machine, &1))
+        |> Enum.reject(&is_nil/1)
+        |> MapSet.new()
+
+      assert replayed_configuration == live_status.configuration
     end
   end
 
