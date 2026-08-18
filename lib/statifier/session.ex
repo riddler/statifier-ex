@@ -99,6 +99,40 @@ defmodule Statifier.Session do
       message this session sends its subscribers for the run (ADR-0044
       decision 2).
 
+  A late subscriber catches up by replaying the recording, not from any
+  buffer this session retains (ADR-0049). `subscribe/3` with
+  `catch_up: true` returns `{:ok, recording}` - the session's current
+  `Statifier.Session.Recording.t()`, snapshotted in the *same* `handle_call`
+  that adds the pid - or `{:error, :not_recorded}` without adding it, for a
+  session not started with `record: true`.
+
+  The invariant that makes the split exact: **between GenServer callbacks,
+  `Statifier.Replay.run/1` over this session's current recording produces
+  exactly the messages this session has notified so far.** Each callback is
+  atomic in the effects' terms - it records its input and notifies every
+  resulting effect, including ADR-0044's deferred re-entry batches drained
+  before the callback returns, which is why `deferred` is documented always
+  `[]` between callbacks - so a `subscribe` call, serialized between
+  callbacks, observes a recording whose replay is precisely the notified
+  prefix.
+
+  The consumption recipe, as it will actually be written:
+
+  ```elixir
+  {:ok, recording} = Statifier.Session.subscribe(session, self(), catch_up: true)
+  {:ok, %{stream: prefix}} = Statifier.Replay.run(recording)
+  # every subsequent {:statifier, session_id, message} is the suffix
+  ```
+
+  ADR-0044 decision 1's monotone-arrival contract holds across the seam: the
+  prefix is replay's own order and the suffix continues it. A halted session
+  composes for free - the recording is complete, the replayed stream ends
+  `{:halted, reason}`, the live suffix is empty, and `Replay.run/1`'s
+  `status` says so, so post-mortem attachment is the same call as late
+  attachment. A subscriber wanting only the current picture keeps using
+  `snapshot/1`/`status/1` with a plain `subscribe/2`; nothing here replaces
+  them.
+
   A subscriber that dies is dropped on its own `:DOWN`.
 
   ## A cancel is a queue entry, not an out-of-band call
@@ -414,6 +448,11 @@ defmodule Statifier.Session do
   guarantee against this call, so a `recording/1` issued before an
   `assert_receive` on the effect it produced (or a `wait_for_status/3`-style
   poll) can race the entry it is meant to observe.
+
+  A caller that also wants to subscribe should use `subscribe/3` with
+  `catch_up: true` instead: `recording/1` followed by `subscribe/2` has a
+  window between the two calls, while `subscribe/3` snapshots and adds the
+  pid atomically, in the same `handle_call` (ADR-0049).
   """
   @spec recording(server :: server()) :: {:ok, Recording.t()} | {:error, :not_recording}
   def recording(server), do: GenServer.call(server, :recording)
@@ -515,6 +554,45 @@ defmodule Statifier.Session do
   """
   @spec subscribe(server :: server(), pid :: pid()) :: :ok
   def subscribe(server, pid) when is_pid(pid), do: GenServer.call(server, {:subscribe, pid})
+
+  @typedoc """
+  `subscribe/3` options. `catch_up: true` asks for the recording snapshot
+  alongside the subscription; the default is `false`.
+  """
+  @type subscribe_opts :: [catch_up: boolean()]
+
+  @doc """
+  Adds `pid` to this session's monitored subscriber set, optionally handing
+  back the material the pid needs to reconstruct what it missed (ADR-0049).
+
+  With `catch_up: false` (the default) this is `subscribe/2`: `:ok`, delivery
+  from now on.
+
+  With `catch_up: true` on a session started with `record: true`, returns
+  `{:ok, recording}` - the session's current
+  `Statifier.Session.Recording.t()`, snapshotted in the *same* `handle_call`
+  that adds `pid`. The missed prefix is
+  `Statifier.Replay.run(recording)`'s `result.stream`, computed by the
+  caller; the suffix is everything `pid` receives from now on. There is no
+  overlap and no gap between them, and no dedup key is needed - see the
+  moduledoc's "One subscriber stream" section for why, and for the
+  `prefix ++ suffix` consumption recipe.
+
+  With `catch_up: true` on a session started *without* `record: true`,
+  returns `{:error, :not_recorded}` and **does not add `pid`** - there is
+  nothing to re-derive from, and this record adds no second retention
+  mechanism (ADR-0049 decision 2). A caller for whom live-only delivery is
+  acceptable falls back to `subscribe/2`.
+  """
+  @spec subscribe(server :: server(), pid :: pid(), opts :: subscribe_opts()) ::
+          :ok | {:ok, Recording.t()} | {:error, :not_recorded}
+  def subscribe(server, pid, opts) when is_pid(pid) and is_list(opts) do
+    if Keyword.get(opts, :catch_up, false) do
+      GenServer.call(server, {:subscribe, pid, :catch_up})
+    else
+      GenServer.call(server, {:subscribe, pid})
+    end
+  end
 
   @doc "Removes `pid` from this session's subscriber set. A no-op if it was never in it."
   @spec unsubscribe(server :: server(), pid :: pid()) :: :ok
@@ -802,15 +880,16 @@ defmodule Statifier.Session do
     {:reply, {:ok, recording}, state}
   end
 
-  def handle_call({:subscribe, pid}, _from, state) do
-    subscribers =
-      if Map.has_key?(state.subscribers, pid) do
-        state.subscribers
-      else
-        Map.put(state.subscribers, pid, Process.monitor(pid))
-      end
+  def handle_call({:subscribe, _pid, :catch_up}, _from, %State{recording: nil} = state) do
+    {:reply, {:error, :not_recorded}, state}
+  end
 
-    {:reply, :ok, %{state | subscribers: subscribers}}
+  def handle_call({:subscribe, pid, :catch_up}, _from, %State{recording: recording} = state) do
+    {:reply, {:ok, recording}, %{state | subscribers: add_subscriber(state.subscribers, pid)}}
+  end
+
+  def handle_call({:subscribe, pid}, _from, state) do
+    {:reply, :ok, %{state | subscribers: add_subscriber(state.subscribers, pid)}}
   end
 
   def handle_call({:unsubscribe, pid}, _from, state) do
@@ -1591,6 +1670,19 @@ defmodule Statifier.Session do
     payload = {:statifier, state.session_id, message}
     Enum.each(state.subscribers, fn {pid, _ref} -> send(pid, payload) end)
     :ok
+  end
+
+  # Idempotent: a pid already subscribed is not monitored twice. Shared by
+  # both `{:subscribe, _}` clauses so the catch-up path cannot drift from
+  # the plain one.
+  @spec add_subscriber(subscribers :: %{pid() => reference()}, pid :: pid()) ::
+          %{pid() => reference()}
+  defp add_subscriber(subscribers, pid) do
+    if Map.has_key?(subscribers, pid) do
+      subscribers
+    else
+      Map.put(subscribers, pid, Process.monitor(pid))
+    end
   end
 
   # A session started without `record: true` carries `recording: nil` and

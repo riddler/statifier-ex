@@ -50,6 +50,7 @@
 | [0046](0046-round-on-every-core-effect.md) | Every core effect carries `round`; the ADR-0020 exemption is withdrawn and `round` joins the core-effect event measurements | accepted (amends 0020 in part; amends 0040 in part) |
 | [0047](0047-send-static-target-type-invalidity-rejects-in-the-core.md) | Static send target/type invalidity rejects in the core; reachability stays session-side, test496 deferred to its own record | accepted (amends 0039 in part) |
 | [0048](0048-send-reachability-judged-against-a-route-snapshot.md) | Send reachability is judged in the core against a caller-declared route snapshot; core-detected unreachability aborts the block (discharges 0047 decision 6's deferral) | accepted (amends 0039 in part) |
+| [0049](0049-late-subscriber-catch-up-via-recording.md) | Late subscribers catch up by replaying the recording; no header effect joins the stream | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
