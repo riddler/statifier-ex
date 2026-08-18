@@ -796,21 +796,38 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**Verified 2026-08-18**, all nine, in an orchestrator session with the human.
+The two sabotage items were not taken on the comments' word: all six
+mutations were re-applied to the working tree and re-run individually, each
+observed red at the assertion its comment names - including the mid-run one
+at the *second* checkpoint specifically (`replay_round_trip_test.exs:647`,
+the first checkpoint passing), which is the property that distinguishes that
+test from the end-of-run cases beside it. Every mutation was then reverted
+and the tree confirmed clean against `HEAD`.
+
+One fixup came out of the review rather than a clean pass: the
+`:not_recorded` / `:not_recording` item asked whether the near-collision is
+deliberate *and* documented. Each atom was documented in its own `@doc`, but
+neither named the other, so a reader hitting one had no signal the other
+existed. Both `@doc`s now carry a cross-reference saying the two are one
+letter apart and deliberately not unified. Renaming stayed out of scope per
+Open Question 1.
+
 ### Phase 1
 
-- [ ] **Appendix D judgment**: confirm from the diff that no function named
+- [x] **Appendix D judgment**: confirm from the diff that no function named
       in Appendix D was touched and no interpreter file was edited, so
       ADR-0002's deviation rule is satisfied vacuously rather than by an
       unrecorded deviation.
-- [ ] Each of the four sabotage mutations was actually applied and observed
+- [x] Each of the four sabotage mutations was actually applied and observed
       red before being reverted - the comments describe runs that happened.
-- [ ] The moduledoc's new sub-section reads as the module's contract, not as
+- [x] The moduledoc's new sub-section reads as the module's contract, not as
       a restatement of ADR-0049: it says what a caller does, and cites the
       ADR number rather than re-arguing the alternatives.
-- [ ] `{:error, :not_recorded}` versus the neighbouring
+- [x] `{:error, :not_recorded}` versus the neighbouring
       `{:error, :not_recording}` from `recording/1` is deliberate and both
       are documented in their own `@doc` (see Open Questions).
-- [ ] No regressions in related features: `subscribe/2`'s existing test at
+- [x] No regressions in related features: `subscribe/2`'s existing test at
       `test/statifier/session_test.exs:171-183` still reads as before and
       still passes.
 
@@ -826,16 +843,16 @@ surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] **Appendix D judgment**: confirm from the diff that no Appendix D
+- [x] **Appendix D judgment**: confirm from the diff that no Appendix D
       function and no interpreter file was touched; the only `lib/` change is
       a docstring.
-- [ ] Both sabotage mutations were applied and observed red - and, for the
+- [x] Both sabotage mutations were applied and observed red - and, for the
       mid-run one, observed red *at the second checkpoint specifically*,
       which is the property distinguishing this test from the end-of-run
       one it sits beside.
-- [ ] The `docs/observability.md` sentences read as constraint prose in that
+- [x] The `docs/observability.md` sentences read as constraint prose in that
       document's voice, not as an ADR excerpt, and cite ADR-0049 by number.
-- [ ] Read `docs/adr/0049-late-subscriber-catch-up-via-recording.md` decision
+- [x] Read `docs/adr/0049-late-subscriber-catch-up-via-recording.md` decision
       6 against the final diff and confirm all three directed edits landed:
       observability constraint 6, `Session`'s moduledoc (Phase 1), and
       `Replay.run/1`'s doc.
