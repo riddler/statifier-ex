@@ -237,6 +237,130 @@ defmodule Statifier.SessionTest do
     end
   end
 
+  # -- catch-up subscribers --------------------------------------------------
+
+  describe "catch-up subscribers" do
+    # sabotage: n/a - test plumbing, no lib/ behavior of its own
+    defp relay_to(test_pid) do
+      spawn(fn -> relay_loop(test_pid) end)
+    end
+
+    defp relay_loop(test_pid) do
+      receive do
+        {:statifier, _session_id, _message} = envelope -> send(test_pid, {:late, envelope})
+      end
+
+      relay_loop(test_pid)
+    end
+
+    defp drain_late(session_id, acc \\ []) do
+      receive do
+        {:late, {:statifier, ^session_id, message}} -> drain_late(session_id, [message | acc])
+      after
+        100 -> Enum.reverse(acc)
+      end
+    end
+
+    # sabotage: the catch-up `handle_call` clause replies `{:ok, recording}`
+    # but drops the `subscribers:` update (returns `state` unchanged instead
+    # of `%{state | subscribers: add_subscriber(...)}`) -> the relay is never
+    # added, so `drain_late/1`'s `suffix` is `[]` and `prefix ++ suffix ==
+    # full` fails. Reverted and confirmed green.
+    test "a late catch_up subscriber's replayed prefix plus its live suffix is the from-start stream" do
+      machine = compile!(two_state_doc())
+
+      {:ok, session} =
+        Session.start_link(machine, record: true, trace: true, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+
+      relay = relay_to(self())
+
+      Session.send_event(session, "go")
+
+      assert {:ok, recording} = Session.subscribe(session, relay, catch_up: true)
+
+      Session.send_event(session, "go")
+      _status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+
+      assert {:ok, %{stream: prefix}} = Statifier.Replay.run(recording)
+      assert prefix != []
+
+      full = StreamOrder.drain(session_id)
+      suffix = drain_late(session_id)
+
+      assert prefix ++ suffix == full
+      StreamOrder.assert_monotone(prefix ++ suffix)
+    end
+
+    # sabotage: the `recording: nil` clause is reordered below the general
+    # catch-up clause (so a non-recording session matches
+    # `{:subscribe, pid, :catch_up}, %State{recording: recording}` first,
+    # replies `{:ok, nil}`, and *is* subscribed) -> the
+    # `{:error, :not_recorded}` match fails. Reverted and confirmed green.
+    test "catch_up: true on a session without record: true returns :not_recorded and does not subscribe" do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      relay = relay_to(self())
+
+      assert {:error, :not_recorded} = Session.subscribe(session, relay, catch_up: true)
+
+      Session.send_event(session, "finish")
+      assert_receive {:statifier, ^session_id, {:halted, :done}}
+
+      assert drain_late(session_id) == []
+
+      assert :ok = Session.subscribe(session, relay)
+    end
+
+    # sabotage: `subscribe/3`'s `Keyword.get(opts, :catch_up, false)` default
+    # is flipped to `Keyword.get(opts, :catch_up, true)` -> the `[]`-opts call
+    # (no explicit `:catch_up` key, so the default applies) returns
+    # `{:error, :not_recorded}` on this non-recording session instead of
+    # `:ok`, reddening the second assertion. Reverted and confirmed green.
+    test "catch_up: false is subscribe/2" do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      relay = relay_to(self())
+
+      assert :ok = Session.subscribe(session, relay, catch_up: false)
+      assert :ok = Session.subscribe(session, relay, [])
+
+      Session.send_event(session, "finish")
+      assert_receive {:statifier, ^session_id, {:halted, :done}}
+
+      suffix = drain_late(session_id)
+      assert Enum.count(suffix, &(&1 == {:halted, :done})) == 1
+    end
+
+    # sabotage: `handle_call({:subscribe, pid, :catch_up}, ...)` snapshots
+    # `Recording.new(recording.machine, recording.opts)` (fresh, empty
+    # entries) instead of `state.recording` -> the replayed stream never
+    # halts (`status: :running`, not `:done`), reddening the
+    # `{:ok, %{stream: stream, status: :done}}` match. Reverted and confirmed
+    # green.
+    test "a post-halt catch_up attach recovers the complete stream" do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, record: true, trace: true)
+      session_id = Session.session_id(session)
+
+      Session.send_event(session, "finish")
+      _status = wait_for_status(session, fn s -> s.status == :done end)
+
+      relay = relay_to(self())
+
+      assert {:ok, recording} = Session.subscribe(session, relay, catch_up: true)
+      assert {:ok, %{stream: stream, status: :done}} = Statifier.Replay.run(recording)
+      assert List.last(stream) == {:halted, :done}
+
+      assert drain_late(session_id) == []
+    end
+  end
+
   # -- :done ------------------------------------------------------------------
 
   describe ":done" do
