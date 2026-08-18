@@ -417,12 +417,12 @@ than Phase 1 because the investigation that found it is item 4's, and because
 
 #### Automated Verification:
 
-- [ ] `mix quality --profile loop` used between edits (never as the phase gate)
-- [ ] Full `mix quality` green
-- [ ] `mix test.regression` passes with the ratchet unchanged
-- [ ] The new `error.execution` span test passes, and reddens under its stated
+- [x] `mix quality --profile loop` used between edits (never as the phase gate)
+- [x] Full `mix quality` green
+- [x] `mix test.regression` passes with the ratchet unchanged
+- [x] The new `error.execution` span test passes, and reddens under its stated
       sabotage (revert the Phase 1 swap, observe red, restore)
-- [ ] `mix quality --profile merge` reports no finding keyed
+- [x] `mix quality --profile merge` reports no finding keyed
       `adr-0014-expression-spans` (`lib/mix/statifier/adr_judge.ex:184-186`) -
       this is the bead's own acceptance criterion, and the merge profile is
       the only profile that runs the ADR judge (`.quality.exs`'s
@@ -541,5 +541,30 @@ human to confirm the manual testing before moving to the next phase. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically (via `/wurk:commit --auto`), and Manual Verification items are
 deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+      line - no Appendix D procedure is edited in this phase; confirm the
+      `error.execution` raise path in
+      `lib/statifier/interpreter/content.ex` is unchanged
+- [ ] Read the raised event by hand (`mix run` or an iex session) on a
+      two-statement failing script and confirm the span underlines the failing
+      subexpression rather than the whole program - the ADR-0014 Consequences
+      sentence, checked against a real payload
+- [ ] `{:system_variable, root}` failures still carry no span and are still
+      not wrapped in `Evaluator.Error` - ADR-0014's 2026-08-18 amendment
+      requires it, and `test/statifier/evaluator_test.exs:302-360` already
+      covers the behavior; confirm those tests were not disturbed
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; full
+`mix quality` is the phase gate, and `mix quality --profile merge` is run once
+in this phase to clear the ADR-0014 finding. In interactive execution, pause
+here for the human to confirm the manual testing. In looped (`--loop`)
+execution, this phase's Automated Verification gates advancement automatically
+(via `/wurk:commit --auto`), and Manual Verification items are deferred and
+surfaced once at the end.
 
 ---
