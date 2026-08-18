@@ -1,0 +1,9 @@
+diff --git a/lib/statifier/interpreter/exit_entry.ex b/lib/statifier/interpreter/exit_entry.ex
+--- a/lib/statifier/interpreter/exit_entry.ex
++++ b/lib/statifier/interpreter/exit_entry.ex
+@@ -146,2 +146,0 @@
+-    trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
+-
+@@ -154,0 +152,2 @@
++    trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
++

@@ -554,13 +554,13 @@ and no fixture body may contain `@tag :skip`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The shape test passes with the four new rows: files exist, key is real,
+- [x] Full quality gate passes: `mix quality`
+- [x] The shape test passes with the four new rows: files exist, key is real,
       tier legal, both verdicts present for `(adr-0012-debuggability, :subtle)`,
       each fixture produces non-empty chunks in `lib/statifier` and empty chunks
       in the `.claude/wurk` scope, no `@tag :skip`
-- [ ] `mix test` still reports zero `adr_judge_corpus` tests executed
-- [ ] Use `mix quality --profile loop` between edits
+- [x] `mix test` still reports zero `adr_judge_corpus` tests executed
+- [x] Use `mix quality --profile loop` between edits
 
 #### Manual Verification:
 - [ ] Each violating fixture reads as unambiguously violating to a human who
@@ -1062,6 +1062,28 @@ record the result in Phase 5's scorecard.
 full `mix quality` as the phase gate. This phase spends nothing and must not be
 used to "try out" a tier-filtered run - the first paid run of this branch is
 Phase 2's single-fixture check.
+
+---
+
+### Phase 2
+
+- [ ] Each violating fixture reads as unambiguously violating to a human who
+      knows ADR-0012 and `docs/observability.md` - a fixture a reviewer would
+      argue about is not a known-violating fixture and must be reworded or
+      dropped before Phase 5 scores it
+- [ ] Each clean fixture is unambiguously clean by the same standard, and is the
+      *same shape* as its partner - the pair differs in meaning, not in surface
+- [ ] The touched functions' real behavior is understood well enough to say the
+      violation is real: `exit_states/2`'s trace ordering matches the W3C
+      Appendix D `exitStates` phase boundaries the moduledoc cites, and the
+      fixture breaks that ordering rather than an incidental one
+- [ ] Single-fixture spot checks, if run, are recorded against the Phase-2
+      authoring budget of Decision 3
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full `mix quality` as the phase gate. Fixture wording iteration, if it needs a
+model in the loop at all, uses `mix test --only fixture:<name>` - one fixture,
+not the corpus. Do not run the full corpus in this phase.
 
 ---
 ## Open Questions
