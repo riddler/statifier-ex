@@ -13,6 +13,63 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-18 - st-383
+
+Approved-by: JohnnyT (in session)
+
+- .credo.exs: moves fifteen checks from `disabled:` to `enabled:` -
+  Design.SkipTestWithoutComment, Readability.SeparateAliasRequire,
+  Readability.WithCustomTaggedTuple, Readability.SingleFunctionToBlockPipe,
+  Readability.BlockPipe, Readability.UnusedFunctionParameterPattern,
+  Refactor.MapMap, Refactor.DoubleBooleanNegation, Refactor.RejectFilter,
+  Refactor.PreferDateTimeShift, Refactor.FilterReject, Refactor.NegatedIsNil,
+  Warning.LazyLogging, Warning.MapGetUnsafePass, and
+  Consistency.MultiAliasImportRequireUse - the last of which now reports the
+  multi-alias direction because st-383 rewrote the tree to the grouped form
+- .credo.exs: enables Warning.LeakyEnvironment with `files: %{excluded:
+  ["lib/mix/", "test/"]}` and a comment giving the reason
+- .credo.exs: adds explanatory comments to three entries that STAY in
+  `disabled:` - Readability.MultiAlias, Refactor.ABCSize and
+  Refactor.AppendSingleItem
+
+Reason: `.credo.exs` was generated with `mix credo gen.config` under st-vbu, so
+the repo owns the full check list and nothing turns itself on. Most of what sat
+in `disabled:` was there because gen.config put it there, not because this
+project decided against it. **Every edit in this diff is a widening of what the
+gate checks. No threshold moves, no check is removed, no test is skipped, and
+no scope is narrowed** - which is the direction ADR-0011's guard exists to allow
+freely. The guard fired because it is mechanical about the path, not because a
+check was weakened.
+
+The two path exclusions are the file's sanctioned mechanism ("Checks are
+excluded by path or by check parameter, with a comment giving the reason"), and
+both add coverage rather than removing it, since both checks were entirely off
+before this diff. Warning.LeakyEnvironment's 8 findings are all dev-only Mix
+tooling and test helpers shelling out to `git`, `mix`, `grep` and the `claude`
+CLI - subprocesses that need the inherited environment to run at all - and none
+is in `lib/statifier/`, where the check now runs and where ADR-0003 already
+means no `System.cmd` should appear.
+
+Three checks stay disabled with their reasons written into the file.
+Readability.MultiAlias forbids the grouped alias form outright, so it is the
+direct contradiction of this bead rather than a companion to it.
+Refactor.AppendSingleItem was classified site by site rather than swept: 17 of
+its 23 findings are correct as written (eleven one-shot appends to short bounded
+lists, six order-critical - the write-before-effect rule, Appendix D's
+removeConflictingTransitions, session.ex's FIFO deferred queue under ADR-0044,
+and timers.ex's spec 6.3 scheduling order). The six genuinely hot appends were
+rewritten anyway, as a real improvement independent of any check; enabling the
+check would leave 17 standing findings and would need a nine-file exclusion list
+to silence them, which is a worse record than the paragraph now in the file.
+Refactor.ABCSize was measured rather than assumed: Refactor.CyclomaticComplexity
+(already enabled, max 9) reports zero findings on this tree, so ABCSize's 28
+findings overlap nothing and would be 28 real refactors concentrated in
+lib/statifier/lowering/builders.ex, interpreter.ex and compiler.ex - the literal
+Appendix D port ADR-0002 protects, and the same argument that already keeps
+Design.DuplicatedCode and Refactor.CondInsteadOfIfElse out. It is left out
+rather than enabled with a raised max_size, because inventing a threshold that
+happens to clear the current tree is the shape CLAUDE.md forbids.
+
 ## 2026-08-18 - st-1tqt
 
 Approved-by: JohnnyT (in session)
