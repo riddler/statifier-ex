@@ -34,12 +34,15 @@ defmodule Statifier.Machine.State do
   | `invoke` | `:state`, `:parallel` - the compiled `Machine.Invoke.t()` list this state's own `<invoke>` children produced, in document order, `[]` when it has none |
   | `attribute_locations` | any - the owning element's own written-attribute spans, carried verbatim |
 
-  Every field in the table except `donedata` and `invoke` is written in one
-  pass: the compiler's state-interning walk builds each
+  Every field in the table except `donedata`, `data` and `invoke` is written
+  in one pass: the compiler's state-interning walk builds each
   `%Statifier.Machine.State{}` whole, index and `t_index`/`c_index` references
-  included. `donedata` and `invoke` are the exception - each is filled in
-  after that walk, once its own compilation pass has run, so they are the
-  only fields whose values are not known when the struct is first built.
+  included - `attribute_locations` among them, carried straight from the
+  source node at both construction sites. Those three are the exception, each
+  folded on after that walk by its own helper (`Statifier.Compiler`'s
+  `with_donedata/2`, `with_data/2` and `with_invoke/2`) once its own
+  compilation pass has run, so they are the only fields whose values are not
+  known when the struct is first built.
 
   ## `attribute_locations`
 
