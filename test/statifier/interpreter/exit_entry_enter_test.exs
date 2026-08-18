@@ -300,6 +300,27 @@ defmodule Statifier.Interpreter.ExitEntryEnterTest do
 
       refute Enum.any?(effects, &Effect.trace?/1)
     end
+
+    # sabotage: `enter_states/2` stamps `configuration` from
+    # `pre_entry_state` instead of the post-arrival `machine_state` -> the
+    # entered states (`compound_final`, `cf_done`) are missing from the
+    # payload's `configuration`, reddening this assertion.
+    test "configuration equals the returned machine_state.configuration, over a multi-state entry" do
+      m = machine()
+      ms = machine_state(m, [idx(:region), idx(:trigger)], trace: true)
+      transition = transition_named(m, "go-cf-done")
+
+      {result, effects} = ExitEntry.enter_states(ms, [transition])
+
+      assert [%Effect.Trace.EntrySet{} = entry_set] =
+               for({:trace, %Effect.Trace.EntrySet{} = payload} <- effects, do: payload)
+
+      assert length(entry_set.indexes) > 1
+      assert entry_set.configuration == result.configuration
+      assert entry_set.macrostep == ms.macrostep
+      assert entry_set.microstep == ms.microstep
+      assert entry_set.round == ms.round
+    end
   end
 
   describe "per-state block sources (onentry, default entry, default history content)" do

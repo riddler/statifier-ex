@@ -205,7 +205,14 @@ defmodule Statifier.MachineStateAcceptanceTest do
        round: 0
      }},
     {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 0, microstep: 0, round: 0}},
-    {:trace, %Trace.ExitSet{indexes: [], macrostep: 0, microstep: 0, round: 0}},
+    {:trace,
+     %Trace.ExitSet{
+       indexes: [],
+       configuration: MapSet.new(),
+       macrostep: 0,
+       microstep: 0,
+       round: 0
+     }},
     {:trace,
      %Trace.ContentExecuted{
        owner: {:transition, 0},
@@ -214,7 +221,14 @@ defmodule Statifier.MachineStateAcceptanceTest do
        microstep: 0,
        round: 0
      }},
-    {:trace, %Trace.EntrySet{indexes: [], macrostep: 0, microstep: 0, round: 0}},
+    {:trace,
+     %Trace.EntrySet{
+       indexes: [],
+       configuration: MapSet.new(),
+       macrostep: 0,
+       microstep: 0,
+       round: 0
+     }},
     {:trace,
      %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}},
     {:trace, %Trace.Done{configuration: MapSet.new(), macrostep: 0, microstep: 0, round: 0}}

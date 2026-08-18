@@ -102,6 +102,18 @@ Rules:
   eventless probe that ends a macrostep, which is why the round reporting
   quiescence carries an effect list of its own rather than being a bare
   atom.
+- The "exit set" and "entry set" rows carry the *resulting* configuration
+  (ADR-0005, full configuration, ancestors included), not only the
+  `indexes` delta: `configuration` is the configuration as it stands after
+  every state named by `indexes` has left (exit set) or been added (entry
+  set). The table's "before exiting"/"before entering" wording still
+  describes the phase boundary the payload is stamped against - the step
+  counters keep coming from that boundary - but `configuration` is what
+  the boundary produced, read after the mutation it names. This is what
+  lets a consumer render the active configuration after every microstep
+  without folding deltas or re-deriving `exit_interpreter`'s
+  whole-configuration sweep; at `exit_interpreter`, the exit set's
+  `configuration` is the empty set.
 
 ## Constraint 3: the Machine retains locations and identities
 

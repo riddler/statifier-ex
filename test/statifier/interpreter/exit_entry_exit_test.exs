@@ -288,6 +288,27 @@ defmodule Statifier.Interpreter.ExitEntryExitTest do
 
       refute Enum.any?(effects, &Effect.trace?/1)
     end
+
+    # sabotage: `exit_states/2` stamps `configuration` from `pre_exit_state`
+    # instead of the post-departure `machine_state` -> the exited states
+    # (`aa`, `a1`) are still present in the payload's `configuration`,
+    # reddening the configuration assertion.
+    test "configuration is the post-departure configuration, and counters are the pre-call ones" do
+      m = machine()
+      original = MapSet.new([idx(:a), idx(:aa), idx(:a1), idx(:c), idx(:c1)])
+      ms = machine_state(m, original)
+
+      {result, effects} = ExitEntry.exit_states(ms, [leave_all(m)])
+
+      assert [%Effect.Trace.ExitSet{} = exit_set] =
+               for({:trace, %Effect.Trace.ExitSet{} = payload} <- effects, do: payload)
+
+      assert exit_set.configuration == MapSet.difference(original, MapSet.new(exit_set.indexes))
+      assert exit_set.configuration == result.configuration
+      assert exit_set.macrostep == ms.macrostep
+      assert exit_set.microstep == ms.microstep
+      assert exit_set.round == ms.round
+    end
   end
 
   # sabotage: `exit_states/2`'s `Selection.compute_exit_set/2` call is
