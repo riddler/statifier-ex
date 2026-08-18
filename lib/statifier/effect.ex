@@ -3,10 +3,9 @@ defmodule Statifier.Effect do
   The effect vocabulary (ADR-0003) plus the nine trace effects
   (`docs/observability.md` constraint 2) - one `@type t()` union, in this
   one module, that every interpreter function emits from and every
-  consumer pattern-matches against, including the not-yet-built session
-  that will eventually drive `<send>`/`<cancel>`/`<invoke>`. This module
-  defines the vocabulary and the trace gate; it never emits an effect
-  itself.
+  consumer pattern-matches against, including `Statifier.Session`, which
+  drives `<send>`/`<cancel>`/`<invoke>`. This module defines the
+  vocabulary and the trace gate; it never emits an effect itself.
 
   ## Every effect is `{tag, payload_struct}`
 
@@ -15,17 +14,17 @@ defmodule Statifier.Effect do
   ...` reading the way ADR-0003 writes it and makes "is this a trace
   effect?" a single match (`trace?/1`); the struct payload gives named
   fields, dialyzer coverage, and room to grow the `<send>`/`<send_delayed>`/
-  `<cancel>`/`<invoke>` payloads once they have a caller, without changing
-  any arity. There are no positional tuples with four or five elements
-  anywhere in this vocabulary.
+  `<cancel>`/`<invoke>` payloads without changing any arity. There are no
+  positional tuples with four or five elements anywhere in this
+  vocabulary.
 
   ## The vocabulary
 
   | Tag | Payload | Produced by |
   |---|---|---|
-  | `:send` | `Statifier.Effect.Send` | not yet produced (`<send>`, immediate) |
-  | `:send_delayed` | `Statifier.Effect.SendDelayed` | not yet produced (`<send>` with `delay`) |
-  | `:cancel` | `Statifier.Effect.Cancel` | not yet produced (`<cancel>`) |
+  | `:send` | `Statifier.Effect.Send` | `Statifier.Machine.Content.Send`'s `execute/2`, when no delay resolves (`<send>`, immediate, spec 6.2) |
+  | `:send_delayed` | `Statifier.Effect.SendDelayed` | `Statifier.Machine.Content.Send`'s `execute/2`, when a delay resolves (`<send>` with `delay`, spec 6.2) |
+  | `:cancel` | `Statifier.Effect.Cancel` | `Statifier.Machine.Content.Cancel`'s `execute/2` (`<cancel>`, spec 6.3) |
   | `:invoke` | `Statifier.Effect.Invoke` | `Statifier.Interpreter`'s invoke pass (`main_event_loop/3`'s `run_invoke_pass/1`, spec 6.4) |
   | `:cancel_invoke` | `Statifier.Effect.CancelInvoke` | `Statifier.Interpreter.ExitEntry.cancel_invocations_for_state/2`, called from both `depart/2` and `Statifier.Interpreter.exit_interpreter/1` (spec 6.4) |
   | `:autoforward` | `Statifier.Effect.Autoforward` | `Statifier.Interpreter.handle_event/2`'s finalize/autoforward pass (`apply_invoke_passes/2`, spec 6.4) |
@@ -44,11 +43,10 @@ defmodule Statifier.Effect do
   | `:trace` | `Statifier.Effect.Trace.InvokePass` | `Statifier.Interpreter`'s invoke pass (`run_invoke_pass/1`, spec 6.4) |
   | `:trace` | `Statifier.Effect.Trace.FinalizeAutoforward` | `Statifier.Interpreter.handle_event/2`'s finalize/autoforward pass (`apply_invoke_passes/2`, spec 6.4/6.5) |
 
-  The interpreter now produces `:log`, `:done`, `:budget_exhausted`,
-  `:invoke`, `:cancel_invoke`, `:autoforward`, `:datamodel_change`,
-  `:datamodel_init`, and all nine trace effects. `:send`, `:send_delayed`,
-  and `:cancel` remain unproduced, because nothing in this core sends,
-  delays, or cancels a delayed send yet.
+  Every tag in this vocabulary is produced today: `:log`, `:done`,
+  `:budget_exhausted`, `:invoke`, `:cancel_invoke`, `:autoforward`,
+  `:datamodel_change`, `:datamodel_init`, `:send`, `:send_delayed`,
+  `:cancel`, and all nine trace effects.
 
   ## Trace effects carry indexes and counters, never structs
 
