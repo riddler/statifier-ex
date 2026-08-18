@@ -43,8 +43,7 @@ defmodule Statifier.Machine.Content.Send do
   alias Statifier.Machine.Content.Send
   alias Statifier.Machine.Param
   alias Statifier.Parser.Location
-  alias Statifier.Send.Routes
-  alias Statifier.Send.Target
+  alias Statifier.Send.{Routes, Target}
 
   @enforce_keys [:c_index, :location]
   defstruct [
