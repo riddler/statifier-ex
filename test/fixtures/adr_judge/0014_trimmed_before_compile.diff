@@ -1,7 +1,7 @@
 diff --git a/lib/statifier/compiler.ex b/lib/statifier/compiler.ex
 --- a/lib/statifier/compiler.ex
 +++ b/lib/statifier/compiler.ex
-@@ -789,7 +789,7 @@ defmodule Statifier.Compiler do
+@@ -793,7 +793,7 @@ defmodule Statifier.Compiler do
    defp build_cond(%DTransition{cond: nil}, _t_index), do: {:ok, nil}
  
    defp build_cond(%DTransition{cond: source} = transition, t_index) do
