@@ -50,10 +50,21 @@ from the three above in kind, not just in tag:
   companion, `test/mix/statifier/adr_judge_corpus_shape_test.exs`, runs in the
   ordinary suite and keeps the corpus from rotting between hand-runs: every
   manifest file exists, every key is real, every registry entry has both a
-  violating and a clean fixture, every fixture's diff lands in its own scope and
+  violating and a clean fixture in every tier it has a row in, every tier is
+  `:blatant` or `:subtle`, every fixture's diff lands in its own scope and
   not a differing one, and no fixture contains the literal `@tag :skip` (which
   would trip `Mix.Statifier.GateGuard`'s skip-tag scan, since fixtures live under
   `test/`).
+- **Tiers.** Every manifest row carries a `:tier`. `:blatant` is a deletion or
+  omission the deterministic guards (`AdrGuard`, `GateGuard`) would also
+  catch or a reviewer would spot on sight; `:subtle` is a violation that
+  preserves the shape of the change it fakes and breaks only its meaning.
+  The recorded scores below are all on the `:blatant` tier - it is the
+  original eight-fixture corpus. Two selection commands run a slice instead
+  of the whole paid corpus: `mix test --only tier:subtle` runs one tier, and
+  `mix test --only fixture:<name>` runs one fixture - useful while wording a
+  new fixture, since it costs one model round trip instead of the whole
+  corpus's.
 - **How to read a failure.** Each corpus test's failure message names which of
   three things went wrong: a **false negative** (a known-violating fixture
   produced no surviving finding), a **false positive** (a known-clean fixture

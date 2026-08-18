@@ -28,7 +28,10 @@ defmodule Mix.Statifier.AdrJudgeCorpus do
   @doc """
   The corpus manifest: one map per fixture, with `:key` (a judged-ADR
   registry key), `:file` (relative to `fixture_dir/0`), `:expect`
-  (`:violation` or `:clean`), and `:note`.
+  (`:violation` or `:clean`), `:tier` (`:blatant` or `:subtle`), and `:note`.
+  A `:blatant` fixture is a deletion or omission the deterministic guards
+  (`AdrGuard`, `GateGuard`) would also catch; a `:subtle` fixture preserves
+  the shape of the change it fakes and breaks only its meaning.
   """
   @spec manifest() :: [map()]
   def manifest, do: @manifest_path |> Code.eval_file() |> elem(0)
