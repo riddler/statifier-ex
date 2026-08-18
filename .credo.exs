@@ -84,6 +84,7 @@
           #
           {Credo.Check.Consistency.ExceptionNames, []},
           {Credo.Check.Consistency.LineEndings, []},
+          {Credo.Check.Consistency.MultiAliasImportRequireUse, []},
           {Credo.Check.Consistency.ParameterPatternMatching, []},
           {Credo.Check.Consistency.SpaceAroundOperators, []},
           {Credo.Check.Consistency.SpaceInParentheses, []},
@@ -107,11 +108,13 @@
           #
           {Credo.Check.Design.MissingCheckInConfig, []},
           {Credo.Check.Design.RedundantConfigComments, []},
+          {Credo.Check.Design.SkipTestWithoutComment, []},
 
           #
           ## Readability Checks
           #
           {Credo.Check.Readability.AliasOrder, []},
+          {Credo.Check.Readability.BlockPipe, []},
           {Credo.Check.Readability.FunctionNames, []},
           {Credo.Check.Readability.ImplTrue, []},
           {Credo.Check.Readability.LargeNumbers, []},
@@ -126,6 +129,8 @@
           {Credo.Check.Readability.PreferImplicitTry, []},
           {Credo.Check.Readability.RedundantBlankLines, []},
           {Credo.Check.Readability.Semicolons, []},
+          {Credo.Check.Readability.SeparateAliasRequire, []},
+          {Credo.Check.Readability.SingleFunctionToBlockPipe, []},
           {Credo.Check.Readability.SpaceAfterCommas, []},
           # Specs and SpecParameterNames enforce the CLAUDE.md rule that public
           # functions carry a @spec. Deliberately not scoped off test/: the
@@ -142,7 +147,9 @@
           {Credo.Check.Readability.TrailingBlankLine, []},
           {Credo.Check.Readability.TrailingWhiteSpace, []},
           {Credo.Check.Readability.UnnecessaryAliasExpansion, []},
+          {Credo.Check.Readability.UnusedFunctionParameterPattern, []},
           {Credo.Check.Readability.VariableNames, []},
+          {Credo.Check.Readability.WithCustomTaggedTuple, []},
           {Credo.Check.Readability.WithSingleClause, []},
 
           #
@@ -151,8 +158,10 @@
           {Credo.Check.Refactor.Apply, []},
           {Credo.Check.Refactor.CondStatements, []},
           {Credo.Check.Refactor.CyclomaticComplexity, []},
+          {Credo.Check.Refactor.DoubleBooleanNegation, []},
           {Credo.Check.Refactor.FilterCount, []},
           {Credo.Check.Refactor.FilterFilter, []},
+          {Credo.Check.Refactor.FilterReject, []},
           {Credo.Check.Refactor.FunctionArity, []},
           # Excluded where printing to stdout is the point, not a leftover
           # debug statement: test helpers and the harness may print freely, and
@@ -163,11 +172,15 @@
           {Credo.Check.Refactor.IoPuts, [files: %{excluded: ["test/", "lib/mix/tasks/"]}]},
           {Credo.Check.Refactor.LongQuoteBlocks, []},
           {Credo.Check.Refactor.MapJoin, []},
+          {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.MatchInCondition, []},
           {Credo.Check.Refactor.NegatedConditionsInUnless, []},
           {Credo.Check.Refactor.NegatedConditionsWithElse, []},
+          {Credo.Check.Refactor.NegatedIsNil, []},
           {Credo.Check.Refactor.Nesting, []},
+          {Credo.Check.Refactor.PreferDateTimeShift, []},
           {Credo.Check.Refactor.RedundantWithClauseResult, []},
+          {Credo.Check.Refactor.RejectFilter, []},
           {Credo.Check.Refactor.RejectReject, []},
           {Credo.Check.Refactor.UnlessWithElse, []},
           {Credo.Check.Refactor.UtcNowTruncate, []},
@@ -184,6 +197,15 @@
           {Credo.Check.Warning.ForbiddenModule, []},
           {Credo.Check.Warning.IExPry, []},
           {Credo.Check.Warning.IoInspect, []},
+          {Credo.Check.Warning.LazyLogging, []},
+          # Excluded where clearing the environment would break the subprocess rather
+          # than protect it: every System.cmd/3 under lib/mix/ and test/ shells out to
+          # git, mix, grep or the claude CLI, which need PATH, HOME and the developer's
+          # own auth to run at all. None of the 8 sites is in lib/statifier/, where this
+          # check now runs and where ADR-0003 already means no System.cmd should appear
+          # (st-383).
+          {Credo.Check.Warning.LeakyEnvironment, [files: %{excluded: ["lib/mix/", "test/"]}]},
+          {Credo.Check.Warning.MapGetUnsafePass, []},
           {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, []},
           # Excluded where reading Mix.env/0 is legitimate rather than a
           # runtime leak: mix.exs is build configuration, and mix tasks only
@@ -218,7 +240,6 @@
           # Controversial and experimental checks (opt-in, just move the check to `:enabled`
           #   and be sure to use `mix credo --strict` to see low priority checks)
           #
-          {Credo.Check.Consistency.MultiAliasImportRequireUse, []},
           # Disabled under protest: on credo 1.8.0-dev this check reports one
           # false positive per entry in the `disabled:` list below, because the
           # config merge rewrites those entries to `{Check, false}` - the very
@@ -231,35 +252,47 @@
           # check would fight spec fidelity. Do not enable without revisiting
           # that (st-vbu).
           {Credo.Check.Design.DuplicatedCode, []},
-          {Credo.Check.Design.SkipTestWithoutComment, []},
           {Credo.Check.Readability.AliasAs, []},
-          {Credo.Check.Readability.BlockPipe, []},
           {Credo.Check.Readability.CaptureOperator, []},
+          # Stays disabled deliberately: this check forbids the grouped alias form
+          # outright, which is the direct contradiction of st-383 rather than a
+          # companion to it - the tree was rewritten to the grouped form on purpose and
+          # Consistency.MultiAliasImportRequireUse above now enforces it. Enabling this
+          # would fight that decision, not reinforce it.
           {Credo.Check.Readability.MultiAlias, []},
           {Credo.Check.Readability.NestedFunctionCalls, []},
           {Credo.Check.Readability.OneArityFunctionInPipe, []},
           {Credo.Check.Readability.OnePipePerLine, []},
-          {Credo.Check.Readability.SeparateAliasRequire, []},
-          {Credo.Check.Readability.SingleFunctionToBlockPipe, []},
           {Credo.Check.Readability.SinglePipe, []},
-          {Credo.Check.Readability.UnusedFunctionParameterPattern, []},
-          {Credo.Check.Readability.WithCustomTaggedTuple, []},
+          # Left out on measurement, not on assumption (st-383): the obvious argument
+          # for skipping it - that it duplicates Refactor.CyclomaticComplexity, already
+          # enabled - does not hold here. CyclomaticComplexity (max 9) reports zero
+          # findings on this tree, so ABCSize's 28 findings overlap nothing. They
+          # concentrate in lowering/builders.ex, interpreter.ex, compiler.ex and
+          # interpreter/datamodel.ex - the literal W3C Appendix D port - so enabling it
+          # would trade spec fidelity for a size metric, the same trade that already
+          # keeps Design.DuplicatedCode and Refactor.CondInsteadOfIfElse out (ADR-0002).
+          # Not enabled with a raised max_size either: a threshold picked to clear the
+          # current tree is a weakening dressed as a widening.
           {Credo.Check.Refactor.ABCSize, []},
+          # Left out after classifying all 23 findings, not by default (st-383): 17 of
+          # them are correct as written. Eleven are one-shot appends to short, bounded
+          # lists (the `errors ++ [Error....]` idiom repeated across lowering/builders.ex,
+          # a compile-time module attribute in parser/markup.ex, per-call argument lists
+          # in the mix tooling), and six are order-critical - the datamodel-write-before-
+          # effect rule in interpreter.ex and machine/content/send.ex, Appendix D's
+          # removeConflictingTransitions in interpreter/selection.ex, session.ex's FIFO
+          # deferred queue (ADR-0044), and timers.ex's scheduling order (spec 6.3) - where
+          # prepend-and-reverse changes behavior rather than cost. The six genuinely hot
+          # appends were rewritten under st-383; enabling the check would leave 17
+          # standing findings, and the path exclusion that silenced them would have to
+          # name nine files, which is a worse record than this paragraph.
           {Credo.Check.Refactor.AppendSingleItem, []},
           {Credo.Check.Refactor.CondInsteadOfIfElse, []},
-          {Credo.Check.Refactor.DoubleBooleanNegation, []},
-          {Credo.Check.Refactor.FilterReject, []},
-          {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.ModuleDependencies, []},
-          {Credo.Check.Refactor.NegatedIsNil, []},
           {Credo.Check.Refactor.PassAsyncInTestCases, []},
           {Credo.Check.Refactor.PipeChainStart, []},
-          {Credo.Check.Refactor.PreferDateTimeShift, []},
-          {Credo.Check.Refactor.RejectFilter, []},
-          {Credo.Check.Refactor.VariableRebinding, []},
-          {Credo.Check.Warning.LazyLogging, []},
-          {Credo.Check.Warning.LeakyEnvironment, []},
-          {Credo.Check.Warning.MapGetUnsafePass, []}
+          {Credo.Check.Refactor.VariableRebinding, []}
 
           # {Credo.Check.Refactor.MapInto, []},
 
