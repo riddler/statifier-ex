@@ -245,7 +245,7 @@ promotion path.
 | machine_state struct holds configuration, internal queue, history, datamodel, `running`, and step counters - no interpreter loop variable that is not reconstructible from the struct | `Statifier.MachineState` |
 | `microstep` step function exists; macrostep folds over it | `Statifier.Interpreter` |
 | trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
-| compiler retains locations on states, transitions, executable content, and each node's written-attribute spans (`attribute_locations`, carried verbatim) | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`/`Invoke` |
+| compiler retains locations on states, transitions, executable content, and - on states, transitions and `<invoke>` - the written-attribute spans of each (`attribute_locations`, carried verbatim) | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`/`Invoke` |
 | compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |
 | compiler assigns document-order indexes to transitions, executable-content nodes, and `<data>` elements (`t_index`/`c_index`/`d_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |

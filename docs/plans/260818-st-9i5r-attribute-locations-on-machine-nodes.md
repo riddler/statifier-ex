@@ -356,17 +356,17 @@ must redden it; for the default test, removing the `%{}` default from the
       green, no `mix test.baseline add` needed)
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment: `Statifier.Interpreter.initial_transition/1`
+- [x] Spec-conformance judgment: `Statifier.Interpreter.initial_transition/1`
       still matches Appendix D's `expandScxmlSource(doc)` normalization line
       for line. The only ADR-0002 deviation on this path remains the existing
       one - a synthesized transition is not a document element - and the
       comment now names both of its consequences (`t_index: nil`,
       `attribute_locations: %{}`) rather than one. No new deviation is
       introduced.
-- [ ] The moduledoc paragraph reads as a sibling of `Machine.Invoke`'s, not a
+- [x] The moduledoc paragraph reads as a sibling of `Machine.Invoke`'s, not a
       restatement of it: it says why *this* node takes the escape hatch and
       why `cond_location` stays out of it.
-- [ ] A compiled transition from a real fixture, inspected in IEx, shows the
+- [x] A compiled transition from a real fixture, inspected in IEx, shows the
       map keys the source actually wrote and no others.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -510,14 +510,14 @@ separately rather than sharing one line.
 - [x] `mix test.regression` green with no `test/passing_tests.json` change
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment: the compiler's state-interning walk
+- [x] Spec-conformance judgment: the compiler's state-interning walk
       (`walk_siblings/4`) and root construction still match the structure
       Appendix D's `expandScxmlSource`/document-order assumptions rely on -
       both edits are a single additional field on an existing struct literal
       and introduce no new ADR-0002 deviation.
-- [ ] The reworded "written in one pass" paragraph is still true of every
+- [x] The reworded "written in one pass" paragraph is still true of every
       field the table now lists, `attribute_locations` included.
-- [ ] Compiling a real fixture in IEx and reading `Machine.at(machine, 0)`
+- [x] Compiling a real fixture in IEx and reading `Machine.at(machine, 0)`
       shows the `<scxml>` attributes the fixture wrote and no others.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -651,12 +651,12 @@ rewrites.
       passing is the mechanical confirmation
 
 #### Manual Verification:
-- [ ] The ADR-0012 amendment reads as completing/widening item 3, not as
+- [x] The ADR-0012 amendment reads as completing/widening item 3, not as
       reversing it; the original item 3 sentence is byte-identical to what it
       was
-- [ ] Constraint 3's existing element-level bullet is untouched and the new
+- [x] Constraint 3's existing element-level bullet is untouched and the new
       bullet is additive
-- [ ] The changelog fragment passes `changelog.d/README.md`'s test - someone
+- [x] The changelog fragment passes `changelog.d/README.md`'s test - someone
       who only calls the public API could tell the difference
 
 **Implementation Note**: This phase touches no Elixir code, so per `CLAUDE.md`
@@ -738,19 +738,42 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**2026-08-18: all items confirmed.** The empirical ones were checked by
+compiling a fixture that writes every attribute under review and slicing each
+carried span back out of the source: a transition's `event`/`target`/`type`/
+`cond`, a state's `id`/`initial`, a history's `type`, the root's six `<scxml>`
+attributes, `%{}` on an attribute-free `<final/>`, and no `:type` key on a
+transition that compiled to `type: :external` by default. A root writing no
+`<initial>` still reaches quiescence through the synthesized-transition path.
+
+Two corrections came out of the sweep, both in prose the phases had written:
+
+1. Phase 2's reworded "written in one pass" paragraph named `donedata` and
+   `invoke` as the only post-walk fields. `data` is a third
+   (`Statifier.Compiler.with_data/2`, folded on in the same pipeline at
+   `compiler.ex:284`). The original phrasing was positional - "every field
+   above `donedata`" - which excluded `data` by accident of table order; the
+   rewording made the claim explicit and therefore wrong. Now names all
+   three, and states that `attribute_locations` is in the one-pass set.
+2. `docs/observability.md`'s seams-table row read as though every module it
+   lists carries `attribute_locations`. `Statifier.Machine.Content` does not
+   - the verbatim carry is `State`, `Transition` and `Invoke` only, which the
+   constraint-3 prose bullet already said correctly. The row now scopes its
+   attribute-span half to those three.
+
 ### Phase 1
 
-- [ ] Spec-conformance judgment: `Statifier.Interpreter.initial_transition/1`
+- [x] Spec-conformance judgment: `Statifier.Interpreter.initial_transition/1`
       still matches Appendix D's `expandScxmlSource(doc)` normalization line
       for line. The only ADR-0002 deviation on this path remains the existing
       one - a synthesized transition is not a document element - and the
       comment now names both of its consequences (`t_index: nil`,
       `attribute_locations: %{}`) rather than one. No new deviation is
       introduced.
-- [ ] The moduledoc paragraph reads as a sibling of `Machine.Invoke`'s, not a
+- [x] The moduledoc paragraph reads as a sibling of `Machine.Invoke`'s, not a
       restatement of it: it says why *this* node takes the escape hatch and
       why `cond_location` stays out of it.
-- [ ] A compiled transition from a real fixture, inspected in IEx, shows the
+- [x] A compiled transition from a real fixture, inspected in IEx, shows the
       map keys the source actually wrote and no others.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -764,14 +787,14 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment: the compiler's state-interning walk
+- [x] Spec-conformance judgment: the compiler's state-interning walk
       (`walk_siblings/4`) and root construction still match the structure
       Appendix D's `expandScxmlSource`/document-order assumptions rely on -
       both edits are a single additional field on an existing struct literal
       and introduce no new ADR-0002 deviation.
-- [ ] The reworded "written in one pass" paragraph is still true of every
+- [x] The reworded "written in one pass" paragraph is still true of every
       field the table now lists, `attribute_locations` included.
-- [ ] Compiling a real fixture in IEx and reading `Machine.at(machine, 0)`
+- [x] Compiling a real fixture in IEx and reading `Machine.at(machine, 0)`
       shows the `<scxml>` attributes the fixture wrote and no others.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -785,12 +808,12 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] The ADR-0012 amendment reads as completing/widening item 3, not as
+- [x] The ADR-0012 amendment reads as completing/widening item 3, not as
       reversing it; the original item 3 sentence is byte-identical to what it
       was
-- [ ] Constraint 3's existing element-level bullet is untouched and the new
+- [x] Constraint 3's existing element-level bullet is untouched and the new
       bullet is additive
-- [ ] The changelog fragment passes `changelog.d/README.md`'s test - someone
+- [x] The changelog fragment passes `changelog.d/README.md`'s test - someone
       who only calls the public API could tell the difference
 
 **Implementation Note**: This phase touches no Elixir code, so per `CLAUDE.md`
