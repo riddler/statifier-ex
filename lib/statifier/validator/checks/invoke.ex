@@ -73,33 +73,29 @@ defmodule Statifier.Validator.Checks.Invoke do
       namelist_and_param(invoke, location)
   end
 
-  defp type_and_typeexpr(%DInvoke{type: type, typeexpr: typeexpr}, location)
-       when not is_nil(type) and not is_nil(typeexpr) do
-    [Error.invoke_type_and_typeexpr(location)]
-  end
+  defp type_and_typeexpr(%DInvoke{type: nil}, _location), do: []
+  defp type_and_typeexpr(%DInvoke{typeexpr: nil}, _location), do: []
 
-  defp type_and_typeexpr(%DInvoke{}, _location), do: []
+  defp type_and_typeexpr(%DInvoke{}, location),
+    do: [Error.invoke_type_and_typeexpr(location)]
 
-  defp src_and_srcexpr(%DInvoke{src: src, srcexpr: srcexpr}, location)
-       when not is_nil(src) and not is_nil(srcexpr) do
-    [Error.invoke_src_and_srcexpr(location)]
-  end
+  defp src_and_srcexpr(%DInvoke{src: nil}, _location), do: []
+  defp src_and_srcexpr(%DInvoke{srcexpr: nil}, _location), do: []
 
-  defp src_and_srcexpr(%DInvoke{}, _location), do: []
+  defp src_and_srcexpr(%DInvoke{}, location),
+    do: [Error.invoke_src_and_srcexpr(location)]
 
-  defp src_and_content(%DInvoke{src: src, srcexpr: srcexpr, content: content}, location)
-       when not is_nil(content) and (not is_nil(src) or not is_nil(srcexpr)) do
-    [Error.invoke_src_and_content(location)]
-  end
+  defp src_and_content(%DInvoke{content: nil}, _location), do: []
+  defp src_and_content(%DInvoke{src: nil, srcexpr: nil}, _location), do: []
 
-  defp src_and_content(%DInvoke{}, _location), do: []
+  defp src_and_content(%DInvoke{}, location),
+    do: [Error.invoke_src_and_content(location)]
 
-  defp id_and_idlocation(%DInvoke{id: id, idlocation: idlocation}, location)
-       when not is_nil(id) and not is_nil(idlocation) do
-    [Error.invoke_id_and_idlocation(location)]
-  end
+  defp id_and_idlocation(%DInvoke{id: nil}, _location), do: []
+  defp id_and_idlocation(%DInvoke{idlocation: nil}, _location), do: []
 
-  defp id_and_idlocation(%DInvoke{}, _location), do: []
+  defp id_and_idlocation(%DInvoke{}, location),
+    do: [Error.invoke_id_and_idlocation(location)]
 
   defp namelist_and_param(%DInvoke{namelist: namelist, params: params}, location)
        when namelist != [] and params != [] do

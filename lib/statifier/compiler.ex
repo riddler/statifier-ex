@@ -1061,14 +1061,14 @@ defmodule Statifier.Compiler do
   # two-line function rather than a reused one.
   @spec build_cancel_sendid(cancel_node :: DCancel.t(), owner :: Expressions.owner_ref()) ::
           {:ok, Machine.expr() | nil} | {:error, Error.t()}
-  defp build_cancel_sendid(%DCancel{sendid: sendid}, _owner) when not is_nil(sendid) do
-    {:ok, Expressions.static(sendid)}
-  end
-
   defp build_cancel_sendid(%DCancel{sendid: nil, sendidexpr: nil}, _owner), do: {:ok, nil}
 
   defp build_cancel_sendid(%DCancel{sendid: nil, sendidexpr: source} = cancel_node, owner) do
     Expressions.compile(source, owner, cancel_attr_location(cancel_node))
+  end
+
+  defp build_cancel_sendid(%DCancel{sendid: sendid}, _owner) do
+    {:ok, Expressions.static(sendid)}
   end
 
   # `cancel_node.attribute_locations[:sendidexpr]`'s value span when the
@@ -1094,15 +1094,14 @@ defmodule Statifier.Compiler do
           send_node :: DSend.t(),
           owner :: Expressions.owner_ref()
         ) :: {:ok, Machine.expr() | nil} | {:error, Error.t()}
-  defp build_send_pair(static_value, _compiled_source, _expr_attr, _send_node, _owner)
-       when not is_nil(static_value) do
-    {:ok, Expressions.static(static_value)}
-  end
-
   defp build_send_pair(nil, nil, _expr_attr, _send_node, _owner), do: {:ok, nil}
 
   defp build_send_pair(nil, source, expr_attr, send_node, owner) do
     Expressions.compile(source, owner, send_attr_location(send_node, expr_attr))
+  end
+
+  defp build_send_pair(static_value, _compiled_source, _expr_attr, _send_node, _owner) do
+    {:ok, Expressions.static(static_value)}
   end
 
   @spec build_send_content(content :: DContent.t() | nil, owner :: Expressions.owner_ref()) ::
@@ -1121,13 +1120,22 @@ defmodule Statifier.Compiler do
     |> collect()
   end
 
-  defp build_send_param(%DParam{expr: source, param_location: nil} = param, owner)
-       when not is_nil(source) do
+  # `expr`/`param_location` are `String.t() | nil` (`Document.Param`'s own
+  # typespec), so `<<_rest::binary>>` structurally excludes `nil` without a
+  # guard - unlike `build_invoke_param/3`/`build_donedata_param/2`, nothing
+  # upstream validates a `<send>`'s own `<param>` children (see
+  # `build_send_params/2`'s moduledoc reference), so `expr` and
+  # `param_location` both `nil` is reachable here, not just theoretical; no
+  # clause below matches that case, preserving the prior guard's
+  # `FunctionClauseError` exactly rather than papering over it.
+  defp build_send_param(
+         %DParam{expr: <<_rest::binary>> = source, param_location: nil} = param,
+         owner
+       ) do
     build_dparam(param, :expr, source, owner)
   end
 
-  defp build_send_param(%DParam{param_location: source} = param, owner)
-       when not is_nil(source) do
+  defp build_send_param(%DParam{param_location: <<_rest::binary>> = source} = param, owner) do
     build_dparam(param, :location, source, owner)
   end
 
@@ -1382,13 +1390,18 @@ defmodule Statifier.Compiler do
   # never actually needs.
   @spec build_donedata_param(param :: DParam.t(), index :: non_neg_integer()) ::
           {:ok, MParam.t()} | {:error, Error.t()}
-  defp build_donedata_param(%DParam{expr: source, param_location: nil} = param, index)
-       when not is_nil(source) do
+  # `<<_rest::binary>>` structurally excludes `nil` without a guard - see
+  # `build_send_param/2`'s comment for why this pattern was picked over a
+  # guard here too, even though `Checks.Param` already makes the
+  # both-`nil` case unreachable for a `<donedata>` `<param>`.
+  defp build_donedata_param(
+         %DParam{expr: <<_rest::binary>> = source, param_location: nil} = param,
+         index
+       ) do
     build_dparam(param, :expr, source, {:donedata, index})
   end
 
-  defp build_donedata_param(%DParam{param_location: source} = param, index)
-       when not is_nil(source) do
+  defp build_donedata_param(%DParam{param_location: <<_rest::binary>> = source} = param, index) do
     build_dparam(param, :location, source, {:donedata, index})
   end
 
@@ -1514,11 +1527,6 @@ defmodule Statifier.Compiler do
           owner :: Expressions.owner_ref(),
           acc :: acc()
         ) :: {Machine.expr() | nil, acc()}
-  defp build_invoke_pair(static_value, _compiled_source, _expr_attr, _invoke, _owner, acc)
-       when not is_nil(static_value) do
-    {Expressions.static(static_value), acc}
-  end
-
   defp build_invoke_pair(nil, nil, _expr_attr, _invoke, _owner, acc), do: {nil, acc}
 
   defp build_invoke_pair(nil, source, expr_attr, invoke, owner, acc) do
@@ -1528,6 +1536,10 @@ defmodule Statifier.Compiler do
       {:ok, expr} -> {expr, acc}
       {:error, error} -> {nil, %{acc | invoke_errors: [error | acc.invoke_errors]}}
     end
+  end
+
+  defp build_invoke_pair(static_value, _compiled_source, _expr_attr, _invoke, _owner, acc) do
+    {Expressions.static(static_value), acc}
   end
 
   @spec build_invoke_content(
@@ -1554,13 +1566,19 @@ defmodule Statifier.Compiler do
     {Enum.reject(results, &is_nil/1), acc}
   end
 
-  defp build_invoke_param(%DParam{expr: source, param_location: nil} = param, owner, acc)
-       when not is_nil(source) do
+  # `<<_rest::binary>>` structurally excludes `nil` without a guard - see
+  # `build_send_param/2`'s comment for why this pattern was picked over a
+  # guard here too, even though `Checks.Param` already makes the
+  # both-`nil` case unreachable for an `<invoke>` `<param>`.
+  defp build_invoke_param(
+         %DParam{expr: <<_rest::binary>> = source, param_location: nil} = param,
+         owner,
+         acc
+       ) do
     collect_invoke_param(build_dparam(param, :expr, source, owner), acc)
   end
 
-  defp build_invoke_param(%DParam{param_location: source} = param, owner, acc)
-       when not is_nil(source) do
+  defp build_invoke_param(%DParam{param_location: <<_rest::binary>> = source} = param, owner, acc) do
     collect_invoke_param(build_dparam(param, :location, source, owner), acc)
   end
 

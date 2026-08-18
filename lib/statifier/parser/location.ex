@@ -578,7 +578,7 @@ defmodule Statifier.Parser.Location do
 
   defp match_reference(raw) do
     with [full, body] <- Regex.run(@reference_regex, raw),
-         decoded when not is_nil(decoded) <- decode_reference(body) do
+         <<_rest::binary>> = decoded <- decode_reference(body) do
       {full, decoded}
     else
       _no_reference -> nil

@@ -54,15 +54,10 @@ defmodule Statifier.Validator.Checks.Param do
     [Error.param_no_value(name, location)]
   end
 
-  defp check_param(%DParam{
-         expr: expr,
-         param_location: param_location,
-         name: name,
-         location: location
-       })
-       when not is_nil(expr) and not is_nil(param_location) do
+  defp check_param(%DParam{expr: nil}), do: []
+  defp check_param(%DParam{param_location: nil}), do: []
+
+  defp check_param(%DParam{name: name, location: location}) do
     [Error.param_expr_and_location(name, location)]
   end
-
-  defp check_param(%DParam{}), do: []
 end

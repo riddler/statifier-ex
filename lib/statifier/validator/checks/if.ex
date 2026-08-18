@@ -113,7 +113,7 @@ defmodule Statifier.Validator.Checks.If do
   defp classify_branch(%Branch{cond: nil} = branch, true, errors),
     do: {[Error.if_duplicate_else(branch.location) | errors], true}
 
-  defp classify_branch(%Branch{cond: cond} = branch, true, errors) when not is_nil(cond),
+  defp classify_branch(%Branch{} = branch, true, errors),
     do: {[Error.if_elseif_after_else(branch.location) | errors], true}
 
   defp classify_branch(%Branch{cond: nil}, false, errors), do: {errors, true}

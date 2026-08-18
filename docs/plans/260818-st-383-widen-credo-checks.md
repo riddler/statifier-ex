@@ -559,17 +559,17 @@ that still greps for `not is_nil` after this phase is expected, not a miss.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix credo --strict --enable-disabled-checks Refactor.NegatedIsNil`
+- [x] `mix credo --strict --enable-disabled-checks Refactor.NegatedIsNil`
       reports zero findings.
-- [ ] Full `mix quality` passes, including the full test suite with coverage -
+- [x] Full `mix quality` passes, including the full test suite with coverage -
       the compiler and validator are the most heavily covered modules in the
       repo, so a clause-order mistake shows up as a red test, not a silent
       behavior change.
-- [ ] `mix test --include scion --include scxml_w3` passes at the same counts as
+- [x] `mix test --include scion --include scxml_w3` passes at the same counts as
       before the phase.
-- [ ] `mix test.regression` passes - no ratchet entry regresses.
-- [ ] `mix gate.check` is green - no guarded path touched.
-- [ ] Grep confirms no `!= nil` was introduced as a silencing rewrite:
+- [x] `mix test.regression` passes - no ratchet entry regresses.
+- [x] `mix gate.check` is green - no guarded path touched.
+- [x] Grep confirms no `!= nil` was introduced as a silencing rewrite:
       `git diff -U0 | grep '^+' | grep '!= nil'` is empty.
 
 #### Manual Verification:
@@ -1221,5 +1221,24 @@ deferred and surfaced at the end.
 - [ ] No clause ordering changed - dropping a name must not reorder heads.
 
 **Implementation Note**: loop gate while iterating; full gate as the phase gate.
+
+---
+
+### Phase 4
+
+- [ ] Every new nil-matching head does what the previous fallback did for nil.
+      This is the failure mode with no test to catch it: if the old code fell
+      through to a clause that returned `{:ok, nil}` and the new head returns
+      `{:error, ...}`, that is a behavior change dressed as a refactor.
+- [ ] Clause ordering: the nil heads precede the general heads in every case.
+- [ ] No conjunction guard was flattened into `!= nil`.
+- [ ] `compiler.ex` is not an Appendix D port, but the validator checks feed the
+      interpreter's error events - confirm the error-event shapes are unchanged
+      (errors are events, `{:ok, v} | {:error, e}`, ADR-0003).
+
+**Implementation Note**: loop gate while iterating; full gate as the phase gate.
+If a site cannot be restructured without changing behavior, leave that site
+alone, and carry the check's fate into Phase 8 as a path exclusion with a stated
+reason - never as a silencing rewrite.
 
 ---

@@ -100,10 +100,10 @@ defmodule Statifier.Validator.Checks.Cancel do
     [Error.cancel_no_sendid(location)]
   end
 
-  defp check_cancel(%DCancel{sendid: sendid, sendidexpr: sendidexpr, location: location})
-       when not is_nil(sendid) and not is_nil(sendidexpr) do
+  defp check_cancel(%DCancel{sendid: nil}), do: []
+  defp check_cancel(%DCancel{sendidexpr: nil}), do: []
+
+  defp check_cancel(%DCancel{location: location}) do
     [Error.cancel_sendid_and_sendidexpr(location)]
   end
-
-  defp check_cancel(%DCancel{}), do: []
 end

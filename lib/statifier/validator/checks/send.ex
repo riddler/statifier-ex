@@ -165,40 +165,35 @@ defmodule Statifier.Validator.Checks.Send do
       param_and_content(send, location)
   end
 
-  defp event_and_eventexpr(%DSend{event: event, eventexpr: eventexpr}, location)
-       when not is_nil(event) and not is_nil(eventexpr) do
-    [Error.send_event_and_eventexpr(location)]
-  end
+  defp event_and_eventexpr(%DSend{event: nil}, _location), do: []
+  defp event_and_eventexpr(%DSend{eventexpr: nil}, _location), do: []
 
-  defp event_and_eventexpr(%DSend{}, _location), do: []
+  defp event_and_eventexpr(%DSend{}, location),
+    do: [Error.send_event_and_eventexpr(location)]
 
-  defp target_and_targetexpr(%DSend{target: target, targetexpr: targetexpr}, location)
-       when not is_nil(target) and not is_nil(targetexpr) do
-    [Error.send_target_and_targetexpr(location)]
-  end
+  defp target_and_targetexpr(%DSend{target: nil}, _location), do: []
+  defp target_and_targetexpr(%DSend{targetexpr: nil}, _location), do: []
 
-  defp target_and_targetexpr(%DSend{}, _location), do: []
+  defp target_and_targetexpr(%DSend{}, location),
+    do: [Error.send_target_and_targetexpr(location)]
 
-  defp type_and_typeexpr(%DSend{type: type, typeexpr: typeexpr}, location)
-       when not is_nil(type) and not is_nil(typeexpr) do
-    [Error.send_type_and_typeexpr(location)]
-  end
+  defp type_and_typeexpr(%DSend{type: nil}, _location), do: []
+  defp type_and_typeexpr(%DSend{typeexpr: nil}, _location), do: []
 
-  defp type_and_typeexpr(%DSend{}, _location), do: []
+  defp type_and_typeexpr(%DSend{}, location),
+    do: [Error.send_type_and_typeexpr(location)]
 
-  defp id_and_idlocation(%DSend{id: id, idlocation: idlocation}, location)
-       when not is_nil(id) and not is_nil(idlocation) do
-    [Error.send_id_and_idlocation(location)]
-  end
+  defp id_and_idlocation(%DSend{id: nil}, _location), do: []
+  defp id_and_idlocation(%DSend{idlocation: nil}, _location), do: []
 
-  defp id_and_idlocation(%DSend{}, _location), do: []
+  defp id_and_idlocation(%DSend{}, location),
+    do: [Error.send_id_and_idlocation(location)]
 
-  defp delay_and_delayexpr(%DSend{delay: delay, delayexpr: delayexpr}, location)
-       when not is_nil(delay) and not is_nil(delayexpr) do
-    [Error.send_delay_and_delayexpr(location)]
-  end
+  defp delay_and_delayexpr(%DSend{delay: nil}, _location), do: []
+  defp delay_and_delayexpr(%DSend{delayexpr: nil}, _location), do: []
 
-  defp delay_and_delayexpr(%DSend{}, _location), do: []
+  defp delay_and_delayexpr(%DSend{}, location),
+    do: [Error.send_delay_and_delayexpr(location)]
 
   # Detectable only when `target` is a **literal** attribute - a `<send
   # delayexpr="..." targetexpr="who">` cannot be checked until execute time,
