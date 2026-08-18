@@ -13,6 +13,25 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-18 - st-1tqt
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: rewrites the trailing sentence of the `Regression ratchet`
+  custom-stage comment, which described the conformance lists
+  (`scion_tests`, `w3c_tests`) as "still empty"
+
+Reason: the corpus flip populated both lists - 119 SCION and 148 W3C entries
+today - and `feature_registry/0` carries zero `:unsupported` values, so the
+comment's future tense ("once `mix test.baseline` starts growing them ...
+becomes the point") described a state the project left several beads ago. The
+edit is inside a comment: no stage is added, removed, reordered or
+reconfigured, no threshold moves, and `Code.eval_file/1` hashes to 35104355 on
+both sides of the diff - the same value st-0y0's entry below records, since
+neither change touches configuration. Recorded rather than exempted, per
+st-4hk's precedent for the same shape: the guard's value comes from having no
+path around it.
+
 ## 2026-08-18 - st-0y0
 
 Approved-by: JohnnyT (in session)
