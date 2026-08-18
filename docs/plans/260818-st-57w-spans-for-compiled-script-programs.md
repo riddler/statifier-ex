@@ -521,17 +521,46 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**Verified 2026-08-18** (manual pass, st-57w). Evidence per item:
+
+- *Appendix D / raise path untouched*: the branch changes exactly two `lib/`
+  files, `compiler/expressions.ex` and `evaluator/error.ex`. Nothing under
+  `lib/statifier/interpreter/` is touched, so `raise_execution_error/4` and
+  the `error.execution` path are unchanged by construction, and neither
+  edited function is an Appendix D procedure.
+- *Docs read as a resolved stopgap*: both ADR-0014 quotes check verbatim
+  against `docs/adr/0014-expression-spans-in-cond-diagnostics.md:49-52`, and
+  the prose names predicator `~> 9.0` / `compile_program_with_spans/1` as
+  what closed it. The `evaluator/error.ex` comment correction also checks:
+  `ParseError` is `defstruct [:message, :position, span: nil]` (it *does*
+  have `:span`), `LocationError` is `defstruct [:type, :message, :details]`
+  (it does not), so `Map.get/2` is justified by the latter.
+- *No `<script>` regressions*: `mix test script_test.exs content_test.exs
+  evaluator_test.exs` -> 76 tests, 0 failures.
+- *Span underlines the subexpression*: hand-run end to end through
+  `Statifier.compile/2` + `Statifier.initialize/1` on a two-statement script
+  `"x = 1;\ny = zzz + 1;"`. The queued `error.execution` carries
+  `%Evaluator.Error{span: {{2, 5}, {2, 8}}}` wrapping
+  `%Predicator.Errors.UndefinedVariableError{}` - columns 5-8 of line 2 is
+  `zzz` exactly, not the statement extent `{{2, 1}, {2, 12}}` and not the
+  program. The datamodel confirms the halt alongside it: `x => 1` kept,
+  `y => 0` unwritten.
+- *System-variable failures undisturbed*: `evaluator_test.exs` carries a
+  single hunk on this branch, the `program/1` fixture at :57. Lines 302-360
+  are byte-identical, and now exercise the property through a
+  spans-compiled program rather than merely being left alone.
+
 ### Phase 1
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - vacuously here, since neither `compile_program/3` nor any
       interpreter function it feeds changes shape, but confirm no Appendix D
       procedure was touched
-- [ ] The rewritten moduledoc and `@doc` read as a record of a *resolved*
+- [x] The rewritten moduledoc and `@doc` read as a record of a *resolved*
       stopgap, name what closed it (predicator `~> 9.0` /
       `compile_program_with_spans/1`), and quote ADR-0014 item 1 accurately
       against `docs/adr/0014-expression-spans-in-cond-diagnostics.md`
-- [ ] No regressions in `<script>` execution: `mix test
+- [x] No regressions in `<script>` execution: `mix test
       test/statifier/machine/content/script_test.exs
       test/statifier/interpreter/content_test.exs` green
 
@@ -546,15 +575,15 @@ deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line - no Appendix D procedure is edited in this phase; confirm the
       `error.execution` raise path in
       `lib/statifier/interpreter/content.ex` is unchanged
-- [ ] Read the raised event by hand (`mix run` or an iex session) on a
+- [x] Read the raised event by hand (`mix run` or an iex session) on a
       two-statement failing script and confirm the span underlines the failing
       subexpression rather than the whole program - the ADR-0014 Consequences
       sentence, checked against a real payload
-- [ ] `{:system_variable, root}` failures still carry no span and are still
+- [x] `{:system_variable, root}` failures still carry no span and are still
       not wrapped in `Evaluator.Error` - ADR-0014's 2026-08-18 amendment
       requires it, and `test/statifier/evaluator_test.exs:302-360` already
       covers the behavior; confirm those tests were not disturbed
