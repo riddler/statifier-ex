@@ -51,6 +51,7 @@
 | [0047](0047-send-static-target-type-invalidity-rejects-in-the-core.md) | Static send target/type invalidity rejects in the core; reachability stays session-side, test496 deferred to its own record | accepted (amends 0039 in part) |
 | [0048](0048-send-reachability-judged-against-a-route-snapshot.md) | Send reachability is judged in the core against a caller-declared route snapshot; core-detected unreachability aborts the block (discharges 0047 decision 6's deferral) | accepted (amends 0039 in part) |
 | [0049](0049-late-subscriber-catch-up-via-recording.md) | Late subscribers catch up by replaying the recording; no header effect joins the stream | accepted |
+| [0050](0050-invoked-children-inherit-observation-by-opt-in.md) | Invoked children inherit the parent's observers by opt-in; the invocation table gets a public accessor | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
