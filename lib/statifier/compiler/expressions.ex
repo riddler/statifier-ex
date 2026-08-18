@@ -7,11 +7,14 @@ defmodule Statifier.Compiler.Expressions do
   content/donedata) so neither lands a raw-string field and changes its type
   afterwards.
 
-  ADR-0014 item 1 commits to spans, not point positions: `compile/3` always
-  calls `Predicator.compile_with_spans/1`, never `compile_with_positions/1`.
-  Item 2 already settled the compiled shape - `%Predicator.Compiled{}`
-  threads its own `positions` table alongside `instructions`, so there is no
-  separate table for this module to carry or drop.
+  ADR-0014 item 1 commits to spans, not point positions: every compile entry
+  point in this module calls a `_with_spans/1` variant, never a
+  `_with_positions/1` one - `compile/3` calls `Predicator.compile_with_spans/1`,
+  and `compile_program/3` calls `Predicator.compile_program_with_spans/1`. The
+  program path's point-position stopgap is closed. Item 2 already
+  settled the compiled shape - `%Predicator.Compiled{}` threads its own
+  `positions` table alongside `instructions`, so there is no separate table for
+  this module to carry or drop.
   """
 
   alias Predicator.Errors.ParseError
@@ -168,23 +171,37 @@ defmodule Statifier.Compiler.Expressions do
   them - the owning node for the error case, and the `Location` a failure
   is reported against.
 
-  On success, `Predicator.compile_program_with_positions/1`'s
+  On success, `Predicator.compile_program_with_spans/1`'s
   `%Predicator.Compiled{}` is stored whole, exactly as `compile/3` stores
-  `compile_with_spans/1`'s result.
+  `compile_with_spans/1`'s result. `compiled.positions` maps each
+  instruction's 0-based index to the source span of the AST node that
+  emitted it; the instruction that terminates a statement - `store` for an
+  assignment, `pop` for a bare expression statement - carries that
+  statement's own source extent (upstream's own words,
+  `deps/predicator/lib/predicator.ex:856-895`'s doc for
+  `compile_program_with_spans/1`).
 
   On failure, the error is the same `%Predicator.Errors.ParseError{}` shape
   `compile/3` returns, handed straight through with no re-parse. A program
   parse failure still carries a `:span`: it comes from the token stream that
-  `compile_program_with_positions/1` shares with every other compile entry
+  `compile_program_with_spans/1` shares with every other compile entry
   point (`deps/predicator/lib/predicator.ex:902-915`'s `build_compiled_result/1`
-  private clause), not from the `spans:` option - so a span is present here
-  even though this function compiles with positions rather than spans.
+  private clause), not from the `spans:` option - so a span is present in
+  every compile mode, because it comes from the token stream.
+
+  `compile_program/3` used to compile with a point-position variant instead, a
+  stopgap ADR-0014 item 1 sanctioned for exactly this case: "If cond wiring
+  must begin before 4.0 ships, it threads the identical seam with
+  `compile_with_positions/1` / `:positions` as a stopgap, storing the table in
+  the same field" - "the seam is the commitment, the width follows the pin."
+  Predicator `~> 9.0` closed that stopgap by shipping
+  `compile_program_with_spans/1`, and this function widened onto it.
   """
   @spec compile_program(source :: String.t(), owner :: owner_ref(), location :: Location.t()) ::
           {:ok, Machine.program()} | {:error, Error.t()}
   def compile_program(source, owner, %Location{} = location)
       when is_binary(source) and is_tuple(owner) do
-    case Predicator.compile_program_with_positions(source) do
+    case Predicator.compile_program_with_spans(source) do
       {:ok, %Predicator.Compiled{} = compiled} ->
         {:ok, {:program, compiled, source}}
 

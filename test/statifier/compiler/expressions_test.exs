@@ -82,6 +82,25 @@ defmodule Statifier.Compiler.ExpressionsTest do
     refute compiled.instructions == []
   end
 
+  # sabotage: swap compile_program_with_spans/1 back to
+  # compile_program_with_positions/1 in compile_program/3 -> every table entry
+  # becomes a point {line, column} instead of a {start, stop} span pair, and
+  # this test goes red
+  test "compile_program/3 stores a span table, not a point-position table" do
+    assert {:ok, {:program, %Predicator.Compiled{} = compiled, _source}} =
+             Expressions.compile_program("x = 1;\ny = x + 1;", {:content, 0}, loc(0))
+
+    assert map_size(compiled.positions) > 0
+
+    Enum.each(compiled.positions, fn {index, span} ->
+      assert {{start_line, start_column}, {end_line, end_column}} = span,
+             "instruction #{index} carries #{inspect(span)}, not a span"
+
+      assert is_integer(start_line) and is_integer(start_column)
+      assert is_integer(end_line) and is_integer(end_column)
+    end)
+  end
+
   # sabotage: in compile_program/3's failure arm, replace parse_error with
   # ParseError.new("x", 1, 1) -> the reported position stops matching
   # predicator's actual failure site, and this test goes red on a source

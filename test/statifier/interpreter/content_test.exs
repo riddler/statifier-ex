@@ -468,7 +468,7 @@ defmodule Statifier.Interpreter.ContentTest do
 
   describe "<script>, through the real block runner" do
     defp script_node(c_index, source) do
-      {:ok, compiled} = Predicator.compile_program_with_positions(source)
+      {:ok, compiled} = Predicator.compile_program_with_spans(source)
 
       %Script{
         c_index: c_index,

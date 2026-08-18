@@ -31,7 +31,7 @@ defmodule Statifier.Machine.Content.ScriptTest do
   @owner {:onentry, 0, 0}
 
   defp program(source) do
-    {:ok, compiled} = Predicator.compile_program_with_positions(source)
+    {:ok, compiled} = Predicator.compile_program_with_spans(source)
     {:program, compiled, source}
   end
 
