@@ -74,10 +74,9 @@
     # (ADR-0011), so trimming it to avoid overlap would need its own ledger
     # entry and would weaken the ratchet's coverage to make the gate faster -
     # backwards for what this stage exists to protect. The conformance lists
-    # (`scion_tests`, `w3c_tests`) are still empty; once `mix test.baseline`
-    # starts growing them, this stage's marginal cost over the Tests stage
-    # shrinks toward zero and its value - a named failure instead of a buried
-    # count - becomes the point.
+    # (`scion_tests`, `w3c_tests`) are populated now, so this stage's marginal
+    # cost over the Tests stage has already shrunk toward zero and its value -
+    # a named failure instead of a buried count - is the point.
     [
       key: :regression,
       name: "Regression ratchet",
