@@ -18,9 +18,15 @@ defmodule Statifier.Effect.Trace.InvokePass do
   invocation. `invoke_ids` are the `Statifier.Effect.Invoke.invoke_id`
   values of every invocation this pass actually started, in the order the
   pass emitted their effects (entry order across states, document order
-  within one state) - an invocation whose argument evaluation raised
-  `error.execution` (ADR-0031) contributes no entry here, the same way it
-  contributes no `Effect.Invoke`.
+  within one state) - i.e. every invocation now live in
+  `Statifier.MachineState.active_invocations`. Two cases contribute no
+  entry here: an invocation whose argument evaluation raised
+  `error.execution` (ADR-0031), which contributes no `Effect.Invoke` either,
+  and an invocation whose resolved `type` is unsupported (6.4.1), which
+  still contributes its `Effect.Invoke` - carrying the authored type,
+  unchanged - but was never recorded live because no child was ever started
+  for `Statifier.Session.Effects.plan_invoke/2`'s
+  `error.execution` to describe.
 
   Emitted every time the pass runs, even when both lists are empty - the
   same "includes the empty set" reasoning `Trace.TransitionsSelected` and

@@ -34,12 +34,12 @@ defmodule Statifier.Interpreter.FinalizeTest do
           <data id="b_ran" expr="false"/>
       </datamodel>
       <state id="s0">
-          <invoke id="inv-a" type="t.a">
+          <invoke id="inv-a" type="scxml">
               <finalize>
                   <assign location="a_ran" expr="true"/>
               </finalize>
           </invoke>
-          <invoke id="inv-b" type="t.b">
+          <invoke id="inv-b" type="scxml">
               <finalize>
                   <assign location="b_ran" expr="true"/>
               </finalize>
@@ -120,7 +120,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
           <data id="a_ran" expr="false"/>
       </datamodel>
       <state id="s0">
-          <invoke id="inv-a" type="t.a" autoforward="true">
+          <invoke id="inv-a" type="scxml" autoforward="true">
               <finalize>
                   <assign location="a_ran" expr="true"/>
               </finalize>
@@ -212,10 +212,10 @@ defmodule Statifier.Interpreter.FinalizeTest do
           <data id="var_absent"/>
       </datamodel>
       <state id="s0">
-          <invoke id="inv-empty" type="t" namelist="var_empty">
+          <invoke id="inv-empty" type="scxml" namelist="var_empty">
               <finalize/>
           </invoke>
-          <invoke id="inv-absent" type="t" namelist="var_absent"/>
+          <invoke id="inv-absent" type="scxml" namelist="var_absent"/>
       </state>
   </scxml>
   """
@@ -268,7 +268,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
           <data id="param_target"/>
       </datamodel>
       <state id="s0">
-          <invoke id="inv-param" type="t">
+          <invoke id="inv-param" type="scxml">
               <param name="p" location="param_target"/>
               <finalize/>
           </invoke>
@@ -302,7 +302,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
           <data id="flag" expr="false"/>
       </datamodel>
       <state id="s0">
-          <invoke id="inv-a" type="t">
+          <invoke id="inv-a" type="scxml">
               <finalize>
                   <assign location="flag" expr="true"/>
               </finalize>
@@ -365,7 +365,7 @@ defmodule Statifier.Interpreter.FinalizeTest do
     @failing_param_location_document """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
         <state id="s0">
-            <invoke id="inv-fail" type="t">
+            <invoke id="inv-fail" type="scxml">
                 <param name="p" location="_sessionid"/>
                 <finalize/>
             </invoke>

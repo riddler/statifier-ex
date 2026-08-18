@@ -31,8 +31,8 @@ defmodule Statifier.Interpreter.CancelInvokeTest do
   @two_invocations_document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
       <state id="s0">
-          <invoke id="inv-a" type="t.a"/>
-          <invoke id="inv-b" type="t.b"/>
+          <invoke id="inv-a" type="scxml"/>
+          <invoke id="inv-b" type="scxml"/>
           <onexit>
               <log label="s0-exit"/>
           </onexit>
@@ -74,7 +74,7 @@ defmodule Statifier.Interpreter.CancelInvokeTest do
   @live_invocation_document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
       <state id="s0">
-          <invoke id="inv-a" type="t.a"/>
+          <invoke id="inv-a" type="scxml"/>
       </state>
   </scxml>
   """
@@ -159,12 +159,12 @@ defmodule Statifier.Interpreter.CancelInvokeTest do
   end
 
   #  0 scxml (root)
-  #  1   s0      (invoke type="t"; -> s1 on "leave")
+  #  1   s0      (invoke type="scxml"; -> s1 on "leave")
   #  2   s1      (-> s0 on "back")
   @reentry_document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
       <state id="s0">
-          <invoke type="t"/>
+          <invoke type="scxml"/>
           <transition event="leave" target="s1"/>
       </state>
       <state id="s1">
@@ -191,5 +191,40 @@ defmodule Statifier.Interpreter.CancelInvokeTest do
     assert [second_invoke] = invoke_effects(back_effects)
 
     refute second_invoke.invoke_id == first_invoke.invoke_id
+  end
+
+  #  0 scxml (root)
+  #  1   s0      (invoke id="bad" type="http://example.com/not-scxml"; invoke id="ok" type="scxml"; -> s1 on "go")
+  #  2   s1
+  @unsupported_type_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <invoke id="bad" type="http://example.com/not-scxml"/>
+          <invoke id="ok" type="scxml"/>
+          <transition event="go" target="s1"/>
+      </state>
+      <state id="s1"/>
+  </scxml>
+  """
+
+  # sabotage: `maybe_record_active_invocation/5`'s
+  # `Target.supported_invoke_type?(type)` guard is replaced with `true`
+  # unconditionally, so the unsupported-type invocation is recorded live at
+  # entry -> a second `:cancel_invoke` effect (for "bad") appears on exit,
+  # reddening the length-one assertion below. Confirmed red and reverted.
+  test "an invocation with an unsupported type produces no cancel on exit, only its supported sibling does" do
+    m = compile!(@unsupported_type_document)
+    {ms, init_effects} = Interpreter.initialize(m)
+
+    assert [bad_invoke, ok_invoke] = invoke_effects(init_effects)
+    assert bad_invoke.invoke_id == "bad"
+    assert ok_invoke.invoke_id == "ok"
+
+    assert {:ok, result, effects} = Interpreter.handle_event(ms, Event.external("go"))
+
+    assert [cancel] = cancel_invoke_effects(effects)
+    assert cancel.invoke_id == "ok"
+
+    assert result.active_invocations == %{}
   end
 end
