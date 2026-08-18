@@ -1,0 +1,13 @@
+diff --git a/.claude/wurk.json b/.claude/wurk.json
+--- a/.claude/wurk.json
++++ b/.claude/wurk.json
+@@ -44,7 +44,8 @@
+     "not_applicable_skips": [
+       "^:gettext not installed$",
+       "^no \\.po files found$",
+       "^no \\.po files outside the source locale$",
+-      "^disabled in \\.quality\\.exs$"
++      "^disabled in \\.quality\\.exs$",
++      "^coverage tooling unavailable$"
+     ]
+   },

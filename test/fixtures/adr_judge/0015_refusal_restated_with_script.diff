@@ -1,0 +1,15 @@
+diff --git a/.claude/wurk/commit.md b/.claude/wurk/commit.md
+--- a/.claude/wurk/commit.md
++++ b/.claude/wurk/commit.md
+@@ -19,5 +19,6 @@
+-- **In auto mode**, sabotaging the test yourself and continuing is fine; what
+-  is never fine is committing a test with no note. Refuse and report which
+-  tests are unverified rather than inventing a note for a mutation that was
+-  never run - a fabricated note is the one failure mode this check cannot
+-  catch afterward.
++- **In auto mode**, sabotaging the test yourself and continuing is fine.
++  `data.sabotage.missing` lists the tests with no note - that list is the
++  mechanics. What is never fine is committing a test with no note: refuse and
++  report which tests are unverified rather than inventing a note for a
++  mutation that was never run, whatever the list says - a fabricated note is
++  the one failure mode this check cannot catch afterward.

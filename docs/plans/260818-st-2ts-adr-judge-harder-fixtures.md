@@ -818,14 +818,14 @@ notes say ADR-0017 in prose, since that is the text the entry ships.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The shape test passes with the four new rows, including both verdicts
+- [x] Full quality gate passes: `mix quality`
+- [x] The shape test passes with the four new rows, including both verdicts
       present for `(adr-0015-swallowed-judgment, :subtle)`, non-empty chunks in
       the `.claude/wurk` scope for all four (including the two
       `.claude/wurk.json` fixtures, whose path matches the scope prefix), and
       empty chunks in the `lib/statifier` scope
-- [ ] `mix test` still reports zero `adr_judge_corpus` tests executed
-- [ ] Use `mix quality --profile loop` between edits
+- [x] `mix test` still reports zero `adr_judge_corpus` tests executed
+- [x] Use `mix quality --profile loop` between edits
 
 #### Manual Verification:
 - [ ] The two prose fixtures differ only in whether the refusal survives as
@@ -1105,6 +1105,26 @@ not the corpus. Do not run the full corpus in this phase.
 full `mix quality` as the phase gate. This pair is the most likely to need a
 wording pass; iterate with `--only fixture:<name>` against the Phase-3 share of
 the authoring budget, not the corpus.
+
+---
+
+### Phase 4
+
+- [ ] The two prose fixtures differ only in whether the refusal survives as
+      prose, so the pair isolates ADR-0017 point 1's tell and nothing else
+- [ ] The two manifest fixtures differ only in whether the changed key encodes a
+      policy call, so the pair isolates point 6's constant-versus-decision line
+- [ ] Neither fixture body nor manifest note contains a literal bead id, which
+      `AdrGuard`'s ADR-0018 scan would flag on lines added under `test/`
+- [ ] The fixture diffs against `.claude/wurk.json` and `.claude/wurk/commit.md`
+      are plausible against those files as they stand, and the real files are
+      unchanged by this phase
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full `mix quality` as the phase gate. Take particular care that only the fixture
+*files* change - a fixture is a text file describing a hypothetical diff, and
+this phase must not edit the real `.claude/wurk.json` or
+`.claude/wurk/commit.md`.
 
 ---
 ## Open Questions
