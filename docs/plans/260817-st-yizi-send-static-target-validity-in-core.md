@@ -587,14 +587,14 @@ the raised `error.execution` carries the failing send's `sendid`.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` is green.
-- [ ] `mix gate.verify` confirms the run was full and unscoped.
-- [ ] `mix test.regression` is green *with test159 now in the registry*.
-- [ ] `grep test159 test/passing_tests.json` finds the entry, and
+- [x] Full `mix quality` is green.
+- [x] `mix gate.verify` confirms the run was full and unscoped.
+- [x] `mix test.regression` is green *with test159 now in the registry*.
+- [x] `grep test159 test/passing_tests.json` finds the entry, and
       `grep test496 test/passing_tests.json` finds nothing.
-- [ ] `mix gate.check` passes with no ledger entry - proof the
+- [x] `mix gate.check` passes with no ledger entry - proof the
       `test/passing_tests.json` change was additive.
-- [ ] `changelog.d/st-yizi.md` exists.
+- [x] `changelog.d/st-yizi.md` exists.
 
 #### Manual Verification:
 
