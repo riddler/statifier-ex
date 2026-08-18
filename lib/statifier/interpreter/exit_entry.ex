@@ -305,7 +305,11 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # One invocation's own `cancelInvoke(inv)`: emit and forget it when it is
   # still live (present in `active_invocations`), or leave `ms`/`effects`
-  # untouched when it never started. `effects` accumulates prepended
+  # untouched when it never started - either because its argument evaluation
+  # raised `error.execution` (ADR-0031) before an `Effect.Invoke` was ever
+  # built, or because its resolved `type` was unsupported (6.4.1), which
+  # does build and emit an `Effect.Invoke` but never records the invocation
+  # live. `effects` accumulates prepended
   # (`[effect | effects]`) rather than appended (`effects ++ [effect]`);
   # Appendix D's List datatype names only `append(l)` (`spec-cache/appendix-d.txt:21`)
   # with no complexity contract, and appending here per invoke was O(n) per

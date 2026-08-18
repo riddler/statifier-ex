@@ -184,6 +184,7 @@ defmodule Statifier.Interpreter do
   alias Statifier.Interpreter.{Content, Datamodel, ExitEntry, Selection}
   alias Statifier.Machine.{Block, Param, Transition}
   alias Statifier.Machine.Invoke, as: MInvoke
+  alias Statifier.Send.Target
 
   require Statifier.Effect, as: Effect
 
@@ -1284,7 +1285,19 @@ defmodule Statifier.Interpreter do
         {ms, context, effects ++ state_effects}
       end)
 
-    invoke_ids = for {:invoke, %Effect.Invoke{invoke_id: invoke_id}} <- effects, do: invoke_id
+    # Reads liveness (`active_invocations`), not emission: an `Effect.Invoke`
+    # is still built and emitted for an unsupported-type invocation (Phase 1
+    # Phase 1), but it was never recorded live, so it must not appear
+    # here either. Matching on the effect's own `{state_index, invoke_index}`
+    # key *and* the id value means a hypothetical stale entry under the same
+    # key cannot resurrect an id; `effects` is still walked in emission
+    # order (entry order across states, document order within a state), so
+    # order is preserved.
+    invoke_ids =
+      for {:invoke, %Effect.Invoke{} = invoke} <- effects,
+          Map.get(machine_state.active_invocations, {invoke.state_index, invoke.invoke_index}) ==
+            invoke.invoke_id,
+          do: invoke.invoke_id
 
     trace =
       Effect.trace(machine_state, Effect.Trace.InvokePass,
@@ -1330,8 +1343,11 @@ defmodule Statifier.Interpreter do
   # "." <> "inv_" <> counter`, or bare `inv_<counter>` when the state has
   # no `id` (ADR-0008 as amended 2026-08-15). `idlocation`, when set, is written through
   # `Datamodel.write_location/4` - a write failure is a step-4-shaped
-  # failure, same abort, no effect. Otherwise the invocation is recorded in
-  # `active_invocations` and one `{:invoke, %Effect.Invoke{}}` is emitted.
+  # failure, same abort, no effect. Otherwise one `{:invoke, %Effect.Invoke{}}`
+  # is always emitted, but the invocation is only recorded in
+  # `active_invocations` when the resolved `type` is one
+  # `Statifier.Send.Target.supported_invoke_type?/1` accepts
+  # Phase 1) - the effect is unconditional, the liveness record is not.
   @spec invoke_one(
           machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
@@ -1350,7 +1366,13 @@ defmodule Statifier.Interpreter do
       case maybe_write_idlocation(machine_state, context, invoke.idlocation, invoke_id) do
         {:ok, machine_state, context, write} ->
           machine_state =
-            record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
+            maybe_record_active_invocation(
+              machine_state,
+              state_index,
+              invoke_index,
+              invoke_id,
+              type
+            )
 
           effect =
             {:invoke,
@@ -1539,6 +1561,35 @@ defmodule Statifier.Interpreter do
          round: machine_state.round
        }}
     ]
+  end
+
+  # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
+  # the only `type` this platform supports; a `type`/`typeexpr` naming
+  # anything else starts no child - `Statifier.Session.Effects.plan_invoke/2`
+  # raises 3.12.2's `error.execution` for it instead. The `Effect.Invoke` is
+  # still emitted (the session needs it to raise against), but the invocation
+  # is never live, so it is not recorded: 6.4's "MUST automatically cancel
+  # the invoked component" has no invoked component to reach, and a trace
+  # consumer must not see an invocation start that never did. Same channel
+  # ADR-0031's failed-argument case already uses - absent from
+  # `active_invocations` - reached for a different reason. Calling
+  # `Statifier.Send.Target` from the core is ADR-0047 decisions 3 and 5:
+  # the classifier lives in a neutral module for this, and the supported set
+  # is static. Unlike `<send>`, this is not a rejection - nothing about the
+  # emitted effect or the raised error changes.
+  @spec maybe_record_active_invocation(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer(),
+          invoke_id :: String.t(),
+          type :: term()
+        ) :: MachineState.t()
+  defp maybe_record_active_invocation(machine_state, state_index, invoke_index, invoke_id, type) do
+    if Target.supported_invoke_type?(type) do
+      record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
+    else
+      machine_state
+    end
   end
 
   # `active_invocations[{state_index, invoke_index}] = inv.invokeid`

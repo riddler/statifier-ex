@@ -57,6 +57,30 @@ defmodule Statifier.Interpreter.InvokePassTest do
   </scxml>
   """
 
+  # Same shape as `@parallel_document`, but every `<invoke>` carries a
+  # supported `type` (6.4.1) - needed only by the `invoke_ids`/liveness
+  # assertion below, since `@parallel_document`'s arbitrary types (never
+  # meant to be spec-conformant, only distinct) are no longer recorded live
+  # as of this change.
+  #
+  #  0 scxml (root)
+  #  1   p       (parallel)
+  #  2     alpha   (invoke id="inv-alpha" type="scxml")
+  #  3     beta    (invoke type="scxml"; invoke type="scxml")
+  @parallel_supported_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+      <parallel id="p">
+          <state id="alpha">
+              <invoke id="inv-alpha" type="scxml"/>
+          </state>
+          <state id="beta">
+              <invoke type="scxml"/>
+              <invoke type="scxml"/>
+          </state>
+      </parallel>
+  </scxml>
+  """
+
   # sabotage: `run_invoke_pass/1`'s `Machine.document_order(machine,
   # machine_state.states_to_invoke)` is changed to
   # `Enum.reverse(Machine.document_order(...))` -> beta's invocations are
@@ -85,7 +109,7 @@ defmodule Statifier.Interpreter.InvokePassTest do
   # from `trace.invoke_ids` even though the pass started them, reddening the
   # equality assertion below. Confirmed red and reverted.
   test "the invoke pass emits Trace.InvokePass with the states walked and the invocations started" do
-    m = compile!(@parallel_document)
+    m = compile!(@parallel_supported_document)
     {result, effects} = Interpreter.initialize(m, trace: true)
 
     assert [trace] = invoke_pass_traces(effects)
@@ -439,5 +463,79 @@ defmodule Statifier.Interpreter.InvokePassTest do
              budget_exhausted_effects(effects)
 
     assert result.running
+  end
+
+  #  0 scxml (root)
+  #  1   s0      (invoke id="bad" type="http://example.com/not-scxml"; invoke id="ok" type="scxml")
+  @unsupported_type_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <invoke id="bad" type="http://example.com/not-scxml"/>
+          <invoke id="ok" type="scxml"/>
+      </state>
+  </scxml>
+  """
+
+  # sabotage: `maybe_record_active_invocation/5`'s
+  # `Target.supported_invoke_type?(type)` guard is replaced with `true`
+  # unconditionally, so the unsupported-type invocation is recorded live
+  # again -> "bad" reappears in `trace.invoke_ids` and gains an
+  # `active_invocations` entry, reddening both assertions below. Confirmed
+  # red and reverted.
+  test "an unsupported static invoke type is absent from invoke_ids and active_invocations, but its Effect.Invoke survives" do
+    m = compile!(@unsupported_type_document)
+    {result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [bad_invoke, ok_invoke] = invoke_effects(effects)
+    assert bad_invoke.invoke_id == "bad"
+    assert bad_invoke.type == "http://example.com/not-scxml"
+    assert ok_invoke.invoke_id == "ok"
+    assert ok_invoke.type == "scxml"
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.invoke_ids == ["ok"]
+
+    s0 = idx(m, "s0")
+    assert Map.get(result.active_invocations, {s0, bad_invoke.invoke_index}) == nil
+    assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
+  end
+
+  #  0 scxml (root)
+  #  1   s0      (invoke id="bad" typeexpr="bad_type" evaluates to an unsupported string; invoke id="ok" type="scxml")
+  @unsupported_typeexpr_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0"
+         datamodel="predicator">
+      <datamodel>
+          <data id="bad_type" expr="'http://example.com/not-scxml'"/>
+      </datamodel>
+      <state id="s0">
+          <invoke id="bad" typeexpr="bad_type"/>
+          <invoke id="ok" type="scxml"/>
+      </state>
+  </scxml>
+  """
+
+  # sabotage: same as above - `maybe_record_active_invocation/5`'s guard
+  # replaced with `true` unconditionally -> "bad" reappears in
+  # `trace.invoke_ids` and gains an `active_invocations` entry, reddening
+  # both assertions below. Confirmed red and reverted. This fixture proves
+  # the check runs against the *resolved* value (a runtime `typeexpr`), not
+  # only a static `type`.
+  test "an unsupported typeexpr-resolved invoke type is absent from invoke_ids and active_invocations, but its Effect.Invoke survives" do
+    m = compile!(@unsupported_typeexpr_document)
+    {result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [bad_invoke, ok_invoke] = invoke_effects(effects)
+    assert bad_invoke.invoke_id == "bad"
+    assert bad_invoke.type == "http://example.com/not-scxml"
+    assert ok_invoke.invoke_id == "ok"
+    assert ok_invoke.type == "scxml"
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.invoke_ids == ["ok"]
+
+    s0 = idx(m, "s0")
+    assert Map.get(result.active_invocations, {s0, bad_invoke.invoke_index}) == nil
+    assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
   end
 end
