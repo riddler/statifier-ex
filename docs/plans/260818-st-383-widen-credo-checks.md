@@ -672,14 +672,14 @@ whether any check is watching.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix credo --strict --enable-disabled-checks Refactor.AppendSingleItem`
+- [x] `mix credo --strict --enable-disabled-checks Refactor.AppendSingleItem`
       reports exactly the 17 sites classified B or C above - no more (nothing
       new introduced) and no fewer (no class-B or C site quietly rewritten).
-- [ ] Full `mix quality` passes.
-- [ ] `mix test --include scion --include scxml_w3` passes at the same counts as
+- [x] Full `mix quality` passes.
+- [x] `mix test --include scion --include scxml_w3` passes at the same counts as
       before the phase.
-- [ ] `mix test.regression` passes.
-- [ ] `mix gate.check` is green - no guarded path touched.
+- [x] `mix test.regression` passes.
+- [x] `mix gate.check` is green - no guarded path touched.
 
 #### Manual Verification:
 - [ ] The classification table above was re-read against the code before any
@@ -1240,5 +1240,32 @@ deferred and surfaced at the end.
 If a site cannot be restructured without changing behavior, leave that site
 alone, and carry the check's fate into Phase 8 as a path exclusion with a stated
 reason - never as a silencing rewrite.
+
+---
+
+### Phase 5
+
+- [ ] The classification table above was re-read against the code before any
+      edit, and any disagreement with it was resolved by reading, not by
+      defaulting to "rewrite".
+- [ ] The rewritten sites in `interpreter/content.ex`,
+      `interpreter/selection.ex` and `interpreter/exit_entry.ex` still read
+      line-for-line against the W3C Appendix D pseudocode; any deviation carries
+      an inline comment naming the mechanical reason (ADR-0002).
+      `prepend + reverse` in place of `++ [x]` is a mechanical deviation and
+      needs that comment where the pseudocode says "append". Quote the clause
+      from the local cache
+      (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`),
+      not from memory.
+- [ ] Order is preserved at all six rewrites: the conformance suites are the
+      evidence, but read `exit_entry.ex:321` and `selection.ex:514` directly,
+      because a reversed list can still pass a test that only checks membership.
+- [ ] No class-C site was touched. `selection.ex:570`, `session.ex:1442` and
+      `session/timers.ex:41` are the three where a rewrite changes behavior.
+
+**Implementation Note**: loop gate while iterating; full gate as the phase gate.
+Six sites, three files. If the implementer's own reading disagrees with a
+classification, that is a finding to report - not a licence to widen the
+rewrite.
 
 ---

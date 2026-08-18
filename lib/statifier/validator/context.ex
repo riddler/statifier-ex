@@ -101,7 +101,15 @@ defmodule Statifier.Validator.Context do
       parents = Map.put(parents, state, parent)
       transitions = transitions ++ own_transitions(state)
 
-      child_ancestor_ids = if state.id, do: ancestor_ids ++ [state.id], else: ancestor_ids
+      # `[state.id | ancestor_ids]` instead of `ancestor_ids ++ [state.id]`:
+      # this recurses once per tree level, so the append was O(depth) per
+      # level (O(depth^2) over a deep chain). The list ends up innermost-id
+      # first instead of outermost-first, but `descendant?/3` above only
+      # tests membership (`ancestor_id in Map.get(ancestors, ...)`), so the
+      # stored order carries no semantics - this is validator-local
+      # bookkeeping, not an Appendix D procedure (see the `compound?/1` note
+      # above), so no pseudocode line governs its order.
+      child_ancestor_ids = if state.id, do: [state.id | ancestor_ids], else: ancestor_ids
 
       {child_states, child_ancestors, child_parents, child_transitions} =
         walk(state.states, state, child_ancestor_ids)

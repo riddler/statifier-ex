@@ -190,27 +190,42 @@ defmodule Statifier.Interpreter.Content do
   # keeps `new_context` - the context the node had already produced,
   # `pending_errors` included - instead of discarding it back to the
   # fold's pre-call `context` (see `drain_pending/2`, below).
+  #
+  # Effects and executed indexes accumulate prepended (`[x | acc]`) instead
+  # of appended (`acc ++ [x]`/`acc ++ node_effects`), then get put back into
+  # document order once after the fold. Appendix D's List datatype names
+  # only `append(l)` (`spec-cache/appendix-d.txt:21`, "Returns the list
+  # appended with l") with no complexity contract, so this fold's per-`++`
+  # cost - O(n) per `c_index`, O(n^2) over a content block - was a mechanical
+  # accident, not something the pseudocode requires; prepend+reverse keeps
+  # the same document order at O(n).
   @spec run_nodes(context :: Context.t(), c_indexes :: [non_neg_integer()]) ::
           {Context.t(), [Effect.t()], [non_neg_integer()], {non_neg_integer(), term()} | nil}
   defp run_nodes(context, c_indexes) do
-    Enum.reduce_while(
-      c_indexes,
-      {context, [], [], nil},
-      fn c_index, {context, effects, executed, _error} ->
-        case execute_one(context, c_index) do
-          {:ok, new_context, node_effects} ->
-            new_context = drain_pending(new_context, c_index)
-            {:cont, {new_context, effects ++ node_effects, executed ++ [c_index], nil}}
+    {final_context, reversed_effect_lists, reversed_executed, error} =
+      Enum.reduce_while(
+        c_indexes,
+        {context, [], [], nil},
+        fn c_index, {context, effects, executed, _error} ->
+          case execute_one(context, c_index) do
+            {:ok, new_context, node_effects} ->
+              new_context = drain_pending(new_context, c_index)
+              {:cont, {new_context, [node_effects | effects], [c_index | executed], nil}}
 
-          {:error, new_context, reason} ->
-            new_context = drain_pending(new_context, c_index)
-            {:halt, {new_context, effects, executed ++ [c_index], {c_index, reason}}}
+            {:error, new_context, reason} ->
+              new_context = drain_pending(new_context, c_index)
+              {:halt, {new_context, effects, [c_index | executed], {c_index, reason}}}
 
-          {:error, reason} ->
-            {:halt, {context, effects, executed ++ [c_index], {c_index, reason}}}
+            {:error, reason} ->
+              {:halt, {context, effects, [c_index | executed], {c_index, reason}}}
+          end
         end
-      end
-    )
+      )
+
+    effects = reversed_effect_lists |> Enum.reverse() |> Enum.concat()
+    executed = Enum.reverse(reversed_executed)
+
+    {final_context, effects, executed, error}
   end
 
   # Drains `context.pending_errors` (spec 5.9.1's non-fatal channel - see the
