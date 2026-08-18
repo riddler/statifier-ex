@@ -273,18 +273,28 @@ defmodule Statifier.Interpreter.ExitEntry do
           state_index :: non_neg_integer()
         ) :: {MachineState.t(), [Effect.t()]}
   def cancel_invocations_for_state(%MachineState{machine: machine} = machine_state, state_index) do
-    machine
-    |> Machine.at(state_index)
-    |> Map.fetch!(:invoke)
-    |> Enum.with_index()
-    |> Enum.reduce({machine_state, []}, fn {_invoke, invoke_index}, {ms, effects} ->
-      cancel_one_invocation(ms, state_index, invoke_index, effects)
-    end)
+    {ms, reversed_effects} =
+      machine
+      |> Machine.at(state_index)
+      |> Map.fetch!(:invoke)
+      |> Enum.with_index()
+      |> Enum.reduce({machine_state, []}, fn {_invoke, invoke_index}, {ms, effects} ->
+        cancel_one_invocation(ms, state_index, invoke_index, effects)
+      end)
+
+    {ms, Enum.reverse(reversed_effects)}
   end
 
   # One invocation's own `cancelInvoke(inv)`: emit and forget it when it is
   # still live (present in `active_invocations`), or leave `ms`/`effects`
-  # untouched when it never started.
+  # untouched when it never started. `effects` accumulates prepended
+  # (`[effect | effects]`) rather than appended (`effects ++ [effect]`);
+  # Appendix D's List datatype names only `append(l)` (`spec-cache/appendix-d.txt:21`)
+  # with no complexity contract, and appending here per invoke was O(n) per
+  # invoke, O(n^2) over a state's whole `invoke` list. The caller,
+  # `cancel_invocations_for_state/2` above, reverses once after the fold so
+  # cancels still emit in the pseudocode's `for inv in s.invoke` document
+  # order.
   @spec cancel_one_invocation(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -310,7 +320,7 @@ defmodule Statifier.Interpreter.ExitEntry do
               Map.delete(machine_state.active_invocations, {state_index, invoke_index})
         }
 
-        {machine_state, effects ++ [effect]}
+        {machine_state, [effect | effects]}
 
       :error ->
         {machine_state, effects}

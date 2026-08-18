@@ -336,7 +336,10 @@ defmodule Statifier.Interpreter.Selection do
         &selected_for_atomic_state(machine_state, context, &1, event_tokens, &2)
       )
 
-    machine_state = raise_cond_errors(machine_state, cond_errors)
+    # `cond_errors` accumulated prepended through `cond_enabled/3` below;
+    # reverse once here to restore walk order before raising (see that
+    # function's comment).
+    machine_state = raise_cond_errors(machine_state, Enum.reverse(cond_errors))
     enabled = Enum.uniq_by(enabled, & &1.t_index)
 
     {machine_state, remove_conflicting_transitions(machine_state, enabled)}
@@ -368,7 +371,10 @@ defmodule Statifier.Interpreter.Selection do
         &selected_for_atomic_state(machine_state, context, &1, nil, &2)
       )
 
-    machine_state = raise_cond_errors(machine_state, cond_errors)
+    # `cond_errors` accumulated prepended through `cond_enabled/3` below;
+    # reverse once here to restore walk order before raising (see that
+    # function's comment).
+    machine_state = raise_cond_errors(machine_state, Enum.reverse(cond_errors))
     enabled = Enum.uniq_by(enabled, & &1.t_index)
 
     {machine_state, remove_conflicting_transitions(machine_state, enabled)}
@@ -499,6 +505,18 @@ defmodule Statifier.Interpreter.Selection do
   # `cond` into the accumulator instead of dropping it. Not enabling *and*
   # recording: docs/architecture.md principle 3 - the error becomes an
   # event, it is never swallowed into a bare `false`.
+  #
+  # Prepends (`[{transition, reason} | cond_errors]`) instead of appending
+  # (`cond_errors ++ [...]`). `cond_errors` is threaded, unreordered, through
+  # every fold between here and `select_transitions/2` /
+  # `select_eventless_transitions/2` (`selected_for_atomic_state/5`'s and
+  # `first_matching_transition/5`'s own `Enum.reduce_while/3` calls above),
+  # so this is the one accumulation site for the whole configuration scan;
+  # appending here was O(n) per failed `cond`. Appendix D's List datatype
+  # names only `append(l)` (`spec-cache/appendix-d.txt:21`) with no
+  # complexity contract - the two call sites reverse once, right before
+  # `raise_cond_errors/2`, to restore the "in walk order" both callers'
+  # `@doc`s promise.
   @spec cond_enabled(
           context :: Predicator.Context.t(),
           transition :: Transition.t(),
@@ -508,7 +526,7 @@ defmodule Statifier.Interpreter.Selection do
     case evaluate_cond(context, transition) do
       {:ok, true} -> {true, cond_errors}
       {:ok, false} -> {false, cond_errors}
-      {:error, reason} -> {false, cond_errors ++ [{transition, reason}]}
+      {:error, reason} -> {false, [{transition, reason} | cond_errors]}
     end
   end
 
