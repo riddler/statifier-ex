@@ -93,7 +93,8 @@ defmodule Mix.Tasks.Adr.Check do
   defp violations([_one]), do: "violation"
   defp violations(_many), do: "violations"
 
-  defp document(summary, findings, true = _json?) do
+  # third arg: JSON output?
+  defp document(summary, findings, true) do
     JSON.encode!(%{
       summary: summary,
       stats: %{finding_count: length(findings)},
@@ -101,9 +102,9 @@ defmodule Mix.Tasks.Adr.Check do
     })
   end
 
-  defp document(summary, [], false = _json?), do: summary
+  defp document(summary, [], false), do: summary
 
-  defp document(summary, findings, false = _json?) do
+  defp document(summary, findings, false) do
     body = Enum.map_join(findings, "\n\n", &human/1)
 
     "#{summary}\n\n#{body}\n\n#{@advice}"
@@ -118,12 +119,14 @@ defmodule Mix.Tasks.Adr.Check do
   # The skip reason is written rather than left to the first line of output:
   # ExQuality falls back to that line, and `mix` is free to print a build-lock
   # notice ahead of ours.
-  defp skipped(true = _json?),
+  # arg: JSON output?
+  defp skipped(true),
     do: JSON.encode!(%{summary: @skip_reason, stats: %{finding_count: 0}, findings: []})
 
-  defp skipped(false = _json?), do: @skip_reason
+  defp skipped(false), do: @skip_reason
 
-  defp failed(reason, true = _json?) do
+  # second arg: JSON output?
+  defp failed(reason, true) do
     JSON.encode!(%{
       summary: "ADR check could not read git",
       stats: %{finding_count: 1},
@@ -131,7 +134,7 @@ defmodule Mix.Tasks.Adr.Check do
     })
   end
 
-  defp failed(reason, false = _json?), do: "ADR check could not read git: #{reason}"
+  defp failed(reason, false), do: "ADR check could not read git: #{reason}"
 
   defp report(output, 0) do
     Mix.shell().info(output)
