@@ -626,20 +626,20 @@ session's own stream.
 
 #### Automated Verification:
 
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating;
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating;
       a loop-profile green does not satisfy this phase).
-- [ ] `mix test test/statifier/session/` passes, including the new
+- [x] `mix test test/statifier/session/` passes, including the new
       `invoke_observer_inheritance_test.exs`.
-- [ ] `mix test` (the default internal suite) passes with no change to any
+- [x] `mix test` (the default internal suite) passes with no change to any
       pre-existing test - the option defaulting to `false` means no existing
       expectation about a child's stream may move.
-- [ ] Every new `test "..."` has a `# sabotage:` line above it, with the
+- [x] Every new `test "..."` has a `# sabotage:` line above it, with the
       mutation actually run and confirmed red.
-- [ ] `mix adr.check` reports no finding.
-- [ ] `mix quality --profile merge` passes, so the ADR judge (ADR-0012 scope,
+- [x] `mix adr.check` reports no finding.
+- [x] `mix quality --profile merge` passes, so the ADR judge (ADR-0012 scope,
       `lib/statifier`) runs against this branch at least once before the
       request is opened.
-- [ ] `changelog.d/st-fd7n.md` names both the accessor and the option.
+- [x] `changelog.d/st-fd7n.md` names both the accessor and the option.
 
 #### Manual Verification:
 
@@ -799,6 +799,32 @@ deferred and surfaced once at the end instead of blocking here.
       `terminate/2`-adjacent cancellation has emptied the table.
 - [ ] No regressions in related features: `#_<invokeid>` routing, autoforward,
       and cancellation behave as before.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+the full gate as the phase gate. In interactive execution, pause here for the
+human to confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      vacuously here, since this phase touches no Appendix D procedure; confirm
+      from the diff that `lib/statifier/interpreter*` is untouched and that the
+      change is confined to `Statifier.Session`'s effect-performing half.
+- [ ] In IEx, a three-level document (parent invokes child invokes grandchild)
+      started `trace: true, subscribers: [self()], inherit_observers: true`
+      fills the mailbox with `{:statifier, sid, {:effect, _}}` under all three
+      session ids, and `Session.invocations/1` walks from the root to the leaf.
+- [ ] The same document started without the option produces messages under the
+      root's session id only.
+- [ ] `{:halted, _}` arrives last within each session id's own stream.
+- [ ] No regressions in related features: cancelling an invocation still stops
+      the child and the parent's subscribers stop receiving that child's
+      messages; a killed subscriber does not take a child down.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
