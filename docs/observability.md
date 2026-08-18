@@ -201,7 +201,11 @@ promotion path.
   distinguish core-derived effects (replay re-derives them) from
   `interpret/2`-injected ones (replay re-injects them). `Statifier.Replay`
   drives the pure core directly rather than a live session, and the recording
-  carries ordinal order with no clock reading (ADR-0034).
+  carries ordinal order with no clock reading (ADR-0034). Each recorded entry
+  that triggers a core drive also carries the `Statifier.Send.Routes.t()`
+  route snapshot that drive was judged against (ADR-0048 decision 3), so
+  `Statifier.Replay` re-supplies it rather than rebuilding one; this widens
+  what an entry carries, and the set of recorded input kinds does not grow.
 
 ## Non-goals (for now)
 

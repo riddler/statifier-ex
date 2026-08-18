@@ -91,6 +91,21 @@ defmodule Statifier.Replay do
   `Statifier.Session`'s own resolver never calls `deliver_internal/5` for
   that one route either.
 
+  ## Replay re-supplies the recorded snapshot rather than rebuilding one
+
+  ADR-0048 decision 2 has the caller stamp a route snapshot before every core
+  drive; decision 3 has each recorded entry carry the snapshot that drive was
+  judged against. `apply_entry/2` therefore does exactly one thing with each
+  entry's trailing `Statifier.Send.Routes.t() | nil` field before triggering
+  the drive it names: `Statifier.MachineState.put_routes/2` it onto
+  `state.machine_state`. It never recomputes a snapshot from
+  `Statifier.Registry` or from any other live fact - this module holds no
+  registry reference anywhere, which is exactly what keeps it a pure fold
+  over the recording (ADR-0034) rather than a second implementation of
+  ADR-0048's session-side construction. Re-supplying rather than rebuilding
+  is also what keeps replay cost bounded by the recording's own size, the
+  ground ADR-0048 decision 1 argues from.
+
   ## No Appendix D function is reimplemented
 
   Every state transition this module performs is a call into
@@ -195,7 +210,8 @@ defmodule Statifier.Replay do
 
   @spec apply_entry(entry :: Recording.entry(), state :: State.t()) ::
           {:ok, State.t()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}
-  defp apply_entry({:event, %Event{} = event}, state) do
+  defp apply_entry({:event, %Event{} = event, routes}, state) do
+    state = stamp(state, routes)
     {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
   end
 
@@ -212,7 +228,9 @@ defmodule Statifier.Replay do
   # an older build, or hand-built in a test, can still carry one, and
   # skipping it here is what keeps such a recording replaying to the same
   # configuration the live run reached (ADR-0034's round-trip obligation).
-  defp apply_entry({:invoked_event, invoke_id, %Event{} = event}, state) do
+  defp apply_entry({:invoked_event, invoke_id, %Event{} = event, routes}, state) do
+    state = stamp(state, routes)
+
     if MapSet.member?(state.live_invoke_ids, invoke_id) do
       {:ok,
        %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)} |> drain()}
@@ -221,11 +239,13 @@ defmodule Statifier.Replay do
     end
   end
 
-  defp apply_entry(:cancel, state) do
+  defp apply_entry({:cancel, routes}, state) do
+    state = stamp(state, routes)
     {:ok, %{state | inbox: Inbox.enqueue_cancel(state.inbox)} |> drain()}
   end
 
-  defp apply_entry({:interpret, effects}, state) when is_list(effects) do
+  defp apply_entry({:interpret, effects, routes}, state) when is_list(effects) do
+    state = stamp(state, routes)
     {:ok, state |> perform(effects) |> drain()}
   end
 
@@ -235,11 +255,14 @@ defmodule Statifier.Replay do
   # entirely successful run produces these entries too (see the moduledoc's
   # "defer to the recorded entry" section for why this is the *only* place
   # `Interpreter.deliver_internal/5` is called from this module).
-  defp apply_entry({:internal, kind, name, origin, opts}, state) do
+  defp apply_entry({:internal, kind, name, origin, opts, routes}, state) do
+    state = stamp(state, routes)
     {:ok, state |> perform_internal(kind, name, origin, opts) |> drain()}
   end
 
-  defp apply_entry({:timer, send_id, %Event{} = event}, state) do
+  defp apply_entry({:timer, send_id, %Event{} = event, routes}, state) do
+    state = stamp(state, routes)
+
     case draw_credit(state, send_id) do
       {:ok, state} ->
         {:ok, %{state | inbox: Inbox.enqueue_event(state.inbox, event)} |> drain()}
@@ -247,6 +270,14 @@ defmodule Statifier.Replay do
       :error ->
         {:error, {:unscheduled_timer_firing, send_id}}
     end
+  end
+
+  # ADR-0048 decision 2/3: stamp the recorded snapshot onto `machine_state`
+  # before the drive the entry triggers - see the moduledoc's "Replay
+  # re-supplies the recorded snapshot" section.
+  @spec stamp(state :: State.t(), routes :: Statifier.Send.Routes.t() | nil) :: State.t()
+  defp stamp(state, routes) do
+    %{state | machine_state: MachineState.put_routes(state.machine_state, routes)}
   end
 
   @spec draw_credit(state :: State.t(), send_id :: String.t() | nil) ::

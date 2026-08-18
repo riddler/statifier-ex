@@ -1186,8 +1186,8 @@ defmodule Statifier.SessionTest do
       {:ok, recording} = Session.recording(session)
 
       assert [
-               {:event, %Event{name: "go"}},
-               {:event, %Event{name: "go"}}
+               {:event, %Event{name: "go"}, nil},
+               {:event, %Event{name: "go"}, nil}
              ] = Recording.entries(recording)
     end
 
@@ -1208,7 +1208,7 @@ defmodule Statifier.SessionTest do
 
       {:ok, recording} = Session.recording(session)
 
-      assert [{:event, %Event{name: "go"}}, :cancel] = Recording.entries(recording)
+      assert [{:event, %Event{name: "go"}, nil}, {:cancel, nil}] = Recording.entries(recording)
     end
 
     # sabotage: `handle_cast({:interpret, effects}, state)`'s `record(state,
@@ -1236,7 +1236,7 @@ defmodule Statifier.SessionTest do
       _status = wait_for_status(session, fn s -> s.pending_timers == 1 end)
 
       {:ok, recording} = Session.recording(session)
-      assert [{:interpret, ^effects}] = Recording.entries(recording)
+      assert [{:interpret, ^effects, nil}] = Recording.entries(recording)
     end
 
     # sabotage: `handle_info({:statifier_delayed_send, ref, send_id, event},
@@ -1272,8 +1272,8 @@ defmodule Statifier.SessionTest do
       {:ok, recording} = Session.recording(session)
 
       assert [
-               {:interpret, ^effects},
-               {:timer, "s1", %Event{name: "go"}}
+               {:interpret, ^effects, nil},
+               {:timer, "s1", %Event{name: "go"}, nil}
              ] = Recording.entries(recording)
     end
 
