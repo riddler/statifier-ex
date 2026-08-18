@@ -194,7 +194,12 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `parse_program/2`, the `store`/`pop` instructions, and
    `Predicator.execute/1,2,3` returning the resulting context (with the
    partial context on error). Consumed here per ADR-0026; the statifier-side
-   `<script>` implementation is st-af3.17.
+   `<script>` implementation is st-af3.17. Predicator 9.0's
+   `protected_roots:` option on `Predicator.execute/3` is the 5.10 half of
+   this same seam - a write to a protected root now fails at the attempt
+   rather than needing a post-hoc diff to catch it - consumed here by
+   st-i9d, which replaces the post-hoc root diff as the primary enforcement
+   mechanism.
 5. **String prefix/substring**: landed in predicator 3.7.0 (`starts_with/2`,
    `ends_with/2`, `substring/2,3`, `index_of/2`); `conf:varPrefix` (test224) no
    longer needs an exclusion.
