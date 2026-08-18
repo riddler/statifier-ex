@@ -11,6 +11,7 @@ defmodule Statifier.Machine.Content.SendTest do
   alias Statifier.Machine
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Send.Routes
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -98,6 +99,24 @@ defmodule Statifier.Machine.Content.SendTest do
       </state>
       <state id="valid_invoke">
           <onentry><send event="e" target="#_someinvoke"/></onentry>
+      </state>
+      <state id="unreachable_session">
+          <onentry><send event="e" target="#_scxml_foo"/></onentry>
+      </state>
+      <state id="unreachable_session_idloc">
+          <onentry><send event="e" target="#_scxml_foo" idlocation="loc"/></onentry>
+      </state>
+      <state id="unreachable_delay">
+          <onentry><send event="e" target="#_scxml_foo" delay="100ms"/></onentry>
+      </state>
+      <state id="unreachable_type_over">
+          <onentry>
+              <send event="e" target="#_scxml_foo" type="http://example.com/bogus"/>
+          </onentry>
+      </state>
+      <state id="parent_target"><onentry><send event="e" target="#_parent"/></onentry></state>
+      <state id="self_target">
+          <onentry><send event="e" target="#_scxml_selfsess"/></onentry>
       </state>
   </scxml>
   """
@@ -631,7 +650,7 @@ defmodule Statifier.Machine.Content.SendTest do
   end
 
   describe "execute/2 - static target/type rejection (ADR-0047)" do
-    # sabotage: `reject_reason/2`'s `cond` is changed to unconditionally
+    # sabotage: `reject_reason/4`'s `cond` is changed to unconditionally
     # return `nil` -> the invalid target below would dispatch a `{:send,
     # _}` effect instead of rejecting, reddening this test's match.
     # Confirmed red (the pattern match failed against `{:ok, _, [...]}`)
@@ -641,13 +660,13 @@ defmodule Statifier.Machine.Content.SendTest do
       ms = machine_state(m)
       node = send_node(m, "reject_target")
 
-      assert {:error, _new_ctx, {:send_rejected, send_id, {:invalid_target, "baz"}}} =
+      assert {:error, _new_ctx, {:send_rejected, send_id, :execution, {:invalid_target, "baz"}}} =
                ExecutableContent.execute(node, context(ms))
 
       assert send_id != nil
     end
 
-    # sabotage: same mutation as above (`reject_reason/2`'s `cond` forced
+    # sabotage: same mutation as above (`reject_reason/4`'s `cond` forced
     # to `nil`) -> `execute/2` returns `{:ok, _, _}` instead of the
     # `{:error, new_ctx, _}` this test matches on, reddening it too.
     # Confirmed red and reverted.
@@ -657,13 +676,13 @@ defmodule Statifier.Machine.Content.SendTest do
       before_counter = ms.send_counter
       node = send_node(m, "reject_target")
 
-      assert {:error, new_ctx, {:send_rejected, _send_id, {:invalid_target, "baz"}}} =
+      assert {:error, new_ctx, {:send_rejected, _send_id, :execution, {:invalid_target, "baz"}}} =
                ExecutableContent.execute(node, context(ms))
 
       assert new_ctx.machine_state.send_counter == before_counter + 1
     end
 
-    # sabotage: same mutation as above (`reject_reason/2`'s `cond` forced
+    # sabotage: same mutation as above (`reject_reason/4`'s `cond` forced
     # to `nil`) -> `execute/2` returns `{:ok, _, _}` instead of the
     # `{:error, new_ctx, _}` this test matches on, reddening it too.
     # Confirmed red and reverted.
@@ -672,13 +691,13 @@ defmodule Statifier.Machine.Content.SendTest do
       ms = machine_state(m)
       node = send_node(m, "reject_target_idloc")
 
-      assert {:error, new_ctx, {:send_rejected, send_id, {:invalid_target, "baz"}}} =
+      assert {:error, new_ctx, {:send_rejected, send_id, :execution, {:invalid_target, "baz"}}} =
                ExecutableContent.execute(node, context(ms))
 
       assert new_ctx.machine_state.datamodel["loc"] == send_id
     end
 
-    # sabotage: `reject_reason/2`'s `cond` clauses are swapped (target
+    # sabotage: `reject_reason/4`'s `cond` clauses are swapped (target
     # checked before type) -> this document's simultaneous unsupported type
     # and invalid target would reject as `{:invalid_target, "baz"}` instead
     # of `{:unsupported_type, _}`, reddening this test's match (only this
@@ -691,12 +710,13 @@ defmodule Statifier.Machine.Content.SendTest do
       node = send_node(m, "reject_type_over_target")
 
       assert {:error, _new_ctx,
-              {:send_rejected, _send_id, {:unsupported_type, "http://example.com/bogus"}}} =
+              {:send_rejected, _send_id, :execution,
+               {:unsupported_type, "http://example.com/bogus"}}} =
                ExecutableContent.execute(node, context(ms))
     end
 
     # sabotage: same mutation as the first two tests above
-    # (`reject_reason/2`'s `cond` forced to `nil`) -> `execute/2` returns
+    # (`reject_reason/4`'s `cond` forced to `nil`) -> `execute/2` returns
     # `{:ok, _, [{:send_delayed, _}]}` instead of the `{:error, _, _}` this
     # test matches on, reddening it - proof the delayed path runs through
     # the same check as the immediate one. Confirmed red and reverted.
@@ -705,7 +725,7 @@ defmodule Statifier.Machine.Content.SendTest do
       ms = machine_state(m)
       node = send_node(m, "reject_delay")
 
-      assert {:error, _new_ctx, {:send_rejected, _send_id, {:invalid_target, "baz"}}} =
+      assert {:error, _new_ctx, {:send_rejected, _send_id, :execution, {:invalid_target, "baz"}}} =
                ExecutableContent.execute(node, context(ms))
     end
 
@@ -715,7 +735,7 @@ defmodule Statifier.Machine.Content.SendTest do
           {"valid_session", "#_scxml_x"},
           {"valid_invoke", "#_someinvoke"}
         ] do
-      # sabotage: `reject_reason/2`'s `not Target.supported_type?(type) ->`
+      # sabotage: `reject_reason/4`'s `not Target.supported_type?(type) ->`
       # clause changed to always fire (`true ->`) -> every one of these
       # routes rejects instead of dispatching, reddening every case of this
       # test -> red. Confirmed red and reverted.
@@ -727,6 +747,186 @@ defmodule Statifier.Machine.Content.SendTest do
         assert {:ok, _new_ctx, [{:send, %Effect.Send{target: unquote(target)}}]} =
                  ExecutableContent.execute(node, context(ms))
       end
+    end
+  end
+
+  describe "execute/2 - reachability against a route snapshot (ADR-0048)" do
+    # sabotage: `unreachable?/3`'s `defp unreachable?(target, nil, routes),
+    # do: not Routes.reachable?(routes, Target.parse(target))` clause
+    # negation is dropped (`Routes.reachable?(...)` instead of
+    # `not Routes.reachable?(...)`) -> a snapshot that omits "foo" from
+    # `sessions` would be read as reachable, so this test would dispatch a
+    # `{:send, _}` effect instead of rejecting, reddening the match below.
+    # Confirmed red and reverted.
+    test "an unreachable session route rejects as :communication with no effect" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new(sessions: ["other"]))
+      node = send_node(m, "unreachable_session")
+
+      assert {:error, _new_ctx,
+              {:send_rejected, send_id, :communication, {:unreachable_target, "#_scxml_foo"}}} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert send_id != nil
+    end
+
+    # sabotage: `unreachable?/3`'s final clause changed to
+    # `defp unreachable?(_target, nil, _routes), do: true` (ignoring the
+    # snapshot entirely) -> this send would reject even though "foo" is in
+    # the snapshot, reddening the `{:ok, _, [...]}` match below. Confirmed
+    # red and reverted.
+    test "the same target dispatches once the snapshot includes its session" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new(sessions: ["foo"]))
+      node = send_node(m, "unreachable_session")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{target: "#_scxml_foo"}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: `Routes.reachable?/2`'s `:parent` clause changed to
+    # unconditionally return `true` -> the first case here (`parent?:
+    # false`) would dispatch instead of rejecting, reddening its match.
+    # Confirmed red and reverted.
+    test ":parent is unreachable when parent?: false, reachable when true" do
+      m = machine()
+      node = send_node(m, "parent_target")
+
+      ms_no_parent = machine_state(m, routes: Routes.new(parent?: false))
+
+      assert {:error, _new_ctx,
+              {:send_rejected, _send_id, :communication, {:unreachable_target, "#_parent"}}} =
+               ExecutableContent.execute(node, context(ms_no_parent))
+
+      ms_parent = machine_state(m, routes: Routes.new(parent?: true))
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{target: "#_parent"}}]} =
+               ExecutableContent.execute(node, context(ms_parent))
+    end
+
+    # sabotage: `Routes.reachable?/2`'s `{:invoke, invoke_id}` clause
+    # changed to unconditionally return `false` -> the second case here
+    # (invoke id present in the snapshot) would reject instead of
+    # dispatching, reddening its match. Confirmed red and reverted.
+    test "{:invoke, id} is unreachable when absent from invokes, reachable when present" do
+      m = machine()
+      node = send_node(m, "valid_invoke")
+
+      ms_no_invoke = machine_state(m, routes: Routes.new())
+
+      assert {:error, _new_ctx,
+              {:send_rejected, _send_id, :communication, {:unreachable_target, "#_someinvoke"}}} =
+               ExecutableContent.execute(node, context(ms_no_invoke))
+
+      ms_invoke = machine_state(m, routes: Routes.new(invokes: ["someinvoke"]))
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{target: "#_someinvoke"}}]} =
+               ExecutableContent.execute(node, context(ms_invoke))
+    end
+
+    # ADR-0048 decision 4's mirror at the core layer: a session always
+    # includes its own id in the snapshot's session set, so
+    # `#_scxml_<own id>` is reachable with no registry involved.
+    #
+    # sabotage: `Routes.reachable?/2`'s `{:session, session_id}` clause
+    # changed to unconditionally return `false` -> the self-addressed send
+    # would reject instead of dispatching, reddening the match below.
+    # Confirmed red and reverted.
+    test "#_scxml_<own session id> is reachable when the snapshot's sessions contains it" do
+      m = machine()
+      ms = machine_state(m, session_id: "selfsess", routes: Routes.new(sessions: ["selfsess"]))
+      node = send_node(m, "self_target")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{target: "#_scxml_selfsess"}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # sabotage: `unreachable?/3`'s `defp unreachable?(_target, _delay_ms,
+    # nil), do: false` clause changed to `do: true` -> a `nil` snapshot
+    # would be read as "everything unreachable" instead of "no
+    # determination", rejecting this send (and 35 other tests in this
+    # file that rely on `nil` routes dispatching unchanged) instead of
+    # dispatching it. Confirmed red and reverted.
+    test "routes: nil emits the effect - today's behavior, unchanged" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "unreachable_session")
+
+      assert {:ok, _new_ctx, [{:send, %Effect.Send{target: "#_scxml_foo"}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # ADR-0048 decision 6's exemption: a delayed send gets no plan-time
+    # reachability check at all.
+    #
+    # sabotage: `unreachable?/3`'s delayed-send clause changed from
+    # `defp unreachable?(_target, delay_ms, _routes) when is_integer(delay_ms),
+    # do: false` to `do: not Routes.reachable?(routes, Target.parse(target))`
+    # - the same check the immediate-send clause runs - so a delayed send
+    # to an unreachable target rejects instead of scheduling, reddening
+    # the match below. Confirmed red and reverted.
+    test "a delayed send to an unreachable target still emits Effect.SendDelayed" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new(sessions: ["other"]))
+      node = send_node(m, "unreachable_delay")
+
+      assert {:ok, _new_ctx, [{:send_delayed, %Effect.SendDelayed{target: "#_scxml_foo"}}]} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # ADR-0047's arms keep priority over ADR-0048's reachability arm.
+    #
+    # sabotage: `reject_reason/4`'s `cond` clauses are reordered so the
+    # `unreachable?/3` arm is checked before `Target.supported_type?/1` ->
+    # this document's simultaneous unsupported type and unreachable target
+    # would reject as `{:communication, {:unreachable_target, _}}` instead
+    # of `{:execution, {:unsupported_type, _}}`, reddening this test's
+    # match. Confirmed red and reverted.
+    test "an unsupported type still wins over an unreachable target" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new(sessions: ["other"]))
+      node = send_node(m, "unreachable_type_over")
+
+      assert {:error, _new_ctx,
+              {:send_rejected, _send_id, :execution,
+               {:unsupported_type, "http://example.com/bogus"}}} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # An `{:invalid, _}` target still rejects as :execution, never
+    # :communication - ADR-0047's static arm keeps priority.
+    #
+    # sabotage: `reject_reason/4`'s `match?({:invalid, _reason},
+    # Target.parse(target)) ->` arm's tag changed from `:execution` to
+    # `:communication` -> this test's match on `:execution` reddens.
+    # Confirmed red and reverted.
+    test "an invalid target still rejects as :execution" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new())
+      node = send_node(m, "reject_target")
+
+      assert {:error, _new_ctx, {:send_rejected, _send_id, :execution, {:invalid_target, "baz"}}} =
+               ExecutableContent.execute(node, context(ms))
+    end
+
+    # test332's ordering, now asserted for the reachability rejection: the
+    # send id is minted and idlocation written before the :communication
+    # rejection.
+    #
+    # sabotage: `reject_reason/4`'s `unreachable?(target, delay_ms, routes)
+    # ->` cond clause is changed to `false ->` (never firing) -> this send
+    # would dispatch a `{:send, _}` effect instead of rejecting, reddening
+    # the `{:error, new_ctx, _}` match below. Confirmed red and reverted.
+    test "the send id is minted and idlocation written before the reachability rejection" do
+      m = machine()
+      ms = machine_state(m, routes: Routes.new(sessions: ["other"]))
+      node = send_node(m, "unreachable_session_idloc")
+
+      assert {:error, new_ctx,
+              {:send_rejected, send_id, :communication, {:unreachable_target, "#_scxml_foo"}}} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert new_ctx.machine_state.datamodel["loc"] == send_id
     end
   end
 end

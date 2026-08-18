@@ -82,16 +82,24 @@ defmodule Statifier.Interpreter.Content do
   triggered by a failed attempt to send an event, the Processor MUST set
   this field to the send id of the triggering `<send>` element") is
   unconditional, so the id travels as an event field rather than only
-  inside `data`. `raise_execution_error/4` gains a clause matching
-  `{:send_rejected, send_id, reason}`, destructuring it into `data: reason`
-  and `sendid: send_id`; the inner `reason` is still what a consumer reading
-  `data` sees, the same shape as any other content failure.
+  inside `data`. ADR-0048 widens it once more: the node now names the
+  *event* as well as the id, since a `<send>` can be rejected for two
+  distinct reasons that raise two distinct `error.*` names (6.2.4's
+  invalid/unsupported arm and 6.2.4's "unable to dispatch" arm). This is
+  `Statifier.Machine.Content.Send`'s rejection kind, `:execution |
+  :communication`, carried alongside the reason rather than the string
+  itself - the leaf still names no `error.*` event of its own.
+  `raise_execution_error/4` gains a clause matching `{:send_rejected,
+  send_id, kind, reason}`, mapping `kind` to the event name and
+  destructuring the rest into `data: reason` and `sendid: send_id`; the
+  inner `reason` is still what a consumer reading `data` sees, the same
+  shape as any other content failure.
 
   This clause is reachable from the fatal arm only: 5.9.1's
   `pending_errors` drain (below) is the non-fatal channel, and no node ever
-  puts a `{:send_rejected, _, _}` reason there - deliberately, since a
+  puts a `{:send_rejected, _, _, _}` reason there - deliberately, since a
   drained error does not abort the block, and 4.9's abort is the whole
-  point of the ADR-0047 rejection.
+  point of the ADR-0047/ADR-0048 rejection.
 
   ## Non-fatal errors, drained here too
 
@@ -248,16 +256,24 @@ defmodule Statifier.Interpreter.Content do
           reason :: term()
         ) :: MachineState.t()
 
-  # ADR-0047's widening of the runner's error model: a node may name the
-  # send id its failure belongs to, and 5.10.1's MUST ("in the case of
-  # error events triggered by a failed attempt to send an event, the
-  # Processor MUST set this field to the send id of the triggering
+  # ADR-0047/ADR-0048's widening of the runner's error model: a node may
+  # name the send id its failure belongs to, and 5.10.1's MUST ("in the
+  # case of error events triggered by a failed attempt to send an event,
+  # the Processor MUST set this field to the send id of the triggering
   # <send> element") is unconditional, so the id travels as an event field
-  # rather than only inside `data`. The inner reason is still what `data`
-  # carries, so a consumer reading `data` sees the same shape it would for
-  # any other content failure.
-  defp raise_execution_error(machine_state, owner, c_index, {:send_rejected, send_id, reason}) do
-    MachineState.raise_platform(machine_state, "error.execution", {:content, c_index, owner},
+  # rather than only inside `data`. `kind` (`:execution | :communication`)
+  # names which `error.*` event this rejection raises - the leaf carries
+  # the atom, never the string, so this remains the only site in the tree
+  # that names an `error.*` event for content. The inner reason is still
+  # what `data` carries, so a consumer reading `data` sees the same shape
+  # it would for any other content failure.
+  defp raise_execution_error(
+         machine_state,
+         owner,
+         c_index,
+         {:send_rejected, send_id, kind, reason}
+       ) do
+    MachineState.raise_platform(machine_state, error_name(kind), {:content, c_index, owner},
       data: reason,
       sendid: send_id
     )
@@ -268,4 +284,12 @@ defmodule Statifier.Interpreter.Content do
       data: reason
     )
   end
+
+  # ADR-0048: the two `error.*` names a `{:send_rejected, _, _, _}`
+  # rejection can carry. 6.2.4's invalid/unsupported arm and 6.2.5's
+  # unsupported-type arm still raise `error.execution`; the reachability
+  # arm (6.2.4's "unable to dispatch") raises `error.communication`.
+  @spec error_name(kind :: :execution | :communication) :: String.t()
+  defp error_name(:execution), do: "error.execution"
+  defp error_name(:communication), do: "error.communication"
 end

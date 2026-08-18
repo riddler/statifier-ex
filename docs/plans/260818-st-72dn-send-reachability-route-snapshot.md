@@ -443,14 +443,14 @@ Every one of these asserts `lib/` behavior and needs a verified
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating
-- [ ] Full `mix quality` green
-- [ ] `mix gate.verify` confirms a full, unscoped run
-- [ ] `mix test.regression` green - test159 and test332 still pass, and no
+- [x] `mix quality --profile loop` green while iterating
+- [x] Full `mix quality` green
+- [x] `mix gate.verify` confirms a full, unscoped run
+- [x] `mix test.regression` green - test159 and test332 still pass, and no
       already-ratcheted conformance test moves
-- [ ] `mix test --include scxml_w3 --include scion` shows test496 still red
+- [x] `mix test --include scxml_w3 --include scion` shows test496 still red
       (this phase does not claim it) and no *new* red file
-- [ ] `mix test test/statifier/interpreter/content_acceptance_test.exs` green
+- [x] `mix test test/statifier/interpreter/content_acceptance_test.exs` green
       with AC3 widened to `error.communication`
 
 #### Manual Verification:
@@ -936,6 +936,30 @@ before considering the plan fully landed.
       `:parent`, and `{:invoke, invokeid}` - one rule, not a test496-shaped
       special case"
 - [ ] Each sabotage note was actually verified red, not written from belief
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line;
+      specifically `executeContent`'s block semantics in
+      `Statifier.Interpreter.Content` are unchanged in structure - only the
+      name the conversion raises is now a parameter
+- [ ] The 4.9 quote in the moduledoc still describes what the code does, read
+      against the local spec cache
+      (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`),
+      not from memory
+- [ ] `Statifier.Machine.Content.Send` still names no `error.*` string
+      anywhere (grep the file), and AC3's widened sweep is what proves it
+      rather than the grep alone
+- [ ] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 full `mix quality` as the phase gate. In interactive execution, pause here for

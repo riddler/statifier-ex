@@ -1010,27 +1010,28 @@ defmodule Statifier.Interpreter.ContentTest do
     #
     # sabotage (three mutations, each confirmed red and reverted):
     #
-    # 1. `Statifier.Machine.Content.Send`'s `reject_reason/2` changed to
+    # 1. `Statifier.Machine.Content.Send`'s `reject_reason/4` changed to
     #    unconditionally return `nil` -> the <send> would dispatch instead
     #    of rejecting, so the <assign> would run (`x` becomes `1`),
     #    `error.execution` would never be raised, and every assertion below
     #    reddens.
     # 2. `Send`'s rejection arm changed from the three-element
-    #    `{:error, new_context, {:send_rejected, send_id, reason}}` to the
-    #    two-element `{:error, {:send_rejected, send_id, reason}}` -> the
-    #    fold's fatal arm discards `new_context` (and the `idlocation`
-    #    write it carries) back to the pre-call context, so `"loc"` stays
-    #    unwritten while `error_event.sendid` is still the minted id,
-    #    reddening the `result.datamodel["loc"] == error_event.sendid`
-    #    assertion specifically.
+    #    `{:error, new_context, {:send_rejected, send_id, kind, reason}}`
+    #    to the two-element `{:error, {:send_rejected, send_id, kind,
+    #    reason}}` -> the fold's fatal arm discards `new_context` (and the
+    #    `idlocation` write it carries) back to the pre-call context, so
+    #    `"loc"` stays unwritten while `error_event.sendid` is still the
+    #    minted id, reddening the `result.datamodel["loc"] ==
+    #    error_event.sendid` assertion specifically.
     # 3. `Send`'s rejection arm changed to `{:ok, new_context, []}` -> the
     #    block no longer aborts, the <assign> runs, and `x` becomes `1`,
     #    reddening `result.datamodel["x"] == 0`.
-    # 4. `Content.raise_execution_error/4`'s `{:send_rejected, _, _}` clause
-    #    deleted -> the general clause matches instead, `error_event.data`
-    #    becomes the whole `{:send_rejected, send_id, reason}` tuple instead
-    #    of `reason`, reddening `error_event.data == {:invalid_target, "baz"}`.
-    # sabotage: Content.raise_execution_error/4's {:send_rejected, _, _} clause deleted -> red (case 4 above)
+    # 4. `Content.raise_execution_error/4`'s `{:send_rejected, _, _, _}`
+    #    clause deleted -> the general clause matches instead,
+    #    `error_event.data` becomes the whole `{:send_rejected, send_id,
+    #    kind, reason}` tuple instead of `reason`, reddening
+    #    `error_event.data == {:invalid_target, "baz"}`.
+    # sabotage: Content.raise_execution_error/4's {:send_rejected, _, _, _} clause deleted -> red (case 4 above)
     test "a rejecting <send> aborts the block before the sibling <assign> runs" do
       m = compile!(@send_reject_document)
       a_idx = m |> Machine.index("a") |> elem(1)
@@ -1062,6 +1063,66 @@ defmodule Statifier.Interpreter.ContentTest do
       # the datamodel, never as a {:datamodel_change, _} effect.
       assert [{:trace, %Effect.Trace.ContentExecuted{owner: ^owner, c_indexes: [^send_c]}}] =
                effects
+    end
+  end
+
+  describe "<send>, through the real block runner - reachability rejection (ADR-0048)" do
+    alias Statifier.Send.Routes
+
+    @send_unreachable_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <send event="e" target="#_scxml_foo" id="send1"/>
+                <raise event="foo"/>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # test496's mechanism at the unit level, without a session: a
+    # core-detected unreachable target aborts the block (4.9) exactly as
+    # ADR-0047's static rejection does, but raises `error.communication`
+    # rather than `error.execution` and carries the send's own `sendid`.
+    #
+    # sabotage (two mutations, each confirmed red and reverted):
+    #
+    # 1. `Statifier.Interpreter.Content`'s `error_name/1` clause
+    #    `defp error_name(:communication), do: "error.communication"`
+    #    changed to `do: "error.execution"` -> `error_event.name` below
+    #    comes back `"error.execution"` instead of `"error.communication"`,
+    #    reddening the name assertion.
+    # 2. `Send`'s `unreachable?/3` final clause changed to
+    #    `defp unreachable?(_target, nil, _routes), do: false` (routes
+    #    never consulted) -> the send dispatches instead of rejecting, the
+    #    sibling <raise> runs, and `MachineState.internal_events(result)`
+    #    holds `["foo"]` instead of the rejection - reddens both the
+    #    `error_event.name` match (a `MatchError`, since only one event is
+    #    now on the queue) and would flip the `refute "foo" in names`
+    #    assertion had the first not already failed.
+    # sabotage: Send's unreachable?/3 hardcoded to `false` -> red (case 2 above)
+    test "an unreachable-target <send> aborts the block before the sibling <raise> runs, raising error.communication" do
+      m = compile!(@send_unreachable_document)
+      a_idx = m |> Machine.index("a") |> elem(1)
+      [block] = Machine.at(m, a_idx).onentry
+      [send_c, _raise_c] = block.content
+      owner = {:onentry, a_idx, 0}
+
+      ms = machine_state(m, routes: Routes.new())
+
+      {result, _effects} = Content.execute_block(ms, owner, block.content)
+
+      assert [error_event] = MachineState.internal_events(result)
+      assert error_event.name == "error.communication"
+      assert error_event.type == :platform
+      assert error_event.cause.origin == {:content, send_c, owner}
+      assert error_event.data == {:unreachable_target, "#_scxml_foo"}
+      assert error_event.sendid == "send1"
+
+      # 4.9: the rest of the block - the sibling <raise> - does not run,
+      # so "foo" never reaches the internal queue.
+      names = result |> MachineState.internal_events() |> Enum.map(& &1.name)
+      refute "foo" in names
     end
   end
 end

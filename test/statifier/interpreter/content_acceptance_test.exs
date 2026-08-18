@@ -144,29 +144,35 @@ defmodule Statifier.Interpreter.ContentAcceptanceTest do
   end
 
   # AC: "Errors-are-events conversion in the runner, not in leaf nodes; only
-  # the interpreter raises error.execution" - asserted structurally as well
-  # as behaviorally (the behavioral half is `content_test.exs`'s "error.execution
-  # is raised as a platform event..." test): no module under
-  # `lib/statifier/machine/content/` mentions `error.execution` or `Event`,
-  # so a future leaf that raises its own error fails here even before it
-  # reaches a behavioral test. `Event(?!Data)` (not a bare `"Event"`
-  # substring) since `Machine.Content.Send` has a legitimate dependency on
+  # the interpreter raises error.execution or error.communication" -
+  # asserted structurally as well as behaviorally (the behavioral half is
+  # `content_test.exs`'s "error.execution is raised as a platform event..."
+  # test): no module under `lib/statifier/machine/content/` mentions
+  # `error.execution`, `error.communication`, or `Event`, so a future leaf
+  # that raises its own error fails here even before it reaches a
+  # behavioral test. `Event(?!Data)` (not a bare `"Event"` substring) since
+  # `Machine.Content.Send` has a legitimate dependency on
   # `Statifier.EventData` - B.2.8.1's payload coercion, not `Statifier.Event`
   # construction or raising - and a bare substring match would misfire on
-  # that module name.
+  # that module name. ADR-0048 widens the predicate to `error.communication`
+  # too: `Statifier.Machine.Content.Send` carries the rejection *kind* as
+  # an atom, never the event name, and this is the first phase where a
+  # second `error.*` name exists to be misplaced.
   #
-  # sabotage: a line reading `# Event error.execution` is appended to
+  # sabotage: a line reading `# Event error.communication` is appended to
   # `lib/statifier/machine/content/raise.ex` -> the offenders list below
   # picks it up and the `assert offenders == []` reddens. Reverted after
   # confirming.
-  test "AC3: no module under lib/statifier/machine/content/ mentions error.execution or Event" do
+  test "AC3: no module under lib/statifier/machine/content/ mentions error.execution, error.communication, or Event" do
     files = Path.wildcard(Path.join(File.cwd!(), "lib/statifier/machine/content/*.ex"))
     assert files != []
 
     offenders =
       for file <- files,
           text = File.read!(file),
-          String.contains?(text, "error.execution") or Regex.match?(~r/Event(?!Data)/, text) do
+          String.contains?(text, "error.execution") or
+            String.contains?(text, "error.communication") or
+            Regex.match?(~r/Event(?!Data)/, text) do
         file
       end
 
