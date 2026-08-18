@@ -1,6 +1,12 @@
 diff --git a/lib/statifier/compiler.ex b/lib/statifier/compiler.ex
 --- a/lib/statifier/compiler.ex
 +++ b/lib/statifier/compiler.ex
-@@ -792 +792 @@
+@@ -789,7 +789,7 @@ defmodule Statifier.Compiler do
+   defp build_cond(%DTransition{cond: nil}, _t_index), do: {:ok, nil}
+ 
+   defp build_cond(%DTransition{cond: source} = transition, t_index) do
 -    Expressions.compile(source, {:transition, t_index}, cond_location(transition))
 +    Expressions.compile(String.trim(source), {:transition, t_index}, cond_location(transition))
+   end
+ 
+   # `attribute_locations[:cond]`'s value span when the author wrote `cond`

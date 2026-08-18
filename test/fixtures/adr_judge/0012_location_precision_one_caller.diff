@@ -1,6 +1,39 @@
 diff --git a/lib/statifier/validator/checks/data.ex b/lib/statifier/validator/checks/data.ex
 --- a/lib/statifier/validator/checks/data.ex
 +++ b/lib/statifier/validator/checks/data.ex
-@@ -103,1 +103,1 @@
+@@ -85,7 +85,7 @@ defmodule Statifier.Validator.Checks.Data do
+   defp expr_and_src_errors(%Data{src: nil}), do: []
+ 
+   defp expr_and_src_errors(%Data{id: id} = data) do
+-    [Error.data_expr_and_src(id, id_location(data))]
++    [Error.data_expr_and_src(id, attribute_location(data, :id))]
+   end
+ 
+   defp value_and_children_errors(%Data{expr: nil, src: nil}), do: []
+@@ -94,13 +94,13 @@ defmodule Statifier.Validator.Checks.Data do
+     if blank?(text) do
+       []
+     else
+-      [Error.data_value_and_children(id, id_location(data))]
++      [Error.data_value_and_children(id, attribute_location(data, :id))]
+     end
+   end
+ 
+   defp reserved_id_errors(%Data{id: id} = data) do
+     if String.starts_with?(id, "_") do
 -      [Error.data_reserved_id(id, id_location(data))]
 +      [Error.data_reserved_id(id, data.location)]
+     else
+       []
+     end
+@@ -120,8 +120,8 @@ defmodule Statifier.Validator.Checks.Data do
+ 
+   defp bad_parent?(%State{}), do: false
+ 
+-  defp id_location(%Data{attribute_locations: attribute_locations, location: location}) do
+-    Map.get(attribute_locations, :id, location)
++  defp attribute_location(%Data{attribute_locations: locations, location: location}, attribute) do
++    Map.get(locations, attribute, location)
+   end
+ 
+   defp blank?(nil), do: true

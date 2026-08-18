@@ -1,10 +1,10 @@
 diff --git a/.claude/wurk.json b/.claude/wurk.json
 --- a/.claude/wurk.json
 +++ b/.claude/wurk.json
-@@ -28,7 +28,7 @@
+@@ -29,5 +29,5 @@
    "gate": {
      "full": ["mix", "quality"],
--    "loop": ["mix", "quality", "--profile", "loop"],
-+    "loop": ["mix", "quality", "--profile", "loop", "--test-scope", "changed"],
-     "report": ["mix", "quality", "--report", "-"],
+     "loop": ["mix", "quality", "--profile", "loop"],
+-    "report": ["mix", "quality", "--report", "-"],
++    "report": ["mix", "quality", "--format", "json", "--report", "-"],
      "attest": ["mix", "gate.verify"],
