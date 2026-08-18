@@ -750,10 +750,10 @@ and before the two human phases, rather than at the very end.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Each of the nine checks reports zero findings under
+- [x] Each of the nine checks reports zero findings under
       `--enable-disabled-checks`.
-- [ ] Full `mix quality` passes.
-- [ ] `mix gate.check` is green - no guarded path touched.
+- [x] Full `mix quality` passes.
+- [x] `mix gate.check` is green - no guarded path touched.
 
 #### Manual Verification:
 - [ ] If the phase produced no commit, that is recorded as the outcome rather
@@ -1267,5 +1267,15 @@ reason - never as a silencing rewrite.
 Six sites, three files. If the implementer's own reading disagrees with a
 classification, that is a finding to report - not a licence to widen the
 rewrite.
+
+---
+
+### Phase 6
+
+- [ ] If the phase produced no commit, that is recorded as the outcome rather
+      than skipped silently.
+
+**Implementation Note**: this phase may legitimately be a no-op. In `--loop`
+execution, a no-op phase advances on the green gate with no commit.
 
 ---
