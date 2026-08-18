@@ -633,18 +633,18 @@ rewrites.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating (not a phase gate on
+- [x] `mix quality --profile loop` green while iterating (not a phase gate on
       its own, and on a docs-only diff it proves little - the two stages below
       are the ones with something to say here)
-- [ ] Full `mix quality` green, unscoped, confirmed by `mix gate.verify` -
+- [x] Full `mix quality` green, unscoped, confirmed by `mix gate.verify` -
       including the `ADR guard` stage (`mix adr.check`), which must report no
       finding for the branch
-- [ ] `mix quality --profile merge` green, which is what actually runs the ADR
+- [x] `mix quality --profile merge` green, which is what actually runs the ADR
       judge stage the bare gate skips by design (`.quality.exs:23`; see
       `CLAUDE.md`'s not-applicable-skips section) - the judge is the check
       that reads the amendment against the branch's diff
-- [ ] `changelog.d/st-9i5r.md` exists and no line of `CHANGELOG.md` changed
-- [ ] No `docs/quality-gate-changes.md` entry is required, because no guarded
+- [x] `changelog.d/st-9i5r.md` exists and no line of `CHANGELOG.md` changed
+- [x] No `docs/quality-gate-changes.md` entry is required, because no guarded
       path (`.quality.exs`, `.credo.exs`, `coveralls.json`, `.sobelow-conf`,
       `.doctor.exs`, gate-relevant `mix.exs` lines, `@tag :skip`,
       `test/passing_tests.json`) is touched by this branch - `mix gate.check`
@@ -780,5 +780,23 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The ADR-0012 amendment reads as completing/widening item 3, not as
+      reversing it; the original item 3 sentence is byte-identical to what it
+      was
+- [ ] Constraint 3's existing element-level bullet is untouched and the new
+      bullet is additive
+- [ ] The changelog fragment passes `changelog.d/README.md`'s test - someone
+      who only calls the public API could tell the difference
+
+**Implementation Note**: This phase touches no Elixir code, so per `CLAUDE.md`
+it could commit on review of the diff alone; run the full gate anyway, since
+`mix adr.check` and the merge-profile ADR judge are exactly the stages that
+have something to say about it. In looped execution, its Automated
+Verification gates advancement as usual.
 
 ---
