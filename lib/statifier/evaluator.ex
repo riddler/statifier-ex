@@ -342,32 +342,53 @@ defmodule Statifier.Evaluator do
   and a write in one, which is what W3C test302/test304 assert (ADR-0026
   decision 2, `Statifier.Machine.Content.Script`'s moduledoc).
 
-  Spec 5.10 is enforced primarily by passing `protected_roots:` (derived by
-  `protected_roots/1` below) to `Predicator.execute/3`, so a write to a
-  system root **fails at the attempt**: the run halts at that statement,
+  Spec 5.10 is enforced by two mechanisms together, and the attempt-time
+  guarantee holds for one of them and only after the fact for the other.
+  Passing `protected_roots:` (derived by `protected_roots/1` below) to
+  `Predicator.execute/3` makes a write to any root already present in
+  `before_data` **fail at the attempt**: the run halts at that statement,
   no later statement in the program runs, and a write-then-restore cannot
-  hide the attempt because no write ever lands. The list is derived rather
+  hide because no write ever lands. `Statifier.MachineState.new/2` merges
+  `Statifier.Evaluator.SystemVariables.initial/2` over the author
+  datamodel, so the four seeded system variables (`_event`, `_sessionid`,
+  `_name`, `_ioprocessors`) are always in `before_data` and this
+  attempt-time guarantee is complete for them. The list is derived rather
   than fixed, reconciling this repo's `_`-prefix rule
   (`Statifier.Interpreter.Datamodel.check_system_variable/1`) against
   predicator's membership-only API - see `protected_roots/1`'s own comment
   for the reasoning.
 
-  The post-run diff below (`partition_changed_roots/2`) is retained as the
-  residual catch-all for the one class `protected_roots/1` structurally
-  cannot name: a `_` root the program creates fresh, absent from
-  `before_data`. `store` never deletes a root, so such a root can never be
-  restored to absence and is always visible to this diff as a changed
-  root. If the diff finds a changed root beginning with `_`, this returns
-  `{:error, machine_state, {:system_variable, root}, post_context}` - the
-  same reason tuple `Statifier.Interpreter.Datamodel.check_system_variable/1`
-  produces, so `error.execution`'s `data:` reads identically whichever
-  element attempted the write - with every non-system changed root from
-  the *same* program still merged into the returned `machine_state` (spec
-  4.9's stop-and-keep model: writes made *before* the refused statement
-  still merge, now applied at the statement that failed rather than after
-  the whole program). When several changed roots are system roots, the one
-  reported is the alphabetically first - the diff makes no claim about
-  which assignment statement ran first, only about which roots differ.
+  A `_`-rooted root the program creates fresh - one absent from
+  `before_data`, of which spec 5.10's own `_x` (the platform-variable
+  root, which this repo seeds nowhere) is the reachable example - is not
+  in the derived list, so `protected_roots:` cannot refuse it: the write
+  lands inside the program, and a later statement in the same body can
+  read the value before any error is reported. This case is caught only
+  after the fact, by the post-run diff below (`partition_changed_roots/2`),
+  which is retained for exactly this residual class. `store` never deletes
+  a root, so such a root can never be restored to absence and is always
+  visible to this diff as a changed root. If the diff finds a changed root
+  beginning with `_`, this returns `{:error, machine_state,
+  {:system_variable, root}, post_context}` - the same reason tuple
+  `Statifier.Interpreter.Datamodel.check_system_variable/1` produces, so
+  `error.execution`'s `data:` reads identically whichever element attempted
+  the write and whichever of the two mechanisms caught it - with every
+  non-system changed root from the *same* program still merged into the
+  returned `machine_state` (spec 4.9's stop-and-keep model: writes made
+  *before* the refused statement merge; a write to a fresh `_` root caught
+  only by the diff never merges, no matter where in the program it landed).
+  When several changed roots are system roots, the one reported is the
+  alphabetically first - the diff makes no claim about which assignment
+  statement ran first, only about which roots differ.
+
+  Detection is therefore complete across the two mechanisms; only the
+  *timing* guarantee is partial, and the gap is narrow by construction. A
+  conformant SCXML document cannot declare a `<data>` id beginning with `_`
+  (spec 5.10), and this repo seeds every named system variable into
+  `before_data`, so the only way to reach the after-the-fact case is a
+  script inventing a fresh `_`-rooted identifier of its own - and even then
+  the write is still detected, still never merged, and still raises
+  `error.execution`.
 
   One edge case follows from keeping both mechanisms: a program that first
   creates a fresh `_foo` and then writes a pre-existing root such as

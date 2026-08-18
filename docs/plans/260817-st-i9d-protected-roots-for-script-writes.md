@@ -16,7 +16,8 @@ last_updated_by: Claude
 
 ## Overview
 
-Consume predicator 9.0's `protected_roots:` option on `Predicator.execute/3`
+Consume predicator 8.0.0's `protected_roots:` option (consumed here under
+this repo's current `~> 9.0` pin) on `Predicator.execute/3`
 so a `<script>` body's write to a spec-5.10 system variable **fails at the
 attempt** rather than being detected afterwards by diffing context roots.
 This closes the two gaps `Statifier.Evaluator.run_program/2`'s docstring
@@ -135,7 +136,7 @@ same `{:system_variable, root}` tuple; full `mix quality` green.
 - `docs/datamodel.md:196-201` (upstreaming seam 4, "Statement sequences")
   is where predicator statement support is tracked as landed; it is the
   natural home for a one-sentence note that the protected-roots half landed
-  in 9.0 and is consumed here.
+  in predicator 8.0.0 (consumed here under this repo's current `~> 9.0` pin).
 - **An existing test's expectation genuinely changes.**
   `test/statifier/evaluator_test.exs:305-315` runs `"_event = 1; x = 2;"` and
   asserts `new_ms.datamodel["x"] == 2`. Under `protected_roots:` the program
@@ -681,7 +682,8 @@ land, they land together.
 
 - Under **Decision 4** (`:223-241`), after the "Known and accepted gap"
   paragraph: state that the gap closed on 2026-08-17 via st-i9d, that
-  `protected_roots:` (predicator 9.0) refuses the write at the attempt, and
+  `protected_roots:` (predicator 8.0.0, consumed here under this repo's
+  current `~> 9.0` pin) refuses the write at the attempt, and
   that the diff is retained for program-created `_` roots. Do not delete the
   original paragraph - it is the record of what was decided then.
 - Under **resolved open question 2** (`:871-883`): note that the named
@@ -692,8 +694,9 @@ land, they land together.
 
 **File**: `docs/datamodel.md`
 **Changes**: extend upstreaming seam 4 (`:196-201`) with one sentence -
-predicator 9.0's `protected_roots:` option on `Predicator.execute/3` is the
-5.10 half of the same seam, consumed here by st-i9d, replacing the post-hoc
+predicator 8.0.0's `protected_roots:` option (consumed here under this
+repo's current `~> 9.0` pin) on `Predicator.execute/3` is the 5.10 half of
+the same seam, consumed here by st-i9d, replacing the post-hoc
 root diff as the enforcement mechanism.
 
 #### 3. Amend ADR-0014 item 4
