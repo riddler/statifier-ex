@@ -280,7 +280,9 @@ defmodule Statifier.Interpreter do
   # gives a document an `<initial>` element where it wrote none; this is
   # that step, done lazily for the root only. ADR-0002 mechanical
   # deviation: a synthesized transition is not a document element, so it
-  # has no `t_index`.
+  # has no `t_index` - and, for the same reason, its `attribute_locations`
+  # is empty: no author wrote an attribute for it, which is exactly what
+  # `Statifier.Document`'s key-presence contract says an empty map means.
   @spec initial_transition(machine :: Machine.t()) :: Transition.t()
   defp initial_transition(%Machine{} = machine) do
     case Machine.at(machine, 0).initial_transition do
@@ -292,7 +294,8 @@ defmodule Statifier.Interpreter do
           events: [],
           type: :external,
           content: [],
-          location: machine.location
+          location: machine.location,
+          attribute_locations: %{}
         }
 
       t_index ->

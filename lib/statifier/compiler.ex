@@ -774,7 +774,8 @@ defmodule Statifier.Compiler do
            type: transition.type,
            content: content,
            location: transition.location,
-           cond_location: cond_location(transition)
+           cond_location: cond_location(transition),
+           attribute_locations: transition.attribute_locations
          }}
 
       {:error, error} ->
