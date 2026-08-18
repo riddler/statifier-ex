@@ -985,7 +985,7 @@ defmodule Statifier.SessionTest do
     # never reaches the session layer, and even a sabotage of `deliver/5`
     # itself would leave this test green (the residual path is simply
     # unreached). The mutation that actually reddens it lives one layer up:
-    # `reject_reason/2`'s reachability `cond` arm in
+    # `reject_reason/4`'s reachability `cond` arm in
     # `lib/statifier/machine/content/send.ex` is changed from
     # `{:communication, {:unreachable_target, target}}` to
     # `{:execution, {:unreachable_target, target}}` -> the core raises
@@ -1020,7 +1020,7 @@ defmodule Statifier.SessionTest do
     end
 
     # Under ADR-0047 the rejection now happens in the core
-    # (`Statifier.Machine.Content.Send`'s `reject_reason/2`), before any
+    # (`Statifier.Machine.Content.Send`'s `reject_reason/4`), before any
     # `{:send_delayed, _}` effect is ever built - `Session.Effects`'s own
     # `plan_send_delayed/3` check is only the `Session.interpret/2`
     # boundary arm ADR-0047 decision 4 keeps and never actually decides

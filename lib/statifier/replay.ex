@@ -35,13 +35,15 @@ defmodule Statifier.Replay do
 
   A live session's `{:schedule, ...}` clause arms a real
   `Process.send_after/3` timer. Feeding a recording that already holds both
-  the `{:interpret, effects}` entry that scheduled a `:send_delayed` and the
-  later `{:timer, send_id, event}` entry recording its firing into a *live*
+  the `{:interpret, effects, routes}` entry that scheduled a `:send_delayed`
+  and the later `{:timer, send_id, event, routes}` entry recording its firing
+  into a *live*
   session would arm a second, real timer on top of the firing already
   waiting in the recording - delivering the event twice. This module never
   arms a timer at all: `{:schedule, send_id, _delay_ms, _event}` only
   increments a plain count under `send_id` in `pending`, and a
-  `{:timer, send_id, event}` entry draws one credit from that count before
+  `{:timer, send_id, event, routes}` entry draws one credit from that count
+  before
   enqueuing the event. Each recorded firing is therefore delivered exactly
   once, at its recorded position (ADR-0034 decision 1).
 
@@ -61,7 +63,8 @@ defmodule Statifier.Replay do
   live session's mailbox: the cancel does not unsend it, and
   `lib/statifier/session.ex`'s `handle_info/2` enqueues it unconditionally
   when it arrives. A recording can therefore legitimately hold a
-  `{:timer, send_id, event}` entry *after* the `{:cancel, ...}` effect that
+  `{:timer, send_id, event, routes}` entry *after* the `{:cancel, ...}` effect
+  that
   cancelled that same id - the cancel and the fire raced, and the fire won.
   A firing draws credit from `pending` first and `raced` second, delivered
   normally either way; only a firing with credit in neither map means the
@@ -75,7 +78,7 @@ defmodule Statifier.Replay do
   route except a self-addressed `{:session, sid}` reach
   `Statifier.Interpreter.deliver_internal/5` through
   `Statifier.Session`'s own private seam, and every one of those calls is
-  recorded as an `{:internal, kind, name, origin, opts}` entry
+  recorded as an `{:internal, kind, name, origin, opts, routes}` entry
   (ADR-0039, ADR-0029) at its own position in the session's serialized
   input order - interleaved with, not nested inside, the entry that
   triggered it. Performing the delivery again while re-deriving that
@@ -113,7 +116,7 @@ defmodule Statifier.Replay do
   duplicates a pseudocode-named function under a new name. `drain/1` is the
   one loop this module owns, and it is not part of Appendix D itself - it is
   this codebase's own port of `mainEventLoop`'s dequeue tail
-  (`lib/statifier/session.ex:350-374`'s own comment), reused here with a
+  (`lib/statifier/session.ex:750-757`'s own comment), reused here with a
   `Statifier.Session.Inbox` in place of a process mailbox, exactly as the
   live session already reuses it in place of the blocking
   `externalQueue.dequeue()`.

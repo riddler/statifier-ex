@@ -928,14 +928,14 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       here vacuously: no Appendix D procedure is touched, and the reviewer
       confirms that by inspection of the diff
-- [ ] `Routes.reachable?/2`'s clause set is read against ADR-0048 decision 1's
+- [x] `Routes.reachable?/2`'s clause set is read against ADR-0048 decision 1's
       "the check covers every route the snapshot can answer - `{:session, sid}`,
       `:parent`, and `{:invoke, invokeid}` - one rule, not a test496-shaped
       special case"
-- [ ] Each sabotage note was actually verified red, not written from belief
+- [x] Each sabotage note was actually verified red, not written from belief
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -948,18 +948,18 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line;
+- [x] The touched functions match the W3C Appendix D pseudocode line for line;
       specifically `executeContent`'s block semantics in
       `Statifier.Interpreter.Content` are unchanged in structure - only the
       name the conversion raises is now a parameter
-- [ ] The 4.9 quote in the moduledoc still describes what the code does, read
+- [x] The 4.9 quote in the moduledoc still describes what the code does, read
       against the local spec cache
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`),
       not from memory
-- [ ] `Statifier.Machine.Content.Send` still names no `error.*` string
+- [x] `Statifier.Machine.Content.Send` still names no `error.*` string
       anywhere (grep the file), and AC3's widened sweep is what proves it
       rather than the grep alone
-- [ ] Each sabotage note was actually verified red
+- [x] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -972,14 +972,14 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       `Statifier.Replay` reimplements no Appendix D function (its own moduledoc
       claims this; confirm the diff does not break the claim)
-- [ ] `docs/observability.md` constraint 6 reads correctly against ADR-0029's
+- [x] `docs/observability.md` constraint 6 reads correctly against ADR-0029's
       four-input tuple: entries got richer, the input set did not grow
-- [ ] The widened `entry()` typedoc and `Statifier.Replay`'s clauses agree
+- [x] The widened `entry()` typedoc and `Statifier.Replay`'s clauses agree
       shape for shape, with no clause silently ignoring its snapshot
-- [ ] Each sabotage note was actually verified red
+- [x] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -992,18 +992,18 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 4
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line;
+- [x] The touched functions match the W3C Appendix D pseudocode line for line;
       `Statifier.Session` is outside Appendix D by construction (ADR-0003), and
       the reviewer confirms no interpreter procedure changed in this phase
-- [ ] C.1's two paragraphs and 4.9's block rule are re-read from the local
+- [x] C.1's two paragraphs and 4.9's block rule are re-read from the local
       spec cache and the behavior matches both - the error lands on the
       *sending* session's internal queue, and the rest of the block does not run
-- [ ] Each existing test listed under "Tests that will need updating" was read
+- [x] Each existing test listed under "Tests that will need updating" was read
       and re-decided, not edited until green
-- [ ] The residual ADR-0039 path is exercised by at least one test after the
+- [x] The residual ADR-0039 path is exercised by at least one test after the
       change (a session that dies after the stamping), so decision 5's staleness
       reading has a live witness
-- [ ] Each sabotage note was actually verified red
+- [x] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -1013,3 +1013,54 @@ advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
 
 ---
+
+## Verification record (2026-08-18)
+
+Every Deferred Manual Verification item above was worked through after the
+loop finished, against the four landed phase commits. Sabotage items were
+re-run as real mutations rather than read: each mutation was applied to
+`lib/`, the covering test file was run, the failing test name was captured,
+and the file was restored. Findings, and the fixes they produced:
+
+- **Phase 1.** `Routes.reachable?/2`'s six clauses match `Target.route()`'s
+  six alternatives one for one, so the check is the general rule ADR-0048
+  decision 1 asks for. All 15 mutations reddened, each hitting exactly the
+  test its note sits above.
+- **Phase 2.** The 4.9 and 6.2.4/6.2.5 quotes match the local spec cache
+  verbatim, and `Statifier.Machine.Content.Send` names no `error.*` event.
+  The module doc's *opening* sentence was stale, though: it still said a
+  failing node's error becomes `error.execution`, which ADR-0048 made untrue.
+  Corrected. All 9 mutations reddened, including the arm-ordering and
+  delayed-send-exemption ones, so neither behavior is accidental.
+- **Phase 3.** `docs/observability.md` constraint 6 is accurate: six entry
+  kinds before and after, each widened by one field. Two defects found and
+  fixed. First, `Statifier.Replay`'s and `Statifier.Session.Recording`'s prose
+  still wrote the pre-widening tuple arities, and `Statifier.Replay`'s
+  moduledoc cited a `session.ex` line range that had already drifted (that one
+  predates this branch). Second, and more substantive: only the
+  `{:event, ...}` clause of `apply_entry/2` had its stamping pinned by a test.
+  The other five could each drop `stamp(state, routes)` with the suite still
+  green. A structural sweep test now pins all six, in the shape of
+  `content_acceptance_test.exs`'s AC3 sweep; it was verified red against every
+  one of the five, and against a seventh clause being added.
+- **Phase 4.** C.1's rule reads "on the internal event queue of the *sending*
+  session", and both halves hold: the block-runner test asserts the
+  `error.communication` platform event on the sender's own internal queue with
+  the failing send's `sendid`, and asserts the sibling `<raise>` never runs.
+  The pre-existing tests whose detection point moved were re-decided rather
+  than edited to green - their assertions are unchanged and only their
+  sabotage notes were rewritten to name a mutation that still reddens them.
+  Phase 2's `reject_reason/2` -> `reject_reason/4` widening had left every
+  prose reference to that arity stale across `lib/` and `test/`; corrected.
+
+**One item is verified in the letter but narrower in substance, deliberately.**
+The residual ADR-0039 path does have a live witness whose target dies after the
+sender's stamp (`session_runtime_test.exs`'s delayed-send pair). What that
+witness does *not* cover is a snapshot that was wrong: an immediate send whose
+stamped snapshot claims a session that has already gone. Decision 6 exempts
+delayed sends from the plan-time check outright, so a delayed send never had a
+determination to be stale. The immediate-send case appears not to be
+deterministically constructible through the public API - the stamp and the
+send occur inside one synchronous `handle_cast`, with no seam between them
+that a test can drive - so no witness was invented for it. It is recorded here
+rather than left implied by a checked box.

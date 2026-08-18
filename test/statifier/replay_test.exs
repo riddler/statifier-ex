@@ -575,6 +575,38 @@ defmodule Statifier.ReplayTest do
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "c")])
       assert Enum.any?(result.stream, &match?({:effect, {:send, _}}, &1))
     end
+
+    # ADR-0048 decision 3 obliges *every* `apply_entry/2` clause to stamp its
+    # own recorded snapshot before the drive it triggers, but only the
+    # `{:event, ...}` clause is pinned behaviorally by the pair above: the
+    # other five would each need a live invoke, a fired timer, an
+    # `interpret/2` batch or a cancel carrying a distinguishing snapshot to
+    # observe from the outside. This sweep pins the invariant structurally
+    # instead, the same shape as `content_acceptance_test.exs`'s AC3 sweep, so
+    # a clause added later cannot silently ignore its snapshot.
+    #
+    # sabotage: any single `apply_entry/2` clause has its `routes` binding
+    # renamed to `_routes` and its `state = stamp(state, routes)` line
+    # deleted -> that clause reaches the sweep with no stamp call and
+    # `assert unstamped == []` reddens. Verified separately against the
+    # `{:timer, ...}` and `{:internal, ...}` clauses, neither of which the
+    # behavioral pair above covers; reverted and confirmed green.
+    test "every apply_entry/2 clause stamps its recorded snapshot before driving" do
+      source = File.read!(Path.join(File.cwd!(), "lib/statifier/replay.ex"))
+
+      clauses = source |> String.split(~r/^  defp apply_entry\(/m) |> Enum.drop(1)
+
+      assert length(clauses) == 6
+
+      unstamped =
+        for clause <- clauses,
+            head_and_body = clause |> String.split("\n") |> Enum.take(3) |> Enum.join("\n"),
+            not String.contains?(head_and_body, "stamp(state, routes)") do
+          clause |> String.split("\n") |> List.first()
+        end
+
+      assert unstamped == []
+    end
   end
 
   # Polls `Session.status/1` until `pred` is true, or gives up after a

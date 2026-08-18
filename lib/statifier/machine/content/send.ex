@@ -153,7 +153,7 @@ defmodule Statifier.Machine.Content.Send do
       end
     end
 
-    # `reject_reason/2` decides between the two outcomes `execute/2` may
+    # `reject_reason/4` decides between the two outcomes `execute/2` may
     # return once the send id is minted and `idlocation` is written: build
     # and return the effect, or reject with the composite error form.
     # Pulled out of `execute/2` itself to keep that function's own nesting

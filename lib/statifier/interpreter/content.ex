@@ -3,8 +3,10 @@ defmodule Statifier.Interpreter.Content do
   The block runner - spec 4.9's rule for a block of executable content,
   ported once here rather than at each of `Statifier.Interpreter.ExitEntry`'s
   four call sites: a block runs its nodes in document order; if a node
-  errors, the rest of the block does not run, and the error becomes
-  `error.execution` on the internal queue - the errors-are-events conversion
+  errors, the rest of the block does not run, and the error becomes an
+  `error.*` event on the internal queue - `error.execution` for every
+  failure but one, and `error.communication` for a `<send>` the core
+  judges undeliverable (ADR-0048) - the errors-are-events conversion
   happens here and only here, never in a leaf node's own
   `Statifier.ExecutableContent.execute/2` implementation. Other blocks are
   unaffected: a block that errors leaves every other block - another

@@ -142,7 +142,7 @@ defmodule Statifier.SessionRuntimeTest do
     # `deliver/5` (and `communication_error/4`) ever run; sabotaging either
     # of those, or `registry_lookup/1`'s own rescue clause, now leaves this
     # test green, since the residual path is simply unreached. The mutation
-    # that actually reddens it lives one layer up: `reject_reason/2`'s
+    # that actually reddens it lives one layer up: `reject_reason/4`'s
     # reachability `cond` arm in `lib/statifier/machine/content/send.ex` is
     # changed from `{:communication, {:unreachable_target, target}}` to
     # `{:execution, {:unreachable_target, target}}` -> the core raises
