@@ -226,7 +226,7 @@ defmodule Statifier.Session do
   both checked ahead of the ordinary subscriber `:DOWN` clause.
 
   `start_link/2`'s `:inherit_observers` starts a child with this session's
-  `:trace` and subscriber pids at the moment it starts (ADR-0049), rather than
+  `:trace` and subscriber pids at the moment it starts (ADR-0050), rather than
   leaving observation to a post-hoc attach, because an attach cannot
   substitute here: `start_link/2` runs `Interpreter.initialize/2` to
   quiescence, and the child is started from inside the parent's own invoke
@@ -348,7 +348,7 @@ defmodule Statifier.Session do
       invocations: Invocations.new(),
       macrostep_started_at: nil,
       deferred: [],
-      # ADR-0049 decisions 2 and 4: off by default, so a session that never
+      # ADR-0050 decisions 2 and 4: off by default, so a session that never
       # opted in starts its own children exactly as before. `true` carries
       # forward into every child this session starts for an `<invoke>`, which
       # is what makes the opt-in transitive down the whole invoke tree.
@@ -385,7 +385,7 @@ defmodule Statifier.Session do
             # `perform/3` call - every callback that reads `%State{}` sees
             # an empty queue.
             deferred: [{[Statifier.Effect.t()], :cancelled | nil}],
-            # ADR-0049 decisions 2 and 4: whether a child this session starts
+            # ADR-0050 decisions 2 and 4: whether a child this session starts
             # for an `<invoke>` inherits this session's `:trace` and
             # subscriber pids, and the flag itself, so one opt-in at the root
             # traces the whole invoke tree.
@@ -458,7 +458,7 @@ defmodule Statifier.Session do
       starts for an `<invoke>` is started with this session's `:trace`
       setting, this session's subscriber pids as of the moment the child
       starts, and `inherit_observers: true` of its own, so one opt-in at the
-      root traces the whole invoke tree (ADR-0049). Default `false`, which
+      root traces the whole invoke tree (ADR-0050). Default `false`, which
       starts children exactly as before. Each inherited subscriber receives
       the child's messages under the child's own `session_id` in the
       `{:statifier, session_id, message}` envelope, so a mixed stream
@@ -608,8 +608,11 @@ defmodule Statifier.Session do
   A child started before this session opted into `:inherit_observers` (or
   one under a session that never did) has its own subscriber set, so
   attaching to it here observes it only from the moment of the
-  `subscribe/2` - see `start_link/2`'s `:inherit_observers` for the reason
-  that is not equivalent to inheriting from the start (ADR-0049).
+  `subscribe/2`. Catch-up does not close that gap for a child: children
+  are not started with `record: true`, so `subscribe/3` with
+  `catch_up: true` on one answers `{:error, :not_recorded}` - see
+  `start_link/2`'s `:inherit_observers` for why that is not equivalent to
+  inheriting from the start (ADR-0050 decisions 3 and 6).
   """
   @spec invocations(server :: server()) :: [invocation()]
   def invocations(server), do: GenServer.call(server, :invocations)
@@ -1466,7 +1469,7 @@ defmodule Statifier.Session do
     :exit, reason -> {:error, reason}
   end
 
-  # ADR-0049 decisions 2-5: off by default, so a session that never opted in
+  # ADR-0050 decisions 2-5: off by default, so a session that never opted in
   # starts its children exactly as before. When on, the child gets this
   # session's `trace` (read off `%MachineState{}`, where `new/2` fixed it) and
   # this session's subscriber pids *as of now* - a snapshot, not a live link -
