@@ -232,7 +232,11 @@ defmodule Statifier.Compiler do
       initial: resolve_root_initial(document, children, acc.id_to_index),
       history_type: nil,
       history_children: history_children_of(children, acc.states_acc),
-      location: document.location
+      location: document.location,
+      # Index 0's source node is `%Statifier.Document{}` itself, so its map
+      # is the `<scxml>` element's own written attributes - the same reason
+      # `location` above is `document.location`.
+      attribute_locations: document.attribute_locations
     }
 
     states_acc = Map.put(acc.states_acc, 0, root)
@@ -402,7 +406,8 @@ defmodule Statifier.Compiler do
       onexit: onexit,
       initial_transition: initial_transition,
       history_default: history_default,
-      location: dstate.location
+      location: dstate.location,
+      attribute_locations: dstate.attribute_locations
     }
 
     acc = %{
