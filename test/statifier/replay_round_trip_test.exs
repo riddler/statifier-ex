@@ -4,6 +4,7 @@ defmodule Statifier.ReplayRoundTripTest do
   alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
+  alias Statifier.StreamOrder
 
   # The recorder bead's acceptance criteria, executable: record a live run,
   # replay it, and assert both the effect stream and the terminal snapshot match
@@ -598,6 +599,81 @@ defmodule Statifier.ReplayRoundTripTest do
 
       refute Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
       assert List.last(stream) == {:halted, :done}
+      assert result.status == :done
+    end
+  end
+
+  # -- the between-callbacks invariant (ADR-0049 decision 1) ----------------
+
+  # ADR-0049 decision 1's invariant, checkable at any quiescent point:
+  # between GenServer callbacks, `Replay.run/1` over the session's current
+  # recording produces exactly the messages notified so far. `recording/1` is
+  # a GenServer.call, so it is serialized between callbacks and every message
+  # notified by an earlier callback is already in this process's mailbox when
+  # it replies - which is why the call comes first and the drain second.
+  # Returns the messages consumed, so a caller can accumulate across checks.
+  defp assert_invariant_here(session, session_id, seen) do
+    {:ok, recording} = Session.recording(session)
+    new = drain_stream(session_id)
+    seen = seen ++ new
+
+    assert {:ok, result} = Replay.run(recording)
+    assert result.stream == seen
+
+    seen
+  end
+
+  describe "the between-callbacks invariant" do
+    # sabotage: `Statifier.Session.handle_cast({:enqueue_event, event},
+    # state)`'s `record(state, &Recording.put_event(&1, event, ...))` step is
+    # dropped, so the second "go" drives the core without being recorded ->
+    # the recording's replayed stream is short by that event's effects and
+    # `assert_invariant_here/3`'s `result.stream == seen` still passes at the
+    # first checkpoint (the initialize burst alone, unaffected by the
+    # unrecorded event) and fails at the second checkpoint, exactly the
+    # mid-run sensitivity distinguishing this test from the end-of-run cases
+    # above. Reverted and confirmed green.
+    test "the recording round-trips at every quiescent point across a run, not only at the end" do
+      machine = compile!(two_state_doc())
+
+      {:ok, session} =
+        Session.start_link(machine, record: true, trace: true, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+
+      seen = assert_invariant_here(session, session_id, [])
+
+      Session.send_event(session, "go")
+      seen = assert_invariant_here(session, session_id, seen)
+
+      Session.send_event(session, "go")
+      seen = assert_invariant_here(session, session_id, seen)
+
+      assert seen != []
+      StreamOrder.assert_monotone(seen)
+    end
+
+    # sabotage: `Statifier.Replay`'s `to_result/1` is changed to report
+    # `status: :running` unconditionally, ignoring `state.halted` -> the
+    # replayed `result.status` stays `:running` for the halted recording, so
+    # this test's `result.status == :done` match fails. Reverted and
+    # confirmed green.
+    test "the invariant holds after halt too, the same call shape as a post-mortem catch-up" do
+      machine = compile!(final_chain_doc())
+
+      {:ok, session} =
+        Session.start_link(machine, record: true, trace: true, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+
+      Session.send_event(session, "go")
+      Session.send_event(session, "go")
+      wait_for_status(session, fn s -> s.status == :done end)
+
+      _seen = assert_invariant_here(session, session_id, [])
+
+      {:ok, recording} = Session.recording(session)
+      assert {:ok, result} = Replay.run(recording)
       assert result.status == :done
     end
   end

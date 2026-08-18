@@ -177,6 +177,12 @@ defmodule Statifier.Replay do
   `{:timer, send_id, _event}` entry has no credit in either the `pending`
   or `raced` bookkeeping - see the moduledoc for what that means and the
   one legitimate case (the cancel/fire race) it does not misfire on.
+
+  Also supports a mid-run use case: a recording captured from a session
+  still running replays to `status: :running` and a `stream` that is the
+  notified prefix so far, which is what
+  `Statifier.Session.subscribe(server, pid, catch_up: true)` hands its
+  caller for a late subscriber to catch up on (ADR-0049).
   """
   @spec run(recording :: Recording.t()) ::
           {:ok, result()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}

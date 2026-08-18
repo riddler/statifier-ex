@@ -639,23 +639,23 @@ fold are untouched.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` is used between edits while iterating (not
+- [x] `mix quality --profile loop` is used between edits while iterating (not
       as the phase gate).
-- [ ] Full `mix quality` passes, and `mix gate.verify` confirms the run was
+- [x] Full `mix quality` passes, and `mix gate.verify` confirms the run was
       unprofiled, unscoped, and not `--skip`-ed.
-- [ ] `mix test test/statifier/replay_round_trip_test.exs` passes, including
+- [x] `mix test test/statifier/replay_round_trip_test.exs` passes, including
       the new `describe "the between-callbacks invariant"` block.
-- [ ] `mix test` (the default internal suite) passes with no change to the
+- [x] `mix test` (the default internal suite) passes with no change to the
       pre-existing tests.
-- [ ] `git diff --name-only` lists exactly
+- [x] `git diff --name-only` lists exactly
       `test/statifier/replay_round_trip_test.exs`, `docs/observability.md`,
       and `lib/statifier/replay.ex`.
-- [ ] `git diff lib/statifier/replay.ex` shows changes inside the `@doc`
+- [x] `git diff lib/statifier/replay.ex` shows changes inside the `@doc`
       heredoc only - no line outside it, so the pure fold is provably
       untouched.
-- [ ] `git diff docs/observability.md` shows no line changed under the
+- [x] `git diff docs/observability.md` shows no line changed under the
       `## Non-goals (for now)` heading (ADR-0049 decision 4).
-- [ ] Every new `test` line in the diff has a `# sabotage:` comment directly
+- [x] Every new `test` line in the diff has a `# sabotage:` comment directly
       above it.
 
 #### Manual Verification:
@@ -813,6 +813,32 @@ before considering the plan fully landed.
 - [ ] No regressions in related features: `subscribe/2`'s existing test at
       `test/statifier/session_test.exs:171-183` still reads as before and
       still passes.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run full `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before
+moving to the next phase. In looped (`--loop`) execution, this phase's
+Automated Verification gates advancement automatically (via
+`/wurk:commit --auto`), and Manual Verification items are deferred and
+surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] **Appendix D judgment**: confirm from the diff that no Appendix D
+      function and no interpreter file was touched; the only `lib/` change is
+      a docstring.
+- [ ] Both sabotage mutations were applied and observed red - and, for the
+      mid-run one, observed red *at the second checkpoint specifically*,
+      which is the property distinguishing this test from the end-of-run
+      one it sits beside.
+- [ ] The `docs/observability.md` sentences read as constraint prose in that
+      document's voice, not as an ADR excerpt, and cite ADR-0049 by number.
+- [ ] Read `docs/adr/0049-late-subscriber-catch-up-via-recording.md` decision
+      6 against the final diff and confirm all three directed edits landed:
+      observability constraint 6, `Session`'s moduledoc (Phase 1), and
+      `Replay.run/1`'s doc.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run full `mix quality` as the phase gate. In interactive

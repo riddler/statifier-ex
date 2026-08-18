@@ -183,7 +183,18 @@ promotion path.
   session sends its subscribers for the run, so a consumer may treat it as
   end-of-stream (ADR-0044 decision 2) - constraint 2's cross-batch ordering
   sentence is what makes that true, since it guarantees no later-round
-  effect can still be queued behind it.
+  effect can still be queued behind it. A pid that subscribes after
+  `Statifier.Session.start_link/2` has already missed the initialize burst,
+  and catches up by asking for the recording in the same call that
+  subscribes it: `Statifier.Session.subscribe(server, pid, catch_up: true)`
+  returns `{:ok, recording}`, and `Statifier.Replay.run/1` re-derives the
+  missed prefix (ADR-0049). It requires `record: true`; nothing is retained
+  on the session to answer it otherwise. What makes prefix and suffix meet
+  exactly: between GenServer callbacks, `Statifier.Replay.run/1` over the
+  session's current recording produces exactly the messages the session has
+  notified so far - which generalizes the end-of-run equality
+  `test/statifier/replay_round_trip_test.exs` asserts to every quiescent
+  point.
 - **Replay**: because the core is pure and timers are effects, recording the
   external inputs (delivered events, timer firings, cancel markers) in the
   session's serialized input order at the session boundary makes a run
