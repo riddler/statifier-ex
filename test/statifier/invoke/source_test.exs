@@ -92,10 +92,10 @@ defmodule Statifier.Invoke.SourceTest do
                Source.resolve(invoke(content: nil, src: "file:x.scxml"), [])
     end
 
-    # sabotage: the `content_not_markup` clause's guard `not is_nil(content)`
-    # is dropped, so this clause also matches a `nil` content and the
-    # `:no_source` test below reddens (it now returns `{:content_not_markup,
-    # nil}` instead of `{:error, :no_source}`)
+    # sabotage: the `content_not_markup` clause is reordered above the
+    # `content: nil` clause, so it also matches a `nil` content and the two
+    # `:no_source` tests below redden (they now return
+    # `{:content_not_markup, nil}` instead of `{:error, :no_source}`)
     test "content is neither nil nor a binary -> {:error, {:content_not_markup, content}}" do
       assert {:error, {:content_not_markup, %{a: 1}}} =
                Source.resolve(invoke(content: %{a: 1}), [])
@@ -114,6 +114,19 @@ defmodule Statifier.Invoke.SourceTest do
     # `{:error, :src_not_resolved}` -> this assertion reddens
     test "neither src nor content -> {:error, :no_source}" do
       assert {:error, :no_source} = Source.resolve(invoke(content: nil, src: nil), [])
+    end
+
+    # `src` is typed `String.t() | nil` but holds whatever `srcexpr`
+    # evaluated to, so a non-binary reaches here from a legal document
+    # (`<invoke srcexpr="1 + 1"/>` with no `<content>`); the validator cannot
+    # reject it, because the value only exists at runtime.
+    #
+    # sabotage: the `content: nil` clause is narrowed back to
+    # `%Invoke{content: nil, src: nil}` -> this case falls through to the
+    # catch-all and the assertion reddens with `{:content_not_markup, nil}`,
+    # a reason the `t:reason/0` typedoc says cannot carry `nil`
+    test "content is nil and src is not a binary -> {:error, :no_source}" do
+      assert {:error, :no_source} = Source.resolve(invoke(content: nil, src: 2), [])
     end
   end
 

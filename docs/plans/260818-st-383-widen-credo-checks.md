@@ -285,6 +285,7 @@ already enabled and will catch it.
 - Any grouping that would exceed 120 columns.
   `Readability.MaxLineLength` is already enabled at `max_length: 120`; prefer
   two directives over a wrapped one.
+  **SUPERSEDED by commit 2da1b85 - see the amendment below.**
 - Any `alias X.Y, as: Z` directive - the grouped form cannot carry `as:`. If a
   namespace mixes plain and `as:` aliases, group the plain ones only, and only
   if two or more remain.
@@ -293,11 +294,32 @@ already enabled and will catch it.
   deliberately; that acceptance does not extend to hiding a name nobody would
   then find. Concretely: if a module aliases many names from one base and the
   group would run to a dozen entries, split it or leave it.
+  **SUPERSEDED by commit 2da1b85 - see the amendment below.**
 - Aliases declared inside a function body. The collector skips `def`/`defp`
   (`collector.ex:37`), so they are neither violations nor wins.
 
+**Amendment (2026-08-18, commit `2da1b85`)**: the two rules struck above were
+wrong and are replaced by a single rule - *a run of two or more plain aliases
+sharing a base namespace is always grouped, using the formatter's multi-line
+brace form when it will not fit on one line*.
+
+They were written as if line length were a reason not to group. It is not:
+`Consistency.MultiAliasImportRequireUse` reads the AST, so a wrapped group and a
+one-line group are the same directive to it, and eight files (groups of 12, 13,
+18 and 20 names) were left as single directives by Phase 1 and became violations
+the moment Phase 8 enabled the check. Phase 6's drift re-check did not catch it
+because it only re-ran the nine step-1 checks.
+
+The greppability rule collapses for the same reason: the multi-line form puts
+one name per line, so `grep Trace` still hits the alias block - it is *more*
+greppable than a one-line group, not less. A post-hoc sweep of all 152 names
+reachable only through a grouped directive found every one still occurring
+fully-qualified elsewhere in `lib/` + `test/`; nothing became unfindable.
+
+The `as:` rule and the single-name rule are unaffected and still hold.
+
 **Assumption recorded**: "wherever it makes sense" is read as *group by default,
-exclude by the four rules above*. If a reviewer disagrees with a specific
+exclude by the rules above*. If a reviewer disagrees with a specific
 grouping, that is a review comment on the diff, not a re-plan.
 
 ### Success Criteria:
@@ -1167,23 +1189,29 @@ are the ones a reviewer should check rather than skim.
 
 ## Deferred Manual Verification
 
+**All items verified 2026-08-18** (see `docs/plans/` sibling note in the bead's
+loop notes). Three findings came out of the sweep, all fixed in the touch-up
+commit: a real behavior change at `lib/statifier/invoke/source.ex` (Phase 4), a
+stale `root-first` moduledoc at `lib/statifier/validator/context.ex` (Phase 5),
+and the superseded Phase 1 exclusion rules amended above.
+
 Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Every finding the consistency check still reports is a legitimate
+- [x] Every finding the consistency check still reports is a legitimate
       exclusion - it matches one of the four stated rules (single-alias base,
       over 120 columns, `as:` mixed in, or greppability) and not merely a module
       the rewrite missed. This is prose judgment against prose criteria, which
       is why it is here and not in the Automated list.
-- [ ] Spot-check ten grouped directives for greppability: a name a reader would
+- [x] Spot-check ten grouped directives for greppability: a name a reader would
       search for is still findable, or the grouping was skipped.
-- [ ] No `alias X, as: Y` directive was folded into a group.
-- [ ] No behavior change anywhere: the diff is directives only, and every
+- [x] No `alias X, as: Y` directive was folded into a group.
+- [x] No behavior change anywhere: the diff is directives only, and every
       changed line is an `alias`.
-- [ ] Spec conformance (required by `.claude/wurk/plan.md` for every phase
+- [x] Spec conformance (required by `.claude/wurk/plan.md` for every phase
       touching `lib/statifier/`): the interpreter modules this phase edits are
       Appendix D ports, and an alias rewrite must leave their bodies byte-
       identical. Confirm with
@@ -1200,11 +1228,11 @@ deferred and surfaced at the end.
 
 ### Phase 2
 
-- [ ] `interpreter.ex:1425` and `selection.ex:589` are Appendix D ports: the
+- [x] `interpreter.ex:1425` and `selection.ex:589` are Appendix D ports: the
       rewritten functions still read line-for-line against the pseudocode, and
       any deviation carries an inline comment naming the mechanical reason
       (ADR-0002).
-- [ ] The two `FilterReject` rewrites preserve the exact predicate semantics -
+- [x] The two `FilterReject` rewrites preserve the exact predicate semantics -
       `filter(a) |> reject(b)` is `a and not b`, and the combined predicate has
       not accidentally become `a and b` or short-circuited differently on nil.
 
@@ -1215,10 +1243,10 @@ deferred and surfaced at the end.
 
 ### Phase 3
 
-- [ ] Each affected function still reads unambiguously: a reader can tell what
+- [x] Each affected function still reads unambiguously: a reader can tell what
       the bare `true` / `false` means from the added comment or from the call
       sites.
-- [ ] No clause ordering changed - dropping a name must not reorder heads.
+- [x] No clause ordering changed - dropping a name must not reorder heads.
 
 **Implementation Note**: loop gate while iterating; full gate as the phase gate.
 
@@ -1226,13 +1254,13 @@ deferred and surfaced at the end.
 
 ### Phase 4
 
-- [ ] Every new nil-matching head does what the previous fallback did for nil.
+- [x] Every new nil-matching head does what the previous fallback did for nil.
       This is the failure mode with no test to catch it: if the old code fell
       through to a clause that returned `{:ok, nil}` and the new head returns
       `{:error, ...}`, that is a behavior change dressed as a refactor.
-- [ ] Clause ordering: the nil heads precede the general heads in every case.
-- [ ] No conjunction guard was flattened into `!= nil`.
-- [ ] `compiler.ex` is not an Appendix D port, but the validator checks feed the
+- [x] Clause ordering: the nil heads precede the general heads in every case.
+- [x] No conjunction guard was flattened into `!= nil`.
+- [x] `compiler.ex` is not an Appendix D port, but the validator checks feed the
       interpreter's error events - confirm the error-event shapes are unchanged
       (errors are events, `{:ok, v} | {:error, e}`, ADR-0003).
 
@@ -1245,10 +1273,10 @@ reason - never as a silencing rewrite.
 
 ### Phase 5
 
-- [ ] The classification table above was re-read against the code before any
+- [x] The classification table above was re-read against the code before any
       edit, and any disagreement with it was resolved by reading, not by
       defaulting to "rewrite".
-- [ ] The rewritten sites in `interpreter/content.ex`,
+- [x] The rewritten sites in `interpreter/content.ex`,
       `interpreter/selection.ex` and `interpreter/exit_entry.ex` still read
       line-for-line against the W3C Appendix D pseudocode; any deviation carries
       an inline comment naming the mechanical reason (ADR-0002).
@@ -1257,10 +1285,10 @@ reason - never as a silencing rewrite.
       from the local cache
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`),
       not from memory.
-- [ ] Order is preserved at all six rewrites: the conformance suites are the
+- [x] Order is preserved at all six rewrites: the conformance suites are the
       evidence, but read `exit_entry.ex:321` and `selection.ex:514` directly,
       because a reversed list can still pass a test that only checks membership.
-- [ ] No class-C site was touched. `selection.ex:570`, `session.ex:1442` and
+- [x] No class-C site was touched. `selection.ex:570`, `session.ex:1442` and
       `session/timers.ex:41` are the three where a rewrite changes behavior.
 
 **Implementation Note**: loop gate while iterating; full gate as the phase gate.
@@ -1272,7 +1300,7 @@ rewrite.
 
 ### Phase 6
 
-- [ ] If the phase produced no commit, that is recorded as the outcome rather
+- [x] If the phase produced no commit, that is recorded as the outcome rather
       than skipped silently.
 
 **Implementation Note**: this phase may legitimately be a no-op. In `--loop`

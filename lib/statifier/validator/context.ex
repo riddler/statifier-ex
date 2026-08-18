@@ -7,10 +7,12 @@ defmodule Statifier.Validator.Context do
   independent. Correctness over speed here, per the bead's own design note.
 
   `states` maps a named state's id to its struct. `ancestors` maps a named
-  state's id to the list of its named ancestors' ids, root-first, itself
-  excluded - `descendant?/3` turns that into a list-membership test rather
-  than a re-walk. A state with a `nil` id cannot be named by anything, so it
-  is absent from both maps.
+  state's id to the list of its named ancestors' ids, itself excluded -
+  `descendant?/3` turns that into a list-membership test rather than a
+  re-walk. The list carries no order contract: membership is the whole of
+  what anything reads, and `walk/3` builds it innermost-first to avoid an
+  append per tree level. A state with a `nil` id cannot be named by anything,
+  so it is absent from both maps.
 
   `parents` maps **every** state struct (nameless ones included) to its
   immediate parent - another `State.t()`, or the `Document.t()` for a
