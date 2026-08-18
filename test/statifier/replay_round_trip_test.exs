@@ -588,7 +588,7 @@ defmodule Statifier.ReplayRoundTripTest do
   end
 
   describe "a run whose unreachable send is core-detected (ADR-0048)" do
-    # sabotage: `Statifier.Machine.Content.Send`'s `reject_reason/2`
+    # sabotage: `Statifier.Machine.Content.Send`'s `reject_reason/4`
     # reachability `cond` arm has its `{:communication,
     # {:unreachable_target, target}}` result changed to `nil` (never reject)
     # -> the send is dispatched as an ordinary effect instead, so this

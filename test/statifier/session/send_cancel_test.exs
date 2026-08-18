@@ -198,12 +198,12 @@ defmodule Statifier.Session.SendCancelTest do
     # internal queue, never `{:unroutable, _}` (that vocabulary member
     # survives only for `:invoke`/`:cancel_invoke`/`:autoforward`, later,
     # separate work). Per ADR-0047 the rejection happens in the core, in
-    # `Statifier.Machine.Content.Send`'s own `reject_reason/2`, before any
+    # `Statifier.Machine.Content.Send`'s own `reject_reason/4`, before any
     # `{:send, _}` effect is built - `Statifier.Session.Effects`'s own
     # `{:invalid, _target}` arm is the `Session.interpret/2` boundary check
     # ADR-0047 decision 4 keeps, not what decides this document's outcome.
     #
-    # sabotage: `Send`'s `reject_reason/2` has its `match?({:invalid,
+    # sabotage: `Send`'s `reject_reason/4` has its `match?({:invalid,
     # _reason}, Target.parse(target))` clause changed to always return
     # `nil` -> the invalid target would dispatch a `{:send, _}` effect
     # instead of being rejected, so the `refute_receive` below would catch

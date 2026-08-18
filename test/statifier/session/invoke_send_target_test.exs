@@ -105,7 +105,7 @@ defmodule Statifier.Session.InvokeSendTargetTest do
     # `deliver/5`'s `{:invoke, _}` clause ever runs - sabotaging that clause
     # (the pre-bead mutation here) now leaves this test green, since the
     # residual path is simply unreached. The mutation that actually reddens
-    # it lives one layer up: `reject_reason/2`'s reachability `cond` arm in
+    # it lives one layer up: `reject_reason/4`'s reachability `cond` arm in
     # `lib/statifier/machine/content/send.ex` is changed from
     # `{:communication, {:unreachable_target, target}}` to
     # `{:execution, {:unreachable_target, target}}` -> the core raises

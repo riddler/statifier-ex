@@ -58,7 +58,8 @@ defmodule Statifier.Session.Recording do
   several separate calls that happened to be adjacent - a distinction replay
   needs, since `Statifier.Session.Effects.plan/1` and any effect-derived
   routing decisions apply to the batch as `interpret/2` presented it. Storing
-  the whole batch as `{:interpret, effects}` preserves that boundary exactly.
+  the whole batch as `{:interpret, effects, routes}` preserves that boundary
+  exactly.
 
   ## The timer `ref` is dropped, not recorded
 
