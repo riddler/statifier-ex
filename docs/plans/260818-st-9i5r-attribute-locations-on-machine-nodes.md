@@ -501,13 +501,13 @@ separately rather than sharing one line.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating
-- [ ] Full `mix quality` green, unscoped, confirmed by `mix gate.verify`
-- [ ] `mix test test/statifier/compiler/location_test.exs` passes on its own
-- [ ] Each new test's sabotage mutation applied, observed red, reverted, and
+- [x] `mix quality --profile loop` green while iterating
+- [x] Full `mix quality` green, unscoped, confirmed by `mix gate.verify`
+- [x] `mix test test/statifier/compiler/location_test.exs` passes on its own
+- [x] Each new test's sabotage mutation applied, observed red, reverted, and
       recorded in its one-line comment - including the two distinct compiler
       sites (`:225` root, `:390` walk)
-- [ ] `mix test.regression` green with no `test/passing_tests.json` change
+- [x] `mix test.regression` green with no `test/passing_tests.json` change
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: the compiler's state-interning walk
@@ -752,6 +752,27 @@ before considering the plan fully landed.
       why `cond_location` stays out of it.
 - [ ] A compiled transition from a real fixture, inspected in IEx, shows the
       map keys the source actually wrote and no others.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment: the compiler's state-interning walk
+      (`walk_siblings/4`) and root construction still match the structure
+      Appendix D's `expandScxmlSource`/document-order assumptions rely on -
+      both edits are a single additional field on an existing struct literal
+      and introduce no new ADR-0002 deviation.
+- [ ] The reworded "written in one pass" paragraph is still true of every
+      field the table now lists, `attribute_locations` included.
+- [ ] Compiling a real fixture in IEx and reading `Machine.at(machine, 0)`
+      shows the `<scxml>` attributes the fixture wrote and no others.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
 full `mix quality` is the phase gate. In interactive execution, pause here for

@@ -17,12 +17,22 @@ defmodule Statifier.Compiler.LocationTest do
               <transition target="s1a" type="internal"/>
           </initial>
           <state id="s1a"/>
+          <state id="s2" initial="s2a">
+              <state id="s2a">
+                  <state/>
+              </state>
+          </state>
           <history id="h1" type="deep">
               <transition target="s1a" type="internal"/>
+          </history>
+          <history id="h2">
+              <transition target="s1a"/>
           </history>
           <transition target="s1a" event="e4" cond="x &gt; 2" type="internal"/>
           <transition target="s1a" event="e5"/>
       </state>
+      <parallel id="p1"/>
+      <final id="f1"/>
   </scxml>
   """
 
@@ -120,6 +130,98 @@ defmodule Statifier.Compiler.LocationTest do
 
       refute with_cond.cond_location == nil
       assert without_cond.cond_location == nil
+    end
+  end
+
+  describe "Machine.State carries attribute_locations" do
+    # sabotage: `Statifier.Compiler.compile/1` drops
+    # `attribute_locations: dstate.attribute_locations` from the general
+    # state-interning walk's `%Machine.State{}` literal (around :390) ->
+    # every assertion below on a non-root state reddens on `KeyError`.
+    test "every written attribute on a compound state, a parallel, a final, and a history slices back to its own text" do
+      machine = compile!()
+      {:ok, s2_index} = Machine.index(machine, "s2")
+      {:ok, p1_index} = Machine.index(machine, "p1")
+      {:ok, f1_index} = Machine.index(machine, "f1")
+      {:ok, h1_index} = Machine.index(machine, "h1")
+
+      s2 = Machine.at(machine, s2_index)
+      p1 = Machine.at(machine, p1_index)
+      f1 = Machine.at(machine, f1_index)
+      h1 = Machine.at(machine, h1_index)
+
+      assert_attribute_location(s2.attribute_locations, :id, "s2")
+      assert_attribute_location(s2.attribute_locations, :initial, "s2a")
+
+      assert_attribute_location(p1.attribute_locations, :id, "p1")
+      assert_attribute_location(f1.attribute_locations, :id, "f1")
+
+      assert_attribute_location(h1.attribute_locations, :id, "h1")
+      assert_attribute_location(h1.attribute_locations, :type, "deep")
+    end
+
+    # sabotage: `Statifier.Compiler.compile/1` drops
+    # `attribute_locations: document.attribute_locations` from the root
+    # `%Machine.State{}` literal (around :225) -> every assertion below
+    # reddens on `KeyError`, while the non-root case above stays green
+    # (it goes through the other construction site).
+    test "the root state carries the <scxml> element's own spans" do
+      machine = compile!()
+      root = Machine.at(machine, 0)
+
+      assert_attribute_location(root.attribute_locations, :initial, "s1")
+      assert_attribute_location(root.attribute_locations, :name, "root")
+      assert_attribute_location(root.attribute_locations, :datamodel, "null")
+      assert_attribute_location(root.attribute_locations, :binding, "late")
+      assert_attribute_location(root.attribute_locations, :version, "1.0")
+
+      assert_attribute_location(
+        root.attribute_locations,
+        :xmlns,
+        "http://www.w3.org/2005/07/scxml"
+      )
+    end
+
+    # sabotage: same mutation as the first test above (dropping
+    # `attribute_locations: dstate.attribute_locations` at :390) -> the
+    # `assert Map.has_key?/2` clause on `h1` and the `[:id]` keys assertion
+    # on `s1a` both redden (the carried map falls back to `%{}`).
+    test "key presence survives compilation: a defaulted history type carries no :type key" do
+      machine = compile!()
+      {:ok, h2_index} = Machine.index(machine, "h2")
+      {:ok, h1_index} = Machine.index(machine, "h1")
+      {:ok, s1a_index} = Machine.index(machine, "s1a")
+
+      h2 = Machine.at(machine, h2_index)
+      h1 = Machine.at(machine, h1_index)
+      s1a = Machine.at(machine, s1a_index)
+
+      assert h2.history_type == :shallow
+      refute Map.has_key?(h2.attribute_locations, :type)
+
+      assert h1.history_type == :deep
+      assert Map.has_key?(h1.attribute_locations, :type)
+
+      assert Map.keys(s1a.attribute_locations) == [:id]
+    end
+
+    # sabotage: `Statifier.Compiler.compile/1`'s general walk hardcodes
+    # `attribute_locations: Map.put(dstate.attribute_locations, :bogus, nil)`
+    # instead of carrying the map as-is -> `assert bare_child.attribute_locations
+    # == %{}` reddens (the empty-map case above catches dropping the carry
+    # entirely, since that would also produce `%{}`; this mutation targets
+    # carrying the map itself, verbatim, rather than falling back to a
+    # default that happens to look the same on an empty node).
+    test "a state whose element wrote no attributes at all compiles to an empty map" do
+      machine = compile!()
+      {:ok, s2a_index} = Machine.index(machine, "s2a")
+      s2a = Machine.at(machine, s2a_index)
+
+      [bare_child_index] = s2a.children
+      bare_child = Machine.at(machine, bare_child_index)
+
+      assert bare_child.id == nil
+      assert bare_child.attribute_locations == %{}
     end
   end
 end
