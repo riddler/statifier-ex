@@ -1,7 +1,8 @@
 # ADR-0012: Debuggability is designed into the core
 
 Status: accepted (2026-08-04) - amended 2026-08-17 (st-1xwh: `d_index` named a
-third identity under item 3)
+third identity under item 3) - amended 2026-08-18 (st-9i5r: item 3's retention
+reaches attribute-level spans, not only element-level)
 
 ## Context
 
@@ -60,6 +61,22 @@ This amendment completes the enumeration item 3 had already fallen behind; it
 mints no new identity kind and the original sentence is left standing above,
 unedited, for the same reason ADR-0040's amendments explain rather than
 rewrite the rule they amend.
+
+**Amendment (st-9i5r):** item 3 says compilation "keeps locations on states,
+transitions, and executable content", and `docs/observability.md` constraint
+3 illustrates that with a visualizer highlighting a `<transition>` line.
+Both are element-granular. `Statifier.Machine.Invoke` had already gone one
+step finer - carrying `Statifier.Document.Invoke`'s `attribute_locations`
+map verbatim rather than distilling a `*_location` field per attribute - and
+`Statifier.Machine.State` and `Statifier.Machine.Transition` now do the
+same. The retained data is the value span of each attribute the author
+actually wrote, so the Machine can answer both "where is this attribute" and
+"was it written or defaulted" without a second parse. This widens what item
+3 retains; it mints no new identity and adds no runtime cost beyond the
+memory the Consequences section already accepts, which is why it is an
+amendment rather than a new record. The original sentence stands above,
+unedited, for the same reason the st-1xwh amendment explains rather than
+rewrites.
 
 ## Consequences
 

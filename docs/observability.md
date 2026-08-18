@@ -115,6 +115,18 @@ them anyway:
 - States, transitions, and executable-content nodes on the Machine retain their
   source location. A visualizer highlighting the `<transition>` line currently
   executing needs nothing else.
+- Attribute-level spans are retained too, one step finer than the bullet
+  above: `Statifier.Machine.State`, `Statifier.Machine.Transition` and
+  `Statifier.Machine.Invoke` each carry their source node's
+  `attribute_locations` map verbatim (`Statifier.Document`'s moduledoc holds
+  the contract - value spans only, and a key exists only for an attribute
+  the author wrote). The element-level sentence above is what a
+  line-highlighting visualizer needs; a consumer with attribute-level hover
+  targets on a `<transition>`'s `event`/`target`/`type` or a state's
+  `id`/`initial` needs the map, and re-deriving it by re-parsing the source
+  and joining Document nodes to Machine identities by location equality is
+  sound only while the re-parsed bytes match what built the Machine, which
+  nothing checks (st-9i5r).
 - SCXML transitions and executable content have no IDs, so the compiler assigns
   each a stable document-order index (per machine). Trace effects and error
   metadata reference these indexes; tooling maps them back to locations.
@@ -233,7 +245,7 @@ promotion path.
 | machine_state struct holds configuration, internal queue, history, datamodel, `running`, and step counters - no interpreter loop variable that is not reconstructible from the struct | `Statifier.MachineState` |
 | `microstep` step function exists; macrostep folds over it | `Statifier.Interpreter` |
 | trace effect types defined with the vocabulary above; emission gated | `Statifier.Effect`, `Statifier.Effect.Trace.*` |
-| compiler retains locations on states, transitions, executable content | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content` |
+| compiler retains locations on states, transitions, executable content, and each node's written-attribute spans (`attribute_locations`, carried verbatim) | `Statifier.Compiler`, `Statifier.Machine.State`/`Transition`/`Content`/`Invoke` |
 | compiled expressions carry their span table with the instructions (ADR-0014) | `Statifier.Compiler.Expressions.compile/3` stores `%Predicator.Compiled{}` whole |
 | compiler assigns document-order indexes to transitions, executable-content nodes, and `<data>` elements (`t_index`/`c_index`/`d_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
