@@ -29,11 +29,9 @@ defmodule Statifier.Validator.Checks.Script do
   alias Statifier.Document
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
-  alias Statifier.Document.Initial
+  alias Statifier.Document.{Initial, State}
   alias Statifier.Document.Script, as: DScript
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<script>` reachable through a state's `onentry`/`onexit`

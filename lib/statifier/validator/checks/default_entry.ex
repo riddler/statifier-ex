@@ -26,8 +26,7 @@ defmodule Statifier.Validator.Checks.DefaultEntry do
 
   alias Statifier.Document
   alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns a `:default_entry_not_enterable` error for every compound `<state>`

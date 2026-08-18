@@ -32,8 +32,7 @@ defmodule Statifier.Document.Send do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Content
-  alias Statifier.Document.Param
+  alias Statifier.Document.{Content, Param}
   alias Statifier.Parser.Location
 
   @enforce_keys [:location]

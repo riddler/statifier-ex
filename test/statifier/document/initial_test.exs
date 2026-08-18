@@ -1,8 +1,7 @@
 defmodule Statifier.Document.InitialTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Initial
-  alias Statifier.Document.Transition
+  alias Statifier.Document.{Initial, Transition}
   alias Statifier.Parser.Location
 
   defp loc(offset \\ 0) do

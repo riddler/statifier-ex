@@ -5,17 +5,8 @@ defmodule Statifier.Session.InvokeCancelTest do
   # real child places `Statifier.Supervisor` (a fixed, module-qualified
   # singleton), so this module is `async: false`.
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Replay
-  alias Statifier.Session
-  alias Statifier.Session.Inbox
-  alias Statifier.Session.Invocations
-  alias Statifier.Session.Recording
-  alias Statifier.Validator
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
+  alias Statifier.Session.{Inbox, Invocations, Recording}
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

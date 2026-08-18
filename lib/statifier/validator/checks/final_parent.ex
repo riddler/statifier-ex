@@ -30,8 +30,7 @@ defmodule Statifier.Validator.Checks.FinalParent do
 
   alias Statifier.Document
   alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns a `:final_parent_missing_id` error for every state with no written

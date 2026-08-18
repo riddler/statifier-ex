@@ -77,15 +77,9 @@ defmodule Statifier.Session.Effects do
   been popped by its own `:DOWN` or a prior cancel.
   """
 
-  alias Statifier.Effect
-  alias Statifier.Effect.Autoforward
-  alias Statifier.Effect.Cancel
-  alias Statifier.Effect.CancelInvoke
-  alias Statifier.Effect.Invoke
-  alias Statifier.Effect.Send
-  alias Statifier.Effect.SendDelayed
+  alias Statifier.{Effect, Event}
+  alias Statifier.Effect.{Autoforward, Cancel, CancelInvoke, Invoke, Send, SendDelayed}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Send.Target
 

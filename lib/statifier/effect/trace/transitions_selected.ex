@@ -12,8 +12,7 @@ defmodule Statifier.Effect.Trace.TransitionsSelected do
   `round` are always stamped from the `Statifier.MachineState` at hand.
   """
 
-  alias Statifier.Event
-  alias Statifier.MachineState
+  alias Statifier.{Event, MachineState}
 
   @enforce_keys [:t_indexes, :macrostep, :microstep, :round]
   defstruct [:t_indexes, :event, :macrostep, :microstep, :round]

@@ -1,17 +1,9 @@
 defmodule Statifier.EvaluatorTest do
   use ExUnit.Case, async: true
 
-  alias Predicator.Errors.EvaluationError
-  alias Predicator.Errors.TypeMismatchError
-  alias Predicator.Errors.UndefinedVariableError
-  alias Statifier.Compiler
-  alias Statifier.Evaluator
+  alias Predicator.Errors.{EvaluationError, TypeMismatchError, UndefinedVariableError}
+  alias Statifier.{Compiler, Evaluator, Lowering, Machine, MachineState, Parser, Validator}
   alias Statifier.Evaluator.Error
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">

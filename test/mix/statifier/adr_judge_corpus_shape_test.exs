@@ -1,8 +1,7 @@
 defmodule Mix.Statifier.AdrJudgeCorpusShapeTest do
   use ExUnit.Case, async: true
 
-  alias Mix.Statifier.AdrJudge
-  alias Mix.Statifier.AdrJudgeCorpus
+  alias Mix.Statifier.{AdrJudge, AdrJudgeCorpus}
 
   # Caller-free: no opts[:caller] is ever passed to AdrJudge.analyze/2 here,
   # so this test runs in the ordinary suite (unlike

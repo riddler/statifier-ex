@@ -14,8 +14,7 @@ defmodule Statifier.Evaluator.SystemVariables do
   it.
   """
 
-  alias Statifier.Event
-  alias Statifier.Machine
+  alias Statifier.{Event, Machine}
 
   @scxml_event_processor "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
   @scxml_session_target_prefix "#_scxml_"

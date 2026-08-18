@@ -18,8 +18,7 @@ defmodule Statifier.Validator.Checks.InitialElement do
   alias Statifier.Document
   alias Statifier.Document.State
   alias Statifier.Validator.Checks.DefaultTransition
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns an `:initial_attribute_and_element` error for every state whose

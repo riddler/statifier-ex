@@ -278,24 +278,14 @@ defmodule Statifier.Session do
 
   use GenServer, restart: :temporary
 
-  alias Statifier.Effect
-  alias Statifier.Effect.Done
-  alias Statifier.Effect.Invoke
+  alias Statifier.{Effect, Event, Interpreter, Machine, MachineState}
+  alias Statifier.Effect.{Done, Invoke}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Event
   alias Statifier.Event.Cause
-  alias Statifier.Interpreter
   alias Statifier.Invoke.Source
-  alias Statifier.Machine
-  alias Statifier.MachineState
   alias Statifier.Send.Routes
   alias Statifier.Send.Target
-  alias Statifier.Session.Effects
-  alias Statifier.Session.Inbox
-  alias Statifier.Session.Invocations
-  alias Statifier.Session.Recording
-  alias Statifier.Session.Telemetry
-  alias Statifier.Session.Timers
+  alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
 
   defmodule State do
     @moduledoc false

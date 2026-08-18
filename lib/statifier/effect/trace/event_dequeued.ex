@@ -10,8 +10,7 @@ defmodule Statifier.Effect.Trace.EventDequeued do
   no call site can forget or duplicate them.
   """
 
-  alias Statifier.Event
-  alias Statifier.MachineState
+  alias Statifier.{Event, MachineState}
 
   @enforce_keys [:event, :from, :macrostep, :microstep, :round]
   defstruct [:event, :from, :macrostep, :microstep, :round]

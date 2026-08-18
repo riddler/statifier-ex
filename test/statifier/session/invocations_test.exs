@@ -1,11 +1,8 @@
 defmodule Statifier.Session.InvocationsTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.{Compiler, Lowering, Parser, Validator}
   alias Statifier.Session.Invocations
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

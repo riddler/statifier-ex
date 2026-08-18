@@ -19,8 +19,7 @@ defmodule Statifier.Document.Donedata do
   exists to report, not one this layer refuses to build.
   """
 
-  alias Statifier.Document.Content
-  alias Statifier.Document.Param
+  alias Statifier.Document.{Content, Param}
   alias Statifier.Parser.Location
 
   @enforce_keys [:location]

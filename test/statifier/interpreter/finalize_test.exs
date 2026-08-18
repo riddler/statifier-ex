@@ -1,15 +1,9 @@
 defmodule Statifier.Interpreter.FinalizeTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect.Autoforward
-  alias Statifier.Effect.DatamodelChange
+  alias Statifier.{Compiler, Event, Interpreter, Lowering, Parser, Validator}
+  alias Statifier.Effect.{Autoforward, DatamodelChange}
   alias Statifier.Effect.Trace.FinalizeAutoforward
-  alias Statifier.Event
-  alias Statifier.Interpreter
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

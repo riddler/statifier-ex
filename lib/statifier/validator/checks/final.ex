@@ -20,8 +20,7 @@ defmodule Statifier.Validator.Checks.Final do
 
   alias Statifier.Document
   alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns a `:final_has_states` error for every state child of a `:final`

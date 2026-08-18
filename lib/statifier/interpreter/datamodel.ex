@@ -82,11 +82,8 @@ defmodule Statifier.Interpreter.Datamodel do
   `Statifier.Interpreter.Selection.raise_cond_errors/2`).
   """
 
-  alias Statifier.Effect
-  alias Statifier.Evaluator
+  alias Statifier.{Effect, Evaluator, Machine, MachineState}
   alias Statifier.Interpreter.Datamodel.Write
-  alias Statifier.Machine
-  alias Statifier.MachineState
 
   @doc """
   Writes `value` at `path_source` (a raw, uncompiled path expression such as

@@ -30,14 +30,7 @@ defmodule Statifier.Machine.Content do
   would stop `c_index` meaning "the nth executable-content node".
   """
 
-  alias Statifier.Machine.Content.Assign
-  alias Statifier.Machine.Content.Cancel
-  alias Statifier.Machine.Content.Foreach
-  alias Statifier.Machine.Content.If
-  alias Statifier.Machine.Content.Log
-  alias Statifier.Machine.Content.Raise
-  alias Statifier.Machine.Content.Script
-  alias Statifier.Machine.Content.Send
+  alias Statifier.Machine.Content.{Assign, Cancel, Foreach, If, Log, Raise, Script, Send}
 
   @typedoc """
   Which block of executable content a node lives in - the block identity a

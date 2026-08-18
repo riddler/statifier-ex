@@ -2,8 +2,7 @@ defmodule Statifier.Parser.LocationAccuracyTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Parser
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
+  alias Statifier.Parser.{DOM, Location}
 
   # The property, applied to every element and every attribute of a parsed
   # document rather than to hand-picked nodes: slice each span back out of

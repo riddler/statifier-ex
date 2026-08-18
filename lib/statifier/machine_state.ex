@@ -321,9 +321,8 @@ defmodule Statifier.MachineState do
   """
 
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Event
+  alias Statifier.{Event, Machine}
   alias Statifier.Event.Cause
-  alias Statifier.Machine
   alias Statifier.Send.Routes
 
   # Crockford base32's alphabet in `Base.hex_encode32/2`'s symbol order, so a

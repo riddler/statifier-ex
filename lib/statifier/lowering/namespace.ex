@@ -12,8 +12,7 @@ defmodule Statifier.Lowering.Namespace do
   cleanup step.
   """
 
-  alias Statifier.Parser.DOM.Attribute
-  alias Statifier.Parser.DOM.Element
+  alias Statifier.Parser.DOM.{Attribute, Element}
 
   @scxml_namespace "http://www.w3.org/2005/07/scxml"
 

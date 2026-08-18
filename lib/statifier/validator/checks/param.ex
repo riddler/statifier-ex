@@ -20,11 +20,9 @@ defmodule Statifier.Validator.Checks.Param do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Donedata
+  alias Statifier.Document.{Donedata, State}
   alias Statifier.Document.Param, as: DParam
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<final>`'s `<donedata><param>` and every state's

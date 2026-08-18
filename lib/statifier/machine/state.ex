@@ -41,9 +41,7 @@ defmodule Statifier.Machine.State do
   known when the struct is first built.
   """
 
-  alias Statifier.Machine.Block
-  alias Statifier.Machine.Donedata
-  alias Statifier.Machine.Invoke
+  alias Statifier.Machine.{Block, Donedata, Invoke}
   alias Statifier.Parser.Location
 
   @enforce_keys [:index, :kind, :last, :location]

@@ -2,8 +2,7 @@ defmodule Statifier.Compiler.ExpressionsTest do
   use ExUnit.Case, async: true
 
   alias Predicator.Errors.ParseError
-  alias Statifier.Compiler.Error
-  alias Statifier.Compiler.Expressions
+  alias Statifier.Compiler.{Error, Expressions}
   alias Statifier.Parser.Location
 
   # Every call below gets its own offset, so a bug that reused one call's

@@ -1,18 +1,11 @@
 defmodule Statifier.SessionTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
+  alias Statifier.{Compiler, Effect, Event, Lowering, MachineState}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
+  alias Statifier.{Parser, Session, StreamOrder, Validator}
   alias Statifier.Send.Routes
-  alias Statifier.Session
   alias Statifier.Session.Recording
-  alias Statifier.StreamOrder
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

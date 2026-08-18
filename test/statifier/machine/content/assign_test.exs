@@ -1,17 +1,12 @@
 defmodule Statifier.Machine.Content.AssignTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Evaluator, ExecutableContent, Lowering}
   alias Statifier.Effect.DatamodelChange
-  alias Statifier.Evaluator
-  alias Statifier.ExecutableContent
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Lowering
   alias Statifier.Machine.Content.Assign
-  alias Statifier.MachineState
-  alias Statifier.Parser
+  alias Statifier.{MachineState, Parser, Validator}
   alias Statifier.Parser.Location
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

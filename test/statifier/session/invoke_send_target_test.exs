@@ -6,14 +6,8 @@ defmodule Statifier.Session.InvokeSendTargetTest do
   # do, so this module is `async: false` for the same reason
   # `invoke_start_child_test.exs` gives itself the same tag.
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, Validator}
   alias Statifier.Session.Invocations
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

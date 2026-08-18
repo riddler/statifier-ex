@@ -2,14 +2,7 @@ defmodule Statifier.DocumentTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Document
-  alias Statifier.Document.Block
-  alias Statifier.Document.Content
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Initial
-  alias Statifier.Document.Log
-  alias Statifier.Document.Raise
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
+  alias Statifier.Document.{Block, Content, Donedata, Initial, Log, Raise, State, Transition}
   alias Statifier.Parser.Location
 
   # Every node below gets its own offset, so a bug that swaps two nodes'

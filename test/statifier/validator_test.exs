@@ -1,11 +1,8 @@
 defmodule Statifier.ValidatorTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Validator
-  alias Statifier.Validator.Error
-  alias Statifier.Validator.Warning
+  alias Statifier.{Lowering, Parser, Validator}
+  alias Statifier.Validator.{Error, Warning}
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -6,12 +6,8 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
   # do, so this module is `async: false` for the same reason
   # `invoke_start_child_test.exs` gives itself the same tag.
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Lowering, Parser, Session, Validator}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

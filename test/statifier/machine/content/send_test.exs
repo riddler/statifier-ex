@@ -1,18 +1,11 @@
 defmodule Statifier.Machine.Content.SendTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Evaluator
-  alias Statifier.ExecutableContent
+  alias Statifier.{Compiler, Effect, Evaluator, ExecutableContent, Lowering}
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter.Datamodel
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.MachineState
-  alias Statifier.Parser
+  alias Statifier.{Machine, MachineState, Parser, Validator}
   alias Statifier.Send.Routes
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

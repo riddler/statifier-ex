@@ -81,14 +81,11 @@ defmodule Statifier.Validator.Checks.Send do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Block
+  alias Statifier.Document.{Block, Initial, State}
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
-  alias Statifier.Document.Initial
   alias Statifier.Document.Send, as: DSend
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<send>` in the document and returns one error per 6.2.2/6.2.3

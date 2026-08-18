@@ -33,8 +33,7 @@ defmodule Statifier.Validator.Checks.History do
   alias Statifier.Document.State
   alias Statifier.Parser.Location
   alias Statifier.Validator.Checks.DefaultTransition
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns, per `:history` state in the document, any combination of a

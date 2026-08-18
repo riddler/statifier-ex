@@ -13,12 +13,8 @@ defmodule Statifier.SessionRuntimeTest do
   # each other either, so no concurrently running session can observe the
   # registry mid-cycle.
 
-  alias Statifier.Compiler
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.{Compiler, Lowering, Parser, Session, Validator}
   alias Statifier.Send.Routes
-  alias Statifier.Session
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

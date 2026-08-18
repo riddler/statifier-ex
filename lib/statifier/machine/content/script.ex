@@ -38,9 +38,8 @@ defmodule Statifier.Machine.Content.Script do
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
-  alias Statifier.Evaluator
+  alias Statifier.{Evaluator, Machine}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Script
   alias Statifier.Parser.Location
 

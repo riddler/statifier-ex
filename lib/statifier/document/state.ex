@@ -84,12 +84,7 @@ defmodule Statifier.Document.State do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Block
-  alias Statifier.Document.Datamodel
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Initial
-  alias Statifier.Document.Invoke
-  alias Statifier.Document.Transition
+  alias Statifier.Document.{Block, Datamodel, Donedata, Initial, Invoke, Transition}
   alias Statifier.Parser.Location
 
   @enforce_keys [:kind, :location]

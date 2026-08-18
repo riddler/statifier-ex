@@ -176,7 +176,7 @@ defmodule Statifier.Session.Telemetry do
   module's event list impossible to enumerate ahead of a call.
   """
 
-  alias Statifier.Effect
+  alias Statifier.{Effect, Machine, MachineState}
   alias Statifier.Effect.Autoforward
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
@@ -189,8 +189,6 @@ defmodule Statifier.Session.Telemetry do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
-  alias Statifier.Machine
-  alias Statifier.MachineState
 
   @typedoc "One `:telemetry` event name this module can emit."
   @type event_name :: [atom(), ...]

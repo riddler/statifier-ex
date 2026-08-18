@@ -2,8 +2,7 @@ defmodule Statifier.Parser.ParseErrorTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Parser
-  alias Statifier.Parser.Location
-  alias Statifier.Parser.ParseError
+  alias Statifier.Parser.{Location, ParseError}
 
   # One case per Saxy reason `parse/1` can actually reach. Each fixture puts
   # the failure off line 1 where it can, so a location that merely defaulted

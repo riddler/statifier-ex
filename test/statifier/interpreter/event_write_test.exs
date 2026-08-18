@@ -1,12 +1,7 @@
 defmodule Statifier.Interpreter.EventWriteTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Event
-  alias Statifier.Interpreter
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Validator
+  alias Statifier.{Compiler, Event, Interpreter, Lowering, Parser, Validator}
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -1,9 +1,7 @@
 defmodule Statifier.Document.StateTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Initial
-  alias Statifier.Document.State
+  alias Statifier.Document.{Donedata, Initial, State}
   alias Statifier.Parser.Location
 
   defp loc(offset \\ 0) do

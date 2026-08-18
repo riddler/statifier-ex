@@ -1,11 +1,7 @@
 defmodule Statifier.Parser.HandlerTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Handler
-  alias Statifier.Parser.Location
-  alias Statifier.Parser.Markup
-  alias Statifier.Parser.ParseError
+  alias Statifier.Parser.{DOM, Handler, Location, Markup, ParseError}
 
   defp init(source), do: Handler.init(source, Markup.scan(source))
 

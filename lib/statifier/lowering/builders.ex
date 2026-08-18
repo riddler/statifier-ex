@@ -13,7 +13,7 @@ defmodule Statifier.Lowering.Builders do
   `place/3`, never a fact the child itself needs to know.
   """
 
-  alias Statifier.Document
+  alias Statifier.{Document, Lowering}
   alias Statifier.Document.Assign
   alias Statifier.Document.Block
   alias Statifier.Document.Cancel
@@ -32,13 +32,9 @@ defmodule Statifier.Lowering.Builders do
   alias Statifier.Document.Send
   alias Statifier.Document.State
   alias Statifier.Document.Transition
-  alias Statifier.Lowering
-  alias Statifier.Lowering.Attributes
-  alias Statifier.Lowering.Error
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.DOM.Element
-  alias Statifier.Parser.DOM.Text
-  alias Statifier.Parser.Location
+  alias Statifier.Lowering.{Attributes, Error}
+  alias Statifier.Parser.{DOM, Location}
+  alias Statifier.Parser.DOM.{Element, Text}
 
   @binding_values %{"early" => :early, "late" => :late}
   @history_type_values %{"shallow" => :shallow, "deep" => :deep}

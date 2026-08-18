@@ -122,15 +122,9 @@ defmodule Statifier.Replay do
   `externalQueue.dequeue()`.
   """
 
-  alias Statifier.Effect
-  alias Statifier.Effect.Done
-  alias Statifier.Effect.Invoke
-  alias Statifier.Event
-  alias Statifier.Interpreter
-  alias Statifier.MachineState
-  alias Statifier.Session.Effects
-  alias Statifier.Session.Inbox
-  alias Statifier.Session.Recording
+  alias Statifier.{Effect, Event, Interpreter, MachineState}
+  alias Statifier.Effect.{Done, Invoke}
+  alias Statifier.Session.{Effects, Inbox, Recording}
 
   defmodule State do
     @moduledoc false

@@ -37,17 +37,11 @@ defmodule Statifier.Machine.Content.Send do
   anywhere else in the tree.
   """
 
-  alias Statifier.Document
-  alias Statifier.Duration
-  alias Statifier.Effect
-  alias Statifier.Evaluator
-  alias Statifier.EventData
+  alias Statifier.{Document, Duration, Effect, Evaluator, EventData, Machine, MachineState}
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter.Datamodel
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Send
   alias Statifier.Machine.Param
-  alias Statifier.MachineState
   alias Statifier.Parser.Location
   alias Statifier.Send.Routes
   alias Statifier.Send.Target

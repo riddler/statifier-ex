@@ -71,9 +71,7 @@ defmodule Statifier.Case do
 
   use ExUnit.CaseTemplate
 
-  alias Statifier.FeatureDetector
-  alias Statifier.MachineState
-  alias Statifier.Session
+  alias Statifier.{FeatureDetector, MachineState, Session}
 
   using do
     quote do

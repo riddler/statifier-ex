@@ -1,9 +1,7 @@
 defmodule Statifier.Lowering.DatamodelTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Data
-  alias Statifier.Document.Datamodel
-  alias Statifier.Document.State
+  alias Statifier.Document.{Data, Datamodel, State}
   alias Statifier.Lowering
   alias Statifier.Lowering.Error
 

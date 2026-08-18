@@ -78,9 +78,8 @@ defmodule Statifier.Compiler do
   pieces of state than that once each is its own argument.
   """
 
-  alias Statifier.Compiler.Error
-  alias Statifier.Compiler.Expressions
-  alias Statifier.Document
+  alias Statifier.Compiler.{Error, Expressions}
+  alias Statifier.{Document, Machine}
   alias Statifier.Document.Assign, as: DAssign
   alias Statifier.Document.Block, as: DBlock
   alias Statifier.Document.Cancel, as: DCancel
@@ -99,7 +98,6 @@ defmodule Statifier.Compiler do
   alias Statifier.Document.Send, as: DSend
   alias Statifier.Document.State, as: DState
   alias Statifier.Document.Transition, as: DTransition
-  alias Statifier.Machine
   alias Statifier.Machine.Block, as: MBlock
   alias Statifier.Machine.Content, as: MContent
   alias Statifier.Machine.Content.Assign, as: MAssign

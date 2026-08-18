@@ -21,8 +21,7 @@ defmodule Statifier.Validator.Checks.Donedata do
   alias Statifier.Document
   alias Statifier.Document.Donedata, as: DDonedata
   alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns a `:donedata_not_on_final` error for every state that carries a

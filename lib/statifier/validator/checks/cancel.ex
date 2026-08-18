@@ -22,14 +22,11 @@ defmodule Statifier.Validator.Checks.Cancel do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Block
+  alias Statifier.Document.{Block, Initial, State}
   alias Statifier.Document.Cancel, as: DCancel
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
-  alias Statifier.Document.Initial
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<cancel>` in the document and returns a

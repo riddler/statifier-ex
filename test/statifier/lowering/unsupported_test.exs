@@ -1,9 +1,8 @@
 defmodule Statifier.Lowering.UnsupportedTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Lowering
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Lowering.Error
-  alias Statifier.Parser
   alias Statifier.Parser.Location
 
   defp parse!(xml) do

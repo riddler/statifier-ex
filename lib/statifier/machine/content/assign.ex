@@ -34,11 +34,9 @@ defmodule Statifier.Machine.Content.Assign do
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
-  alias Statifier.Effect
-  alias Statifier.Evaluator
+  alias Statifier.{Effect, Evaluator, Machine}
   alias Statifier.ExecutableContent.Context
   alias Statifier.Interpreter.Datamodel
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Assign
   alias Statifier.Parser.Location
 

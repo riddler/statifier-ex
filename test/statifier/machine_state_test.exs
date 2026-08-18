@@ -1,14 +1,9 @@
 defmodule Statifier.MachineStateTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Event
+  alias Statifier.{Compiler, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Event.Cause
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
   alias Statifier.Send.Routes
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

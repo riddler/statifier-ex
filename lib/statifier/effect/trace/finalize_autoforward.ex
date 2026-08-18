@@ -40,8 +40,7 @@ defmodule Statifier.Effect.Trace.FinalizeAutoforward do
   `round` are always stamped from the `Statifier.MachineState` at hand.
   """
 
-  alias Statifier.Event
-  alias Statifier.MachineState
+  alias Statifier.{Event, MachineState}
 
   @enforce_keys [:event, :finalized, :forwarded, :macrostep, :microstep, :round]
   defstruct [:event, :finalized, :forwarded, :macrostep, :microstep, :round]

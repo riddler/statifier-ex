@@ -136,13 +136,9 @@ defmodule Statifier.Interpreter.Content do
   how much the wrong position can cost.
   """
 
-  alias Statifier.Effect
-  alias Statifier.Evaluator
-  alias Statifier.ExecutableContent
+  alias Statifier.{Effect, Evaluator, ExecutableContent, Machine, MachineState}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content
-  alias Statifier.MachineState
 
   require Statifier.Effect, as: Effect
 

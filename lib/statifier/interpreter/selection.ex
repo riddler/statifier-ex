@@ -48,12 +48,9 @@ defmodule Statifier.Interpreter.Selection do
   `OrderedSet`.
   """
 
-  alias Statifier.Evaluator
-  alias Statifier.Event
+  alias Statifier.{Evaluator, Event, Machine, MachineState}
   alias Statifier.Interpreter.NameMatch
-  alias Statifier.Machine
   alias Statifier.Machine.Transition
-  alias Statifier.MachineState
 
   # A failed `cond`, paired with the transition it belongs to - the
   # accumulator D2 threads through the private walk instead of writing
