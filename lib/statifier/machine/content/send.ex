@@ -49,6 +49,7 @@ defmodule Statifier.Machine.Content.Send do
   alias Statifier.Machine.Param
   alias Statifier.MachineState
   alias Statifier.Parser.Location
+  alias Statifier.Send.Routes
   alias Statifier.Send.Target
 
   @enforce_keys [:c_index, :location]
@@ -180,7 +181,7 @@ defmodule Statifier.Machine.Content.Send do
          ) do
       %{owner: owner, machine_state: machine_state} = new_context
 
-      case reject_reason(fields.target, fields.type) do
+      case reject_reason(fields.target, fields.type, delay_ms, machine_state.routes) do
         nil ->
           fields = Map.put(fields, :data, data(node, raw_params, content))
           effect = build_effect(node, fields, send_id, delay_ms, owner, machine_state)
@@ -192,15 +193,18 @@ defmodule Statifier.Machine.Content.Send do
           {:ok, new_context,
            datamodel_change_effects(write, node, owner, machine_state) ++ [effect]}
 
-        reason ->
-          # ADR-0047: 6.2.4's invalid target and 6.2.5's unsupported type
-          # are rejected here, in the core, so 4.9's block abort is
-          # honored. The id was minted and idlocation written first
-          # (5.10.1's unconditional MUST), and the composite error form is
-          # what keeps both: the advanced send_counter and the datamodel
-          # write are in new_context's machine_state, which the block
-          # runner keeps on its fatal arm.
-          {:error, new_context, {:send_rejected, send_id, reason}}
+        {kind, reason} ->
+          # ADR-0047/ADR-0048: 6.2.4's invalid target, 6.2.5's unsupported
+          # type, and ADR-0048's unreachable route are all rejected here,
+          # in the core, so 4.9's block abort is honored. The id was
+          # minted and idlocation written first (5.10.1's unconditional
+          # MUST), and the composite error form is what keeps both: the
+          # advanced send_counter and the datamodel write are in
+          # new_context's machine_state, which the block runner keeps on
+          # its fatal arm. `kind` (`:execution | :communication`) is an
+          # atom, not an event-name string - `Statifier.Interpreter.Content`
+          # is still the only site that names an `error.*` event.
+          {:error, new_context, {:send_rejected, send_id, kind, reason}}
       end
     end
 
@@ -220,15 +224,50 @@ defmodule Statifier.Machine.Content.Send do
     # above ran `resolve_expr/2` on each), so a `targetexpr` that fails to
     # evaluate never reaches this function - that is still ADR-0036's
     # argument-failure path.
-    @spec reject_reason(target :: term(), type :: term()) ::
-            {:unsupported_type, term()} | {:invalid_target, term()} | nil
-    defp reject_reason(target, type) do
+    #
+    # ADR-0048: reachability, judged against the caller-declared snapshot on
+    # `%MachineState{}` - a value, never a lookup (ADR-0003/ADR-0027 stay
+    # structural). `nil` routes means the driver declared nothing, so the core
+    # makes no determination and the effect is emitted exactly as before; the
+    # session's `deliver/5` boundary is still the detector on that path
+    # (ADR-0048 decision 5). A delayed send is exempt: 6.2.3 governs *argument*
+    # evaluation at element-evaluation time and reachability is not an argument,
+    # so the route is resolved when the timer fires (ADR-0048 decision 6).
+    @spec reject_reason(
+            target :: term(),
+            type :: term(),
+            delay_ms :: non_neg_integer() | nil,
+            routes :: Routes.t() | nil
+          ) ::
+            {:execution, {:unsupported_type, term()} | {:invalid_target, term()}}
+            | {:communication, {:unreachable_target, term()}}
+            | nil
+    defp reject_reason(target, type, delay_ms, routes) do
       cond do
-        not Target.supported_type?(type) -> {:unsupported_type, type}
-        match?({:invalid, _reason}, Target.parse(target)) -> {:invalid_target, target}
-        true -> nil
+        not Target.supported_type?(type) ->
+          {:execution, {:unsupported_type, type}}
+
+        match?({:invalid, _reason}, Target.parse(target)) ->
+          {:execution, {:invalid_target, target}}
+
+        unreachable?(target, delay_ms, routes) ->
+          {:communication, {:unreachable_target, target}}
+
+        true ->
+          nil
       end
     end
+
+    @spec unreachable?(
+            target :: term(),
+            delay_ms :: non_neg_integer() | nil,
+            routes :: Routes.t() | nil
+          ) :: boolean()
+    defp unreachable?(_target, _delay_ms, nil), do: false
+    defp unreachable?(_target, delay_ms, _routes) when is_integer(delay_ms), do: false
+
+    defp unreachable?(target, nil, routes),
+      do: not Routes.reachable?(routes, Target.parse(target))
 
     # `delay`/`delayexpr` (6.2.2), resolved to whole milliseconds via
     # `Statifier.Duration.to_ms/1`. `nil` (neither attribute) -> `{:ok, nil}`
