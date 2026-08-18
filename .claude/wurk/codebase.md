@@ -17,11 +17,11 @@ The pure core stops at `{machine_state, [effect]}`; `session.ex` is the
 GenServer that performs those effects (ADR-0003, ADR-0027) - the one module
 under `lib/statifier/` allowed to do I/O. `session/` holds its pure deciding
 halves (`effects.ex`, `inbox.ex`, `invocations.ex`, `timers.ex`,
-`recording.ex`), `invoke/` and `send/` hold the small resolvers those effects
-need (`invoke/source.ex`, `send/target.ex`), and `replay.ex` re-drives a
-`Session.Recording` through the same core with no process and no timer
-(ADR-0034). `docs/architecture.md`'s "Sessions and invoke" section is the map
-of how these fit together.
+`recording.ex`, `telemetry.ex`), `invoke/` and `send/` hold the small
+resolvers those effects need (`invoke/source.ex`, `send/target.ex`), and
+`replay.ex` re-drives a `Session.Recording` through the same core with no
+process and no timer (ADR-0034). `docs/architecture.md`'s "Sessions and
+invoke" section is the map of how these fit together.
 
 `lib/mix/tasks/` and `lib/mix/statifier/` hold the repo's own gate machinery:
 `gate.check`, `gate.verify`, `adr.check`, `adr.judge`, `test.regression`,
