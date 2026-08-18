@@ -1,10 +1,21 @@
 diff --git a/lib/statifier/interpreter/exit_entry.ex b/lib/statifier/interpreter/exit_entry.ex
 --- a/lib/statifier/interpreter/exit_entry.ex
 +++ b/lib/statifier/interpreter/exit_entry.ex
-@@ -146,2 +146,1 @@
+@@ -143,7 +143,7 @@ defmodule Statifier.Interpreter.ExitEntry do
+ 
+     states_to_exit = Machine.exit_order(machine, exit_set)
+ 
 -    trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
--
 +    pre_exit_state = machine_state
-@@ -154,0 +153,2 @@
+ 
+     machine_state = record_history_values(machine_state, states_to_exit)
+ 
+@@ -153,6 +153,8 @@ defmodule Statifier.Interpreter.ExitEntry do
+         {ms, effects ++ new_effects}
+       end)
+ 
 +    trace_effects = Effect.trace(pre_exit_state, Effect.Trace.ExitSet, indexes: states_to_exit)
 +
+     {machine_state, trace_effects ++ depart_effects}
+   end
+ 

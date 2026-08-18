@@ -33,7 +33,7 @@
     expect: :violation,
     tier: :subtle,
     note:
-      "one of three callers of the shared id-location helper now reports the element span instead of the id attribute's - a location is still reported, at coarser granularity, for that check only"
+      "the same helper generalization as its clean partner, except one of the three callers now reports the element's own location instead of the id attribute's - a location is still reported, at coarser granularity, for that check only"
   },
   %{
     key: "adr-0012-debuggability",
@@ -49,15 +49,15 @@
     expect: :violation,
     tier: :subtle,
     note:
-      "the exit-set trace effect is built after the departure reduce instead of before it, so it is stamped against post-departure state while its payload and list position are unchanged"
+      "the exit-set trace effect is built after the departure reduce instead of before it, so it no longer records the exit-set phase boundary it names and any state-derived field it stamps would take post-departure values - payload and list position unchanged"
   },
   %{
     key: "adr-0012-debuggability",
-    file: "0012_trace_binding_renamed.diff",
+    file: "0012_trace_prestate_captured.diff",
     expect: :clean,
     tier: :subtle,
     note:
-      "the exit-set trace call moves below the departure reduce but reads a binding captured before it, so the stamped state is unchanged"
+      "the exit-set trace call moves below the departure reduce but reads a binding captured before it, so the state it is stamped against is the same one the unmoved call read"
   },
   %{
     key: "adr-0014-expression-spans",
@@ -133,6 +133,6 @@
     expect: :clean,
     tier: :subtle,
     note:
-      "a gate command array changes - a project fact, not a choice about what blocks - which ADR-0017 point 6 says must not be reported"
+      "an output-format flag is added to a gate command array - a project fact, not a choice about what blocks - which ADR-0017 point 6 says must not be reported"
   }
 ]

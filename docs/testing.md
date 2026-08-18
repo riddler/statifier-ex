@@ -89,12 +89,34 @@ from the three above in kind, not just in tag:
   `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
   measurement section for the full per-fixture numbers and the decision.
 
-  A `:subtle` tier (ten fixtures, five per-registry-entry pairs) now exists in
-  the corpus alongside the original eight `:blatant` fixtures
-  (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`), but it has
-  not yet been measured - the paid runs are deferred to a human under that
-  plan's Phase 5. The blatant-tier numbers above are unchanged by st-2ts's
-  Phases 1-4.
+  A `:subtle` tier (ten fixtures, five per-registry-entry pairs) joined the
+  corpus alongside the original eight `:blatant` fixtures
+  (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`) and was
+  measured on 2026-08-18 under that plan's Decision 2 - three runs per model at
+  seeds 101/202/303, a fixture's verdict being the majority of its three:
+
+  | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
+  |---|---|---|---|---|---|
+  | subtle | `claude-sonnet-5` | 3/5 | 0/5 | 3/10 | 145.7s |
+  | subtle | `claude-haiku-4-5-20251001` | 1/5 | 0/5 | 3/10 | 890.6s |
+
+  Two things follow, and the plan's Phase 5 holds the per-fixture matrices
+  behind both. First, the subtle tier separates the two models where the
+  blatant tier does not, which is what the tier was added for. Second, it
+  separates them **against** the current `@default_model`: haiku is the more
+  accurate of the two here, at roughly six times the wall time, so the
+  accuracy tie the `claude-sonnet-5` default was chosen under no longer holds.
+  The attribute is deliberately left where it is; the recommendation to
+  reconsider it is recorded in that plan's findings, and
+  `STATIFIER_ADR_JUDGE_MODEL` overrides it either way.
+
+  Read the blatant-tier rows above as single-run observations rather than a
+  reproducible floor: the 2026-08-18 control runs (one per model, seed 101)
+  each produced one false positive on a known-clean fixture - sonnet on
+  `0015_mechanics_only.diff`, haiku on `0014_span_preserving_refactor.diff` -
+  where the recorded baseline is 0/4. Neither run re-measured the tier under
+  the majority-of-three policy, which is what re-recording that table would
+  take.
 
 ## Sabotage testing
 
