@@ -1,0 +1,35 @@
+diff --git a/lib/statifier/compiler.ex b/lib/statifier/compiler.ex
+--- a/lib/statifier/compiler.ex
++++ b/lib/statifier/compiler.ex
+@@ -792 +792,30 @@
+-    Expressions.compile(source, {:transition, t_index}, cond_location(transition))
++    trimmed = String.trim_leading(source)
++    skipped = binary_part(source, 0, byte_size(source) - byte_size(trimmed))
++    anchor = advance_anchor(cond_location(transition), skipped)
++    Expressions.compile(trimmed, {:transition, t_index}, anchor)
++  end
++
++  # `resolve_span/4` requires the compiled value's `{1, 1}` to be the
++  # anchor's start, so a caller that trims must move the anchor by exactly
++  # what it skipped - counting any newlines in the skipped prefix, not just
++  # its byte length, so a leading blank line still advances the anchor's
++  # line and not merely its column.
++  @spec advance_anchor(location :: Location.t() | nil, skipped :: binary()) :: Location.t() | nil
++  defp advance_anchor(location, ""), do: location
++
++  defp advance_anchor(%Location{start_line: line, start_column: column} = location, skipped) do
++    {added_lines, last_line_length} =
++      case String.split(skipped, "\n") do
++        [only] -> {0, String.length(only)}
++        lines -> {length(lines) - 1, String.length(List.last(lines))}
++      end
++
++    new_column = if added_lines == 0, do: column + last_line_length, else: last_line_length + 1
++
++    %{
++      location
++      | start_line: line + added_lines,
++        start_column: new_column,
++        start_offset: location.start_offset + byte_size(skipped)
++    }
++  end

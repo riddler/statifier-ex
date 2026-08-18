@@ -74,6 +74,22 @@
     note: "helper extracted, spans preserved on both sides"
   },
   %{
+    key: "adr-0014-expression-spans",
+    file: "0014_trimmed_before_compile.diff",
+    expect: :violation,
+    tier: :subtle,
+    note:
+      "the cond source is trimmed before compiling while the location anchor is not adjusted, so the retained span table is offset from the document positions it is resolved against"
+  },
+  %{
+    key: "adr-0014-expression-spans",
+    file: "0014_trim_with_anchor_adjust.diff",
+    expect: :clean,
+    tier: :subtle,
+    note:
+      "the cond source is trimmed and the location anchor advanced by the trimmed prefix, so resolved spans still land on the document positions they name"
+  },
+  %{
     key: "adr-0015-swallowed-judgment",
     file: "0015_delegated_judgment.diff",
     expect: :violation,

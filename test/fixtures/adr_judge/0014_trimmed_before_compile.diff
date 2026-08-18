@@ -1,0 +1,6 @@
+diff --git a/lib/statifier/compiler.ex b/lib/statifier/compiler.ex
+--- a/lib/statifier/compiler.ex
++++ b/lib/statifier/compiler.ex
+@@ -792 +792 @@
+-    Expressions.compile(source, {:transition, t_index}, cond_location(transition))
++    Expressions.compile(String.trim(source), {:transition, t_index}, cond_location(transition))
