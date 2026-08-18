@@ -102,5 +102,37 @@
     expect: :clean,
     tier: :blatant,
     note: "wurk extension step names a script for mechanics, restates the policy in prose"
+  },
+  %{
+    key: "adr-0015-swallowed-judgment",
+    file: "0015_refusal_reduced_to_check.diff",
+    expect: :violation,
+    tier: :subtle,
+    note:
+      "the sabotage refusal is replaced by a check on the script's own missing-notes list, so the clause forbidding an invented note is gone while the surrounding prose still reads as policy"
+  },
+  %{
+    key: "adr-0015-swallowed-judgment",
+    file: "0015_refusal_restated_with_script.diff",
+    expect: :clean,
+    tier: :subtle,
+    note:
+      "the sabotage step names the script for the mechanics and restates the refusal in prose, which ADR-0017 point 1 permits"
+  },
+  %{
+    key: "adr-0015-swallowed-judgment",
+    file: "0015_manifest_policy_key.diff",
+    expect: :violation,
+    tier: :subtle,
+    note:
+      "a new not-applicable skip pattern reclassifies a stage that would otherwise block, with no prose stating the policy it points back to - ADR-0017 point 6"
+  },
+  %{
+    key: "adr-0015-swallowed-judgment",
+    file: "0015_manifest_constant_change.diff",
+    expect: :clean,
+    tier: :subtle,
+    note:
+      "a gate command array changes - a project fact, not a choice about what blocks - which ADR-0017 point 6 says must not be reported"
   }
 ]
