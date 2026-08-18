@@ -581,14 +581,14 @@ longer describes the mutation gets re-verified and rewritten.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating
-- [ ] Full `mix quality` green
-- [ ] `mix gate.verify` confirms a full, unscoped run
-- [ ] `mix test.regression` green - no conformance movement, since nothing
+- [x] `mix quality --profile loop` green while iterating
+- [x] Full `mix quality` green
+- [x] `mix gate.verify` confirms a full, unscoped run
+- [x] `mix test.regression` green - no conformance movement, since nothing
       stamps a non-`nil` snapshot yet
-- [ ] `mix quality --format json --report -` parses, for the looped runner's
+- [x] `mix quality --format json --report -` parses, for the looped runner's
       own routing
-- [ ] `grep -rn "Recording.entries(" test/` shows no remaining three-element
+- [x] `grep -rn "Recording.entries(" test/` shows no remaining three-element
       `{:event, _}` / bare `:cancel` / three-element `{:invoked_event, _, _}`
       pattern against a recording entry
 
@@ -959,6 +959,26 @@ items are deferred and surfaced once at the end instead of blocking here.
 - [ ] `Statifier.Machine.Content.Send` still names no `error.*` string
       anywhere (grep the file), and AC3's widened sweep is what proves it
       rather than the grep alone
+- [ ] Each sabotage note was actually verified red
+
+**Implementation Note**: Use `mix quality --profile loop` between edits and
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+      `Statifier.Replay` reimplements no Appendix D function (its own moduledoc
+      claims this; confirm the diff does not break the claim)
+- [ ] `docs/observability.md` constraint 6 reads correctly against ADR-0029's
+      four-input tuple: entries got richer, the input set did not grow
+- [ ] The widened `entry()` typedoc and `Statifier.Replay`'s clauses agree
+      shape for shape, with no clause silently ignoring its snapshot
 - [ ] Each sabotage note was actually verified red
 
 **Implementation Note**: Use `mix quality --profile loop` between edits and

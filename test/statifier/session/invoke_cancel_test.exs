@@ -260,7 +260,7 @@ defmodule Statifier.Session.InvokeCancelTest do
 
         Enum.any?(
           Recording.entries(recording),
-          &match?({:invoked_event, _invoke_id, %Event{name: "onexit.child"}}, &1)
+          &match?({:invoked_event, _invoke_id, %Event{name: "onexit.child"}, _routes}, &1)
         )
       end)
 

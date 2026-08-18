@@ -142,7 +142,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.status == :done end)
         end)
 
-      refute Enum.any?(Recording.entries(recording), &match?({:interpret, _}, &1))
+      refute Enum.any?(Recording.entries(recording), &match?({:interpret, _, _}, &1))
 
       assert length(stream) > 1
       assert {:halted, :done} in stream
@@ -196,9 +196,9 @@ defmodule Statifier.ReplayRoundTripTest do
       effects = [{:send_delayed, send_delayed}, {:log, log_effect}]
 
       assert [
-               {:interpret, ^effects},
-               {:timer, "s1", %Event{name: "go"}},
-               {:event, %Event{name: "go"}}
+               {:interpret, ^effects, nil},
+               {:timer, "s1", %Event{name: "go"}, nil},
+               {:event, %Event{name: "go"}, nil}
              ] = Recording.entries(recording)
 
       # What catches a double delivery is `round_trip/3`'s full ordered
@@ -262,7 +262,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.pending_timers == 1 end)
         end)
 
-      assert [{:interpret, ^effects}] = Recording.entries(recording)
+      assert [{:interpret, ^effects, nil}] = Recording.entries(recording)
 
       # `trace: true` also emits the initialization trace effects ahead of
       # the batch, and `Interpreter.initialize/2` always emits its own
@@ -307,9 +307,9 @@ defmodule Statifier.ReplayRoundTripTest do
         end)
 
       assert [
-               {:event, %Event{name: "go"}},
-               {:event, %Event{name: "go"}},
-               :cancel
+               {:event, %Event{name: "go"}, nil},
+               {:event, %Event{name: "go"}, nil},
+               {:cancel, nil}
              ] = Recording.entries(recording)
 
       assert length(stream) > 1
@@ -364,10 +364,10 @@ defmodule Statifier.ReplayRoundTripTest do
       # the session-level reading of "serialized input order" that the
       # per-kind cases each cover only a slice of.
       assert [
-               {:interpret, ^effects},
-               {:timer, "s1", %Event{name: "go"}},
-               {:event, %Event{name: "go"}},
-               :cancel
+               {:interpret, ^effects, nil},
+               {:timer, "s1", %Event{name: "go"}, nil},
+               {:event, %Event{name: "go"}, nil},
+               {:cancel, nil}
              ] = Recording.entries(recording)
 
       assert length(stream) > 1
@@ -499,7 +499,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.status == :done end)
         end)
 
-      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _}, &1))
+      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
       assert List.last(stream) == {:halted, :done}
       assert result.status == :done
     end
@@ -540,7 +540,7 @@ defmodule Statifier.ReplayRoundTripTest do
           wait_for_status(session, fn s -> s.status == :done end)
         end)
 
-      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _}, &1))
+      assert Enum.any?(Recording.entries(recording), &match?({:internal, _, _, _, _, _}, &1))
       assert List.last(stream) == {:halted, :done}
       assert result.status == :done
     end

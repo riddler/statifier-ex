@@ -7,6 +7,7 @@ defmodule Statifier.ReplayTest do
   alias Statifier.Lowering
   alias Statifier.Parser
   alias Statifier.Replay
+  alias Statifier.Send.Routes
   alias Statifier.Session
   alias Statifier.Session.Recording
   alias Statifier.Validator
@@ -102,7 +103,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_event(event("go"))
+        |> Recording.put_event(event("go"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -118,7 +119,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_cancel()
+        |> Recording.put_cancel(nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.status == :cancelled
@@ -139,7 +140,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([send_effect])
+        |> Recording.put_interpret([send_effect], nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -170,7 +171,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([invoke_effect])
+        |> Recording.put_interpret([invoke_effect], nil)
 
       assert {:ok, result} = Replay.run(recording)
       # `Interpreter.initialize/2`'s own `{:datamodel_init, _}` baseline
@@ -205,8 +206,8 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([invoke_effect])
-        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"))
+        |> Recording.put_interpret([invoke_effect], nil)
+        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -248,8 +249,8 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([invoke_effect, cancel_invoke_effect])
-        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"))
+        |> Recording.put_interpret([invoke_effect, cancel_invoke_effect], nil)
+        |> Recording.put_invoked_event("i1", Event.external("go", invokeid: "i1"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "a")])
@@ -269,8 +270,8 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 40)}])
-        |> Recording.put_timer("s1", event("go"))
+        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 40)}], nil)
+        |> Recording.put_timer("s1", event("go"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -288,9 +289,9 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 30)}])
-        |> Recording.put_interpret([{:cancel, cancel_effect("s1")}])
-        |> Recording.put_timer("s1", event("go"))
+        |> Recording.put_interpret([{:send_delayed, send_delayed("s1", 30)}], nil)
+        |> Recording.put_interpret([{:cancel, cancel_effect("s1")}], nil)
+        |> Recording.put_timer("s1", event("go"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "b")])
@@ -306,7 +307,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_timer("never-scheduled", event("go"))
+        |> Recording.put_timer("never-scheduled", event("go"), nil)
 
       assert Replay.run(recording) == {:error, {:unscheduled_timer_firing, "never-scheduled"}}
     end
@@ -325,7 +326,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test", max_macrostep_rounds: 5)
-        |> Recording.put_event(event("ignored"))
+        |> Recording.put_event(event("ignored"), nil)
 
       assert {:ok, result} = Replay.run(recording)
       assert result.status == :budget_exhausted
@@ -349,7 +350,7 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
-        |> Recording.put_interpret([log_one, log_two])
+        |> Recording.put_interpret([log_one, log_two], nil)
 
       assert {:ok, result} = Replay.run(recording)
 
@@ -493,6 +494,71 @@ defmodule Statifier.ReplayTest do
 
       assert result.machine_state.configuration ==
                MapSet.new([0, state_index(machine, "b")])
+    end
+  end
+
+  # -- route snapshot re-supply (ADR-0048 decision 3) ----------------------
+
+  describe "an entry's recorded route snapshot is re-supplied before its drive" do
+    defp send_unreachable_then_raise_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="go" target="b"/>
+          </state>
+          <state id="b">
+              <onentry>
+                  <send event="e1" target="#_scxml_foo"/>
+                  <raise event="sibling"/>
+              </onentry>
+              <transition event="sibling" target="c"/>
+              <transition event="error.communication" target="d"/>
+          </state>
+          <state id="c"/>
+          <state id="d"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `apply_entry/2`'s `{:event, %Event{} = event, routes}` clause
+    # drops its `stamp(state, routes)` call -> the recorded snapshot omitting
+    # "foo" never reaches `state.machine_state.routes` (which stays `nil`
+    # from initialization), so the core's reachability arm sees `nil` and
+    # emits the send unconditionally instead of rejecting it - the
+    # configuration reaches "c" instead of "d", reddening the assertion.
+    # Reverted and confirmed green.
+    test "a snapshot omitting the target session rejects the send, reaching the configuration the core's reachability arm produces" do
+      machine = compile!(send_unreachable_then_raise_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_routes")
+        |> Recording.put_event(event("go"), Routes.new())
+
+      assert {:ok, result} = Replay.run(recording)
+
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "d")])
+    end
+
+    # sabotage: same as above - dropping `stamp(state, routes)` from the
+    # `{:event, ...}` clause. This test's entry already carries `nil`, so
+    # `state.machine_state.routes` would still read `nil` either way and the
+    # assertion would stay green under that particular mutation - which is
+    # exactly the point of pairing it with the test above rather than relying
+    # on this one alone (the pair is what proves the re-supply is real,
+    # per the plan). Reverted and confirmed green.
+    test "a nil snapshot reproduces today's post-hoc path - the send is emitted, the sibling raises" do
+      machine = compile!(send_unreachable_then_raise_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_routes")
+        |> Recording.put_event(event("go"), nil)
+
+      assert {:ok, result} = Replay.run(recording)
+
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "c")])
+      assert Enum.any?(result.stream, &match?({:effect, {:send, _}}, &1))
     end
   end
 

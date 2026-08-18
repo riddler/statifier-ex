@@ -754,24 +754,28 @@ defmodule Statifier.Session do
 
   @impl GenServer
   def handle_cast({:enqueue_event, event}, state) do
-    state = record(state, &Recording.put_event(&1, event))
+    state = record(state, &Recording.put_event(&1, event, state.machine_state.routes))
     {:noreply, %{state | inbox: Inbox.enqueue_event(state.inbox, event)}, {:continue, :drain}}
   end
 
   def handle_cast({:enqueue_invoked_event, invoke_id, event}, state) do
-    state = record(state, &Recording.put_invoked_event(&1, invoke_id, event))
+    state =
+      record(
+        state,
+        &Recording.put_invoked_event(&1, invoke_id, event, state.machine_state.routes)
+      )
 
     {:noreply, %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)},
      {:continue, :drain}}
   end
 
   def handle_cast(:enqueue_cancel, state) do
-    state = record(state, &Recording.put_cancel/1)
+    state = record(state, &Recording.put_cancel(&1, state.machine_state.routes))
     {:noreply, %{state | inbox: Inbox.enqueue_cancel(state.inbox)}, {:continue, :drain}}
   end
 
   def handle_cast({:interpret, effects}, state) do
-    state = record(state, &Recording.put_interpret(&1, effects))
+    state = record(state, &Recording.put_interpret(&1, effects, state.machine_state.routes))
     Telemetry.interpret(state.session_id, length(effects), state.machine_state)
     {:noreply, perform(state, effects), {:continue, :drain}}
   end
@@ -789,7 +793,7 @@ defmodule Statifier.Session do
   # check decides whether it is drained now or stays queued.
   @impl GenServer
   def handle_info({:statifier_delayed_send, ref, send_id, route, event, effect}, state) do
-    state = record(state, &Recording.put_timer(&1, send_id, event))
+    state = record(state, &Recording.put_timer(&1, send_id, event, state.machine_state.routes))
 
     state = %{
       state
@@ -1431,7 +1435,11 @@ defmodule Statifier.Session do
           override :: :cancelled | nil
         ) :: State.t()
   defp deliver_internal(kind, name, origin, opts, state, override) do
-    state = record(state, &Recording.put_internal(&1, kind, name, origin, opts))
+    state =
+      record(
+        state,
+        &Recording.put_internal(&1, kind, name, origin, opts, state.machine_state.routes)
+      )
 
     in_macrostep(state, :internal, nil, fn state ->
       case Interpreter.deliver_internal(state.machine_state, kind, name, origin, opts) do

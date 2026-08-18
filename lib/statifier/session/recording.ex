@@ -19,6 +19,25 @@ defmodule Statifier.Session.Recording do
   references) is part of a recording, because none of it is an input; all of
   it is either derived or process-shaped.
 
+  ## The route snapshot rides on the entry, not as a fifth input
+
+  ADR-0048 decision 2 has the caller stamp a `Statifier.Send.Routes.t()`
+  snapshot onto `%MachineState{}` before every core drive; decision 3 has
+  each recorded entry that triggers a drive carry the snapshot that drive was
+  judged against. This is an *attribute* of an existing entry, not a new
+  recording input and not a new entry kind - ADR-0029's four inputs
+  (`machine`, `opts`, and the two entry-producing kinds it already named) are
+  unchanged in kind. Every `entry()` variant therefore widens by one trailing
+  `Statifier.Send.Routes.t() | nil` field, including `:cancel`, which becomes
+  `{:cancel, routes}` rather than a bare atom: a cancel drives
+  `Statifier.Interpreter.cancel/1`, whose exit walk can run `<onexit>` blocks
+  containing `<send>`, so it needs a snapshot exactly as every other drive
+  does. `nil` means the driver declared nothing - the same meaning `nil`
+  carries on `%MachineState{}.routes` itself - and `opts`'s own `:routes` key
+  carries the snapshot in force for the implicit session-start
+  initialization, riding where every other `Statifier.MachineState.new/2`
+  option already rides.
+
   ## `:session_id` is resolved, not supplied
 
   A caller starting a session may never pass `:session_id` at all, letting
@@ -69,19 +88,20 @@ defmodule Statifier.Session.Recording do
   alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Machine
+  alias Statifier.Send.Routes
 
   @enforce_keys [:machine, :opts, :entries]
   defstruct [:machine, :opts, entries: []]
 
   @typedoc "One recorded input, in the session's serialized input order."
   @type entry ::
-          {:event, Event.t()}
-          | {:invoked_event, invoke_id :: String.t(), Event.t()}
-          | :cancel
-          | {:timer, send_id :: String.t() | nil, Event.t()}
-          | {:interpret, [Effect.t()]}
+          {:event, Event.t(), Routes.t() | nil}
+          | {:invoked_event, invoke_id :: String.t(), Event.t(), Routes.t() | nil}
+          | {:cancel, Routes.t() | nil}
+          | {:timer, send_id :: String.t() | nil, Event.t(), Routes.t() | nil}
+          | {:interpret, [Effect.t()], Routes.t() | nil}
           | {:internal, kind :: :internal | :platform, name :: String.t(), Cause.origin(),
-             opts :: keyword()}
+             opts :: keyword(), Routes.t() | nil}
 
   @opaque t :: %__MODULE__{
             machine: Machine.t(),
@@ -89,14 +109,16 @@ defmodule Statifier.Session.Recording do
             entries: [entry()]
           }
 
-  @normalized_opts [:session_id, :trace, :datamodel, :max_macrostep_rounds]
+  @normalized_opts [:session_id, :trace, :datamodel, :max_macrostep_rounds, :routes]
 
   @doc """
   Starts an empty recording over `machine`, normalizing `opts` to exactly
-  `:session_id`, `:trace`, `:datamodel`, and `:max_macrostep_rounds`
-  (`Statifier.MachineState.new/2`'s own options), defaulted the same way that
-  function defaults them, and sorted by key so two recordings of the same run
-  compare equal regardless of the order their options were supplied in.
+  `:session_id`, `:trace`, `:datamodel`, `:max_macrostep_rounds`, and
+  `:routes` (`Statifier.MachineState.new/2`'s own options), defaulted the
+  same way that function defaults them, and sorted by key so two recordings
+  of the same run compare equal regardless of the order their options were
+  supplied in. `:routes` defaults to `nil` - the session-start
+  initialization's snapshot (see the moduledoc's "route snapshot" section).
 
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
@@ -112,15 +134,20 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:trace, false)
       |> Keyword.put_new(:datamodel, %{})
       |> Keyword.put_new(:max_macrostep_rounds, 10_000)
+      |> Keyword.put_new(:routes, nil)
       |> Enum.sort()
 
     %__MODULE__{machine: machine, opts: normalized, entries: []}
   end
 
-  @doc "Appends a delivered external event as the next entry."
-  @spec put_event(recording :: t(), event :: Event.t()) :: t()
-  def put_event(%__MODULE__{entries: entries} = recording, %Event{} = event) do
-    %{recording | entries: [{:event, event} | entries]}
+  @doc """
+  Appends a delivered external event as the next entry, carrying the
+  `Statifier.Send.Routes.t()` snapshot (or `nil`) in force for the drive it
+  triggers (see the moduledoc's "route snapshot" section).
+  """
+  @spec put_event(recording :: t(), event :: Event.t(), routes :: Routes.t() | nil) :: t()
+  def put_event(%__MODULE__{entries: entries} = recording, %Event{} = event, routes) do
+    %{recording | entries: [{:event, event, routes} | entries]}
   end
 
   @doc """
@@ -128,48 +155,73 @@ defmodule Statifier.Session.Recording do
   keyed by the `invoke_id` that delivered it - the input `Statifier.Replay`
   needs to reproduce 6.4.3's drain-time discard, which reads the entry's
   origin rather than `event.invokeid` (`Statifier.Session.Inbox`'s `entry`
-  typedoc).
+  typedoc) - plus the route snapshot in force for the drive it triggers.
   """
-  @spec put_invoked_event(recording :: t(), invoke_id :: String.t(), event :: Event.t()) :: t()
-  def put_invoked_event(%__MODULE__{entries: entries} = recording, invoke_id, %Event{} = event)
+  @spec put_invoked_event(
+          recording :: t(),
+          invoke_id :: String.t(),
+          event :: Event.t(),
+          routes :: Routes.t() | nil
+        ) :: t()
+  def put_invoked_event(
+        %__MODULE__{entries: entries} = recording,
+        invoke_id,
+        %Event{} = event,
+        routes
+      )
       when is_binary(invoke_id) do
-    %{recording | entries: [{:invoked_event, invoke_id, event} | entries]}
+    %{recording | entries: [{:invoked_event, invoke_id, event, routes} | entries]}
   end
 
-  @doc "Appends the cancel marker as the next entry."
-  @spec put_cancel(recording :: t()) :: t()
-  def put_cancel(%__MODULE__{entries: entries} = recording) do
-    %{recording | entries: [:cancel | entries]}
+  @doc """
+  Appends the cancel marker as the next entry, carrying the route snapshot in
+  force for the drive it triggers - a cancel drives
+  `Statifier.Interpreter.cancel/1`, whose exit walk can run `<onexit>` blocks
+  containing `<send>` (see the moduledoc's "route snapshot" section).
+  """
+  @spec put_cancel(recording :: t(), routes :: Routes.t() | nil) :: t()
+  def put_cancel(%__MODULE__{entries: entries} = recording, routes) do
+    %{recording | entries: [{:cancel, routes} | entries]}
   end
 
   @doc """
   Appends a fired delayed-send timer as the next entry - `send_id` (`nil` for
-  an unnamed send) and the delivered `event`, with the live session's own
-  correlation reference dropped (see the moduledoc).
+  an unnamed send), the delivered `event`, and the route snapshot in force
+  for the drive it triggers, with the live session's own correlation
+  reference dropped (see the moduledoc).
   """
-  @spec put_timer(recording :: t(), send_id :: String.t() | nil, event :: Event.t()) :: t()
-  def put_timer(%__MODULE__{entries: entries} = recording, send_id, %Event{} = event)
+  @spec put_timer(
+          recording :: t(),
+          send_id :: String.t() | nil,
+          event :: Event.t(),
+          routes :: Routes.t() | nil
+        ) :: t()
+  def put_timer(%__MODULE__{entries: entries} = recording, send_id, %Event{} = event, routes)
       when is_binary(send_id) or is_nil(send_id) do
-    %{recording | entries: [{:timer, send_id, event} | entries]}
+    %{recording | entries: [{:timer, send_id, event, routes} | entries]}
   end
 
   @doc """
   Appends one `interpret/2` batch as a single entry, preserving its boundary
-  (see the moduledoc's "A batch is one entry" section).
+  (see the moduledoc's "A batch is one entry" section), plus the route
+  snapshot in force for the drive it triggers.
   """
-  @spec put_interpret(recording :: t(), effects :: [Effect.t()]) :: t()
-  def put_interpret(%__MODULE__{entries: entries} = recording, effects) when is_list(effects) do
-    %{recording | entries: [{:interpret, effects} | entries]}
+  @spec put_interpret(recording :: t(), effects :: [Effect.t()], routes :: Routes.t() | nil) ::
+          t()
+  def put_interpret(%__MODULE__{entries: entries} = recording, effects, routes)
+      when is_list(effects) do
+    %{recording | entries: [{:interpret, effects, routes} | entries]}
   end
 
   @doc """
   Appends a `Statifier.Interpreter.deliver_internal/5` call as the next
   entry - `kind`, `name`, `origin` and `opts` exactly as
-  `Statifier.Session` passed them to that seam (ADR-0039). This is *not*
+  `Statifier.Session` passed them to that seam (ADR-0039), plus the route
+  snapshot in force for the drive it triggers. This is *not*
   deterministic from the recorded effect stream alone - whether a
   `#_scxml_<sessionid>` target resolved depends on which sessions were
   alive when the sending session performed its effects - so it has to be an
-  input in its own right, exactly as a fired timer is (`put_timer/3`
+  input in its own right, exactly as a fired timer is (`put_timer/4`
   above). It is also the delivery path for an entirely successful
   `<send target="#_internal">`, not only for the two spec-6.2.4 failures.
   """
@@ -178,11 +230,12 @@ defmodule Statifier.Session.Recording do
           kind :: :internal | :platform,
           name :: String.t(),
           origin :: Cause.origin(),
-          opts :: keyword()
+          opts :: keyword(),
+          routes :: Routes.t() | nil
         ) :: t()
-  def put_internal(%__MODULE__{entries: entries} = recording, kind, name, origin, opts)
+  def put_internal(%__MODULE__{entries: entries} = recording, kind, name, origin, opts, routes)
       when kind in [:internal, :platform] and is_binary(name) and is_list(opts) do
-    %{recording | entries: [{:internal, kind, name, origin, opts} | entries]}
+    %{recording | entries: [{:internal, kind, name, origin, opts, routes} | entries]}
   end
 
   @doc "The compiled document this recording was made over."
