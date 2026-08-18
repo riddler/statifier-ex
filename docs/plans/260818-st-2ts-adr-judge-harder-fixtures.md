@@ -669,12 +669,12 @@ they name".
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] The shape test passes with the two new rows, including both verdicts
+- [x] Full quality gate passes: `mix quality`
+- [x] The shape test passes with the two new rows, including both verdicts
       present for `(adr-0014-expression-spans, :subtle)` and empty chunks in the
       `.claude/wurk` scope
-- [ ] `mix test` still reports zero `adr_judge_corpus` tests executed
-- [ ] Use `mix quality --profile loop` between edits
+- [x] `mix test` still reports zero `adr_judge_corpus` tests executed
+- [x] Use `mix quality --profile loop` between edits
 
 #### Manual Verification:
 - [ ] The violating fixture is unambiguous to a human holding ADR-0014 and
@@ -1084,6 +1084,27 @@ Phase 2's single-fixture check.
 full `mix quality` as the phase gate. Fixture wording iteration, if it needs a
 model in the loop at all, uses `mix test --only fixture:<name>` - one fixture,
 not the corpus. Do not run the full corpus in this phase.
+
+---
+
+### Phase 3
+
+- [ ] The violating fixture is unambiguous to a human holding ADR-0014 and
+      `lib/statifier/parser/location.ex:94-97` side by side - if the violation
+      cannot be stated in one sentence from the shown material plus the ADR
+      text, the fixture is too indirect for the corpus, since the judge is shown
+      only the ADR and the hunks
+- [ ] The clean fixture's anchor arithmetic is right, so the pair really is
+      compliant-versus-not and not two flavors of broken. The fixture need not
+      compile, but every mechanism it relies on must be visible in the fixture
+      itself - it may not lean on an API the repository does not have
+- [ ] The touched compiler path matches the repository's actual span contract as
+      documented, not a remembered one
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run the
+full `mix quality` as the phase gate. This pair is the most likely to need a
+wording pass; iterate with `--only fixture:<name>` against the Phase-3 share of
+the authoring budget, not the corpus.
 
 ---
 ## Open Questions
