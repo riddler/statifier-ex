@@ -13,6 +13,23 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-18 - st-0y0
+
+Approved-by: JohnnyT (in session)
+
+- .quality.exs: the header comment for `mix quality --profile merge` names
+  `/wurk:mr` instead of `/merge-request`, and the reflowed tail collapses to
+  one line
+
+Reason: `/merge-request` was renamed to `/wurk:mr` when this repo's workflow
+moved onto the generic `wurk:*` skills, and `.quality.exs:16` was the last
+non-historical reference to a pre-rename skill name left in the tree - every
+other hit is dated plan or research prose, ADR text, or an older entry in this
+file, all of which are correct as written because they record what was true
+when they were written. The edit is inside a comment: no stage is added,
+removed, reordered or reconfigured, no threshold moves, and `Code.eval_file/1`
+hashes to 35104355 on both sides of the diff.
+
 ## 2026-08-16 - st-cmq.1
 
 Approved-by: JohnnyT (in session)
