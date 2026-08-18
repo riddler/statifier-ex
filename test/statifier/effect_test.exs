@@ -13,8 +13,7 @@ defmodule Statifier.EffectTest do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
-  alias Statifier.Event
-  alias Statifier.MachineState
+  alias Statifier.{Event, MachineState}
 
   require Statifier.Effect, as: Effect
 

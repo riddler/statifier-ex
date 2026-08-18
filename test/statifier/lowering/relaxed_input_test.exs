@@ -1,13 +1,9 @@
 defmodule Statifier.Lowering.RelaxedInputTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
+  alias Statifier.{Document, Lowering, Parser}
+  alias Statifier.Document.{State, Transition}
+  alias Statifier.Parser.{DOM, Location}
 
   defp parse!(xml) do
     {:ok, root} = Parser.parse(xml)

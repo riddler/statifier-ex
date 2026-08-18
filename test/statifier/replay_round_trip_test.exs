@@ -1,16 +1,9 @@
 defmodule Statifier.ReplayRoundTripTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Replay
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
   alias Statifier.Send.Routes
-  alias Statifier.Session
   alias Statifier.Session.Recording
-  alias Statifier.Validator
 
   # The recorder bead's acceptance criteria, executable: record a live run,
   # replay it, and assert both the effect stream and the terminal snapshot match

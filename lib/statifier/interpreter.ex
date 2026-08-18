@@ -179,21 +179,11 @@ defmodule Statifier.Interpreter do
     clauses.
   """
 
-  alias Statifier.Compiler
-  alias Statifier.Evaluator
-  alias Statifier.Event
+  alias Statifier.{Compiler, Evaluator, Event, EventData, Machine, MachineState}
   alias Statifier.Event.Cause
-  alias Statifier.EventData
-  alias Statifier.Interpreter.Content
-  alias Statifier.Interpreter.Datamodel
-  alias Statifier.Interpreter.ExitEntry
-  alias Statifier.Interpreter.Selection
-  alias Statifier.Machine
-  alias Statifier.Machine.Block
+  alias Statifier.Interpreter.{Content, Datamodel, ExitEntry, Selection}
+  alias Statifier.Machine.{Block, Param, Transition}
   alias Statifier.Machine.Invoke, as: MInvoke
-  alias Statifier.Machine.Param
-  alias Statifier.Machine.Transition
-  alias Statifier.MachineState
 
   require Statifier.Effect, as: Effect
 

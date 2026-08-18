@@ -33,8 +33,7 @@ defmodule Statifier.Validator.Context do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
+  alias Statifier.Document.{State, Transition}
 
   @enforce_keys [:source, :states, :ancestors, :parents, :transitions, :invoke_content_markup?]
   defstruct [:source, :states, :ancestors, :parents, :transitions, :invoke_content_markup?]

@@ -1,11 +1,8 @@
 defmodule Statifier.Lowering.CancelTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Block
-  alias Statifier.Document.Cancel
-  alias Statifier.Document.State
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.Document.{Block, Cancel, State}
+  alias Statifier.{Lowering, Parser}
 
   defp parse!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -10,14 +10,8 @@ defmodule Statifier.Session.InvokeStartChildTest do
   # runtime placed" branch, so this module is `async: false` the same way
   # that one is.
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
+  alias Statifier.{Compiler, Effect, Lowering, Parser, Session, StreamOrder, Validator}
   alias Statifier.Session.Invocations
-  alias Statifier.StreamOrder
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

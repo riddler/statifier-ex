@@ -1,13 +1,9 @@
 defmodule Statifier.Lowering.DonedataTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Content
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Param
-  alias Statifier.Document.State
-  alias Statifier.Lowering
+  alias Statifier.Document.{Content, Donedata, Param, State}
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Lowering.Error
-  alias Statifier.Parser
 
   defp parse!(xml) do
     {:ok, root} = Parser.parse(xml)

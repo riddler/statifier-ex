@@ -1,15 +1,9 @@
 defmodule Statifier.Evaluator.SystemVariablesTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Evaluator
+  alias Statifier.{Compiler, Evaluator, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Event
   alias Statifier.Event.Cause
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">

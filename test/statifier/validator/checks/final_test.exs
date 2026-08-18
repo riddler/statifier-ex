@@ -1,9 +1,7 @@
 defmodule Statifier.Validator.Checks.FinalTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Validator
+  alias Statifier.{Lowering, Parser, Validator}
   alias Statifier.Validator.Error
 
   defp lower!(xml) do

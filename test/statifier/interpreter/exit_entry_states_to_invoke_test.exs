@@ -1,12 +1,8 @@
 defmodule Statifier.Interpreter.ExitEntryStatesToInvokeTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Lowering, MachineState, Parser, Validator}
   alias Statifier.Interpreter.ExitEntry
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -1,8 +1,7 @@
 defmodule Statifier.Validator.ContextTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Validator.Context
 
   defp build!(xml) do

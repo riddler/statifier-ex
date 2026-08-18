@@ -13,9 +13,7 @@ defmodule Statifier.Session.TelemetryTest do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
-  alias Statifier.Event
-  alias Statifier.Machine
-  alias Statifier.Session
+  alias Statifier.{Event, Machine, Session}
   alias Statifier.Session.Telemetry
 
   # Handlers are global to the VM (`:telemetry.attach_many/4` registers on a

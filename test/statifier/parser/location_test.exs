@@ -2,8 +2,7 @@ defmodule Statifier.Parser.LocationTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Parser
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
+  alias Statifier.Parser.{DOM, Location}
 
   describe "at_offset/2" do
     # sabotage: line_and_column/1 seeds column with `String.length(last_line)`

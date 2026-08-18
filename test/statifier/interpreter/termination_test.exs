@@ -1,13 +1,7 @@
 defmodule Statifier.Interpreter.TerminationTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Interpreter
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
+  alias Statifier.{Compiler, Effect, Interpreter, Lowering, MachineState, Parser, Validator}
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

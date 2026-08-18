@@ -58,9 +58,7 @@ defmodule Statifier.Validator do
   alias Statifier.Validator.Checks.Script
   alias Statifier.Validator.Checks.Send
   alias Statifier.Validator.Checks.Targets
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
-  alias Statifier.Validator.Warning
+  alias Statifier.Validator.{Context, Error, Warning}
 
   @checks [
     &Ids.check/2,

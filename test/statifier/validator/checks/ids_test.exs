@@ -1,10 +1,7 @@
 defmodule Statifier.Validator.Checks.IdsTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Validator
+  alias Statifier.{Document, Lowering, Parser, Validator}
   alias Statifier.Validator.Error
 
   defp lower!(xml) do

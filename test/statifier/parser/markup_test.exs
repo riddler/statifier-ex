@@ -1,8 +1,7 @@
 defmodule Statifier.Parser.MarkupTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Parser.Location
-  alias Statifier.Parser.Markup
+  alias Statifier.Parser.{Location, Markup}
 
   describe "scan/1 - elements" do
     # sabotage: walk/3 prepends a self-closing tag's records unreversed

@@ -1,10 +1,8 @@
 defmodule Statifier.LoweringTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document
-  alias Statifier.Lowering
+  alias Statifier.{Document, Lowering, Parser}
   alias Statifier.Lowering.Error
-  alias Statifier.Parser
   alias Statifier.Parser.Location
 
   defp parse!(xml) do

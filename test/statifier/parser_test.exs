@@ -2,9 +2,7 @@ defmodule Statifier.ParserTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Parser
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
-  alias Statifier.Parser.ParseError
+  alias Statifier.Parser.{DOM, Location, ParseError}
 
   defp parse!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -1,13 +1,8 @@
 defmodule Statifier.Lowering.SendTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Block
-  alias Statifier.Document.Content
-  alias Statifier.Document.Param
-  alias Statifier.Document.Send
-  alias Statifier.Document.State
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.Document.{Block, Content, Param, Send, State}
+  alias Statifier.{Lowering, Parser}
 
   defp parse!(xml) do
     {:ok, root} = Parser.parse(xml)

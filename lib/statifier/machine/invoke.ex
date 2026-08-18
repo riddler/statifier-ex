@@ -50,10 +50,8 @@ defmodule Statifier.Machine.Invoke do
   of them, so the one shared map stands in for all of them at once.
   """
 
-  alias Statifier.Document
-  alias Statifier.Machine
-  alias Statifier.Machine.Block
-  alias Statifier.Machine.Param
+  alias Statifier.{Document, Machine}
+  alias Statifier.Machine.{Block, Param}
   alias Statifier.Parser.Location
 
   @enforce_keys [:index, :location]

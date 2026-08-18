@@ -2,15 +2,9 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
   use ExUnit.Case, async: true
 
   alias Predicator.Errors.UndefinedVariableError
-  alias Statifier.Compiler
-  alias Statifier.Evaluator
-  alias Statifier.Event
+  alias Statifier.{Compiler, Evaluator, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Interpreter.Selection
-  alias Statifier.Lowering
   alias Statifier.Machine.Transition
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

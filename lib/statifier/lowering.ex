@@ -51,11 +51,8 @@ defmodule Statifier.Lowering do
   """
 
   alias Statifier.Document
-  alias Statifier.Lowering.Builders
-  alias Statifier.Lowering.Error
-  alias Statifier.Lowering.Namespace
-  alias Statifier.Parser.DOM.Element
-  alias Statifier.Parser.DOM.Text
+  alias Statifier.Lowering.{Builders, Error, Namespace}
+  alias Statifier.Parser.DOM.{Element, Text}
 
   @dispatch %{
     "scxml" => &Builders.build_scxml/2,

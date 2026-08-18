@@ -57,10 +57,7 @@ defmodule Statifier.Parser.Handler do
 
   @behaviour Saxy.Handler
 
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
-  alias Statifier.Parser.Markup
-  alias Statifier.Parser.ParseError
+  alias Statifier.Parser.{DOM, Location, Markup, ParseError}
 
   @type cursor :: {offset :: non_neg_integer(), line :: pos_integer(), column :: pos_integer()}
 

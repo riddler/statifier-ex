@@ -1,12 +1,7 @@
 defmodule Statifier.Session.SendCancelTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
-  alias Statifier.Validator
+  alias Statifier.{Compiler, Effect, Lowering, Parser, Session, Validator}
 
   # Phase 6: the core-to-session seam proven on real `<send>`/`<cancel>`
   # documents, migrated off the hand-built `Session.interpret/2` effects

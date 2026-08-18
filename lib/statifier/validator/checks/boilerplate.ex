@@ -31,8 +31,7 @@ defmodule Statifier.Validator.Checks.Boilerplate do
 
   alias Statifier.Document
   alias Statifier.Lowering.Namespace
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns a `:bad_namespace` error when `document.namespace` does not resolve

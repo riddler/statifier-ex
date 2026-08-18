@@ -84,10 +84,8 @@ defmodule Statifier.Machine.Content.Foreach do
   anywhere else in the tree.
   """
 
-  alias Statifier.Evaluator
-  alias Statifier.ExecutableContent
+  alias Statifier.{Evaluator, ExecutableContent, Machine}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Foreach
   alias Statifier.Parser.Location
 

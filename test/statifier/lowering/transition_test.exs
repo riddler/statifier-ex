@@ -1,10 +1,8 @@
 defmodule Statifier.Lowering.TransitionTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.Document.{State, Transition}
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Parser.Location
 
   defp parse!(xml) do

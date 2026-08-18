@@ -1,13 +1,9 @@
 defmodule Statifier.Invoke.SourceTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Lowering, Machine, Parser, Validator}
   alias Statifier.Effect.Invoke
   alias Statifier.Invoke.Source
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

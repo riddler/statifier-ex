@@ -3,10 +3,8 @@ defmodule Statifier.Parser.LocationSpanResolutionTest do
 
   alias Statifier.Compiler.Error, as: CompilerError
   alias Statifier.Compiler.Expressions
-  alias Statifier.Evaluator
-  alias Statifier.Parser
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Location
+  alias Statifier.{Evaluator, Parser}
+  alias Statifier.Parser.{DOM, Location}
 
   # Phase 1's `resolve_span/4` tests feed hand-written spans. These prove the
   # same composition against a span predicator actually produced, reached

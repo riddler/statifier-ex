@@ -78,17 +78,9 @@ defmodule Statifier.Interpreter.ExitEntry do
   """
 
   alias Statifier.Effect.CancelInvoke
-  alias Statifier.Evaluator
-  alias Statifier.EventData
-  alias Statifier.Interpreter.Content
-  alias Statifier.Interpreter.Datamodel
-  alias Statifier.Interpreter.Selection
-  alias Statifier.Machine
-  alias Statifier.Machine.Donedata
-  alias Statifier.Machine.Param
-  alias Statifier.Machine.State
-  alias Statifier.Machine.Transition
-  alias Statifier.MachineState
+  alias Statifier.{Evaluator, EventData, Machine, MachineState}
+  alias Statifier.Interpreter.{Content, Datamodel, Selection}
+  alias Statifier.Machine.{Donedata, Param, State, Transition}
 
   require Statifier.Effect, as: Effect
 

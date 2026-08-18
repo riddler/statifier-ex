@@ -34,9 +34,7 @@ defmodule Statifier.Document.Invoke do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Block
-  alias Statifier.Document.Content
-  alias Statifier.Document.Param
+  alias Statifier.Document.{Block, Content, Param}
   alias Statifier.Parser.Location
 
   @enforce_keys [:location]

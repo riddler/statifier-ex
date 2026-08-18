@@ -38,11 +38,8 @@ defmodule Statifier.Validator.Checks.Data do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Data
-  alias Statifier.Document.Datamodel
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Document.{Data, Datamodel, State}
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns `:data_expr_and_src`, `:data_value_and_children`, and

@@ -1,14 +1,9 @@
 defmodule Statifier.MachineStateAcceptanceTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Effect.Trace
-  alias Statifier.Event
   alias Statifier.Event.Cause
-  alias Statifier.Lowering
-  alias Statifier.MachineState
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   require Statifier.Effect, as: Effect
 

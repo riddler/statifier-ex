@@ -1,21 +1,13 @@
 defmodule Statifier.Interpreter.DatamodelTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect.DatamodelChange
-  alias Statifier.Effect.DatamodelInit
-  alias Statifier.Evaluator
-  alias Statifier.Event
-  alias Statifier.ExecutableContent
+  alias Statifier.{Compiler, Evaluator, Event, ExecutableContent, Interpreter}
+  alias Statifier.Effect.{DatamodelChange, DatamodelInit}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Interpreter
   alias Statifier.Interpreter.Datamodel
-  alias Statifier.Lowering
+  alias Statifier.{Lowering, MachineState, Parser, Validator}
   alias Statifier.Machine.Content.Assign
-  alias Statifier.MachineState
-  alias Statifier.Parser
   alias Statifier.Parser.Location
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

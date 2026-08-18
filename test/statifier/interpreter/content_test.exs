@@ -1,22 +1,13 @@
 defmodule Statifier.Interpreter.ContentTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.ContextRecorder
-  alias Statifier.Effect
-  alias Statifier.Evaluator
+  alias Statifier.{Compiler, ContextRecorder, Effect, Evaluator, Lowering}
   alias Statifier.Evaluator.Error, as: EvaluatorError
-  alias Statifier.Interpreter.Content
-  alias Statifier.Interpreter.ExitEntry
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.Machine.Content.Assign
-  alias Statifier.Machine.Content.Script
-  alias Statifier.MachineState
-  alias Statifier.Parser
+  alias Statifier.Interpreter.{Content, ExitEntry}
+  alias Statifier.{Machine, MachineState, Parser, TestContent, Validator}
+  alias Statifier.Machine.Content.{Assign, Script}
   alias Statifier.Parser.Location
-  alias Statifier.TestContent
-  alias Statifier.Validator
+  alias Statifier.Send.Routes
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

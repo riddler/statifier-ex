@@ -103,10 +103,7 @@ defmodule Statifier.Machine do
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
-  alias Statifier.Machine.Content
-  alias Statifier.Machine.Data
-  alias Statifier.Machine.State
-  alias Statifier.Machine.Transition
+  alias Statifier.Machine.{Content, Data, State, Transition}
   alias Statifier.Parser.Location
   alias Statifier.Validator.Warning
 

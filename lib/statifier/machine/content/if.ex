@@ -50,10 +50,8 @@ defmodule Statifier.Machine.Content.If do
   anywhere else in the tree.
   """
 
-  alias Statifier.Evaluator
-  alias Statifier.ExecutableContent
+  alias Statifier.{Evaluator, ExecutableContent, Machine}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content.If
   alias Statifier.Parser.Location
 

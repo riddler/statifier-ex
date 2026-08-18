@@ -1,9 +1,8 @@
 defmodule Statifier.Lowering.CoverageTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Lowering
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Lowering.Error
-  alias Statifier.Parser
 
   # The same 25-name vocabulary `test/statifier/parser/generic_handler_test.exs`
   # scans for, kept as its own copy: `lib/` may not reference `test/support/`

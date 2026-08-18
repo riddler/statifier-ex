@@ -52,8 +52,7 @@ defmodule Statifier.Validator.Checks.Enums do
 
   alias Statifier.Document
   alias Statifier.Parser.Location
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @transition_types ["internal", "external"]
   @bindings ["early", "late"]

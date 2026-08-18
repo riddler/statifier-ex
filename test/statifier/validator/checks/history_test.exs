@@ -2,12 +2,9 @@ defmodule Statifier.Validator.Checks.HistoryTest do
   use ExUnit.Case, async: true
 
   alias Statifier.Document.State
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.{Lowering, Parser, Validator}
   alias Statifier.Parser.Location
-  alias Statifier.Validator
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)

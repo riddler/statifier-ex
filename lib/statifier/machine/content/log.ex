@@ -11,10 +11,8 @@ defmodule Statifier.Machine.Content.Log do
   anywhere else in the tree.
   """
 
-  alias Statifier.Effect
-  alias Statifier.Evaluator
+  alias Statifier.{Effect, Evaluator, Machine}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Log
   alias Statifier.Parser.Location
 

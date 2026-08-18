@@ -13,9 +13,7 @@ defmodule Statifier.Parser.DOM do
   object.
   """
 
-  alias Statifier.Parser.DOM.Attribute
-  alias Statifier.Parser.DOM.Element
-  alias Statifier.Parser.DOM.Text
+  alias Statifier.Parser.DOM.{Attribute, Element, Text}
 
   @doc """
   `element`'s children, filtered to elements.

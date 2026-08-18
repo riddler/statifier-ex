@@ -14,10 +14,8 @@ defmodule Statifier.Lowering.Attributes do
   """
 
   alias Statifier.Document
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.DOM.Attribute
-  alias Statifier.Parser.DOM.Element
-  alias Statifier.Parser.Location
+  alias Statifier.Parser.{DOM, Location}
+  alias Statifier.Parser.DOM.{Attribute, Element}
 
   @doc """
   The raw, entity-expanded value of `element`'s `name` attribute, or `nil`

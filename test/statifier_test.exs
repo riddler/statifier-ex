@@ -1,8 +1,7 @@
 defmodule StatifierTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Event
-  alias Statifier.Machine
+  alias Statifier.{Event, Machine}
   alias Statifier.Validator.Warning
 
   # sabotage: in `Statifier.compile/1`, swap `Compiler.compile(document)` for

@@ -1,16 +1,8 @@
 defmodule Statifier.Lowering.LocationTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Block
-  alias Statifier.Document.Content
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.Initial
-  alias Statifier.Document.Log
-  alias Statifier.Document.Raise
-  alias Statifier.Document.State
-  alias Statifier.Document.Transition
-  alias Statifier.Lowering
-  alias Statifier.Parser
+  alias Statifier.Document.{Block, Content, Donedata, Initial, Log, Raise, State, Transition}
+  alias Statifier.{Lowering, Parser}
   alias Statifier.Parser.Location
 
   # In the style of `test/statifier/parser/location_accuracy_test.exs:13-37`:

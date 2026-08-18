@@ -1,17 +1,10 @@
 defmodule Statifier.Effect.TraceTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Effect.Trace.ContentExecuted
-  alias Statifier.Effect.Trace.Done
-  alias Statifier.Effect.Trace.EntrySet
-  alias Statifier.Effect.Trace.EventDequeued
-  alias Statifier.Effect.Trace.ExitSet
-  alias Statifier.Effect.Trace.FinalizeAutoforward
-  alias Statifier.Effect.Trace.InvokePass
-  alias Statifier.Effect.Trace.MacrostepStable
-  alias Statifier.Effect.Trace.TransitionsSelected
-  alias Statifier.Event
-  alias Statifier.MachineState
+  alias Statifier.Effect.Trace.{ContentExecuted, Done, EntrySet}
+  alias Statifier.Effect.Trace.{EventDequeued, ExitSet, FinalizeAutoforward}
+  alias Statifier.Effect.Trace.{InvokePass, MacrostepStable, TransitionsSelected}
+  alias Statifier.{Event, MachineState}
 
   # `new/2` never inspects `:machine` - a placeholder is enough for every
   # payload module under test here, which only reads the counters. Each

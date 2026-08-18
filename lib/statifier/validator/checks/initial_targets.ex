@@ -42,8 +42,7 @@ defmodule Statifier.Validator.Checks.InitialTargets do
 
   alias Statifier.Document
   alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns, per state and for the document's own root `initial` attribute, one

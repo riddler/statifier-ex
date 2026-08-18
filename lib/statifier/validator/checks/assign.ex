@@ -29,10 +29,8 @@ defmodule Statifier.Validator.Checks.Assign do
   alias Statifier.Document.Assign, as: DAssign
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
-  alias Statifier.Document.Initial
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Document.{Initial, State}
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<assign>` reachable through a state's `onentry`/`onexit`

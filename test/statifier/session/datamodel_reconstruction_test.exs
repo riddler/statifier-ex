@@ -11,14 +11,9 @@ defmodule Statifier.Session.DatamodelReconstructionTest do
   # `Statifier.Session`, all inside the initial macrostep (no external event
   # is needed to exercise the point).
 
-  alias Statifier.Compiler
-  alias Statifier.Effect.DatamodelChange
-  alias Statifier.Effect.DatamodelInit
+  alias Statifier.{Compiler, Lowering, Parser, Session, Validator}
+  alias Statifier.Effect.{DatamodelChange, DatamodelInit}
   alias Statifier.Evaluator.SystemVariables
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -138,10 +138,8 @@ defmodule Statifier.Evaluator do
   """
 
   alias Predicator.Errors.EvaluationError
-  alias Statifier.Evaluator.Error
-  alias Statifier.Evaluator.Functions
-  alias Statifier.Machine
-  alias Statifier.MachineState
+  alias Statifier.Evaluator.{Error, Functions}
+  alias Statifier.{Machine, MachineState}
 
   @doc """
   Builds the `Predicator.Context.t()` `evaluate/2` evaluates against, bound

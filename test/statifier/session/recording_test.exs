@@ -1,15 +1,10 @@
 defmodule Statifier.Session.RecordingTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Event, Lowering, Machine, Parser, Validator}
   alias Statifier.Effect.Log
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.Parser
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
-  alias Statifier.Validator
 
   defp compile! do
     xml = """

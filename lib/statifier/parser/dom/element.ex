@@ -24,8 +24,7 @@ defmodule Statifier.Parser.DOM.Element do
     of the end tag (for a self-closing element, the tag itself).
   """
 
-  alias Statifier.Parser.DOM.Attribute
-  alias Statifier.Parser.DOM.Text
+  alias Statifier.Parser.DOM.{Attribute, Text}
   alias Statifier.Parser.Location
 
   @enforce_keys [:name, :attributes, :children, :location]

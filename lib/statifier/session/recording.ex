@@ -85,10 +85,8 @@ defmodule Statifier.Session.Recording do
   `Statifier.Session` alone touch wall-clock time does not name this file.
   """
 
-  alias Statifier.Effect
-  alias Statifier.Event
+  alias Statifier.{Effect, Event, Machine}
   alias Statifier.Event.Cause
-  alias Statifier.Machine
   alias Statifier.Send.Routes
 
   @enforce_keys [:machine, :opts, :entries]

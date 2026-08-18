@@ -1,12 +1,8 @@
 defmodule Statifier.Evaluator.FunctionsTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Lowering, Machine, Parser, Validator}
   alias Statifier.Evaluator.Functions
-  alias Statifier.Lowering
-  alias Statifier.Machine
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">

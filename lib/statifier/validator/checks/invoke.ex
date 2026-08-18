@@ -46,9 +46,7 @@ defmodule Statifier.Validator.Checks.Invoke do
   alias Statifier.Document.Invoke, as: DInvoke
   alias Statifier.Document.Raise, as: DRaise
   alias Statifier.Document.Send, as: DSend
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
-  alias Statifier.Validator.Warning
+  alias Statifier.Validator.{Context, Error, Warning}
 
   @doc """
   Walks every `<invoke>` in the document and returns one error per 6.4.1

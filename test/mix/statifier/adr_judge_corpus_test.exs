@@ -1,8 +1,7 @@
 defmodule Mix.Statifier.AdrJudgeCorpusTest do
   use ExUnit.Case, async: false
 
-  alias Mix.Statifier.AdrJudge
-  alias Mix.Statifier.AdrJudgeCorpus
+  alias Mix.Statifier.{AdrJudge, AdrJudgeCorpus}
 
   # Real `claude` CLI calls: ~11-78s per fixture (one propose call, plus one
   # refute call per proposed candidate), ~6 minutes for the whole corpus at

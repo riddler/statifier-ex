@@ -1,16 +1,9 @@
 defmodule Statifier.ReplayTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Replay
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
   alias Statifier.Send.Routes
-  alias Statifier.Session
   alias Statifier.Session.Recording
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

@@ -5,14 +5,8 @@ defmodule Statifier.Session.InvokeAutoforwardTest do
   # `Statifier.Supervisor` (a fixed, module-qualified singleton), so this
   # module is `async: false`.
 
-  alias Statifier.Compiler
-  alias Statifier.Effect
-  alias Statifier.Event
-  alias Statifier.Lowering
-  alias Statifier.Parser
-  alias Statifier.Session
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, Validator}
   alias Statifier.Session.Invocations
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

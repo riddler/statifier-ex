@@ -1,13 +1,9 @@
 defmodule Statifier.Compiler.DataTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Compiler
+  alias Statifier.{Compiler, Lowering, Machine, Parser, Validator}
   alias Statifier.Compiler.Error
-  alias Statifier.Lowering
-  alias Statifier.Machine
   alias Statifier.Machine.Data, as: MData
-  alias Statifier.Parser
-  alias Statifier.Validator
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)

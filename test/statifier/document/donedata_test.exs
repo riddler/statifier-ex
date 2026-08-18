@@ -1,8 +1,7 @@
 defmodule Statifier.Document.DonedataTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Content
-  alias Statifier.Document.Donedata
+  alias Statifier.Document.{Content, Donedata}
   alias Statifier.Parser.Location
 
   defp loc do

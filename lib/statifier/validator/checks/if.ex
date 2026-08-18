@@ -43,10 +43,8 @@ defmodule Statifier.Validator.Checks.If do
   alias Statifier.Document.Foreach, as: DForeach
   alias Statifier.Document.If, as: DIf
   alias Statifier.Document.If.Branch
-  alias Statifier.Document.Initial
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Document.{Initial, State}
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<if>` reachable through a state's `onentry`/`onexit` blocks or

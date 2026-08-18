@@ -28,11 +28,8 @@ defmodule Statifier.Validator.Checks.Ids do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Data
-  alias Statifier.Document.Datamodel
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Document.{Data, Datamodel, State}
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns an `:empty_id` error for every state or `<data>` written `id=""`

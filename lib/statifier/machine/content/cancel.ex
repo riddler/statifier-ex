@@ -19,11 +19,8 @@ defmodule Statifier.Machine.Content.Cancel do
   anywhere else in the tree.
   """
 
-  alias Statifier.Document
-  alias Statifier.Effect
-  alias Statifier.Evaluator
+  alias Statifier.{Document, Effect, Evaluator, Machine}
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine
   alias Statifier.Machine.Content.Cancel
   alias Statifier.Parser.Location
 

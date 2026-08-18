@@ -17,8 +17,7 @@ defmodule Statifier.Validator.Checks.Targets do
   """
 
   alias Statifier.Document
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Returns an `:unresolved_target` error for every `<transition>` in the

@@ -36,11 +36,8 @@ defmodule Statifier.Validator.Checks.Content do
   """
 
   alias Statifier.Document
-  alias Statifier.Document.Content
-  alias Statifier.Document.Donedata
-  alias Statifier.Document.State
-  alias Statifier.Validator.Context
-  alias Statifier.Validator.Error
+  alias Statifier.Document.{Content, Donedata, State}
+  alias Statifier.Validator.{Context, Error}
 
   @doc """
   Walks every `<final>`'s `<donedata><content>` and every state's

@@ -1,9 +1,7 @@
 defmodule Statifier.Document.BlockTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Document.Block
-  alias Statifier.Document.Log
-  alias Statifier.Document.Raise
+  alias Statifier.Document.{Block, Log, Raise}
   alias Statifier.Parser.Location
 
   defp loc(offset) do

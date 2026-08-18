@@ -93,10 +93,7 @@ defmodule Statifier.Parser do
   raises" holds for every binary and not merely every *well-formed-ish* one.
   """
 
-  alias Statifier.Parser.DOM
-  alias Statifier.Parser.Handler
-  alias Statifier.Parser.Markup
-  alias Statifier.Parser.ParseError
+  alias Statifier.Parser.{DOM, Handler, Markup, ParseError}
 
   @doc """
   Parses `source` into its root element.
