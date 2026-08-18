@@ -257,8 +257,8 @@ promotion path.
 | compiler assigns document-order indexes to transitions, executable-content nodes, and `<data>` elements (`t_index`/`c_index`/`d_index`, dense from 0) | `Statifier.Compiler` |
 | internally raised events carry cause metadata (identity + step) | `Statifier.Event.Cause`, `MachineState.raise_internal/4` |
 | Appendix D query functions take/return plain values, unfused | `Statifier.Interpreter.Selection`, `Statifier.Interpreter.ExitEntry`, `Statifier.Interpreter.Content` |
-| validator warnings retained on the compiled Machine (ADR-0033) | `Statifier.Validator.Warning`, `Statifier.Machine.warnings` |
 | the session's live invocations are nameable from outside it, so an observer can walk the invoke tree | `Statifier.Session.invocations/1`, `Statifier.Session.Invocations.list/1` |
+| validator warnings retained on the compiled Machine (ADR-0033) | `Statifier.Validator.Warning`, `Statifier.Machine.warnings` |
 
 The last row is a seam of one link, not an omission: a validator finding is
 produced before a `Machine` exists, so none of the trace vocabulary above

@@ -27,7 +27,7 @@ ADR-0027 decision 3 is the table and monitor topology this builds on: the
 invocations table already tracks `{session_id, pid, monitor_ref,
 autoforward}` per invoke id, and children are already started as ordinary
 monitored processes on the flat registry, not as children of the parent's
-supervision tree. ADR-0012 constraint 6 and `docs/observability.md`
+supervision tree. ADR-0012 and `docs/observability.md`
 constraint 6 name the seam being widened here: today observation happens at
 a single session boundary, and this record is the first to describe
 observation across an invoke tree. ADR-0029 is why `:record` is not part of

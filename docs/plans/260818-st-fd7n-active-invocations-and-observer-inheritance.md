@@ -288,12 +288,12 @@ propagation, which would supersede decision 5 rather than amend it.
 
 #### Manual Verification:
 
-- [ ] The six decision points read as decisions with reasons, not as a
+- [x] The six decision points read as decisions with reasons, not as a
       restatement of the plan, and each rejected alternative names why it was
       rejected rather than only that it was.
-- [ ] The ADR is reviewed at the direction level per `docs/workflow.md` before
+- [ ] (outstanding - human/direction gate) The ADR is reviewed at the direction level per `docs/workflow.md` before
       the branch is opened for merge.
-- [ ] No regressions in related features: nothing outside `docs/` changed.
+- [x] No regressions in related features: nothing outside `docs/` changed.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
@@ -443,16 +443,16 @@ each module's own `compile!/1`, `content_body/0`, and `wait_for_status/3`.
 
 #### Manual Verification:
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously here, since this phase touches no Appendix D procedure; confirm
       by reading the diff that `lib/statifier/interpreter*` is untouched.
-- [ ] In IEx over a document with two `<invoke>`s, `Session.invocations/1`
+- [x] In IEx over a document with two `<invoke>`s, `Session.invocations/1`
       returns both entries sorted, each `pid` is alive, and
       `Session.session_id/1` on each pid equals the reported `session_id`.
-- [ ] `Session.invocations/1` on a session with no `<invoke>` returns `[]`
+- [x] `Session.invocations/1` on a session with no `<invoke>` returns `[]`
       rather than raising, and on a halted session returns `[]` once
       `terminate/2`-adjacent cancellation has emptied the table.
-- [ ] No regressions in related features: `#_<invokeid>` routing, autoforward,
+- [x] No regressions in related features: `#_<invokeid>` routing, autoforward,
       and cancellation behave as before.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
@@ -643,18 +643,18 @@ session's own stream.
 
 #### Manual Verification:
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously here, since this phase touches no Appendix D procedure; confirm
       from the diff that `lib/statifier/interpreter*` is untouched and that the
       change is confined to `Statifier.Session`'s effect-performing half.
-- [ ] In IEx, a three-level document (parent invokes child invokes grandchild)
+- [x] In IEx, a three-level document (parent invokes child invokes grandchild)
       started `trace: true, subscribers: [self()], inherit_observers: true`
       fills the mailbox with `{:statifier, sid, {:effect, _}}` under all three
       session ids, and `Session.invocations/1` walks from the root to the leaf.
-- [ ] The same document started without the option produces messages under the
+- [x] The same document started without the option produces messages under the
       root's session id only.
-- [ ] `{:halted, _}` arrives last within each session id's own stream.
-- [ ] No regressions in related features: cancelling an invocation still stops
+- [x] `{:halted, _}` arrives last within each session id's own stream.
+- [x] No regressions in related features: cancelling an invocation still stops
       the child and the parent's subscribers stop receiving that child's
       messages; a killed subscriber does not take a child down.
 
@@ -764,18 +764,30 @@ does move, that is a finding to stop on rather than to ratchet.
 
 ## Deferred Manual Verification
 
+**Verified 2026-08-18.** Every item below was exercised against a running
+runtime and is ticked, with two clarifications worth carrying forward:
+
+- "cancelling an invocation still stops the child" means the child reaches
+  `:cancelled` with its `<onexit>` walk run and emits nothing further on its
+  stream; the child *process* deliberately stays alive, since
+  `{:stop_child, _}` calls `Session.cancel/1` rather than `GenServer.stop/2`
+  (`lib/statifier/session.ex:1247-1259`). A check asserting process death is
+  asserting the wrong thing.
+- The one item left unticked is the direction-level ADR review, which is a
+  human gate rather than something this branch can satisfy for itself.
+
 Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The six decision points read as decisions with reasons, not as a
+- [x] The six decision points read as decisions with reasons, not as a
       restatement of the plan, and each rejected alternative names why it was
       rejected rather than only that it was.
-- [ ] The ADR is reviewed at the direction level per `docs/workflow.md` before
+- [ ] (outstanding - human/direction gate) The ADR is reviewed at the direction level per `docs/workflow.md` before
       the branch is opened for merge.
-- [ ] No regressions in related features: nothing outside `docs/` changed.
+- [x] No regressions in related features: nothing outside `docs/` changed.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
@@ -788,16 +800,16 @@ deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously here, since this phase touches no Appendix D procedure; confirm
       by reading the diff that `lib/statifier/interpreter*` is untouched.
-- [ ] In IEx over a document with two `<invoke>`s, `Session.invocations/1`
+- [x] In IEx over a document with two `<invoke>`s, `Session.invocations/1`
       returns both entries sorted, each `pid` is alive, and
       `Session.session_id/1` on each pid equals the reported `session_id`.
-- [ ] `Session.invocations/1` on a session with no `<invoke>` returns `[]`
+- [x] `Session.invocations/1` on a session with no `<invoke>` returns `[]`
       rather than raising, and on a halted session returns `[]` once
       `terminate/2`-adjacent cancellation has emptied the table.
-- [ ] No regressions in related features: `#_<invokeid>` routing, autoforward,
+- [x] No regressions in related features: `#_<invokeid>` routing, autoforward,
       and cancellation behave as before.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
@@ -811,18 +823,18 @@ deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] The touched functions match the W3C Appendix D pseudocode line for line -
+- [x] The touched functions match the W3C Appendix D pseudocode line for line -
       vacuously here, since this phase touches no Appendix D procedure; confirm
       from the diff that `lib/statifier/interpreter*` is untouched and that the
       change is confined to `Statifier.Session`'s effect-performing half.
-- [ ] In IEx, a three-level document (parent invokes child invokes grandchild)
+- [x] In IEx, a three-level document (parent invokes child invokes grandchild)
       started `trace: true, subscribers: [self()], inherit_observers: true`
       fills the mailbox with `{:statifier, sid, {:effect, _}}` under all three
       session ids, and `Session.invocations/1` walks from the root to the leaf.
-- [ ] The same document started without the option produces messages under the
+- [x] The same document started without the option produces messages under the
       root's session id only.
-- [ ] `{:halted, _}` arrives last within each session id's own stream.
-- [ ] No regressions in related features: cancelling an invocation still stops
+- [x] `{:halted, _}` arrives last within each session id's own stream.
+- [x] No regressions in related features: cancelling an invocation still stops
       the child and the parent's subscribers stop receiving that child's
       messages; a killed subscriber does not take a child down.
 

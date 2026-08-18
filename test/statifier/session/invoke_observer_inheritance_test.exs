@@ -112,13 +112,13 @@ defmodule Statifier.Session.InvokeObserverInheritanceTest do
     StreamOrder.assert_monotone(stream)
   end
 
+  @tag timeout: 10_000
   # sabotage: `inherited_observer_opts/1`'s `true`-shaped clause drops
   # `inherit_observers: true` from the returned keyword list (keeping only
   # `trace`/`subscribers`) -> the grandchild's own parent (the child) starts
   # with `inherit_observers` defaulting back to `false`, so the grandchild's
   # `Trace.EntrySet` never reaches the parent's subscriber and the
   # `Enum.any?/2` assertion below reddens. Reverted and confirmed green.
-  @tag timeout: 10_000
   test "transitive: a grandchild's trace effects reach the root's subscribers" do
     parent_xml = parent_doc(content_body(escape_cdata(@child_with_grandchild_xml)))
     machine = compile!(parent_xml)
