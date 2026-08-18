@@ -13,8 +13,7 @@
 #   mix quality --profile merge - the full gate plus the ADR judge (mix
 #                                 adr.judge). It makes real `claude` CLI calls,
 #                                 so it is opt-in rather than part of every
-#                                 gate run; /merge-request runs it before
-#                                 pushing.
+#                                 gate run; /wurk:mr runs it before pushing.
 #
 # Agents: prefer `--format json --report -` when you want to route on results.
 
