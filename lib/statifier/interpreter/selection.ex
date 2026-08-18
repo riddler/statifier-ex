@@ -581,9 +581,14 @@ defmodule Statifier.Interpreter.Selection do
           filtered :: [Transition.t()]
         ) :: {:preempted, [Transition.t()]} | {:keep, [Transition.t()]}
   defp resolve_against_filtered(machine_state, t1, filtered) do
-    filtered
-    |> Enum.reduce_while({:keep, []}, &conflict_step(machine_state, t1, filtered, &1, &2))
-    |> case do
+    result =
+      Enum.reduce_while(
+        filtered,
+        {:keep, []},
+        &conflict_step(machine_state, t1, filtered, &1, &2)
+      )
+
+    case result do
       {:preempted, removed_filtered} -> {:preempted, removed_filtered}
       {:keep, to_remove} -> {:keep, filtered -- to_remove}
     end

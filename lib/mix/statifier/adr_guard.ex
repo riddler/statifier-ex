@@ -466,13 +466,21 @@ defmodule Mix.Statifier.AdrGuard do
     if compliant? or String.length(normalized) < @min_name_length do
       nil
     else
-      candidates
-      |> Enum.filter(fn {_canonical, candidate} -> near_miss?(normalized, candidate) end)
-      |> Enum.max_by(fn {_canonical, candidate} -> rank(normalized, candidate) end, fn -> nil end)
-      |> case do
-        {canonical, _candidate} -> canonical
-        nil -> nil
-      end
+      nearest_near_miss(candidates, normalized)
+    end
+  end
+
+  defp nearest_near_miss(candidates, normalized) do
+    near_misses =
+      Enum.filter(candidates, fn {_canonical, candidate} -> near_miss?(normalized, candidate) end)
+
+    case Enum.max_by(
+           near_misses,
+           fn {_canonical, candidate} -> rank(normalized, candidate) end,
+           fn -> nil end
+         ) do
+      {canonical, _candidate} -> canonical
+      nil -> nil
     end
   end
 
