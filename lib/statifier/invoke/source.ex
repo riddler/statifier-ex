@@ -46,7 +46,9 @@ defmodule Statifier.Invoke.Source do
   - `{:content_not_markup, content}` - `content` was present but neither
     `nil` nor a binary (a value-shaped `<content>`, 5.6's other case,
     naming nothing an SCXML-typed service can start).
-  - `:no_source` - neither `src` nor `content` was present.
+  - `:no_source` - neither `src` nor `content` yielded a usable source: both
+    absent, or `content` absent and `src` not a binary (a `srcexpr` that
+    evaluated to a non-string).
 
   An embedder-supplied `invoke_source` resolver's own `{:error, reason}` is
   returned unchanged, so its `reason` shape is not enumerated here.
@@ -87,17 +89,24 @@ defmodule Statifier.Invoke.Source do
     end
   end
 
-  def resolve(%Invoke{content: nil, src: nil}, _opts) do
+  # Matches `content: nil` whatever `src` holds, not just `src: nil`. `src`
+  # is typed `String.t() | nil` but is not one at runtime: it is whatever
+  # `srcexpr` evaluated to, stored verbatim off `resolve_expr/2`'s
+  # `{:ok, term()}` (interpreter.ex), so `<invoke srcexpr="1 + 1"/>` with no
+  # `<content>` reaches here with `src: 2`. The `is_binary(src)` clause above
+  # therefore does not exhaust the non-nil half, and a `src: nil` pattern
+  # here would leave that case falling through to the catch-all below,
+  # reporting `{:content_not_markup, nil}` - a reason its own typedoc says
+  # cannot carry `nil`.
+  def resolve(%Invoke{content: nil}, _opts) do
     {:error, :no_source}
   end
 
-  # No guard needed: `content: nil` is already fully handled by the two
-  # clauses above (`is_binary(src)` and `src: nil` between them exhaust
-  # `src`'s `String.t() | nil` type), and `is_binary(content)` is fully
-  # handled by the `resolve/2` clause above that. Whatever reaches here has
-  # `content` present and not a binary - `content` is `term()`, so that is
-  # not expressible as a structural pattern the way a `String.t() | nil`
-  # field would be.
+  # No guard needed: every `content: nil` case is taken above, and
+  # `is_binary(content)` by the first clause, so whatever reaches here has
+  # `content` present and not a binary. `content` is `term()`, which is not
+  # expressible as a structural pattern the way a `String.t() | nil` field
+  # would be.
   def resolve(%Invoke{content: content}, _opts) do
     {:error, {:content_not_markup, content}}
   end
