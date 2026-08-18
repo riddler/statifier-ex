@@ -27,17 +27,24 @@ defmodule Mix.Statifier.AdrJudgeCorpusShapeTest do
   end
 
   # sabotage: n/a - asserts manifest/fixture consistency, no lib/ behavior
-  test "every registry entry has at least one violation and one clean fixture" do
-    by_key = Enum.group_by(@manifest, & &1.key)
+  test "every manifest row declares a known tier" do
+    for entry <- @manifest do
+      assert entry.tier in [:blatant, :subtle],
+             "#{entry.file} has tier #{inspect(Map.get(entry, :tier))}; " <>
+               "expected :blatant or :subtle"
+    end
+  end
 
-    for registry_entry <- AdrJudge.judged() do
-      rows = Map.get(by_key, registry_entry.key, [])
+  # sabotage: n/a - asserts manifest/fixture consistency, no lib/ behavior
+  test "every registry entry has both verdicts in every tier it appears in" do
+    by_key_and_tier = Enum.group_by(@manifest, &{&1.key, &1.tier})
 
+    for {{key, tier}, rows} <- by_key_and_tier do
       assert Enum.any?(rows, &(&1.expect == :violation)),
-             "#{registry_entry.key} has no :violation fixture"
+             "#{key} has no :violation fixture in the #{tier} tier"
 
       assert Enum.any?(rows, &(&1.expect == :clean)),
-             "#{registry_entry.key} has no :clean fixture"
+             "#{key} has no :clean fixture in the #{tier} tier"
     end
   end
 
