@@ -203,7 +203,15 @@ defmodule Statifier.Session.TelemetryTest do
     {:transitions_selected,
      {:trace,
       %Trace.TransitionsSelected{t_indexes: [], event: nil, macrostep: 1, microstep: 1, round: 0}}},
-    {:exit_set, {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}}},
+    {:exit_set,
+     {:trace,
+      %Trace.ExitSet{
+        indexes: [],
+        configuration: MapSet.new(),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }}},
     {:content_executed,
      {:trace,
       %Trace.ContentExecuted{
@@ -213,7 +221,15 @@ defmodule Statifier.Session.TelemetryTest do
         microstep: 1,
         round: 0
       }}},
-    {:entry_set, {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}}},
+    {:entry_set,
+     {:trace,
+      %Trace.EntrySet{
+        indexes: [],
+        configuration: MapSet.new(),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }}},
     {:macrostep_stable,
      {:trace,
       %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}}},
@@ -726,7 +742,14 @@ defmodule Statifier.Session.TelemetryTest do
     test "a list-carrying trace effect carries no location key, the index list, and a size measurement",
          %{ref: ref} do
       machine = located_machine()
-      payload = %Trace.ExitSet{indexes: [1, 2, 3], macrostep: 1, microstep: 1, round: 0}
+
+      payload = %Trace.ExitSet{
+        indexes: [1, 2, 3],
+        configuration: MapSet.new(),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
 
       Telemetry.effect("sess1", machine, {:trace, payload})
 
@@ -815,7 +838,16 @@ defmodule Statifier.Session.TelemetryTest do
       machine = located_machine()
       {:ok, a_index} = Machine.index(machine, "a")
 
-      one = {:trace, %Trace.ExitSet{indexes: [a_index], macrostep: 1, microstep: 1, round: 0}}
+      one =
+        {:trace,
+         %Trace.ExitSet{
+           indexes: [a_index],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
       Telemetry.effect("sess1", machine, one)
 
       assert_received {[:statifier, :session, :trace, :exit_set], ^ref, one_measurements,
@@ -824,7 +856,16 @@ defmodule Statifier.Session.TelemetryTest do
       assert one_measurements.size == 1
       refute Map.has_key?(one_metadata, :location)
 
-      zero = {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}}
+      zero =
+        {:trace,
+         %Trace.ExitSet{
+           indexes: [],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
       Telemetry.effect("sess1", machine, zero)
 
       assert_received {[:statifier, :session, :trace, :exit_set], ^ref, zero_measurements,
@@ -835,7 +876,13 @@ defmodule Statifier.Session.TelemetryTest do
 
       many =
         {:trace,
-         %Trace.ExitSet{indexes: [a_index, a_index], macrostep: 1, microstep: 1, round: 0}}
+         %Trace.ExitSet{
+           indexes: [a_index, a_index],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
 
       Telemetry.effect("sess1", machine, many)
 
@@ -857,7 +904,16 @@ defmodule Statifier.Session.TelemetryTest do
       machine = located_machine()
       {:ok, a_index} = Machine.index(machine, "a")
 
-      one = {:trace, %Trace.EntrySet{indexes: [a_index], macrostep: 1, microstep: 1, round: 0}}
+      one =
+        {:trace,
+         %Trace.EntrySet{
+           indexes: [a_index],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
       Telemetry.effect("sess1", machine, one)
 
       assert_received {[:statifier, :session, :trace, :entry_set], ^ref, one_measurements,
@@ -866,7 +922,16 @@ defmodule Statifier.Session.TelemetryTest do
       assert one_measurements.size == 1
       refute Map.has_key?(one_metadata, :location)
 
-      zero = {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}}
+      zero =
+        {:trace,
+         %Trace.EntrySet{
+           indexes: [],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
       Telemetry.effect("sess1", machine, zero)
 
       assert_received {[:statifier, :session, :trace, :entry_set], ^ref, zero_measurements,
@@ -877,7 +942,13 @@ defmodule Statifier.Session.TelemetryTest do
 
       many =
         {:trace,
-         %Trace.EntrySet{indexes: [a_index, a_index], macrostep: 1, microstep: 1, round: 0}}
+         %Trace.EntrySet{
+           indexes: [a_index, a_index],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
 
       Telemetry.effect("sess1", machine, many)
 

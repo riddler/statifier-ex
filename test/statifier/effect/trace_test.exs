@@ -61,9 +61,17 @@ defmodule Statifier.Effect.TraceTest do
     # round: 0` instead of reading them off `machine_state` -> this
     # assertion reddens.
     test "stamps counters from machine_state and sets its own fields" do
-      payload = ExitSet.new(ms(2, 4, 6), indexes: [9, 3, 1])
+      configuration = MapSet.new([2, 4])
 
-      assert %ExitSet{indexes: [9, 3, 1], macrostep: 2, microstep: 4, round: 6} = payload
+      payload = ExitSet.new(ms(2, 4, 6), indexes: [9, 3, 1], configuration: configuration)
+
+      assert %ExitSet{
+               indexes: [9, 3, 1],
+               configuration: ^configuration,
+               macrostep: 2,
+               microstep: 4,
+               round: 6
+             } = payload
     end
   end
 
@@ -85,9 +93,17 @@ defmodule Statifier.Effect.TraceTest do
     # round: 0` instead of reading them off `machine_state` -> this
     # assertion reddens.
     test "stamps counters from machine_state and sets its own fields" do
-      payload = EntrySet.new(ms(6, 3, 10), indexes: [1, 2, 5])
+      configuration = MapSet.new([1, 2])
 
-      assert %EntrySet{indexes: [1, 2, 5], macrostep: 6, microstep: 3, round: 10} = payload
+      payload = EntrySet.new(ms(6, 3, 10), indexes: [1, 2, 5], configuration: configuration)
+
+      assert %EntrySet{
+               indexes: [1, 2, 5],
+               configuration: ^configuration,
+               macrostep: 6,
+               microstep: 3,
+               round: 10
+             } = payload
     end
   end
 

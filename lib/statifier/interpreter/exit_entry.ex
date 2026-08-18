@@ -113,15 +113,21 @@ defmodule Statifier.Interpreter.ExitEntry do
   3. `exit_set` is sorted into exit order via `Machine.exit_order/2` into
      `states_to_exit`: `compute_exit_set/2` returns unordered, and ordering
      it is this function's job, not `Selection`'s.
-  4. `Effect.trace(machine_state, Effect.Trace.ExitSet, indexes:
-     states_to_exit)` is emitted over the `machine_state` as it stands after
-     step 2's `states_to_invoke` update - the macro's own hygienic
-     `machine_state` rebinding inside its expansion does not touch this
-     function's parameter.
-  5. `record_history_values/2` runs its whole first pass over
+  4. `record_history_values/2` runs its whole first pass over
      `states_to_exit`, reading the untouched configuration.
-  6. `states_to_exit` is reduced through `depart/2`, each state running its
+  5. `states_to_exit` is reduced through `depart/2`, each state running its
      `onexit` blocks and then leaving the configuration.
+  6. `Effect.trace(pre_exit_state, Effect.Trace.ExitSet, indexes:
+     states_to_exit, configuration: machine_state.configuration)` is
+     emitted last: `macrostep`/`microstep`/`round` are stamped against
+     `pre_exit_state`, captured as `machine_state` stood after step 2's
+     `states_to_invoke` update and before the departure reduce (ADR-0012 -
+     `test/fixtures/adr_judge/0012_trace_prestate_captured.diff` is the
+     sanctioned shape), while `configuration` is read from the
+     post-departure `machine_state` because "the configuration after this
+     exit set was applied" does not exist until step 5 has run.
+     The payload's position in the returned list is unchanged: it is still
+     first, since the list is concatenated at the end either way.
   """
   @spec exit_states(machine_state :: MachineState.t(), enabled_transitions :: [Transition.t()]) ::
           {MachineState.t(), [Effect.t()]}
@@ -135,7 +141,13 @@ defmodule Statifier.Interpreter.ExitEntry do
 
     states_to_exit = Machine.exit_order(machine, exit_set)
 
-    trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
+    # ADR-0012: the counters this payload stamps must be the ones that stood
+    # at the exit-set phase boundary, so the trace is stamped against
+    # `pre_exit_state`; only `configuration` is read from the post-departure
+    # state, because "the configuration after this exit set was applied"
+    # does not exist until the reduce below has run. Effect-list
+    # position is unchanged: the list is concatenated at the end either way.
+    pre_exit_state = machine_state
 
     machine_state = record_history_values(machine_state, states_to_exit)
 
@@ -144,6 +156,12 @@ defmodule Statifier.Interpreter.ExitEntry do
         {ms, new_effects} = depart(ms, state_index)
         {ms, effects ++ new_effects}
       end)
+
+    trace_effects =
+      Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
+        indexes: states_to_exit,
+        configuration: machine_state.configuration
+      )
 
     {machine_state, trace_effects ++ depart_effects}
   end
@@ -661,12 +679,20 @@ defmodule Statifier.Interpreter.ExitEntry do
   1. `compute_entry_set/2` over `enabled_transitions`.
   2. `entry_order` = `Machine.document_order/2` over `states_to_enter` -
      ascending index, the mirror of `exit_states/2`'s `exit_order`.
-  3. `Effect.trace(machine_state, Effect.Trace.EntrySet, indexes:
-     entry_order)` before any mutation, over the *original* `machine_state`.
-  4. `entry_order` is reduced through `arrive/3`, each state added to the
+  3. `entry_order` is reduced through `arrive/3`, each state added to the
      configuration, its `onentry` blocks run, its default-entry / default-
      history content run when flagged/registered, then its completion
      events raised.
+  4. `Effect.trace(pre_entry_state, Effect.Trace.EntrySet, indexes:
+     entry_order, configuration: machine_state.configuration)` is emitted
+     last: `macrostep`/`microstep`/`round` are stamped against
+     `pre_entry_state`, captured as `machine_state` stood before step 3's
+     `arrive/3` reduce (ADR-0012, mirroring `exit_states/2`), while
+     `configuration` is read from the post-entry `machine_state` because
+     "the configuration after this entry set was applied" does not exist
+     until step 3 has run. The payload's position in the returned
+     list is unchanged: it is still first, since the list is concatenated
+     at the end either way.
   """
   @spec enter_states(machine_state :: MachineState.t(), enabled_transitions :: [Transition.t()]) ::
           {MachineState.t(), [Effect.t()]}
@@ -676,7 +702,13 @@ defmodule Statifier.Interpreter.ExitEntry do
 
     entry_order = Machine.document_order(machine, states_to_enter)
 
-    trace_effects = Effect.trace(machine_state, Effect.Trace.EntrySet, indexes: entry_order)
+    # ADR-0012: the counters this payload stamps must be the ones that stood
+    # at the entry-set phase boundary, so the trace is stamped against
+    # `pre_entry_state`; only `configuration` is read from the post-entry
+    # state, because "the configuration after this entry set was applied"
+    # does not exist until the reduce below has run. Effect-list
+    # position is unchanged: the list is concatenated at the end either way.
+    pre_entry_state = machine_state
 
     bookkeeping = {states_for_default_entry, default_history_content}
 
@@ -685,6 +717,12 @@ defmodule Statifier.Interpreter.ExitEntry do
         {ms, new_effects} = arrive(ms, state_index, bookkeeping)
         {ms, effects ++ new_effects}
       end)
+
+    trace_effects =
+      Effect.trace(pre_entry_state, Effect.Trace.EntrySet,
+        indexes: entry_order,
+        configuration: machine_state.configuration
+      )
 
     {machine_state, trace_effects ++ arrive_effects}
   end

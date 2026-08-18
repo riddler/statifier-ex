@@ -1588,14 +1588,20 @@ defmodule Statifier.Interpreter do
      document themselves as "the configuration as it stood at exit", which
      the walk would otherwise leave empty.
   2. `states_to_exit` = `Machine.exit_order/2` over the configuration, and
-     `Trace.ExitSet` is emitted over it before any state leaves - the same
+     `Trace.ExitSet` is emitted over it, stamped against `pre_exit_state`
+     (`machine_state` as it stood before the termination sweep) - the same
      phase-boundary row `exit_states/2` emits, at the one other place this
      engine exits states. ADR-0012 item 2 binds the row to the boundaries
      Appendix D itself names, and `exitInterpreter` names one: its
-     `statesToExit` is the same variable `exitStates` computes. `Trace.Done`
-     carries the same set as `configuration`, but it arrives after the walk
-     and means "the run ended here", so it is not a substitute for a marker
-     that means "these are about to be exited".
+     `statesToExit` is the same variable `exitStates` computes. Its
+     `configuration` field is read from the post-sweep `machine_state`:
+     the sweep provably empties the configuration, so this is
+     always `MapSet.new()`, but it is read rather than hardcoded so it
+     cannot drift from the walk. `Trace.Done` carries the configuration as
+     it stood *at* exit (non-empty, from `configuration_at_exit`), but it
+     arrives after the walk and means "the run ended here", so it is not a
+     substitute for a marker that means "these are about to be exited" and
+     its empty `Trace.ExitSet.configuration` counterpart.
   3. Each state, in exit order, runs its `onexit` blocks
      (`ExitEntry.run_onexit_blocks/2` - the same per-state body
      `exit_states/2`'s `depart/2` runs), then each of its live invocations
@@ -1640,7 +1646,13 @@ defmodule Statifier.Interpreter do
     configuration_at_exit = machine_state.configuration
     states_to_exit = Machine.exit_order(machine, configuration_at_exit)
 
-    exit_set_trace = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
+    # ADR-0012: the counters this payload stamps must be the ones that stood
+    # at the exit-set phase boundary, so the trace is stamped against
+    # `pre_exit_state`; only `configuration` is read from the post-sweep
+    # state, because "the configuration after this exit set was applied"
+    # does not exist until the reduce below has run. Effect-list
+    # position is unchanged: the list is concatenated at the end either way.
+    pre_exit_state = machine_state
 
     {machine_state, donedata, exit_effects} =
       Enum.reduce(states_to_exit, {machine_state, nil, []}, fn state_index,
@@ -1663,6 +1675,12 @@ defmodule Statifier.Interpreter do
 
         {ms, donedata, effects ++ onexit_effects ++ cancel_effects}
       end)
+
+    exit_set_trace =
+      Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
+        indexes: states_to_exit,
+        configuration: machine_state.configuration
+      )
 
     done_trace =
       Effect.trace(machine_state, Effect.Trace.Done,

@@ -291,6 +291,27 @@ defmodule Statifier.Interpreter.TerminationTest do
 
       assert [] = for({:trace, %Effect.Trace.ExitSet{} = payload} <- effects, do: payload)
     end
+
+    # sabotage: `exit_interpreter/1`'s `exit_set_trace` is built with
+    # `configuration: pre_exit_state.configuration` instead of the
+    # post-sweep `machine_state.configuration` -> the payload's
+    # `configuration` comes back non-empty, reddening the empty-set
+    # assertion below.
+    test "carries the empty configuration, while the sibling Trace.Done carries the configuration at exit" do
+      m = machine()
+      ms = machine_state(m, [idx(:parent), idx(:leaf)])
+
+      {_result, effects} = Interpreter.exit_interpreter(ms)
+
+      assert [%Effect.Trace.ExitSet{} = exit_set] =
+               for({:trace, %Effect.Trace.ExitSet{} = payload} <- effects, do: payload)
+
+      assert [%Effect.Trace.Done{} = done_trace] =
+               for({:trace, %Effect.Trace.Done{} = payload} <- effects, do: payload)
+
+      assert exit_set.configuration == MapSet.new()
+      assert done_trace.configuration == MapSet.new([idx(:parent), idx(:leaf)])
+    end
   end
 
   describe "exit_interpreter/1 - Trace.Done" do

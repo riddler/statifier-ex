@@ -322,8 +322,25 @@ defmodule Statifier.Session.EffectsTest do
        {:notify,
         {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 1, microstep: 1, round: 0}}}
      ]},
-    {{:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
-     [{:notify, {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}}}]},
+    {{:trace,
+      %Trace.ExitSet{
+        indexes: [],
+        configuration: MapSet.new(),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }},
+     [
+       {:notify,
+        {:trace,
+         %Trace.ExitSet{
+           indexes: [],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}}
+     ]},
     {{:trace,
       %Trace.ContentExecuted{
         owner: {:transition, 0},
@@ -343,8 +360,25 @@ defmodule Statifier.Session.EffectsTest do
            round: 0
          }}}
      ]},
-    {{:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
-     [{:notify, {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}}}]},
+    {{:trace,
+      %Trace.EntrySet{
+        indexes: [],
+        configuration: MapSet.new(),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }},
+     [
+       {:notify,
+        {:trace,
+         %Trace.EntrySet{
+           indexes: [],
+           configuration: MapSet.new(),
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}}
+     ]},
     {{:trace,
       %Trace.MacrostepStable{configuration: MapSet.new(), macrostep: 1, microstep: 1, round: 0}},
      [

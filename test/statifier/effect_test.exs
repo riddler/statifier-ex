@@ -93,7 +93,14 @@ defmodule Statifier.EffectTest do
          round: 0
        }},
       {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 1, microstep: 1, round: 0}},
-      {:trace, %Trace.ExitSet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
+      {:trace,
+       %Trace.ExitSet{
+         indexes: [],
+         configuration: MapSet.new(),
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
       {:trace,
        %Trace.ContentExecuted{
          owner: {:transition, 0},
@@ -102,7 +109,14 @@ defmodule Statifier.EffectTest do
          microstep: 1,
          round: 0
        }},
-      {:trace, %Trace.EntrySet{indexes: [], macrostep: 1, microstep: 1, round: 0}},
+      {:trace,
+       %Trace.EntrySet{
+         indexes: [],
+         configuration: MapSet.new(),
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
       {:trace,
        %Trace.MacrostepStable{
          configuration: MapSet.new(),
@@ -199,9 +213,18 @@ defmodule Statifier.EffectTest do
     # the condition) -> the on-case below returns `[]` instead of the
     # one-element list, reddening this assertion.
     test "gate on: returns a one-element list holding the stamped payload" do
-      effects = Effect.trace(ms(2, 3, true), Trace.EntrySet, indexes: [1, 2])
+      effects =
+        Effect.trace(ms(2, 3, true), Trace.EntrySet, indexes: [1, 2], configuration: MapSet.new())
 
-      assert [{:trace, %Trace.EntrySet{indexes: [1, 2], macrostep: 2, microstep: 3}}] = effects
+      assert [
+               {:trace,
+                %Trace.EntrySet{
+                  indexes: [1, 2],
+                  configuration: %MapSet{},
+                  macrostep: 2,
+                  microstep: 3
+                }}
+             ] = effects
     end
 
     # sabotage: `Effect.trace/3`'s `else` branch returns `[nil]` instead of
@@ -228,7 +251,12 @@ defmodule Statifier.EffectTest do
     # the condition) -> trace-on now takes the `else` branch, `fields` is
     # never evaluated, and `assert_received` below reddens.
     test "the fields expression is evaluated when trace is on" do
-      Effect.trace(ms(1, 1, true), Trace.EntrySet, indexes: send(self(), :evaluated) && [1])
+      Effect.trace(
+        ms(1, 1, true),
+        Trace.EntrySet,
+        indexes: send(self(), :evaluated) && [1],
+        configuration: MapSet.new()
+      )
 
       assert_received :evaluated
     end
@@ -244,7 +272,8 @@ defmodule Statifier.EffectTest do
         Effect.trace(
           send(self(), :evaluated) && ms(1, 1, true),
           Trace.EntrySet,
-          indexes: [1]
+          indexes: [1],
+          configuration: MapSet.new()
         )
 
       assert [{:trace, %Trace.EntrySet{}}] = effects
