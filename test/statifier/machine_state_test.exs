@@ -7,6 +7,7 @@ defmodule Statifier.MachineStateTest do
   alias Statifier.Lowering
   alias Statifier.MachineState
   alias Statifier.Parser
+  alias Statifier.Send.Routes
   alias Statifier.Validator
 
   defp compile!(xml) do
@@ -173,6 +174,15 @@ defmodule Statifier.MachineStateTest do
       assert new_machine_state().max_macrostep_rounds == 10_000
       assert new_machine_state(max_macrostep_rounds: 25).max_macrostep_rounds == 25
       assert new_machine_state(max_macrostep_rounds: :infinity).max_macrostep_rounds == :infinity
+    end
+
+    # sabotage: `MachineState.new/2` hardcodes `routes: nil` and ignores the
+    # `:routes` option -> this assertion reddens.
+    test "routes defaults to nil, and the :routes option is honored" do
+      assert new_machine_state().routes == nil
+
+      routes = Routes.new(parent?: true)
+      assert new_machine_state(routes: routes).routes == routes
     end
 
     # sabotage: `MachineState.new/2` ignores the `:datamodel` option and
@@ -363,6 +373,32 @@ defmodule Statifier.MachineStateTest do
 
       ms = MachineState.new(named_machine)
       assert ms.datamodel["_name"] == "my-machine"
+    end
+  end
+
+  describe "put_routes/2" do
+    # sabotage: `put_routes/2` is changed to `do: machine_state` (ignoring
+    # its `routes` argument) -> this assertion reddens.
+    test "sets the routes field" do
+      routes = Routes.new(sessions: ["sess_a"])
+      ms = new_machine_state() |> MachineState.put_routes(routes)
+
+      assert ms.routes == routes
+    end
+
+    # sabotage: `put_routes/2`'s map update `%{machine_state | routes: routes}`
+    # is changed to `%{machine_state | routes: machine_state.routes || routes}`
+    # (a previously-set snapshot survives a later `put_routes/2` call
+    # instead of being replaced) -> the second assertion below, which
+    # clears a previously-set snapshot back to nil, reddens.
+    test "clears a previously-set snapshot back to nil" do
+      routes = Routes.new(parent?: true)
+
+      ms = new_machine_state() |> MachineState.put_routes(routes)
+      assert ms.routes == routes
+
+      ms = MachineState.put_routes(ms, nil)
+      assert ms.routes == nil
     end
   end
 

@@ -324,6 +324,7 @@ defmodule Statifier.MachineState do
   alias Statifier.Event
   alias Statifier.Event.Cause
   alias Statifier.Machine
+  alias Statifier.Send.Routes
 
   # Crockford base32's alphabet in `Base.hex_encode32/2`'s symbol order, so a
   # 32-entry character translation is exact and order-preserving. Crockford
@@ -353,7 +354,8 @@ defmodule Statifier.MachineState do
     microstep: 0,
     round: 0,
     trace: false,
-    max_macrostep_rounds: 10_000
+    max_macrostep_rounds: 10_000,
+    routes: nil
   ]
 
   @typedoc """
@@ -385,6 +387,17 @@ defmodule Statifier.MachineState do
   """
   @type max_macrostep_rounds :: pos_integer() | :infinity
 
+  @typedoc """
+  The caller-declared route snapshot (ADR-0048), or `nil`. `nil` means "no
+  determination made": the driver stamped nothing before this drive, so
+  `Statifier.Machine.Content.Send`'s reachability arm makes no judgment and
+  the effect is emitted exactly as it was before ADR-0048 - the session's
+  `deliver/5` boundary stays the detector on that path (ADR-0048 decision
+  5). A non-`nil` value is a point-in-time claim, not a subscription: it
+  carries no obligation to track anything between writes.
+  """
+  @type routes :: Routes.t() | nil
+
   @type t :: %__MODULE__{
           machine: Machine.t(),
           configuration: MapSet.t(non_neg_integer()),
@@ -402,7 +415,8 @@ defmodule Statifier.MachineState do
           microstep: non_neg_integer(),
           round: non_neg_integer(),
           trace: trace(),
-          max_macrostep_rounds: max_macrostep_rounds()
+          max_macrostep_rounds: max_macrostep_rounds(),
+          routes: routes()
         }
 
   @doc """
@@ -413,8 +427,10 @@ defmodule Statifier.MachineState do
   constructor's.
 
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
-  `:session_id` (default a freshly generated `sess_` id, ADR-0008), and
-  `:max_macrostep_rounds` (default `10_000`). All four system variables
+  `:session_id` (default a freshly generated `sess_` id, ADR-0008),
+  `:max_macrostep_rounds` (default `10_000`), and `:routes` (default `nil`,
+  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means). All four
+  system variables
   (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
   option's map, so author-supplied data can never shadow a system variable.
 
@@ -452,7 +468,8 @@ defmodule Statifier.MachineState do
       microstep: 0,
       round: 0,
       trace: Keyword.get(opts, :trace, false),
-      max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000)
+      max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000),
+      routes: Keyword.get(opts, :routes)
     }
   end
 
@@ -475,8 +492,17 @@ defmodule Statifier.MachineState do
   # untouched, and entropy is kept at full strength because session ids must be
   # unique *across* sessions (the ADR-0027 registry and parent/child routing
   # depend on it).
+  @doc """
+  Mints a fresh `sess_` session id (ADR-0008 as amended): a 48-bit
+  big-endian millisecond timestamp followed by 80 bits of CSPRNG output,
+  Crockford base32-encoded. Public so `Statifier.Session` can resolve the
+  id it must put in an ADR-0048 route snapshot's own session set before
+  `Statifier.Interpreter.initialize/2` runs - a snapshot has to name the
+  declaring session's own id before that id is otherwise known, since
+  `new/2` would not generate it until `initialize/2` calls it.
+  """
   @spec generate_session_id() :: String.t()
-  defp generate_session_id do
+  def generate_session_id do
     # ADR-0008: 48-bit millisecond timestamp, then 80 bits of entropy.
     body = <<System.os_time(:millisecond)::48, :crypto.strong_rand_bytes(10)::binary>>
     "sess_" <> crockford32(body)
@@ -724,4 +750,14 @@ defmodule Statifier.MachineState do
   def begin_round(%__MODULE__{round: round} = machine_state) do
     %{machine_state | round: round + 1}
   end
+
+  @doc """
+  Stamps `routes` onto `machine_state` - ADR-0048 decision 2's per-drive
+  snapshot write, called by `Statifier.Session` immediately before each
+  core drive. Pass `nil` to clear a snapshot back to "no determination
+  made" (`t:routes/0`).
+  """
+  @spec put_routes(machine_state :: t(), routes :: routes()) :: t()
+  def put_routes(%__MODULE__{} = machine_state, routes),
+    do: %{machine_state | routes: routes}
 end
