@@ -2,7 +2,11 @@
 
 Status: accepted (2026-08-15) - amended in part by ADR-0047 (2026-08-17:
 the rejected "move target routing into the core" alternative is scoped to
-liveness; static target/type classification runs in the core)
+liveness; static target/type classification runs in the core) - amended in
+part by ADR-0048 (2026-08-18: the liveness foreclosure narrows again - the
+core never consults the registry, but it may judge reachability against a
+caller-declared route snapshot; `deliver_internal/5` stays the single
+write-back door for session-detected failures)
 
 ## Context
 

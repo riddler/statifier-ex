@@ -40,7 +40,7 @@
 | [0036](0036-send-argument-failure-discards-the-message.md) | A failed `<send>` argument discards the message (amends 0021 in part) | accepted |
 | [0037](0037-unbound-spelled-undefined-at-the-writer.md) | Unbound is spelled `:undefined` at the writer; `nil` means null | accepted |
 | [0038](0038-invoke-source-resolves-at-the-session-boundary.md) | `<invoke>`'s source resolves at the session boundary, never inside the library | accepted |
-| [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted (amended in part by 0047: the rejected alternative is scoped to liveness) |
+| [0039](0039-session-detected-send-failures-re-enter-the-core.md) | Session-detected send failures re-enter the core through `deliver_internal/5` | accepted (amended in part by 0047: the rejected alternative is scoped to liveness; amended in part by 0048: the core may judge reachability against a caller-declared route snapshot) |
 | [0040](0040-session-telemetry-event-contract.md) | Session telemetry event contract: the `[:statifier, :session, ...]` bridge, measurements-vs-metadata split, and trace-off policy | accepted (amended 2026-08-16: singleton location carve-out withdrawn; no trace event carries a location; amended 2026-08-16: `:datamodel_change` joins the core effect events; amended in part by 0046: `round` joins every core-effect event's measurements) |
 | [0041](0041-content-markup-lowers-to-a-source-slice.md) | `<content>` markup lowers to a source slice, compiled at invoke time | accepted (amended 2026-08-16: namespace limitation corrected - the corpus child documents do not compile standalone; amended in part by 0042) |
 | [0042](0042-invoke-content-compiles-under-the-relaxed-namespace-rule.md) | Invoke content markup compiles under the relaxed namespace rule | accepted (amends 0041 in part) |
@@ -49,6 +49,7 @@
 | [0045](0045-character-data-folds-line-breaks-per-xml-2-11.md) | Character data folds line breaks per XML 1.0 2.11, guided by the raw source (resolves 0043's open question) | accepted |
 | [0046](0046-round-on-every-core-effect.md) | Every core effect carries `round`; the ADR-0020 exemption is withdrawn and `round` joins the core-effect event measurements | accepted (amends 0020 in part; amends 0040 in part) |
 | [0047](0047-send-static-target-type-invalidity-rejects-in-the-core.md) | Static send target/type invalidity rejects in the core; reachability stays session-side, test496 deferred to its own record | accepted (amends 0039 in part) |
+| [0048](0048-send-reachability-judged-against-a-route-snapshot.md) | Send reachability is judged in the core against a caller-declared route snapshot; core-detected unreachability aborts the block (discharges 0047 decision 6's deferral) | accepted (amends 0039 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
