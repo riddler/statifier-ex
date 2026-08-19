@@ -1,7 +1,18 @@
 defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.{Compiler, Effect, Lowering, Machine, MachineState, Parser, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Interpreter,
+    Lowering,
+    Machine,
+    MachineState,
+    Parser,
+    Validator
+  }
+
   alias Statifier.Interpreter.ExitEntry
 
   defp compile!(xml) do
@@ -507,5 +518,140 @@ defmodule Statifier.Interpreter.ExitEntryAcceptanceTest do
 
     assert entered.configuration == MapSet.union(exited.configuration, MapSet.new(entry_order))
     assert entered.configuration == MapSet.new([idx(:region), idx(:a), idx(:a2)])
+  end
+
+  # A second, standalone document for the bead's own acceptance criterion:
+  # "the carried configuration matches the configuration folded from the
+  # deltas, across a parallel-region chart, including exit_interpreter".
+  # Driven through the real interpreter loop
+  # (`Interpreter.initialize/2` / `handle_event/2`) rather than the
+  # hand-built `machine_state` values the rest of this file uses, because
+  # only a real drive to termination reaches `exit_interpreter/1`'s
+  # whole-configuration sweep.
+  #
+  #  0 scxml (root)
+  #  1   par                 (parallel)
+  #  2     reg1                (compound; initial="reg1a")
+  #  3       reg1a               (`go` -> reg1b)
+  #  4       reg1b
+  #  5     reg2                (compound; initial="reg2a")
+  #  6       reg2a               (`go` -> reg2b)
+  #  7       reg2b
+  #  |     `finish` (external, par -> done) also sits on `par`
+  #  8   done                (final, parent 0 - top-level, sibling of par)
+  @parallel_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="par">
+      <parallel id="par">
+          <state id="reg1" initial="reg1a">
+              <state id="reg1a">
+                  <transition event="go" target="reg1b"/>
+              </state>
+              <state id="reg1b"/>
+          </state>
+          <state id="reg2" initial="reg2a">
+              <state id="reg2a">
+                  <transition event="go" target="reg2b"/>
+              </state>
+              <state id="reg2b"/>
+          </state>
+          <transition event="finish" target="done"/>
+      </parallel>
+      <final id="done"/>
+  </scxml>
+  """
+
+  @parallel_indexes %{
+    par: 1,
+    reg1: 2,
+    reg1a: 3,
+    reg1b: 4,
+    reg2: 5,
+    reg2a: 6,
+    reg2b: 7,
+    done: 8
+  }
+
+  defp pidx(name), do: Map.fetch!(@parallel_indexes, name)
+
+  defp trace_set_payloads(effects) do
+    for {:trace, %mod{} = payload} <- effects,
+        mod in [Effect.Trace.EntrySet, Effect.Trace.ExitSet],
+        do: payload
+  end
+
+  # sabotage: `enter_states/2` in lib/statifier/interpreter/exit_entry.ex is
+  # changed to stamp `configuration:` from `pre_entry_state.configuration`
+  # (the pre-arrive binding, before the reduce that adds each entered state)
+  # instead of the post-`arrive/3` accumulator `machine_state.configuration`
+  # -> every `EntrySet`'s `configuration` freezes one step behind, so the
+  # naive fold below (which unions `indexes` into its own running total)
+  # diverges from the payload's own `configuration` at the very first
+  # `EntrySet`, reddening that step's equality assertion. Confirmed red
+  # (left `MapSet.new([0, 1, 2, 3, 5, 6])`, right `MapSet.new([])`) and
+  # reverted.
+  test "carried configuration matches the naive delta fold across a parallel-region run, including exit_interpreter" do
+    {:ok, root} = Parser.parse(@parallel_document)
+    {:ok, document} = Lowering.lower(root, @parallel_document)
+    {:ok, document, _warnings} = Validator.validate(document, @parallel_document)
+    {:ok, m} = Compiler.compile(document)
+
+    {ms0, init_effects} = Interpreter.initialize(m, trace: true)
+    {:ok, ms1, go_effects} = Interpreter.handle_event(ms0, %Event{name: "go", type: :external})
+
+    {:ok, ms2, finish_effects} =
+      Interpreter.handle_event(ms1, %Event{name: "finish", type: :external})
+
+    refute ms2.running
+    assert ms2.status == :done
+
+    payloads = trace_set_payloads(init_effects ++ go_effects ++ finish_effects)
+
+    # Step 4: fold independently, starting from `MapSet.new()` - the naive
+    # delta fold a consumer would write - and assert after each step that it
+    # agrees with the payload's own `configuration`, across both the
+    # within-microstep boundary and the boundary between separate
+    # `handle_event/2` calls.
+    {final_fold, entry_sets, exit_sets} =
+      Enum.reduce(payloads, {MapSet.new(), [], []}, fn payload, {fold, entries, exits} ->
+        case payload do
+          %Effect.Trace.EntrySet{indexes: indexes, configuration: configuration} = entry_set ->
+            fold = MapSet.union(fold, MapSet.new(indexes))
+            assert fold == configuration
+            {fold, [entry_set | entries], exits}
+
+          %Effect.Trace.ExitSet{indexes: indexes, configuration: configuration} = exit_set ->
+            fold = MapSet.difference(fold, MapSet.new(indexes))
+            assert fold == configuration
+            {fold, entries, [exit_set | exits]}
+        end
+      end)
+
+    entry_sets = Enum.reverse(entry_sets)
+    exit_sets = Enum.reverse(exit_sets)
+
+    # Step 5: the terminal `ExitSet` is `exit_interpreter/1`'s whole-
+    # configuration sweep, not the ordinary `exit_states/2` path - its
+    # `indexes` is the entire configuration that was running (root plus
+    # `done`), its `configuration` is `MapSet.new()`, and the fold agrees.
+    assert %Effect.Trace.ExitSet{configuration: terminal_configuration} =
+             terminal_exit = List.last(exit_sets)
+
+    assert terminal_configuration == MapSet.new()
+    assert final_fold == MapSet.new()
+    assert MapSet.new(terminal_exit.indexes) == MapSet.new([0, pidx(:done)])
+
+    # Step 6: the last `EntrySet` *before* the run heads into termination -
+    # not the very last `EntrySet` in the stream, which is the trivial
+    # top-level-final entry (`done` alone, part of the same terminating step
+    # as the exit above) - carries every state of both parallel regions plus
+    # their ancestors: the ADR-0005 full-configuration property, and the
+    # part a delta-folding consumer gets wrong.
+    last_entry_set = List.last(entry_sets)
+    pre_termination_entry_set = Enum.at(entry_sets, -2)
+
+    assert last_entry_set.configuration == MapSet.new([0, pidx(:done)])
+
+    assert pre_termination_entry_set.configuration ==
+             MapSet.new([0, pidx(:par), pidx(:reg1), pidx(:reg1b), pidx(:reg2), pidx(:reg2b)])
   end
 end
