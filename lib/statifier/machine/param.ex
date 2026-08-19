@@ -1,8 +1,10 @@
 defmodule Statifier.Machine.Param do
   @moduledoc """
   One compiled `<param>` element - the interned counterpart to
-  `Statifier.Document.Param`, reachable only through its owning
-  `Statifier.Machine.Donedata.params` list.
+  `Statifier.Document.Param`. A `%Param{}` is not reachable only through
+  `Statifier.Machine.Donedata.params`: `Statifier.Machine.Content.Send` and
+  `Statifier.Machine.Invoke` each own a `namelist` and a `params` list of
+  `Param.t()` too.
 
   `kind` records which of `expr`/`location` the author wrote (`:expr` or
   `:location`) - `Statifier.Validator.Checks.Param` already guarantees
@@ -30,6 +32,7 @@ defmodule Statifier.Machine.Param do
   runs it.
   """
 
+  alias Statifier.Compiler.Error, as: CompilerError
   alias Statifier.Machine
   alias Statifier.Parser.Location
 
@@ -38,10 +41,21 @@ defmodule Statifier.Machine.Param do
 
   @type kind :: :expr | :location
 
+  @typedoc """
+  The compiled location/expression, or `{:invalid, error}` when a `namelist`
+  entry failed to compile. Only a `namelist` entry ever carries the deferral
+  arm: a `<param>` element's `expr`/`location` still fails
+  `Statifier.Compiler.compile/1` (see `docs/datamodel.md`'s per-element-class
+  policy). Spec 5.9.4 permits either timing; deferral is what lets a document
+  with an ill-formed `namelist` load at all, so 6.2.2's discard MUST and 6.4's
+  terminate MUST (ADR-0036, ADR-0031) get to run.
+  """
+  @type expr :: Machine.expr() | {:invalid, CompilerError.t()}
+
   @type t :: %__MODULE__{
           name: String.t(),
           kind: kind(),
-          expr: Machine.expr(),
+          expr: expr(),
           expr_location: Location.t(),
           location: Location.t()
         }

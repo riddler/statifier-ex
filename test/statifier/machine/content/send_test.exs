@@ -43,6 +43,9 @@ defmodule Statifier.Machine.Content.SendTest do
       <state id="namelist_undeclared">
           <onentry><send event="e" namelist="Undeclared"/></onentry>
       </state>
+      <state id="namelist_invalid">
+          <onentry><send event="e" namelist="&quot;foo"/></onentry>
+      </state>
       <state id="param">
           <onentry><send event="e"><param name="a" expr="p1"/></send></onentry>
       </state>
@@ -286,6 +289,26 @@ defmodule Statifier.Machine.Content.SendTest do
 
       assert {:error, _reason} =
                ExecutableContent.execute(send_node(m, "namelist_undeclared"), context(ms))
+    end
+
+    # Companion to the pin above, one layer earlier: a namelist entry that
+    # never compiled at all (5.9.4 deferral, `{:invalid, error}` on the
+    # entry's `%Machine.Param{}` - see `Statifier.Machine.Param`) discards the
+    # message exactly as an undeclared root does, not by reaching the
+    # evaluator and failing there but by never reaching it.
+    #
+    # sabotage: `evaluate_param/2`'s `{:invalid, error} -> {:error, error}`
+    # clause is dropped, falling through to the catch-all
+    # `Evaluator.evaluate(datamodel_context, expr)` clause -> `Evaluator` has
+    # no clause for `{:invalid, _}`, so this raises a `FunctionClauseError`
+    # instead of returning `{:error, _}`, reddening this test for the wrong
+    # reason (a crash, not a discard).
+    test "namelist entry that failed to compile discards the message, no effect" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:error, _reason} =
+               ExecutableContent.execute(send_node(m, "namelist_invalid"), context(ms))
     end
 
     # sabotage: `data/3`'s clauses are swapped (`%Send{content: nil}` picks
@@ -623,6 +646,25 @@ defmodule Statifier.Machine.Content.SendTest do
       m = machine()
       ms = machine_state(m)
       node = send_node(m, "fail_content_expr")
+
+      assert {:error, _reason} = ExecutableContent.execute(node, context(ms))
+    end
+
+    # A `namelist` entry that failed to compile (5.9.4 deferral,
+    # `{:invalid, error}` on the entry - see `Statifier.Machine.Param`) is one
+    # more member of this discard set, not a special case: `evaluate_param/2`
+    # turns it into `{:error, _}` ahead of the evaluator, same as any other
+    # failing argument here.
+    #
+    # sabotage: `execute/2`'s `with` clause is changed from
+    # `resolve_params(datamodel_context, node.namelist ++ node.params)` to
+    # `resolve_params(datamodel_context, node.params)` (namelist dropped from
+    # the merge) -> the deferred entry is never resolved at all, so no error
+    # is raised and an effect is emitted, reddening this test.
+    test "a deferred namelist entry yields {:error, _} and no effect" do
+      m = machine()
+      ms = machine_state(m)
+      node = send_node(m, "namelist_invalid")
 
       assert {:error, _reason} = ExecutableContent.execute(node, context(ms))
     end

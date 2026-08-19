@@ -21,7 +21,12 @@ defmodule Statifier.Machine.Content.Send do
   `Statifier.Machine.Param.t()`, every `namelist` entry compiled with
   `kind: :location` - the same split `Statifier.Machine.Invoke` keeps for
   its own `namelist`/`params`, so the validator can enforce 6.2.1's
-  "namelist Must not occur with the `<param>` element".
+  "namelist Must not occur with the `<param>` element". A `namelist` entry
+  that fails to compile as a location expression does not fail
+  `Statifier.Compiler.compile/1`: it carries `{:invalid, error}` on the
+  entry's `expr` (5.9.4 deferral, see `Statifier.Machine.Param`) and is
+  discarded at execute time - `resolve_params/2` below - rather than at load
+  time.
 
   `content` folds `<content>`'s markup into a single `Machine.expr()`,
   exactly as `Machine.Invoke.content` and `Machine.Donedata.expr` do - `nil`
@@ -293,13 +298,16 @@ defmodule Statifier.Machine.Content.Send do
     # element-level discard, not 5.7's per-`<param>` ignore, so this halts at
     # the first failure instead of dropping it and continuing - the same
     # shape `invoke_one/6`'s own `resolve_params/2` already takes for
-    # `<invoke>` under ADR-0031.
+    # `<invoke>` under ADR-0031. A `namelist` entry that deferred a compile
+    # failure (`{:invalid, error}`, see `Statifier.Machine.Param`) is
+    # intercepted by `evaluate_param/2` below, ahead of `Evaluator.evaluate/2`,
+    # which has no clause for the shape.
     @spec resolve_params(datamodel_context :: Predicator.Context.t(), params :: [Param.t()]) ::
             {:ok, [{String.t(), term()}]} | {:error, term()}
     defp resolve_params(datamodel_context, params) do
       result =
         Enum.reduce_while(params, {:ok, []}, fn %Param{name: name, expr: expr}, {:ok, pairs} ->
-          case Evaluator.evaluate(datamodel_context, expr) do
+          case evaluate_param(datamodel_context, expr) do
             {:ok, value} -> {:cont, {:ok, [{name, value} | pairs]}}
             {:error, reason} -> {:halt, {:error, reason}}
           end
@@ -310,6 +318,20 @@ defmodule Statifier.Machine.Content.Send do
         {:error, reason} -> {:error, reason}
       end
     end
+
+    # A `namelist` entry whose location expression did not compile (5.9.4
+    # deferral - see `Statifier.Machine.Param`). `Statifier.Evaluator` has no
+    # `{:invalid, _}` clause by design, so the shape is intercepted here,
+    # exactly as `Machine.Content.Assign` and `Machine.Content.Script`
+    # intercept theirs. The `{:error, _}` return is ADR-0036's discard: the
+    # block runner converts it to the platform error event and no send
+    # effect is produced.
+    @spec evaluate_param(datamodel_context :: Predicator.Context.t(), expr :: Param.expr()) ::
+            {:ok, term()} | {:error, term()}
+    defp evaluate_param(_datamodel_context, {:invalid, error}), do: {:error, error}
+
+    defp evaluate_param(datamodel_context, expr),
+      do: Evaluator.evaluate(datamodel_context, expr)
 
     # `<content>` under `<send>` - `nil` when absent, `<content>`'s text body
     # coerced through `EventData.coerce({:text, _})` when static, or
