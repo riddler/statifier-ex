@@ -49,7 +49,7 @@
     expect: :violation,
     tier: :subtle,
     note:
-      "the exit-set trace effect is built after the departure reduce instead of before it, so it no longer records the exit-set phase boundary it names and any state-derived field it stamps would take post-departure values - payload and list position unchanged. Re-anchored 2026-08-18 (st-ntf5): the trace call already sits below the reduce in production code, so the captured edit is now the sharper instance of the same violation - it deletes the `pre_exit_state` capture that existed for exactly this reason and stamps `Effect.trace/3` from the post-departure `machine_state` directly; `indexes` and `configuration` are untouched"
+      "the exit-set trace effect is built after the departure reduce instead of before it, so it no longer records the exit-set phase boundary it names and any state-derived field it stamps would take post-departure values - payload and list position unchanged. Re-anchored 2026-08-18 (st-ntf5): the trace call already sits below the reduce in production code, so the captured edit is now the sharper instance of the same violation - it deletes the `pre_exit_state` capture that existed for exactly this reason and stamps `Effect.trace/3` from the post-departure `machine_state` directly; `indexes` and `configuration` are untouched. Judged 2026-08-18 (st-ntf5) with the real CLI: caught as captured. A variant keeping the ADR-0012 comment in place and deleting only the binding line was measured a false negative, so some of this row's signal is the deleted comment naming the rule rather than the stamp swap alone - st-xsb1 holds that gap"
   },
   %{
     key: "adr-0012-debuggability",
