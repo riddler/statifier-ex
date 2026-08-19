@@ -138,7 +138,8 @@ defmodule Statifier.Replay do
       stream: [],
       pending: %{},
       raced: %{},
-      live_invoke_ids: MapSet.new()
+      live_invoke_ids: MapSet.new(),
+      invoke_handlers: %{}
     ]
 
     @type t :: %__MODULE__{
@@ -149,7 +150,14 @@ defmodule Statifier.Replay do
             stream: [Statifier.Replay.message()],
             pending: %{(String.t() | nil) => non_neg_integer()},
             raced: %{(String.t() | nil) => non_neg_integer()},
-            live_invoke_ids: MapSet.t(String.t())
+            live_invoke_ids: MapSet.t(String.t()),
+            # ADR-0051 decision 4: the recorded `:invoke_handlers` map
+            # (`Statifier.Session.Recording.opts/1`), re-supplied here so
+            # `plan_context/1`'s answer matches the live run's - see the
+            # moduledoc's "Replay re-supplies the recorded snapshot rather
+            # than rebuilding one" section, which this follows for the same
+            # reason.
+            invoke_handlers: %{String.t() => module()}
           }
   end
 
@@ -190,8 +198,10 @@ defmodule Statifier.Replay do
     {machine_state, effects} =
       Interpreter.initialize(Recording.machine(recording), Recording.opts(recording))
 
+    invoke_handlers = Keyword.get(Recording.opts(recording), :invoke_handlers, %{})
+
     state =
-      %State{machine_state: machine_state, inbox: Inbox.new()}
+      %State{machine_state: machine_state, inbox: Inbox.new(), invoke_handlers: invoke_handlers}
       |> perform(effects)
       |> drain()
 
@@ -388,14 +398,16 @@ defmodule Statifier.Replay do
   end
 
   # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
-  # decision 2), built from the `%MachineState{}` this replay already holds
-  # so the planner's `invoke_types` answer matches the one the live run was
-  # recorded under.
+  # decisions 2 and 4), built from the `%MachineState{}` this replay
+  # already holds plus the recorded `:invoke_handlers` map, so both the
+  # planner's `invoke_types` answer and its handler dispatch match the ones
+  # the live run was recorded under.
   @spec plan_context(state :: State.t()) :: Effects.context()
   defp plan_context(%State{} = state) do
     %{
       session_id: state.machine_state.datamodel["_sessionid"],
-      invoke_types: state.machine_state.invoke_types
+      invoke_types: state.machine_state.invoke_types,
+      invoke_handlers: state.invoke_handlers
     }
   end
 
@@ -490,6 +502,19 @@ defmodule Statifier.Replay do
   # change, with no process to cancel.
   defp perform_instruction({:stop_child, invoke_id}, state, _override) do
     %{state | live_invoke_ids: MapSet.delete(state.live_invoke_ids, invoke_id)}
+  end
+
+  # A handler's `perform/2` is impure host/executor code (ADR-0051 decision
+  # 4) - not replayable, for the same reason `{:start_child, _, _}` above
+  # starts no process: every contribution the handler made to the parent's
+  # run is already in the recorded event log, reached through the parent's
+  # own `{:internal, ...}`/`{:invoked_event, ...}` entries, not through
+  # re-running the handler. ADR-0034 forbids a catch-all clause, so this one
+  # is required rather than falling through to some default. The
+  # `{:notify, effect}` instruction planned ahead of this one has already
+  # appended the triggering effect itself to `stream`.
+  defp perform_instruction({:handler, _module, _payload}, state, _override) do
+    state
   end
 
   # Autoforward delivery is a live-process action (`Statifier.Session`

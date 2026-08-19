@@ -2,8 +2,28 @@ defmodule Statifier.ReplayTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
+
+  # A minimal `Statifier.Invoke.Handler` used only to produce a `{:handler,
+  # __MODULE__, _}` instruction for the no-op pin below - `perform/2` is
+  # never called by `Statifier.Replay` (that is exactly what the pin
+  # proves), so it is left unimplemented.
+  defmodule TestHandler do
+    @moduledoc false
+    @behaviour Statifier.Invoke.Handler
+
+    @impl Statifier.Invoke.Handler
+    def start(%Effect.Invoke{invoke_id: invoke_id}, _ctx),
+      do: {:ok, [{:handler, __MODULE__, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def cancel(invoke_id, _ctx), do: {:ok, [{:stop_child, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def forward(invoke_id, event, _ctx), do: {:ok, [{:forward, invoke_id, event}]}
+  end
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -164,6 +184,44 @@ defmodule Statifier.ReplayTest do
       recording =
         machine
         |> Recording.new(session_id: "sess_replay_test")
+        |> Recording.put_interpret([invoke_effect], nil)
+
+      assert {:ok, result} = Replay.run(recording)
+      # `Interpreter.initialize/2`'s own `{:datamodel_init, _}` baseline
+      # precedes the recorded interpret batch's own effect.
+      assert [{:effect, {:datamodel_init, _init}}, {:effect, ^invoke_effect}] = result.stream
+    end
+
+    # sabotage: `perform_instruction({:handler, _module, _payload}, state,
+    # _override)` is changed from `state` to `append(state, {:unroutable,
+    # effect})` - the same mutation the `{:start_child, ...}` pin above uses,
+    # applied to this clause instead -> `result.stream` gains a second entry
+    # a handler-backed invocation's own `{:handler, ...}` instruction never
+    # produces on replay (a real executor's `perform/2` call has no replay
+    # counterpart), reddening the exact-list equality assertion below.
+    # Reverted and confirmed green.
+    test "a handler-backed <invoke>'s {:handler, ...} instruction is a no-op beyond its own {:notify, ...}" do
+      machine = compile!(two_state_doc())
+
+      invoke_effect =
+        {:invoke,
+         %Effect.Invoke{
+           invoke_id: "i1",
+           type: "test:echo",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      recording =
+        machine
+        |> Recording.new(
+          session_id: "sess_replay_test",
+          invoke_types: InvokeTypes.new(types: ["test:echo"]),
+          invoke_handlers: %{"test:echo" => TestHandler}
+        )
         |> Recording.put_interpret([invoke_effect], nil)
 
       assert {:ok, result} = Replay.run(recording)

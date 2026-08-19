@@ -6,6 +6,28 @@ defmodule Statifier.ReplayRoundTripTest do
   alias Statifier.Session.Recording
   alias Statifier.StreamOrder
 
+  # A minimal `Statifier.Invoke.Handler` for the ADR-0051 parity case below -
+  # `perform/2` is a no-op since this describe block only proves the
+  # recording/replay round trip, not the live handler dispatch already
+  # covered by `test/statifier/session/invoke_handler_test.exs`.
+  defmodule EchoHandler do
+    @moduledoc false
+    @behaviour Statifier.Invoke.Handler
+
+    @impl Statifier.Invoke.Handler
+    def start(%Effect.Invoke{invoke_id: invoke_id}, _ctx),
+      do: {:ok, [{:handler, __MODULE__, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def cancel(invoke_id, _ctx), do: {:ok, [{:stop_child, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def forward(invoke_id, event, _ctx), do: {:ok, [{:forward, invoke_id, event}]}
+
+    @impl Statifier.Invoke.Handler
+    def perform(_invoke_id, _ctx), do: :ok
+  end
+
   # The recorder bead's acceptance criteria, executable: record a live run,
   # replay it, and assert both the effect stream and the terminal snapshot match
   # (Decision 4, plan lines ~269-287). Every case below drives a live
@@ -37,6 +59,18 @@ defmodule Statifier.ReplayRoundTripTest do
             <transition event="go" target="c"/>
         </state>
         <state id="c"/>
+    </scxml>
+    """
+  end
+
+  defp handler_invoke_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <invoke id="inv1" type="test:echo"/>
+            <transition event="go" target="b"/>
+        </state>
+        <state id="b"/>
     </scxml>
     """
   end
@@ -675,6 +709,40 @@ defmodule Statifier.ReplayRoundTripTest do
       {:ok, recording} = Session.recording(session)
       assert {:ok, result} = Replay.run(recording)
       assert result.status == :done
+    end
+  end
+
+  # -- ADR-0051: a registered <invoke> handler ------------------------------
+
+  describe "a run with a registered <invoke> handler (ADR-0051)" do
+    # sabotage: `Statifier.Session.Recording`'s `@normalized_opts` list drops
+    # `:invoke_handlers` -> `Recording.new/2`'s `Keyword.take/2` never picks
+    # the supplied `%{"test:echo" => EchoHandler}` map up at all, so only
+    # `new/2`'s own `Keyword.put_new(:invoke_handlers, %{})` default survives
+    # into `Recording.opts/1` - reddening the equality assertion below,
+    # which asserts the *supplied* map, not the default. Reverted and
+    # confirmed green.
+    test "the recorded opts carry :invoke_handlers, and the recording/replay round-trips" do
+      machine = compile!(handler_invoke_doc())
+
+      # `round_trip/3` itself asserts `result.stream == stream` and
+      # `result.machine_state == snapshot` (its own moduledoc) - the
+      # ordinary parity check every other case in this file relies on.
+      {recording, stream, _result} =
+        round_trip(machine, [invoke_handlers: %{"test:echo" => EchoHandler}], fn session ->
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["a"]) end)
+          Session.send_event(session, "go")
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+        end)
+
+      assert Enum.any?(
+               stream,
+               &match?({:effect, {:invoke, %Effect.Invoke{invoke_id: "inv1"}}}, &1)
+             )
+
+      assert Keyword.get(Recording.opts(recording), :invoke_handlers) == %{
+               "test:echo" => EchoHandler
+             }
     end
   end
 end
