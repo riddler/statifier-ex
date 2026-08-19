@@ -524,13 +524,13 @@ widening here.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits.
-- [ ] Full `mix quality` green, `mix gate.verify` exits zero.
-- [ ] `mix test test/statifier/interpreter/exit_entry_acceptance_test.exs`
+- [x] `mix quality --profile loop` green between edits.
+- [x] Full `mix quality` green, `mix gate.verify` exits zero.
+- [x] `mix test test/statifier/interpreter/exit_entry_acceptance_test.exs`
       green with the new test present.
-- [ ] `git diff --name-only` for this phase's commit shows no file under
+- [x] `git diff --name-only` for this phase's commit shows no file under
       `lib/`.
-- [ ] `mix test.regression` green.
+- [x] `mix test.regression` green.
 
 #### Manual Verification:
 - [ ] Spec-conformance judgment: the chart exercises real Appendix D parallel
@@ -835,5 +835,28 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Spec-conformance judgment: the chart exercises real Appendix D parallel
+      entry ordering (`addDescendantStatesToEnter` over a `<parallel>`), not a
+      compound chart in disguise - read the entry order the test observes
+      against the pseudocode.
+- [ ] The sabotage named above was applied, went red, and was reverted.
+- [ ] The test covers `exit_interpreter/1`'s whole-configuration sweep, not
+      only the ordinary exit path - confirm the terminal `ExitSet` in the
+      captured stream came from `exit_interpreter/1` (it is the one whose
+      `indexes` is the whole configuration and whose `configuration` is
+      empty).
+- [ ] No regressions: the rest of the acceptance file's assertions still
+      describe the same behavior.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically, and Manual Verification items are deferred.
 
 ---
