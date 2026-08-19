@@ -47,7 +47,7 @@ defmodule Statifier.Session.Effects do
 
   ## `<invoke>` routing
 
-  `plan_invoke/2` checks `type` first, mirroring `<send>`'s own order
+  `plan_invoke/3` checks `type` first, mirroring `<send>`'s own order
   (6.2.5's unsupported-`type` check ahead of target resolution): an
   unregistered `type` (`Statifier.Invoke.Types.registered?/2`, judged
   against the plan context's `:invoke_types` snapshot - ADR-0051) plans
@@ -55,23 +55,34 @@ defmodule Statifier.Session.Effects do
   invoke_index}, []}` and nothing else - 3.12.2 puts an unregistered `type`
   in `error.execution`'s class ("errors internal to the execution of the
   document"), the same class `<send>`'s own unsupported-type check uses,
-  because no communication is attempted at all. A registered `type` plans
-  `{:start_child, invoke, effect}` instead - `Statifier.Session` resolves
-  the source, seeds the child's datamodel, and starts it (ADR-0027 decision
-  3, ADR-0038).
+  because no communication is attempted at all. A registered `type` looks
+  up its handler module in the plan context's `:invoke_handlers` map
+  (`Map.get/3`, defaulting to `Statifier.Invoke.Handler.Scxml` - the
+  built-in handler is just the default map entry, so no branch here names
+  `scxml` specially, ADR-0051 decision 4) and splices `module.start/2`'s
+  own returned instructions into the plan. The built-in handler's `start/2`
+  returns `{:start_child, invoke, effect}` unchanged from what this module
+  used to produce directly - `Statifier.Session` resolves the source, seeds
+  the child's datamodel, and starts it (ADR-0027 decision 3, ADR-0038).
 
   ## The plan context
 
   `plan/2`'s second argument is a plain map, not a bare session id:
   `%{session_id: String.t(), invoke_types: Statifier.Invoke.Types.t() |
-  nil}` (ADR-0051 decision 2). `session_id` is what every `plan_send/3` /
-  `plan_send_delayed/3` call used to receive directly; `invoke_types` is
-  the caller-declared registered set `plan_invoke/2` judges against, read
-  off the same `%MachineState{}` the core was stamped with, so the
-  planner's answer and the core's `maybe_record_active_invocation/5` answer
-  cannot drift (ADR-0047 decision 4). Both `Statifier.Session` and
-  `Statifier.Replay` build this map from the `%MachineState{}` they already
-  hold before calling `plan/2`.
+  nil, invoke_handlers: %{String.t() => module()}}` (ADR-0051 decisions 2
+  and 4). `session_id` is what every `plan_send/3` / `plan_send_delayed/3`
+  call used to receive directly; `invoke_types` is the caller-declared
+  registered set `plan_invoke/3` judges against, read off the same
+  `%MachineState{}` the core was stamped with, so the planner's answer and
+  the core's `maybe_record_active_invocation/5` answer cannot drift
+  (ADR-0047 decision 4); `invoke_handlers` is the per-session handler
+  dispatch map `plan_invoke/3` looks a registered type's module up in, and
+  is also exactly the `ctx` argument every `Statifier.Invoke.Handler`
+  planning callback receives. Both `Statifier.Session` and
+  `Statifier.Replay` build this map from the `%MachineState{}`/session
+  state they already hold before calling `plan/2`, deriving `invoke_types`
+  and `invoke_handlers` from the same source so the two cannot diverge
+  (ADR-0051 decision 3's "one constructor").
 
   `:autoforward` plans `{:forward, invoke_id, event}` unconditionally - no
   type or target check, since the effect is the core's own decision about an
@@ -95,6 +106,7 @@ defmodule Statifier.Session.Effects do
   alias Statifier.Effect.{Autoforward, Cancel, CancelInvoke, Invoke, Send, SendDelayed}
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
+  alias Statifier.Invoke.Handler.Scxml, as: ScxmlHandler
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Target
 
@@ -102,13 +114,20 @@ defmodule Statifier.Session.Effects do
   @type raise_kind :: :internal | :platform
 
   @typedoc """
-  The pure fold's context (ADR-0051 decision 2) - see the moduledoc's "The
-  plan context" section. `session_id` is the sending session's own id
-  (spec 5.10's `_sessionid`); `invoke_types` is the caller-declared
-  registered-type snapshot `plan_invoke/2` judges against, or `nil` for "no
-  declaration made".
+  The pure fold's context (ADR-0051 decisions 2 and 4) - see the
+  moduledoc's "The plan context" section, and
+  `Statifier.Invoke.Handler.t:ctx/0`, which this is. `session_id` is the
+  sending session's own id (spec 5.10's `_sessionid`); `invoke_types` is
+  the caller-declared registered-type snapshot `plan_invoke/3` judges
+  against, or `nil` for "no declaration made"; `invoke_handlers` is the
+  per-session `<invoke type> => module` dispatch map `plan_invoke/3` looks
+  a registered type's handler up in.
   """
-  @type context :: %{session_id: String.t(), invoke_types: InvokeTypes.t() | nil}
+  @type context :: %{
+          session_id: String.t(),
+          invoke_types: InvokeTypes.t() | nil,
+          invoke_handlers: %{String.t() => module()}
+        }
 
   @typedoc "One instruction for `Statifier.Session` to perform."
   @type instruction ::
@@ -122,6 +141,7 @@ defmodule Statifier.Session.Effects do
           | {:start_child, Invoke.t(), Effect.t()}
           | {:forward, invoke_id :: String.t(), Event.t()}
           | {:stop_child, invoke_id :: String.t()}
+          | {:handler, module(), term()}
           | {:unroutable, Effect.t()}
           | {:halt, :done | :budget_exhausted}
 
@@ -131,7 +151,9 @@ defmodule Statifier.Session.Effects do
   - see the moduledoc's "The plan context" section): `session_id` is the
   sending session's own id (spec 5.10's `_sessionid`), needed to build a
   delivered event's `origin`; `invoke_types` is the registered-type
-  snapshot `plan_invoke/2` judges against. `:log`, `:datamodel_change`,
+  snapshot `plan_invoke/3` judges against, and `invoke_handlers` is the
+  dispatch map it looks a registered type's handler module up in. `:log`,
+  `:datamodel_change`,
   `:datamodel_init`, and `:trace` effects plan to nothing but their own
   `{:notify, effect}`.
   """
@@ -235,18 +257,36 @@ defmodule Statifier.Session.Effects do
   # has none - so `type` is the only gate, judged against the plan
   # context's `invoke_types` snapshot rather than the always-static
   # `Statifier.Send.Target.supported_invoke_type?/1` (ADR-0051 decision 3).
+  # A registered type dispatches to its handler module - looked up in
+  # `context.invoke_handlers`, defaulting to the built-in `scxml` handler
+  # (ADR-0051 decision 4) - and splices `start/2`'s own returned
+  # instructions into the plan. `start/2`'s `{:error, _}` is planned as the
+  # same `error.execution` shape an unregistered type raises: it is a pure
+  # planning failure (no communication was ever attempted, since `start/2`
+  # performs none), the same class 3.12.2 assigns an unregistered type to -
+  # unlike a *registered* handler's `perform/2` later failing to reach its
+  # service, which is `error.communication` (ADR-0051's classification
+  # table).
   @spec plan_invoke(invoke :: Invoke.t(), effect :: Effect.t(), context :: context()) :: [
           instruction()
         ]
-  defp plan_invoke(invoke, effect, %{invoke_types: invoke_types}) do
+  defp plan_invoke(invoke, _effect, %{invoke_types: invoke_types} = context) do
     if InvokeTypes.registered?(invoke_types, invoke.type) do
-      [{:start_child, invoke, effect}]
+      handler_module =
+        context |> Map.get(:invoke_handlers, %{}) |> Map.get(invoke.type, ScxmlHandler)
+
+      case handler_module.start(invoke, context) do
+        {:ok, instructions} -> instructions
+        {:error, _reason} -> [invoke_execution_error(invoke)]
+      end
     else
-      [
-        {:raise, :platform, "error.execution", {:invoke, invoke.state_index, invoke.invoke_index},
-         []}
-      ]
+      [invoke_execution_error(invoke)]
     end
+  end
+
+  @spec invoke_execution_error(invoke :: Invoke.t()) :: instruction()
+  defp invoke_execution_error(invoke) do
+    {:raise, :platform, "error.execution", {:invoke, invoke.state_index, invoke.invoke_index}, []}
   end
 
   # 6.2.5's unsupported-`type` error and 6.2.4's unsupported-or-invalid

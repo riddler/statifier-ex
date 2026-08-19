@@ -30,11 +30,12 @@ defmodule Statifier.Session.RecordingTest do
   describe "new/2" do
     # sabotage: `new/2`'s default for `:max_macrostep_rounds` changed from
     # `10_000` to `1_000` -> the defaulted-options assertion reddens
-    test "normalizes and defaults the six options, sorted by key" do
+    test "normalizes and defaults the seven options, sorted by key" do
       recording = Recording.new(compile!(), [])
 
       assert Recording.opts(recording) == [
                datamodel: %{},
+               invoke_handlers: %{},
                invoke_types: nil,
                max_macrostep_rounds: 10_000,
                routes: nil,

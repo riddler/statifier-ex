@@ -326,6 +326,7 @@ defmodule Statifier.Session do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Source
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.{Routes, Target}
   alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
 
@@ -341,6 +342,7 @@ defmodule Statifier.Session do
       :timers,
       :invoke_source,
       :invoked_by,
+      invoke_handlers: %{},
       timer_refs: %{},
       subscribers: %{},
       halted: nil,
@@ -368,6 +370,13 @@ defmodule Statifier.Session do
             invocations: Statifier.Session.Invocations.t(),
             invoke_source: (String.t() -> {:ok, Machine.t()} | {:error, term()}) | nil,
             invoked_by: {pid(), String.t()} | nil,
+            # ADR-0051 decision 2: the per-session `<invoke type> => module`
+            # dispatch map `start_link/2`'s `:invoke_handlers` option
+            # supplied, default `%{}`. `init/1` derives the `%MachineState{}`
+            # `invoke_types` stamp from this same map's keys - one
+            # constructor, so the stamped set and this dispatch map cannot
+            # diverge (decision 3's anti-drift property).
+            invoke_handlers: %{String.t() => module()},
             # The monotonic timestamp (`System.monotonic_time/0`) of the
             # currently open macrostep span - telemetry only, never recorded
             # (ADR-0040, ADR-0034). `nil` outside `drain_event/2`,
@@ -449,6 +458,15 @@ defmodule Statifier.Session do
       `Statifier.Invoke.Source.resolve/2` for every `<invoke src="...">` it
       starts (ADR-0038). `nil` (the default) leaves every `src`-only
       invocation unresolved, per `Statifier.Invoke.Source`'s own contract.
+    - `:invoke_handlers` - a `%{type_string => module}` map of
+      `Statifier.Invoke.Handler`-implementing modules this session
+      dispatches a registered `<invoke type="...">` to (ADR-0051). Default
+      `%{}`, which registers no type beyond the built-in `scxml`/bare-URI
+      set `Statifier.Invoke.Handler.Scxml` already serves as the default
+      handler for. The `%MachineState{}` `invoke_types` snapshot this
+      session's core is stamped with is derived from this same map's keys,
+      so the registered-type set and the dispatch map cannot diverge
+      (decision 3).
     - `:invoked_by` - `{parent_pid, invoke_id}`, set by
       `Statifier.Session` itself when it starts a child for an `<invoke>`
       (never set by an ordinary caller). Makes this session monitor
@@ -696,12 +714,23 @@ defmodule Statifier.Session do
     register_session(session_id)
 
     invoked_by = Keyword.get(opts, :invoked_by)
+    invoke_handlers = Keyword.get(opts, :invoke_handlers, %{})
 
     machine_opts =
       opts
       |> Keyword.take([:trace, :datamodel, :max_macrostep_rounds])
       |> Keyword.put(:session_id, session_id)
       |> Keyword.put(:routes, init_routes(session_id, invoked_by))
+      # ADR-0051 decision 3's "one constructor": the `invoke_types` snapshot
+      # the core is stamped with is derived from `invoke_handlers`'s own
+      # keys, not declared separately, so the registered-type set and the
+      # dispatch map `plan_context/1` builds below cannot diverge.
+      # `:invoke_handlers` itself rides along in `machine_opts` too, purely
+      # so `Recording.new/2` (called with this same keyword list) can
+      # normalize it into the recording (`@normalized_opts`) - `Statifier.
+      # MachineState.new/2` reads no such key and ignores it.
+      |> Keyword.put(:invoke_types, InvokeTypes.new(types: Map.keys(invoke_handlers)))
+      |> Keyword.put(:invoke_handlers, invoke_handlers)
 
     start_time = System.monotonic_time()
     span_ref = make_ref()
@@ -731,6 +760,7 @@ defmodule Statifier.Session do
       recording: recording,
       invocations: Invocations.new(),
       invoke_source: Keyword.get(opts, :invoke_source),
+      invoke_handlers: invoke_handlers,
       invoked_by: invoked_by,
       inherit_observers: Keyword.get(opts, :inherit_observers, false)
     }
@@ -1220,12 +1250,18 @@ defmodule Statifier.Session do
   end
 
   # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
-  # decision 2), built from the `%MachineState{}` this session already
-  # holds so the planner's `invoke_types` answer and the core's own stamp
-  # cannot diverge.
+  # decisions 2 and 4), built from the `%MachineState{}`/session state this
+  # session already holds so the planner's `invoke_types` answer and the
+  # core's own stamp cannot diverge, and so `invoke_handlers` is the same
+  # map `init/1` derived `invoke_types` from (decision 3's "one
+  # constructor").
   @spec plan_context(state :: State.t()) :: Effects.context()
   defp plan_context(%State{} = state) do
-    %{session_id: state.session_id, invoke_types: state.machine_state.invoke_types}
+    %{
+      session_id: state.session_id,
+      invoke_types: state.machine_state.invoke_types,
+      invoke_handlers: state.invoke_handlers
+    }
   end
 
   # FIFO, and monotone with no sorting at any nesting depth: each crossing's
@@ -1366,6 +1402,21 @@ defmodule Statifier.Session do
         cancel(pid)
         %{state | invocations: invocations}
     end
+  end
+
+  # ADR-0051 decision 4's impure half: `module.perform/2` is the one call
+  # site any `{:handler, module, payload}` instruction ever reaches - a
+  # planning callback (`start/2`, `cancel/2`, `forward/3`) never performs
+  # anything itself, it only returns this opaque instruction for an
+  # executor to run. The library does not interpret `perform/2`'s return:
+  # an `{:error, _}` is the handler's own concern to observe, not something
+  # this session recovers from or feeds back into the core (ADR-0003), and
+  # a raised exception crashes this session's process - deliberately, per
+  # `Statifier.Invoke.Handler`'s own moduledoc, which asks for idempotency
+  # on `invoke_id` instead of a rescue-to-default here.
+  defp perform_instruction({:handler, module, payload}, state, _override) do
+    module.perform(payload, plan_context(state))
+    state
   end
 
   defp perform_instruction({:unroutable, effect}, state, _override) do

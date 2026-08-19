@@ -114,21 +114,27 @@ defmodule Statifier.Session.Recording do
     :datamodel,
     :max_macrostep_rounds,
     :routes,
-    :invoke_types
+    :invoke_types,
+    :invoke_handlers
   ]
 
   @doc """
   Starts an empty recording over `machine`, normalizing `opts` to exactly
   `:session_id`, `:trace`, `:datamodel`, `:max_macrostep_rounds`, `:routes`,
-  and `:invoke_types` (`Statifier.MachineState.new/2`'s own options),
-  defaulted the same way that function defaults them, and sorted by key so
-  two recordings of the same run compare equal regardless of the order
-  their options were supplied in. `:routes` defaults to `nil` - the
+  `:invoke_types`, and `:invoke_handlers` (`Statifier.MachineState.new/2`'s
+  own options, plus `Statifier.Session.start_link/2`'s `:invoke_handlers`),
+  defaulted the same way those are defaulted, and sorted by key so two
+  recordings of the same run compare equal regardless of the order their
+  options were supplied in. `:routes` defaults to `nil` - the
   session-start initialization's snapshot (see the moduledoc's "route
   snapshot" section). `:invoke_types` defaults to `nil` too - ADR-0051's
   registered-type set, recorded once as a normalized option rather than per
   entry, since it is fixed for the session's whole lifetime rather than
-  re-stamped per drive the way `:routes` is.
+  re-stamped per drive the way `:routes` is. `:invoke_handlers` defaults to
+  `%{}`, matching `start_link/2`'s own default - it joins `:invoke_types`
+  here (ADR-0051 decision 4) so a type registered during recording is not
+  re-classified as unregistered on replay: `Statifier.Replay`'s plan
+  context is built from this recorded map, not from an empty one.
 
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
@@ -146,6 +152,7 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:max_macrostep_rounds, 10_000)
       |> Keyword.put_new(:routes, nil)
       |> Keyword.put_new(:invoke_types, nil)
+      |> Keyword.put_new(:invoke_handlers, %{})
       |> Enum.sort()
 
     %__MODULE__{machine: machine, opts: normalized, entries: []}
