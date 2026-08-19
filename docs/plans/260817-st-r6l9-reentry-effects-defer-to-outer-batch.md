@@ -952,7 +952,9 @@ of blocking here.
 ## References
 
 - Source document: `docs/research/260817-st-r6l9-invoke-effect-order-reentry.md`
-- Decision this plan implements: `docs/adr/0043-re-entry-effects-defer-to-the-outer-batch.md`
+- Decision this plan implements: `docs/adr/0044-re-entry-effects-defer-to-the-outer-batch.md`
+  (cited as 0043-... when this plan was written; renumbered after a
+  number collision)
 - Related ADRs: `docs/adr/0039-session-detected-send-failures-re-enter-the-core.md`
   (the seam), `docs/adr/0040-session-telemetry-event-contract.md` (nested
   spans, struct-shape contract), `docs/adr/0034-*` (flat ordinal recording,
