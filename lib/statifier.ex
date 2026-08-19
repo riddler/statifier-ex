@@ -39,6 +39,15 @@ defmodule Statifier do
           | Statifier.Validator.Error.t()
           | Statifier.Compiler.Error.t()
 
+  # The closed set of `compile/2` options persisted onto the Machine and, from
+  # there, into a `Statifier.Chart` blob. Closed rather than open: `:safe`
+  # decoding refuses to create atoms a blob names, so an embedder's own
+  # unrecognized option key could make a blob this library wrote undecodable.
+  # Every option this function recognizes is either listed here or provably
+  # inert for compilation - adding a fourth recognized option means deciding
+  # which it is. See ADR-0052.
+  @persisted_compile_opts [:invoke_content_markup, :chart_name, :chart_version]
+
   @doc """
   Compiles SCXML source into a `Statifier.Machine`.
 
@@ -81,6 +90,13 @@ defmodule Statifier do
   change to carry them. They stamp the returned `Machine.t()`'s `identity`
   field (`Statifier.Machine.identity/1`) alongside the content hash
   `compile/2` always takes over `source`.
+
+  A successful compile also stamps `source` (the exact bytes passed in) and
+  `compile_opts` (`opts` filtered through the closed
+  `@persisted_compile_opts` allowlist, in the allowlist's own order) onto the
+  returned `Machine.t()`, so it can reproduce itself later - see
+  `Statifier.Machine`'s moduledoc for the invariant this keeps with
+  `identity`.
   """
   @spec compile(source :: binary(), opts :: keyword()) :: {:ok, Machine.t()} | {:error, [error()]}
   def compile(source, opts \\ []) when is_binary(source) and is_list(opts) do
@@ -88,12 +104,23 @@ defmodule Statifier do
          {:ok, document} <- Lowering.lower(root, source),
          {:ok, document, warnings} <- Validator.validate(document, source, opts),
          {:ok, machine} <- Compiler.compile(document) do
-      {:ok, %Machine{machine | warnings: warnings, identity: Identity.of_source(source, opts)}}
+      {:ok,
+       %Machine{
+         machine
+         | warnings: warnings,
+           identity: Identity.of_source(source, opts),
+           source: source,
+           compile_opts: persisted_opts(opts)
+       }}
     else
       {:error, errors, _warnings} -> {:error, errors}
       other -> other
     end
   end
+
+  @spec persisted_opts(opts :: keyword()) :: keyword()
+  defp persisted_opts(opts),
+    do: for(key <- @persisted_compile_opts, Keyword.has_key?(opts, key), do: {key, opts[key]})
 
   defp parse(source) do
     case Parser.parse(source) do

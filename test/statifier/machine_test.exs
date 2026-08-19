@@ -344,4 +344,41 @@ defmodule Statifier.MachineTest do
       assert Machine.identity(m) == nil
     end
   end
+
+  describe "source/1" do
+    # sabotage: `Statifier.Machine`'s `defstruct` default for `source`
+    # changes from implicit `nil` to `"stub"` -> reddens because a machine
+    # built straight through `Compiler.compile/1` (bypassing
+    # `Statifier.compile/2`, the only stamping site) now carries a non-nil
+    # source
+    test "is nil on a machine built straight through Compiler.compile/1" do
+      m = machine()
+      assert Machine.source(m) == nil
+    end
+
+    # sabotage: `Machine.source/1` returns a hardcoded `nil` instead of
+    # matching out the `source` field -> reddens
+    test "reads the source field on a machine built through Statifier.compile/2" do
+      {:ok, m} = Statifier.compile(@document)
+      assert Machine.source(m) == @document
+    end
+  end
+
+  describe "compile_opts/1" do
+    # sabotage: `Statifier.Machine`'s `defstruct` default for `compile_opts`
+    # changes from `[]` to `[stub: true]` -> reddens because a machine built
+    # straight through `Compiler.compile/1` (bypassing `Statifier.compile/2`,
+    # the only stamping site) now carries a non-empty compile_opts
+    test "is [] on a machine built straight through Compiler.compile/1" do
+      m = machine()
+      assert Machine.compile_opts(m) == []
+    end
+
+    # sabotage: `Machine.compile_opts/1` returns a hardcoded `[]` instead of
+    # matching out the `compile_opts` field -> reddens
+    test "reads the compile_opts field on a machine built through Statifier.compile/2" do
+      {:ok, m} = Statifier.compile(@document, chart_name: "clock")
+      assert Machine.compile_opts(m) == [chart_name: "clock"]
+    end
+  end
 end
