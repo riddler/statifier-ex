@@ -248,6 +248,11 @@ promotion path.
   route snapshot that drive was judged against (ADR-0048 decision 3), so
   `Statifier.Replay` re-supplies it rather than rebuilding one; this widens
   what an entry carries, and the set of recorded input kinds does not grow.
+  `:invoke_types` (ADR-0051 decision 2) is recorded once as a normalized
+  session option, beside `:routes`, rather than per entry: the registered
+  `<invoke type>` set is fixed for the session's whole lifetime, so
+  `Statifier.Session.Recording`'s `@normalized_opts` carries it and
+  `Statifier.Replay` rebuilds the same snapshot for every drive.
 
 ## Non-goals (for now)
 

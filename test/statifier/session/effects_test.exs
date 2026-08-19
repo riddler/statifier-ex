@@ -19,6 +19,7 @@ defmodule Statifier.Session.EffectsTest do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event
   alias Statifier.Event.Cause
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Session.Effects
 
   # `internal_event/1`'s own placeholder cause - round 0 is never read back
@@ -28,6 +29,11 @@ defmodule Statifier.Session.EffectsTest do
   @session_id "sess_test"
   @origin SystemVariables.scxml_location(@session_id)
   @origintype SystemVariables.scxml_event_processor()
+  # The plan context (`Statifier.Session.Effects.t:context/0`) with no
+  # declared invoke types - `nil` answers exactly what
+  # `Statifier.Send.Target.supported_invoke_type?/1` answered before
+  # ADR-0051.
+  @context %{session_id: @session_id, invoke_types: nil}
 
   # Table-driven over the whole `Effect.t()` vocabulary (twenty tags: eleven
   # core plus nine trace), mirroring `test/statifier/effect_test.exs`'s
@@ -453,7 +459,7 @@ defmodule Statifier.Session.EffectsTest do
       # out reddens the "datamodel_change" fixture case with the same
       # `FunctionClauseError`, confirmed, and reverted.
       test "plans #{tag} carrying #{inspect(payload.__struct__)} (fixture #{index})" do
-        assert Effects.plan([unquote(Macro.escape(effect))], @session_id) ==
+        assert Effects.plan([unquote(Macro.escape(effect))], @context) ==
                  unquote(Macro.escape(expected))
       end
     end
@@ -467,7 +473,7 @@ defmodule Statifier.Session.EffectsTest do
       send_effect = {:send, %Send{event: "e", target: nil, macrostep: 1, microstep: 1, round: 0}}
       cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}
 
-      instructions = Effects.plan([log, send_effect, cancel], @session_id)
+      instructions = Effects.plan([log, send_effect, cancel], @context)
 
       notify_effects = for {:notify, e} <- instructions, do: e
       assert notify_effects == [log, send_effect, cancel]
@@ -483,7 +489,7 @@ defmodule Statifier.Session.EffectsTest do
       effect =
         {:send, %Send{event: "e", target: "#_internal", macrostep: 1, microstep: 1, round: 0}}
 
-      instructions = Effects.plan([effect], @session_id)
+      instructions = Effects.plan([effect], @context)
 
       refute Enum.any?(instructions, &match?({:enqueue_event, _}, &1))
       assert Enum.any?(instructions, &match?({:deliver, :internal, _event, ^effect}, &1))
@@ -500,7 +506,7 @@ defmodule Statifier.Session.EffectsTest do
          %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1, round: 0}}
 
       assert [_notify, {:enqueue_event, %Event{data: %{k: 1}}}] =
-               Effects.plan([effect], @session_id)
+               Effects.plan([effect], @context)
     end
   end
 
@@ -523,7 +529,7 @@ defmodule Statifier.Session.EffectsTest do
          }}
 
       assert [_notify, {:schedule, nil, 30, :self, %Event{name: "e"}, ^effect}] =
-               Effects.plan([effect], @session_id)
+               Effects.plan([effect], @context)
     end
   end
 
@@ -545,11 +551,11 @@ defmodule Statifier.Session.EffectsTest do
          }}
 
       assert [_notify, {:raise, :platform, "error.execution", {:invoke, 2, 3}, []}] =
-               Effects.plan([effect], @session_id)
+               Effects.plan([effect], @context)
     end
 
-    # sabotage: `plan_invoke/2`'s `if Target.supported_invoke_type?(...)` is
-    # inverted to `unless` -> a supported (`nil`) invoke type would raise
+    # sabotage: `plan_invoke/3`'s `if InvokeTypes.registered?(...)` is
+    # inverted to `unless` -> a registered (`nil`) invoke type would raise
     # instead of planning `{:start_child, ...}`, and this refute reddens
     test "no :raise instruction appears for a supported (nil) invoke type" do
       effect =
@@ -564,7 +570,33 @@ defmodule Statifier.Session.EffectsTest do
            round: 0
          }}
 
-      instructions = Effects.plan([effect], @session_id)
+      instructions = Effects.plan([effect], @context)
+
+      refute Enum.any?(instructions, &match?({:raise, _, _, _, _}, &1))
+      assert Enum.any?(instructions, &match?({:start_child, _invoke, ^effect}, &1))
+    end
+
+    # sabotage: `plan_invoke/3`'s call is changed from
+    # `InvokeTypes.registered?(invoke_types, invoke.type)` to
+    # `InvokeTypes.registered?(nil, invoke.type)`, ignoring the context's
+    # stamped snapshot entirely -> the declared type would raise instead of
+    # planning `{:start_child, ...}`, and this refute reddens
+    test "plans {:start_child, ...} for a type present in the context's stamped invoke_types" do
+      effect =
+        {:invoke,
+         %Invoke{
+           invoke_id: "i1",
+           type: "myapp:enrich",
+           state_index: 0,
+           invoke_index: 0,
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      context = %{@context | invoke_types: InvokeTypes.new(types: ["myapp:enrich"])}
+
+      instructions = Effects.plan([effect], context)
 
       refute Enum.any?(instructions, &match?({:raise, _, _, _, _}, &1))
       assert Enum.any?(instructions, &match?({:start_child, _invoke, ^effect}, &1))

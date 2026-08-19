@@ -323,6 +323,7 @@ defmodule Statifier.MachineState do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.{Event, Machine}
   alias Statifier.Event.Cause
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Routes
 
   # Crockford base32's alphabet in `Base.hex_encode32/2`'s symbol order, so a
@@ -354,7 +355,8 @@ defmodule Statifier.MachineState do
     round: 0,
     trace: false,
     max_macrostep_rounds: 10_000,
-    routes: nil
+    routes: nil,
+    invoke_types: nil
   ]
 
   @typedoc """
@@ -397,6 +399,17 @@ defmodule Statifier.MachineState do
   """
   @type routes :: Routes.t() | nil
 
+  @typedoc """
+  The caller-declared registered `<invoke type>` set (ADR-0051), or `nil`.
+  `nil` means "the built-in set only": no `:invoke_handlers` were passed at
+  session start, so `Statifier.Invoke.Types.registered?/2` answers exactly
+  `Statifier.Send.Target.supported_invoke_type?/1` - `nil`, `"scxml"`, and
+  the bare `http://www.w3.org/TR/scxml/` URI. Unlike `t:routes/0`, this is
+  stamped once per session rather than per drive: the registered set is a
+  `start_link/2` option, fixed for the session's whole lifetime.
+  """
+  @type invoke_types :: InvokeTypes.t() | nil
+
   @type t :: %__MODULE__{
           machine: Machine.t(),
           configuration: MapSet.t(non_neg_integer()),
@@ -415,7 +428,8 @@ defmodule Statifier.MachineState do
           round: non_neg_integer(),
           trace: trace(),
           max_macrostep_rounds: max_macrostep_rounds(),
-          routes: routes()
+          routes: routes(),
+          invoke_types: invoke_types()
         }
 
   @doc """
@@ -427,9 +441,10 @@ defmodule Statifier.MachineState do
 
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
   `:session_id` (default a freshly generated `sess_` id, ADR-0008),
-  `:max_macrostep_rounds` (default `10_000`), and `:routes` (default `nil`,
-  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means). All four
-  system variables
+  `:max_macrostep_rounds` (default `10_000`), `:routes` (default `nil`,
+  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means), and
+  `:invoke_types` (default `nil`, ADR-0051 - see the `t:invoke_types/0`
+  typedoc for what `nil` means). All four system variables
   (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
   option's map, so author-supplied data can never shadow a system variable.
 
@@ -468,7 +483,8 @@ defmodule Statifier.MachineState do
       round: 0,
       trace: Keyword.get(opts, :trace, false),
       max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000),
-      routes: Keyword.get(opts, :routes)
+      routes: Keyword.get(opts, :routes),
+      invoke_types: Keyword.get(opts, :invoke_types)
     }
   end
 

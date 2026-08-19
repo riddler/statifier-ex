@@ -1215,8 +1215,17 @@ defmodule Statifier.Session do
         ) :: State.t()
   defp perform_batch(state, effects, halt_override) do
     effects
-    |> Effects.plan(state.session_id)
+    |> Effects.plan(plan_context(state))
     |> Enum.reduce(state, &perform_instruction(&1, &2, halt_override))
+  end
+
+  # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
+  # decision 2), built from the `%MachineState{}` this session already
+  # holds so the planner's `invoke_types` answer and the core's own stamp
+  # cannot diverge.
+  @spec plan_context(state :: State.t()) :: Effects.context()
+  defp plan_context(%State{} = state) do
+    %{session_id: state.session_id, invoke_types: state.machine_state.invoke_types}
   end
 
   # FIFO, and monotone with no sorting at any nesting depth: each crossing's

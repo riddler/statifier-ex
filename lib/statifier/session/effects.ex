@@ -49,15 +49,29 @@ defmodule Statifier.Session.Effects do
 
   `plan_invoke/2` checks `type` first, mirroring `<send>`'s own order
   (6.2.5's unsupported-`type` check ahead of target resolution): an
-  unsupported `type` (`Statifier.Send.Target.supported_invoke_type?/1`)
-  plans `{:raise, :platform, "error.execution", {:invoke, state_index,
-  invoke_index}, []}` and nothing else - 3.12.2 puts an unsupported `type`
+  unregistered `type` (`Statifier.Invoke.Types.registered?/2`, judged
+  against the plan context's `:invoke_types` snapshot - ADR-0051) plans
+  `{:raise, :platform, "error.execution", {:invoke, state_index,
+  invoke_index}, []}` and nothing else - 3.12.2 puts an unregistered `type`
   in `error.execution`'s class ("errors internal to the execution of the
   document"), the same class `<send>`'s own unsupported-type check uses,
-  because no communication is attempted at all. A supported `type` plans
+  because no communication is attempted at all. A registered `type` plans
   `{:start_child, invoke, effect}` instead - `Statifier.Session` resolves
   the source, seeds the child's datamodel, and starts it (ADR-0027 decision
   3, ADR-0038).
+
+  ## The plan context
+
+  `plan/2`'s second argument is a plain map, not a bare session id:
+  `%{session_id: String.t(), invoke_types: Statifier.Invoke.Types.t() |
+  nil}` (ADR-0051 decision 2). `session_id` is what every `plan_send/3` /
+  `plan_send_delayed/3` call used to receive directly; `invoke_types` is
+  the caller-declared registered set `plan_invoke/2` judges against, read
+  off the same `%MachineState{}` the core was stamped with, so the
+  planner's answer and the core's `maybe_record_active_invocation/5` answer
+  cannot drift (ADR-0047 decision 4). Both `Statifier.Session` and
+  `Statifier.Replay` build this map from the `%MachineState{}` they already
+  hold before calling `plan/2`.
 
   `:autoforward` plans `{:forward, invoke_id, event}` unconditionally - no
   type or target check, since the effect is the core's own decision about an
@@ -81,10 +95,20 @@ defmodule Statifier.Session.Effects do
   alias Statifier.Effect.{Autoforward, Cancel, CancelInvoke, Invoke, Send, SendDelayed}
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Target
 
   @typedoc "Which internal-queue writer `{:raise, ...}` should use - `Statifier.Interpreter.deliver_internal/5`'s own `kind`."
   @type raise_kind :: :internal | :platform
+
+  @typedoc """
+  The pure fold's context (ADR-0051 decision 2) - see the moduledoc's "The
+  plan context" section. `session_id` is the sending session's own id
+  (spec 5.10's `_sessionid`); `invoke_types` is the caller-declared
+  registered-type snapshot `plan_invoke/2` judges against, or `nil` for "no
+  declaration made".
+  """
+  @type context :: %{session_id: String.t(), invoke_types: InvokeTypes.t() | nil}
 
   @typedoc "One instruction for `Statifier.Session` to perform."
   @type instruction ::
@@ -103,59 +127,63 @@ defmodule Statifier.Session.Effects do
 
   @doc """
   Plans `effects`, the core's own order preserved, into the instructions
-  `Statifier.Session` performs. `session_id` is the sending session's own id
-  (spec 5.10's `_sessionid`), needed to build a delivered event's `origin`.
-  `:log`, `:datamodel_change`, `:datamodel_init`, and `:trace` effects plan
-  to nothing but their own `{:notify, effect}`.
+  `Statifier.Session` performs. `context` is the plan context (`t:context/0`
+  - see the moduledoc's "The plan context" section): `session_id` is the
+  sending session's own id (spec 5.10's `_sessionid`), needed to build a
+  delivered event's `origin`; `invoke_types` is the registered-type
+  snapshot `plan_invoke/2` judges against. `:log`, `:datamodel_change`,
+  `:datamodel_init`, and `:trace` effects plan to nothing but their own
+  `{:notify, effect}`.
   """
-  @spec plan(effects :: [Effect.t()], session_id :: String.t()) :: [instruction()]
-  def plan(effects, session_id) when is_list(effects) and is_binary(session_id) do
-    Enum.flat_map(effects, &plan_one(&1, session_id))
+  @spec plan(effects :: [Effect.t()], context :: context()) :: [instruction()]
+  def plan(effects, %{session_id: session_id} = context)
+      when is_list(effects) and is_binary(session_id) do
+    Enum.flat_map(effects, &plan_one(&1, context))
   end
 
-  @spec plan_one(effect :: Effect.t(), session_id :: String.t()) :: [instruction()]
-  defp plan_one({:send, %Send{} = send} = effect, session_id) do
-    [{:notify, effect} | plan_send(send, effect, session_id)]
+  @spec plan_one(effect :: Effect.t(), context :: context()) :: [instruction()]
+  defp plan_one({:send, %Send{} = send} = effect, context) do
+    [{:notify, effect} | plan_send(send, effect, context)]
   end
 
-  defp plan_one({:send_delayed, %SendDelayed{} = send} = effect, session_id) do
-    [{:notify, effect} | plan_send_delayed(send, effect, session_id)]
+  defp plan_one({:send_delayed, %SendDelayed{} = send} = effect, context) do
+    [{:notify, effect} | plan_send_delayed(send, effect, context)]
   end
 
-  defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect, _session_id) do
+  defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect, _context) do
     [{:notify, effect}, {:cancel_timers, send_id}]
   end
 
-  defp plan_one({:invoke, %Invoke{} = invoke} = effect, _session_id) do
-    [{:notify, effect} | plan_invoke(invoke, effect)]
+  defp plan_one({:invoke, %Invoke{} = invoke} = effect, context) do
+    [{:notify, effect} | plan_invoke(invoke, effect, context)]
   end
 
-  defp plan_one({:cancel_invoke, %CancelInvoke{invoke_id: invoke_id}} = effect, _session_id) do
+  defp plan_one({:cancel_invoke, %CancelInvoke{invoke_id: invoke_id}} = effect, _context) do
     [{:notify, effect}, {:stop_child, invoke_id}]
   end
 
-  defp plan_one({:autoforward, %Autoforward{} = af} = effect, _session_id) do
+  defp plan_one({:autoforward, %Autoforward{} = af} = effect, _context) do
     [{:notify, effect}, {:forward, af.invoke_id, af.event}]
   end
 
-  defp plan_one({:done, _done} = effect, _session_id) do
+  defp plan_one({:done, _done} = effect, _context) do
     [{:notify, effect}, {:halt, :done}]
   end
 
-  defp plan_one({:budget_exhausted, _budget_exhausted} = effect, _session_id) do
+  defp plan_one({:budget_exhausted, _budget_exhausted} = effect, _context) do
     [{:notify, effect}, {:halt, :budget_exhausted}]
   end
 
-  defp plan_one({:log, _log} = effect, _session_id), do: [{:notify, effect}]
-  defp plan_one({:datamodel_change, _change} = effect, _session_id), do: [{:notify, effect}]
-  defp plan_one({:datamodel_init, _init} = effect, _session_id), do: [{:notify, effect}]
-  defp plan_one({:trace, _payload} = effect, _session_id), do: [{:notify, effect}]
+  defp plan_one({:log, _log} = effect, _context), do: [{:notify, effect}]
+  defp plan_one({:datamodel_change, _change} = effect, _context), do: [{:notify, effect}]
+  defp plan_one({:datamodel_init, _init} = effect, _context), do: [{:notify, effect}]
+  defp plan_one({:trace, _payload} = effect, _context), do: [{:notify, effect}]
 
   # An immediate `<send>`'s own routing (see moduledoc's numbered list).
-  @spec plan_send(send :: Send.t(), effect :: Effect.t(), session_id :: String.t()) :: [
+  @spec plan_send(send :: Send.t(), effect :: Effect.t(), context :: context()) :: [
           instruction()
         ]
-  defp plan_send(send, effect, session_id) do
+  defp plan_send(send, effect, %{session_id: session_id}) do
     if Target.supported_type?(send.type) do
       case Target.parse(send.target) do
         {:invalid, _target} ->
@@ -180,9 +208,9 @@ defmodule Statifier.Session.Effects do
   # route travels with the `{:schedule, ...}` instruction instead of
   # resolving now, since the destination is only reached once the timer
   # fires.
-  @spec plan_send_delayed(send :: SendDelayed.t(), effect :: Effect.t(), session_id :: String.t()) ::
+  @spec plan_send_delayed(send :: SendDelayed.t(), effect :: Effect.t(), context :: context()) ::
           [instruction()]
-  defp plan_send_delayed(send, effect, session_id) do
+  defp plan_send_delayed(send, effect, %{session_id: session_id}) do
     if Target.supported_type?(send.type) do
       case Target.parse(send.target) do
         {:invalid, _target} ->
@@ -204,10 +232,14 @@ defmodule Statifier.Session.Effects do
 
   # An `<invoke>`'s own routing (see moduledoc's "`<invoke>` routing"
   # section). Unlike `plan_send/3`, there is no target to check - `<invoke>`
-  # has none - so `type` is the only gate.
-  @spec plan_invoke(invoke :: Invoke.t(), effect :: Effect.t()) :: [instruction()]
-  defp plan_invoke(invoke, effect) do
-    if Target.supported_invoke_type?(invoke.type) do
+  # has none - so `type` is the only gate, judged against the plan
+  # context's `invoke_types` snapshot rather than the always-static
+  # `Statifier.Send.Target.supported_invoke_type?/1` (ADR-0051 decision 3).
+  @spec plan_invoke(invoke :: Invoke.t(), effect :: Effect.t(), context :: context()) :: [
+          instruction()
+        ]
+  defp plan_invoke(invoke, effect, %{invoke_types: invoke_types}) do
+    if InvokeTypes.registered?(invoke_types, invoke.type) do
       [{:start_child, invoke, effect}]
     else
       [

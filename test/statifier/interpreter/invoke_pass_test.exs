@@ -2,6 +2,7 @@ defmodule Statifier.Interpreter.InvokePassTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Compiler, Effect, Event, Interpreter, Lowering}
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.{Machine, MachineState, Parser, Validator}
 
   defp compile!(xml) do
@@ -582,5 +583,50 @@ defmodule Statifier.Interpreter.InvokePassTest do
     # same shape the failing-`typeexpr` test above relies on.
     assert MachineState.internal_events(result) == []
     assert result.running
+  end
+
+  # sabotage: `maybe_record_active_invocation/5`'s
+  # `InvokeTypes.registered?(machine_state.invoke_types, type)` is replaced
+  # with `Target.supported_invoke_type?(type)` - the pre-ADR-0051 call - so
+  # the stamped snapshot is never consulted -> "declared" no longer appears
+  # in `trace.invoke_ids` or gains an `active_invocations` entry, reddening
+  # both assertions below. Confirmed red and reverted.
+  test "a type present in a stamped invoke_types snapshot IS recorded live and appears in invoke_ids" do
+    m = compile!(@unsupported_type_document)
+    invoke_types = InvokeTypes.new(types: ["http://example.com/not-scxml"])
+
+    {result, effects} = Interpreter.initialize(m, trace: true, invoke_types: invoke_types)
+
+    assert [declared_invoke, ok_invoke] = invoke_effects(effects)
+    assert declared_invoke.invoke_id == "bad"
+    assert declared_invoke.type == "http://example.com/not-scxml"
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.invoke_ids == ["bad", "ok"]
+
+    s0 = idx(m, "s0")
+    assert Map.get(result.active_invocations, {s0, declared_invoke.invoke_index}) == "bad"
+    assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
+  end
+
+  # sabotage: n/a - this pins that the default (`invoke_types` omitted,
+  # which `MachineState.new/2` defaults to `nil`) reaches the same code
+  # path as an explicit `invoke_types: nil` - the equivalence the "unsupported
+  # static invoke type" test above already exercises for the omitted-option
+  # case. No mutation isolates "explicit nil" from "omitted" independently,
+  # since `Keyword.get(opts, :invoke_types)` treats both identically.
+  test "an explicit invoke_types: nil behaves identically to the type being unsupported today" do
+    m = compile!(@unsupported_type_document)
+
+    {result, effects} = Interpreter.initialize(m, trace: true, invoke_types: nil)
+
+    assert [bad_invoke, ok_invoke] = invoke_effects(effects)
+
+    assert [trace] = invoke_pass_traces(effects)
+    assert trace.invoke_ids == ["ok"]
+
+    s0 = idx(m, "s0")
+    assert Map.get(result.active_invocations, {s0, bad_invoke.invoke_index}) == nil
+    assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
   end
 end
