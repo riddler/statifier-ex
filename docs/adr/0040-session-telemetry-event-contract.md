@@ -7,7 +7,9 @@ amended 2026-08-17 (st-1xwh: `:datamodel_init` joins the core effect events)
 - amended in part by ADR-0046 (2026-08-17, st-xb2b: every core effect struct
 gains `round`, and `round` joins every core-effect event's measurements; the
 `:budget_exhausted`-only exception in the core-effect measurements line below
-is superseded)
+is superseded) - amended in part by ADR-0059 (2026-08-19, st-q6b6:
+`%SendDelayed{}` and `%Cancel{}` gain a per-execution `ordinal`, which joins
+the `:send_delayed` and `:cancel` events' measurements)
 
 ## Context
 

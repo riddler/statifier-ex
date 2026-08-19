@@ -43,6 +43,7 @@ carry the whole seam:
   macrostep: non_neg_integer(),
   microstep: non_neg_integer(),
   round: non_neg_integer(),
+  ordinal: pos_integer(),
   id_from_author?: boolean()
 }
 ```
@@ -58,11 +59,16 @@ scheduled, so your store needs to compute (or record) the fire time itself.
   owner: Statifier.Machine.Content.owner() | nil,
   macrostep: non_neg_integer(),
   microstep: non_neg_integer(),
-  round: non_neg_integer()
+  round: non_neg_integer(),
+  ordinal: pos_integer()
 }
 ```
 
-(`lib/statifier/effect/cancel.ex:20-30`).
+(`lib/statifier/effect/cancel.ex:20-30`). `ordinal` on both structs is a
+per-execution sequence number off `machine_state.timer_counter`, decided by
+`docs/adr/0059-per-execution-ordinal-on-durable-timer-effects.md` - it is
+what keeps two executions of the same `<send delay>` or `<cancel>` node
+(a `<foreach>` body iterating) distinct in your store's dedup key below.
 
 These are the **only** two things a durable-timer host reads. The instruction
 vocabulary - `{:schedule, ...}` and `{:cancel_timers, ...}`
@@ -234,7 +240,7 @@ play, not one.
 | Purpose | Key | Why |
 |---|---|---|
 | Cancellation | `{session scope, send_id}` | May legitimately match more than one stored row. `Timers.put/3` appends per `send_id` in scheduling order (`lib/statifier/session/timers.ex:39-44`) and `take/2` pops every ref under an id (`:51-60`), because spec 6.3 says a cancel with a given sendid cancels them all. An author-written `id` is reused verbatim and never advances the counter (`lib/statifier/machine/content/send.ex:383-389`), so one `<send id="x" delay="...">` executed twice produces two live timers under one `send_id`. A cancel that matches nothing is a no-op, not an error - mirror `take/2`'s `{[], timers}`. |
-| Deduplication (at-least-once) | `{session scope, send_id, macrostep, microstep, round, c_index, owner}` | Read off the stored `%SendDelayed{}` itself. All five counters/positions are stamped as of scheduling, not firing (`lib/statifier/effect/send_delayed.ex:11-13`, ADR-0046), and every component is deterministic - no clock, no CSPRNG, no pid. Re-executing the same drive after a crash produces a byte-identical key, so your store's dedup check is sound. |
+| Deduplication (at-least-once) | `{session scope, send_id, macrostep, microstep, round, c_index, owner, ordinal}` | Read off the stored `%SendDelayed{}` itself. The counters/positions are stamped as of scheduling, not firing (`lib/statifier/effect/send_delayed.ex:11-13`, ADR-0046), `ordinal` is a per-execution sequence off `machine_state.timer_counter` (ADR-0059), and every component is deterministic - no clock, no CSPRNG, no pid. Re-executing the same drive after a crash produces a byte-identical key, so your store's dedup check is sound. |
 
 `session scope` is `ctx.session_id` (spec 5.10's `_sessionid`) for a live
 session, or your own durable run id for a process-less host. Scoping is
@@ -254,18 +260,28 @@ delayed sends with the same author-written `id` in the same microstep: both
 share every one of those five fields, and only `c_index`/`owner` tell them
 apart.
 
-**Honest residual.** Even with `c_index`/`owner` included, the key is not
-strictly per-instance for a `<send id="x" delay="...">` written inside a
-`<foreach>` body: `<foreach>`'s own content runner re-executes the same
-static, document-order `c_index` list on every iteration
-(`lib/statifier/machine/content/foreach.ex:327-328`), so every iteration's
-send carries the *same* `c_index`, the *same* `owner`, and - if the id is
-author-written - the *same* `send_id`, all from the same microstep. The
-workaround is on the document author's side, not your store's: do not
-hand-write an `id` on a `<send delay="...">` inside a `<foreach>` if you are
-running a durable scheduler. A generated id advances `send_counter` per
-execution (`lib/statifier/machine/content/send.ex:383-389`), so each iteration
-gets its own `send_N` and the compound key is unique again.
+`ordinal` is what makes the key per-instance where the other seven
+components cannot. A `<send id="x" delay="...">` written inside a
+`<foreach>` body executes once per iteration from the same content position
+- `<foreach>`'s own content runner re-executes the same static,
+document-order `c_index` list on every iteration
+(`lib/statifier/machine/content/foreach.ex`) - so every iteration's send
+carries the *same* `c_index`, the *same* `owner`, and (the id being
+author-written) the *same* `send_id`, all from the same microstep. Only
+`ordinal` tells those apart: it is minted from
+`machine_state.timer_counter`, a session-global counter that advances on
+every `%SendDelayed{}` or `%Cancel{}` construction and replays
+deterministically for the same reason `send_counter` does (pure fold state,
+ADR-0035's argument; decided by ADR-0059). `%Cancel{}` carries the same
+`ordinal` field for the same reason - two cancels of the same `send_id`
+from two iterations are distinct effects your store must not collapse into
+one, or a send scheduled between them keeps a timer the chart cancelled.
+
+Because `timer_counter` is monotone and session-global,
+`{session scope, ordinal}` is already unique on its own; ADR-0059 blesses
+that pair as a compact key, with the remaining fields kept as row data. The
+full compound form stays the documented default because a self-describing
+row is worth more during an incident than a bare sequence number.
 
 ## Termination: what you owe that the library used to give you
 
