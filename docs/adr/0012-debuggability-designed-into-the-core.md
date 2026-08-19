@@ -94,7 +94,7 @@ field after the mutation is not a violation of this item; stamping the
 counters after it is. A trace effect can therefore mix a pre-mutation
 stamp with a post-mutation field in the same payload without breaking item
 4, so long as each is read from the state its own meaning depends on.
-`exit_states/2` (`lib/statifier/interpreter/exit_entry.ex:100-132`) is a
+`exit_states/2` (`lib/statifier/interpreter/exit_entry.ex:134-167`) is a
 worked example of exactly this split.
 
 This is an amendment rather than a new record: it mints no new identity,
