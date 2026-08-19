@@ -626,15 +626,15 @@ Match the file's existing typography and its ADR-link style
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green.
-- [ ] `mix gate.verify` confirms a full, unscoped run.
-- [ ] Every relative link the new section adds resolves
+- [x] Full `mix quality` is green.
+- [x] `mix gate.verify` confirms a full, unscoped run.
+- [x] Every relative link the new section adds resolves
       (`ls docs/adr/0056-recording-identity-and-serialization.md` and the
       ADR-0034/ADR-0052 targets it cites).
-- [ ] Every module and function name the section names exists
+- [x] Every module and function name the section names exists
       (`grep -n "def to_binary\|def from_binary\|def format_version"
       lib/statifier/session/recording.ex`).
-- [ ] `git diff --stat` shows only `docs/`.
+- [x] `git diff --stat` shows only `docs/`.
 
 #### Manual Verification:
 - [ ] The new section reads as guidance to a host deciding what to persist,
@@ -817,6 +817,28 @@ deferred and surfaced once at the end instead of blocking here.
       unchanged - persistence is the only thing refused.
 - [ ] No regressions in related features (`Replay`, `Session` recording,
       `subscribe(catch_up: true)`).
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The new section reads as guidance to a host deciding what to persist,
+      not as API reference duplicated from the moduledoc.
+- [ ] The elixir example compiles conceptually against the real signatures
+      (paste it into `iex -S mix` over a real recording once).
+- [ ] The `## Explicitly not the *compiled* chart` section that follows still
+      reads correctly now that three artifacts precede it rather than two.
+- [ ] No Appendix D-named function was touched (this phase changes no `lib/`
+      file - confirm by `git diff --stat`).
+- [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

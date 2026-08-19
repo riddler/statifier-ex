@@ -166,6 +166,71 @@ before any version, compile, or identity check runs. The other three arms are
 `from_binary/1` checks them; `Statifier.Chart.to_binary/1`'s one refusal is
 `{:error, :unidentified_chart}`.
 
+## Persisting a recording
+
+A recording (`Statifier.Session.Recording.t()`) is the third persistable
+artifact, alongside a position and a chart. What its blob carries: the
+nested chart blob (`Statifier.Chart.to_binary/1`'s own envelope - the SCXML
+source, the persisted compile opts, and the chart's identity, not a second
+copy of anything), the recording's normalized session opts, and its
+`entries/1` in append order. What it never carries: the compiled
+`%Machine{}` term (`from_binary/1` recompiles one from the nested chart blob
+on load, exactly as the chart section above does), any pid, ref, port, or
+fun, and no clock reading -
+[ADR-0034](adr/0034-replay-re-drives-the-core-not-a-live-session.md)
+decision 2 is why a recording never reads wall-clock time in the first
+place, so there is nothing of the kind for a blob to carry.
+
+Loading one composes the same two-line shape the chart section above models:
+
+```elixir
+{:ok, recording} = Statifier.Session.Recording.from_binary(blob)
+{:ok, result} = Statifier.Replay.run(recording)
+```
+
+**The decoding host must have its `:invoke_handlers` modules loaded before it
+decodes.** `String.to_existing_atom/1` cannot conjure an atom for a module
+nobody has loaded yet, so `to_binary/1` writes each handler module as a
+string rather than an atom
+([ADR-0056 decision 5](adr/0056-recording-identity-and-serialization.md)),
+and `from_binary/1` resolves every one back, collecting every unresolvable
+name into a single `{:error, {:unknown_handler_modules, names}}` instead of
+failing on the first. The error is the actionable instruction: load the
+handler code, then decode.
+
+**Replay after decode is only as faithful as the handlers' planning
+callbacks are.** `Statifier.Session.Effects.plan/2` dispatches to a
+handler's planning callback while replaying; `perform/2`, the impure half,
+is never called during replay. A decoded recording therefore reproduces the
+recorded stream only where the handlers' planning callbacks are equivalent
+to the ones the original run used - an accepted environmental limit, the
+same class as
+[ADR-0034](adr/0034-replay-re-drives-the-core-not-a-live-session.md)'s OTP
+`MapSet`-iteration caveat, not a defect to chase down.
+
+**Host-supplied atoms inside recorded payloads remain the host's own
+`:safe` obligation.** The codec resolves only the handler-module atoms it
+itself wrote; an atom a host put into `:datamodel` values or event data is
+neither scanned for nor translated by `to_binary/1` or `from_binary/1`.
+
+The error vocabulary, in the order `from_binary/1` checks it:
+`:not_a_statifier_blob` (anything that is not this module's own tagged
+envelope), `{:unsupported_format_version, version}`,
+`{:chart, reason}` (carrying `Statifier.Chart.from_binary/1`'s own error
+tuple, unflattened), and `{:unknown_handler_modules, names}`.
+`to_binary/1` has exactly one refusal: `{:error, :unidentified_chart}`, for
+a recording made over a `Machine` that was never identified to begin with -
+the same rule positions and charts already live under.
+
+As with a position blob, reading a recording's identity without paying the
+recompile is not answered yet - deferred the same way
+[ADR-0052](adr/0052-chart-identity-and-position-serialization.md) defers it
+for positions. A host that needs to index many recordings by chart revision
+without recompiling each one on lookup stores
+`Statifier.Machine.Identity.to_binary/1` beside each recording blob at write
+time, the same pattern item 2 of "What a host must persist" above already
+gives positions.
+
 ## Explicitly not the *compiled* chart
 
 What is still never persisted, in either shape above, is the *compiled*
@@ -213,3 +278,8 @@ Choosing the chart-blob shape over retaining source directly is not free:
   option outside that set cannot expect the blob to carry it: recompiling
   that option back in on load is the embedder's own responsibility, not
   something `from_binary/1` does on its behalf.
+- **A recording's own load pays the same recompile, once.** A recording
+  nests exactly one chart blob, so `Statifier.Session.Recording.from_binary/1`
+  pays the cost above once per decode, through the same
+  `Statifier.Chart.from_binary/1` call the chart section describes - not a
+  second, independent recompile cost of its own.
