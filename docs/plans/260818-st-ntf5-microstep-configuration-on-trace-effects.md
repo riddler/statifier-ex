@@ -440,19 +440,19 @@ the guarded paths (`.quality.exs`, `.credo.exs`, `coveralls.json`,
       no conformance test moved.
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment: `exit_states/2`, `enter_states/2` and
+- [x] Spec-conformance judgment: `exit_states/2`, `enter_states/2` and
       `exit_interpreter/1` still match the W3C Appendix D pseudocode line for
       line. Only the ADR-0012 trace statement moved, and Appendix D contains
       no trace statement, so no pseudocode statement was reordered - confirm
       by reading the three moduledoc numbered lists against
       `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`.
-- [ ] Each of the three new tests was actually sabotaged: the named mutation
+- [x] Each of the three new tests was actually sabotaged: the named mutation
       was applied, the test went red, and the change was reverted.
-- [ ] Read the diff against
+- [x] Read the diff against
       `test/fixtures/adr_judge/0012_trace_prestate_captured.diff`: every moved
       call is stamped from a binding captured before the mutation, and only
       `configuration` reads the post-mutation state.
-- [ ] No regressions in related features: trace effect ordering within a
+- [x] No regressions in related features: trace effect ordering within a
       microstep is unchanged (the payload is still first in each function's
       returned list).
 
@@ -533,17 +533,17 @@ widening here.
 - [x] `mix test.regression` green.
 
 #### Manual Verification:
-- [ ] Spec-conformance judgment: the chart exercises real Appendix D parallel
+- [x] Spec-conformance judgment: the chart exercises real Appendix D parallel
       entry ordering (`addDescendantStatesToEnter` over a `<parallel>`), not a
       compound chart in disguise - read the entry order the test observes
       against the pseudocode.
-- [ ] The sabotage named above was applied, went red, and was reverted.
-- [ ] The test covers `exit_interpreter/1`'s whole-configuration sweep, not
+- [x] The sabotage named above was applied, went red, and was reverted.
+- [x] The test covers `exit_interpreter/1`'s whole-configuration sweep, not
       only the ordinary exit path - confirm the terminal `ExitSet` in the
       captured stream came from `exit_interpreter/1` (it is the one whose
       `indexes` is the whole configuration and whose `configuration` is
       empty).
-- [ ] No regressions: the rest of the acceptance file's assertions still
+- [x] No regressions: the rest of the acceptance file's assertions still
       describe the same behavior.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -655,14 +655,14 @@ turns up.
       CLI calls; it is the same run `/wurk:mr` performs before pushing.
 
 #### Manual Verification:
-- [ ] Read both regenerated diffs and confirm each one's meaning is the one
+- [x] Read both regenerated diffs and confirm each one's meaning is the one
       its manifest note claims - the violation stamps counters from the
       post-departure state, the clean one does not.
-- [ ] Confirm the two fixtures' *judged properties* are unchanged from before
+- [x] Confirm the two fixtures' *judged properties* are unchanged from before
       this branch, so st-2ts's recorded Phase 5 scorecard measurement still
       stands (this is the same claim `b3fa844`'s commit body makes, and it is
       a human's call on the record, not an automated one).
-- [ ] Optionally hand-run the real-CLI corpus suite for the two rows only -
+- [x] Optionally hand-run the real-CLI corpus suite for the two rows only -
       `mix test --only fixture:0012_trace_after_departure.diff` and
       `mix test --only fixture:0012_trace_prestate_captured.diff`, the
       per-fixture spend control `test/mix/statifier/adr_judge_corpus_test.exs`
@@ -673,7 +673,14 @@ turns up.
       the expected verdicts. This costs real spend, so treat a green
       `--profile merge` plus the reading above as sufficient if spend is a
       concern; record which was done.
-- [ ] No regressions: the other fifteen fixtures are byte-identical to their
+      **Done 2026-08-18: both rows were hand-run against the real CLI and
+      returned their expected verdicts.** The run also measured a variant of
+      the violation fixture that keeps the ADR-0012 comment and deletes only
+      the `pre_exit_state` binding: the judge does *not* catch it, so part of
+      the shipped row's signal is the deleted comment naming the rule rather
+      than the stamp swap alone. The shipped fixture is unchanged; the gap is
+      filed as st-xsb1.
+- [x] No regressions: the other sixteen fixtures are byte-identical to their
       pre-branch state.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -813,19 +820,19 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Spec-conformance judgment: `exit_states/2`, `enter_states/2` and
+- [x] Spec-conformance judgment: `exit_states/2`, `enter_states/2` and
       `exit_interpreter/1` still match the W3C Appendix D pseudocode line for
       line. Only the ADR-0012 trace statement moved, and Appendix D contains
       no trace statement, so no pseudocode statement was reordered - confirm
       by reading the three moduledoc numbered lists against
       `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/appendix-d.txt`.
-- [ ] Each of the three new tests was actually sabotaged: the named mutation
+- [x] Each of the three new tests was actually sabotaged: the named mutation
       was applied, the test went red, and the change was reverted.
-- [ ] Read the diff against
+- [x] Read the diff against
       `test/fixtures/adr_judge/0012_trace_prestate_captured.diff`: every moved
       call is stamped from a binding captured before the mutation, and only
       `configuration` reads the post-mutation state.
-- [ ] No regressions in related features: trace effect ordering within a
+- [x] No regressions in related features: trace effect ordering within a
       microstep is unchanged (the payload is still first in each function's
       returned list).
 
@@ -840,17 +847,17 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] Spec-conformance judgment: the chart exercises real Appendix D parallel
+- [x] Spec-conformance judgment: the chart exercises real Appendix D parallel
       entry ordering (`addDescendantStatesToEnter` over a `<parallel>`), not a
       compound chart in disguise - read the entry order the test observes
       against the pseudocode.
-- [ ] The sabotage named above was applied, went red, and was reverted.
-- [ ] The test covers `exit_interpreter/1`'s whole-configuration sweep, not
+- [x] The sabotage named above was applied, went red, and was reverted.
+- [x] The test covers `exit_interpreter/1`'s whole-configuration sweep, not
       only the ordinary exit path - confirm the terminal `ExitSet` in the
       captured stream came from `exit_interpreter/1` (it is the one whose
       `indexes` is the whole configuration and whose `configuration` is
       empty).
-- [ ] No regressions: the rest of the acceptance file's assertions still
+- [x] No regressions: the rest of the acceptance file's assertions still
       describe the same behavior.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -863,14 +870,14 @@ advancement automatically, and Manual Verification items are deferred.
 
 ### Phase 3
 
-- [ ] Read both regenerated diffs and confirm each one's meaning is the one
+- [x] Read both regenerated diffs and confirm each one's meaning is the one
       its manifest note claims - the violation stamps counters from the
       post-departure state, the clean one does not.
-- [ ] Confirm the two fixtures' *judged properties* are unchanged from before
+- [x] Confirm the two fixtures' *judged properties* are unchanged from before
       this branch, so st-2ts's recorded Phase 5 scorecard measurement still
       stands (this is the same claim `b3fa844`'s commit body makes, and it is
       a human's call on the record, not an automated one).
-- [ ] Optionally hand-run the real-CLI corpus suite for the two rows only -
+- [x] Optionally hand-run the real-CLI corpus suite for the two rows only -
       `mix test --only fixture:0012_trace_after_departure.diff` and
       `mix test --only fixture:0012_trace_prestate_captured.diff`, the
       per-fixture spend control `test/mix/statifier/adr_judge_corpus_test.exs`
@@ -881,7 +888,14 @@ advancement automatically, and Manual Verification items are deferred.
       the expected verdicts. This costs real spend, so treat a green
       `--profile merge` plus the reading above as sufficient if spend is a
       concern; record which was done.
-- [ ] No regressions: the other fifteen fixtures are byte-identical to their
+      **Done 2026-08-18: both rows were hand-run against the real CLI and
+      returned their expected verdicts.** The run also measured a variant of
+      the violation fixture that keeps the ADR-0012 comment and deletes only
+      the `pre_exit_state` binding: the judge does *not* catch it, so part of
+      the shipped row's signal is the deleted comment naming the rule rather
+      than the stamp swap alone. The shipped fixture is unchanged; the gap is
+      filed as st-xsb1.
+- [x] No regressions: the other sixteen fixtures are byte-identical to their
       pre-branch state.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
