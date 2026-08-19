@@ -115,9 +115,9 @@ and decoding a binary in memory is not an effect a caller has to route
 around, so ADR-0003 does not apply to `Position` itself; it applies to where
 the module sits relative to the core.
 
-**6. `export/1` / `import/2` speak string ids (ADR-0005's boundary rule,
-ADR-0006's public-surface constraint), and perform no identity check,
-because crossing a revision is their whole purpose.** `to_binary/1` /
+**6. `export/1` / `import/2` speak string ids (ADR-0005's boundary rule),
+and perform no identity check, because crossing a revision is their whole
+purpose.** `to_binary/1` /
 `from_binary/2` are the same-revision contract: they refuse to cross a chart
 revision at all. `export/1` and `import/2` are the deliberate counterpart - a
 position translated into string state ids so a host holding a position saved
@@ -129,6 +129,22 @@ hand-editing an export may update, delete, or leave that key stale, and all
 three import identically - the key is provenance for a host that wants to
 log "migrated from revision X to revision Y," not a check this module
 performs on the host's behalf.
+
+The bead this record closes cited "the ADR-0006 public-surface rule" for the
+string-id vocabulary. That is a mis-citation, corrected here rather than
+carried forward: ADR-0006 is the conformance corpus and regression ratchet,
+and its surface-shaped content is a closed list of the functions
+`Statifier.Case` may *drive the library through* - a constraint on what the
+corpus couples to, which that record is explicit is "not library surface".
+The rule the bead describes is ADR-0005's Consequences: "Configurations are
+`MapSet`s of integers; string IDs appear only at the API." So ADR-0006 is
+not reopened by adding `to_binary/1`, `from_binary/2`, `export/1` or
+`import/2` - none of them is a driving function, and the corpus references
+none of them. That last clause is checked rather than asserted: a grep for
+qualified calls to all four, plus `Machine.Identity` and `Machine.identity/1`,
+over `test/support/`, `test/scion_tests/` and `test/scxml_tests/` returns
+nothing. A future change that does couple the corpus to one of them reopens
+ADR-0006 by its own terms, and is a different decision from this one.
 
 The exported map deliberately omits four fields, none of them silently
 dropped: `internal_queue`, because `export/1` refuses a non-empty one
@@ -212,8 +228,9 @@ record by proximity.
 ## Related
 
 - ADR-0005 (interned state indexes - the hazard this record exists to
-  detect), ADR-0006 (the public-surface rule `export`/`import`'s string ids
-  follow), ADR-0014 (item 2's no-instruction-list premise, reaffirmed by
-  decision 3), ADR-0034 (replay's pure fold and why `Session.Recording` is
+  detect, and the boundary rule `export`/`import`'s string ids follow),
+  ADR-0006 (the corpus driving surface, deliberately *not* reopened here -
+  see decision 6), ADR-0014 (item 2's no-instruction-list premise,
+  reaffirmed by decision 3), ADR-0034 (replay's pure fold and why `Session.Recording` is
   out of scope), ADR-0048 and ADR-0051 (the per-drive/per-session snapshot
   fields `export/1` omits).

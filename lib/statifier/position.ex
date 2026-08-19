@@ -28,8 +28,8 @@ defmodule Statifier.Position do
 
   `to_binary/1`/`from_binary/2` above are the same-revision contract: they
   refuse to cross a chart revision at all. `export/1` and `import/2` are the
-  deliberate counterpart - a position in ADR-0005 boundary terms (string
-  state ids, per the ADR-0006 public-surface rule) so a host holding a
+  deliberate counterpart - a position in ADR-0005 boundary terms ("string
+  IDs appear only at the API", ADR-0005's Consequences) so a host holding a
   position saved against revision A can load it onto revision B *on
   purpose*. `import/2` performs **no identity check**: it does not compare
   `export/1`'s `:identity` key to the target `Machine`'s own identity, and
@@ -117,7 +117,9 @@ defmodule Statifier.Position do
   `{:error, {:identity_mismatch, expected, actual}}`'s `expected` is the
   blob's own identity and `actual` is the supplied `machine`'s - both carried
   in the error so a host can log which chart revision it has and which one
-  it needed. When `machine` itself carries no identity, the error is
+  it needed. What to do about it is a choice between two migration
+  strategies - drain the old revision, or migrate the position with
+  `export/1` and `import/2` - laid out in `docs/persistence.md`. When `machine` itself carries no identity, the error is
   `{:error, :unidentified_chart}` instead: the host handed over a `Machine`
   it built without a recorded source, which is a different mistake with a
   different fix (recompile with a source, or via `Statifier.compile/2`).

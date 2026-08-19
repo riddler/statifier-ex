@@ -78,6 +78,17 @@ the export untouched, before handing it to `import/2`. Unlike `to_binary/1`
 / `from_binary/2`, `import/2` performs no identity check at all: crossing a
 revision on purpose is exactly what this pair is for.
 
+A rename is not a one-field edit. A state id appears in *every* exported
+field that references that state, and `import/2` resolves all of them: an id
+left stale in any one of them fails the whole import. Renaming `"b"` to
+`"bee"` means editing it in `configuration`, `entered_states` and
+`states_to_invoke` (each a set of ids), in `history_values` (both its keys
+and the id sets it values), and in the state-id half of every
+`active_invocations` key. The error names the stale id but not the field it
+came from, so an import that still reports `{:error, {:unknown_state_ids,
+["b"]}}` after an apparently complete rename is a field the edit missed, not
+a state the target revision lacks.
+
 What it cannot do:
 
 - **It cannot invent a state the new revision deleted.** If the export
