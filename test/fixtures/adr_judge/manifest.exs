@@ -118,7 +118,10 @@
         "divergence - hunk width, the second trace call, or the production site, " <>
         "unseparated. What is new in this PAIR is the clean half and the wide " <>
         "two-trace hunk, not this row's edit - see " <>
-        "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
+        "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2. " <>
+        "The site-C non-target call was reviewed and upheld 2026-08-19 on " <>
+        "amended grounds - see " <>
+        "docs/research/260819-st-6f7h-decision-3-site-c-review.md"
   },
   %{
     key: "adr-0012-debuggability",

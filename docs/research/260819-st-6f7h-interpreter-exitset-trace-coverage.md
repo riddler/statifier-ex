@@ -621,6 +621,13 @@ stated alongside it.
    is still open on the plan's deferred list, and overturning it would oblige a
    site-C pair.
 
+   **Reviewed 2026-08-19 (Direction stage):** by rule and tier, upheld - with
+   the honest caveat that the verify pass falsified the "transplants are
+   uninformative" premise (identical changed bytes caught 3/3 at site A,
+   missed 3/3 at site B), so the answer now rests on the miss being
+   unattributed to the site rather than on transplants buying nothing. See
+   `docs/research/260819-st-6f7h-decision-3-site-c-review.md`.
+
 2. **If a pair lands, is it a transplant or a `Trace.Done` pair?** A transplant
    is the cheaper and more literal reading of the acceptance criterion; a
    `Trace.Done` pair is the only design distinct under both readings but is a
@@ -648,6 +655,13 @@ stated alongside it.
    the design rejected. Durably recorded in the violation row's manifest note,
    not only in the plan. Still subject to maintainer review on the plan's
    deferred list.
+
+   **Reviewed 2026-08-19 (Direction stage):** upheld on amended grounds - no
+   fixture, no follow-up bead. Site C emits one trace call and cannot
+   reproduce the two-trace composition that surfaced the site-B miss; the
+   named trigger to reopen is a 0.17 CE `--unified=3` re-cut of site B's own
+   edit missing at three seeds, a human's spend to authorize. See
+   `docs/research/260819-st-6f7h-decision-3-site-c-review.md`.
 
 4. **Should the corpus-equivalent unit be re-anchored?** 1.0 CE is defined as
    "one pass over all 18 fixtures" and the corpus is 20 rows, heading for 22.
