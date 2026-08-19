@@ -386,26 +386,26 @@ argument.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate
-- [ ] `mix test test/mix/statifier/adr_judge_corpus_shape_test.exs` passes, now
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate
+- [x] `mix test test/mix/statifier/adr_judge_corpus_shape_test.exs` passes, now
       all 22 rows - specifically the file-exists, real-key, known-tier,
       both-verdicts-per-`{key, tier}`, own-scope-only, and no-`@tag :skip`
       checks
-- [ ] `mix test` reports zero `adr_judge_corpus` tests executed, so the addition
+- [x] `mix test` reports zero `adr_judge_corpus` tests executed, so the addition
       put nothing paid on the ordinary suite
-- [ ] Each new fixture is a single contiguous hunk containing both trace calls:
+- [x] Each new fixture is a single contiguous hunk containing both trace calls:
       for each file,
       `grep -c '^@@' <file>` is `1`, and `grep -c 'Effect.Trace.ExitSet' <file>`
       and `grep -c 'Effect.Trace.Done' <file>` are each at least `1`
-- [ ] Both new fixtures apply cleanly at HEAD:
+- [x] Both new fixtures apply cleanly at HEAD:
       `git apply --check test/fixtures/adr_judge/0012_exit_sweep_stamp_swapped_beside_done.diff`
       and the same for `0012_done_trace_stamped_post_sweep.diff` exit 0
-- [ ] `git diff --stat` shows no path under `lib/`
-- [ ] `git diff --stat` shows no guarded path (`.quality.exs`, `.credo.exs`,
+- [x] `git diff --stat` shows no path under `lib/`
+- [x] `git diff --stat` shows no guarded path (`.quality.exs`, `.credo.exs`,
       `coveralls.json`, `.sobelow-conf`, `.doctor.exs`, `mix.exs`,
       `test/passing_tests.json`), so `mix gate.check` needs no ledger entry
-- [ ] Use `mix quality --profile loop` between edits while iterating
+- [x] Use `mix quality --profile loop` between edits while iterating
 
 #### Manual Verification:
 - [ ] The violation half's hunk, read as the judge would read it with no other
@@ -767,6 +767,35 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
 Any of these is a ceiling decision, and Decision 3 of st-2ts says a ceiling
 decision is a human's call.
 
+
+### Phase 1
+
+- [ ] The violation half's hunk, read as the judge would read it with no other
+      context, contains everything needed to indict the `ExitSet` stamp and
+      acquit the `Done` stamp - and a reader who knows only ADR-0012's text
+      reaches that verdict
+- [ ] The clean half is genuinely meaning-preserving: `post_sweep_state` is a
+      pure alias for the post-reduce `machine_state`, so the emitted `Done`
+      payload is byte-identical
+- [ ] The clean half varies something no existing clean row varies, and a reader
+      can say in one sentence what (a post-mutation **stamp**, where
+      `0012_configuration_read_post_departure.diff` varies a post-mutation
+      **field**)
+- [ ] Neither fixture touches site A or site C, so each presents exactly one
+      site and the row is scored on one signal
+- [ ] No existing row's prose or `.diff` bytes changed: the branch's diff of
+      `manifest.exs` and `test/fixtures/adr_judge/` is a pure insertion
+- [ ] The `docs/testing.md` clause and the Decision 3 sentence read as
+      annotations, not as edits to recorded measurements
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run full `mix quality` as the phase gate. In interactive execution,
+pause here for the human to confirm the manual items before Phase 2. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically and the Manual items are deferred to the end. **A `--loop` pass
+stops at the end of Phase 1** - see Phase 2.
+
+---
 ## References
 
 - Source document:
