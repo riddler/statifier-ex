@@ -139,8 +139,8 @@ defmodule Statifier.Session.Telemetry do
   | Event | Measurements | Metadata |
   |---|---|---|
   | `[:statifier, :session, :effect, :send]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `round`, `delay_ms` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `round`, `delay_ms`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep`, `round`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index` |
   | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
@@ -490,7 +490,8 @@ defmodule Statifier.Session.Telemetry do
        macrostep: send.macrostep,
        microstep: send.microstep,
        round: send.round,
-       delay_ms: send.delay_ms
+       delay_ms: send.delay_ms,
+       ordinal: send.ordinal
      },
      %{
        location: location(machine, send),
@@ -502,7 +503,12 @@ defmodule Statifier.Session.Telemetry do
   end
 
   defp core_shape(machine, %Cancel{} = cancel) do
-    {%{macrostep: cancel.macrostep, microstep: cancel.microstep, round: cancel.round},
+    {%{
+       macrostep: cancel.macrostep,
+       microstep: cancel.microstep,
+       round: cancel.round,
+       ordinal: cancel.ordinal
+     },
      %{
        location: location(machine, cancel),
        send_id: cancel.send_id,
