@@ -403,14 +403,14 @@ no test keys on the ADR's body text.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate
-- [ ] `mix test test/mix/statifier/adr_judge_test.exs` passes - in particular
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate
+- [x] `mix test test/mix/statifier/adr_judge_test.exs` passes - in particular
       the `adr_text` assertion that reads the amended file
-- [ ] `git diff --stat` for this phase shows exactly one path,
+- [x] `git diff --stat` for this phase shows exactly one path,
       `docs/adr/0012-debuggability-designed-into-the-core.md`
-- [ ] `mix test` still reports zero `adr_judge_corpus` tests executed
-- [ ] Use `mix quality --profile loop` between edits while iterating
+- [x] `mix test` still reports zero `adr_judge_corpus` tests executed
+- [x] Use `mix quality --profile loop` between edits while iterating
 
 #### Manual Verification:
 - [ ] The amendment follows the st-1xwh/st-9i5r convention: appended block, the
@@ -752,6 +752,28 @@ iterating; run full `mix quality` as the phase gate. In interactive execution,
 pause here for the human to confirm the manual items before Phase 2. In looped
 (`--loop`) execution, this phase's Automated Verification gates advancement
 automatically and the Manual items are deferred to the end.
+
+---
+
+### Phase 2
+
+- [ ] The amendment follows the st-1xwh/st-9i5r convention: appended block, the
+      original item 4 sentence left standing unedited, and a stated reason why
+      it is an amendment rather than a new record
+- [ ] Read the amendment with the two new fixtures side by side and confirm it
+      calls the violation half a violation and the clean half clean, **without
+      reference to any inline code comment**
+- [ ] Read the amendment against the four other ADR-0012 subtle and blatant
+      fixtures and confirm it does not newly indict any known-clean one - the
+      false-positive risk a rubric widening carries is a reader's judgment
+      before it is a measurement
+- [ ] `mix quality --profile merge` on this branch: the `ADR judge` stage should
+      report a clean skip (`:no_scoped_changes`), since no phase of this plan
+      touches `lib/statifier/`. Confirm the skip line rather than assuming it
+
+**Implementation Note**: Same loop/full-gate discipline as Phase 1. Pause for
+the human before Phase 3 unconditionally - Phase 3 spends money and is not an
+agent's to start.
 
 ---
 ## References
