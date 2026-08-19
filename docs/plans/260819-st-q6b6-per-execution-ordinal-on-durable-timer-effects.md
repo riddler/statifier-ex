@@ -569,14 +569,14 @@ Sabotage-verified, same protocol as Phase 1.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes; `mix gate.verify` exits zero.
-- [ ] `mix test test/statifier/position_test.exs` is green, including the
+- [x] Full `mix quality` passes; `mix gate.verify` exits zero.
+- [x] `mix test test/statifier/position_test.exs` is green, including the
       corrected `:318-331` test.
-- [ ] The version-1 read-path test exists and passes - this is what proves
+- [x] The version-1 read-path test exists and passes - this is what proves
       persistence compatibility, and it is the phase's single most important
       automated criterion.
-- [ ] `mix test.regression` green with `test/passing_tests.json` unmodified.
-- [ ] The gate's sabotage scan reports no missing `# sabotage:` note.
+- [x] `mix test.regression` green with `test/passing_tests.json` unmodified.
+- [x] The gate's sabotage scan reports no missing `# sabotage:` note.
 
 #### Manual Verification:
 - [ ] **Spec-conformance judgment**: `lib/statifier/position.ex` holds no
@@ -816,5 +816,29 @@ execution, this phase's Automated Verification gates advancement automatically
 via `/wurk:commit --auto`, and Manual Verification items are deferred and
 surfaced once at the end. Do not open a pull request after this phase alone -
 see the intermediate-state note in Implementation Approach.
+
+---
+
+### Phase 2
+
+- [ ] **Spec-conformance judgment**: `lib/statifier/position.ex` holds no
+      Appendix D procedure and this phase changes no interpreter behavior; the
+      diff touches only serialization.
+- [ ] Read the version-1 test's fixture by hand and confirm it is a genuine
+      version-1 shape - `:timer_counter` actually absent from the payload map,
+      not merely set to `0`. A fixture that sets it to `0` proves nothing.
+- [ ] Confirm the `check_version(1)` sabotage was really run and reddened with
+      `{:unsupported_format_version, 1}` - and that nobody "fixed" the test by
+      inventing a mutation against `upgrade_payload/2`, which cannot redden.
+- [ ] `docs/persistence.md:43-53` now reads correctly against a two-version
+      `Position` - the added sentence says version 1 is read rather than
+      refused, and the surrounding claim about identity mismatches is
+      undisturbed.
+- [ ] No regression for a host that never persisted anything - a session that
+      never calls `to_binary/1` behaves identically.
+
+**Implementation Note**: Same loop/full gate discipline as Phase 1. This phase
+is the merge blocker referenced in Implementation Approach; the branch is not
+publishable until it lands.
 
 ---
