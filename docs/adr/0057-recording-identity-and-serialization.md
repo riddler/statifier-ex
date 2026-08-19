@@ -3,7 +3,9 @@
 Status: accepted (2026-08-19) - answers ADR-0052 decision 8's named
 follow-up (st-hz2a); consumes 0052's identity and chart-codec machinery
 without amending any of its decisions; ADR-0034's whole-`%Machine{}`
-embedding stands untouched
+embedding stands untouched - decision 4's format-version door walked
+through by ADR-0060 (2026-08-19: the envelope gains an `anchor` position
+blob, format version 1 -> 2, version 1 still decodes)
 
 ## Context
 
