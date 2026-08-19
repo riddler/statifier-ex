@@ -10,7 +10,8 @@ defmodule Statifier.Session.InvokeStartChildTest do
   # runtime placed" branch, so this module is `async: false` the same way
   # that one is.
 
-  alias Statifier.{Compiler, Effect, Lowering, Parser, Session, StreamOrder, Validator}
+  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, StreamOrder, Validator}
+  alias Statifier.Event.Cause
   alias Statifier.Session.Invocations
 
   defp compile!(xml) do
@@ -487,6 +488,91 @@ defmodule Statifier.Session.InvokeStartChildTest do
                Invocations.fetch(child_invocations, grandchild_invoke_id)
 
       assert Session.status(grandchild_pid).configuration == MapSet.new(["run"])
+    end
+  end
+
+  # -- an unsupported <invoke type> -------------------------------------------
+
+  describe "an <invoke> with an unsupported type" do
+    # This is the end-to-end pin for "the two checks agree": one document,
+    # one run, both halves asserted from the same drained stream -
+    # `Statifier.Session.Effects.plan_invoke/2`
+    # still raises `error.execution` (the session half) while
+    # `Statifier.Interpreter`'s `active_invocations` bookkeeping (the core
+    # half, Phase 1) never records the invocation, so `Trace.InvokePass`
+    # never names it and exiting the state emits no `Effect.CancelInvoke`
+    # for it. A core-only or a session-only regression each reddens a
+    # different assertion below, which is what makes this test genuinely
+    # end-to-end rather than a duplicate of either Phase 1's or
+    # `effects_test.exs`'s unit coverage.
+    #
+    # sabotage: `Statifier.Interpreter`'s `maybe_record_active_invocation/5`
+    # is changed to always call `record_active_invocation/4` (drops the
+    # `Target.supported_invoke_type?(type)` guard) -> the unsupported
+    # invocation is recorded live, so `Trace.InvokePass`'s `invoke_ids`
+    # gains "bad" (reddening that assertion) and exiting state "a" emits an
+    # `Effect.CancelInvoke{invoke_id: "bad"}` (reddening the `refute`
+    # below). Reverted and confirmed green.
+    test "raises error.execution, and Effect.Invoke's id never becomes live" do
+      machine =
+        compile!("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+            <state id="a">
+                <invoke id="bad" type="http://example.com/not-scxml"/>
+                <transition event="error.execution" target="b"/>
+            </state>
+            <state id="b"/>
+        </scxml>
+        """)
+
+      {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
+      session_id = Session.session_id(session)
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert status.configuration == MapSet.new(["b"])
+
+      stream = StreamOrder.drain(session_id)
+
+      assert {:effect,
+              {:invoke,
+               %Effect.Invoke{
+                 invoke_id: "bad",
+                 type: "http://example.com/not-scxml",
+                 state_index: state_index,
+                 invoke_index: invoke_index
+               }}} = Enum.find(stream, &match?({:effect, {:invoke, _invoke}}, &1))
+
+      assert Enum.any?(stream, fn
+               {:effect,
+                {:trace,
+                 %Effect.Trace.EventDequeued{
+                   from: :internal,
+                   event: %Event{
+                     name: "error.execution",
+                     cause: %Cause{origin: {:invoke, ^state_index, ^invoke_index}}
+                   }
+                 }}} ->
+                 true
+
+               _other_message ->
+                 false
+             end)
+
+      assert Enum.any?(stream, fn
+               {:effect, {:trace, %Effect.Trace.InvokePass{invoke_ids: invoke_ids}}} ->
+                 "bad" not in invoke_ids
+
+               _other_message ->
+                 false
+             end)
+
+      %{invocations: invocations} = :sys.get_state(session)
+      assert Invocations.count(invocations) == 0
+
+      refute Enum.any?(stream, fn
+               {:effect, {:cancel_invoke, %Effect.CancelInvoke{invoke_id: "bad"}}} -> true
+               _other_message -> false
+             end)
     end
   end
 end
