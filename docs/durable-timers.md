@@ -398,5 +398,5 @@ The chartered `statifier_oban` package is the packaged consumer of exactly
 this recipe - an Oban-backed implementation of Route A, keyed and
 liveness-checked per ADR-0054. If you are building an invoke handler
 alongside your durable timers, its own at-least-once contract lives in
-`docs/extending.md:178-190` ("At-least-once: handlers must be idempotent"),
+`docs/extending.md:181-193` ("At-least-once: handlers must be idempotent"),
 not here - the two seams share a host but not a rulebook.
