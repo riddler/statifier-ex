@@ -53,6 +53,18 @@ Reading the five sites shows they are not one kind of thing:
   already cites 0039 by its current name, so the document is internally
   inconsistent besides.
 
+One of the two pointer sites carries evidence about why it survived,
+and it is not what it looks like. The 0043 -> 0044 renumber was done by
+`2c26fe0` ("Renumbers this branch's ADR to 0044", `Refs: st-r6l9`),
+whose message states that it "rewrites every ADR-0043 citation on this
+branch" and which changed 82 lines of that same plan document. It even
+handled the hard case deliberately, noting that "the parser's own
+ADR-0043 references are left alone; they cite the
+attribute-normalization record, not this one." A careful sweep, on the
+renumbering branch, in the same commit, still left line 955 behind.
+What failed there was not a missing obligation to sweep; it was an
+unaided hand sweep across a dozen files.
+
 A naive link check also flags four names that are not this repo's
 records at all: `0010-bounded-rebase-conflict-auto-resolution.md` and
 `0011-codebase-orientation-extension-file.md` are wurk's ADRs, cited by
@@ -90,6 +102,18 @@ as a broken link to the wrong record.
    and `260817-st-r6l9-reentry-effects-defer-to-outer-batch.md:955`
    (0043 -> 0044).
 
+   Name the bead that performed the renumber only when it is not the
+   citing document's own bead. The st-cmq.7 plan gains "renumbered
+   under st-7wql" because st-7wql is a different bead and routes the
+   reader somewhere new; the st-r6l9 plan keeps the unattributed
+   "renumbered after a number collision" even though its resolver is
+   known to be st-r6l9, because that renumber was st-r6l9's own work
+   and naming it there would cite the document to itself. The
+   unattributed form is correct in that case rather than second-best.
+   The renumbering commit is not cited by sha: worktrees here rebase
+   onto `origin/main` routinely, so a sha written on a branch can move
+   before it merges, while bead ids are stable.
+
 3. **Historical statements stand as written, exactly per st-0y0.** The
    old name named as a fact of the past is correct prose, and correcting
    it would falsify the record. This covers the remaining three sites:
@@ -106,6 +130,19 @@ as a broken link to the wrong record.
    by nature (they cite authority) and get the same treatment. The sweep
    is bounded to this repo's tree; nothing is owed to prose in other
    repositories.
+
+   Preventing collisions never retires this obligation. Every mechanism
+   st-9vco weighs still ends in a renumber: a pre-merge check detects
+   the collision and hands off to one, reserving the number at plan
+   time "moves the collision earlier but does not eliminate it" in that
+   bead's own words, and the third option accepts collisions outright
+   and makes the renumber cheap. The rule is written for any
+   renumbering rather than only a collision's resolution, so it outlives
+   collisions entirely. What it does need is a mechanical verifier
+   behind it, on the evidence of the 0043 -> 0044 sweep above: the
+   obligation was met there and a pointer leaked anyway. That verifier
+   is st-9vco's other half, and it complements this rule instead of
+   replacing it.
 
 5. **A cross-repo ADR citation must carry the repository's identity in
    the citation itself.** Acceptable forms: a full URL (as ADR-0025
@@ -127,25 +164,25 @@ as a broken link to the wrong record.
   (`260815-st-cmq.7-invoke-scxml-child-sessions.md:1155`,
   `260817-st-r6l9-reentry-effects-defer-to-outer-batch.md:955`) in the
   decision-2 form, and touches nothing else the link check flagged.
-- Future renumberings (until st-9vco prevents them) carry their own
-  pointer sweep on the renumbering branch, so this cleanup shape does
-  not recur as a separate bead.
+- Future renumberings carry their own pointer sweep on the renumbering
+  branch, so this cleanup shape does not recur as a separate bead.
+  st-9vco's prevention work does not lift that obligation - it is the
+  mechanical check a hand sweep needs behind it.
 - Any future mechanical link check over `docs/adr/` citations must
   either distinguish pointer from historical-statement sites or accept a
   suppression mechanism for the latter; a checker that demands every
   `docs/adr/` string resolve would force falsifying history. It must
   also treat repo-qualified citations (decision 5's forms) as out of
   scope.
+- The same constraint binds harder on a *rewriter* than on a checker.
+  st-9vco weighs "a script that renames a record and repoints every
+  citation" as the cheap option; applied naively that script would
+  rewrite the decision-3 historical statements and falsify them, and
+  `2c26fe0` shows it would also have to decide which record a reused
+  number means, since the parser's ADR-0043 citations pointed at a
+  different record than the one being renumbered. A repointer that
+  cannot make both judgments must leave what it cannot classify to a
+  human rather than guess.
 - New cross-repo citations that omit the repo are defects from this
   record forward, even when the number happens not to collide with a
   local record.
-
-Open questions, recorded rather than resolved here:
-
-1. Whether st-9vco's prevention mechanism (reserving the number at plan
-   time, or a pre-merge collision check) makes decision 4's sweep
-   obligation moot. Until it lands, the sweep stands.
-2. Whether the decision-2 parenthetical should also name the collision's
-   resolving bead when it is known. The form shown includes it
-   (st-7wql); when the resolver is unknown, "renumbered after a number
-   collision" suffices.
