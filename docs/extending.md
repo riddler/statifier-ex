@@ -157,6 +157,9 @@ freshly generated value - it is a deterministic counter carried on
 from the same persisted position always produces the same `invoke_id` for the
 same `<invoke>` element, so a `done.invoke.<id>` that arrives minutes or days
 after `start/2` planned it is still addressing a stable, recognizable name.
+For what "persisted position" means safely - the reload has to land on the
+same chart revision it was saved against, or fail loudly rather than resume
+the wrong states - see [docs/persistence.md](persistence.md).
 
 The door your host uses to report completion is
 `Statifier.Session.done_invocation/3`:

@@ -103,6 +103,10 @@ above, and `Statifier.Effect` is the `effect`.
   `Statifier.Interpreter.NameMatch` is the 3.13 matcher above.
 - The exit and entry blocks - history recording/restoration and
   `done.state.*` generation included - live in `Statifier.Interpreter.ExitEntry`.
+- A `MachineState`'s configuration is interned integer indexes, stable only
+  within one `Machine` build - persisting and reloading one safely, across a
+  chart revision or not, is [docs/persistence.md](persistence.md)'s concern,
+  not this document's.
 
 ### Executable content
 

@@ -52,6 +52,8 @@
 | [0048](0048-send-reachability-judged-against-a-route-snapshot.md) | Send reachability is judged in the core against a caller-declared route snapshot; core-detected unreachability aborts the block (discharges 0047 decision 6's deferral) | accepted (amends 0039 in part) |
 | [0049](0049-late-subscriber-catch-up-via-recording.md) | Late subscribers catch up by replaying the recording; no header effect joins the stream | accepted |
 | [0050](0050-invoked-children-inherit-observation-by-opt-in.md) | Invoked children inherit the parent's observers by opt-in; the invocation table gets a public accessor | accepted |
+| [0051](0051-invoke-handlers-are-registered-per-session.md) | Invoke handlers are registered per session; the registered invoke-type set becomes core-visible deployment state | accepted |
+| [0052](0052-chart-identity-and-position-serialization.md) | Chart identity is a content hash of the SCXML source; a position blob carries identity and a format version, checked before use | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.
