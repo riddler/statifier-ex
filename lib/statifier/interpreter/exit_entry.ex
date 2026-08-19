@@ -276,7 +276,8 @@ defmodule Statifier.Interpreter.ExitEntry do
   `state_index`: walk its compiled `invoke` list in document order, and for
   each `{state_index, invoke_index}` found in `machine_state.active_invocations`
   emit a cancel and delete the entry. An invocation whose arguments failed
-  (ADR-0031) never reached `active_invocations`, so it produces no cancel.
+  (ADR-0031), and one whose resolved `type` was unsupported (6.4.1), never
+  reached `active_invocations`, so neither produces a cancel.
 
   Two callers, both after that state's own `onexit` blocks and before it
   leaves the configuration - both the pseudocode's own order in `exitStates`

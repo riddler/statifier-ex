@@ -628,16 +628,16 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The touched functions still match the W3C Appendix D pseudocode line for
+- [x] The touched functions still match the W3C Appendix D pseudocode line for
       line: `invoke(inv)` is declared platform-specific
       (`spec-cache/appendix-d.txt:137`), so the guard inside it is not a
       deviation, and `exitStates`' unconditional `cancelInvoke(inv)` deviation
       is the pre-existing one whose comment this phase widens rather than a new
       one.
-- [ ] A trace consumer stepping the invoke pass for a document with a mixed pair
+- [x] A trace consumer stepping the invoke pass for a document with a mixed pair
       of invocations sees exactly the started one named, and sees no phantom
       node appear and disappear.
-- [ ] No regressions in `<finalize>` or autoforward behavior for supported
+- [x] No regressions in `<finalize>` or autoforward behavior for supported
       invocations (they read the same map).
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -651,13 +651,13 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The test genuinely exercises both halves in one run - reading it, a
+- [x] The test genuinely exercises both halves in one run - reading it, a
       reviewer can see that a core-side change alone or a session-side change
       alone would redden it.
-- [ ] The observed effect stream, read in order, tells a coherent story: an
+- [x] The observed effect stream, read in order, tells a coherent story: an
       `Effect.Invoke`, an `error.execution`, no invocation in the pass trace, no
       cancel on exit.
-- [ ] No regressions in the module's existing start-child tests.
+- [x] No regressions in the module's existing start-child tests.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
