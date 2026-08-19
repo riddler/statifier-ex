@@ -90,13 +90,23 @@ defmodule Mix.Tasks.Adr.CheckTest do
     assert {:ok, %{"summary" => "No likely ADR violations", "findings" => []}} = JSON.decode(json)
   end
 
-  # sabotage: return {:error, _} instead of {:skip, _} when no base ref
-  #           resolves -> red
+  # sabotage: have respond_partial/2 skip regardless of findings -> red
   test "no base ref is a skip that writes its own reason" do
-    assert {:skip, json} = Check.execute(["--format", "json"], runner: runner([]))
+    lister = fn "docs/adr" -> {:ok, []} end
+    reader = fn "docs/adr/README.md" -> {:ok, ""} end
+
+    assert {:skip, json} =
+             Check.execute(["--format", "json"],
+               runner: runner([]),
+               lister: lister,
+               reader: reader
+             )
 
     assert {:ok, %{"summary" => summary}} = JSON.decode(json)
-    assert summary == "no base ref: neither origin/main nor main resolves"
+
+    assert summary ==
+             "no base ref: neither origin/main nor main resolves; " <>
+               "the docs/adr/ numbering invariant ran and is clean"
   end
 
   # sabotage: report a failing git command as {:skip, _} -> red
@@ -185,6 +195,57 @@ defmodule Mix.Tasks.Adr.CheckTest do
       assert text =~ "docs/adr/0001-first.md\n"
       refute text =~ "docs/adr/0001-first.md:"
     end
+
+    # sabotage: have execute/2's {:no_base_ref, source} clause call
+    #           respond/2 instead of respond_partial/2, so a colliding index
+    #           reports {:ok, _} (respond/2's :ok is unconditional for a []
+    #           argument, but the real behavior lost here is that a nonempty
+    #           finding list under no base ref must still fail the stage) -> red
+    test "no base ref with a colliding index fails the stage, not skips it" do
+      lister = fn "docs/adr" -> {:ok, ["0001-first.md", "0001-second.md"]} end
+
+      reader = fn
+        "docs/adr/README.md" ->
+          {:ok,
+           """
+           | # | Decision | Status |
+           |---|---|---|
+           | [0001](0001-first.md) | First | accepted |
+           | [0001](0001-second.md) | Second | accepted |
+           """}
+      end
+
+      assert {:error, json} =
+               Check.execute(["--format", "json"],
+                 runner: runner([]),
+                 lister: lister,
+                 reader: reader
+               )
+
+      assert {:ok, %{"findings" => findings}} = JSON.decode(json)
+      assert Enum.any?(findings, &(&1["check"] == "adr-0056-duplicate-number"))
+    end
+
+    # sabotage: have respond_partial/2's [] clause return {:error, _} instead
+    #           of {:skip, _} -> red
+    test "no base ref with a clean index skips, naming the invariant as having run" do
+      lister = fn "docs/adr" -> {:ok, ["0001-first.md"]} end
+
+      reader = fn "docs/adr/README.md" ->
+        {:ok,
+         "| # | Decision | Status |\n|---|---|---|\n| [0001](0001-first.md) | First | accepted |\n"}
+      end
+
+      assert {:skip, json} =
+               Check.execute(["--format", "json"],
+                 runner: runner([]),
+                 lister: lister,
+                 reader: reader
+               )
+
+      assert {:ok, %{"summary" => summary}} = JSON.decode(json)
+      assert summary =~ "the docs/adr/ numbering invariant ran and is clean"
+    end
   end
 
   describe "without --format json" do
@@ -209,9 +270,15 @@ defmodule Mix.Tasks.Adr.CheckTest do
 
     # sabotage: have skipped/1 return the JSON document in prose mode -> red
     test "a skip states its reason as prose" do
-      assert {:skip, output} = Check.execute([], runner: runner([]))
+      lister = fn "docs/adr" -> {:ok, []} end
+      reader = fn "docs/adr/README.md" -> {:ok, ""} end
 
-      assert output == "no base ref: neither origin/main nor main resolves"
+      assert {:skip, output} =
+               Check.execute([], runner: runner([]), lister: lister, reader: reader)
+
+      assert output ==
+               "no base ref: neither origin/main nor main resolves; " <>
+                 "the docs/adr/ numbering invariant ran and is clean"
     end
 
     # sabotage: have failed/2 drop the git reason from the prose message -> red

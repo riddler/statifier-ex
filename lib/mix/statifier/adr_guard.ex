@@ -189,8 +189,10 @@ defmodule Mix.Statifier.AdrGuard do
 
   Base ref resolution is `opts[:base]`, then `origin/main`, then `main`. When
   none of them resolves there is nothing to diff against, so this returns
-  `:no_base_ref` rather than guessing a base; the task turns that into a skipped
-  stage.
+  `{:no_base_ref, source}` rather than guessing a base - the source still
+  carries the tree-local `:adr` index (an empty `:diff`), because that half
+  needs no base ref and the task runs it regardless; the diff-based and
+  base-ref halves are what the task turns into a skipped stage.
 
   `opts[:runner]` replaces the `git` shell-out with a function of an argument
   list returning `{output, status}`, mirroring `Mix.Statifier.GateGuard`.
@@ -204,7 +206,8 @@ defmodule Mix.Statifier.AdrGuard do
   filesystem read, not a git one, so it costs nothing to compute up front and
   it is what lets the tree-local numbering checks run without a base ref.
   """
-  @spec collect(opts :: keyword()) :: {:ok, source()} | {:error, String.t()} | :no_base_ref
+  @spec collect(opts :: keyword()) ::
+          {:ok, source()} | {:no_base_ref, source()} | {:error, String.t()}
   def collect(opts) do
     runner = Keyword.get(opts, :runner, &git/1)
     reader = Keyword.get(opts, :reader, &File.read/1)
@@ -213,7 +216,7 @@ defmodule Mix.Statifier.AdrGuard do
     candidates = Enum.reject([opts[:base], "origin/main", "main"], &is_nil/1)
 
     case Enum.find(candidates, &resolves?(&1, runner)) do
-      nil -> :no_base_ref
+      nil -> {:no_base_ref, %{diff: "", adr: index}}
       ref -> collect_from(ref, runner, reader, index)
     end
   end

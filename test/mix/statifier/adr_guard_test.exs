@@ -635,9 +635,15 @@ defmodule Mix.Statifier.AdrGuardTest do
   end
 
   describe "collect/1" do
-    # sabotage: fall back to HEAD instead of returning :no_base_ref -> red
+    # sabotage: fall back to HEAD instead of returning {:no_base_ref, _} -> red
     test "reports no base ref rather than guessing one" do
-      assert AdrGuard.collect(runner: runner([])) == :no_base_ref
+      lister = fn "docs/adr" -> {:ok, ["0001-first.md"]} end
+      reader = fn "docs/adr/README.md" -> {:ok, "readme text"} end
+
+      assert {:no_base_ref, source} =
+               AdrGuard.collect(runner: runner([]), lister: lister, reader: reader)
+
+      assert %{diff: "", adr: %{files: ["0001-first.md"], readme: "readme text"}} = source
     end
 
     # sabotage: drop `opts[:base]` from the candidate list -> red

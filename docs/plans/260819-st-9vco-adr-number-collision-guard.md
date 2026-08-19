@@ -594,8 +594,8 @@ that still names a mutation in the code path they now cover (e.g.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green; `mix gate.verify` exits zero.
-- [ ] The no-base-ref path is decided by the test suite, not by a CLI
+- [x] Full `mix quality` is green; `mix gate.verify` exits zero.
+- [x] The no-base-ref path is decided by the test suite, not by a CLI
       invocation: the two new `adr_check_test.exs` tests (colliding index with
       no base ref is `{:error, _}`; clean index with no base ref is
       `{:skip, _}` whose reason names the invariant) pass under the full gate.
@@ -605,10 +605,10 @@ that still names a mutation in the code path they now cover (e.g.
       diff path, not this one. Checking it off from a CLI run would be checking
       off the wrong thing. The scratch-clone walkthrough is under Manual
       Verification.
-- [ ] `mix quality --format json --report -` still shows `ADR guard` as passed
+- [x] `mix quality --format json --report -` still shows `ADR guard` as passed
       in a normal worktree (where `origin/main` resolves), i.e. this phase does
       not turn ordinary runs into skips.
-- [ ] No new pattern in `.claude/wurk.json`'s `gate.project_level_skips` or
+- [x] No new pattern in `.claude/wurk.json`'s `gate.project_level_skips` or
       `gate.not_applicable_skips`, and no edit to `.quality.exs` - ADR-0056
       decision 4 turns on this being true, and ADR-0017 point 6's re-argument
       obligation is not triggered.
