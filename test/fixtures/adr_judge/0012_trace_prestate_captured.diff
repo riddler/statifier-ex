@@ -1,21 +1,33 @@
 diff --git a/lib/statifier/interpreter/exit_entry.ex b/lib/statifier/interpreter/exit_entry.ex
+index b594e64..17653d9 100644
 --- a/lib/statifier/interpreter/exit_entry.ex
 +++ b/lib/statifier/interpreter/exit_entry.ex
-@@ -135,7 +135,7 @@ defmodule Statifier.Interpreter.ExitEntry do
+@@ -143,11 +143,11 @@ defmodule Statifier.Interpreter.ExitEntry do
  
-     states_to_exit = Machine.exit_order(machine, exit_set)
- 
--    trace_effects = Effect.trace(machine_state, Effect.Trace.ExitSet, indexes: states_to_exit)
-+    pre_exit_state = machine_state
+     # ADR-0012: the counters this payload stamps must be the ones that stood
+     # at the exit-set phase boundary, so the trace is stamped against
+-    # `pre_exit_state`; only `configuration` is read from the post-departure
++    # `exit_set_state`; only `configuration` is read from the post-departure
+     # state, because "the configuration after this exit set was applied"
+     # does not exist until the reduce below has run. Effect-list
+     # position is unchanged: the list is concatenated at the end either way.
+-    pre_exit_state = machine_state
++    exit_set_state = machine_state
  
      machine_state = record_history_values(machine_state, states_to_exit)
  
-@@ -145,6 +145,8 @@ defmodule Statifier.Interpreter.ExitEntry do
+@@ -157,10 +157,12 @@ defmodule Statifier.Interpreter.ExitEntry do
          {ms, effects ++ new_effects}
        end)
  
-+    trace_effects = Effect.trace(pre_exit_state, Effect.Trace.ExitSet, indexes: states_to_exit)
++    resulting_configuration = machine_state.configuration
 +
-     {machine_state, trace_effects ++ depart_effects}
-   end
+     trace_effects =
+-      Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
++      Effect.trace(exit_set_state, Effect.Trace.ExitSet,
+         indexes: states_to_exit,
+-        configuration: machine_state.configuration
++        configuration: resulting_configuration
+       )
  
+     {machine_state, trace_effects ++ depart_effects}
