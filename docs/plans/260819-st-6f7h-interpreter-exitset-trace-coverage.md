@@ -537,21 +537,29 @@ this plan - **plus `test/fixtures/adr_judge/manifest.exs` if and only if change
 4's branch was taken.** That fourth path is an expected outcome, not a symptom.
 
 #### Manual Verification:
-- [ ] A human, not an agent, decided to start this phase and authorized the
+- [x] A human, not an agent, decided to start this phase and authorized the
       spend. If an agent runs the six commands under that authorization, the
       deviation is written into the scorecard entry rather than ticked away -
-      st-xsb1 recorded exactly this deviation and the precedent is to state it
+      st-xsb1 recorded exactly this deviation and the precedent is to state it.
+      **Deviation, recorded rather than ticked away**: the human explicitly
+      said to go ahead and run the six commands; an agent ran them
 - [ ] Every recorded cell traces to one
       `mix test --only fixture:<name> --seed <n>` invocation whose raw ExUnit
-      output was read directly; no cell inferred from another
-- [ ] The spend is recorded in corpus-equivalents against Decision 3's ceiling
+      output was read directly; no cell inferred from another. **Not fully
+      satisfied**: the violation row's seed-101 cell has a sound verdict (a
+      miss, exit status 2) but no captured assertion text - the agent's first
+      invocation was run without redirecting output and the terminal output
+      was truncated before it could be read. That cell is recorded as an
+      uncaptured miss, not inferred from seeds 202/303, per the plan's own
+      instruction not to infer a cell from another cell
+- [x] The spend is recorded in corpus-equivalents against Decision 3's ceiling
       of 8, cumulative - 0.33 spent, cumulative 5.53 of 8
-- [ ] The budget was not exceeded: 6 of 6 runs, no fixture re-run, no second
+- [x] The budget was not exceeded: 6 of 6 runs, no fixture re-run, no second
       model, no tier-wide selector
-- [ ] The entry is unambiguously labeled a first measurement of two new rows,
+- [x] The entry is unambiguously labeled a first measurement of two new rows,
       and every existing table is left standing
-- [ ] `docs/testing.md`'s mirrored row carries the same label
-- [ ] If either row misses, the finding is written down and **no further paid
+- [x] `docs/testing.md`'s mirrored row carries the same label
+- [x] If either row misses, the finding is written down and **no further paid
       run was made**
 
 **Implementation Note**: There is no `--loop` execution of this phase. An agent
@@ -714,6 +722,69 @@ under Phase 2 change 4 rather than acted on.
   measures on sonnet partly because of that. If a maintainer moves the default,
   Phase 2's model should move with it.
 
+### Phase 2 finding: the measurement inverted the plan's own prediction
+
+**Measured 2026-08-19**, `claude-sonnet-5`, seeds 101/202/303, per Phase 2's
+budget of six fixture-runs (0.33 CE; cumulative 5.53 of 8). Full matrix,
+provenance, and interpretation are recorded in
+`docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`'s Phase 5 subsection
+("First measurement of two new rows, 2026-08-19 (st-6f7h)"), mirrored in
+`docs/testing.md`. Summarized here because this plan's own text made a
+prediction the result contradicts.
+
+**Result.**
+
+| Fixture | Expect | sonnet 101/202/303 | Majority |
+|---|---|---|---|
+| `0012_exit_sweep_stamp_swapped_beside_done.diff` | violation | uncaptured (miss, exit 2), FN, FN | **MISS, unanimous** |
+| `0012_done_trace_stamped_post_sweep.diff` | clean | ok, ok, ok | **ok, unanimous** |
+
+**Two deviations, written down rather than ticked away:**
+
+1. **An agent, not a human, ran the six commands.** The human authorized the
+   spend explicitly ("go ahead and run the six commands"); the agent executed
+   them. This is the same deviation shape st-xsb1 recorded, and is recorded
+   here per this plan's own manual criterion rather than silently ticked.
+2. **One cell has no captured assertion text.** The violation row's seed-101
+   run exited 2 (an ExUnit failure - a sound miss verdict), but the agent's
+   first invocation was run without redirecting output and the terminal
+   output was truncated before the assertion text could be read. Per this
+   plan's instruction not to infer a cell from another, that cell is recorded
+   plainly as an **uncaptured miss** - not inferred as FALSE NEGATIVE or
+   WRONG-ADR from the other two seeds. The row's majority verdict does not
+   depend on this cell: seeds 202 and 303 alone already form a majority of
+   false negatives.
+
+**The finding, read plainly.** This plan predicted the clean row was the
+likelier miss - that a judge which had internalized "stamp pre-mutation" as
+an unconditional rule would fire a false positive on the conspicuously
+post-sweep `Trace.Done` stamp. The measurement went the other way: the clean
+row was acquitted unanimously, and the violation row - the swapped
+`Trace.ExitSet` stamp sitting beside the untouched, correctly post-sweep
+`Trace.Done` call in the same hunk - was missed unanimously. On this wide
+two-trace hunk, the judge did not indict the swapped stamp at all.
+
+**Diagnostic: a failure to propose, not a refute-pass over-rejection.** The
+violation row's runs took roughly 6.0s of sync time; the clean row's took
+13-32s. The judge's propose step returned no candidate at all on the
+violation row - no candidate means no refute call, hence the short runtime.
+On the clean row the judge proposed candidates and then refuted them away.
+So this miss is not the judge seeing a real violation and being talked out of
+it by refute; it never proposed one.
+
+**What the measurement cannot separate.** `0012_trace_stamp_swapped_comment_kept.diff`,
+the comment-kept `Trace.ExitSet` stamp swap at site A (`exit_states/2`), was
+previously measured caught unanimously (st-xsb1). The new violation row
+differs from it in at least three ways simultaneously: the wider
+`--unified=14` context (no prior fixture used more than 3), the presence of a
+second, legitimately post-sweep trace call in the same hunk, and the
+different production site. Any one of the three could explain the miss where
+the other row was caught. The budget spent here (six fixture-runs) cannot
+isolate which explanation is correct, and separating them - by re-wording a
+fixture and re-measuring - is explicitly out of budget for this phase and is
+a human's call, not this plan's to make. This is an open question, recorded
+rather than resolved.
+
 ## Deferred Manual Verification
 
 Everything below needs a human. None of it may be added to `mix quality`, to CI,
@@ -726,17 +797,21 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
 
 ### Paid corpus runs (Phase 2)
 
-- [ ] Three `claude-sonnet-5` runs at seeds 101/202/303 over each of the two new
+- [x] Three `claude-sonnet-5` runs at seeds 101/202/303 over each of the two new
       fixtures, via `--only fixture:<name>` - 6 fixture-runs = 0.33 CE,
       cumulative 5.53 of 8
-- [ ] Per-fixture verdicts and wall times recorded per run
-- [ ] Majority-of-three computed per fixture and the flap column filled in, per
+- [~] Per-fixture verdicts and wall times recorded per run. **Partially
+      satisfied**: one cell (violation, seed 101) has a sound verdict but no
+      captured assertion text or wall time - the terminal output was truncated
+      before it could be read. Recorded as an uncaptured miss rather than
+      inferred; see the Phase 2 finding above
+- [x] Majority-of-three computed per fixture and the flap column filled in, per
       st-2ts Decision 2
-- [ ] The matrix and summary row added to st-2ts's
+- [x] The matrix and summary row added to st-2ts's
       `#### Phase 5 measurement (recorded)` subsection, labeled a first
       measurement of two new rows
-- [ ] The summary mirrored into `docs/testing.md` with the same label
-- [ ] Spend recorded in corpus-equivalents against the ceiling of 8, cumulative
+- [x] The summary mirrored into `docs/testing.md` with the same label
+- [x] Spend recorded in corpus-equivalents against the ceiling of 8, cumulative
 
 ### Judgment items a command cannot settle
 
@@ -745,7 +820,13 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
       candidate explanations - the fixture's content and its unusual width - and
       this plan cannot separate them within its budget. If the pair behaves
       unexpectedly, record width as a live hypothesis rather than concluding
-      about content.
+      about content. **Fired**: Phase 2's violation row missed unanimously,
+      the inverse of the plan's prediction. Width remains one of at least
+      three live, unseparated hypotheses alongside hunk content (the second
+      trace call) and production site (site B vs. the previously-caught site
+      A fixture) - see the Phase 2 finding above. Separating them is a
+      re-measurement pass, out of this phase's budget, and remains a human's
+      call
 - [ ] **Whether the violation half reads as one violation or two.** A judge may
       propose a finding against the `Trace.Done` stamp as well. Under the
       harness a violation row passes on any surviving finding, so this would not
