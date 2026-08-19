@@ -614,6 +614,13 @@ stated alongside it.
    here*: neither reading is picked, and both bodies of evidence are set out in
    section 5 for the plan to choose from.
 
+   **Settled (2026-08-19):** by rule and tier, per the plan's Decision 3 - the
+   harness enforces `{key, tier}` and ADR-0012's amendment is written generally,
+   with `exit_states/2` named only as a worked example. Recorded as the working
+   answer, **not as a closed question**: whether it survives maintainer review
+   is still open on the plan's deferred list, and overturning it would oblige a
+   site-C pair.
+
 2. **If a pair lands, is it a transplant or a `Trace.Done` pair?** A transplant
    is the cheaper and more literal reading of the acceptance criterion; a
    `Trace.Done` pair is the only design distinct under both readings but is a
@@ -621,11 +628,26 @@ stated alongside it.
    never probed. *Assumption*: the plan should treat these as two options with
    different evidence, not one.
 
+   **Settled (2026-08-19):** the `Trace.Done` pair - but the dichotomy was
+   false, and that only became visible after measurement. The pair's violation
+   half is byte-identical in its changed lines to
+   `0012_trace_stamp_swapped_comment_kept.diff`, so it *is* the transplant; the
+   novelty lives in the clean half and the wide two-trace hunk. That accident
+   turned out to be the most useful property of the fixture: identical bytes
+   caught 3/3 at site A and missed 3/3 at site B exonerate the edit and isolate
+   the cause to context.
+
 3. **Does site C (`enter_states/2`) join this bead?** The bead says to check it;
    it is confirmed governed and uncovered. Whether that is a finding to record,
    a second pair to cut, or a follow-up bead is unanswered. *Assumption*: it is
    at minimum a finding this bead must record, since a per-site coverage
    argument that stops at two sites is incomplete.
+
+   **Settled (2026-08-19):** recorded as a finding, no fixture and no follow-up
+   bead, per the plan's Decision 3 - a site-C row could only be the transplant
+   the design rejected. Durably recorded in the violation row's manifest note,
+   not only in the plan. Still subject to maintainer review on the plan's
+   deferred list.
 
 4. **Should the corpus-equivalent unit be re-anchored?** 1.0 CE is defined as
    "one pass over all 18 fixtures" and the corpus is 20 rows, heading for 22.
@@ -633,11 +655,20 @@ stated alongside it.
    *Assumption*: the unit stays pinned at 18 fixture-runs and this document
    computes against that, matching how st-xsb1 computed its 1.0.
 
+   **Settled (2026-08-19):** pinned at 18 fixture-runs, and now stated in
+   st-2ts's Decision 3 itself rather than left as a convention. Re-anchoring to
+   22 would re-denominate 5.2 to roughly 4.3 and manufacture headroom nobody
+   voted for.
+
 5. **Does the bead's note need correcting on the record?** It states 5.2 as
    remaining headroom where every source states it as cumulative spend of 8, so
    real headroom is 2.8. *Assumption*: this document records the correction; a
    `bd update` to the note is the orchestrating session's call, not this
    research stage's.
+
+   **Settled (2026-08-19):** corrected on the bead by a dated `bd note` during
+   the research stage. Headroom was 2.8 before this bead's Phase 2 and is 2.47
+   after it.
 
 6. **What context width should a site-B fixture use?** The older convention is
    `--unified=0` and the re-anchored ADR-0012 fixtures use `--unified=3`. A
@@ -646,3 +677,10 @@ stated alongside it.
    permitted authoring choice, since nothing validates hunk width and the
    fixtures need not apply - but it is untested at this repository and worth a
    plan phase's explicit check.
+
+   **Settled (2026-08-19):** `--unified=14`, chosen empirically (widths 3 and 10
+   split the violation edit into two hunks with `Trace.Done` partly hidden; 14
+   yields one hunk carrying both trace calls). Sufficient, not minimal - 11-13
+   were never tried. **This choice is now a live suspect** rather than a settled
+   detail: it is one of the three surviving explanations for the row's unanimous
+   miss, and the only one this bead introduced.

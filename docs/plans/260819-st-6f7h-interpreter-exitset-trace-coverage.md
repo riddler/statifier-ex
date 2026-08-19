@@ -17,6 +17,22 @@ post-sweep) is a discrimination task no existing fixture poses, and its clean
 half probes the one half of ADR-0012's amendment the corpus has never tested -
 a **legitimately post-mutation stamp**.
 
+**Corrected 2026-08-19 (st-6f7h `/wurk:verify` pass).** The "not a transplant"
+claim above is wrong for the violation half, and the correction matters because
+Phase 2's result turns on it. The violation half's *changed lines* are
+byte-identical to `0012_trace_stamp_swapped_comment_kept.diff` - the same four
+lines, deleting `pre_exit_state = machine_state` and swapping
+`Effect.trace(pre_exit_state, Effect.Trace.ExitSet, ...)` to
+`Effect.trace(machine_state, ...)`. It *is* that transplant, deliberately re-cut
+at `--unified=14` against site B. What is genuinely new in this pair is the
+clean half (a legitimately post-mutation stamp) and the wide two-trace hunk,
+never the violation half's edit.
+
+This is what makes Phase 2's finding sharp rather than ambiguous: site A's row
+is caught 3/3 and site B's is missed 3/3 **on identical changed bytes**, so the
+edit itself is exonerated as the cause and only the surrounding context can
+explain the divergence.
+
 ## Current State Analysis
 
 Everything below is established by
@@ -815,7 +831,7 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
 
 ### Judgment items a command cannot settle
 
-- [ ] **Whether `--unified=14` itself confounds the measurement.** No existing
+- [x] **Whether `--unified=14` itself confounds the measurement.** No existing
       fixture uses a width above 3, so a surprising Phase 2 verdict has two
       candidate explanations - the fixture's content and its unusual width - and
       this plan cannot separate them within its budget. If the pair behaves
@@ -826,13 +842,25 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
       trace call) and production site (site B vs. the previously-caught site
       A fixture) - see the Phase 2 finding above. Separating them is a
       re-measurement pass, out of this phase's budget, and remains a human's
-      call
-- [ ] **Whether the violation half reads as one violation or two.** A judge may
+      call. **Narrowed 2026-08-19 (`/wurk:verify`), at no spend**: this row's
+      changed lines are byte-identical to
+      `0012_trace_stamp_swapped_comment_kept.diff`, which is caught 3/3. The
+      edit is therefore exonerated as the cause, leaving exactly three live
+      hypotheses - hunk width (60 lines vs 22), the second trace call in the
+      hunk, and the production site. A maintainer chose on 2026-08-19 to record
+      this narrowing and spend nothing further, so width vs. the other two
+      remains unseparated by choice, not by budget exhaustion (2.47 CE remain)
+- [x] **Whether the violation half reads as one violation or two.** A judge may
       propose a finding against the `Trace.Done` stamp as well. Under the
       harness a violation row passes on any surviving finding, so this would not
       show as a failure - but a finding aimed at the wrong call is a false
       positive hiding inside a true positive, and only reading the proposed
       findings' text catches it. Read them; do not read only the verdicts.
+      **Settled 2026-08-19 (`/wurk:verify`)**: moot for this measurement. The
+      propose step returned **no candidate at all** on every seed, so there was
+      no finding of either kind - nothing could hide inside a true positive
+      because there was no true positive. The question stays live for any
+      future run in which this row is caught.
 - [ ] **Whether Decision 3 (no site-C fixture) survives maintainer review.** It
       is the decision most likely to be overturned, and the redirect is cheap
       and additive.
@@ -851,22 +879,22 @@ decision is a human's call.
 
 ### Phase 1
 
-- [ ] The violation half's hunk, read as the judge would read it with no other
+- [x] The violation half's hunk, read as the judge would read it with no other
       context, contains everything needed to indict the `ExitSet` stamp and
       acquit the `Done` stamp - and a reader who knows only ADR-0012's text
       reaches that verdict
-- [ ] The clean half is genuinely meaning-preserving: `post_sweep_state` is a
+- [x] The clean half is genuinely meaning-preserving: `post_sweep_state` is a
       pure alias for the post-reduce `machine_state`, so the emitted `Done`
       payload is byte-identical
-- [ ] The clean half varies something no existing clean row varies, and a reader
+- [x] The clean half varies something no existing clean row varies, and a reader
       can say in one sentence what (a post-mutation **stamp**, where
       `0012_configuration_read_post_departure.diff` varies a post-mutation
       **field**)
-- [ ] Neither fixture touches site A or site C, so each presents exactly one
+- [x] Neither fixture touches site A or site C, so each presents exactly one
       site and the row is scored on one signal
-- [ ] No existing row's prose or `.diff` bytes changed: the branch's diff of
+- [x] No existing row's prose or `.diff` bytes changed: the branch's diff of
       `manifest.exs` and `test/fixtures/adr_judge/` is a pure insertion
-- [ ] The `docs/testing.md` clause and the Decision 3 sentence read as
+- [x] The `docs/testing.md` clause and the Decision 3 sentence read as
       annotations, not as edits to recorded measurements
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while

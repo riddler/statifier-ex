@@ -109,7 +109,15 @@
         "truncated before it could be read), so that cell is recorded as an " <>
         "uncaptured miss rather than inferred from the other two. The judge's " <>
         "propose step returned no candidate at all on this row, so the miss is a " <>
-        "failure to propose, not a refute-pass over-rejection - see " <>
+        "failure to propose, not a refute-pass over-rejection. Verified " <>
+        "2026-08-19: this row's CHANGED LINES are byte-identical to " <>
+        "0012_trace_stamp_swapped_comment_kept.diff (same four lines; this row " <>
+        "is that edit re-cut at --unified=14 against site B). That row is caught " <>
+        "3/3 and this one missed 3/3 on identical bytes, so the edit is " <>
+        "exonerated as the cause and only the surrounding context explains the " <>
+        "divergence - hunk width, the second trace call, or the production site, " <>
+        "unseparated. What is new in this PAIR is the clean half and the wide " <>
+        "two-trace hunk, not this row's edit - see " <>
         "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
   },
   %{
