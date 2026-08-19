@@ -1,7 +1,9 @@
 defmodule Statifier.PositionTest do
   use ExUnit.Case, async: true
 
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.{Machine, MachineState, Position}
+  alias Statifier.Send.Routes
 
   @xml """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
@@ -53,6 +55,35 @@ defmodule Statifier.PositionTest do
           <transition event="back" target="h"/>
       </state>
       <state id="extra"/>
+  </scxml>
+  """
+
+  # @xml with "b" and "outside" both removed - an unknown-id fixture for
+  # `import/2`, not a whitespace edit. "a" keeps no outgoing transition
+  # since its only target ("b") no longer exists.
+  @xml_two_states_removed """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+      <datamodel>
+          <data id="count" expr="0"/>
+      </datamodel>
+      <state id="p" initial="a">
+          <history id="h" type="shallow">
+              <transition target="a"/>
+          </history>
+          <state id="a"/>
+      </state>
+  </scxml>
+  """
+
+  # A nameless state as the default (first-child) initial of "p" - an
+  # unnameable-active-state fixture for `export/1`.
+  @xml_nameless_active_state """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+      <state id="p">
+          <state>
+              <transition event="go" target="p"/>
+          </state>
+      </state>
   </scxml>
   """
 
@@ -313,6 +344,11 @@ defmodule Statifier.PositionTest do
                {:error, :not_a_statifier_blob}
     end
 
+    # sabotage: same mutation as above (`from_binary/2`'s catch-all
+    # `_other -> {:error, :not_a_statifier_blob}` clause's returned atom
+    # changed to `:invalid_blob`) -> this test reddens too, since a random
+    # binary reaches the same catch-all via `safe_decode/1`'s `rescue`
+    # clause rather than a non-matching decoded term
     test "a random binary returns {:error, :not_a_statifier_blob} rather than raising" do
       machine = compile!(@xml)
       random_binary = :crypto.strong_rand_bytes(64)
@@ -354,6 +390,243 @@ defmodule Statifier.PositionTest do
       assert decoded.datamodel["undefined_var"] == :undefined
       assert decoded.datamodel["null_var"] == nil
       refute decoded.datamodel["undefined_var"] == decoded.datamodel["null_var"]
+    end
+  end
+
+  describe "export/1 then import/2 round trip against the same machine" do
+    # sabotage: `translate_index_set/2`'s `Enum.reject(&is_nil/1)` filter is
+    # dropped, so the root index's own `nil` id survives translation and
+    # lands in `exported.configuration` as a literal `nil` member -> this
+    # test reddens because `Position.import/2` now returns
+    # `{:error, {:malformed_export, {:configuration, _}}}` (the shape check
+    # rejects the stray `nil`) instead of `{:ok, _}`
+    test "reproduces every translated field of a machine_state advanced by real send_event/2 calls" do
+      machine = compile!(@xml)
+      machine_state = advanced_machine_state(machine)
+
+      assert {:ok, exported} = Position.export(machine_state)
+      assert {:ok, imported} = Position.import(machine, exported)
+
+      assert MachineState.internal_events(imported) == []
+      assert MachineState.internal_events(machine_state) == []
+
+      assert %MachineState{
+               machine: ^machine,
+               configuration: configuration,
+               history_values: history_values,
+               entered_states: entered_states,
+               states_to_invoke: states_to_invoke,
+               active_invocations: active_invocations,
+               invoke_counter: invoke_counter,
+               send_counter: send_counter,
+               datamodel: datamodel,
+               running: running,
+               status: status,
+               macrostep: macrostep,
+               microstep: microstep,
+               round: round,
+               trace: trace,
+               max_macrostep_rounds: max_macrostep_rounds,
+               routes: nil,
+               invoke_types: nil
+             } = imported
+
+      assert configuration == machine_state.configuration
+      assert history_values == machine_state.history_values
+      assert entered_states == machine_state.entered_states
+      assert states_to_invoke == machine_state.states_to_invoke
+      assert active_invocations == machine_state.active_invocations
+      assert invoke_counter == machine_state.invoke_counter
+      assert send_counter == machine_state.send_counter
+      assert datamodel == machine_state.datamodel
+      assert running == machine_state.running
+      assert status == machine_state.status
+      assert macrostep == machine_state.macrostep
+      assert microstep == machine_state.microstep
+      assert round == machine_state.round
+      assert trace == machine_state.trace
+      assert max_macrostep_rounds == machine_state.max_macrostep_rounds
+    end
+  end
+
+  describe "export/1 then import/2 across a chart revision with an unrelated state added" do
+    # sabotage: `unnameable_indexes/2`'s root exception (`&1 != 0`) is
+    # dropped, so index `0` is treated as unnameable too -> this test
+    # reddens because `Position.export/1` now returns `{:error,
+    # {:unnameable_states, [0]}}` instead of `{:ok, _}`
+    test "every original id still resolves and the resulting configuration is the same set of ids" do
+      machine_a = compile!(@xml)
+      machine_state = advanced_machine_state(machine_a)
+      assert {:ok, exported} = Position.export(machine_state)
+
+      machine_b = compile!(@xml_one_state_added)
+      assert {:ok, imported} = Position.import(machine_b, exported)
+
+      assert MapSet.member?(imported.configuration, 0)
+
+      imported_ids =
+        imported.configuration
+        |> MapSet.delete(0)
+        |> MapSet.new(&Machine.id(machine_b, &1))
+
+      assert imported_ids == exported.configuration
+    end
+  end
+
+  describe "export/1 then import/2 across a chart revision that removed active states" do
+    # sabotage: `collect_unknown_ids/2`'s `Machine.index(machine, &1) ==
+    # :error` filter is replaced with `fn _id -> true end` (every id looks
+    # unknown) -> this test reddens because the returned list gains every
+    # other id the position touches ("a", "h", "p") instead of naming only
+    # the two ids the new chart revision actually dropped
+    test "returns {:error, {:unknown_state_ids, ids}} listing all of them, not just the first" do
+      machine_a = compile!(@xml)
+      machine_state = advanced_machine_state(machine_a)
+      assert {:ok, exported} = Position.export(machine_state)
+
+      assert MapSet.member?(exported.configuration, "b")
+
+      machine_b = compile!(@xml_two_states_removed)
+
+      assert Position.import(machine_b, exported) ==
+               {:error, {:unknown_state_ids, ["b", "outside"]}}
+    end
+  end
+
+  describe "export/1 on a machine_state with a non-empty internal_queue" do
+    # sabotage: `export/1`'s `if MachineState.internal_queue_empty?(...)`
+    # branch is inverted -> this test reddens because a non-empty queue now
+    # exports successfully instead of returning
+    # `{:error, :internal_queue_not_empty}`
+    test "returns {:error, :internal_queue_not_empty}" do
+      machine = compile!(@xml)
+
+      machine_state =
+        machine
+        |> MachineState.new()
+        |> MachineState.raise_internal("test.event", {:state, 0})
+
+      refute MachineState.internal_queue_empty?(machine_state)
+      assert Position.export(machine_state) == {:error, :internal_queue_not_empty}
+    end
+  end
+
+  describe "export/1 then import/2 of history_values" do
+    # sabotage: `translate_history_values/2`'s `Machine.id(machine, key)`
+    # lookup is replaced with a hardcoded `nil` (as if every history key
+    # were unnameable) -> this test reddens because `exported.history_values`
+    # comes back `%{}` instead of carrying the "h" => "b" entry the real run
+    # produced
+    test "survives a round trip with keys and values both translated to string ids" do
+      machine = compile!(@xml)
+      machine_state = advanced_machine_state(machine)
+      refute machine_state.history_values == %{}
+
+      assert {:ok, exported} = Position.export(machine_state)
+
+      assert %{"h" => value_ids} = exported.history_values
+      assert MapSet.equal?(value_ids, MapSet.new(["b"]))
+
+      assert {:ok, imported} = Position.import(machine, exported)
+      assert imported.history_values == machine_state.history_values
+    end
+  end
+
+  describe "export/1 then import/2 of active_invocations" do
+    # sabotage: `translate_active_invocations/2`'s key construction is
+    # changed from `{state_id, invoke_index}` to `{state_id, invoke_index +
+    # 1}` -> this test reddens because `exported.active_invocations`'s key
+    # carries the wrong `invoke_index`
+    test "survives a round trip with its invoke_index intact" do
+      machine = compile!(@xml)
+      {:ok, state_b_index} = Machine.index(machine, "b")
+
+      machine_state = %{
+        MachineState.new(machine)
+        | configuration: MapSet.new([0, state_b_index]),
+          active_invocations: %{{state_b_index, 2} => "inv_2"}
+      }
+
+      assert {:ok, exported} = Position.export(machine_state)
+      assert exported.active_invocations == %{{"b", 2} => "inv_2"}
+
+      assert {:ok, imported} = Position.import(machine, exported)
+      assert imported.active_invocations == %{{state_b_index, 2} => "inv_2"}
+    end
+  end
+
+  describe "export/1 on a chart with a nameless non-root state active" do
+    # sabotage: `unnameable_indexes/2`'s `is_nil(Machine.id(machine, &1))`
+    # check is replaced with `false` (nothing is ever unnameable) -> this
+    # test reddens because `export/1` returns `{:ok, _}` instead of
+    # `{:error, {:unnameable_states, _}}`
+    test "returns {:error, {:unnameable_states, _}}" do
+      machine = compile!(@xml_nameless_active_state)
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      assert {:error, {:unnameable_states, unnameable}} = Position.export(machine_state)
+      assert unnameable != []
+      refute Enum.member?(unnameable, 0)
+    end
+  end
+
+  describe "export/1 then import/2 drop routes and invoke_types" do
+    # sabotage: `build_machine_state/2`'s `routes: nil` and
+    # `invoke_types: nil` literals are changed to
+    # `routes: :sabotage, invoke_types: :sabotage` -> this test reddens
+    # because `imported.routes`/`imported.invoke_types` no longer equal `nil`
+    test "routes and invoke_types set before export come back nil after import, not tolerated as absent" do
+      machine = compile!(@xml)
+
+      machine_state = %{
+        MachineState.new(machine)
+        | routes: Routes.new(sessions: ["sess_other"]),
+          invoke_types: InvokeTypes.new(types: ["http://example.com/custom"])
+      }
+
+      assert {:ok, exported} = Position.export(machine_state)
+      refute Map.has_key?(exported, :routes)
+      refute Map.has_key?(exported, :invoke_types)
+
+      assert {:ok, imported} = Position.import(machine, exported)
+      assert imported.routes == nil
+      assert imported.invoke_types == nil
+    end
+  end
+
+  describe "import/2 on a malformed export" do
+    # sabotage: `check_required_keys/1`'s `Map.has_key?(exported, &1)` guard
+    # is replaced with `true` (every key looks present) -> this test reddens
+    # because `import/2` now tries to build a `MachineState` from a map with
+    # no `:datamodel` key and raises `KeyError` instead of returning
+    # `{:error, {:malformed_export, _}}`
+    test "an export map with a key deleted returns {:error, {:malformed_export, _}}" do
+      machine = compile!(@xml)
+      machine_state = MachineState.new(machine)
+
+      assert {:ok, exported} = Position.export(machine_state)
+      malformed = Map.delete(exported, :datamodel)
+
+      assert {:error, {:malformed_export, _reason}} = Position.import(machine, malformed)
+    end
+  end
+
+  describe "import/2 ignores the :identity key entirely" do
+    # sabotage: an `Identity.matches?/2` guard is added to `import/2`
+    # (rejecting an `:identity` value that does not match `machine`'s own,
+    # via `Machine.identity/1`) -> both assertions below redden, since a
+    # `:garbage` identity and a missing one would both now fail import
+    # instead of succeeding identically to a correct one
+    test "a tampered or missing :identity value imports identically to a correct one" do
+      machine = compile!(@xml)
+      machine_state = MachineState.new(machine)
+      assert {:ok, exported} = Position.export(machine_state)
+
+      tampered = %{exported | identity: :garbage}
+      assert {:ok, _imported} = Position.import(machine, tampered)
+
+      no_identity = Map.delete(exported, :identity)
+      assert {:ok, _imported} = Position.import(machine, no_identity)
     end
   end
 end

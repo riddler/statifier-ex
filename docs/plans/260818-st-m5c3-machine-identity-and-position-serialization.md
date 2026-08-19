@@ -735,11 +735,11 @@ the plan's own manual test hand-edits the map.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating)
-- [ ] `mix gate.verify` confirms a full, unscoped run
-- [ ] Doctor stays at 100%
-- [ ] `mix adr.check` reports no finding
-- [ ] `mix test.regression` passes, and
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating)
+- [x] `mix gate.verify` confirms a full, unscoped run
+- [x] Doctor stays at 100%
+- [x] `mix adr.check` reports no finding
+- [x] `mix test.regression` passes, and
       `git diff --quiet origin/main -- test/passing_tests.json` exits 0
 
 #### Manual Verification:
@@ -1046,6 +1046,24 @@ deferred and surfaced once at the end instead of blocking here.
       same configuration. Nothing in this phase modifies `Session`; this
       confirms the codec accepts the position shape a real session produces,
       not just one built by `MachineState.new/2`
+
+**Implementation Note**: Use the project's loop gate between edits; run the full
+gate as the phase gate. In interactive execution, pause here for the human to
+confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] No Appendix D function is touched
+- [ ] A hand-edited export map (a state id renamed by hand) imports onto the
+      renamed chart, checked in IEx - the migration story a human would
+      actually perform
+- [ ] The set of dropped fields, read from the `@doc` alone, is enough for a
+      host to know what it must re-supply
 
 **Implementation Note**: Use the project's loop gate between edits; run the full
 gate as the phase gate. In interactive execution, pause here for the human to
