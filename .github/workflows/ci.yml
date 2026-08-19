@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Full quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # mix gate.check and mix adr.check resolve a base ref as origin/main,
+      # then main. Without one they exit 2, which skip_exit_code: 2 turns into
+      # a skipped stage that gate.verify accepts - the guards would go quiet
+      # instead of red. Materialize the ref explicitly.
+      - name: Materialize origin/main for the gate and ADR guards
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      # Single source of truth for the toolchain: a version duplicated into
+      # this file drifts the first time mise.toml moves. mise itself is not
+      # used to provision CI - it would build Erlang from source and install
+      # the temurin JRE that only the corpus generator needs.
+      - name: Read the toolchain out of mise.toml
+        id: toolchain
+        run: |
+          set -euo pipefail
+          erlang="$(sed -n 's/^erlang *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
+          elixir="$(sed -n 's/^elixir *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
+          test -n "$erlang" || { echo "no erlang version in mise.toml" >&2; exit 1; }
+          test -n "$elixir" || { echo "no elixir version in mise.toml" >&2; exit 1; }
+          echo "erlang=$erlang" >> "$GITHUB_OUTPUT"
+          echo "elixir=$elixir" >> "$GITHUB_OUTPUT"
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ steps.toolchain.outputs.erlang }}
+          elixir-version: ${{ steps.toolchain.outputs.elixir }}
+
+      # _build carries the Dialyzer PLT
+      # (_build/dev/dialyxir_erlang-*_elixir-*_deps-dev.plt), so this cache is
+      # the PLT cache too. The restore-keys fallback means a lockfile bump
+      # rebuilds the PLT incrementally from the previous one rather than from
+      # scratch.
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-otp${{ steps.toolchain.outputs.erlang }}-ex${{ steps.toolchain.outputs.elixir }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-otp${{ steps.toolchain.outputs.erlang }}-ex${{ steps.toolchain.outputs.elixir }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      # The full gate, attested. .quality.exs registers the gate guard, the
+      # regression ratchet, and the ADR guard as custom stages of mix quality,
+      # and gate.verify runs mix quality and fails if the run was profiled,
+      # scoped, --quick-ed or --skip-ed. So this one command is the same gate
+      # a developer must have green before committing. The ADR judge stays
+      # disabled here, exactly as .quality.exs:23 intends.
+      - name: Full quality gate
+        run: mix gate.verify
+
+      # gate.verify captures the gate's output to parse its JSON report, so a
+      # red run reports failing stage names without the detail underneath.
+      # Only a failed run pays for the second pass.
+      - name: Gate detail on failure
+        if: failure()
+        run: mix quality
