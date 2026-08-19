@@ -1,9 +1,6 @@
 # ADR-0052: Durable timers consume the effect vocabulary
 
-Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the
-delayed-send half; scopes docs/extending.md:57-58's opaque-instruction rule to
-the timer consumer; reads ADR-0035's run-local send id as a cancellation key,
-not a uniqueness key
+Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:57-58's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected)
 
 ## Context
 
@@ -84,14 +81,58 @@ cancel (the cancel_timers instruction)") is corrected by this decision: it
 names the opaque half, and the effect - `{:cancel, %Cancel{}}` - is what a
 host actually sees.
 
-**2. The fired event re-enters through `Statifier.Session.send_event/2`** for
-a live-session host, or through the host's own next `Statifier.Interpreter`
-drive for a process-less one. Not through `interpret/2`
-(`lib/statifier/session.ex:611-614`): ADR-0029 makes `interpret/2` the fourth
-recorded replay input - "Calling this function does not void the replay
-guarantee - it obligates the recording" (`lib/statifier/session.ex:605-606`)
-- and a host that chooses it takes on that obligation for no gain, because
-`deliver_fired/4` (`lib/statifier/session.ex:1823-1833`) already re-enqueues a
+**2. A self-routed delayed send re-enters through
+`Statifier.Session.send_event/2`; every other route is out of scope for this
+ADR.** *(Amended 2026-08-19, st-ifa3 - the original text of this decision
+claimed unconditionally that "the fired event re-enters through
+`Statifier.Session.send_event/2`". That claim held only for the self-routed
+case; it is corrected below.)*
+
+**Scope.** The claim holds for a `<send delay="...">` with **no target**, or a
+target that parses to `:self`. That is the case `deliver_fired/4`
+(`lib/statifier/session.ex:1829-1833`) handles with its own clause, by
+re-enqueuing onto the session inbox exactly as `send_event/2` does. For that
+route, and only that route, a host scheduler can substitute `send_event/2` for
+the library's own timer and rejoin an identical path.
+
+**Why the other routes are not covered.** The route is derived in the session
+at plan time and travels on the **opaque** `{:schedule, ...}` instruction
+(`lib/statifier/session/effects.ex:270-288`'s `plan_send_delayed/3` resolves
+`send.target` into `:internal`, `:self`, `#_parent`, `#_invokeid`, or an
+external session id, and hands the resolved route to `{:schedule, ...}`, never
+back onto the `%SendDelayed{}` effect), which decision 1 forbids a host from
+reading. A host holding only the effect can see `target` as the author wrote
+it, but not the library's resolution of it, and it has no public door
+equivalent to `deliver/5` for `#_parent`, `#_invokeid`, or an external session
+id: `deliver_fired/4` (`lib/statifier/session.ex:1829-1833`) special-cases only
+`:self`; every other route goes through `deliver/5`. Furthermore the *event*
+is built inside the session, not by the host: `delivered_event/2`
+(`lib/statifier/session/effects.ex:392-399`) stamps `origin`, `origintype`,
+and a `sendid` gated on `id_from_author?`, and `#_internal` uses an entirely
+different carrier, `internal_event/1` (`effects.ex:414-427`), whose delivery
+re-raises through `Statifier.Interpreter.deliver_internal/5` and rebuilds its
+`Cause` from the machine's counters at delivery time (ADR-0039 decision 2).
+
+**What a host must therefore do.** A durable-timer host supports delayed
+sends whose target is absent or `:self`. For a delayed send with any other
+target - `#_parent`, `#_invokeid`, `#_internal`, or an external session id -
+the host must **leave the timer to the library** (do not intercept it): the
+effect stream is observational, so ignoring a `%SendDelayed{}` costs nothing
+and the session's own `Process.send_after/3` still fires it. Reconstructing a
+non-self delivery from outside is not supported today, because the host would
+have to rebuild a `%Statifier.Event{}` with the `origin`/`origintype`/`sendid`
+the library sets and then find a public door that does not exist. **This is an
+open gap, recorded rather than solved** - see Consequences.
+
+A process-less host feeds the fired event in as the next
+`Statifier.Interpreter` drive's input for a live-session host's counterpart
+route; the same target restriction applies for the same reason.
+
+Not through `interpret/2` (`lib/statifier/session.ex:611-614`) either way:
+ADR-0029 makes `interpret/2` the fourth recorded replay input - "Calling this
+function does not void the replay guarantee - it obligates the recording"
+(`lib/statifier/session.ex:605-606`) - and a host that chooses it takes on
+that obligation for no gain, because `deliver_fired/4` already re-enqueues a
 `:self` route exactly as `send_event/2` does. A host that *does* pick
 `interpret/2` anyway now knows, from this record, exactly what it bought: a
 fourth recorded input alongside the three-input tuple `(machine, initial
@@ -111,12 +152,39 @@ the same key.** This is the correction of the charter's "unique per send id":
   (`lib/statifier/machine/content/send.ex:383-389`). A cancel deletes every
   match; a cancel that matches nothing is a no-op, not an error, mirroring
   `take/2`'s `{[], timers}` on an unknown id.
-- **Deduplication key** (the at-least-once concern):
-  `{session scope, send_id, macrostep, microstep, round}`, read off the
-  `%SendDelayed{}` itself. Those counters are stamped as of scheduling, not
-  firing (`lib/statifier/effect/send_delayed.ex:11-13`, ADR-0046), and every
-  component is a deterministic counter, so re-executing the same drive after
-  a crash produces a byte-identical key and the host's store dedups it.
+- **Deduplication key** (the at-least-once concern): `{session scope, send_id,
+  macrostep, microstep, round, c_index, owner}`, read off the `%SendDelayed{}`
+  itself. *(Amended 2026-08-19, st-ifa3 - the original text of this key omitted
+  `c_index` and `owner`; both are now mandatory members, for the reason given
+  below.)* Those counters are stamped as of scheduling, not firing
+  (`lib/statifier/effect/send_delayed.ex:11-13`, ADR-0046), and
+  `c_index`/`owner` (`:33-34`) are the send's position inside its
+  executable-content block. Every component is a deterministic counter or a
+  static position, so re-executing the same drive after a crash produces a
+  byte-identical key and the host's store dedups it.
+
+  **Why the position fields are mandatory, not decoration.** Without them the
+  key collides whenever one microstep executes two delayed sends that share a
+  `send_id` - two `<send id="x" delay="...">` in one `<onentry>` block, since
+  an author-written id is used verbatim and never advances the counter
+  (`lib/statifier/machine/content/send.ex:383-389`). The library keeps those as
+  two live timers (`Timers.put/3` appends, `lib/statifier/session/timers.ex:39-44`);
+  a store keyed without `c_index` would silently collapse them into one,
+  dropping a timer the state chart expects to fire.
+
+  **Residual collision, stated honestly.** Even with `c_index` and `owner`,
+  the key is *not* strictly per-instance. A `<send id="x" delay="...">` inside
+  a `<foreach>` body executes once per iteration from the **same** content
+  position, in the same microstep, under the same author id - confirmed by
+  reading `lib/statifier/machine/content/foreach.ex`'s `run_content/2`
+  (around `:326-343`), which folds over the same fixed, document-order
+  `c_index` list on every iteration - so every iteration yields an identical
+  key and the store dedups genuine distinct timers down to one. The library
+  has no per-iteration ordinal on `%SendDelayed{}` to add. **Guidance for a
+  host:** do not put an author-written `id` on a `<send delay="...">` inside a
+  `<foreach>` if you are running a durable scheduler; let the id be generated,
+  and `send_counter` gives each iteration its own `send_1`, `send_2`, ... and
+  the key becomes per-instance again.
 - **`session scope`** is `ctx.session_id` / spec 5.10's `_sessionid` for a
   live session, or the host's own durable run id for a process-less host.
   Scoping is mandatory, not advisory: `send_counter` restarts at 0 per
@@ -146,12 +214,40 @@ still live, and discard the message without delivering it otherwise.**
 session; it does not stop it" section), and `handle_continue(:drain, ...)`
 declines to drain onto a halted session
 (`lib/statifier/session.ex:970-973`), so an event fed to one sits queued
-rather than being discarded. `Statifier.Session.status/1` is the read door
-for a live host; a process-less host reads it off its own persisted
-position.
+rather than being discarded.
+
+**How "live" is actually observed.** *(Amended 2026-08-19, st-ifa3 - the
+original text of this decision named `Statifier.Session.status/1` alone as
+the read door; that is corrected below.)* `status/1` is a `GenServer.call`
+(`lib/statifier/session.ex:644-645`), so against a **terminated** session it
+exits the caller rather than answering - and terminated is precisely the case
+the 6.2 substitute exists to catch. The check is therefore two-step, in this
+order:
+
+1. **Terminated?** Resolve the session id through the registry:
+   `Registry.lookup(Statifier.Registry, session_id)` (ADR-0027 decision 2,
+   documented at `lib/statifier/session.ex:155-160`). An empty result means no
+   live session under that id - **discard the message**. A host that holds a
+   pid rather than an id uses `Process.alive?/1` instead. A host that insists
+   on calling `status/1` directly must wrap it so an exit is caught and read
+   as "terminated", not propagated - an uncaught exit here turns a required
+   discard into a crashed worker.
+2. **Halted?** Only once step 1 says a process is there, call
+   `Statifier.Session.status/1` and check its `status` field. A halted session
+   is live as a process and must still be treated as not-live for delivery.
+
+A process-less host performs both reads off its own persisted position
+instead.
 
 ## Consequences
 
+- **Non-self-routed delayed sends are not durably schedulable today.** Decision
+  2 scopes the contract to a delayed send whose target is absent or `:self`.
+  No public door exists to redeliver a `#_parent`, `#_invokeid`, `#_internal`,
+  or external-session route from outside the library - the resolved route
+  rides on the opaque `{:schedule, ...}` instruction, not on the
+  `%SendDelayed{}` effect. This gap is recorded here, not only in the plan
+  that produced this amendment, so it is discoverable from the ADR itself.
 - This constrains `statifier_oban` before it is written: its uniqueness
   design is decided here, not there. A package that keys stored jobs on
   `send_id` alone, or that treats the cancellation key and the dedup key as

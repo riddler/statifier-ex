@@ -922,10 +922,10 @@ finding touches them. Re-read them only to confirm that.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes.
-- [ ] `mix gate.verify` exits zero.
-- [ ] `mix quality --profile merge` passes.
-- [ ] The dedup key gained the position fields in **both** documents, and the
+- [x] Full `mix quality` passes.
+- [x] `mix gate.verify` exits zero.
+- [x] `mix quality --profile merge` passes.
+- [x] The dedup key gained the position fields in **both** documents, and the
       old five-field spelling is gone from both. A bare `grep -q 'c_index'`
       passes falsely - both files already print `c_index` inside the struct
       listing - so match the key itself:
@@ -935,26 +935,26 @@ finding touches them. Re-read them only to confirm that.
       `bash -c '! grep -q "microstep, round}" docs/durable-timers.md'`
       (today those last two would fail: `0052...md:115` and
       `durable-timers.md:188` both carry the five-field key).
-- [ ] `grep -q 'Statifier.Registry' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+- [x] `grep -q 'Statifier.Registry' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
       and `grep -q 'Statifier.Registry' docs/durable-timers.md` - decision 4 and
       the guide's section 6 name the registry door rather than `status/1` alone
       (today `docs/durable-timers.md:225` says "`Statifier.Session.status/1` is
       the read door for a live host").
-- [ ] `grep -q ':67-76' docs/durable-timers.md` and
+- [x] `grep -q ':67-76' docs/durable-timers.md` and
       `bash -c '! grep -q ":70-83" docs/durable-timers.md'` - the ordering
       citation was narrowed off the withdrawn paragraph (today the guide carries
       `:70-83`, so this criterion is red until Phase 3 runs).
-- [ ] `grep -q '_parent' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+- [x] `grep -q '_parent' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
       - decision 2 names the out-of-scope routes.
-- [ ] The amendment is marked, per ADR-0001 and the repo's amendment practice:
+- [x] The amendment is marked, per ADR-0001 and the repo's amendment practice:
       `bash -c 'grep -q "^Status:.*amended 2026-08-19" docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md'`,
       `grep -c 'Amended 2026-08-19' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
       returns at least 3 (one inline marker per corrected decision), and
       `bash -c 'grep "\[0052\]" docs/adr/README.md | grep -q "amended 2026-08-19"'`.
-- [ ] Every path in `git diff --name-only "$(git merge-base HEAD origin/main)"`
+- [x] Every path in `git diff --name-only "$(git merge-base HEAD origin/main)"`
       is under `docs/` or is `README.md`:
       `bash -c 'git diff --name-only "$(git merge-base HEAD origin/main)" | grep -vE "^(docs/|README\.md$)" && exit 1 || exit 0'`
-- [ ] `test -z "$(git diff --name-only "$(git merge-base HEAD origin/main)" -- changelog.d/)"`
+- [x] `test -z "$(git diff --name-only "$(git merge-base HEAD origin/main)" -- changelog.d/)"`
       - still no changelog fragment.
 
 #### Manual Verification:
