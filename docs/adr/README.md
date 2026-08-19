@@ -59,6 +59,11 @@
 | [0055](0055-non-self-delayed-send-routes-stay-the-librarys.md) | Non-self delayed-send routes stay the library's: `#_parent`/`#_invokeid`/`#_internal` permanently, the external-session route deferred with a named trigger; no route field joins `%SendDelayed{}` | accepted (decides 0054's recorded gap) |
 | [0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) | After a renumbering, pointer citations move (path fix plus an at-the-time note) and historical statements stand; cross-repo ADR citations must name the repo | accepted |
 | [0057](0057-recording-identity-and-serialization.md) | A recording blob nests the chart blob in the compiled `%Machine{}`'s place; the codec lives on the `@opaque` owner; `:invoke_handlers` cross the boundary as strings, never as atoms or code | accepted (answers 0052 decision 8's follow-up) |
+| [0056](0056-adr-number-collisions-fail-the-gate-tree-locally.md) | ADR number collisions fail the gate via a tree-local numbering invariant; the README table becomes machine-read | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
-drafted or reviewed at the direction level per `docs/workflow.md`.
+drafted or reviewed at the direction level per `docs/workflow.md`. Pick the number
+against a freshly fetched remote - `git fetch origin && git ls-tree origin/main
+--name-only docs/adr/` - so a branch does not start behind a record that has
+already landed; `mix quality`'s ADR guard catches a collision that materializes
+later, but only once the colliding file is in your tree.

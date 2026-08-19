@@ -141,6 +141,52 @@ defmodule Mix.Tasks.Adr.CheckTest do
     refute tag == :skip
   end
 
+  describe "ADR-0056 - numbering findings reported by the task" do
+    # sabotage: have execute/2's :ok clause reject `line: nil` findings before
+    #           calling respond/2, so a numbering finding never reaches the
+    #           task's response -> red
+    test "a numbering finding is reported as {:error, _} with an empty line" do
+      lister = fn "docs/adr" -> {:ok, ["0001-first.md", "0001-second.md"]} end
+
+      reader = fn
+        "docs/adr/README.md" ->
+          {:ok,
+           """
+           | # | Decision | Status |
+           |---|---|---|
+           | [0001](0001-first.md) | First | accepted |
+           | [0001](0001-second.md) | Second | accepted |
+           """}
+      end
+
+      assert {:error, json} =
+               Check.execute(["--format", "json"],
+                 runner: resolving(""),
+                 lister: lister,
+                 reader: reader
+               )
+
+      assert {:ok, %{"findings" => findings}} = JSON.decode(json)
+      assert Enum.any?(findings, &(&1["check"] == "adr-0056-duplicate-number"))
+      assert Enum.all?(findings, &(&1["line"] in [nil]))
+    end
+
+    # sabotage: have human/1's `line: nil` clause fall through to the general
+    #           clause, printing "path:" with a trailing colon -> red
+    test "prose output for a line: nil finding prints the path without a trailing colon" do
+      lister = fn "docs/adr" -> {:ok, ["0001-first.md", "0001-second.md"]} end
+      reader = fn "docs/adr/README.md" -> {:ok, ""} end
+
+      assert {:error, output} =
+               Check.execute([], runner: resolving(""), lister: lister, reader: reader)
+
+      text = IO.iodata_to_binary(output)
+
+      assert text =~ "docs/adr/0001-first.md\n"
+      refute text =~ "docs/adr/0001-first.md:"
+    end
+  end
+
   describe "without --format json" do
     # sabotage: print the JSON document when no format is given -> red
     test "a finding is reported as prose naming the file, check and next step" do
