@@ -5,7 +5,7 @@ defmodule Statifier.Testing.FeatureDetector do
 
   Test-side surface for chart authors, versioned with the engine: no module in
   `lib/` outside `Statifier.Testing.*` may reference anything inside it, so the
-  engine never consults feature detection to decide behavior (ADR-0052,
+  engine never consults feature detection to decide behavior (ADR-0053,
   amending ADR-0006).
   A test whose document uses an unsupported feature flunks with that feature
   named, so it can never masquerade as passing (see `docs/testing.md`, ADR-0006).

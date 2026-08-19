@@ -89,7 +89,7 @@ inline XML heredoc (4-space base indent, pretty-printed from the transformed
 Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
 `test/support` compatibility shims over `Statifier.Testing.Case` and
 `Statifier.Testing.FeatureDetector`, the real modules promoted into `lib/`
-(ADR-0052 decision 5) - deliberate, so the emitters and the 281 already-generated
+(ADR-0053 decision 5) - deliberate, so the emitters and the 281 already-generated
 files need no regeneration on the promoting branch. Adopting the new names in
 generated output is a future regeneration's call, not something owed here. Of
 the 198 downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at

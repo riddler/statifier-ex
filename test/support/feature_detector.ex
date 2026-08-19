@@ -2,7 +2,7 @@ defmodule Statifier.FeatureDetector do
   @moduledoc """
   Compatibility shim: the real module is `Statifier.Testing.FeatureDetector`,
   in `lib/`. This name is kept so the 281 generated corpus files and the
-  `tools/corpus` generators need no regeneration (ADR-0052 decision 5).
+  `tools/corpus` generators need no regeneration (ADR-0053 decision 5).
   """
 
   alias Statifier.Testing.FeatureDetector

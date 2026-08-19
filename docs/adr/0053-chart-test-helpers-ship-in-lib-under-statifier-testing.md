@@ -1,4 +1,4 @@
-# ADR-0052: The chart-author test helpers ship in `lib/` under `Statifier.Testing`
+# ADR-0053: The chart-author test helpers ship in `lib/` under `Statifier.Testing`
 
 Status: accepted (2026-08-19) - amends 0006 in part (the harness modules'
 home: "feature detection moves to `test/support`" stops being a placement

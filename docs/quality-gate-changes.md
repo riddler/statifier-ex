@@ -20,7 +20,7 @@ Approved-by: JohnnyT (in session)
 - mix.exs: adds `:ex_unit` to the existing `dialyzer: [plt_add_apps: [:mix]]`,
   making it `[:mix, :ex_unit]`
 
-Reason: ADR-0052 promotes the chart-author test helpers into `lib/` as
+Reason: ADR-0053 promotes the chart-author test helpers into `lib/` as
 `Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector`, so a module
 calling `ExUnit.CaseTemplate.__proxy__/2`, `ExUnit.Assertions.assert/2` and
 `ExUnit.Assertions.flunk/1` now sits under `lib/` and is analyzed by Dialyzer

@@ -2,7 +2,7 @@ defmodule Statifier.Case do
   @moduledoc """
   Compatibility shim: the real case template is `Statifier.Testing.Case`, in
   `lib/`. This name is kept so the 281 generated corpus files need no
-  regeneration (ADR-0052 decision 5).
+  regeneration (ADR-0053 decision 5).
   """
 
   @doc false

@@ -4,7 +4,7 @@ defmodule Statifier.Testing.Case do
 
   Test-side surface for chart authors, versioned with the engine: no module in
   `lib/` outside `Statifier.Testing.*` may reference anything inside it, so the
-  engine never consults the test harness to decide behavior (ADR-0052,
+  engine never consults the test harness to decide behavior (ADR-0053,
   amending ADR-0006). This module is also the supported entry point for a
   downstream application testing its own charts, not only the corpus's driver
   - `use Statifier.Testing.Case` works the same way outside this repository as
@@ -324,7 +324,7 @@ defmodule Statifier.Testing.Case do
   # session it acts on, rather than reading ambient process state.
   defp drain_done_effect(_session) do
     # This module is `Statifier.Testing`, the test-side surface the same
-    # `lib/` tree now carries (ADR-0052), not the core: it drives a session
+    # `lib/` tree now carries (ADR-0053), not the core: it drives a session
     # from outside and reads its own subscriber mailbox. Draining here rather
     # than returning an effect is the point - there is no interpreter above
     # this frame to run one. ADR-0003 scopes "no side effects in the pure
