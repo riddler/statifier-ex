@@ -264,6 +264,11 @@ defmodule Statifier.Session.ResumeTest do
       :ok
     end
 
+    # sabotage: `check_no_conflicting_resume_opts/1` is changed to always
+    # return `:ok` (dropping the `Keyword.take/2` check against
+    # `@resume_conflicting_opts`) -> every conflicting-option combination
+    # below is accepted instead of refused, reddening each `{:error, _}`
+    # match. Reverted and confirmed green.
     test "conflicting options: :trace, :datamodel, :max_macrostep_rounds, or :invoked_by alongside :resume" do
       machine = compile!(@simple_document)
       blob = blob!(simple_positioned(machine))
@@ -363,6 +368,10 @@ defmodule Statifier.Session.ResumeTest do
                Session.start_link(unidentified, resume: identified_position)
     end
 
+    # sabotage: `decode_resume/2`'s `Identity.matches?(source, target)` guard
+    # is replaced with a literal `true` -> a mismatched identity is accepted
+    # instead of refused, reddening the `{:error, _}` match below. Reverted
+    # and confirmed green.
     test "struct form: a mismatched identity is {:identity_mismatch, expected, actual}" do
       machine_v1 = compile!(@simple_document)
       machine_v2 = compile!(@simple_document_v2)

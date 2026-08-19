@@ -169,7 +169,132 @@ before any version, compile, or identity check runs. The other three arms are
 `from_binary/1` checks them; `Statifier.Chart.to_binary/1`'s one refusal is
 `{:error, :unidentified_chart}`.
 
-## Persisting a recording
+## Resuming a session
+
+Everything above answers "how do I persist a position safely." This section
+answers the other half: how a host turns a persisted position back into a
+running `Statifier.Session`, and what it still owns after doing so. See
+[ADR-0060](adr/0060-resuming-a-session-from-a-persisted-position.md) for the
+full decision record; this section is the narrative for a host that has not
+read it.
+
+The recipe is three lines - recompile the chart, decode the position against
+it, hand the decoded position to `start_link/2`:
+
+```elixir
+{:ok, machine}   = Statifier.Chart.from_binary(chart_blob)
+{:ok, pid}       = Statifier.Session.start_link(machine, resume: position_blob)
+```
+
+`resume:` also accepts an already-decoded `%Statifier.MachineState{}` - the
+`Statifier.Position.import/2` migration-story-B output - so a host that
+migrated a position across a chart revision by hand can hand the result
+straight to `start_link/2` without a round trip through `to_binary/1`. Either
+shape inherits the same identity gate this whole document is about: a blob
+that does not match `machine`, or a struct whose own `machine` does not match
+it, is refused rather than silently resumed against the wrong chart.
+
+A host driving `Statifier.Interpreter` directly, with no `Session` in the
+picture, has the pure-core equivalent of the same recipe - decode, re-stamp
+`routes` and `invoke_types` (the two fields `Statifier.Position.from_binary/2`
+deliberately returns `nil`, per-driver snapshots rather than durable position
+state), then call any advance entry. See the "Rehydrating a position" section
+of `Statifier.Interpreter`'s moduledoc for the full composition.
+
+A resumed session comes up with the persisted configuration, datamodel,
+history values, `entered_states`, `states_to_invoke`, `active_invocations`,
+and all six counters exactly as they were saved - no
+`Statifier.Interpreter.initialize/2` call, no re-entry of the chart's initial
+states, no top-level `<script>` or `<onentry>` block run a second time.
+
+### What resume does not restore
+
+Three things a position cannot carry, each for a structural reason rather
+than an oversight:
+
+- **In-flight delayed sends.** No scheduling deadline is ever stored: `delay_ms`
+  on a `SendDelayed` effect is relative, and no wall-clock instant is written
+  anywhere a position could carry it (ADR-0034 decision 2's no-clock choice,
+  carried forward by ADR-0054/0055/0059's durable-timer design). A resumed
+  session starts with an empty timer table and fires nothing it had scheduled
+  before persisting. Durable scheduling is the host's own responsibility,
+  driven off the same public `SendDelayed`/`Cancel` effect vocabulary
+  ADR-0054 already publishes - a host that wants timers to survive a resume
+  re-arms them itself from that vocabulary, not from anything a position
+  blob carries.
+- **Live invoked children.** Pids, monitor refs, and child session ids are
+  process-local; they were never part of `%MachineState{}` to begin with, so
+  there is nothing for a position to lose here - they simply were never in
+  one. `active_invocations` (the *record* of what was invoked) is carried
+  forward verbatim; see the divergence below for what that does and does not
+  mean. `invoke_id` itself *is* stable across a persist/reload cycle -
+  it is a deterministic counter on `%MachineState{}`, not a freshly generated
+  value (`docs/extending.md:152-160`) - so re-establishing a child is a matter
+  of starting or reattaching a process behind an id the resumed session
+  already recognizes, through the invoke handler registry (ADR-0051).
+- **The external inbox.** `Statifier.Session.Inbox` lives outside
+  `%MachineState{}` by ADR-0002's core/session split - it was never
+  persistable in the first place. Anything queued but not yet dequeued at
+  persist time is lost with the process that held it, the same as any other
+  unpersisted mailbox.
+
+### The `active_invocations` divergence
+
+Carrying `active_invocations` forward while the live process table starts
+empty means the two can disagree for the lifetime of a resumed session, until
+the host re-establishes each child. This is accepted and documented rather
+than papered over: clearing `active_invocations` on resume would change what
+the position means and would leave it disagreeing with `states_to_invoke` and
+`configuration` as well, which is worse. The divergence is safe because
+`{:stop_child, invoke_id}` already treats an unknown id as a silent no-op - a
+`<cancel>` or an exit sweep over a not-yet-re-established invocation stops
+nothing and crashes nothing. The host's obligation is to re-establish the
+processes behind `active_invocations`' ids through the invoke handler
+registry (ADR-0051); this document does not track that work item, but the
+divergence exists precisely because it is not yet done.
+
+### Refusals
+
+`start_link/2` returns `{:error, {:resume, reason}}` rather than booting a
+silently-wrong session:
+
+| `reason` | Why | Fix |
+|---|---|---|
+| `{:conflicting_options, opts}` | `:resume` was passed alongside `:trace`, `:datamodel`, or `:max_macrostep_rounds` (`MachineState.new/2`'s own options, not read on this path) or `:invoked_by` (a child session is always library-started, never resumed) | Drop the conflicting option; a resumed position already carries its own trace/datamodel/rounds state |
+| `:not_a_statifier_blob` | The blob is not this library's own position envelope | Pass a blob written by `Statifier.Position.to_binary/1` |
+| `{:unsupported_format_version, v}` | The blob's format version is newer or older than this build understands | Load with a build that supports version `v`, or re-persist under the current version |
+| `{:identity_mismatch, expected, actual}` | The position was saved against a different chart revision than `machine` | Recompile the chart the position was actually saved against, or migrate the position via `Statifier.Position.export/1` / `import/2` (migration story B above) |
+| `:unidentified_chart` | Either side of the resume - the position's `machine` or the supplied `machine` - was never identified (for instance, a `Machine` resolved via `:invoke_source` or built with `Statifier.Compiler.compile/1` directly) | Compile the chart through `Statifier.compile/2` so it carries an identity |
+| `:position_not_quiescent` | The position's internal event queue is non-empty | Drain to quiescence - let the macrostep finish - before persisting, the same instruction `Statifier.Position.export/1` already gives |
+| `:position_not_running` | The position has `running: false` (`status: :done`) | Inspect a finished position with `Statifier.Position.from_binary/2` and `Statifier.active_leaf_states/1` directly; there is nothing left for a session to do with it |
+
+### The `_sessionid` rule
+
+A resumed session reuses the position's own `datamodel["_sessionid"]` as its
+`session_id` by default. `:session_id` may be passed alongside `:resume` to
+override it, and doing so rewrites `datamodel["_sessionid"]` to agree, so the
+`session_id == datamodel["_sessionid"]` invariant this library already relies
+on elsewhere (ADR-0048 route stamping, telemetry, `Recording.new/2`'s
+`opts[:session_id]` contract) always holds. Reusing the id rather than minting
+a fresh one matters because it is what keeps `#_scxml_<sessionid>` addressing,
+and any external reference to the session, working across the deploy or crash
+that made the resume necessary in the first place - restarting with a fresh id
+would sever exactly the continuity a resume exists to preserve.
+
+### `resume:` plus `record: true`
+
+Passing both starts the new `Statifier.Session.Recording.t()` anchored at the
+resumed position instead of at the chart's initial configuration - the
+recording's `anchor` field carries the resumed position as a blob, and
+`Statifier.Replay.run/1` decodes and starts from it rather than calling
+`Statifier.Interpreter.initialize/2`. Nothing about this changes what a
+caller does: `subscribe/3` with `catch_up: true` and `Statifier.Replay.run/1`
+behave exactly as they do for an unresumed session, reproducing whatever
+prefix the session has actually notified. An anchored recording's stream
+carries no initialization effects, because a resumed session performs no
+initialization in the first place - the catch-up invariant holds literally
+rather than approximately for a resumed session, since there is no
+initialization burst to be missing from the prefix.
 
 A recording (`Statifier.Session.Recording.t()`) is the third persistable
 artifact, alongside a position and a chart. What its blob carries: the
