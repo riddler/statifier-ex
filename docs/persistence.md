@@ -133,16 +133,73 @@ Three things, and only three:
 3. **The position blob** (`Statifier.Position.to_binary/1`), which carries
    the identity itself alongside the position's own state.
 
-Explicitly **not** the `%Statifier.Machine{}` struct. `Position.to_binary/1`
-refuses to encode one at all (`{:error, :unidentified_chart}` for an
-unidentified chart, and the compiled chart is never written to the blob for
-an identified one either) - see
-[ADR-0052 decision 3](adr/0052-chart-identity-and-position-serialization.md).
-The reasoning is the same one predicator gives its own callers for
-`%Predicator.Compiled{}` (`compiled.ex:10-38`): persist the source and
-recompile, rather than persisting a compiled form whose internal shape can
-drift across a library upgrade with no compatibility story of its own. A
-compiled chart is also the overwhelming majority of a naively serialized
-position's bytes - measured on this branch, 5848 bytes with the machine
-embedded against 725 without it for one small position - so stripping it is
-also what keeps a position blob small.
+## Persisting the chart itself
+
+A host that manages its own SCXML source has no reason to persist it a
+second time through this library - the three items above are enough. A host
+that *cannot* retain its own source (an embedder whose deployment story does
+not include shipping `.scxml` files alongside its data) can persist a
+single blob instead:
+`Statifier.Chart.to_binary/1`. It carries the SCXML source, the persisted
+subset of the compile options, and the chart's identity, all in one
+envelope, and `Statifier.Chart.from_binary/1` recompiles a `Machine.t()`
+from it on load - two lines compose the identity check a position blob also
+needs:
+
+```elixir
+{:ok, machine} = Statifier.Chart.from_binary(chart_blob)
+{:ok, machine_state} = Statifier.Position.from_binary(position_blob, machine)
+```
+
+This is the mechanized form of the same "persist the source, recompile"
+advice the three-item list above already follows by hand; see the
+[ADR-0052 amendment (st-i7y7)](adr/0052-chart-identity-and-position-serialization.md)
+for why it ships as its own module rather than as functions on `Machine`.
+
+## Explicitly not the *compiled* chart
+
+What is still never persisted, in either shape above, is the *compiled*
+`%Statifier.Machine{}` struct. `Position.to_binary/1` refuses to encode one
+at all (`{:error, :unidentified_chart}` for an unidentified chart, and the
+compiled chart is never written to the blob for an identified one either),
+and `Statifier.Chart.to_binary/1` refuses the same way for the same reason -
+see
+[ADR-0052 decision 3](adr/0052-chart-identity-and-position-serialization.md)
+and its
+[st-i7y7 amendment](adr/0052-chart-identity-and-position-serialization.md).
+The chart blob's source-carrying shape is exactly why that stays true even
+though the blob now travels as one file: `Statifier.Chart.from_binary/1`
+rebuilds the `Machine` by recompiling the stored source through
+`Statifier.compile/2`, the same pipeline any other caller runs, never by
+deserializing compiler output directly. The reasoning is the same one
+predicator gives its own callers for `%Predicator.Compiled{}`
+(`compiled.ex:10-38`): persist the source and recompile, rather than
+persisting a compiled form whose internal shape can drift across a library
+upgrade with no compatibility story of its own. A compiled chart is also
+the overwhelming majority of a naively serialized position's bytes -
+measured on this branch, 5848 bytes with the machine embedded against 725
+without it for one small position - so stripping it is also what keeps a
+position blob small; a chart blob is, by the same reasoning, roughly the
+size of the SCXML source it carries, not the size of the compiled `Machine`
+that source produces.
+
+## What it costs
+
+Choosing the chart-blob shape over retaining source directly is not free:
+
+- **Recompilation on every load.** `Statifier.Chart.from_binary/1` runs the
+  full `Statifier.compile/2` pipeline before it can return a `Machine.t()`,
+  every time - there is no cached compiled form to skip straight to.
+- **The source must still compile under the loading build.** A blob written
+  by one build and loaded by a later one is only as portable as its source
+  is: `{:error, {:compile_failed, errors}}` is the arm that says it is not,
+  for instance because a validator check tightened across a library
+  upgrade. That is a real, distinct failure from a format or identity
+  mismatch, and is returned unflattened.
+- **The compile-opts set is closed.** `Statifier.Chart.to_binary/1` carries
+  only the same closed allowlist `Statifier.compile/2` already stamps onto
+  `Machine.compile_opts/1` (`:invoke_content_markup`, `:chart_name`,
+  `:chart_version`). An embedder that calls `Statifier.compile/2` with an
+  option outside that set cannot expect the blob to carry it: recompiling
+  that option back in on load is the embedder's own responsibility, not
+  something `from_binary/1` does on its behalf.

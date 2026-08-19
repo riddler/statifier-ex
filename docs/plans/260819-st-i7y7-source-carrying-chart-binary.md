@@ -622,15 +622,15 @@ change, present tense, no nested bullets.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green (no Elixir changed, so this is a no-regression
+- [x] Full `mix quality` green (no Elixir changed, so this is a no-regression
       check on the docs-only diff).
-- [ ] `mix quality --profile merge` green, which is the profile that actually
+- [x] `mix quality --profile merge` green, which is the profile that actually
       runs the ADR judge stage (`.quality.exs:23` disables it in the bare gate
       by design; `.claude/wurk/mr.md` runs the merge profile before every
       push).
-- [ ] `mix gate.check` passes: no guarded gate file is touched by this branch,
+- [x] `mix gate.check` passes: no guarded gate file is touched by this branch,
       so no `docs/quality-gate-changes.md` ledger entry is owed.
-- [ ] `changelog.d/st-i7y7.md` exists and uses only standard Keep a Changelog
+- [x] `changelog.d/st-i7y7.md` exists and uses only standard Keep a Changelog
       headings.
 
 #### Manual Verification:
@@ -775,5 +775,24 @@ phase. In looped (`--loop`) execution, this phase's Automated Verification
 gates advancement automatically (via `/wurk:commit --auto`), and Manual
 Verification items are deferred and surfaced once at the end instead of
 blocking here.
+
+---
+
+### Phase 3
+
+- [ ] The amendment explains rather than rewrites: decisions 3 and 5 are
+      byte-identical to their pre-amendment text, and the Status line names the
+      bead and the date.
+- [ ] A host author reading `docs/persistence.md` end to end can tell which of
+      the two persistence shapes applies to them and what each costs, without
+      opening the ADR.
+- [ ] No `lib/` or `test/` file is modified by this phase's diff.
+
+**Implementation Note**: This phase changes no Elixir code, so per this repo's
+`CLAUDE.md` authority table it may commit on review of the diff alone; the full
+gate is still run to confirm no regression. In interactive execution, pause here
+for the human to confirm the manual testing. In looped (`--loop`) execution,
+this phase's Automated Verification gates advancement automatically, and Manual
+Verification items are deferred to the end.
 
 ---
