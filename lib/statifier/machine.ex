@@ -112,6 +112,20 @@ defmodule Statifier.Machine do
   to `nil` and is not in `@enforce_keys`, the same reasoning as
   `global_scripts` and `warnings` above: a Machine with no identity is exactly
   as valid as one with one. `identity/1` below is the reader.
+
+  ## `source` and `compile_opts`: what `identity` was computed from
+
+  `source` (the SCXML binary `Statifier.compile/2` compiled) and
+  `compile_opts` (the persisted subset of the `opts` it was called with) are
+  stamped onto the Machine together with `identity`, by `compile/2` and only
+  by `compile/2` - the same three fields, the same one producer, so
+  `source: nil` and `identity: nil` always co-occur, and a non-nil `identity`
+  always has the exact `source` it was hashed from sitting beside it.
+  `compile_opts` is never the caller's whole keyword list: it is filtered
+  through a closed allowlist (`Statifier.compile/2`'s `@persisted_compile_opts`)
+  before it is stored, so an option this library does not recognize is never
+  carried onto the Machine. `source/1` and `compile_opts/1` below are the
+  readers.
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
@@ -131,8 +145,10 @@ defmodule Statifier.Machine do
     :binding,
     :location,
     :identity,
+    :source,
     global_scripts: [],
-    warnings: []
+    warnings: [],
+    compile_opts: []
   ]
 
   @typedoc """
@@ -167,8 +183,10 @@ defmodule Statifier.Machine do
           binding: :early | :late,
           location: Location.t(),
           identity: Identity.t() | nil,
+          source: binary() | nil,
           global_scripts: [program() | {:invalid, CompilerError.t()}],
-          warnings: [Warning.t()]
+          warnings: [Warning.t()],
+          compile_opts: keyword()
         }
 
   @doc """
@@ -368,6 +386,24 @@ defmodule Statifier.Machine do
   """
   @spec identity(machine :: t()) :: Identity.t() | nil
   def identity(%__MODULE__{identity: identity}), do: identity
+
+  @doc """
+  The SCXML source `Statifier.compile/2` compiled this Machine from, or `nil`
+  for a Machine built without going through that boundary (mirrors
+  `identity/1`'s `nil` cases).
+  """
+  @spec source(machine :: t()) :: binary() | nil
+  def source(%__MODULE__{source: source}), do: source
+
+  @doc """
+  The persisted subset of the options `Statifier.compile/2` was called
+  with - filtered through its closed allowlist, in the allowlist's order,
+  never the caller's whole `opts` list. `[]` for a Machine built without
+  going through that boundary, or for a compile that passed none of the
+  allowlisted keys.
+  """
+  @spec compile_opts(machine :: t()) :: keyword()
+  def compile_opts(%__MODULE__{compile_opts: compile_opts}), do: compile_opts
 
   @doc "`indexes` sorted ascending - document order, an integer sort (ADR-0005)."
   @spec document_order(machine :: t(), indexes :: Enumerable.t()) :: [non_neg_integer()]

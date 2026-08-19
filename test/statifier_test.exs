@@ -362,4 +362,53 @@ defmodule StatifierTest do
                Machine.identity(machine)
     end
   end
+
+  describe "compile/2 source and compile_opts stamps" do
+    @source_xml """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a"/>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.compile/2`'s final `%Machine{machine | ...}` update
+    # drops the `source: source` key -> this test reddens because
+    # `Machine.source(machine)` comes back `nil` instead of `@source_xml`
+    test "stamps the exact source bytes compiled" do
+      assert {:ok, machine} = Statifier.compile(@source_xml)
+      assert Machine.source(machine) == @source_xml
+    end
+
+    # sabotage: `Statifier.compile/2`'s final `%Machine{machine | ...}` update
+    # is left with no `compile_opts:` key at all -> this test reddens because
+    # `Machine.compile_opts(machine)` comes back `[]` instead of
+    # `[chart_name: "light"]`
+    test "keeps only allowlisted keys, dropping one the caller passed that isn't recognized" do
+      assert {:ok, machine} =
+               Statifier.compile(@source_xml, chart_name: "light", not_a_real_opt: :whatever)
+
+      assert Machine.compile_opts(machine) == [chart_name: "light"]
+    end
+
+    # sabotage: `Statifier.persisted_opts/1`'s comprehension is replaced with
+    # `opts` (the caller's raw list, unfiltered) -> this test reddens because
+    # `compile_opts` comes back in the caller's `[chart_version: ...,
+    # chart_name: ...]` order instead of the allowlist's `[chart_name: ...,
+    # chart_version: ...]` order
+    test "orders compile_opts by the allowlist, not by the caller's argument order" do
+      assert {:ok, machine} =
+               Statifier.compile(@source_xml, chart_version: "7", chart_name: "light")
+
+      assert Machine.compile_opts(machine) == [chart_name: "light", chart_version: "7"]
+    end
+
+    # sabotage: `Statifier.persisted_opts/1`'s `Keyword.has_key?(opts, key)`
+    # guard is dropped, so every allowlisted key is stamped with a `nil`
+    # value even when absent -> this test reddens because `compile_opts`
+    # comes back `[invoke_content_markup: nil, chart_name: nil,
+    # chart_version: nil]` instead of `[]`
+    test "a default-opts compile stores []" do
+      assert {:ok, machine} = Statifier.compile(@source_xml)
+      assert Machine.compile_opts(machine) == []
+    end
+  end
 end
