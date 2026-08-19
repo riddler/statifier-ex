@@ -919,12 +919,12 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Each of the seven decisions is stated as a decision with its own
+- [x] Each of the seven decisions is stated as a decision with its own
       rationale, not as a restatement of the plan.
-- [ ] No decision contradicts ADR-0002, 0003, 0005, 0012, 0027, 0034, 0048,
+- [x] No decision contradicts ADR-0002, 0003, 0005, 0012, 0027, 0034, 0048,
       0049, 0050, 0051, 0052, 0054, 0055, 0057, or 0059; each superseded or
       extended record is cited by number.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -938,15 +938,15 @@ blocking here.
 
 ### Phase 2
 
-- [ ] **Spec conformance**: the touched functions match the W3C Appendix D
+- [x] **Spec conformance**: the touched functions match the W3C Appendix D
       pseudocode line for line - `put_invoke_types/2` is a driver seam and no
       Appendix D procedure is edited, so the check is that nothing in
       `interpreter.ex` changed except the moduledoc.
-- [ ] Each sabotage line was actually performed: the covered code was broken,
+- [x] Each sabotage line was actually performed: the covered code was broken,
       the test went red, and the change was reverted.
-- [ ] The moduledoc's rehydration section reads correctly to a host who has not
+- [x] The moduledoc's rehydration section reads correctly to a host who has not
       read this plan.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -960,13 +960,13 @@ blocking here.
 
 ### Phase 3
 
-- [ ] **Spec conformance**: no Appendix D procedure is touched; `Replay`'s
+- [x] **Spec conformance**: no Appendix D procedure is touched; `Replay`'s
       entry fold still drives the core through the same advance entries in the
       same order a live session does.
-- [ ] Each sabotage line was actually performed.
-- [ ] An anchored recording's blob is inspected once by hand and confirmed to
+- [x] Each sabotage line was actually performed.
+- [x] An anchored recording's blob is inspected once by hand and confirmed to
       contain no compiled `%Machine{}` term (ADR-0052 decision 3).
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -980,15 +980,15 @@ blocking here.
 
 ### Phase 4
 
-- [ ] **Spec conformance**: the touched functions match the W3C Appendix D
+- [x] **Spec conformance**: the touched functions match the W3C Appendix D
       pseudocode line for line - no Appendix D procedure is edited here either;
       `init/1` chooses whether to call `interpret(doc)`, and never alters it.
-- [ ] Each sabotage line was actually performed.
-- [ ] A resumed session addressed by `#_scxml_<sessionid>` from a second live
+- [x] Each sabotage line was actually performed.
+- [x] A resumed session addressed by `#_scxml_<sessionid>` from a second live
       session is reachable at its pre-resume id (exercised by hand once).
-- [ ] The refusal messages read as actionable instructions to a host, not as
+- [x] The refusal messages read as actionable instructions to a host, not as
       internal atoms.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
@@ -1002,14 +1002,14 @@ blocking here.
 
 ### Phase 5
 
-- [ ] A host who has read only `docs/persistence.md` could resume a session,
+- [x] A host who has read only `docs/persistence.md` could resume a session,
       and would know which of their own obligations (timers, children,
       unacknowledged inbox events) they still own.
-- [ ] Every non-restoration item names *why* it cannot be restored, not just
+- [x] Every non-restoration item names *why* it cannot be restored, not just
       that it is not.
-- [ ] The house style of `docs/persistence.md` is matched (its existing
+- [x] The house style of `docs/persistence.md` is matched (its existing
       hyphenation and heading conventions), not converted.
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause

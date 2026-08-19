@@ -178,12 +178,12 @@ running `Statifier.Session`, and what it still owns after doing so. See
 full decision record; this section is the narrative for a host that has not
 read it.
 
-The recipe is three lines - recompile the chart, decode the position against
-it, hand the decoded position to `start_link/2`:
+The recipe is two lines - recompile the chart, then hand the persisted
+position to `start_link/2`, which decodes it against that chart for you:
 
 ```elixir
-{:ok, machine}   = Statifier.Chart.from_binary(chart_blob)
-{:ok, pid}       = Statifier.Session.start_link(machine, resume: position_blob)
+{:ok, machine} = Statifier.Chart.from_binary(chart_blob)
+{:ok, pid} = Statifier.Session.start_link(machine, resume: position_blob)
 ```
 
 `resume:` also accepts an already-decoded `%Statifier.MachineState{}` - the

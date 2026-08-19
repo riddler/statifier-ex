@@ -17,7 +17,7 @@ every advance entry (`handle_event/2`, `deliver_internal/5`, `microstep/1`,
 nothing in the library feeds a decoded position into a `Statifier.Session`:
 `Session.start_link/2` has eleven options, none of them a position, and
 `init/1` unconditionally calls `Interpreter.initialize(machine, machine_opts)`
-(`lib/statifier/session.ex:771`). The only sanctioned recovery path today is
+(`lib/statifier/session.ex`, `init/1`, as it stood before this record). The only sanctioned recovery path today is
 replay via `Statifier.Session.Recording` - O(history) per resume, and it
 requires persisting the whole compiled `%Machine{}` inside the recording
 blob. Production embedders that persist long-running charts across deploys
@@ -39,7 +39,8 @@ here:
   contract.
 - **`Recording` embeds the whole `%Machine{}` and replays from a single
   anchor**, `Interpreter.initialize(Recording.machine(r), Recording.opts(r))`
-  (`lib/statifier/replay.ex:204-205`, ADR-0034, ADR-0057). ADR-0057 decision 4
+  (`Statifier.Replay.run/1`, as it stood before this record; ADR-0034,
+  ADR-0057). ADR-0057 decision 4
   already named its envelope shape a format-version decision for any future
   widening.
 - **Timer handles, invocation pids, and monitor refs are process-owned and
@@ -93,7 +94,8 @@ external reference to the session working across a deploy or crash, which is
 the entire point of resuming instead of restarting. `Statifier.Registry`
 already tolerates a stale prior registration - `register_session/1` rescues
 and ignores every registration failure, leaving the session merely
-unregistered rather than crashing (`lib/statifier/session.ex:856-870`) - so
+unregistered rather than crashing (`register_session/1` in
+`lib/statifier/session.ex`) - so
 re-registering an id whose previous holder is dead costs nothing new.
 ADR-0027 decision 4's "a restart generates a fresh `sess_` id" governs
 restarts, not resumes, and is not amended by this.
@@ -126,7 +128,8 @@ and would leave it disagreeing with `states_to_invoke` and `configuration` -
 worse than the alternative. The alternative is safe today because
 `{:stop_child, invoke_id}` already treats an unknown id as a silent no-op
 (`Invocations.pop/2` returning `{nil, invocations}`,
-`lib/statifier/session.ex:1510-1523`): a `<cancel>` or an exit sweep over a
+`lib/statifier/session/invocations.ex`, popped by the `{:stop_child, _}`
+clause of `perform_instruction/3` in `lib/statifier/session.ex`): a `<cancel>` or an exit sweep over a
 not-yet-re-established invocation stops nothing and crashes nothing rather
 than raising. Actually re-establishing the pids behind those ids - starting
 or reattaching invoked children - is out of scope here; it is ADR-0051's

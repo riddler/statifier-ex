@@ -598,6 +598,13 @@ research stage.
    `resume:` without deciding. Note `start_link/2`'s head pattern-matches
    `%Machine{}` positionally, so the `Machine` stays a positional argument in
    every shape.
+
+   **Settled (2026-08-19):** both shapes, via one `:resume` option - ADR-0060
+   decision 1. A blob goes through `Position.from_binary/2` (identity-gated
+   for free); a `%MachineState{}` is checked against the positional
+   `%Machine{}` by the same rule, so there is one identity rule rather than
+   two. Named `:resume` rather than `machine_state:` because it accepts
+   either shape. No `Statifier.resume/2` facade was added.
 2. **What is a resumed session's `sess_` id?** The position's `datamodel`
    already carries `_sessionid` from the run that produced it. Reading it back
    re-registers a previously-live id in `Statifier.Registry`; minting a fresh
@@ -606,6 +613,14 @@ research stage.
    `new/2`). ADR-0027 decision 4's "generates a fresh `sess_` id and loses
    every bit of the crashed session's state" is about restarts, not resumes,
    and does not settle it.
+
+   **Settled (2026-08-19):** the position's own `_sessionid` is reused -
+   ADR-0060 decision 3. Id continuity is what keeps `#_scxml_<sessionid>`
+   addressing working across the deploy or crash that made the resume
+   necessary; `register_session/1` already rescues every registration
+   failure, so re-registering an id whose holder is dead costs nothing.
+   `:session_id` may override it, and doing so rewrites
+   `datamodel["_sessionid"]` to agree.
 3. **Does a resumed session with `record: true` produce a replayable
    recording?** `Replay.run/1` begins unconditionally at
    `Interpreter.initialize/2`, so a recording made by a resumed session replays
@@ -615,12 +630,24 @@ research stage.
    `catch_up: true` would be answering with a recording whose replay is wrong
    rather than short. Whether that is in scope for this bead or is a follow-on
    is undecided.
+
+   **Settled (2026-08-19):** yes - `Recording` gained an `anchor` field and
+   `Replay.run/1` a start-here branch (ADR-0060 decision 6, format version
+   1 -> 2, version-1 blobs still decode). Anchoring rather than refusing the
+   combination was required by the bead's acceptance criteria. In scope for
+   this bead, not a follow-on.
 4. **Does resume refuse an unidentified `Machine`?** Every persistence codec
    refuses `identity: nil` with `{:error, :unidentified_chart}`, but
    `Session.start_link/2` accepts any `%Machine{}` today. If resume refuses,
    it is the first session-API refusal on identity, and it makes an
    `:invoke_source`-returned Machine (which is `identity: nil` by
    construction) non-resumable.
+
+   **Settled (2026-08-19):** yes, it refuses - ADR-0060 decision 2, the first
+   identity refusal in the session API. Accepted consequence: an
+   `:invoke_source`-resolved or `Compiler.compile/1`-built `%Machine{}` is
+   not resumable, and a host that wants a resumable chart compiles through
+   `Statifier.compile/2`.
 5. **What happens to `active_invocations` on resume?** The position says
    invocations are live; the session's `Invocations` table is empty. Options
    visible in the code: leave the divergence (a subsequent `<cancel>` or exit
@@ -630,12 +657,32 @@ research stage.
    registry before the first drive. The bead points at st-cmq.8 for the
    re-establishment path but does not say what the resumed core's own map
    should contain in the meantime.
+
+   **Settled (2026-08-19):** carried forward verbatim; the live process table
+   starts empty - ADR-0060 decision 5. Clearing it would change what the
+   position means and break `invoke_id` stability. The divergence is safe
+   because `{:stop_child, _}` already no-ops on an unknown id, and is
+   documented in `docs/persistence.md` rather than left silent.
+   Re-establishing the processes stays the host's job (st-cmq.8).
 6. **Does resume accept a non-quiescent position?** `Position.to_binary/1`
    carries `internal_queue` verbatim, while `export/1` refuses a non-empty one.
    A resume that accepts a mid-macrostep position needs the counters and the
    queue to drive correctly on the first call; a resume that refuses one is
    stricter than `from_binary/2` currently is.
+
+   **Settled (2026-08-19):** it refuses, with `:position_not_quiescent` -
+   ADR-0060 decision 4. Booting mid-macrostep would produce effects with no
+   ADR-0048 input boundary behind them. `:resume` is deliberately no more
+   lenient than `Position.export/1`. Draining on boot is recorded in the
+   plan's "What We're NOT Doing" as a follow-on rather than a quiet
+   widening.
 7. **Is `Session.interpret/2` (ADR-0029) affected?** It is one of the five
    recordable input paths and re-enters the core directly. Nothing suggests it
    behaves differently after a resume, but it has not been examined against a
    position whose counters did not start at zero.
+
+   **Settled (2026-08-19):** no - ADR-0060's plan proved it rather than
+   assuming it. `interpret/2` re-enters through `deliver_internal/5`, which
+   increments counters relatively and compares none against zero; a pure-core
+   test and a session-level test both assert the effect counter stamps
+   continue from the resumed values instead of restarting.
