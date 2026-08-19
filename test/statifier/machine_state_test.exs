@@ -3,6 +3,7 @@ defmodule Statifier.MachineStateTest do
 
   alias Statifier.{Compiler, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Event.Cause
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Routes
 
   defp compile!(xml) do
@@ -394,6 +395,33 @@ defmodule Statifier.MachineStateTest do
 
       ms = MachineState.put_routes(ms, nil)
       assert ms.routes == nil
+    end
+  end
+
+  describe "put_invoke_types/2" do
+    # sabotage: `put_invoke_types/2` is changed to `do: machine_state`
+    # (ignoring its `invoke_types` argument) -> this assertion reddens.
+    test "sets the invoke_types field" do
+      invoke_types = InvokeTypes.new(types: ["custom"])
+      ms = new_machine_state() |> MachineState.put_invoke_types(invoke_types)
+
+      assert ms.invoke_types == invoke_types
+    end
+
+    # sabotage: `put_invoke_types/2`'s map update
+    # `%{machine_state | invoke_types: invoke_types}` is changed to
+    # `%{machine_state | invoke_types: machine_state.invoke_types || invoke_types}`
+    # (a previously-set snapshot survives a later `put_invoke_types/2` call
+    # instead of being replaced) -> the second assertion below, which
+    # clears a previously-set snapshot back to nil, reddens.
+    test "clears a previously-set snapshot back to nil" do
+      invoke_types = InvokeTypes.new(types: ["custom"])
+
+      ms = new_machine_state() |> MachineState.put_invoke_types(invoke_types)
+      assert ms.invoke_types == invoke_types
+
+      ms = MachineState.put_invoke_types(ms, nil)
+      assert ms.invoke_types == nil
     end
   end
 

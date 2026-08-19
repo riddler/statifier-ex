@@ -801,4 +801,13 @@ defmodule Statifier.MachineState do
   @spec put_routes(machine_state :: t(), routes :: routes()) :: t()
   def put_routes(%__MODULE__{} = machine_state, routes),
     do: %{machine_state | routes: routes}
+
+  @doc """
+  Stamps `invoke_types` onto `machine_state` - ADR-0051's registered-type
+  snapshot, re-supplied by the driver rather than carried as durable position
+  state (`Statifier.Position.import/2` sets it `nil` for exactly this reason).
+  """
+  @spec put_invoke_types(machine_state :: t(), invoke_types :: invoke_types()) :: t()
+  def put_invoke_types(%__MODULE__{} = machine_state, invoke_types),
+    do: %{machine_state | invoke_types: invoke_types}
 end

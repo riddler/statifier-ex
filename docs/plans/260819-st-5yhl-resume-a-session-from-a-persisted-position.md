@@ -451,14 +451,14 @@ Every one of these tests carries its sabotage line.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (this phase's gate); coverage does not drop.
-- [ ] `mix quality --profile loop` used between edits, never as the phase gate.
-- [ ] `mix quality --format json --report -` is clean, for a looped runner to
+- [x] `mix quality` is fully green (this phase's gate); coverage does not drop.
+- [x] `mix quality --profile loop` used between edits, never as the phase gate.
+- [x] `mix quality --format json --report -` is clean, for a looped runner to
       route on.
-- [ ] `mix test test/statifier/interpreter_rehydration_test.exs` passes.
-- [ ] `mix adr.check` clean - no `Process.`/`:ets.`/clock call is added under
+- [x] `mix test test/statifier/interpreter_rehydration_test.exs` passes.
+- [x] `mix adr.check` clean - no `Process.`/`:ets.`/clock call is added under
       `lib/statifier/` (ADR-0003).
-- [ ] Each new test's sabotage line is present and names a real mutation
+- [x] Each new test's sabotage line is present and names a real mutation
       (`mix quality`'s sabotage stage checks presence; the mutation itself is
       the manual item below).
 
@@ -924,6 +924,28 @@ before considering the plan fully landed.
 - [ ] No decision contradicts ADR-0002, 0003, 0005, 0012, 0027, 0034, 0048,
       0049, 0050, 0051, 0052, 0054, 0055, 0057, or 0059; each superseded or
       extended record is cited by number.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] **Spec conformance**: the touched functions match the W3C Appendix D
+      pseudocode line for line - `put_invoke_types/2` is a driver seam and no
+      Appendix D procedure is edited, so the check is that nothing in
+      `interpreter.ex` changed except the moduledoc.
+- [ ] Each sabotage line was actually performed: the covered code was broken,
+      the test went red, and the change was reverted.
+- [ ] The moduledoc's rehydration section reads correctly to a host who has not
+      read this plan.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
