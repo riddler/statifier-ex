@@ -308,19 +308,19 @@ decision on question 5). Phase 3, not this phase, adds the new labeled row.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes: `mix quality`
-- [ ] `mix gate.verify` confirms the run was a full, unscoped gate
-- [ ] `mix test test/mix/statifier/adr_judge_corpus_shape_test.exs` passes, now
+- [x] Full quality gate passes: `mix quality`
+- [x] `mix gate.verify` confirms the run was a full, unscoped gate
+- [x] `mix test test/mix/statifier/adr_judge_corpus_shape_test.exs` passes, now
       all 20 rows (18 + 2) - specifically the file-exists, real-key, known-tier,
       both-verdicts-per-`{key, tier}`, own-scope-only, and no-`@tag :skip`
       checks
-- [ ] `mix test` reports zero `adr_judge_corpus` tests executed, so the addition
+- [x] `mix test` reports zero `adr_judge_corpus` tests executed, so the addition
       put nothing paid on the ordinary suite
-- [ ] `git diff --stat` shows no path under `lib/`
-- [ ] `git diff --stat` shows no guarded path (`.quality.exs`, `.credo.exs`,
+- [x] `git diff --stat` shows no path under `lib/`
+- [x] `git diff --stat` shows no guarded path (`.quality.exs`, `.credo.exs`,
       `coveralls.json`, `.sobelow-conf`, `.doctor.exs`, `mix.exs`,
       `test/passing_tests.json`), so `mix gate.check` needs no ledger entry
-- [ ] Use `mix quality --profile loop` between edits while iterating
+- [x] Use `mix quality --profile loop` between edits while iterating
 
 #### Manual Verification:
 - [ ] Both new `.diff` files were cut by the established method (apply, `git
@@ -732,6 +732,28 @@ that Phases 1 and 2 are done and that Phase 3 is unstarted and a human's to run.
 Any of these is a ceiling decision, and Decision 3 says a ceiling decision is a
 human's call.
 
+
+### Phase 1
+
+- [ ] Both new `.diff` files were cut by the established method (apply, `git
+      diff --unified=3`, revert) against current `exit_entry.ex`, and their
+      `index` base blob matches the two existing `exit_entry` fixtures
+- [ ] The violation half differs from st-ntf5's hand-measured variant in no
+      respect - it is that diff, not a re-derivation of it
+- [ ] The clean half is genuinely meaning-preserving: read the diff and confirm
+      the state the payload is stamped against and the configuration it carries
+      are both unchanged
+- [ ] The clean half varies something `0012_trace_prestate_captured.diff` does
+      not, and a reader can say in one sentence what
+- [ ] No regression in the other 18 rows' prose or verdicts
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run full `mix quality` as the phase gate. In interactive execution,
+pause here for the human to confirm the manual items before Phase 2. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically and the Manual items are deferred to the end.
+
+---
 ## References
 
 - Source document:

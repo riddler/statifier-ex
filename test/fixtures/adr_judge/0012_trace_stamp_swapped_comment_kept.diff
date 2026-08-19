@@ -1,0 +1,22 @@
+diff --git a/lib/statifier/interpreter/exit_entry.ex b/lib/statifier/interpreter/exit_entry.ex
+index 93d2fa4..38e72c4 100644
+--- a/lib/statifier/interpreter/exit_entry.ex
++++ b/lib/statifier/interpreter/exit_entry.ex
+@@ -147,8 +147,6 @@ defmodule Statifier.Interpreter.ExitEntry do
+     # state, because "the configuration after this exit set was applied"
+     # does not exist until the reduce below has run. Effect-list
+     # position is unchanged: the list is concatenated at the end either way.
+-    pre_exit_state = machine_state
+-
+     machine_state = record_history_values(machine_state, states_to_exit)
+ 
+     {machine_state, depart_effects} =
+@@ -158,7 +156,7 @@ defmodule Statifier.Interpreter.ExitEntry do
+       end)
+ 
+     trace_effects =
+-      Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
++      Effect.trace(machine_state, Effect.Trace.ExitSet,
+         indexes: states_to_exit,
+         configuration: machine_state.configuration
+       )
