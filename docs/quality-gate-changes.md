@@ -13,6 +13,41 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-19 - st-hbdr
+
+Approved-by: JohnnyT (in session)
+
+- mix.exs: adds `:ex_unit` to the existing `dialyzer: [plt_add_apps: [:mix]]`,
+  making it `[:mix, :ex_unit]`
+
+Reason: ADR-0052 promotes the chart-author test helpers into `lib/` as
+`Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector`, so a module
+calling `ExUnit.CaseTemplate.__proxy__/2`, `ExUnit.Assertions.assert/2` and
+`ExUnit.Assertions.flunk/1` now sits under `lib/` and is analyzed by Dialyzer
+for the first time. `:ex_unit` ships with Elixir but is not in the default PLT,
+so all seven call sites report `unknown_function`. Dialyzer is describing a gap
+in its own PLT, not a defect in the code - the same reason `:mix` is already on
+this list, for the Mix task support modules under `lib/mix/`.
+
+**This widens what Dialyzer can see.** Before the change it could not resolve
+any `ExUnit.*` call in the tree; after it, those calls are checked like any
+other. No threshold moves, no check is removed, no test is skipped, and no
+scope is narrowed. Suppressing the seven findings instead - via
+`@dialyzer {:nowarn_function, ...}`, an ignore file, or dropping the Dialyzer
+stage's scope - is the shape CLAUDE.md forbids, and would leave the promoted
+modules permanently unanalyzed rather than analyzed correctly.
+
+The guard fired because `@mix_exs_pattern` matches `dialyzer:` by line content,
+which is the right conservative default: the pattern cannot tell an added PLT
+application from a lowered threshold, so it stops both and asks. This entry is
+the answer for this one.
+
+Deliberately not done in the same edit: `:ex_unit` is **not** added to
+`extra_applications`. Nothing changes about what the released library depends
+on at runtime, and `use ExUnit.CaseTemplate` from `lib/` was verified to emit
+no compile warning on Elixir 1.18.3 (measured in a scratch project against a
+live control case, during st-hbdr's plan stage) - so the PLT entry is the whole
+of what is needed.
 ## 2026-08-18 - st-m5c3
 
 Approved-by: JohnnyT (in session)
