@@ -15,6 +15,7 @@ defmodule Statifier.MixProject do
       name: "Statifier",
       description: "A W3C SCXML-conformant statecharts engine for Elixir",
       source_url: @source_url,
+      package: package(),
       test_coverage: [tool: ExCoveralls],
       # The regression ratchet ships as mix tasks, so Mix itself has to be in
       # the PLT or every Mix.shell/0 call reads as an unknown function.
@@ -35,6 +36,20 @@ defmodule Statifier.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  # Hex package metadata. Nothing is published before 2.0.0 (ADR-0061); this
+  # exists so that publishing is a decision rather than a project.
+  defp package do
+    [
+      name: "statifier",
+      licenses: ["MIT"],
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md),
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+      }
+    ]
+  end
 
   defp deps do
     [
