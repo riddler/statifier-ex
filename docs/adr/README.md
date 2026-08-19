@@ -60,6 +60,7 @@
 | [0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) | After a renumbering, pointer citations move (path fix plus an at-the-time note) and historical statements stand; cross-repo ADR citations must name the repo | accepted |
 | [0057](0057-recording-identity-and-serialization.md) | A recording blob nests the chart blob in the compiled `%Machine{}`'s place; the codec lives on the `@opaque` owner; `:invoke_handlers` cross the boundary as strings, never as atoms or code | accepted (answers 0052 decision 8's follow-up) |
 | [0056](0056-adr-number-collisions-fail-the-gate-tree-locally.md) | ADR number collisions fail the gate via a tree-local numbering invariant; the README table becomes machine-read | accepted |
+| [0056](0056-adr-number-collisions-fail-the-gate-tree-locally.md) | ADR number collisions fail the gate via a tree-local numbering invariant; the README table becomes machine-read | accepted (amended 2026-08-19: decision 2's bite point corrected - the base-ref half fires after the rebase, not merely after a fetch; its addition is the rename/renumber shape) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`. Pick the number

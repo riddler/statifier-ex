@@ -28,8 +28,14 @@ defmodule Mix.Statifier.AdrGuard do
   real (a collision it can see is a collision), but a pass from it promises
   nothing when `origin/main` is stale." The guarantee against a collision
   lives in the tree-local checks above, which run at the post-fetch,
-  post-rebase gate `wurk:mr` performs; `adr-0056-base-number` only moves
-  detection earlier on whatever run happens to have a fresh base ref. **No
+  post-rebase gate `wurk:mr` performs. Because the base listing is taken at
+  the merge-base, not the ref tip, a fetch alone never lets this check see a
+  record that landed on main after the branch diverged - it fires once the
+  rebase has put that record on the branch's base, by which point the
+  tree-local checks fire too. What it alone catches is a branch that renames
+  or renumbers an on-main record: one file per number in the tree keeps the
+  duplicate check silent, while the merge-base still holds the number under
+  the old filename (ADR-0056 decision 2 as amended 2026-08-19). **No
   document, skill, or report may cite a bare-gate ADR guard pass as evidence
   that no collision exists on the remote.**
 

@@ -1,6 +1,10 @@
 # ADR-0056: ADR number collisions fail the gate via a tree-local numbering invariant
 
-Status: accepted (2026-08-19)
+Status: accepted (2026-08-19) - amended 2026-08-19 (st-9vco verify walk:
+decision 2's bite point corrected against a measured replay - the base-ref
+half compares against the merge-base, so it fires after the rebase, not
+merely after a fetch; what it adds over the tree-local checks is the
+rename/renumber shape)
 
 ## Context
 
@@ -87,17 +91,49 @@ Constraints from the gate's own rules that any check must fit:
 
 2. **A secondary, base-ref half joins the same stage: a branch-added
    `docs/adr/NNNN-*.md` whose number exists on the base ref under a different
-   filename is a finding.** `collect/1` already resolves
-   `opts[:base]` / `origin/main` / `main`; the addition is a
-   `git ls-tree <base> docs/adr/` listing carried on `source` so `analyze/1`
-   stays pure. This half exists for early warning only: a finding from it is
+   filename is a finding.** *(Amended 2026-08-19, st-9vco - the original
+   text said this half "merely moves detection earlier on whatever runs
+   happen to have fresh refs". Measured against a faithful replay of the
+   st-hbdr collision, that clause over-promises: fresh refs alone move
+   nothing for that shape, because the comparison is against the merge-base.
+   The corrected account is below.)*
+
+   `collect/1` already resolves `opts[:base]` / `origin/main` / `main`; the
+   addition is a `git ls-tree` listing of `docs/adr/` carried on `source` so
+   `analyze/1` stays pure. The listing is taken at
+   `git merge-base <ref> HEAD` - the same commit the diff is computed
+   against - not at the ref tip. A merge-base by definition excludes
+   anything that landed on main after the branch diverged, so for the
+   st-hbdr collision shape (main gains a record after the branch picked its
+   number) this half fires only once the branch's base ref actually
+   contains the colliding record - in practice after the rebase, not merely
+   after a fetch. Measured on 2026-08-19 with a replay of st-hbdr against a
+   controllable remote (a branch grafted onto pre-0052 main, carrying the
+   guard and its own `docs/adr/0052-*.md`): with a stale `origin/main` and
+   no fetch, `mix adr.check` exits 0; after `git fetch origin` but before
+   the rebase, still 0; after the rebase, exit 1 with
+   `adr-0056-duplicate-number` (both paths), `adr-0056-readme-index`, and
+   `adr-0056-base-number` all firing. By then the tree-local half of
+   point 1 fires anyway, so for the concurrent-pick shape this half adds no
+   earlier detection.
+
+   What this half genuinely adds is a different shape, also observed in the
+   same replay: a branch that renames or renumbers an on-main record -
+   deleting main's `NNNN-old-name.md` and adding `NNNN-new-name.md` -
+   leaves exactly one file per number in the tree, so the duplicate check
+   stays silent, while the merge-base still holds that number under the old
+   filename and `adr-0056-base-number` fires. Comparing against the ref tip
+   instead of the merge-base was offered when this was measured and
+   explicitly declined for this pass; open question 3 records it.
+
+   The asymmetry stands as originally recorded: a finding from this half is
    always real (a collision it can see is a collision), but a pass from it
-   promises nothing when `origin/main` is stale. The guarantee lives in
-   point 1 at the post-fetch, post-rebase gate run; this half merely moves
-   detection earlier on whatever runs happen to have fresh refs. Recording
-   that asymmetry here is what keeps the stale pass from being trusted: no
-   document, skill, or report may cite a bare-gate ADR guard pass as evidence
-   that no collision exists on the remote.
+   promises nothing when `origin/main` is stale - and, per this amendment,
+   promises nothing about post-divergence records even when it is fresh.
+   The guarantee lives in point 1 at the post-fetch, post-rebase gate run.
+   Recording that asymmetry here is what keeps the stale pass from being
+   trusted: no document, skill, or report may cite a bare-gate ADR guard
+   pass as evidence that no collision exists on the remote.
 
 3. **No new stage, no fetch, no new skip line.** The check lands inside
    `mix adr.check` rather than as a second disabled-by-default stage, for
@@ -199,8 +235,8 @@ Constraints from the gate's own rules that any check must fit:
 ## Open questions
 
 Recorded rather than guessed at; no maintainer was available when this record
-was written. Both are answerable at implementation time without reopening the
-decision.
+was written. The first two are answerable at implementation time without
+reopening the decision; the third arrived with the 2026-08-19 amendment.
 
 1. **Should the base-ref half warn about ref age?** `.git/FETCH_HEAD`'s mtime
    could let the guard annotate a base-ref pass with "origin/main last
@@ -216,3 +252,12 @@ decision.
    st-8d5e bead already documents cross-repo citations that a naive link
    check flags wrongly. The implementation should scope by link target from
    the start.
+3. **Should the base-ref half compare against the ref tip instead of the
+   merge-base?** *(Added by the 2026-08-19 amendment.)* Listing `docs/adr/`
+   at the resolved ref itself would let a fetch alone surface a
+   post-divergence collision, moving detection ahead of the rebase for the
+   st-hbdr shape. It was offered during the st-9vco verify walk and
+   explicitly declined for that pass - the amendment corrects the wording,
+   not the behavior - but nothing in this record forbids a later change
+   adopting it, provided the asymmetry prose in decision 2 is re-derived
+   for the new semantics.
