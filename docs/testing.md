@@ -95,13 +95,26 @@ from the three above in kind, not just in tag:
   measured on 2026-08-18 under that plan's Decision 2 - three runs per model at
   seeds 101/202/303, a fixture's verdict being the majority of its three. A
   sixth ADR-0012 pair landed later (st-xsb1) isolating a payload field stamped
-  from the wrong state from one deliberately read after the mutation; it is
-  not yet part of the table below.
+  from the wrong state from one deliberately read after the mutation, and
+  brought an amendment to ADR-0012's text with it; the partial re-measurement
+  that amendment obliged is the third row below.
 
   | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
   |---|---|---|---|---|---|
   | subtle | `claude-sonnet-5` | 3/5 | 0/5 | 3/10 | 145.7s |
   | subtle | `claude-haiku-4-5-20251001` | 1/5 | 0/5 | 3/10 | 890.6s |
+  | ADR-0012 subtle only, 6 rows (partial, st-xsb1) | `claude-sonnet-5` | 1/3 | 0/3 | 0/6 | 21.5s |
+
+  The third row is a **partial re-measurement and supersedes nothing**. The two
+  rows above it were measured over the whole ten-fixture tier on two models and
+  still stand; the st-xsb1 row covers only the six ADR-0012 rows on one model,
+  bought because amending ADR-0012's text invalidated the prior ADR-0012 numbers
+  without saying which way. It moved two violation rows from false negative to
+  caught - including the one st-ntf5 hand-measured as a false negative against
+  the unamended rubric - and introduced no false positive on either clean row.
+  `0012_location_precision_one_caller.diff` remains missed, as it was before the
+  amendment; the plan's Phase 5 holds the per-fixture matrix and the reason that
+  row indicts the ADR's wording rather than the judge.
 
   Two things follow, and the plan's Phase 5 holds the per-fixture matrices
   behind both. First, the subtle tier separates the two models where the
