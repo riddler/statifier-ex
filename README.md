@@ -1,5 +1,7 @@
 # Statifier
 
+[![CI](https://github.com/riddler/statifier-ex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/riddler/statifier-ex/actions/workflows/ci.yml)
+
 A W3C SCXML-conformant statecharts engine for Elixir. Ground-up rewrite of
 [statifier](https://github.com/riddler/statifier) v1.x.
 
@@ -22,6 +24,33 @@ conformance failures. v2 is:
 - built **corpus-first** - 186+ SCION/W3C conformance tests and a
   forward-only regression ratchet inherited from v1, with the generator
   committed this time
+
+## Installation
+
+Statifier v2 is not on Hex yet, and will not be before 2.0.0 - no alpha,
+beta, or release-candidate versions along the way. Until then, depend on a
+commit reachable from `main`:
+
+```elixir
+{:statifier, github: "riddler/statifier-ex", ref: "<sha>"}
+```
+
+What a pin gives you (the full contract is
+[ADR-0061](docs/adr/0061-sha-pinning-contract-until-2-0-0.md)):
+
+- **Pin only commits reachable from `main`.** Every one of them has passed
+  the full quality gate - the same gate CI runs on the default branch. A
+  branch tip is covered by nothing.
+- **Between two pins, any public API and any observable behavior may
+  change** without deprecation, notice period, or compatibility shim.
+  `2.0.0-dev` is one moving version. There are no tags before 2.0.0; the pin
+  is the SHA.
+- **What will never break silently:** persisted position and recording blobs
+  refuse with a typed error on a format-version or chart-identity mismatch
+  rather than misreading; API shape changes fail your compile.
+- **How to see what changed:**
+  `git diff <old-sha>..<new-sha> -- changelog.d/ CHANGELOG.md` lists every
+  user-visible difference between two pins.
 
 ## Development
 
