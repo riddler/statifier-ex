@@ -507,15 +507,15 @@ accepts any integer -> the unsupported-format-version test reddens`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green while iterating (not the phase gate).
-- [ ] Full `mix quality` green, including Sobelow (the `@sobelow_skip` is
+- [x] `mix quality --profile loop` green while iterating (not the phase gate).
+- [x] Full `mix quality` green, including Sobelow (the `@sobelow_skip` is
       per-function and named, so the rest of the module stays scanned), Credo,
       dialyzer against the new `@spec`s, and Doctor's thresholds for the new
       module.
-- [ ] `mix gate.verify` confirms the green run was a full, unscoped gate.
-- [ ] The no-compiled-term assertion passes: the blob's bytes contain no
+- [x] `mix gate.verify` confirms the green run was a full, unscoped gate.
+- [x] The no-compiled-term assertion passes: the blob's bytes contain no
       `Predicator.Compiled` tag.
-- [ ] Each error-arm test reddens under the sabotage its comment names.
+- [x] Each error-arm test reddens under the sabotage its comment names.
 
 #### Manual Verification:
 - [ ] No Appendix D procedure is touched by this phase; `Statifier.Chart` is a
@@ -743,6 +743,30 @@ before considering the plan fully landed.
       the one place Phase 1's fields cross a serialization boundary that this
       phase adds no test of its own for (ADR-0052 decision 8 keeps `Recording`
       out of scope, so this is a read-and-confirm, not a change).
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] No Appendix D procedure is touched by this phase; `Statifier.Chart` is a
+      codec and ports no pseudocode, so ADR-0002 introduces no deviation to
+      justify here.
+- [ ] The check chain reads in the ADR-0052 order (tag, version, recompile,
+      identity) and each arm's error term is the one `docs/persistence.md` will
+      tell a host to expect.
+- [ ] `Statifier.Position`'s behavior is unchanged - its blob shape, format
+      version, and errors are untouched by this phase's diff.
+- [ ] The moduledoc argues the boundary-module placement in its own words
+      (layering, ADR-0003, Doctor burden) rather than only pointing at
+      `Statifier.Position`.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
