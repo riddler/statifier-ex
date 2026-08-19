@@ -38,3 +38,7 @@ handlers: [docs/extending.md](docs/extending.md). Scheduling delayed sends
 durably, outside the session process:
 [docs/durable-timers.md](docs/durable-timers.md). Testing your own charts:
 [docs/testing-charts.md](docs/testing-charts.md).
+
+## License
+
+MIT - see [LICENSE](LICENSE).
