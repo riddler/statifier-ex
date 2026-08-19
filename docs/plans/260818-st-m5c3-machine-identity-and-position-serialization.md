@@ -588,13 +588,13 @@ with a different fix.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes (`mix quality --profile loop` while iterating)
-- [ ] `mix gate.verify` confirms a full, unscoped run
-- [ ] Doctor stays at 100% for the new module
-- [ ] `mix adr.check` reports no finding - in particular no ADR-0003 finding:
+- [x] Full `mix quality` passes (`mix quality --profile loop` while iterating)
+- [x] `mix gate.verify` confirms a full, unscoped run
+- [x] Doctor stays at 100% for the new module
+- [x] `mix adr.check` reports no finding - in particular no ADR-0003 finding:
       this module is pure, does no I/O, and is not added to
       `@effect_interpreter_paths`
-- [ ] `mix test.regression` passes, and
+- [x] `mix test.regression` passes, and
       `git diff --quiet origin/main -- test/passing_tests.json` exits 0
 
 #### Manual Verification:
@@ -1025,6 +1025,27 @@ before considering the plan fully landed.
       checked in IEx
 - [ ] Run the pre-existing `invoke_content_markup: true` tests and confirm
       they still pass with the two new options threaded through `compile/2`
+
+**Implementation Note**: Use the project's loop gate between edits; run the full
+gate as the phase gate. In interactive execution, pause here for the human to
+confirm the manual testing before moving to the next phase. In looped
+(`--loop`) execution, this phase's Automated Verification gates advancement
+automatically (via `/wurk:commit --auto`), and Manual Verification items are
+deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] No Appendix D function is touched; `lib/statifier/interpreter/` is
+      untouched by this phase
+- [ ] The identity-mismatch error message, read cold, tells a host what to do
+      next
+- [ ] Take a `Session.snapshot/1` from a live session, `to_binary/1` it, and
+      `from_binary/2` it against the same machine - confirm `{:ok, _}` and the
+      same configuration. Nothing in this phase modifies `Session`; this
+      confirms the codec accepts the position shape a real session produces,
+      not just one built by `MachineState.new/2`
 
 **Implementation Note**: Use the project's loop gate between edits; run the full
 gate as the phase gate. In interactive execution, pause here for the human to
