@@ -15,7 +15,9 @@ continuity with v1's converted W3C tests).
   corpus tooling rewrites or excludes them. The conformance ceiling this imposes is
   accepted and documented in the test manifest.
 - Real computation belongs in the host application, reached through `<invoke>`
-  handlers and external `<send>` - controlled, typed, supervised.
+  handlers and external `<send>` - controlled, typed, supervised. See
+  [docs/extending.md](extending.md) for how a host registers its own
+  `<invoke>` handlers.
 
 ## What the datamodel provides
 

@@ -33,4 +33,5 @@ mix quality                  # full gate (required green before commit)
 
 Issue tracking is [beads](https://github.com/gastownhall/beads) (`bd ready` to
 find work). Workflow, model roles, and worktree conventions:
-[docs/workflow.md](docs/workflow.md).
+[docs/workflow.md](docs/workflow.md). Registering your own `<invoke>`
+handlers: [docs/extending.md](docs/extending.md).
