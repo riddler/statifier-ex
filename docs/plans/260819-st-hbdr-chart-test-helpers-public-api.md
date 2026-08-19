@@ -796,13 +796,13 @@ whole point of the bead is that these modules stop being harness.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green.
-- [ ] `changelog.d/st-hbdr.md` exists and is non-empty.
-- [ ] Every module and function named in `docs/testing-charts.md` resolves:
+- [x] Full `mix quality` green.
+- [x] `changelog.d/st-hbdr.md` exists and is non-empty.
+- [x] Every module and function named in `docs/testing-charts.md` resolves:
       `mix run -e 'Code.ensure_loaded!(Statifier.Testing.Case); Code.ensure_loaded!(Statifier.Testing.FeatureDetector)'`
       in `MIX_ENV=dev`, which also proves the promoted modules are reachable
       outside `:test` - the whole point of the bead.
-- [ ] Any code block in the guide that is meant to run does run: paste the
+- [x] Any code block in the guide that is meant to run does run: paste the
       example into a scratch test file under `test/statifier/` temporarily,
       confirm it passes, and delete it (do not commit it - `case_test.exs`
       already covers the behavior).
@@ -963,6 +963,24 @@ advancement and the Manual items are deferred to the end.
       correctly, including which direction it forbids.
 - [ ] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
       new prose word for word in substance.
+- [ ] No Appendix D procedure is touched (documentation only).
+
+**Implementation Note**: as Phase 1.
+
+---
+
+### Phase 5
+
+- [ ] **The acceptance criterion, exercised end to end.** In a scratch Mix
+      project outside this repo, add `{:statifier, path: "<this worktree>"}`,
+      write the guide's example verbatim into `test/`, and run `mix test`. It
+      must pass with nothing copied from `test/support`. This is the one check
+      that proves the bead, and no in-repo test can stand in for it: in-repo,
+      `test/support` is on the compile path.
+- [ ] Repeat the scratch-project check with `MIX_ENV=prod mix compile` on the
+      dependency to confirm the promoted modules compile outside `:test`.
+- [ ] The guide reads as a how-to, not an explanation: a chart author gets to a
+      passing test without needing `docs/architecture.md`.
 - [ ] No Appendix D procedure is touched (documentation only).
 
 **Implementation Note**: as Phase 1.
