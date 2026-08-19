@@ -725,6 +725,22 @@ defmodule Statifier.Interpreter do
   # is `:undefined` - "no data" under ADR-0037, and the struct's own default
   # - alongside `nil` for a null payload and a bare string from `{:text, _}`
   # coercion. The `is_map/1` guard rejects all three alike.
+  #
+  # ADR-0051 decision 6, written down rather than coded around: 6.4 makes
+  # `<param>`/namelist interpretation platform-specific for a non-`scxml`
+  # invoked service type ("For targets of other invoked service types, the
+  # interpretation of `<param>` and `<content>` elements and the 'src' and
+  # 'namelist' attributes is platform-specific"), so both a type-conditional
+  # and a type-blind auto-assign conform. This platform picked type-blind
+  # and stayed there: this function runs off the *arriving event* alone,
+  # regardless of which handler delivered it, and that is deliberate, not an
+  # oversight this bead left unfinished. Making it type-conditional would
+  # give the core a second reason to consult the registered handler set, for
+  # a case with no consumer today; `<finalize>` semantics would then vary by
+  # deployment, a strictly worse debugging story under ADR-0012; and an
+  # empty `<finalize/>` is the author's own explicit request to auto-assign,
+  # the least surprising thing to honor uniformly across handler types. No
+  # behavior change here - see the ADR for the full argument.
   @spec auto_assign_finalize(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),

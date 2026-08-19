@@ -124,6 +124,7 @@ defmodule Statifier.Replay do
 
   alias Statifier.{Effect, Event, Interpreter, MachineState}
   alias Statifier.Effect.{Done, Invoke}
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Session.{Effects, Inbox, Recording}
 
   defmodule State do
@@ -138,7 +139,7 @@ defmodule Statifier.Replay do
       stream: [],
       pending: %{},
       raced: %{},
-      live_invoke_ids: MapSet.new(),
+      live_invoke_ids: %{},
       invoke_handlers: %{}
     ]
 
@@ -150,7 +151,12 @@ defmodule Statifier.Replay do
             stream: [Statifier.Replay.message()],
             pending: %{(String.t() | nil) => non_neg_integer()},
             raced: %{(String.t() | nil) => non_neg_integer()},
-            live_invoke_ids: MapSet.t(String.t()),
+            # `invoke_id => type` for every live invocation, mirroring
+            # `Statifier.Session.Invocations.types/1` (ADR-0051 decision 6):
+            # a `scxml` invocation's own entry omits its key entirely (its
+            # dispatch never needs the lookup), so `Map.keys/1` is this
+            # module's own `live_invoke_ids`-shaped membership set.
+            live_invoke_ids: %{String.t() => String.t()},
             # ADR-0051 decision 4: the recorded `:invoke_handlers` map
             # (`Statifier.Session.Recording.opts/1`), re-supplied here so
             # `plan_context/1`'s answer matches the live run's - see the
@@ -246,7 +252,7 @@ defmodule Statifier.Replay do
   defp apply_entry({:invoked_event, invoke_id, %Event{} = event, routes}, state) do
     state = stamp(state, routes)
 
-    if MapSet.member?(state.live_invoke_ids, invoke_id) do
+    if Map.has_key?(state.live_invoke_ids, invoke_id) do
       {:ok,
        %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)} |> drain()}
     else
@@ -398,16 +404,21 @@ defmodule Statifier.Replay do
   end
 
   # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
-  # decisions 2 and 4), built from the `%MachineState{}` this replay
+  # decisions 2, 4, and 6), built from the `%MachineState{}` this replay
   # already holds plus the recorded `:invoke_handlers` map, so both the
   # planner's `invoke_types` answer and its handler dispatch match the ones
-  # the live run was recorded under.
+  # the live run was recorded under. `invocation_types` is `state.
+  # live_invoke_ids` itself - this module's own `invoke_id => type` live
+  # projection, kept by the `{:notify, {:invoke, _}}`/`{:start_child, _, _}`/
+  # `{:stop_child, _}` clauses below the same way `Statifier.Session.
+  # Invocations.types/1` is kept live.
   @spec plan_context(state :: State.t()) :: Effects.context()
   defp plan_context(%State{} = state) do
     %{
       session_id: state.machine_state.datamodel["_sessionid"],
       invoke_types: state.machine_state.invoke_types,
-      invoke_handlers: state.invoke_handlers
+      invoke_handlers: state.invoke_handlers,
+      invocation_types: state.live_invoke_ids
     }
   end
 
@@ -419,6 +430,29 @@ defmodule Statifier.Replay do
   defp perform_instruction({:notify, {:done, %Done{}} = effect}, state, _override) do
     state = append(state, {:effect, effect})
     %{state | done_effect: elem(effect, 1)}
+  end
+
+  # Mirrors `Statifier.Session`'s own `{:notify, {:invoke, invoke}}` clause
+  # (its own comment carries the full reasoning): a registered `invoke.type`
+  # gets recorded into `live_invoke_ids` here, ahead of whatever
+  # `{:start_child, _, _}`/`{:handler, _, _}` instruction `plan_invoke/3`
+  # spliced in after it, so a handler-backed invocation is already tracked
+  # by the time this replay reaches a `{:invoked_event, invoke_id, _, _}`
+  # entry a `done_invocation/3` call produced (`apply_entry/2`'s own clause),
+  # and so `:cancel_invoke`/`:autoforward`'s handler dispatch
+  # (`Statifier.Session.Effects.plan_one/2`) sees the same type the live run
+  # did. `{:start_child, _, _}` below still runs for the built-in `scxml`
+  # case and simply re-writes the same `invoke_id => invoke.type` pair -
+  # harmless, and kept rather than dropped so the comment there needs no
+  # exception carved out of it.
+  defp perform_instruction({:notify, {:invoke, %Invoke{} = invoke} = effect}, state, _override) do
+    state = append(state, {:effect, effect})
+
+    if InvokeTypes.registered?(state.machine_state.invoke_types, invoke.type) do
+      %{state | live_invoke_ids: Map.put(state.live_invoke_ids, invoke.invoke_id, invoke.type)}
+    else
+      state
+    end
   end
 
   defp perform_instruction({:notify, effect}, state, _override) do
@@ -489,11 +523,11 @@ defmodule Statifier.Replay do
   # discards identically on replay (see `apply_entry/2`'s
   # `{:invoked_event, _, _}` clause below).
   defp perform_instruction(
-         {:start_child, %Invoke{invoke_id: invoke_id}, _effect},
+         {:start_child, %Invoke{invoke_id: invoke_id, type: type}, _effect},
          state,
          _override
        ) do
-    %{state | live_invoke_ids: MapSet.put(state.live_invoke_ids, invoke_id)}
+    %{state | live_invoke_ids: Map.put(state.live_invoke_ids, invoke_id, type)}
   end
 
   # `{:cancel_invoke, _}`'s own performed half (Decision 6): a live session
@@ -501,7 +535,7 @@ defmodule Statifier.Replay do
   # removes `invoke_id` from `live_invoke_ids` instead - the same predicate
   # change, with no process to cancel.
   defp perform_instruction({:stop_child, invoke_id}, state, _override) do
-    %{state | live_invoke_ids: MapSet.delete(state.live_invoke_ids, invoke_id)}
+    %{state | live_invoke_ids: Map.delete(state.live_invoke_ids, invoke_id)}
   end
 
   # A handler's `perform/2` is impure host/executor code (ADR-0051 decision

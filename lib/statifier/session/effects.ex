@@ -69,37 +69,60 @@ defmodule Statifier.Session.Effects do
 
   `plan/2`'s second argument is a plain map, not a bare session id:
   `%{session_id: String.t(), invoke_types: Statifier.Invoke.Types.t() |
-  nil, invoke_handlers: %{String.t() => module()}}` (ADR-0051 decisions 2
-  and 4). `session_id` is what every `plan_send/3` / `plan_send_delayed/3`
-  call used to receive directly; `invoke_types` is the caller-declared
-  registered set `plan_invoke/3` judges against, read off the same
-  `%MachineState{}` the core was stamped with, so the planner's answer and
-  the core's `maybe_record_active_invocation/5` answer cannot drift
-  (ADR-0047 decision 4); `invoke_handlers` is the per-session handler
-  dispatch map `plan_invoke/3` looks a registered type's module up in, and
-  is also exactly the `ctx` argument every `Statifier.Invoke.Handler`
-  planning callback receives. Both `Statifier.Session` and
-  `Statifier.Replay` build this map from the `%MachineState{}`/session
-  state they already hold before calling `plan/2`, deriving `invoke_types`
-  and `invoke_handlers` from the same source so the two cannot diverge
+  nil, invoke_handlers: %{String.t() => module()}, invocation_types:
+  %{String.t() => String.t()}}` (ADR-0051 decisions 2, 4, and 6).
+  `session_id` is what every `plan_send/3` / `plan_send_delayed/3` call used
+  to receive directly; `invoke_types` is the caller-declared registered set
+  `plan_invoke/3` judges against, read off the same `%MachineState{}` the
+  core was stamped with, so the planner's answer and the core's
+  `maybe_record_active_invocation/5` answer cannot drift (ADR-0047 decision
+  4); `invoke_handlers` is the per-session handler dispatch map
+  `plan_invoke/3` looks a registered type's module up in, and is also
+  exactly the `ctx` argument every `Statifier.Invoke.Handler` planning
+  callback receives; `invocation_types` is the *live* `invoke_id => type`
+  snapshot `plan_one/2`'s `:cancel_invoke`/`:autoforward` arms look a
+  tracked invocation's own type up in, before doing the same
+  `invoke_handlers` dispatch `plan_invoke/3` does at start time (decision
+  6). Both `Statifier.Session` and `Statifier.Replay` build this map from
+  the `%MachineState{}`/session state they already hold before calling
+  `plan/2`, deriving `invoke_types`, `invoke_handlers`, and
+  `invocation_types` from the same source so none of the three can diverge
   (ADR-0051 decision 3's "one constructor").
 
-  `:autoforward` plans `{:forward, invoke_id, event}` unconditionally - no
-  type or target check, since the effect is the core's own decision about an
-  invocation this session started, not a `<send>` with author-written
-  attributes. `Statifier.Session` looks `invoke_id` up in its invocation
-  table and forwards `event` unmodified (6.4.2's "All the fields specified in
-  5.10.1 ... MUST have the same values in the forwarded copy"); a miss is a
+  `:autoforward` and `:cancel_invoke` route through the owning invocation's
+  own handler (ADR-0051 decision 6), the same dispatch `plan_invoke/3` uses
+  for `start/2`: the plan context's `:invocation_types` map (built by
+  `Statifier.Session`/`Statifier.Replay` from the live invocation table,
+  `Statifier.Session.Invocations.types/1`) answers `invoke_id`'s own `type`,
+  looked up in `:invoke_handlers` the same way, defaulting to
+  `Statifier.Invoke.Handler.Scxml` when `invoke_id` names nothing tracked -
+  an invocation the built-in handler started (which never records its own
+  `type`, since its dispatch already defaults to it), or one that is no
+  longer live at all (a `cancel_invoke`/`autoforward` naming a
+  dead/never-started invocation). The built-in handler's `cancel/2` and
+  `forward/3` return exactly the `{:stop_child, invoke_id}`/`{:forward,
+  invoke_id, event}` instructions this module used to emit directly, so
+  dispatching through it changes nothing observable for `type=scxml`.
+
+  `:autoforward`'s dispatch carries no type or target check of its own
+  beyond the handler lookup, since the effect is the core's own decision
+  about an invocation this session started, not a `<send>` with
+  author-written attributes. The built-in handler's `{:forward, invoke_id,
+  event}` instruction has `Statifier.Session` look `invoke_id` up in its
+  invocation table and forward `event` unmodified (6.4.2's "All the fields
+  specified in 5.10.1 ... MUST have the same values in the forwarded
+  copy"); a miss, or a handler-backed entry with no pid to deliver to, is a
   silent no-op, not an error (6.4.3's MUST-ignore for a cancelled
   invocation).
 
-  `:cancel_invoke` plans `{:stop_child, invoke_id}` unconditionally - no type
-  or target check either, for the same reason `:autoforward` needs none:
-  this is the core's own reaction to a state exiting while one of its
-  `<invoke>`s is still live, not an author-addressed element.
-  `Statifier.Session` pops the table entry, demonitors, and cancels the
-  child (6.4.3); a miss is a silent no-op, the invocation having already
-  been popped by its own `:DOWN` or a prior cancel.
+  `:cancel_invoke`'s dispatch is unconditional for the same reason
+  `:autoforward`'s is: this is the core's own reaction to a state exiting
+  while one of its `<invoke>`s is still live, not an author-addressed
+  element. The built-in handler's `{:stop_child, invoke_id}` instruction has
+  `Statifier.Session` pop the table entry and, when it held a pid, demonitor
+  and cancel the child (6.4.3); a miss, or an entry with no pid, is a
+  silent no-op - the invocation having already been popped by its own
+  `:DOWN` or a prior cancel, or never having had a child process at all.
   """
 
   alias Statifier.{Effect, Event}
@@ -114,19 +137,24 @@ defmodule Statifier.Session.Effects do
   @type raise_kind :: :internal | :platform
 
   @typedoc """
-  The pure fold's context (ADR-0051 decisions 2 and 4) - see the
+  The pure fold's context (ADR-0051 decisions 2, 4, and 6) - see the
   moduledoc's "The plan context" section, and
-  `Statifier.Invoke.Handler.t:ctx/0`, which this is. `session_id` is the
-  sending session's own id (spec 5.10's `_sessionid`); `invoke_types` is
+  `Statifier.Invoke.Handler.t:ctx/0`, which this is (plus `invocation_types`,
+  a key no handler callback reads - see its own doc below). `session_id` is
+  the sending session's own id (spec 5.10's `_sessionid`); `invoke_types` is
   the caller-declared registered-type snapshot `plan_invoke/3` judges
   against, or `nil` for "no declaration made"; `invoke_handlers` is the
   per-session `<invoke type> => module` dispatch map `plan_invoke/3` looks
-  a registered type's handler up in.
+  a registered type's handler up in; `invocation_types` is the live
+  `invoke_id => type` snapshot `plan_one/2`'s `:cancel_invoke`/
+  `:autoforward` arms judge against before doing the same
+  `invoke_handlers` dispatch.
   """
   @type context :: %{
           session_id: String.t(),
           invoke_types: InvokeTypes.t() | nil,
-          invoke_handlers: %{String.t() => module()}
+          invoke_handlers: %{String.t() => module()},
+          invocation_types: %{String.t() => String.t()}
         }
 
   @typedoc "One instruction for `Statifier.Session` to perform."
@@ -151,8 +179,11 @@ defmodule Statifier.Session.Effects do
   - see the moduledoc's "The plan context" section): `session_id` is the
   sending session's own id (spec 5.10's `_sessionid`), needed to build a
   delivered event's `origin`; `invoke_types` is the registered-type
-  snapshot `plan_invoke/3` judges against, and `invoke_handlers` is the
-  dispatch map it looks a registered type's handler module up in. `:log`,
+  snapshot `plan_invoke/3` judges against, `invoke_handlers` is the
+  dispatch map it looks a registered type's handler module up in, and
+  `invocation_types` is the live snapshot `:cancel_invoke`/`:autoforward`
+  judge a tracked invocation's own type against before the same dispatch.
+  `:log`,
   `:datamodel_change`,
   `:datamodel_init`, and `:trace` effects plan to nothing but their own
   `{:notify, effect}`.
@@ -180,12 +211,16 @@ defmodule Statifier.Session.Effects do
     [{:notify, effect} | plan_invoke(invoke, effect, context)]
   end
 
-  defp plan_one({:cancel_invoke, %CancelInvoke{invoke_id: invoke_id}} = effect, _context) do
-    [{:notify, effect}, {:stop_child, invoke_id}]
+  defp plan_one({:cancel_invoke, %CancelInvoke{invoke_id: invoke_id}} = effect, context) do
+    {:ok, instructions} = handler_for(invoke_id, context).cancel(invoke_id, context)
+    [{:notify, effect} | instructions]
   end
 
-  defp plan_one({:autoforward, %Autoforward{} = af} = effect, _context) do
-    [{:notify, effect}, {:forward, af.invoke_id, af.event}]
+  defp plan_one({:autoforward, %Autoforward{} = af} = effect, context) do
+    {:ok, instructions} =
+      handler_for(af.invoke_id, context).forward(af.invoke_id, af.event, context)
+
+    [{:notify, effect} | instructions]
   end
 
   defp plan_one({:done, _done} = effect, _context) do
@@ -272,16 +307,37 @@ defmodule Statifier.Session.Effects do
         ]
   defp plan_invoke(invoke, _effect, %{invoke_types: invoke_types} = context) do
     if InvokeTypes.registered?(invoke_types, invoke.type) do
-      handler_module =
-        context |> Map.get(:invoke_handlers, %{}) |> Map.get(invoke.type, ScxmlHandler)
-
-      case handler_module.start(invoke, context) do
+      case handler_module_for_type(invoke.type, context).start(invoke, context) do
         {:ok, instructions} -> instructions
         {:error, _reason} -> [invoke_execution_error(invoke)]
       end
     else
       [invoke_execution_error(invoke)]
     end
+  end
+
+  # `plan_invoke/3`'s own type -> handler lookup, factored out so
+  # `plan_one/2`'s `:cancel_invoke`/`:autoforward` arms (`handler_for/2`
+  # below) can share it rather than re-deriving the default.
+  @spec handler_module_for_type(type :: String.t() | nil, context :: context()) :: module()
+  defp handler_module_for_type(type, context) do
+    context |> Map.get(:invoke_handlers, %{}) |> Map.get(type, ScxmlHandler)
+  end
+
+  # `:cancel_invoke`/`:autoforward`'s own handler lookup (ADR-0051 decision
+  # 6): `invoke_id`'s type comes from the *live* `invocation_types`
+  # snapshot (`Statifier.Session.Invocations.types/1`), not from the effect
+  # itself - `Effect.CancelInvoke`/`Effect.Autoforward` carry no `type`
+  # field, only `invoke_id`. A miss (the invocation is no longer live at
+  # all - already popped by a prior cancel or a handler's own
+  # `done_invocation/3`) falls through to `handler_module_for_type/2`'s own
+  # `nil` default, `ScxmlHandler` - the same instruction this module
+  # emitted unconditionally before this dispatch existed, so a miss changes
+  # nothing observable.
+  @spec handler_for(invoke_id :: String.t(), context :: context()) :: module()
+  defp handler_for(invoke_id, context) do
+    type = context |> Map.get(:invocation_types, %{}) |> Map.get(invoke_id)
+    handler_module_for_type(type, context)
   end
 
   @spec invoke_execution_error(invoke :: Invoke.t()) :: instruction()

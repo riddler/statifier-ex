@@ -549,6 +549,40 @@ defmodule Statifier.Session do
   end
 
   @doc """
+  The door a non-`scxml` `<invoke>` handler's host uses when its externally
+  run service has finished (ADR-0051 decision 5) - the generalization of
+  what a child `Statifier.Session` does for itself through
+  `return_done_event/2` when *it* halts `:done`. Constructs
+  `done.invoke.<invoke_id>` from `donedata` (spec 6.4's own shape: the
+  service's `<donedata>`, or whatever a process-less host's own equivalent
+  is - 6.4's MUST here is on the *service*, not this engine, which only
+  provides the door and documents what arrives through it), stamps
+  `invokeid`, and delivers it exactly as `send_invoked_event/3` would -
+  through the same invocation-tagged entry, subject to the same 6.4.3
+  drain-time discard if `invoke_id` is no longer live by the time it is
+  dequeued (a late arrival for an invocation already cancelled). `server`
+  is `invoke_id`'s own *owning* session - the one whose `<invoke>` started
+  it, not a child of it, since a handler-backed invocation has no child
+  session at all; the built-in `scxml` handler's own completion
+  (`return_done_event/2`) calls this the same way, on its own parent.
+
+  `invoke_id`'s table entry is popped once the delivered event has cleared
+  the drain that decides whether to discard it - not synchronously here,
+  which would make the very entry this call is reporting on already look
+  gone to that same drain-time check (`handle_info/2`'s `{:pop_invocation,
+  _}` clause below carries the full reasoning). A handler-backed
+  invocation's entry (ADR-0051 decision 6) has no pid for a `:DOWN` to pop
+  on its own, so this call is the only place it is ever removed; calling
+  this for an invocation this session already popped (a prior cancel, or a
+  second `done_invocation/3` call for the same id) is a harmless no-op both
+  times - the discard drops the event, and the pop finds nothing.
+  """
+  @spec done_invocation(server :: server(), invoke_id :: String.t(), donedata :: term()) :: :ok
+  def done_invocation(server, invoke_id, donedata \\ nil) when is_binary(invoke_id) do
+    GenServer.cast(server, {:done_invocation, invoke_id, donedata})
+  end
+
+  @doc """
   Hands `effects` - any list of `Statifier.Effect.t()` values, from any
   driver of the pure core - to this session's own effect-interpretation
   path: planned through `Statifier.Session.Effects.plan/1` and performed
@@ -1018,16 +1052,24 @@ defmodule Statifier.Session do
   end
 
   def handle_cast({:enqueue_invoked_event, invoke_id, event}, state) do
-    state = stamp(state)
+    {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
+  end
 
-    state =
-      record(
-        state,
-        &Recording.put_invoked_event(&1, invoke_id, event, state.machine_state.routes)
-      )
-
-    {:noreply, %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)},
-     {:continue, :drain}}
+  # `done_invocation/3`'s own cast: `build_done_event/3` is the one
+  # `done.invoke.<invoke_id>` construction site `return_done_event/2` also
+  # calls through (`done_invocation/3`'s own doc). The entry pop is
+  # deliberately *not* here - `send(self(), {:pop_invocation, invoke_id})`
+  # queues it behind the `{:continue, :drain}}` this cast returns, which
+  # fully drains (including the entry just enqueued below) before the
+  # GenServer's receive loop looks at the next message; popping
+  # synchronously in this same clause would make `state.invocations`, as
+  # seen by that very drain, already look like `invoke_id` is not live -
+  # discarding the event this call exists to deliver. See
+  # `handle_info/2`'s `{:pop_invocation, _}` clause for the other half.
+  def handle_cast({:done_invocation, invoke_id, donedata}, state) do
+    event = build_done_event(state.session_id, invoke_id, donedata)
+    send(self(), {:pop_invocation, invoke_id})
+    {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
 
   def handle_cast(:enqueue_cancel, state) do
@@ -1104,6 +1146,25 @@ defmodule Statifier.Session do
           _other -> {:noreply, state}
         end
     end
+  end
+
+  # `done_invocation/3`'s own deferred half (its own doc, and
+  # `handle_cast/2`'s `{:done_invocation, _, _}` clause): a handler-backed
+  # invocation has no pid, so nothing ever sends this session a `:DOWN` for
+  # it - this message is the only removal `done_invocation/3` gets, and it
+  # is sent (`send(self(), _)`) rather than popped inline specifically so it
+  # lands *after* the `{:continue, :drain}}` that same cast returns has run
+  # to completion: a GenServer's `handle_continue/2` chain always finishes
+  # before the next mailbox message is taken, so by the time this clause
+  # runs, the done event `done_invocation/3` just enqueued has already
+  # either been delivered (found `invoke_id` live) or discarded (found it
+  # already popped by an intervening cancel) - never the reverse, which
+  # popping synchronously in the cast would have risked. `Invocations.pop/2`
+  # is idempotent on a miss, so a `invoke_id` a prior cancel already popped
+  # costs nothing here.
+  def handle_info({:pop_invocation, invoke_id}, state) do
+    {_entry, invocations} = Invocations.pop(state.invocations, invoke_id)
+    {:noreply, %{state | invocations: invocations}}
   end
 
   # Spec 6.2: "If the SCXML session terminates before the delay interval has
@@ -1250,17 +1311,21 @@ defmodule Statifier.Session do
   end
 
   # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
-  # decisions 2 and 4), built from the `%MachineState{}`/session state this
-  # session already holds so the planner's `invoke_types` answer and the
-  # core's own stamp cannot diverge, and so `invoke_handlers` is the same
-  # map `init/1` derived `invoke_types` from (decision 3's "one
-  # constructor").
+  # decisions 2, 4, and 6), built from the `%MachineState{}`/session state
+  # this session already holds so the planner's `invoke_types` answer and
+  # the core's own stamp cannot diverge, and so `invoke_handlers` is the
+  # same map `init/1` derived `invoke_types` from (decision 3's "one
+  # constructor"). `invocation_types` is `state.invocations`'s own live
+  # snapshot (`Invocations.types/1`), re-derived on every call rather than
+  # cached, exactly like `invoke_types`/`invoke_handlers` above - it always
+  # reflects the table as it stood the moment this plan was built.
   @spec plan_context(state :: State.t()) :: Effects.context()
   defp plan_context(%State{} = state) do
     %{
       session_id: state.session_id,
       invoke_types: state.machine_state.invoke_types,
-      invoke_handlers: state.invoke_handlers
+      invoke_handlers: state.invoke_handlers,
+      invocation_types: Invocations.types(state.invocations)
     }
   end
 
@@ -1287,6 +1352,50 @@ defmodule Statifier.Session do
     notify(state, {:effect, effect})
     Telemetry.effect(state.session_id, state.machine_state.machine, effect)
     %{state | done_effect: elem(effect, 1)}
+  end
+
+  # ADR-0051 decision 6: a handler-backed invocation (dispatched to a
+  # non-`scxml` `Statifier.Invoke.Handler`) has no `{:start_child, _, _}`
+  # instruction to record it through - `plan_invoke/3` spliced its own
+  # `start/2` instructions in instead, and this session cannot tell from
+  # those alone (an opaque `{:handler, module, payload}` among them, in the
+  # common case) which `invoke_id` they belong to or whether `start/2` even
+  # produced them for *this* effect. The `{:invoke, _}` effect's own
+  # `{:notify, _}` instruction is always planned immediately ahead of
+  # whatever `start/2` returned (`Effects.plan_one/2`), so it is read here
+  # instead: a registered `invoke.type` (`InvokeTypes.registered?/2`, the
+  # same test `plan_invoke/3` itself runs, no I/O) gets a pid-less entry
+  # recording `invoke.type` - the only fact `Statifier.Session.Effects.
+  # plan_one/2`'s later `:cancel_invoke`/`:autoforward` dispatch
+  # (`handler_for/2`) needs to route back to the same handler. This runs for
+  # a built-in `scxml` invoke too, not only a handler-backed one: `type`
+  # unconditionally recorded here is what lets an `invoke_handlers` map that
+  # explicitly overrides the literal `"scxml"` type still be honored on
+  # cancel/forward, the same as it already is on start - and `start_child/5`
+  # below overwrites this entry with the real one (pid, monitor_ref,
+  # session_id) once the child actually starts, carrying `type` forward
+  # rather than dropping it. An unregistered type, about to raise instead of
+  # starting, is left untouched: it never becomes live at all (mirroring
+  # `maybe_record_active_invocation/5`, which records `active_invocations`
+  # off `type` registration alone, not off whether the session-side start
+  # later succeeds).
+  defp perform_instruction({:notify, {:invoke, %Invoke{} = invoke} = effect}, state, _override) do
+    notify(state, {:effect, effect})
+    Telemetry.effect(state.session_id, state.machine_state.machine, effect)
+
+    if InvokeTypes.registered?(state.machine_state.invoke_types, invoke.type) do
+      entry = %{
+        type: invoke.type,
+        session_id: nil,
+        pid: nil,
+        monitor_ref: nil,
+        autoforward: invoke.autoforward == true
+      }
+
+      %{state | invocations: Invocations.put(state.invocations, invoke.invoke_id, entry)}
+    else
+      state
+    end
   end
 
   defp perform_instruction({:notify, effect}, state, _override) do
@@ -1364,16 +1473,19 @@ defmodule Statifier.Session do
   # 6.4.2's autoforward delivery: `event` is the core's own copy, unmodified
   # ("All the fields specified in 5.10.1 ... MUST have the same values in the
   # forwarded copy of the event"), so it is never rebuilt through
-  # `Effect.Send`. A miss in `state.invocations` is a silent no-op, not an
-  # error: the invocation was cancelled or the child died between the core's
-  # finalize/autoforward pass and this instruction, and 6.4 specifies no
-  # error for forwarding to a gone child - the cancelled case is 6.4.3's
-  # MUST-ignore, which is a silence requirement, not an
-  # `error.communication` one.
+  # `Effect.Send`. A miss in `state.invocations`, or an entry with no `pid`
+  # (ADR-0051 decision 6: a handler-backed invocation whose `forward/3`
+  # chose to reuse this built-in instruction rather than routing an actual
+  # delivery through its own `perform/2`), is a silent no-op, not an error:
+  # for a miss, the invocation was cancelled or the child died between the
+  # core's finalize/autoforward pass and this instruction, and 6.4 specifies
+  # no error for forwarding to a gone child - the cancelled case is 6.4.3's
+  # MUST-ignore, which is a silence requirement, not an `error.communication`
+  # one.
   defp perform_instruction({:forward, invoke_id, event}, state, _override) do
     case Invocations.fetch(state.invocations, invoke_id) do
-      {:ok, %{pid: pid}} -> send_event(pid, event)
-      :error -> :ok
+      {:ok, %{pid: pid}} when is_pid(pid) -> send_event(pid, event)
+      _miss_or_pidless -> :ok
     end
 
     state
@@ -1391,10 +1503,16 @@ defmodule Statifier.Session do
   # which is `Interpreter.cancel/1`'s own `exit_interpreter/1` walk;
   # `GenServer.stop/2` would tear the process down with none of them run. A
   # miss (the invocation already popped by its own `:DOWN`, or a prior
-  # cancel of the same id) is a silent no-op.
+  # cancel of the same id) is a silent no-op - and so, symmetrically, is a
+  # popped entry with no `pid` (ADR-0051 decision 6's handler-backed entry):
+  # there is no child process to demonitor or cancel, only the table entry
+  # itself to drop.
   defp perform_instruction({:stop_child, invoke_id}, state, _override) do
     case Invocations.pop(state.invocations, invoke_id) do
       {nil, invocations} ->
+        %{state | invocations: invocations}
+
+      {%{pid: nil}, invocations} ->
         %{state | invocations: invocations}
 
       {%{pid: pid, monitor_ref: ref}, invocations} ->
@@ -1437,34 +1555,62 @@ defmodule Statifier.Session do
   # `exitInterpreter`'s own `returnDoneEvent` (Appendix D declares it
   # platform-specific and gives it no pseudocode): 6.4.3's
   # `done.invoke.<invokeid>`, carrying the child's own `<donedata>`, reaches
-  # the parent's **external** queue directly through `send_invoked_event/3`
-  # - not through ADR-0039's `deliver_internal/5` door, which is for routing
-  # failures on the *sending* session's own queue, not for this session
-  # telling its parent it finished. Only a `:done` halt with a live
-  # `invoked_by` qualifies: `:cancelled` is 6.4.3's own "MUST NOT generate
-  # the done.invoke.id event" (a cancelled child halts `:cancelled`, never
-  # `:done`, so this clause never matches it), `:budget_exhausted` has not
-  # finished processing in 6.4.2's sense either, and `invoked_by: nil` (an
-  # ordinary, uninvoked session) has no parent to tell. `state.done_effect`
-  # is populated here because `{:notify, {:done, %Done{}}}` always precedes
-  # `{:halt, :done}` in `Statifier.Session.Effects.plan_one/2`'s own output
-  # for the `{:done, _}` effect - an existing ordering guarantee this clause
-  # leans on, not a new one.
+  # the parent through `done_invocation/3` - the same door ADR-0051 decision
+  # 5 gives a handler-backed invocation's own host, so there is one
+  # `done.invoke` construction site rather than two (this clause used to
+  # build the event inline through `Event.external/2` directly). Only a
+  # `:done` halt with a live `invoked_by` qualifies: `:cancelled` is 6.4.3's
+  # own "MUST NOT generate the done.invoke.id event" (a cancelled child
+  # halts `:cancelled`, never `:done`, so this clause never matches it),
+  # `:budget_exhausted` has not finished processing in 6.4.2's sense either,
+  # and `invoked_by: nil` (an ordinary, uninvoked session) has no parent to
+  # tell. `state.done_effect` is populated here because `{:notify, {:done,
+  # %Done{}}}` always precedes `{:halt, :done}` in
+  # `Statifier.Session.Effects.plan_one/2`'s own output for the `{:done, _}`
+  # effect - an existing ordering guarantee this clause leans on, not a new
+  # one.
   @spec return_done_event(reason :: :done | :cancelled | :budget_exhausted, state :: State.t()) ::
           :ok
   defp return_done_event(:done, %State{invoked_by: {parent_pid, invoke_id}} = state) do
-    event =
-      Event.external("done.invoke." <> invoke_id,
-        data: state.done_effect.donedata,
-        invokeid: invoke_id,
-        origin: SystemVariables.scxml_location(state.session_id),
-        origintype: SystemVariables.scxml_event_processor()
-      )
-
-    send_invoked_event(parent_pid, invoke_id, event)
+    done_invocation(parent_pid, invoke_id, state.done_effect.donedata)
   end
 
   defp return_done_event(_reason, _state), do: :ok
+
+  # `done.invoke.<invoke_id>`'s one construction site (ADR-0051 decision 5):
+  # both `handle_cast/2`'s `{:done_invocation, _, _}` clause and, through
+  # `done_invocation/3`, `return_done_event/2`'s own `:done` clause build the
+  # event here rather than each inlining `Event.external/2` - the shape
+  # `docs/extending.md` documents for a process-less host to match.
+  @spec build_done_event(session_id :: String.t(), invoke_id :: String.t(), donedata :: term()) ::
+          Event.t()
+  defp build_done_event(session_id, invoke_id, donedata) do
+    Event.external("done.invoke." <> invoke_id,
+      data: donedata,
+      invokeid: invoke_id,
+      origin: SystemVariables.scxml_location(session_id),
+      origintype: SystemVariables.scxml_event_processor()
+    )
+  end
+
+  # `{:enqueue_invoked_event, _, _}`'s own body, factored out so
+  # `handle_cast/2`'s `{:done_invocation, _, _}` clause can enqueue its own
+  # constructed event the same recorded, invocation-tagged way (`stamp/1`,
+  # `Recording.put_invoked_event/4`, `Inbox.enqueue_invoked_event/3`)
+  # without duplicating it.
+  @spec enqueue_invoked(state :: State.t(), invoke_id :: String.t(), event :: Event.t()) ::
+          State.t()
+  defp enqueue_invoked(state, invoke_id, event) do
+    state = stamp(state)
+
+    state =
+      record(
+        state,
+        &Recording.put_invoked_event(&1, invoke_id, event, state.machine_state.routes)
+      )
+
+    %{state | inbox: Inbox.enqueue_invoked_event(state.inbox, invoke_id, event)}
+  end
 
   # -- <invoke> starting -----------------------------------------------
 
@@ -1488,6 +1634,7 @@ defmodule Statifier.Session do
     case start_session(machine, invoke, datamodel, state) do
       {:ok, pid} ->
         entry = %{
+          type: invoke.type,
           session_id: session_id(pid),
           pid: pid,
           monitor_ref: Process.monitor(pid),

@@ -19,6 +19,16 @@ defmodule Statifier.Session.InvocationsTest do
     )
   end
 
+  # A handler-backed entry (ADR-0051 decision 6): no child process, so no
+  # `pid`, `session_id`, or `monitor_ref` - `type` is the only thing that
+  # tells cancel/forward dispatch apart from a built-in `scxml` entry.
+  defp handler_entry(overrides \\ %{}) do
+    Map.merge(
+      %{type: "test:echo", session_id: nil, pid: nil, monitor_ref: nil, autoforward: false},
+      overrides
+    )
+  end
+
   describe "new/0" do
     # sabotage: n/a - asserts only the empty table's shape, not any
     # decision-bearing lib/ behavior beyond the two functions below already
@@ -105,6 +115,51 @@ defmodule Statifier.Session.InvocationsTest do
     test "a pid naming no live invocation is a no-op" do
       assert {nil, unchanged} = Invocations.pop_by_pid(Invocations.new(), self())
       assert Invocations.count(unchanged) == 0
+    end
+  end
+
+  describe "a handler-backed entry (ADR-0051 decision 6)" do
+    # sabotage: `put/3`'s `by_pid = if pid, do: Map.put(by_pid, pid,
+    # invoke_id), else: by_pid` is changed to index unconditionally
+    # (`Map.put(by_pid, pid, invoke_id)`, dropping the `if`) -> `by_pid`
+    # gains a `nil => "i1"` entry it should not have, reddening the direct
+    # `by_pid` assertion below. Reverted and confirmed green.
+    test "put/3 leaves by_pid untouched for a pid-less entry" do
+      invocations = Invocations.put(Invocations.new(), "i1", handler_entry())
+
+      assert {:ok, %{pid: nil, type: "test:echo"}} = Invocations.fetch(invocations, "i1")
+      assert invocations.by_pid == %{}
+    end
+
+    # sabotage: `pop/2`'s `{%{pid: nil} = entry, rest_entries} -> {entry,
+    # %__MODULE__{entries: rest_entries, by_pid: by_pid}}` clause is changed
+    # to return `entries` (the *pre*-pop map) instead of `rest_entries` -
+    # `pop/2` claims to have removed "i1" but the entry is still there,
+    # reddening the `fetch/2` assertion below.
+    test "pop/2 returns a pid-less entry, and it is gone afterward" do
+      invocations = Invocations.put(Invocations.new(), "i1", handler_entry())
+
+      assert {%{pid: nil, type: "test:echo"}, rest} = Invocations.pop(invocations, "i1")
+      assert Invocations.fetch(rest, "i1") == :error
+      assert Invocations.count(rest) == 0
+    end
+
+    # sabotage: `put/3`'s pid-index guard is inverted (`if is_nil(pid), do:
+    # Map.put(by_pid, pid, invoke_id), else: by_pid`) -> the real
+    # pid-bearing sibling below stops being indexed at all, so
+    # `pop_by_pid/2` on its actual pid finds nothing, reddening the second
+    # assertion.
+    test "pop_by_pid/2 never finds a pid-less entry, but still finds a pid-bearing sibling" do
+      pid = self()
+
+      invocations =
+        Invocations.new()
+        |> Invocations.put("i1", handler_entry())
+        |> Invocations.put("i2", entry(pid))
+
+      assert {{"i2", %{pid: ^pid}}, invocations} = Invocations.pop_by_pid(invocations, pid)
+      assert Invocations.fetch(invocations, "i1") == {:ok, handler_entry()}
+      assert Invocations.count(invocations) == 1
     end
   end
 

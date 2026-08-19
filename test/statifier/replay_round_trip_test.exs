@@ -744,5 +744,48 @@ defmodule Statifier.ReplayRoundTripTest do
                "test:echo" => EchoHandler
              }
     end
+
+    # sabotage: `Statifier.Session.Effects.plan_one/2`'s `:cancel_invoke` arm
+    # is changed to drop the leading `{:notify, effect}` (`[{:notify, effect}
+    # | instructions]` -> `instructions`) -> the `%Effect.CancelInvoke{}}`
+    # never reaches either stream (live or replayed, both fold through the
+    # same `plan_one/2`), so `cancel_index` below is `nil` and the
+    # `cancel_index < entry_index` assertion reddens (a number never compares
+    # less than `nil` under Elixir's term ordering). Reverted and confirmed
+    # green.
+    test "a handler-backed invocation's cancel is ordered between exit and entry, identically live and replayed" do
+      machine = compile!(handler_invoke_doc())
+
+      {_recording, stream, _result} =
+        round_trip(machine, [invoke_handlers: %{"test:echo" => EchoHandler}], fn session ->
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["a"]) end)
+          Session.send_event(session, "go")
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+        end)
+
+      # "a"'s own initial entry (session start) produces the first
+      # `%Effect.Trace.EntrySet{}` in the stream, ahead of anything this
+      # test drives - the entry this ordering assertion cares about is the
+      # one into "b" *after* "a" exits and "inv1" cancels, so `entry_index`
+      # is found from the exit-set's own position onward, not from the top.
+      exit_index =
+        Enum.find_index(stream, &match?({:effect, {:trace, %Effect.Trace.ExitSet{}}}, &1))
+
+      cancel_index =
+        Enum.find_index(
+          stream,
+          &match?({:effect, {:cancel_invoke, %Effect.CancelInvoke{invoke_id: "inv1"}}}, &1)
+        )
+
+      entry_index =
+        exit_index +
+          Enum.find_index(
+            Enum.drop(stream, exit_index),
+            &match?({:effect, {:trace, %Effect.Trace.EntrySet{}}}, &1)
+          )
+
+      assert exit_index < cancel_index
+      assert cancel_index < entry_index
+    end
   end
 end
