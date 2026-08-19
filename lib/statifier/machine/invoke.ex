@@ -29,7 +29,11 @@ defmodule Statifier.Machine.Invoke do
   channels identically at the invoked service - they stay apart here only so
   the validator can enforce 6.4.1's "namelist Must not occur with the
   `<param>` element" and so a later empty-`<finalize>` auto-assign can find
-  its write targets by name.
+  its write targets by name. A `namelist` entry that fails to compile as a
+  location expression does not fail `Statifier.Compiler.compile/1`: it
+  carries `{:invalid, error}` on the entry's `expr` (5.9.4 deferral, see
+  `Statifier.Machine.Param`) and aborts the invocation at execute time -
+  `Interpreter.resolve_params/2` - rather than at load time.
 
   `content` folds `<content>`'s markup into a single `Machine.expr()`,
   exactly as `Machine.Donedata.expr` does - `nil` when `<invoke>` has no
