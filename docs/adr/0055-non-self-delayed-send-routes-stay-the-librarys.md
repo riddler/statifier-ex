@@ -1,6 +1,6 @@
-# ADR-0053: Non-self delayed-send routes stay the library's
+# ADR-0055: Non-self delayed-send routes stay the library's
 
-Status: accepted (2026-08-19) - decides the gap ADR-0052's Consequences
+Status: accepted (2026-08-19) - decides the gap ADR-0054's Consequences
 recorded ("Non-self-routed delayed sends are not durably schedulable
 today"): the limit is standing for `#_parent`, `#_invokeid`, and
 `#_internal`, and deferred with a named trigger for the external-session
@@ -8,7 +8,7 @@ route; no route field joins `%SendDelayed{}`
 
 ## Context
 
-ADR-0052, as amended, scopes durable timers to a `<send delay="...">`
+ADR-0054, as amended, scopes durable timers to a `<send delay="...">`
 whose target is absent or parses to `:self`, and its Consequences record
 the rest as "an open gap, recorded rather than solved." This record
 answers the direction question that gap leaves open: should a
@@ -17,10 +17,10 @@ is not the session itself, and if so, what carries the resolved route to
 it?
 
 Three facts from the code bound the answer, and the first one reframes
-the question as ADR-0052 posed it.
+the question as ADR-0054 posed it.
 
 **1. The resolved route is already visible to a host - the carrier
-question is not the real limit.** ADR-0052 decision 2 says a host "can
+question is not the real limit.** ADR-0054 decision 2 says a host "can
 see `target` as the author wrote it, but not the library's resolution of
 it," because `plan_send_delayed/3`
 (`lib/statifier/session/effects.ex:270-288`) hands the resolved route to
@@ -74,7 +74,7 @@ private `deliver_internal/6`; no public equivalent exists. Worse, for a
 timer that fired hours later precisely because it outlived a node, the
 *sending session* may itself be gone - the MUST has no queue to land on,
 a situation the in-process design never faces because `terminate/2`
-cancels the timers first (spec 6.2's discard, ADR-0052 decision 4).
+cancels the timers first (spec 6.2's discard, ADR-0054 decision 4).
 
 **Why the routes are not all the same kind of limited.** C.1 defines the
 parent and invoke routes relative to a live invocation relationship,
@@ -112,7 +112,7 @@ live, drivable sender. These three routes are limited by what they
 The external-session route is different in kind. `{:session, sid}`
 resolves through `Registry.lookup(Statifier.Registry, sid)` and delivers
 by `send_event/2` (`lib/statifier/session.ex:1759-1768`) - both doors
-ADR-0052 decision 4 already points hosts at for the liveness check. And
+ADR-0054 decision 4 already points hosts at for the liveness check. And
 session ids are caller-suppliable (`MachineState.new/2`'s `:session_id`
 option, `lib/statifier/machine_state.ex:465`, default a generated `sess_`
 UXID), so an embedder *can* hold stable, restart-surviving target ids.
@@ -174,23 +174,23 @@ not rediscovered:
   question).
 - **The identity story.** Host-stable `:session_id`s make the target
   nameable today, but whether the *sender's* identity (for `origin` and
-  the ADR-0052 decision 3 session scope) survives a restart is st-m5c3's
+  the ADR-0054 decision 3 session scope) survives a restart is st-m5c3's
   territory; that record should land on top of, or explicitly ahead of,
   st-m5c3's serialization contract.
 
-Until that trigger fires, ADR-0052 decision 2's host rule is unchanged:
+Until that trigger fires, ADR-0054 decision 2's host rule is unchanged:
 for any non-nil target, leave the timer to the library.
 
 ## Consequences
 
-- ADR-0052's recorded gap is decided rather than standing: permanent for
+- ADR-0054's recorded gap is decided rather than standing: permanent for
   three routes on semantic grounds, deferred with a trigger for
-  `{:session, sid}`. ADR-0052's status line gains a pointer to this
+  `{:session, sid}`. ADR-0054's status line gains a pointer to this
   record, and its Consequences bullet cross-references it; its decisions
-  are otherwise untouched - this record narrows nothing 0052 states and
+  are otherwise untouched - this record narrows nothing 0054 states and
   widens nothing.
 - `docs/durable-timers.md`'s pointer at the gap ("see Open Question 1 in
-  ADR-0052's Consequences", which named a bullet 0052 does not number)
+  ADR-0054's Consequences", which named a bullet 0054 does not number)
   now cites this record instead.
 - Nothing in `lib/` or `test/` changes. `%SendDelayed{}` keeps its
   ADR-0046 shape; `Target.parse/1`, `deliver/5`, `deliver_fired/4`, and

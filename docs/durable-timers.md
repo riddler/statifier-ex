@@ -21,8 +21,8 @@ firing silently drops the send.
 this substitution the day the effect boundary was decided: "Embedders can
 supply their own effect interpreter (e.g. queue delayed sends into Oban
 instead of process timers)." That sentence named the destination; this guide
-and `docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md` are it.
-ADR-0052 is the contract this guide teaches - read it once, alongside this
+and `docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md` are it.
+ADR-0054 is the contract this guide teaches - read it once, alongside this
 document, if you want the reasoning behind a rule rather than only the rule.
 
 ## What you consume
@@ -70,7 +70,7 @@ vocabulary - `{:schedule, ...}` and `{:cancel_timers, ...}`
 though the two names look like an obvious match for "schedule a timer" and
 "cancel a timer." `docs/extending.md:58-59` already states the general rule:
 "The instruction vocabulary a planning callback returns is opaque outside the
-library." ADR-0052 decision 1 applies that same rule to the timer case by
+library." ADR-0054 decision 1 applies that same rule to the timer case by
 name, because `{:schedule, ...}` and `{:cancel_timers, ...}` are how
 `Statifier.Session` itself performs `Process.send_after/3` and
 `Process.cancel_timer/1` internally - if you have seen those atoms in a stack
@@ -87,7 +87,7 @@ target is yours to schedule.** `plan_send_delayed/3`
 route - `:self` for `nil`, `:internal` for `#_internal`, `:parent` for
 `#_parent`, `{:session, id}` for `#_scxml_<id>`, `{:invoke, id}` for any other
 `#_`-prefixed target - and that resolved route travels on the opaque
-`{:schedule, ...}` instruction (ADR-0052 decision 1 forbids reading it), never
+`{:schedule, ...}` instruction (ADR-0054 decision 1 forbids reading it), never
 on the `%SendDelayed{}` effect itself. `target` on the struct you actually
 receive is only ever the raw string the author wrote, or `nil`; there is no
 string spelling that means "self" the way `nil` does. `deliver_fired/4`
@@ -104,7 +104,7 @@ outside the session that reconstructs any of this for `#_parent`,
 library) any other target - the effect stream is observational, so ignoring
 one costs nothing and the session's own `Process.send_after/3` still fires it.
 This is a deliberate limit, decided rather than pending:
-`docs/adr/0053-non-self-delayed-send-routes-stay-the-librarys.md` makes it
+`docs/adr/0055-non-self-delayed-send-routes-stay-the-librarys.md` makes it
 permanent for `#_parent`, `#_invokeid`, and `#_internal` (those routes name
 the sending session's live process bookkeeping, which a durable timer by
 definition outlives) and defers the external-session route behind a named
@@ -227,7 +227,7 @@ does not invent a format for you.
 
 ## Keying your store
 
-ADR-0052 decision 3 corrects a natural assumption: a timer is **not**
+ADR-0054 decision 3 corrects a natural assumption: a timer is **not**
 uniquely identified by `send_id` alone, and there are two different keys in
 play, not one.
 
@@ -278,7 +278,7 @@ Inside the library, `terminate/2` (`lib/statifier/session.ex:1183-1201`)
 satisfies this unconditionally: every live timer ref is cancelled before the
 process exits. A durable scheduler inverts the whole premise by design - it
 deliberately survives process death, which is the entire point of using one
-- so nothing plays the role `terminate/2` played. ADR-0052 decision 4 states
+- so nothing plays the role `terminate/2` played. ADR-0054 decision 4 states
 what replaces it: **before feeding a fired event back, the host MUST
 establish that the run is still live, and discard the message without
 delivering it otherwise.** A cancel-on-run-end hook is worth running to keep
@@ -396,7 +396,7 @@ clock.
 
 The chartered `statifier_oban` package is the packaged consumer of exactly
 this recipe - an Oban-backed implementation of Route A, keyed and
-liveness-checked per ADR-0052. If you are building an invoke handler
+liveness-checked per ADR-0054. If you are building an invoke handler
 alongside your durable timers, its own at-least-once contract lives in
 `docs/extending.md:178-190` ("At-least-once: handlers must be idempotent"),
 not here - the two seams share a host but not a rulebook.

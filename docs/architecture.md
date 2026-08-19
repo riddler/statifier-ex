@@ -134,7 +134,7 @@ subscribers. That ownership of the delayed-send timers is replaceable, not
 load-bearing - a host can take over scheduling itself by consuming the
 `SendDelayed`/`Cancel` effect pair instead, per
 [docs/durable-timers.md](durable-timers.md) and
-[ADR-0052](adr/0052-durable-timers-consume-the-effect-vocabulary.md). The pure
+[ADR-0054](adr/0054-durable-timers-consume-the-effect-vocabulary.md). The pure
 core lowers, validates, and compiles `<invoke>`
 ([ADR-0031](adr/0031-invoke-argument-failure-aborts-the-invocation.md)),
 runs Appendix D's `statesToInvoke` and cancel-invoke passes

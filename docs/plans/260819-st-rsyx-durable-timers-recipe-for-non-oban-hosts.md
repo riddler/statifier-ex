@@ -92,7 +92,7 @@ read exists under `interpreter/`, `machine/`, or `effect/`.
 
 Two new files exist and are linked from the places a reader arrives from:
 
-- `docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md` - accepted,
+- `docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md` - accepted,
   three-section format, indexed in `docs/adr/README.md`, recording the three
   contract answers above.
 - `docs/durable-timers.md` - a host-facing guide in the same register as
@@ -256,12 +256,12 @@ run happens at the least convenient moment.
   durable host needs one and none exists in `lib/` (no `Jason.Encoder`, no
   `to_map`/`from_map`); `st-m5c3` owns that gap. The recipe states the
   dependency and points at the bead rather than inventing a format.
-- **Not making non-self-routed delayed sends durably schedulable.** ADR-0052
+- **Not making non-self-routed delayed sends durably schedulable.** ADR-0054
   decision 2 as corrected scopes the contract to a delayed send with no target
   or a `:self` target. Supporting `#_parent`, `#_invokeid`, `#_internal`, or an
   external session id would mean putting the resolved route on `%SendDelayed{}`
   or opening a public delivery door - `lib/` changes, out of scope for a docs
-  branch. Recorded as Open Question 1 and named as a gap in ADR-0052's
+  branch. Recorded as Open Question 1 and named as a gap in ADR-0054's
   Consequences.
 - **Not adding a per-execution ordinal to `%SendDelayed{}`** to close the
   `<foreach>` dedup residual. Same reason: a `lib/` change with its own bead.
@@ -286,7 +286,7 @@ independently gate-verifiable.
 independent plan-critic review found three substantive errors in the contract
 this plan told those phases to record (decision 2's re-entry claim, decision
 3's dedup key, and decision 4's liveness door). Phase 3 amends the landed
-ADR-0052 and the written-but-uncommitted `docs/durable-timers.md` to match the
+ADR-0054 and the written-but-uncommitted `docs/durable-timers.md` to match the
 corrected decisions below. It is a third phase rather than an edit to Phases 1
 and 2 because those phases are now a record of what was done, and their commits
 exist; the corrections to their prose in this document are marked as
@@ -311,15 +311,19 @@ under this plan carry `st-ifa3` in their `Refs` trailer, not `st-rsyx`'s.
 
 ### The ADR number
 
-Phase 1 claims **0052**, the next free number as of this plan's writing
-(`docs/adr/` ends at `0051-invoke-handlers-are-registered-per-session.md`). If a
-sibling branch has landed an 0052 by the time this phase runs, take the next
-free number and adjust every reference in Phase 2 to match. This is a
-mechanical check (`ls docs/adr/`), not a decision.
+Phase 1 originally claimed **0052**, the next free number as of this plan's
+writing (`docs/adr/` ended at
+`0051-invoke-handlers-are-registered-per-session.md`). The contingency this
+section described then fired: by the time the branch came to rebase,
+`origin/main` had landed its own `0052` (chart identity and position
+serialization) and `0053` (chart test helpers). **Renumbered 2026-08-19 to
+0054 and 0055**, and every reference in this plan, in both records, in the
+guide, and in the index was adjusted to match. This was the mechanical check
+(`ls docs/adr/`) this section always said it was, not a decision.
 
 ---
 
-## Phase 1: ADR-0052, the durable-timer contract
+## Phase 1: ADR-0054, the durable-timer contract
 
 ### Overview
 
@@ -343,7 +347,7 @@ a guide that could be rewritten for readability.
 
 #### 1. The ADR
 
-**File**: `docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+**File**: `docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`
 **Changes**: New file. Standard three-section format (Context, Decision,
 Consequences) per `docs/adr/README.md`'s closing note. Status line:
 `Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the
@@ -382,7 +386,7 @@ Discoveries above:
    opaque half, and the effect is what a host sees.
 2. **A self-routed delayed send re-enters through
    `Statifier.Session.send_event/2`; every other route is out of scope for this
-   ADR.** *(Corrected 2026-08-19 - the landed ADR-0052 over-claims here; see
+   ADR.** *(Corrected 2026-08-19 - the landed ADR-0054 over-claims here; see
    Phase 3.)*
 
    - **Scope.** The claim holds for `<send delay="...">` with **no target**, or
@@ -436,7 +440,7 @@ Discoveries above:
      `take/2`'s `{[], timers}`.
    - **Deduplication key** (the at-least-once concern): `{session scope,
      send_id, macrostep, microstep, round, c_index, owner}`, read off the
-     `%SendDelayed{}` itself. *(Corrected 2026-08-19 - the landed ADR-0052 omits
+     `%SendDelayed{}` itself. *(Corrected 2026-08-19 - the landed ADR-0054 omits
      `c_index` and `owner`; see Phase 3.)* The counters are stamped as of
      scheduling, not firing (`lib/statifier/effect/send_delayed.ex:11-13`,
      ADR-0046), and `c_index`/`owner` (`:33-34`) are the send's position inside
@@ -492,7 +496,7 @@ Discoveries above:
    being discarded.
 
    **How "live" is actually observed.** *(Corrected 2026-08-19 - the landed
-   ADR-0052 names `Statifier.Session.status/1` as the read door; see Phase 3.)*
+   ADR-0054 names `Statifier.Session.status/1` as the read door; see Phase 3.)*
    `status/1` is a `GenServer.call` (`lib/statifier/session.ex:644-645`), so
    against a **terminated** session it exits the caller rather than answering -
    and terminated is precisely the case the 6.2 substitute exists to catch. The
@@ -529,7 +533,7 @@ conformance result moves.
 matching the existing column shape:
 
 ```
-| [0052](0052-durable-timers-consume-the-effect-vocabulary.md) | Durable timers consume the effect vocabulary; the host owns keying and the 6.2 discard | accepted |
+| [0054](0054-durable-timers-consume-the-effect-vocabulary.md) | Durable timers consume the effect vocabulary; the host owns keying and the 6.2 discard | accepted |
 ```
 
 Say "append as the last row" rather than "after the 0051 row" deliberately:
@@ -537,10 +541,10 @@ Say "append as the last row" rather than "after the 0051 row" deliberately:
 exists on disk but was never given an index row - a gap left by the st-cmq.8
 branch. That gap is **not this plan's to close**: backfilling another bead's
 missing row is an unrelated change in the tree, which the CLAUDE.md authority
-table names as a reason a commit is still unauthorized. Append 0052 after the
+table names as a reason a commit is still unauthorized. Append 0054 after the
 0050 row, leave the 0051 gap exactly as it is, and report it so it can be filed
 as its own one-line `area:docs` chore. The numbering is unaffected either way -
-0052 is the next free number by the filesystem, which is the authority.
+0054 is the next free number by the filesystem, which is the authority.
 
 ### Success Criteria:
 
@@ -550,9 +554,9 @@ as its own one-line `area:docs` chore. The numbering is unaffected either way -
       and not `--skip`-ed.
 - [x] `mix quality --profile merge` passes. (Its ADR-judge stage will report a
       `:no_scoped_changes` skip; see the Implementation Note.)
-- [x] `test -f docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`,
-      substituting the number actually claimed if 0052 was taken.
-- [x] `grep -q '\[0052\]' docs/adr/README.md` - the index row exists (same
+- [x] `test -f docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`,
+      substituting the number actually claimed (0054; 0054 was taken).
+- [x] `grep -q '\[0054\]' docs/adr/README.md` - the index row exists (same
       number substitution).
 - [x] Every path in `git diff --name-only "$(git merge-base HEAD origin/main)"`
       is under `docs/` or is `README.md`, and none is under `lib/`, `test/`, or
@@ -644,19 +648,19 @@ re-explaining the architecture. Sections, in order:
    (`lib/statifier/session.ex:1435-1450`), so every in-flight timer dies with
    the node. For delays measured in seconds that is fine; for follow-ups,
    escalations, and timeouts measured in hours or days it is not. Name
-   ADR-0003's Consequences as the sanction and ADR-0052 as the contract.
+   ADR-0003's Consequences as the sanction and ADR-0054 as the contract.
 2. **What you consume.** `{:send_delayed, %Statifier.Effect.SendDelayed{}}` and
    `{:cancel, %Statifier.Effect.Cancel{}}`, with each struct's fields shown and
    `delay_ms` called out as relative rather than absolute. State plainly that
    `{:schedule, ...}` and `{:cancel_timers, ...}` are **not** yours to read
-   (ADR-0052 decision 1, `docs/extending.md:57-58`), so a reader who has seen
+   (ADR-0054 decision 1, `docs/extending.md:57-58`), so a reader who has seen
    them in a stack trace does not reach for them.
 3. **Route A: a live session.** `Statifier.Session.subscribe/2,3`, the ordered
    complete stream, a worked subscriber that pattern-matches the two effects and
    enqueues/cancels in the host's store, and `Statifier.Session.send_event/2` as
    the door back in. Note that every write door is a `cast` - there is no
    synchronous variant (`lib/statifier/session.ex:530-536`, `:546-549`,
-   `:580-583`, `:611-614`). State the **target restriction** from ADR-0052
+   `:580-583`, `:611-614`). State the **target restriction** from ADR-0054
    decision 2 here, not only in section 5: a host schedules a `%SendDelayed{}`
    whose `target` is `nil` or `:self`, and *ignores* (leaves to the library) one
    with any other target, because the resolved route rides on the opaque
@@ -672,7 +676,7 @@ re-explaining the architecture. Sections, in order:
    position (`docs/observability.md:36-38`) but **no serialization function for
    it exists in `lib/` today** - persisting it is yours, and `st-m5c3` is the
    bead that owns closing that gap.
-5. **Keying your store.** ADR-0052 decision 3, in operational form: the
+5. **Keying your store.** ADR-0054 decision 3, in operational form: the
    cancellation key, the dedup key `{session scope, send_id, macrostep,
    microstep, round, c_index, owner}`, why `send_id` alone collides across runs
    (ADR-0035), why the position fields `c_index`/`owner`
@@ -683,7 +687,7 @@ re-explaining the architecture. Sections, in order:
    skimmed past. State the `<foreach>` residual collision and its workaround
    (do not hand-write an `id` on a `<send delay>` inside a `<foreach>`) as a
    named limitation.
-6. **Termination: what you owe that the library used to give you.** ADR-0052
+6. **Termination: what you owe that the library used to give you.** ADR-0054
    decision 4, with the spec 6.2 sentence quoted and the halted-session gap
    spelled out concretely: a halted session neither cancels its timers nor
    drains an event fed to it (`lib/statifier/session.ex:45-57`, `:970-973`,
@@ -745,7 +749,7 @@ is a different seam - see `docs/durable-timers.md`."
 **Changes**: in the "Sessions and invoke" section (`:124-182`), where it already
 says `Statifier.Session` owns "the delayed-send timers", append one sentence
 noting that this ownership is replaceable and pointing at
-`docs/durable-timers.md` and ADR-0052. One sentence; this document is
+`docs/durable-timers.md` and ADR-0054. One sentence; this document is
 explanation-shaped and contributor-facing, and a recipe does not belong in it.
 
 ### Success Criteria:
@@ -761,7 +765,7 @@ explanation-shaped and contributor-facing, and a recipe does not belong in it.
       `grep -q 'durable-timers.md' docs/architecture.md`.
       *(Corrected 2026-08-19: the earlier `for f in ...; do ... done` form is a
       bash construct and a syntax error in this environment's fish shell.)*
-- [x] `grep -q '0052' docs/durable-timers.md` - the guide cites the ADR it
+- [x] `grep -q '0054' docs/durable-timers.md` - the guide cites the ADR it
       teaches (substituting the number Phase 1 actually claimed).
 - [x] Every relative link in `docs/durable-timers.md` resolves; there is no
       link-checker stage in the gate, so run one explicitly, wrapped in `bash -c`
@@ -793,7 +797,7 @@ explanation-shaped and contributor-facing, and a recipe does not belong in it.
 - [ ] The end-state acceptance read: someone who has not seen `lib/` can name,
       from this document alone, the two effects, the door back in, the compound
       key, and the liveness check.
-- [ ] The guide contradicts nothing in ADR-0052 - read them side by side.
+- [ ] The guide contradicts nothing in ADR-0054 - read them side by side.
 - [ ] The `docs/extending.md` edit is genuinely one sentence and the document's
       scope is unchanged.
 - [ ] No regressions in related features: the diff is documentation only.
@@ -814,7 +818,7 @@ the end.
 
 ---
 
-## Phase 3: Remediate the landed ADR-0052 and the written recipe
+## Phase 3: Remediate the landed ADR-0054 and the written recipe
 
 ### Overview
 
@@ -831,7 +835,7 @@ the checklist of what has to change and where.
 
 ### Changes Required:
 
-#### 1. `docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md` (committed in `f49559d`)
+#### 1. `docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md` (committed in `f49559d`)
 
 **Changes**: amend, and **mark the amendment the way this repo marks every
 other one**. ADR-0001's Decision says an ADR "is amended by a new ADR that
@@ -840,8 +844,8 @@ around it - 0002, 0004, 0008, 0014, 0019, 0020, 0030, 0035, 0039, 0040, 0041,
 0046, 0047, 0048 - is a dated amendment note rather than a fresh superseding
 record for a correction of this size. Follow the practice, not a silent
 rewrite: this is a correction of fact inside an accepted record, and reading
-ADR-0001 to require a whole superseding ADR for it would leave 0052 accepted
-and wrong until 0053 landed. Do **not** rewrite the decisions as though they
+ADR-0001 to require a whole superseding ADR for it would leave 0054 accepted
+and wrong until 0055 landed. Do **not** rewrite the decisions as though they
 had always read this way; the marker is what keeps the change from being the
 history-rewriting ADR-0001 forbids.
 
@@ -853,7 +857,7 @@ Concretely, matching the ADR-0035 pattern
   decision 4's liveness door corrected)`.
 - Each corrected decision carries an inline `*(Amended 2026-08-19, st-ifa3.)*`
   marker at the point the text changes, so a reader sees which claims moved.
-- `docs/adr/README.md`'s 0052 row's status column becomes
+- `docs/adr/README.md`'s 0054 row's status column becomes
   `accepted (amended 2026-08-19: decisions 2, 3, and 4 corrected)`, matching
   the shape of the 0008 and 0014 rows.
 
@@ -910,7 +914,7 @@ redeliver.
 
 #### 3. `docs/adr/README.md`
 
-**Changes**: the 0052 row's status column only, from `accepted` to
+**Changes**: the 0054 row's status column only, from `accepted` to
 `accepted (amended 2026-08-19: decisions 2, 3, and 4 corrected)`. Leave the
 0051 gap exactly as it is - still not this plan's to close.
 
@@ -929,13 +933,13 @@ finding touches them. Re-read them only to confirm that.
       old five-field spelling is gone from both. A bare `grep -q 'c_index'`
       passes falsely - both files already print `c_index` inside the struct
       listing - so match the key itself:
-      `grep -q 'round, c_index, owner' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`,
+      `grep -q 'round, c_index, owner' docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`,
       `grep -q 'round, c_index, owner' docs/durable-timers.md`,
-      `bash -c '! grep -q "microstep, round}" docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md'`,
+      `bash -c '! grep -q "microstep, round}" docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md'`,
       `bash -c '! grep -q "microstep, round}" docs/durable-timers.md'`
-      (today those last two would fail: `0052...md:115` and
+      (today those last two would fail: `0054...md:115` and
       `durable-timers.md:188` both carry the five-field key).
-- [x] `grep -q 'Statifier.Registry' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+- [x] `grep -q 'Statifier.Registry' docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`
       and `grep -q 'Statifier.Registry' docs/durable-timers.md` - decision 4 and
       the guide's section 6 name the registry door rather than `status/1` alone
       (today `docs/durable-timers.md:225` says "`Statifier.Session.status/1` is
@@ -944,13 +948,13 @@ finding touches them. Re-read them only to confirm that.
       `bash -c '! grep -q ":70-83" docs/durable-timers.md'` - the ordering
       citation was narrowed off the withdrawn paragraph (today the guide carries
       `:70-83`, so this criterion is red until Phase 3 runs).
-- [x] `grep -q '_parent' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+- [x] `grep -q '_parent' docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`
       - decision 2 names the out-of-scope routes.
 - [x] The amendment is marked, per ADR-0001 and the repo's amendment practice:
-      `bash -c 'grep -q "^Status:.*amended 2026-08-19" docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md'`,
-      `grep -c 'Amended 2026-08-19' docs/adr/0052-durable-timers-consume-the-effect-vocabulary.md`
+      `bash -c 'grep -q "^Status:.*amended 2026-08-19" docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md'`,
+      `grep -c 'Amended 2026-08-19' docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md`
       returns at least 3 (one inline marker per corrected decision), and
-      `bash -c 'grep "\[0052\]" docs/adr/README.md | grep -q "amended 2026-08-19"'`.
+      `bash -c 'grep "\[0054\]" docs/adr/README.md | grep -q "amended 2026-08-19"'`.
 - [x] Every path in `git diff --name-only "$(git merge-base HEAD origin/main)"`
       is under `docs/` or is `README.md`:
       `bash -c 'git diff --name-only "$(git merge-base HEAD origin/main)" | grep -vE "^(docs/|README\.md$)" && exit 1 || exit 0'`
@@ -997,7 +1001,7 @@ Verification items are deferred to the end.
 Recorded rather than resolved, because no human was available when this
 revision was written and none of them blocks Phase 3.
 
-1. **Non-self-routed durable delayed sends.** ADR-0052 decision 2, as corrected,
+1. **Non-self-routed durable delayed sends.** ADR-0054 decision 2, as corrected,
    supports a delayed send whose target is absent or `:self` and no other. A
    durable host cannot today redeliver a `#_parent`, `#_invokeid`, `#_internal`,
    or external-session delayed send, because the resolved route rides on the
@@ -1010,7 +1014,7 @@ revision was written and none of them blocks Phase 3.
    correction to this plan.
 
    **Settled (2026-08-19):** Decided at the direction level and recorded as
-   ADR-0053, `docs/adr/0053-non-self-delayed-send-routes-stay-the-librarys.md`.
+   ADR-0055, `docs/adr/0055-non-self-delayed-send-routes-stay-the-librarys.md`.
    `#_parent`, `#_invokeid`, and `#_internal` stay the library's permanently, on
    semantic grounds: each names the sending session's live process bookkeeping,
    which a durable timer outlives by definition. The external-session route is
@@ -1018,7 +1022,7 @@ revision was written and none of them blocks Phase 3.
    field joins `%SendDelayed{}` - `Statifier.Send.Target.parse/1` is already
    public, pure, and deterministic, so a host can reproduce the planner's
    resolution; what is genuinely missing is the delivered-event construction and
-   the delivery/miss doors, not route visibility. ADR-0053 carries its own open
+   the delivery/miss doors, not route visibility. ADR-0055 carries its own open
    question about `error.communication` when a fired non-self send misses and
    the sending session is gone.
 2. **The `<foreach>` dedup residual.** The workaround (do not author an `id` on
@@ -1028,7 +1032,7 @@ revision was written and none of them blocks Phase 3.
    own bead.
 
    **Settled (2026-08-19):** Filed as `st-q6b6` (P3, `area:interpreter`),
-   which depends on `st-ifa3`. The documented constraint stands in ADR-0052
+   which depends on `st-ifa3`. The documented constraint stands in ADR-0054
    and `docs/durable-timers.md` until that bead decides otherwise.
 3. **ADR-0051's missing index row** in `docs/adr/README.md`, found during the
    original plan review and declined as an unrelated change (see "What We're NOT
@@ -1062,10 +1066,10 @@ a doctest-style compiled example module under `test/`, which is a change to
 1. Read `docs/durable-timers.md` top to bottom as a host author would, with
    `lib/` closed. Write down, from the document alone, the two effects to
    consume, the function to call to feed an event back, the compound key, and
-   the liveness check. Compare against ADR-0052's decisions 1-4.
+   the liveness check. Compare against ADR-0054's decisions 1-4.
 2. Open each Elixir snippet's referenced function in `lib/` and confirm the name,
    arity, and field names match.
-3. Open each `file:line` reference in ADR-0052 and confirm it says what the ADR
+3. Open each `file:line` reference in ADR-0054 and confirm it says what the ADR
    claims it says.
 4. Follow every relative link in both new files and confirm it lands on an
    existing file and the right section.
@@ -1105,7 +1109,7 @@ this branch makes a claim about the spec at all.
   identity / serialization contract), `st-ewd7` (heartbeats charter)
 - Related ADRs: `docs/adr/0001-record-architecture-decisions.md` (why Phase 3
   marks its amendment
-  rather than rewriting 0052 in place),
+  rather than rewriting 0054 in place),
   `docs/adr/0003-pure-core-with-effects.md` (the warrant, names
   Oban at `:27-28`), `docs/adr/0029-session-interpret-stays-public.md`,
   `docs/adr/0034-replay-re-drives-the-core-not-a-live-session.md`,
@@ -1182,7 +1186,7 @@ end instead of blocking here.
 - [x] The end-state acceptance read: someone who has not seen `lib/` can name,
       from this document alone, the two effects, the door back in, the compound
       key, and the liveness check.
-- [x] The guide contradicts nothing in ADR-0052 - read them side by side.
+- [x] The guide contradicts nothing in ADR-0054 - read them side by side.
 - [x] The `docs/extending.md` edit is genuinely one sentence and the document's
       scope is unchanged.
 - [x] No regressions in related features: the diff is documentation only.

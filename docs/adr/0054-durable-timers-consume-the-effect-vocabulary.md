@@ -1,6 +1,6 @@
-# ADR-0052: Durable timers consume the effect vocabulary
+# ADR-0054: Durable timers consume the effect vocabulary
 
-Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:58-59's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected) - decision 2's recorded gap decided by ADR-0053 (2026-08-19: the limit is standing for `#_parent`/`#_invokeid`/`#_internal`, deferred with a named trigger for the external-session route)
+Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:58-59's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected) - decision 2's recorded gap decided by ADR-0055 (2026-08-19: the limit is standing for `#_parent`/`#_invokeid`/`#_internal`, deferred with a named trigger for the external-session route)
 
 ## Context
 
@@ -248,7 +248,7 @@ instead.
   rides on the opaque `{:schedule, ...}` instruction, not on the
   `%SendDelayed{}` effect. This gap is recorded here, not only in the plan
   that produced this amendment, so it is discoverable from the ADR itself.
-  *(Decided by ADR-0053, 2026-08-19: standing for
+  *(Decided by ADR-0055, 2026-08-19: standing for
   `#_parent`/`#_invokeid`/`#_internal` on semantic grounds; deferred with a
   named trigger for an external session id.)*
 - This constrains `statifier_oban` before it is written: its uniqueness

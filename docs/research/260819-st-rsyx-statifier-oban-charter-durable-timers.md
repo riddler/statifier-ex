@@ -565,7 +565,7 @@ any authority an agent currently holds here. See the open questions.
    scheduler is external. Those are contract statements, and this project puts
    contract statements in ADRs.
 
-   **Settled (2026-08-19):** Yes - ADR-0052, amended the same day for the
+   **Settled (2026-08-19):** Yes - ADR-0054, amended the same day for the
    plan critic's findings.
 5. **How should uniqueness be keyed?** The charter says "unique per send id",
    but `send_counter` restarts at 0 per `%MachineState{}`
@@ -575,7 +575,7 @@ any authority an agent currently holds here. See the open questions.
    partly depends on st-m5c3 (Machine identity / serialization contract), which
    st-q6xl already depends on.
 
-   **Settled (2026-08-19):** Two compound keys, not one, recorded as ADR-0052
+   **Settled (2026-08-19):** Two compound keys, not one, recorded as ADR-0054
    decision 3. Cancellation is `{session scope, send_id}` and legitimately
    matches many rows; deduplication is `{session scope, send_id, macrostep,
    microstep, round, c_index, owner}`. Session scoping is mandatory for the
@@ -588,7 +588,7 @@ any authority an agent currently holds here. See the open questions.
    hook, a validity check at fire time, or leaves it to the host is open.
 
    **Settled (2026-08-19):** A host-side liveness check at fire time, recorded
-   as ADR-0052 decision 4: registry lookup first, then `status/1`, discarding
+   as ADR-0054 decision 4: registry lookup first, then `status/1`, discarding
    the message unless the session is live. "Live" excludes a halted session as
    well as a terminated one. Cancel-on-run-end is best-effort only, because the
    node death this feature exists to survive takes any termination hook with it.
