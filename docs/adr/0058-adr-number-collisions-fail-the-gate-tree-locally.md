@@ -1,10 +1,11 @@
-# ADR-0056: ADR number collisions fail the gate via a tree-local numbering invariant
+# ADR-0058: ADR number collisions fail the gate via a tree-local numbering invariant
 
 Status: accepted (2026-08-19) - amended 2026-08-19 (st-9vco verify walk:
 decision 2's bite point corrected against a measured replay - the base-ref
 half compares against the merge-base, so it fires after the rebase, not
 merely after a fetch; what it adds over the tree-local checks is the
-rename/renumber shape)
+rename/renumber shape); renumbered from 0056 to 0058 before
+merge, per ADR-0056 decision 4
 
 ## Context
 
@@ -112,8 +113,8 @@ Constraints from the gate's own rules that any check must fit:
    guard and its own `docs/adr/0052-*.md`): with a stale `origin/main` and
    no fetch, `mix adr.check` exits 0; after `git fetch origin` but before
    the rebase, still 0; after the rebase, exit 1 with
-   `adr-0056-duplicate-number` (both paths), `adr-0056-readme-index`, and
-   `adr-0056-base-number` all firing. By then the tree-local half of
+   `adr-0058-duplicate-number` (both paths), `adr-0058-readme-index`, and
+   `adr-0058-base-number` all firing. By then the tree-local half of
    point 1 fires anyway, so for the concurrent-pick shape this half adds no
    earlier detection.
 
@@ -122,7 +123,7 @@ Constraints from the gate's own rules that any check must fit:
    deleting main's `NNNN-old-name.md` and adding `NNNN-new-name.md` -
    leaves exactly one file per number in the tree, so the duplicate check
    stays silent, while the merge-base still holds that number under the old
-   filename and `adr-0056-base-number` fires. Comparing against the ref tip
+   filename and `adr-0058-base-number` fires. Comparing against the ref tip
    instead of the merge-base was offered when this was measured and
    explicitly declined for this pass; open question 3 records it.
 
@@ -230,7 +231,12 @@ Constraints from the gate's own rules that any check must fit:
 - This record's own number was chosen under the process it governs:
   `git fetch origin` succeeded and `git ls-tree origin/main docs/adr/`
   showed 0055 as the highest number on the remote at authoring time, so 0056
-  is free on both the remote and this branch.
+  was free on both the remote and this branch. It did not stay free. ADR-0056
+  landed from st-8d5e and ADR-0057 from st-hz2a while this branch was in
+  flight, and this record was renumbered to 0058 at merge time - the concurrent
+  pick this record exists to catch, happening to this record. The guard caught
+  it: the rebase put both files in `docs/adr/`, which is what
+  `adr-0058-duplicate-number` fires on.
 
 ## Open questions
 

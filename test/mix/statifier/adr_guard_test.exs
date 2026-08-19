@@ -472,7 +472,7 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
   end
 
-  describe "ADR-0056 - numbering invariant" do
+  describe "ADR-0058 - numbering invariant" do
     defp analyze_adr(index) do
       AdrGuard.analyze(%{diff: "", adr: index})
     end
@@ -503,7 +503,7 @@ defmodule Mix.Statifier.AdrGuardTest do
 
       findings =
         analyze_adr(%{files: ["0052-a.md", "0052-b.md"], readme: readme})
-        |> Enum.filter(&(&1.check == "adr-0056-duplicate-number"))
+        |> Enum.filter(&(&1.check == "adr-0058-duplicate-number"))
 
       assert length(findings) == 2
 
@@ -525,7 +525,7 @@ defmodule Mix.Statifier.AdrGuardTest do
       | [0001](0001-first.md) | First | accepted |
       """
 
-      assert [%{check: "adr-0056-readme-index", file: "docs/adr/0002-second.md", line: nil}] =
+      assert [%{check: "adr-0058-readme-index", file: "docs/adr/0002-second.md", line: nil}] =
                analyze_adr(%{files: ["0001-first.md", "0002-second.md"], readme: readme})
     end
 
@@ -539,7 +539,7 @@ defmodule Mix.Statifier.AdrGuardTest do
       | [0002](0002-ghost.md) | Ghost | accepted |
       """
 
-      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md", message: message}] =
+      assert [%{check: "adr-0058-readme-index", file: "docs/adr/README.md", message: message}] =
                analyze_adr(%{files: ["0001-first.md"], readme: readme})
 
       assert message =~ "0002-ghost.md"
@@ -557,18 +557,18 @@ defmodule Mix.Statifier.AdrGuardTest do
       | [0001](0002-second.md) | Mislabeled | accepted |
       """
 
-      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md", message: message}] =
+      assert [%{check: "adr-0058-readme-index", file: "docs/adr/README.md", message: message}] =
                analyze_adr(%{files: ["0001-first.md", "0002-second.md"], readme: readme})
 
       assert message =~ "0001"
     end
 
     # Without this finding, a deleted README would make the bijection
-    # vacuously true - the silent-pass shape ADR-0056 exists to avoid.
+    # vacuously true - the silent-pass shape ADR-0058 exists to avoid.
     # sabotage: have the `files != []` clause return `[]` instead of the
     #           unreadable-README finding -> red
     test "a nil readme with a non-empty listing produces the unreadable finding" do
-      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md"}] =
+      assert [%{check: "adr-0058-readme-index", file: "docs/adr/README.md"}] =
                analyze_adr(%{files: ["0001-first.md"], readme: nil})
     end
 
@@ -625,7 +625,7 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
   end
 
-  describe "ADR-0056 - the base-ref early-warning half" do
+  describe "ADR-0058 - the base-ref early-warning half" do
     # sabotage: drop the `not` from `file not in base_files`, so a branch file
     #           absent from the base tree under a different filename fails the
     #           membership filter and no finding is emitted -> red
@@ -646,7 +646,7 @@ defmodule Mix.Statifier.AdrGuardTest do
                %{
                  file: "docs/adr/0052-b.md",
                  line: nil,
-                 check: "adr-0056-base-number",
+                 check: "adr-0058-base-number",
                  message: message
                }
              ] = AdrGuard.analyze(%{diff: "", adr: index})
@@ -667,7 +667,7 @@ defmodule Mix.Statifier.AdrGuardTest do
       }
 
       assert AdrGuard.analyze(%{diff: "", adr: index})
-             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+             |> Enum.filter(&(&1.check == "adr-0058-base-number")) == []
     end
 
     # sabotage: change the base-file lookup from `Map.get(base_by_number,
@@ -682,7 +682,7 @@ defmodule Mix.Statifier.AdrGuardTest do
       }
 
       assert AdrGuard.analyze(%{diff: "", adr: index})
-             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+             |> Enum.filter(&(&1.check == "adr-0058-base-number")) == []
     end
 
     # Covers both Phase 2's no-base-ref source and any hand-built source that
@@ -693,7 +693,7 @@ defmodule Mix.Statifier.AdrGuardTest do
       index = %{files: ["0052-a.md"], readme: nil}
 
       assert AdrGuard.analyze(%{diff: "", adr: index})
-             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+             |> Enum.filter(&(&1.check == "adr-0058-base-number")) == []
     end
   end
 
