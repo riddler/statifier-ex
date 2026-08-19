@@ -23,6 +23,33 @@ defmodule Statifier.Position do
   Neither function performs I/O; encoding and decoding a binary in memory is
   not an effect this module's caller has to route around (ADR-0003 does not
   apply to it, and it is not listed in `@effect_interpreter_paths`).
+
+  ## `export/1` and `import/2`: the migration vocabulary
+
+  `to_binary/1`/`from_binary/2` above are the same-revision contract: they
+  refuse to cross a chart revision at all. `export/1` and `import/2` are the
+  deliberate counterpart - a position in ADR-0005 boundary terms (string
+  state ids, per the ADR-0006 public-surface rule) so a host holding a
+  position saved against revision A can load it onto revision B *on
+  purpose*. `import/2` performs **no identity check**: it does not compare
+  `export/1`'s `:identity` key to the target `Machine`'s own identity, and
+  the malformed-export check does not require `:identity` to be present or
+  well-formed. A host hand-editing an export may update, delete, or leave
+  stale that key, and all three import identically - the key is provenance
+  for a host that wants to log "migrated from revision X to revision Y", not
+  a check this module performs for it.
+
+  The exported map deliberately omits `internal_queue`, `routes`,
+  `invoke_types`, and `machine`: `internal_queue` because `export/1` refuses
+  a non-empty one outright (below), `routes` and `invoke_types` because both
+  are per-drive/per-session snapshots a driver re-stamps before the next
+  drive (ADR-0048, ADR-0051) rather than durable position state, and
+  `machine` because the whole point of the string-id vocabulary is to let a
+  host load the exported map onto a *different* `Machine` than the one that
+  produced it. A host reading the map should not conclude any of the four
+  was forgotten; `import/2` always sets `internal_queue` to a fresh empty
+  queue and `routes`/`invoke_types` to `nil`, leaving both for the driver
+  to re-stamp.
   """
 
   alias Statifier.{Machine, MachineState}
@@ -134,6 +161,373 @@ defmodule Statifier.Position do
     else
       {:error, {:identity_mismatch, blob_identity, machine_identity}}
     end
+  end
+
+  @typedoc """
+  The string-id boundary vocabulary `export/1` produces and `import/2`
+  consumes: `configuration`, `entered_states`, and `states_to_invoke` as
+  `MapSet.t(String.t())`; `history_values` as
+  `%{optional(String.t()) => MapSet.t(String.t())}`; `active_invocations` as
+  `%{optional({String.t(), non_neg_integer()}) => String.t()}`; the
+  `invoke_counter`/`send_counter`/`datamodel`/`running`/`status`/`macrostep`/
+  `microstep`/`round`/`trace`/`max_macrostep_rounds` fields carried verbatim
+  from `MachineState.t()`; and `identity`, the source chart's
+  `Statifier.Machine.Identity.t() | nil` - provenance only, per this
+  module's `export/1`/`import/2` section above.
+  """
+  @type exported :: %{required(atom()) => term()}
+
+  # `:identity` is deliberately absent from this list: `import/2` performs
+  # no identity check at all (see this module's "`export/1` and `import/2`"
+  # section above), so its presence, absence, or well-formedness is not
+  # this function's concern either.
+  @required_export_keys ~w(
+    configuration entered_states states_to_invoke history_values
+    active_invocations invoke_counter send_counter datamodel running status
+    macrostep microstep round trace max_macrostep_rounds
+  )a
+
+  @doc """
+  Translates `machine_state` into the string-id migration vocabulary
+  (`t:exported/0`) - the deliberate counterpart to `to_binary/1`'s refusal to
+  cross a chart revision. See this module's "`export/1` and `import/2`"
+  section above for what is carried, what is dropped, and why.
+
+  Every state index in every translated field is looked up with
+  `Statifier.Machine.id/2`. The root, index `0`, has no written id and is
+  present in every configuration by construction (ADR-0005's full
+  configuration) - and, empirically, in `entered_states` too, since the
+  initial macrostep's own `enterStates` walk reaches it as an ancestor. It
+  is the one exception to the rule below, dropped here wherever it appears
+  and re-added by `import/2` to `configuration` and `entered_states`, the
+  two fields it can structurally appear in (`states_to_invoke` can never
+  hold it: only a real `<state>`'s own `<invoke>` children populate that
+  field, and the root is not a `<state>`). Any *other* index for which
+  `Machine.id/2` returns `nil` (a state compiled with no author-written id)
+  makes the whole export refuse rather than silently drop the state:
+  `{:error, {:unnameable_states, indexes}}`, sorted ascending, naming every
+  offending index across every field at once.
+
+  `active_invocations`' `invoke_index` half of each key stays the integer it
+  already is - a within-state document-order ordinal over that state's own
+  `<invoke>` children (`MachineState`'s own moduledoc), not itself a state
+  id. It survives states being added or reordered elsewhere in the chart,
+  but not an edit to that one state's own `<invoke>` children.
+
+  Refuses a `machine_state` whose `internal_queue` is non-empty
+  (`{:error, :internal_queue_not_empty}`, checked with
+  `MachineState.internal_queue_empty?/1` rather than by materializing the
+  list): the queued internal events were selected against the source
+  chart's own transitions, so a position mid-macrostep is not a thing to
+  move across chart revisions. A host drains to quiescence first.
+  """
+  @spec export(machine_state :: MachineState.t()) ::
+          {:ok, exported()}
+          | {:error, :internal_queue_not_empty}
+          | {:error, {:unnameable_states, [non_neg_integer()]}}
+  def export(%MachineState{} = machine_state) do
+    if MachineState.internal_queue_empty?(machine_state) do
+      do_export(machine_state)
+    else
+      {:error, :internal_queue_not_empty}
+    end
+  end
+
+  @spec do_export(machine_state :: MachineState.t()) ::
+          {:ok, exported()} | {:error, {:unnameable_states, [non_neg_integer()]}}
+  defp do_export(%MachineState{machine: machine} = machine_state) do
+    case machine_state |> referenced_indexes() |> unnameable_indexes(machine) do
+      [] -> {:ok, build_exported(machine, machine_state)}
+      unnameable -> {:error, {:unnameable_states, unnameable}}
+    end
+  end
+
+  # Every state index this module's exported fields can hold, gathered once
+  # so `unnameable_indexes/2` checks the whole export in one pass rather
+  # than reporting one field's offenders and leaving a second field's for a
+  # follow-up call.
+  @spec referenced_indexes(machine_state :: MachineState.t()) :: MapSet.t(non_neg_integer())
+  defp referenced_indexes(%MachineState{
+         configuration: configuration,
+         entered_states: entered_states,
+         states_to_invoke: states_to_invoke,
+         history_values: history_values,
+         active_invocations: active_invocations
+       }) do
+    history_indexes =
+      Enum.reduce(history_values, MapSet.new(), fn {key, value_set}, acc ->
+        acc |> MapSet.put(key) |> MapSet.union(value_set)
+      end)
+
+    invocation_state_indexes =
+      active_invocations
+      |> Map.keys()
+      |> Enum.map(fn {state_index, _invoke_index} -> state_index end)
+      |> MapSet.new()
+
+    configuration
+    |> MapSet.union(entered_states)
+    |> MapSet.union(states_to_invoke)
+    |> MapSet.union(history_indexes)
+    |> MapSet.union(invocation_state_indexes)
+  end
+
+  # Index `0` (the root) is the one documented exception - it never counts
+  # as unnameable even though `Machine.id/2` is `nil` for it too.
+  @spec unnameable_indexes(indexes :: MapSet.t(non_neg_integer()), machine :: Machine.t()) ::
+          [non_neg_integer()]
+  defp unnameable_indexes(indexes, machine) do
+    indexes
+    |> Enum.filter(&(&1 != 0 and is_nil(Machine.id(machine, &1))))
+    |> Enum.sort()
+  end
+
+  @spec build_exported(machine :: Machine.t(), machine_state :: MachineState.t()) :: exported()
+  defp build_exported(machine, %MachineState{} = machine_state) do
+    %{
+      identity: Machine.identity(machine),
+      configuration: translate_index_set(machine, machine_state.configuration),
+      entered_states: translate_index_set(machine, machine_state.entered_states),
+      states_to_invoke: translate_index_set(machine, machine_state.states_to_invoke),
+      history_values: translate_history_values(machine, machine_state.history_values),
+      active_invocations: translate_active_invocations(machine, machine_state.active_invocations),
+      invoke_counter: machine_state.invoke_counter,
+      send_counter: machine_state.send_counter,
+      datamodel: machine_state.datamodel,
+      running: machine_state.running,
+      status: machine_state.status,
+      macrostep: machine_state.macrostep,
+      microstep: machine_state.microstep,
+      round: machine_state.round,
+      trace: machine_state.trace,
+      max_macrostep_rounds: machine_state.max_macrostep_rounds
+    }
+  end
+
+  # `Machine.id/2` is `nil` for the root, and for the root alone once
+  # `do_export/1` has already refused any other nameless index - so this is
+  # simultaneously "translate to a string id" and "drop the root",
+  # depending on which index is asked.
+  @spec translate_index_set(machine :: Machine.t(), indexes :: MapSet.t(non_neg_integer())) ::
+          MapSet.t(String.t())
+  defp translate_index_set(machine, indexes) do
+    indexes
+    |> Enum.map(&Machine.id(machine, &1))
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
+  end
+
+  @spec translate_history_values(
+          machine :: Machine.t(),
+          history_values :: %{optional(non_neg_integer()) => MapSet.t(non_neg_integer())}
+        ) :: %{optional(String.t()) => MapSet.t(String.t())}
+  defp translate_history_values(machine, history_values) do
+    Enum.reduce(history_values, %{}, fn {key, value_set}, acc ->
+      case Machine.id(machine, key) do
+        nil -> acc
+        id -> Map.put(acc, id, translate_index_set(machine, value_set))
+      end
+    end)
+  end
+
+  @spec translate_active_invocations(
+          machine :: Machine.t(),
+          active_invocations :: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()}
+        ) :: %{optional({String.t(), non_neg_integer()}) => String.t()}
+  defp translate_active_invocations(machine, active_invocations) do
+    Enum.reduce(active_invocations, %{}, fn {{state_index, invoke_index}, invoke_id}, acc ->
+      case Machine.id(machine, state_index) do
+        nil -> acc
+        state_id -> Map.put(acc, {state_id, invoke_index}, invoke_id)
+      end
+    end)
+  end
+
+  @doc """
+  Reverses `export/1`: resolves every string id in `exported` against
+  `machine` (`Machine.index/2`) and rebuilds a `MachineState.t()` walking
+  it. **Performs no identity check** - see this module's "`export/1` and
+  `import/2`" section above; `exported[:identity]` is read by nobody here.
+
+  Collects **every** unknown id before returning, rather than failing on the
+  first: `{:error, {:unknown_state_ids, ids}}`, `ids` sorted ascending, so a
+  host migrating a position across chart revisions sees the whole list of
+  states its new revision dropped in one round trip. Re-adds the root index
+  (`0`) to `configuration` and `entered_states` - the reverse of `export/1`'s
+  one documented drop.
+
+  Rebuilds `internal_queue` as `:queue.new()` and `routes`/`invoke_types` as
+  `nil` - the driver re-stamps both before the next drive, exactly as
+  `export/1`'s doc names them as dropped. `machine` is the supplied
+  argument.
+
+  `{:error, {:malformed_export, reason}}` covers a map missing a required
+  key, or carrying a value of the wrong shape for its field - a host may
+  have hand-edited the export, which is the entire point of a string-id
+  vocabulary, and a value `struct!/2` would silently misassign is exactly
+  what this check exists to catch instead.
+  """
+  @spec import(machine :: Machine.t(), exported :: exported()) ::
+          {:ok, MachineState.t()}
+          | {:error, {:unknown_state_ids, [String.t()]}}
+          | {:error, {:malformed_export, term()}}
+  def import(%Machine{} = machine, exported) when is_map(exported) do
+    with :ok <- check_required_keys(exported),
+         :ok <- check_shapes(exported) do
+      case collect_unknown_ids(machine, exported) do
+        [] -> build_machine_state(machine, exported)
+        unknown -> {:error, {:unknown_state_ids, unknown}}
+      end
+    end
+  end
+
+  def import(_machine, exported), do: {:error, {:malformed_export, exported}}
+
+  @spec check_required_keys(exported :: term()) :: :ok | {:error, {:malformed_export, term()}}
+  defp check_required_keys(exported) do
+    case Enum.reject(@required_export_keys, &Map.has_key?(exported, &1)) do
+      [] -> :ok
+      missing -> {:error, {:malformed_export, {:missing_keys, Enum.sort(missing)}}}
+    end
+  end
+
+  @spec check_shapes(exported :: exported()) :: :ok | {:error, {:malformed_export, term()}}
+  defp check_shapes(exported) do
+    [
+      {:configuration, &id_set?/1},
+      {:entered_states, &id_set?/1},
+      {:states_to_invoke, &id_set?/1},
+      {:history_values, &history_values_shape?/1},
+      {:active_invocations, &active_invocations_shape?/1},
+      {:invoke_counter, &is_integer/1},
+      {:send_counter, &is_integer/1},
+      {:datamodel, &is_map/1},
+      {:running, &is_boolean/1},
+      {:status, &(&1 in [:running, :done])},
+      {:macrostep, &is_integer/1},
+      {:microstep, &is_integer/1},
+      {:round, &is_integer/1},
+      {:trace, &is_boolean/1},
+      {:max_macrostep_rounds, &max_macrostep_rounds_shape?/1}
+    ]
+    |> Enum.find_value(:ok, fn {field, valid?} ->
+      value = Map.fetch!(exported, field)
+      unless valid?.(value), do: {:error, {:malformed_export, {field, value}}}
+    end)
+  end
+
+  @spec id_set?(value :: term()) :: boolean()
+  defp id_set?(%MapSet{} = set), do: Enum.all?(set, &is_binary/1)
+  defp id_set?(_other), do: false
+
+  @spec history_values_shape?(value :: term()) :: boolean()
+  defp history_values_shape?(map) when is_map(map) do
+    Enum.all?(map, fn {key, value} -> is_binary(key) and id_set?(value) end)
+  end
+
+  defp history_values_shape?(_other), do: false
+
+  @spec active_invocations_shape?(value :: term()) :: boolean()
+  defp active_invocations_shape?(map) when is_map(map) do
+    Enum.all?(map, fn
+      {{state_id, invoke_index}, invoke_id} ->
+        is_binary(state_id) and is_integer(invoke_index) and is_binary(invoke_id)
+
+      _other ->
+        false
+    end)
+  end
+
+  defp active_invocations_shape?(_other), do: false
+
+  @spec max_macrostep_rounds_shape?(value :: term()) :: boolean()
+  defp max_macrostep_rounds_shape?(:infinity), do: true
+  defp max_macrostep_rounds_shape?(n), do: is_integer(n) and n > 0
+
+  @spec collect_unknown_ids(machine :: Machine.t(), exported :: exported()) :: [String.t()]
+  defp collect_unknown_ids(machine, exported) do
+    history_ids =
+      Enum.reduce(exported.history_values, MapSet.new(), fn {key, value_set}, acc ->
+        acc |> MapSet.put(key) |> MapSet.union(value_set)
+      end)
+
+    invocation_ids =
+      exported.active_invocations
+      |> Map.keys()
+      |> Enum.map(fn {state_id, _invoke_index} -> state_id end)
+      |> MapSet.new()
+
+    MapSet.new()
+    |> MapSet.union(exported.configuration)
+    |> MapSet.union(exported.entered_states)
+    |> MapSet.union(exported.states_to_invoke)
+    |> MapSet.union(history_ids)
+    |> MapSet.union(invocation_ids)
+    |> Enum.filter(&(Machine.index(machine, &1) == :error))
+    |> Enum.sort()
+  end
+
+  @spec build_machine_state(machine :: Machine.t(), exported :: exported()) ::
+          {:ok, MachineState.t()}
+  defp build_machine_state(machine, exported) do
+    machine_state = %MachineState{
+      machine: machine,
+      configuration: resolve_index_set(machine, exported.configuration) |> MapSet.put(0),
+      internal_queue: :queue.new(),
+      history_values: resolve_history_values(machine, exported.history_values),
+      entered_states: resolve_index_set(machine, exported.entered_states) |> MapSet.put(0),
+      states_to_invoke: resolve_index_set(machine, exported.states_to_invoke),
+      active_invocations: resolve_active_invocations(machine, exported.active_invocations),
+      invoke_counter: exported.invoke_counter,
+      send_counter: exported.send_counter,
+      datamodel: exported.datamodel,
+      running: exported.running,
+      status: exported.status,
+      macrostep: exported.macrostep,
+      microstep: exported.microstep,
+      round: exported.round,
+      trace: exported.trace,
+      max_macrostep_rounds: exported.max_macrostep_rounds,
+      routes: nil,
+      invoke_types: nil
+    }
+
+    {:ok, machine_state}
+  end
+
+  # Every id reaching this function has already resolved successfully
+  # (`collect_unknown_ids/2` ran first), so `Machine.index/2` cannot return
+  # `:error` here.
+  @spec resolve_index_set(machine :: Machine.t(), ids :: MapSet.t(String.t())) ::
+          MapSet.t(non_neg_integer())
+  defp resolve_index_set(machine, ids) do
+    Enum.into(ids, MapSet.new(), &resolve_index!(machine, &1))
+  end
+
+  @spec resolve_index!(machine :: Machine.t(), id :: String.t()) :: non_neg_integer()
+  defp resolve_index!(machine, id) do
+    {:ok, index} = Machine.index(machine, id)
+    index
+  end
+
+  @spec resolve_history_values(
+          machine :: Machine.t(),
+          history_values :: %{optional(String.t()) => MapSet.t(String.t())}
+        ) :: %{optional(non_neg_integer()) => MapSet.t(non_neg_integer())}
+  defp resolve_history_values(machine, history_values) do
+    Map.new(history_values, fn {key, value_set} ->
+      {resolve_index!(machine, key), resolve_index_set(machine, value_set)}
+    end)
+  end
+
+  @spec resolve_active_invocations(
+          machine :: Machine.t(),
+          active_invocations :: %{optional({String.t(), non_neg_integer()}) => String.t()}
+        ) :: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()}
+  defp resolve_active_invocations(machine, active_invocations) do
+    Map.new(active_invocations, fn {{state_id, invoke_index}, invoke_id} ->
+      {{resolve_index!(machine, state_id), invoke_index}, invoke_id}
+    end)
   end
 
   # Same rationale as `Statifier.Machine.Identity`'s own `safe_decode/1`
