@@ -173,9 +173,13 @@ event forwarded down to a child carries the *sibling* invocation's id into a
 session that has never had one, and keying on the field would discard
 exactly the copy 6.4.2 requires be delivered. Inline `<content><scxml>...</scxml></content>` does not lower yet
 (a parser-layer, layer-boundary decision deferred to st-53ys); a `<content>`
-holding markup as a text/CDATA binary compiles and runs today. v1's
-handler-registry invoke is kept as an explicit extension type - a useful,
-safe escape hatch, but not the definition of `<invoke>`.
+holding markup as a text/CDATA binary compiles and runs today. v2 now has the
+seam v1's handler-registry invoke gestured at: a host registers a
+`Statifier.Invoke.Handler` per session for any `<invoke type="...">` beyond
+the built-in `scxml`/bare-URI set (`Statifier.Invoke.Handler.Scxml`), which
+itself sits behind the same interface rather than being special-cased
+([ADR-0051](adr/0051-invoke-handlers-are-registered-per-session.md)). See
+[docs/extending.md](extending.md) for how to write and register one.
 
 Generated identifiers split on the pure core's boundary
 ([ADR-0008](adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the
