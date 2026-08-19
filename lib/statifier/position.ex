@@ -63,7 +63,7 @@ defmodule Statifier.Position do
   # `lib/statifier/machine/identity.ex` already uses).
   Module.register_attribute(__MODULE__, :sobelow_skip, persist: true)
 
-  @format_version 1
+  @format_version 2
 
   @doc """
   The version tag `to_binary/1` writes and `from_binary/2` checks. A bare
@@ -114,6 +114,11 @@ defmodule Statifier.Position do
   identity representation changed reports the version mismatch rather than a
   confusing identity one.
 
+  A version-1 blob (written before `timer_counter` existed) is read, not
+  refused: its payload is upgraded with `timer_counter: 0` before the struct
+  is rebuilt (ADR-0059 decision 4) - `0` is the only correct value, since no
+  ordinal was ever minted against a version-1 position.
+
   `{:error, {:identity_mismatch, expected, actual}}`'s `expected` is the
   blob's own identity and `actual` is the supplied `machine`'s - both carried
   in the error so a host can log which chart revision it has and which one
@@ -139,7 +144,8 @@ defmodule Statifier.Position do
       {:ok, {:statifier_position, version, identity, payload}} when is_map(payload) ->
         with :ok <- check_version(version),
              :ok <- check_identity(identity, machine) do
-          {:ok, struct!(MachineState, Map.put(payload, :machine, machine))}
+          upgraded_payload = upgrade_payload(version, payload)
+          {:ok, struct!(MachineState, Map.put(upgraded_payload, :machine, machine))}
         end
 
       _other ->
@@ -149,7 +155,15 @@ defmodule Statifier.Position do
 
   @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
   defp check_version(@format_version), do: :ok
+  defp check_version(1), do: :ok
   defp check_version(version), do: {:error, {:unsupported_format_version, version}}
+
+  # ADR-0059: a version-1 blob predates timer_counter, so no ordinal was ever
+  # minted from it and 0 is the only correct value. The record blesses this
+  # default rather than leaving it to taste.
+  @spec upgrade_payload(version :: term(), payload :: map()) :: map()
+  defp upgrade_payload(1, payload), do: Map.put_new(payload, :timer_counter, 0)
+  defp upgrade_payload(@format_version, payload), do: payload
 
   @spec check_identity(blob_identity :: Identity.t(), machine :: Machine.t()) ::
           :ok
@@ -171,8 +185,9 @@ defmodule Statifier.Position do
   `MapSet.t(String.t())`; `history_values` as
   `%{optional(String.t()) => MapSet.t(String.t())}`; `active_invocations` as
   `%{optional({String.t(), non_neg_integer()}) => String.t()}`; the
-  `invoke_counter`/`send_counter`/`datamodel`/`running`/`status`/`macrostep`/
-  `microstep`/`round`/`trace`/`max_macrostep_rounds` fields carried verbatim
+  `invoke_counter`/`send_counter`/`timer_counter`/`datamodel`/`running`/
+  `status`/`macrostep`/`microstep`/`round`/`trace`/`max_macrostep_rounds`
+  fields carried verbatim
   from `MachineState.t()`; and `identity`, the source chart's
   `Statifier.Machine.Identity.t() | nil` - provenance only, per this
   module's `export/1`/`import/2` section above.
@@ -185,8 +200,8 @@ defmodule Statifier.Position do
   # this function's concern either.
   @required_export_keys ~w(
     configuration entered_states states_to_invoke history_values
-    active_invocations invoke_counter send_counter datamodel running status
-    macrostep microstep round trace max_macrostep_rounds
+    active_invocations invoke_counter send_counter timer_counter datamodel
+    running status macrostep microstep round trace max_macrostep_rounds
   )a
 
   @doc """
@@ -295,6 +310,7 @@ defmodule Statifier.Position do
       active_invocations: translate_active_invocations(machine, machine_state.active_invocations),
       invoke_counter: machine_state.invoke_counter,
       send_counter: machine_state.send_counter,
+      timer_counter: machine_state.timer_counter,
       datamodel: machine_state.datamodel,
       running: machine_state.running,
       status: machine_state.status,
@@ -403,6 +419,7 @@ defmodule Statifier.Position do
       {:active_invocations, &active_invocations_shape?/1},
       {:invoke_counter, &is_integer/1},
       {:send_counter, &is_integer/1},
+      {:timer_counter, &is_integer/1},
       {:datamodel, &is_map/1},
       {:running, &is_boolean/1},
       {:status, &(&1 in [:running, :done])},
@@ -482,6 +499,7 @@ defmodule Statifier.Position do
       active_invocations: resolve_active_invocations(machine, exported.active_invocations),
       invoke_counter: exported.invoke_counter,
       send_counter: exported.send_counter,
+      timer_counter: exported.timer_counter,
       datamodel: exported.datamodel,
       running: exported.running,
       status: exported.status,

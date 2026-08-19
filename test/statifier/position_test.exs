@@ -113,7 +113,11 @@ defmodule Statifier.PositionTest do
     # history, and the datamodel back at its `new/2` seed
     test "reproduces every field of a machine_state built by MachineState.new/2" do
       machine = compile!(@xml)
-      machine_state = MachineState.new(machine)
+      # A fresh MachineState.new/2 carries timer_counter: 0, which a build
+      # that dropped the field entirely would round trip just as well -
+      # bumped here so the assertion below actually proves the field
+      # travels through the envelope.
+      machine_state = %{MachineState.new(machine) | timer_counter: 3}
 
       %MachineState{
         configuration: configuration,
@@ -123,6 +127,7 @@ defmodule Statifier.PositionTest do
         active_invocations: active_invocations,
         invoke_counter: invoke_counter,
         send_counter: send_counter,
+        timer_counter: timer_counter,
         datamodel: datamodel,
         running: running,
         status: status,
@@ -149,6 +154,7 @@ defmodule Statifier.PositionTest do
                active_invocations: ^active_invocations,
                invoke_counter: ^invoke_counter,
                send_counter: ^send_counter,
+               timer_counter: ^timer_counter,
                datamodel: ^datamodel,
                running: ^running,
                status: ^status,
@@ -169,7 +175,12 @@ defmodule Statifier.PositionTest do
     # the state a real send_event/2 sequence produced
     test "reproduces every field of a machine_state advanced by real send_event/2 calls" do
       machine = compile!(@xml)
-      machine_state = advanced_machine_state(machine)
+      # None of @xml's sends are delayed, so a real run leaves timer_counter
+      # at 0 - bumped here (like the sibling test above) so the assertion
+      # below actually proves the field travels through the envelope rather
+      # than round-tripping a default that a build dropping the field would
+      # also satisfy.
+      machine_state = %{advanced_machine_state(machine) | timer_counter: 7}
 
       # A real run genuinely exercised history and the datamodel - assert
       # that before round-tripping, so the round trip below is proven to
@@ -187,6 +198,7 @@ defmodule Statifier.PositionTest do
         active_invocations: active_invocations,
         invoke_counter: invoke_counter,
         send_counter: send_counter,
+        timer_counter: timer_counter,
         datamodel: datamodel,
         running: running,
         status: status,
@@ -213,6 +225,7 @@ defmodule Statifier.PositionTest do
                active_invocations: ^active_invocations,
                invoke_counter: ^invoke_counter,
                send_counter: ^send_counter,
+               timer_counter: ^timer_counter,
                datamodel: ^datamodel,
                running: ^running,
                status: ^status,
@@ -240,7 +253,7 @@ defmodule Statifier.PositionTest do
       naive_size = byte_size(:erlang.term_to_binary(machine_state))
       assert byte_size(blob) < div(naive_size, 2)
 
-      assert {:statifier_position, 1, _identity, payload} = :erlang.binary_to_term(blob)
+      assert {:statifier_position, 2, _identity, payload} = :erlang.binary_to_term(blob)
       refute Map.has_key?(payload, :machine)
     end
   end
@@ -314,21 +327,74 @@ defmodule Statifier.PositionTest do
   end
 
   describe "from_binary/2 format version checks" do
-    # sabotage: `check_version/1`'s exact-match clause head is widened from
-    # `defp check_version(@format_version)` to `defp check_version(_version)`
-    # (accept any version) -> this test reddens because a blob whose version
-    # integer is bumped to 2 now loads instead of returning
-    # `{:error, {:unsupported_format_version, 2}}`
-    test "a blob whose version integer is bumped returns {:error, {:unsupported_format_version, 2}}" do
+    # sabotage: `check_version/1`'s three clauses are collapsed into a
+    # single `defp check_version(_version), do: :ok` (accept any version) ->
+    # this test reddens because `from_binary/2` no longer returns the
+    # expected error tuple for version 3 - it proceeds past `check_version/1`
+    # into `upgrade_payload/2`, which has no clause for `3` and raises
+    # `FunctionClauseError` instead
+    test "a blob whose version integer is bumped returns {:error, {:unsupported_format_version, 3}}" do
       machine = compile!(@xml)
       identity = Machine.identity(machine)
       machine_state = MachineState.new(machine)
       payload = machine_state |> Map.from_struct() |> Map.delete(:machine)
 
-      future_blob = :erlang.term_to_binary({:statifier_position, 2, identity, payload})
+      future_blob = :erlang.term_to_binary({:statifier_position, 3, identity, payload})
 
       assert Position.from_binary(future_blob, machine) ==
-               {:error, {:unsupported_format_version, 2}}
+               {:error, {:unsupported_format_version, 3}}
+    end
+
+    # sabotage: same mutation as above (`check_version/1`'s three clauses
+    # collapsed into `defp check_version(_version), do: :ok`) -> this test
+    # reddens the same way, via `upgrade_payload/2`'s `FunctionClauseError`
+    # for version `0` rather than the expected error tuple
+    test "a blob whose version integer is 0 returns {:error, {:unsupported_format_version, 0}}" do
+      machine = compile!(@xml)
+      identity = Machine.identity(machine)
+      machine_state = MachineState.new(machine)
+      payload = machine_state |> Map.from_struct() |> Map.delete(:machine)
+
+      past_blob = :erlang.term_to_binary({:statifier_position, 0, identity, payload})
+
+      assert Position.from_binary(past_blob, machine) ==
+               {:error, {:unsupported_format_version, 0}}
+    end
+
+    # sabotage: `check_version/1`'s `defp check_version(1)` clause is
+    # deleted (leaving only the `@format_version` exact match and the
+    # catch-all) -> this test reddens because a genuine version-1 envelope
+    # now returns `{:error, {:unsupported_format_version, 1}}` instead of
+    # `{:ok, _}`. Deleting `upgrade_payload/2`'s version-1 clause instead
+    # would NOT redden this test: `timer_counter` is not in
+    # `MachineState`'s `@enforce_keys` and carries a defstruct default of
+    # `0`, so `struct!(MachineState, payload)` fills it in either way -
+    # `check_version/1` is the load-bearing half of the version-1 read
+    # path, not `upgrade_payload/2`.
+    test "a genuine version-1 envelope with timer_counter absent from its payload reads with timer_counter: 0" do
+      machine = compile!(@xml)
+      identity = Machine.identity(machine)
+      machine_state = advanced_machine_state(machine)
+
+      # A real version-1 payload never had a :timer_counter key at all -
+      # deleted here, not defaulted to 0, so this fixture is a genuine
+      # pre-Phase-1 shape rather than a coincidentally-zero one.
+      payload =
+        machine_state
+        |> Map.from_struct()
+        |> Map.delete(:machine)
+        |> Map.delete(:timer_counter)
+
+      refute Map.has_key?(payload, :timer_counter)
+
+      version_1_blob = :erlang.term_to_binary({:statifier_position, 1, identity, payload})
+
+      assert {:ok, decoded} = Position.from_binary(version_1_blob, machine)
+      assert decoded.timer_counter == 0
+      assert decoded.configuration == machine_state.configuration
+      assert decoded.history_values == machine_state.history_values
+      assert decoded.datamodel == machine_state.datamodel
+      assert decoded.send_counter == machine_state.send_counter
     end
   end
 
@@ -360,7 +426,7 @@ defmodule Statifier.PositionTest do
   describe "format_version/0" do
     # sabotage: `format_version/0` is changed to return `@format_version +
     # 1` instead of `@format_version` -> this test reddens because the
-    # returned value (2) no longer equals the version tag actually written
+    # returned value no longer equals the version tag actually written
     # into every blob by `to_binary/1`
     test "matches the version tag to_binary/1 writes" do
       machine = compile!(@xml)
@@ -369,6 +435,12 @@ defmodule Statifier.PositionTest do
       assert {:ok, blob} = Position.to_binary(machine_state)
       assert {:statifier_position, version, _identity, _payload} = :erlang.binary_to_term(blob)
       assert version == Position.format_version()
+    end
+
+    # sabotage: `@format_version` is changed from `2` to `1` -> this test
+    # reddens because `Position.format_version()` returns `1` instead of `2`
+    test "is 2" do
+      assert Position.format_version() == 2
     end
   end
 
@@ -402,7 +474,12 @@ defmodule Statifier.PositionTest do
     # rejects the stray `nil`) instead of `{:ok, _}`
     test "reproduces every translated field of a machine_state advanced by real send_event/2 calls" do
       machine = compile!(@xml)
-      machine_state = advanced_machine_state(machine)
+      # None of @xml's sends are delayed, so a real run leaves timer_counter
+      # at 0 - bumped here so the assertion below actually proves the field
+      # travels through the export/import vocabulary rather than
+      # round-tripping a default a build dropping the key would also
+      # satisfy (until `check_required_keys/1` catches the drop instead).
+      machine_state = %{advanced_machine_state(machine) | timer_counter: 5}
 
       assert {:ok, exported} = Position.export(machine_state)
       assert {:ok, imported} = Position.import(machine, exported)
@@ -419,6 +496,7 @@ defmodule Statifier.PositionTest do
                active_invocations: active_invocations,
                invoke_counter: invoke_counter,
                send_counter: send_counter,
+               timer_counter: timer_counter,
                datamodel: datamodel,
                running: running,
                status: status,
@@ -438,6 +516,7 @@ defmodule Statifier.PositionTest do
       assert active_invocations == machine_state.active_invocations
       assert invoke_counter == machine_state.invoke_counter
       assert send_counter == machine_state.send_counter
+      assert timer_counter == machine_state.timer_counter
       assert datamodel == machine_state.datamodel
       assert running == machine_state.running
       assert status == machine_state.status
@@ -608,6 +687,38 @@ defmodule Statifier.PositionTest do
       malformed = Map.delete(exported, :datamodel)
 
       assert {:error, {:malformed_export, _reason}} = Position.import(machine, malformed)
+    end
+
+    # sabotage: `timer_counter` is removed from `@required_export_keys` ->
+    # this test reddens because `check_required_keys/1` no longer flags the
+    # deleted key, so `check_shapes/1`'s `Map.fetch!(exported, :timer_counter)`
+    # raises `KeyError` instead of `import/2` returning
+    # `{:error, {:malformed_export, {:missing_keys, [:timer_counter]}}}`
+    test "an export map with timer_counter deleted returns {:error, {:malformed_export, {:missing_keys, [:timer_counter]}}}" do
+      machine = compile!(@xml)
+      machine_state = MachineState.new(machine)
+
+      assert {:ok, exported} = Position.export(machine_state)
+      malformed = Map.delete(exported, :timer_counter)
+
+      assert Position.import(machine, malformed) ==
+               {:error, {:malformed_export, {:missing_keys, [:timer_counter]}}}
+    end
+
+    # sabotage: `check_shapes/1`'s `{:timer_counter, &is_integer/1}` entry is
+    # deleted from its field list -> this test reddens because a
+    # non-integer `timer_counter` sails through `check_shapes/1` and reaches
+    # `build_machine_state/2`, returning `{:ok, _}` instead of
+    # `{:error, {:malformed_export, {:timer_counter, "not-an-integer"}}}`
+    test "an export map with a non-integer timer_counter returns {:error, {:malformed_export, {:timer_counter, _}}}" do
+      machine = compile!(@xml)
+      machine_state = MachineState.new(machine)
+
+      assert {:ok, exported} = Position.export(machine_state)
+      malformed = %{exported | timer_counter: "not-an-integer"}
+
+      assert Position.import(machine, malformed) ==
+               {:error, {:malformed_export, {:timer_counter, "not-an-integer"}}}
     end
   end
 

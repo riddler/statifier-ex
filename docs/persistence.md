@@ -50,7 +50,10 @@ shape reports the version mismatch rather than a confusing identity failure
 produced by misreading the new shape as the old one. A mismatch on either
 axis is a returned error tuple, never a silent misread -
 `{:error, {:unsupported_format_version, version}}` or
-`{:error, {:identity_mismatch, expected, actual}}`.
+`{:error, {:identity_mismatch, expected, actual}}`. One exception on the
+version axis: `from_binary/2` also reads a version-1 blob (written before
+`timer_counter` existed), defaulting `timer_counter` to `0` on the way in,
+since no ordinal was ever minted against a version-1 position (ADR-0059).
 
 ## Migration story A: drain on the old version
 
