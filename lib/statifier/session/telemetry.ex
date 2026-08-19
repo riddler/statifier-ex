@@ -72,7 +72,7 @@ defmodule Statifier.Session.Telemetry do
   The `:initialize` span's start event is emitted *after*
   `Interpreter.initialize/2` has already returned (`Statifier.Session.init/1`
   needs the `machine_state` that call produces before it can call
-  `Statifier.Session.Telemetry.init/4`, which happens first), so its
+  `Statifier.Session.Telemetry.init/5`, which happens first), so its
   `system_time` is not the wall-clock instant the span actually opened at,
   even though `duration` on the matching stop is still measured from a
   `System.monotonic_time/0` reading taken before that call.
@@ -113,7 +113,7 @@ defmodule Statifier.Session.Telemetry do
 
   | Event | Measurements | Metadata |
   |---|---|---|
-  | `[:statifier, :session, :init]` | `system_time` | `session_id`, `machine_name`, `trace`, `invoked_by` |
+  | `[:statifier, :session, :init]` | `system_time` | `session_id`, `machine_name`, `trace`, `invoked_by`, `resumed` |
   | `[:statifier, :session, :halt]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `configuration` |
   | `[:statifier, :session, :terminate]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `status` |
   | `[:statifier, :session, :macrostep, :start]` | `system_time`, `monotonic_time` | `session_id`, `trigger`, `event_name`, `span_ref` |
@@ -272,14 +272,21 @@ defmodule Statifier.Session.Telemetry do
       Enum.map(@trace_kinds, &[:statifier, :session, :trace, &1])
   end
 
-  @doc "Emits `[:statifier, :session, :init]`."
+  @doc """
+  Emits `[:statifier, :session, :init]`. `resumed` is ADR-0060's
+  metadatum - `true` when this session booted from a `:resume` option
+  rather than running `Statifier.Interpreter.initialize/2`. Additive: an
+  existing handler reading only the four original keys is unaffected by the
+  fifth.
+  """
   @spec init(
           session_id :: String.t(),
           machine :: Machine.t(),
           machine_state :: MachineState.t(),
-          invoked_by :: {pid(), String.t()} | nil
+          invoked_by :: {pid(), String.t()} | nil,
+          resumed :: boolean()
         ) :: :ok
-  def init(session_id, machine, machine_state, invoked_by) do
+  def init(session_id, machine, machine_state, invoked_by, resumed) do
     :telemetry.execute(
       [:statifier, :session, :init],
       %{system_time: System.system_time()},
@@ -287,7 +294,8 @@ defmodule Statifier.Session.Telemetry do
         session_id: session_id,
         machine_name: machine.name,
         trace: machine_state.trace,
-        invoked_by: invoked_by
+        invoked_by: invoked_by,
+        resumed: resumed
       }
     )
   end
@@ -347,7 +355,7 @@ defmodule Statifier.Session.Telemetry do
   """
   @spec macrostep_start(
           session_id :: String.t(),
-          trigger :: :initialize | :event | :cancel | :internal,
+          trigger :: :initialize | :event | :cancel | :internal | :resume,
           event :: Statifier.Event.t() | nil,
           span_ref :: reference()
         ) :: :ok
@@ -377,7 +385,7 @@ defmodule Statifier.Session.Telemetry do
   """
   @spec macrostep_stop(
           session_id :: String.t(),
-          trigger :: :initialize | :event | :cancel | :internal,
+          trigger :: :initialize | :event | :cancel | :internal | :resume,
           machine_state :: MachineState.t(),
           event :: Statifier.Event.t() | nil,
           outcome :: :quiescent | :done | :cancelled | :budget_exhausted,
