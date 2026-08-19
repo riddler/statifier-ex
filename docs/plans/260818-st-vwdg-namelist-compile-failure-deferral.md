@@ -667,17 +667,17 @@ changes, and neither appears in `tools/corpus/scxml_w3/exclusions.exs` or
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix test --include scxml_w3` on both files passes **before**
+- [x] `mix test --include scxml_w3` on both files passes **before**
       `mix test.baseline add` is run.
-- [ ] `test/passing_tests.json`'s `w3c_tests` list grows by exactly two entries,
+- [x] `test/passing_tests.json`'s `w3c_tests` list grows by exactly two entries,
       naming those two files, with no other list touched.
-- [ ] `mix test.regression` green and now running both files - confirm by the
+- [x] `mix test.regression` green and now running both files - confirm by the
       task's own per-corpus W3C count rising by two.
-- [ ] Full `mix quality` green, confirmed by `mix gate.verify`; the
+- [x] Full `mix quality` green, confirmed by `mix gate.verify`; the
       `Regression ratchet` stage in particular must be a real pass, not a skip.
-- [ ] `mix quality --format json --report -` if a downstream agent needs to
+- [x] `mix quality --format json --report -` if a downstream agent needs to
       route on the stage results.
-- [ ] `git diff` for this phase touches only `docs/datamodel.md`,
+- [x] `git diff` for this phase touches only `docs/datamodel.md`,
       `lib/statifier/compiler.ex` (the `@doc` only), `changelog.d/st-vwdg.md`
       and `test/passing_tests.json`.
 
@@ -906,5 +906,27 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Spec-conformance judgment on the `lib/` change: the corrected `compile/1`
+      `@doc` describes what the function actually returns for every class named
+      in the updated `docs/datamodel.md` paragraph, with 5.9.4 cited as the
+      authority for the split.
+- [ ] The `docs/datamodel.md` edit reads as an extension of the recorded
+      leaning ("if this is ever unified, it unifies toward deferral"), not as a
+      quiet reversal, and a reader who only reads that paragraph can still tell
+      which element classes reject at load time.
+- [ ] The changelog fragment is written for someone who only calls the public
+      API and can tell the difference.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before finishing. In looped (`--loop`)
+execution, this phase's Automated Verification gates advancement automatically
+(via `/wurk:commit --auto`), and Manual Verification items are deferred and
+surfaced once at the end instead of blocking here.
 
 ---

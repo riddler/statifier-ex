@@ -69,27 +69,43 @@ Every evaluation goes through one module with one context type:
 - Every evaluation returns `{:ok, value} | {:error, reason}`. The interpreter maps
   errors to `error.execution` internal events per spec. Leaves never swallow errors.
 - **An expression that fails to compile is rejected at load time everywhere
-  except `<data expr>` and `<assign expr>`, which defer to runtime.** Spec
-  5.9.4 permits either ("The SCXML Processor MAY reject documents containing
-  syntactically ill-formed expressions at document load time, or it MAY wait
-  and place 'error.execution' in the internal event queue at runtime"), so
-  both halves conform - but the clause frames the choice as one
-  processor-wide policy, and this engine currently makes it per element class.
-  The asymmetry is deliberate, not an oversight: `test/scion_tests/data/data_invalid_test.exs`
+  except `<data expr>`, `<assign expr>`, `<script>`, and a `namelist` entry on
+  `<send>`/`<invoke>`, which defer to runtime.** Spec 5.9.4 permits either
+  ("The SCXML Processor MAY reject documents containing syntactically
+  ill-formed expressions at document load time, or it MAY wait and place
+  'error.execution' in the internal event queue at runtime"), so both halves
+  conform - but the clause frames the choice as one processor-wide policy, and
+  this engine currently makes it per element class. The asymmetry is
+  deliberate, not an oversight: `test/scion_tests/data/data_invalid_test.exs`
   declares an unparseable `<data expr="{p1: 'v1'"/>` and asserts `pass` by
   *catching* the resulting `error.execution`, so load-time rejection would
   make that document unloadable and the test unpassable.
   `test/scion_tests/assign/assign_invalid_test.exs` requires the identical
   treatment for `<assign expr="{p1: 'v1'"/>`. A `<data expr>` or `<assign
   expr>` that will not compile is therefore captured as `{:invalid, error}`
-  on the compiled node and raised at binding/execution time, while `cond` and
-  `<log expr>` still fail `Compiler.compile/1`.
+  on the compiled node and raised at binding/execution time. `<script>` gets
+  the same treatment for a body outside predicator's statement grammar
+  ([ADR-0026](adr/0026-script-as-predicator-statement-programs.md)). `cond`,
+  `<log expr>`, `<content expr>`, `<foreach array>`, and a `<param>`
+  element's `expr`/`location` still fail `Compiler.compile/1`.
 
   If this is ever unified, it unifies toward deferral rather than away from it:
   deferral loads strictly more documents, and no corpus file requires load-time
   rejection. The trigger to watch for is a corpus document with an unparseable
   `cond` plus an `error.execution` handler - none exists today, and test344 is
   not one (its `cond="1"` compiles, then fails boolean coercion at evaluation).
+  The trigger **did** fire for `namelist`, in st-vwdg: test553
+  (`test/scxml_tests/mandatory/send/test553_test.exs`) and test554
+  (`test/scxml_tests/mandatory/invoke/test554_test.exs`) are corpus documents
+  with an unparseable location expression in a `<send>`/`<invoke>` `namelist`
+  and an expected `pass` that depends on catching the resulting
+  `error.execution` rather than failing to load at all. The response was to
+  move that one element class to the deferring side, not to unify the whole
+  policy - `<param>` keeps rejecting at load time even though ADR-0036 and
+  ADR-0031 give its `expr`/`location` the same *runtime* treatment as a
+  `namelist` entry, because the runtime rule and the load-time rule are
+  separate axes and no corpus file forces `<param>` onto the deferring side.
+  The `cond` half of the trigger is still unfired.
 - Datamodel keys are strings at every level, top-level and nested alike; an
   embedder-supplied `:datamodel` option is checked for this at
   `MachineState.new/2` construction time rather than trusted (see the `@doc`

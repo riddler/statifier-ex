@@ -195,10 +195,15 @@ defmodule Statifier.Compiler do
 
   Returns `{:ok, machine}` on success. A `Document` that reached this stage
   is expected to already be structurally valid - `compile/1` does not
-  re-run validator checks - so `{:error, errors}` here signals a compiler
-  defect (an id that fails to resolve during the numbering walk) rather than
-  a malformed input document; callers should treat it as unexpected, not as
-  routine error-event handling.
+  re-run validator checks - so `{:error, errors}` here has two possible
+  sources: a compiler defect (an id that fails to resolve during the
+  numbering walk), or a malformed input document whose element class still
+  rejects at load time under `docs/datamodel.md`'s per-element-class
+  deferral policy (`cond`, `<log expr>`, `<content expr>`, `<foreach
+  array>`, and `<param>`, among others - see that policy paragraph for the
+  full, current list). Callers should not assume the tuple is always
+  unexpected: routine error-event handling still applies to the
+  load-time-rejecting classes, while a defect is genuinely unexpected.
   """
   @spec compile(document :: Document.t()) :: {:ok, Machine.t()} | {:error, [Error.t()]}
   def compile(%Document{} = document) do
