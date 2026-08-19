@@ -684,6 +684,23 @@ change first.
 an identically worded comment, and is exercised by nothing. That is true whether
 or not it is fixtured, and it is now written into the corpus rather than into a
 plan only.
+*Reviewed 2026-08-19 (st-6f7h Direction stage, escalated from `/wurk:verify`)*:
+**upheld, with amended grounds.** The verify pass falsified this decision's
+"transplant buys only a path string" premise - the site-B violation row's
+changed lines are byte-identical to
+`0012_trace_stamp_swapped_comment_kept.diff`, caught 3/3 at site A and missed
+3/3 at site B, so a re-situated transplant did surface a real blind spot. The
+conclusion survives on the grounds that remain: the miss is not attributable to
+the production site (width, the second trace call, and the site stay
+unseparated, and the site is the hypothesis with the least mechanical support
+in what the judge is shown); site C emits one trace call and cannot reproduce
+the composition that did the finding, so a site-C pair tests only that
+least-supported hypothesis at 0.33 CE where a 0.17 CE narrow re-cut of site
+B's own edit at `--unified=3` separates site from context directly; and
+per-site coverage is not the corpus's unit and does not terminate. No
+follow-up bead; the named trigger for filing one is that re-cut being bought
+by a human and missing. Full reasoning:
+`docs/research/260819-st-6f7h-decision-3-site-c-review.md`.
 
 **Decision 4: the corpus-equivalent unit stays pinned at 18 fixture-runs.**
 *Grounds*: a unit of account that floats with the thing it measures makes every
@@ -861,9 +878,15 @@ automated criteria, so a tool that reads "all automated criteria satisfied" as
       no finding of either kind - nothing could hide inside a true positive
       because there was no true positive. The question stays live for any
       future run in which this row is caught.
-- [ ] **Whether Decision 3 (no site-C fixture) survives maintainer review.** It
+- [x] **Whether Decision 3 (no site-C fixture) survives maintainer review.** It
       is the decision most likely to be overturned, and the redirect is cheap
-      and additive.
+      and additive. **Reviewed 2026-08-19 (Direction stage, no human
+      available): upheld with amended grounds** - conclusion stands (no site-C
+      fixture, no follow-up bead), the falsified "transplant is uninformative"
+      premise is retired, and the named reopening trigger is a 0.17 CE
+      `--unified=3` re-cut of site B's own edit missing at three seeds. See
+      `docs/research/260819-st-6f7h-decision-3-site-c-review.md`; still a
+      maintainer's to overturn, like every provisional decision above
 
 ### Explicitly not budgeted
 
