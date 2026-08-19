@@ -675,15 +675,15 @@ citation is still accurate, leave it - a needless renumbering is review noise.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` passes; `mix gate.verify` exits zero.
-- [ ] `mix test test/statifier/session/telemetry_test.exs` green.
-- [ ] `changelog.d/st-q6b6.md` exists and is a valid Keep a Changelog section.
-- [ ] `grep -n 'ordinal' lib/statifier/session/telemetry.ex` shows both
+- [x] Full `mix quality` passes; `mix gate.verify` exits zero.
+- [x] `mix test test/statifier/session/telemetry_test.exs` green.
+- [x] `changelog.d/st-q6b6.md` exists and is a valid Keep a Changelog section.
+- [x] `grep -n 'ordinal' lib/statifier/session/telemetry.ex` shows both
       `core_shape/2` clauses and both moduledoc table rows.
-- [ ] `mix quality --profile merge` is green before any push - it re-enables the
+- [x] `mix quality --profile merge` is green before any push - it re-enables the
       ADR judge stage that the bare gate disables in `.quality.exs:23`, and this
       branch carries an ADR the judge should see.
-- [ ] The gate's sabotage scan reports no missing `# sabotage:` note.
+- [x] The gate's sabotage scan reports no missing `# sabotage:` note.
 
 #### Manual Verification:
 - [ ] **Spec-conformance judgment**: `telemetry.ex` sits on the session side of
@@ -840,5 +840,24 @@ see the intermediate-state note in Implementation Approach.
 **Implementation Note**: Same loop/full gate discipline as Phase 1. This phase
 is the merge blocker referenced in Implementation Approach; the branch is not
 publishable until it lands.
+
+---
+
+### Phase 3
+
+- [ ] **Spec-conformance judgment**: `telemetry.ex` sits on the session side of
+      ADR-0003's effect boundary and holds no Appendix D procedure; this phase
+      changes no interpreter behavior.
+- [ ] The moduledoc contract table matches what `core_shape/2` actually emits,
+      key for key, for both rows - the table is the published contract and a
+      drift between it and the code is the defect ADR-0040 exists to prevent.
+- [ ] Read `docs/durable-timers.md` end to end against the finished `lib/` and
+      confirm it describes nothing the code lacks. ADR-0059's Consequences make
+      this the condition for merging the branch.
+- [ ] Confirm the changelog fragment reads as a migration note for a 1.x user,
+      not a transcript of the rewrite (`changelog.d/README.md`).
+
+**Implementation Note**: Same loop/full gate discipline. This is the last phase;
+after it, the branch satisfies ADR-0059's Consequences and is publishable.
 
 ---

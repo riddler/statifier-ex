@@ -453,6 +453,9 @@ defmodule Statifier.Session.TelemetryTest do
     # sabotage: `core_shape/2`'s `SendDelayed` clause drops `delay_ms` from
     # its measurements map -> red, `measurements.delay_ms` no longer exists
     # and the `KeyError` fails the assertion - reverted and confirmed green.
+    # Also verified for `ordinal`: dropped `ordinal` from the same clause ->
+    # red, `measurements.ordinal` no longer exists and the `KeyError` fails
+    # the assertion - reverted and confirmed green.
     test "puts delay_ms in measurements and send_id/target in metadata for :send_delayed", %{
       ref: ref
     } do
@@ -468,7 +471,7 @@ defmodule Statifier.Session.TelemetryTest do
         macrostep: 3,
         microstep: 4,
         round: 2,
-        ordinal: 1
+        ordinal: 9
       }
 
       Telemetry.effect("sess1", machine, {:send_delayed, payload})
@@ -477,8 +480,33 @@ defmodule Statifier.Session.TelemetryTest do
                        metadata}
 
       assert measurements.delay_ms == 750
+      assert measurements.ordinal == 9
       assert metadata.send_id == "sd1"
       assert metadata.target == "#_parent"
+    end
+
+    # sabotage: `core_shape/2`'s `Cancel` clause drops `ordinal` from its
+    # measurements map -> red, `measurements.ordinal` no longer exists and
+    # the `KeyError` fails the assertion - reverted and confirmed green.
+    test "puts ordinal in measurements and send_id in metadata for :cancel", %{ref: ref} do
+      machine = located_machine()
+
+      payload = %Cancel{
+        send_id: "c1",
+        c_index: nil,
+        owner: nil,
+        macrostep: 3,
+        microstep: 4,
+        round: 2,
+        ordinal: 11
+      }
+
+      Telemetry.effect("sess1", machine, {:cancel, payload})
+
+      assert_received {[:statifier, :session, :effect, :cancel], ^ref, measurements, metadata}
+
+      assert measurements.ordinal == 11
+      assert metadata.send_id == "c1"
     end
 
     # sabotage: `core_shape/2`'s `BudgetExhausted` clause drops `round` from

@@ -64,7 +64,7 @@ scheduled, so your store needs to compute (or record) the fire time itself.
 }
 ```
 
-(`lib/statifier/effect/cancel.ex:20-30`). `ordinal` on both structs is a
+(`lib/statifier/effect/cancel.ex:31-39`). `ordinal` on both structs is a
 per-execution sequence number off `machine_state.timer_counter`, decided by
 `docs/adr/0059-per-execution-ordinal-on-durable-timer-effects.md` - it is
 what keeps two executions of the same `<send delay>` or `<cancel>` node
@@ -240,18 +240,18 @@ play, not one.
 | Purpose | Key | Why |
 |---|---|---|
 | Cancellation | `{session scope, send_id}` | May legitimately match more than one stored row. `Timers.put/3` appends per `send_id` in scheduling order (`lib/statifier/session/timers.ex:39-44`) and `take/2` pops every ref under an id (`:51-60`), because spec 6.3 says a cancel with a given sendid cancels them all. An author-written `id` is reused verbatim and never advances the counter (`lib/statifier/machine/content/send.ex:383-389`), so one `<send id="x" delay="...">` executed twice produces two live timers under one `send_id`. A cancel that matches nothing is a no-op, not an error - mirror `take/2`'s `{[], timers}`. |
-| Deduplication (at-least-once) | `{session scope, send_id, macrostep, microstep, round, c_index, owner, ordinal}` | Read off the stored `%SendDelayed{}` itself. The counters/positions are stamped as of scheduling, not firing (`lib/statifier/effect/send_delayed.ex:11-13`, ADR-0046), `ordinal` is a per-execution sequence off `machine_state.timer_counter` (ADR-0059), and every component is deterministic - no clock, no CSPRNG, no pid. Re-executing the same drive after a crash produces a byte-identical key, so your store's dedup check is sound. |
+| Deduplication (at-least-once) | `{session scope, send_id, macrostep, microstep, round, c_index, owner, ordinal}` | Read off the stored `%SendDelayed{}` itself. The counters/positions are stamped as of scheduling, not firing (`lib/statifier/effect/send_delayed.ex:12-13`, ADR-0046), `ordinal` is a per-execution sequence off `machine_state.timer_counter` (ADR-0059), and every component is deterministic - no clock, no CSPRNG, no pid. Re-executing the same drive after a crash produces a byte-identical key, so your store's dedup check is sound. |
 
 `session scope` is `ctx.session_id` (spec 5.10's `_sessionid`) for a live
 session, or your own durable run id for a process-less host. Scoping is
 mandatory, not advisory: `send_counter` restarts at 0 for every
-`%MachineState{}` (`lib/statifier/machine_state.ex:349`, ADR-0035), so
+`%MachineState{}` (`lib/statifier/machine_state.ex:502`, ADR-0035), so
 `send_1` from one run collides with `send_1` from a completely unrelated run
 unless your store keeps them apart. The library cannot supply this scope
 itself - it has no view of your store - which is why it is your first
 design decision, not the library's.
 
-`c_index` and `owner` (`lib/statifier/effect/send_delayed.ex:33-34`) are
+`c_index` and `owner` (`lib/statifier/effect/send_delayed.ex:41-42`) are
 mandatory parts of the dedup key, not decoration. They name the `<send>`
 content node's position and which executable-content block emitted it. A key
 built from only `session scope`, `send_id`, `macrostep`, `microstep`, and
@@ -374,8 +374,8 @@ re-entered event can be attributed back to the right point in the run. Read
 those off the `%SendDelayed{}` you stored when the send was scheduled -
 **never** off anything computed at delivery time. ADR-0046 stamps
 `macrostep`, `microstep`, and `round` "as they stood when the send was
-scheduled, not when the timer fires" (`lib/statifier/effect/send_delayed.ex:11-13`),
-and `c_index`/`owner` (`:33-34`) are static content-node identity, not
+scheduled, not when the timer fires" (`lib/statifier/effect/send_delayed.ex:12-13`),
+and `c_index`/`owner` (`:41-42`) are static content-node identity, not
 recomputed at delivery either. This is also what makes the dedup key above
 deterministic across a re-run: the position you stored is the position, full
 stop, regardless of when or how many times the job actually fires.
