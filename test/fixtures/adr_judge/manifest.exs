@@ -60,6 +60,31 @@
       "the exit-set trace call moves below the departure reduce but reads a binding captured before it, so the state it is stamped against is the same one the unmoved call read. Re-anchored 2026-08-18 (st-ntf5): that move is now the production code itself, so the captured edit is a different meaning-preserving change over the same shape - the captured pre-exit binding is renamed `pre_exit_state` -> `exit_set_state` and the post-departure configuration read is hoisted into a local (`resulting_configuration`) immediately before the trace call; neither the state the payload is stamped against nor the carried configuration changes"
   },
   %{
+    key: "adr-0012-debuggability",
+    file: "0012_trace_stamp_swapped_comment_kept.diff",
+    expect: :violation,
+    tier: :subtle,
+    note:
+      "the exit-set trace's counters are stamped from the post-departure state ... " <>
+        "the six-line ADR-0012 comment naming the rule is left in place, so the only " <>
+        "signal is the stamp swap itself. Measured a FALSE NEGATIVE by hand on " <>
+        "2026-08-18 (st-ntf5) against the real CLI; landed under st-xsb1 as the row " <>
+        "that isolates that gap. No gate path runs this row - next measured in " <>
+        "docs/plans/260818-st-xsb1-adr-0012-pre-mutation-fixture.md Phase 3"
+  },
+  %{
+    key: "adr-0012-debuggability",
+    file: "0012_configuration_read_post_departure.diff",
+    expect: :clean,
+    tier: :subtle,
+    note:
+      "the payload's `configuration` is read from an explicitly named " <>
+        "post-departure binding, which is what ADR-0012 requires of that field - " <>
+        "the state the counters are stamped against is unchanged. The adversarial " <>
+        "partner to the row above: a judge that learned 'read after the reduce is a " <>
+        "violation' scores a false positive here"
+  },
+  %{
     key: "adr-0014-expression-spans",
     file: "0014_span_table_dropped.diff",
     expect: :violation,
