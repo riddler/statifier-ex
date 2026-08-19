@@ -1316,6 +1316,149 @@ defmodule Statifier.SessionTest do
     end
   end
 
+  describe "Session.Effects's own validity arms decide interpret/2's boundary (ADR-0029, ADR-0047 decision 4)" do
+    # Every document-driven test in this file reaches an invalid target or
+    # unsupported type through the core, which rejects first (ADR-0047) -
+    # `Session.Effects.plan_send/3`/`plan_send_delayed/3`'s own `{:invalid,
+    # _target}` and `else` (unsupported-type) arms never decide the outcome
+    # on that path. `interpret/2` is public (ADR-0029), so a hand-built
+    # effect the core never produced is the only way to walk the arms
+    # themselves. Both branches land on state "a", which has a transition
+    # for `error.execution` (the arms' own outcome) and a second one for
+    # plain `e` (what an unraised send would deliver to `:self`, since every
+    # effect below omits `target` or writes an unparseable one) - so a
+    # sabotaged arm redirects the run to "delivered" instead of leaving it
+    # timed out or ambiguous.
+    defp boundary_arm_doc do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="error.execution" target="caught"/>
+              <transition event="e" target="delivered"/>
+          </state>
+          <state id="caught"/>
+          <state id="delivered"/>
+      </scxml>
+      """
+    end
+
+    # sabotage: `plan_send/3`'s `{:invalid, _target} -> [execution_error(send)]`
+    # clause is deleted, leaving the `route -> [{:deliver, route,
+    # delivered_event(send, session_id), effect}]` catch-all to match
+    # `{:invalid, "not a recognized target"}` instead -> `Session` is handed
+    # a `{:deliver, {:invalid, _}, _, _}` instruction its own route-handling
+    # clauses do not recognize, and the run never reaches "caught" ->
+    # `wait_for_status/2` times out and flunks. Confirmed red and reverted.
+    test "Send with an unparseable target raises error.execution on the sender's own queue, undelivered" do
+      machine = compile!(boundary_arm_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      send_effect = %Effect.Send{
+        event: "e",
+        target: "not a recognized target",
+        send_id: "send1",
+        id_from_author?: true,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Session.interpret(session, [{:send, send_effect}])
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
+      assert status.configuration == MapSet.new(["caught"])
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `plan_send/3`'s `if Target.supported_type?(send.type) do ...
+    # else [execution_error(send)] end` has the `else` branch replaced with
+    # the `if`-block's own body (so an unsupported type is planned exactly
+    # like a supported one) -> with `target: nil` below, `Target.parse/1`
+    # returns `:self` and the send is delivered as `e` instead of raising,
+    # so the run reaches "delivered" instead of "caught", reddening the
+    # configuration assertion. Confirmed red and reverted.
+    test "Send with an unsupported type raises error.execution on the sender's own queue, undelivered" do
+      machine = compile!(boundary_arm_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      send_effect = %Effect.Send{
+        event: "e",
+        target: nil,
+        type: "http://example.com/bogus",
+        send_id: "send1",
+        id_from_author?: true,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Session.interpret(session, [{:send, send_effect}])
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
+      assert status.configuration == MapSet.new(["caught"])
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `plan_send_delayed/3`'s `{:invalid, _target} ->
+    # [execution_error(send)]` clause is deleted, leaving the `route -> [...]`
+    # catch-all to build a `{:schedule, _, _, {:invalid, _}, _, _}`
+    # instruction instead -> a timer is armed for an invalid route
+    # (`pending_timers` becomes 1, not 0) and the run never reaches "caught",
+    # reddening both assertions below. Confirmed red and reverted.
+    test "SendDelayed with an unparseable target raises error.execution with no timer scheduled" do
+      machine = compile!(boundary_arm_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      send_delayed = %Effect.SendDelayed{
+        event: "e",
+        target: "not a recognized target",
+        send_id: "send1",
+        id_from_author?: true,
+        delay_ms: 200,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Session.interpret(session, [{:send_delayed, send_delayed}])
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
+      assert status.configuration == MapSet.new(["caught"])
+      assert status.pending_timers == 0
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+
+    # sabotage: `plan_send_delayed/3`'s `if Target.supported_type?(send.type)
+    # do ... else [execution_error(send)] end` has the `else` branch replaced
+    # with the `if`-block's own body -> with `target: nil` below, a timer is
+    # armed instead of raising, and 200ms later fires `e` to `:self` -
+    # `wait_for_status/2` never sees "caught" (only "a" then "delivered") and
+    # flunks on timeout. Confirmed red and reverted.
+    test "SendDelayed with an unsupported type raises error.execution with no timer scheduled" do
+      machine = compile!(boundary_arm_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      send_delayed = %Effect.SendDelayed{
+        event: "e",
+        target: nil,
+        type: "http://example.com/bogus",
+        send_id: "send1",
+        id_from_author?: true,
+        delay_ms: 200,
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      Session.interpret(session, [{:send_delayed, send_delayed}])
+
+      status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["caught"]) end)
+      assert status.configuration == MapSet.new(["caught"])
+      assert status.pending_timers == 0
+      assert Session.snapshot(session).datamodel["_event"]["sendid"] == "send1"
+    end
+  end
+
   # -- recording ----------------------------------------------------------
 
   describe "recording" do
