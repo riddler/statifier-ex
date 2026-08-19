@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-08-18",
+  "last_updated": "2026-08-19",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -189,6 +189,7 @@
     "test/scxml_tests/mandatory/invoke/test247_test.exs",
     "test/scxml_tests/mandatory/invoke/test252_test.exs",
     "test/scxml_tests/mandatory/invoke/test253_test.exs",
+    "test/scxml_tests/mandatory/invoke/test554_test.exs",
     "test/scxml_tests/mandatory/on_entry/test375_test.exs",
     "test/scxml_tests/mandatory/on_entry/test376_test.exs",
     "test/scxml_tests/mandatory/on_exit/test377_test.exs",
@@ -254,6 +255,7 @@
     "test/scxml_tests/mandatory/send/test200_test.exs",
     "test/scxml_tests/mandatory/send/test205_test.exs",
     "test/scxml_tests/mandatory/send/test521_test.exs",
+    "test/scxml_tests/mandatory/send/test553_test.exs",
     "test/scxml_tests/mandatory/state/test364_test.exs",
     "test/scxml_tests/mandatory/system_variables/test318_test.exs",
     "test/scxml_tests/mandatory/system_variables/test319_test.exs",
