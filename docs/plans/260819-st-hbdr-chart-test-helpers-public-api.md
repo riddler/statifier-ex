@@ -711,11 +711,11 @@ that adopting the new names is a future regeneration's call.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green. This phase touches no Elixir; the gate still
+- [x] Full `mix quality` green. This phase touches no Elixir; the gate still
       runs and must still be green, and per CLAUDE.md a no-Elixir change may
       commit on review of the diff alone if the gate has nothing to say.
-- [ ] `grep -rn "lives in .test/support., not .lib/." docs/` returns nothing.
-- [ ] `grep -rn "Statifier.Testing" docs/testing.md` returns the new rule.
+- [x] `grep -rn "lives in .test/support., not .lib/." docs/` returns nothing.
+- [x] `grep -rn "Statifier.Testing" docs/testing.md` returns the new rule.
 
 #### Manual Verification:
 - [ ] A reader who knows only `docs/testing.md` can state the new rule
@@ -952,6 +952,18 @@ advancement and the Manual items are deferred to the end.
 - [ ] Confirm no Appendix D procedure is touched.
 - [ ] Read the `## Options` doc as a downstream author: does it say enough to
       pick a value, or only that a value exists?
+
+**Implementation Note**: as Phase 1.
+
+---
+
+### Phase 4
+
+- [ ] A reader who knows only `docs/testing.md` can state the new rule
+      correctly, including which direction it forbids.
+- [ ] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
+      new prose word for word in substance.
+- [ ] No Appendix D procedure is touched (documentation only).
 
 **Implementation Note**: as Phase 1.
 
