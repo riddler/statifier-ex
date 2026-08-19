@@ -34,5 +34,7 @@ mix quality                  # full gate (required green before commit)
 Issue tracking is [beads](https://github.com/gastownhall/beads) (`bd ready` to
 find work). Workflow, model roles, and worktree conventions:
 [docs/workflow.md](docs/workflow.md). Registering your own `<invoke>`
-handlers: [docs/extending.md](docs/extending.md). Testing your own charts:
+handlers: [docs/extending.md](docs/extending.md). Scheduling delayed sends
+durably, outside the session process:
+[docs/durable-timers.md](docs/durable-timers.md). Testing your own charts:
 [docs/testing-charts.md](docs/testing-charts.md).
