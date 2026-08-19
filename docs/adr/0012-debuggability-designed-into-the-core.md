@@ -2,7 +2,9 @@
 
 Status: accepted (2026-08-04) - amended 2026-08-17 (st-1xwh: `d_index` named a
 third identity under item 3) - amended 2026-08-18 (st-9i5r: item 3's retention
-reaches attribute-level spans, not only element-level)
+reaches attribute-level spans, not only element-level) - amended 2026-08-18
+(st-xsb1: item 4's step counters are stamped against the state at the phase
+boundary, not against whatever the state became afterwards)
 
 ## Context
 
@@ -77,6 +79,30 @@ memory the Consequences section already accepts, which is why it is an
 amendment rather than a new record. The original sentence stands above,
 unedited, for the same reason the st-1xwh amendment explains rather than
 rewrites.
+
+**Amendment (st-xsb1):** item 4 commits trace effects to carrying "the step
+and the identity of what raised them" but does not say which state those
+counters are read from. A trace effect names a phase boundary, and the step
+counters it carries are the ones that stood at that boundary - stamped
+against the state as it was when the boundary was crossed, not against
+whatever the state became afterwards.
+
+The converse is equally part of the rule: a payload field whose meaning is
+defined only by the mutation - "the configuration after this exit set was
+applied" - is correctly read from the post-mutation state. Reading such a
+field after the mutation is not a violation of this item; stamping the
+counters after it is. A trace effect can therefore mix a pre-mutation
+stamp with a post-mutation field in the same payload without breaking item
+4, so long as each is read from the state its own meaning depends on.
+`exit_states/2` (`lib/statifier/interpreter/exit_entry.ex:100-132`) is a
+worked example of exactly this split.
+
+This is an amendment rather than a new record: it mints no new identity,
+adds no runtime cost, and constrains no code that was not already
+constrained by item 4. It completes a sentence item 4 left half-stated,
+the same way st-1xwh completed the index enumeration. The original
+sentence stands above, unedited, for the same reason the st-1xwh and
+st-9i5r amendments explain rather than rewrite the rule they amend.
 
 ## Consequences
 
