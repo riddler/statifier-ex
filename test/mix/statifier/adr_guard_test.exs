@@ -625,6 +625,78 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
   end
 
+  describe "ADR-0056 - the base-ref early-warning half" do
+    # sabotage: drop the `not` from `file not in base_files`, so a branch file
+    #           absent from the base tree under a different filename fails the
+    #           membership filter and no finding is emitted -> red
+    test "a branch file whose number exists on the base under a different name is a finding" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0052](0052-b.md) | B | accepted |
+      """
+
+      index = %{
+        files: ["0052-b.md"],
+        readme: readme,
+        base_files: ["0052-a.md"]
+      }
+
+      assert [
+               %{
+                 file: "docs/adr/0052-b.md",
+                 line: nil,
+                 check: "adr-0056-base-number",
+                 message: message
+               }
+             ] = AdrGuard.analyze(%{diff: "", adr: index})
+
+      assert message =~ "0052-a.md"
+      assert message =~ "0052"
+    end
+
+    # An edit to an existing record - the branch's file is the same filename
+    # the base ref already has under that number - is not a new collision.
+    # sabotage: drop the `file not in base_files` filter entirely, so a file
+    #           present under its own name on the base also self-matches -> red
+    test "the same number under the same filename is not a finding" do
+      index = %{
+        files: ["0052-a.md"],
+        readme: nil,
+        base_files: ["0052-a.md"]
+      }
+
+      assert AdrGuard.analyze(%{diff: "", adr: index})
+             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+    end
+
+    # sabotage: change the base-file lookup from `Map.get(base_by_number,
+    #           number)` to `List.first(base_files)`, so a branch file's
+    #           number matches whatever base file happens to be first,
+    #           regardless of whether that number actually exists there -> red
+    test "a number absent from the base is not a finding" do
+      index = %{
+        files: ["0057-new.md"],
+        readme: nil,
+        base_files: ["0052-a.md"]
+      }
+
+      assert AdrGuard.analyze(%{diff: "", adr: index})
+             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+    end
+
+    # Covers both Phase 2's no-base-ref source and any hand-built source that
+    # never populates :base_files.
+    # sabotage: drop `defp base_number_findings(_index), do: []`, so an index
+    #           with no :base_files key raises FunctionClauseError -> red
+    test "an absent :base_files key produces no findings" do
+      index = %{files: ["0052-a.md"], readme: nil}
+
+      assert AdrGuard.analyze(%{diff: "", adr: index})
+             |> Enum.filter(&(&1.check == "adr-0056-base-number")) == []
+    end
+  end
+
   # Keyed by git subcommand, except `rev-parse`, which is keyed by the ref it is
   # asked to resolve - that is the call whose answer decides the base.
   defp runner(responses) do
@@ -776,6 +848,23 @@ defmodule Mix.Statifier.AdrGuardTest do
 
       assert index.files == ["0001-first.md", "0002-second.md"]
       assert index.readme == "the readme text"
+    end
+
+    # sabotage: drop the @adr_filename_pattern filter from base_adr_files/2,
+    #           so README.md counts as a base record too -> red
+    test "collect/1 populates :base_files from the injected runner's ls-tree response" do
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff", {"", 0}},
+        {"ls-tree",
+         {"docs/adr/0001-first.md\ndocs/adr/0002-second.md\ndocs/adr/README.md\n" <>
+            "docs/adr/nested/0003-nested.md\n", 0}}
+      ]
+
+      assert {:ok, %{adr: index}} = AdrGuard.collect(runner: runner(responses))
+
+      assert Enum.sort(index.base_files) == ["0001-first.md", "0002-second.md", "0003-nested.md"]
     end
 
     # sabotage: raise instead of returning {:error, _} when git fails -> red

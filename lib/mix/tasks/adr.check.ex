@@ -5,9 +5,11 @@ defmodule Mix.Tasks.Adr.Check do
   Reports lines the branch adds that look like violations of ADR-0002 (Appendix
   D naming), ADR-0003 (pure core with effects), ADR-0004 (predicator as the
   datamodel), ADR-0008 (generated identifier formats), or ADR-0018 (process
-  artifacts are not code comments) - plus, since ADR-0056, two checks that are
-  not about the diff at all: `docs/adr/` numbers colliding and
-  `docs/adr/README.md`'s table falling out of bijection with the directory.
+  artifacts are not code comments) - plus, since ADR-0056, three checks that
+  are not about the diff at all: `docs/adr/` numbers colliding,
+  `docs/adr/README.md`'s table falling out of bijection with the directory,
+  and a branch-added ADR number that already exists on the base ref under a
+  different filename.
 
   It runs as the `ADR guard` custom stage of `mix quality`, so drift from an
   accepted decision is a named gate failure rather than something review has to
@@ -19,11 +21,21 @@ defmodule Mix.Tasks.Adr.Check do
   placed on or above the line.
 
   The ADR-0056 numbering findings (`adr-0056-duplicate-number`,
-  `adr-0056-readme-index`) clear on neither escape hatch. They carry no line
-  number - they are invariants over the working tree's filenames and README
-  table, not patterns over an added line - and there is no comment that makes a
-  duplicate ADR number or a missing table row correct. The fix is a renumber
-  and a README row move.
+  `adr-0056-readme-index`, `adr-0056-base-number`) clear on neither escape
+  hatch. They carry no line number - they are invariants over the working
+  tree's filenames and README table, or a comparison against the base ref's
+  `docs/adr/` listing, not patterns over an added line - and there is no
+  comment that makes a duplicate ADR number or a missing table row correct.
+  The fix is a renumber and a README row move.
+
+  `adr-0056-base-number` is the odd one out: a finding from it is always real,
+  but **a pass promises nothing when `origin/main` is stale.** ADR-0056
+  decision 2 is explicit that this half "exists for early warning only" and
+  that "no document, skill, or report may cite a bare-gate ADR guard pass as
+  evidence that no collision exists on the remote" - the actual guarantee is
+  `adr-0056-duplicate-number` and `adr-0056-readme-index`, which run
+  tree-locally and therefore bite once `wurk:mr`'s post-fetch rebase has
+  materialized a colliding file into the working tree.
 
   ## Usage
 
@@ -67,9 +79,10 @@ defmodule Mix.Tasks.Adr.Check do
   finding does not clear on an ADR citation - write `ADR-0018-exempt` on or
   above the line instead, since that finding is checking whether the line cites
   a bead, and an ADR citation would clear it by accident. An ADR-0056 numbering
-  finding (`adr-0056-duplicate-number`, `adr-0056-readme-index`) does not clear
-  on any comment at all - the fix is to renumber the colliding record and move
-  its docs/adr/README.md row, not to justify the collision in place.\
+  finding (`adr-0056-duplicate-number`, `adr-0056-readme-index`,
+  `adr-0056-base-number`) does not clear on any comment at all - the fix is
+  to renumber the colliding record and move its docs/adr/README.md row, not
+  to justify the collision in place.\
   """
 
   @impl Mix.Task

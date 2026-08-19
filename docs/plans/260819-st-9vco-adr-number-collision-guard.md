@@ -712,8 +712,8 @@ Each with its sabotage note.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green; `mix gate.verify` exits zero.
-- [ ] `git fetch origin && mix adr.check` exits 0 on this branch. **The fetch
+- [x] Full `mix quality` is green; `mix gate.verify` exits zero.
+- [x] `git fetch origin && mix adr.check` exits 0 on this branch. **The fetch
       is part of the criterion, not a preamble to it.** ADR-0056 decision 2
       says a pass from this half "promises nothing when `origin/main` is
       stale", and that "no document, skill, or report may cite a bare-gate ADR
@@ -722,10 +722,10 @@ Each with its sabotage note.
       this box is not checkable; with one, it mechanically confirms ADR-0056's
       Consequences claim that 0055 was the highest number on the remote and
       0056 is free on both sides.
-- [ ] With a scratch branch that copies an existing on-main record to a new
+- [x] With a scratch branch that copies an existing on-main record to a new
       filename under the same number, `mix adr.check` exits 1 with an
       `adr-0056-base-number` finding.
-- [ ] `mix quality --format json --report -` still shows `ADR guard` passed.
+- [x] `mix quality --format json --report -` still shows `ADR guard` passed.
 
 #### Manual Verification:
 - [ ] Replay st-hbdr's shape by hand: create a branch, add
@@ -875,4 +875,6 @@ without a human present, recorded so they can be overridden cheaply:
 
 ### Phase 3
 - [ ] The st-hbdr replay against a real `origin/main`.
+- [ ] The moduledoc's asymmetry paragraph is strong enough that a future
+      reader does not cite a bare-gate pass as remote evidence.
 - [ ] Confirm no fetch was introduced anywhere under `lib/mix/`.

@@ -11,7 +11,7 @@ defmodule Mix.Statifier.AdrGuard do
   project already clears an Appendix D deviation: an inline comment on or
   above the flagged line naming an ADR or the word "deviation".
 
-  ADR-0056's two checks, `adr-0056-duplicate-number` and
+  ADR-0056's tree-local checks, `adr-0056-duplicate-number` and
   `adr-0056-readme-index`, are different in kind from all five: they are
   invariants over the working tree's `docs/adr/` listing and its README table,
   not patterns over added diff lines. A finding from either carries `line:
@@ -20,6 +20,18 @@ defmodule Mix.Statifier.AdrGuard do
   on the `ADR-0\\d{3}|deviation` escape hatch**. There is no such thing as a
   justified duplicate ADR number, and an ADR citation is not a filename: the
   fix is a renumber and a README row move, never a suppression comment.
+
+  ADR-0056 adds a third check, `adr-0056-base-number`: a branch-added
+  `docs/adr/NNNN-*.md` whose number already exists on the base ref under a
+  different filename. It differs from the two tree-local checks in a way
+  ADR-0056 decision 2 states directly: "a finding from this half is always
+  real (a collision it can see is a collision), but a pass from it promises
+  nothing when `origin/main` is stale." The guarantee against a collision
+  lives in the tree-local checks above, which run at the post-fetch,
+  post-rebase gate `wurk:mr` performs; `adr-0056-base-number` only moves
+  detection earlier on whatever run happens to have a fresh base ref. **No
+  document, skill, or report may cite a bare-gate ADR guard pass as evidence
+  that no collision exists on the remote.**
 
   The ADR-0018 check is the exception to that escape hatch, on purpose. It
   flags a bead ID (`st-` plus the id, including a dotted child suffix) added
@@ -181,7 +193,8 @@ defmodule Mix.Statifier.AdrGuard do
       uxid_findings(files) ++
       bead_id_findings(files, texts) ++
       duplicate_number_findings(index) ++
-      readme_index_findings(index)
+      readme_index_findings(index) ++
+      base_number_findings(index)
   end
 
   @doc """
@@ -206,6 +219,10 @@ defmodule Mix.Statifier.AdrGuard do
   filesystem read, not a git one, so it costs nothing to compute up front and
   it is what lets the tree-local numbering checks run without a base ref.
   """
+  @adr_dir "docs/adr"
+  @adr_readme "docs/adr/README.md"
+  @adr_filename_pattern ~r/^\d{4}-.+\.md$/
+
   @spec collect(opts :: keyword()) ::
           {:ok, source()} | {:no_base_ref, source()} | {:error, String.t()}
   def collect(opts) do
@@ -226,13 +243,28 @@ defmodule Mix.Statifier.AdrGuard do
          base = String.trim(base),
          {:ok, diff} <- run(runner, ["diff", base | @diff_flags]) do
       full_diff = diff <> untracked_diff(runner)
+      index = Map.put(index, :base_files, base_adr_files(runner, base))
       {:ok, %{diff: full_diff, files: file_texts(full_diff, reader), adr: index}}
     end
   end
 
-  @adr_dir "docs/adr"
-  @adr_readme "docs/adr/README.md"
-  @adr_filename_pattern ~r/^\d{4}-.+\.md$/
+  # Filenames only - the check compares numbers, and asking for anything more
+  # would make the guard's data depend on blob contents it never reads.
+  # Resolved against the merge base, not the ref tip: the question is "what
+  # number existed at the point this branch diverged", and a merge-base
+  # listing is what makes a number *added by this branch* distinguishable.
+  defp base_adr_files(runner, base) do
+    case run(runner, ["ls-tree", "--name-only", base, "docs/adr/"]) do
+      {:ok, output} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.map(&Path.basename/1)
+        |> Enum.filter(&Regex.match?(@adr_filename_pattern, &1))
+
+      {:error, _reason} ->
+        []
+    end
+  end
 
   # Deliberately a filesystem listing rather than a git one: the invariant is
   # about the working tree, so an untracked record that has not been committed
@@ -580,17 +612,19 @@ defmodule Mix.Statifier.AdrGuard do
   # check's business, and neither is the footer prose below the table.
   @readme_row_pattern ~r/^\|\s*\[(\d{4})\]\((\d{4}-[^)\/]+\.md)\)/m
 
+  defp adr_number(file) do
+    case Regex.run(@adr_number_pattern, file) do
+      [_all, number] -> number
+      nil -> nil
+    end
+  end
+
   defp duplicate_number_findings(nil), do: []
 
   defp duplicate_number_findings(%{files: files}) do
     groups =
       files
-      |> Enum.group_by(fn file ->
-        case Regex.run(@adr_number_pattern, file) do
-          [_all, number] -> number
-          nil -> nil
-        end
-      end)
+      |> Enum.group_by(&adr_number/1)
       |> Map.delete(nil)
 
     for {number, group} <- groups,
@@ -688,6 +722,34 @@ defmodule Mix.Statifier.AdrGuard do
       )
     end)
   end
+
+  # -- ADR-0056: the base-ref early-warning half ------------------------------
+
+  # Early warning only, per ADR-0056 decision 2: a finding is always real, but
+  # a pass promises nothing when the base ref (`:base_files`) is stale - see
+  # the moduledoc. Absent `:base_files` (the no-base-ref source, or any
+  # hand-built source) this returns [] rather than raising, so the guard's
+  # other checks stay usable without a base ref.
+  defp base_number_findings(%{base_files: base_files, files: files}) do
+    base_by_number = Map.new(base_files, &{adr_number(&1), &1})
+
+    for file <- files,
+        file not in base_files,
+        number = adr_number(file),
+        number != nil,
+        base_file = Map.get(base_by_number, number),
+        base_file != nil do
+      finding(
+        Path.join(@adr_dir, file),
+        nil,
+        "adr-0056-base-number",
+        "ADR number #{number} already exists on the base ref as " <>
+          "#{Path.join(@adr_dir, base_file)}; ADR-0056 requires renumbering before merge"
+      )
+    end
+  end
+
+  defp base_number_findings(_index), do: []
 
   # -- diff parsing ---------------------------------------------------------
 
