@@ -910,14 +910,14 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] Each new sabotage note names a mutation that was actually performed and
+- [x] Each new sabotage note names a mutation that was actually performed and
       actually reddened the named test - the note is the artifact, and a note
       whose mutation never fired is the failure `docs/testing.md:180-205`
       describes.
-- [ ] No Appendix D procedure is touched. The promoted module implements none of
+- [x] No Appendix D procedure is touched. The promoted module implements none of
       the pseudocode; confirm by reading the diff that nothing under
       `lib/statifier/interpreter/` changed and engine behavior is untouched.
-- [ ] The registry comments still tell a reader what each entry means after the
+- [x] The registry comments still tell a reader what each entry means after the
       bead IDs come out - the scrub removed provenance, not meaning.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; the
@@ -929,14 +929,14 @@ advancement and the Manual items are deferred to the end.
 
 ### Phase 2
 
-- [ ] Every replaced `n/a` note names a mutation that was performed and
+- [x] Every replaced `n/a` note names a mutation that was performed and
       reddened its test.
-- [ ] No Appendix D procedure is touched - the promoted module drives the
+- [x] No Appendix D procedure is touched - the promoted module drives the
       engine from outside and implements none of the pseudocode; confirm nothing
       under `lib/statifier/interpreter/` changed.
-- [ ] The ADR-0003 escape comment argues the case rather than asserting an
+- [x] The ADR-0003 escape comment argues the case rather than asserting an
       exemption: a reader who knows only ADR-0003 should finish it agreeing.
-- [ ] Read the corpus shim path once by hand: pick one `test/scion_tests` file
+- [x] Read the corpus shim path once by hand: pick one `test/scion_tests` file
       and one `test/scxml_tests` file and run each alone with
       `mix test <path> --include scion` / `--include scxml_w3`.
 
@@ -946,11 +946,11 @@ advancement and the Manual items are deferred to the end.
 
 ### Phase 3
 
-- [ ] Run the new deadline test alone and confirm it completes in well under a
+- [x] Run the new deadline test alone and confirm it completes in well under a
       second - proving the option is actually read and not shadowed by the
       4-second default.
-- [ ] Confirm no Appendix D procedure is touched.
-- [ ] Read the `## Options` doc as a downstream author: does it say enough to
+- [x] Confirm no Appendix D procedure is touched.
+- [x] Read the `## Options` doc as a downstream author: does it say enough to
       pick a value, or only that a value exists?
 
 **Implementation Note**: as Phase 1.
@@ -959,11 +959,11 @@ advancement and the Manual items are deferred to the end.
 
 ### Phase 4
 
-- [ ] A reader who knows only `docs/testing.md` can state the new rule
+- [x] A reader who knows only `docs/testing.md` can state the new rule
       correctly, including which direction it forbids.
-- [ ] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
+- [x] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
       new prose word for word in substance.
-- [ ] No Appendix D procedure is touched (documentation only).
+- [x] No Appendix D procedure is touched (documentation only).
 
 **Implementation Note**: as Phase 1.
 
@@ -971,17 +971,17 @@ advancement and the Manual items are deferred to the end.
 
 ### Phase 5
 
-- [ ] **The acceptance criterion, exercised end to end.** In a scratch Mix
+- [x] **The acceptance criterion, exercised end to end.** In a scratch Mix
       project outside this repo, add `{:statifier, path: "<this worktree>"}`,
       write the guide's example verbatim into `test/`, and run `mix test`. It
       must pass with nothing copied from `test/support`. This is the one check
       that proves the bead, and no in-repo test can stand in for it: in-repo,
       `test/support` is on the compile path.
-- [ ] Repeat the scratch-project check with `MIX_ENV=prod mix compile` on the
+- [x] Repeat the scratch-project check with `MIX_ENV=prod mix compile` on the
       dependency to confirm the promoted modules compile outside `:test`.
-- [ ] The guide reads as a how-to, not an explanation: a chart author gets to a
+- [x] The guide reads as a how-to, not an explanation: a chart author gets to a
       passing test without needing `docs/architecture.md`.
-- [ ] No Appendix D procedure is touched (documentation only).
+- [x] No Appendix D procedure is touched (documentation only).
 
 **Implementation Note**: as Phase 1.
 
