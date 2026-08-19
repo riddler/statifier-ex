@@ -1158,7 +1158,7 @@ defmodule Statifier.Compiler do
   end
 
   # Each namelist entry is a raw location-expression string, not a
-  # `%DParam{}` - mirrors `build_invoke_namelist/4`'s own reasoning: the
+  # `%DParam{}` - mirrors `build_invoke_namelist/3`'s own reasoning: the
   # entry's own text doing double duty as both `MParam.name` and the source
   # to compile (`kind: :location`). The whole `namelist` attribute shares
   # one written span - there is no per-entry span to point at instead. A

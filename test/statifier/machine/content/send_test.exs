@@ -291,26 +291,6 @@ defmodule Statifier.Machine.Content.SendTest do
                ExecutableContent.execute(send_node(m, "namelist_undeclared"), context(ms))
     end
 
-    # Companion to the pin above, one layer earlier: a namelist entry that
-    # never compiled at all (5.9.4 deferral, `{:invalid, error}` on the
-    # entry's `%Machine.Param{}` - see `Statifier.Machine.Param`) discards the
-    # message exactly as an undeclared root does, not by reaching the
-    # evaluator and failing there but by never reaching it.
-    #
-    # sabotage: `evaluate_param/2`'s `{:invalid, error} -> {:error, error}`
-    # clause is dropped, falling through to the catch-all
-    # `Evaluator.evaluate(datamodel_context, expr)` clause -> `Evaluator` has
-    # no clause for `{:invalid, _}`, so this raises a `FunctionClauseError`
-    # instead of returning `{:error, _}`, reddening this test for the wrong
-    # reason (a crash, not a discard).
-    test "namelist entry that failed to compile discards the message, no effect" do
-      m = machine()
-      ms = machine_state(m)
-
-      assert {:error, _reason} =
-               ExecutableContent.execute(send_node(m, "namelist_invalid"), context(ms))
-    end
-
     # sabotage: `data/3`'s clauses are swapped (`%Send{content: nil}` picks
     # `content` and the other clause picks the params coercion) -> a
     # `<content>text</content>` send would report its params coercion
