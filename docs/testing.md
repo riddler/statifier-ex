@@ -91,15 +91,18 @@ from the three above in kind, not just in tag:
   `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
   measurement section for the full per-fixture numbers and the decision.
 
-  A `:subtle` tier (twelve fixtures, six per-registry-entry pairs) joined the
-  corpus alongside the original eight `:blatant` fixtures
+  A `:subtle` tier (fourteen fixtures, seven per-registry-entry pairs) joined
+  the corpus alongside the original eight `:blatant` fixtures
   (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`) and was
   measured on 2026-08-18 under that plan's Decision 2 - three runs per model at
   seeds 101/202/303, a fixture's verdict being the majority of its three. A
   sixth ADR-0012 pair landed later (st-xsb1) isolating a payload field stamped
   from the wrong state from one deliberately read after the mutation, and
   brought an amendment to ADR-0012's text with it; the partial re-measurement
-  that amendment obliged is the third row below.
+  that amendment obliged is the third row below. A seventh ADR-0012 pair
+  landed later still (st-6f7h), separating a wrongly post-mutation `Trace.ExitSet`
+  stamp from a rightly post-mutation `Trace.Done` stamp, both trace calls
+  visible in the same hunk; it is unmeasured as of that plan's Phase 1.
 
   | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
   |---|---|---|---|---|---|

@@ -261,7 +261,11 @@ rewrite back as a manual step rather than treating it as a score.
 ### Decision 3: the spend ceiling is eight corpus-equivalent runs
 
 The whole bead is budgeted at **eight full-corpus-equivalent runs**, where one
-corpus-equivalent is one pass over all 18 fixtures. Allocated:
+corpus-equivalent is one pass over all 18 fixtures. This unit is pinned at 18
+fixture-runs as a fixed unit of account and does not float with the corpus's
+size - the corpus stood at 20 rows at st-xsb1 and 22 rows after st-6f7h, and
+st-xsb1's 1.0 CE was computed on this pinned unit, not on the corpus size at
+the time. Allocated:
 
 | Purpose | Runs | Notes |
 |---|---|---|

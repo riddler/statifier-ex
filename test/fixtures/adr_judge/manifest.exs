@@ -87,6 +87,44 @@
         "violation' scores a false positive here"
   },
   %{
+    key: "adr-0012-debuggability",
+    file: "0012_exit_sweep_stamp_swapped_beside_done.diff",
+    expect: :violation,
+    tier: :subtle,
+    note:
+      "the exit sweep's `Trace.ExitSet` counters are stamped from the post-sweep " <>
+        "state - the `pre_exit_state` binding is deleted and the six-line ADR-0012 " <>
+        "comment naming the rule is left standing. The hunk is cut wide " <>
+        "(--unified=14) so the `Trace.Done` call eight lines below is visible in " <>
+        "the same chunk, stamped post-sweep and correctly so: the row asks the " <>
+        "judge to indict one trace call and acquit the other from the same bytes, " <>
+        "which no other fixture does. This is the second `Trace.ExitSet` stamp " <>
+        "site; `enter_states/2` is a third and is deliberately unfixtured, because " <>
+        "the corpus is indexed by rule and tier rather than by production site and " <>
+        "this row earns its place on the two-trace discrimination, not on the path " <>
+        "string. UNMEASURED as of st-6f7h Phase 1; no gate path runs this row - " <>
+        "first measured in " <>
+        "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
+  },
+  %{
+    key: "adr-0012-debuggability",
+    file: "0012_done_trace_stamped_post_sweep.diff",
+    expect: :clean,
+    tier: :subtle,
+    note:
+      "the `Trace.Done` payload is stamped from an explicitly named post-sweep " <>
+        "binding, which is correct: the boundary this trace names is the end of " <>
+        "the run, so the counters that stood at it are the post-sweep ones. The " <>
+        "`Trace.ExitSet` stamp above it is untouched and visible in the same hunk. " <>
+        "The adversarial partner to the row above, and the corpus's only probe of " <>
+        "a legitimately post-mutation STAMP - " <>
+        "0012_configuration_read_post_departure.diff probes a legitimately " <>
+        "post-mutation FIELD. A judge that learned 'stamp pre-mutation' as an " <>
+        "unconditional rule scores a false positive here. UNMEASURED as of " <>
+        "st-6f7h Phase 1; first measured in " <>
+        "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
+  },
+  %{
     key: "adr-0014-expression-spans",
     file: "0014_span_table_dropped.diff",
     expect: :violation,

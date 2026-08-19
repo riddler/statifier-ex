@@ -1,0 +1,60 @@
+diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+index f98c27d..8ae29a3 100644
+--- a/lib/statifier/interpreter.ex
++++ b/lib/statifier/interpreter.ex
+@@ -1736,54 +1736,52 @@ defmodule Statifier.Interpreter do
+   `MachineState`'s moduledoc describes between `running: false` (from
+   top-level final entry) and `status: :done` (once this walk finishes).
+   """
+   @spec exit_interpreter(machine_state :: MachineState.t()) :: {MachineState.t(), [Effect.t()]}
+   def exit_interpreter(%MachineState{machine: machine} = machine_state) do
+     configuration_at_exit = machine_state.configuration
+     states_to_exit = Machine.exit_order(machine, configuration_at_exit)
+ 
+     # ADR-0012: the counters this payload stamps must be the ones that stood
+     # at the exit-set phase boundary, so the trace is stamped against
+     # `pre_exit_state`; only `configuration` is read from the post-sweep
+     # state, because "the configuration after this exit set was applied"
+     # does not exist until the reduce below has run. Effect-list
+     # position is unchanged: the list is concatenated at the end either way.
+-    pre_exit_state = machine_state
+-
+     {machine_state, donedata, exit_effects} =
+       Enum.reduce(states_to_exit, {machine_state, nil, []}, fn state_index,
+                                                                {ms, donedata, effects} ->
+         {ms, onexit_effects} = ExitEntry.run_onexit_blocks(ms, state_index)
+ 
+         # `for inv in s.invoke: cancelInvoke(inv)` (Appendix D) - the same
+         # shared walk `ExitEntry.depart/2` runs on the ordinary exit path,
+         # so the two never drift.
+         {ms, cancel_effects} = ExitEntry.cancel_invocations_for_state(ms, state_index)
+ 
+         ms = %{ms | configuration: MapSet.delete(ms.configuration, state_index)}
+ 
+         {ms, donedata} =
+           if Machine.final?(machine, state_index) and Machine.at(machine, state_index).parent == 0 do
+             ExitEntry.donedata(ms, state_index)
+           else
+             {ms, donedata}
+           end
+ 
+         {ms, donedata, effects ++ onexit_effects ++ cancel_effects}
+       end)
+ 
+     exit_set_trace =
+-      Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
++      Effect.trace(machine_state, Effect.Trace.ExitSet,
+         indexes: states_to_exit,
+         configuration: machine_state.configuration
+       )
+ 
+     done_trace =
+       Effect.trace(machine_state, Effect.Trace.Done,
+         configuration: configuration_at_exit,
+         donedata: donedata
+       )
+ 
+     done_effect =
+       {:done,
+        %Effect.Done{
+          donedata: donedata,

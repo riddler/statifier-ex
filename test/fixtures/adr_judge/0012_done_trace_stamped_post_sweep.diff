@@ -1,0 +1,38 @@
+diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+index f98c27d..0687855 100644
+--- a/lib/statifier/interpreter.ex
++++ b/lib/statifier/interpreter.ex
+@@ -1766,30 +1766,32 @@ defmodule Statifier.Interpreter do
+             ExitEntry.donedata(ms, state_index)
+           else
+             {ms, donedata}
+           end
+ 
+         {ms, donedata, effects ++ onexit_effects ++ cancel_effects}
+       end)
+ 
+     exit_set_trace =
+       Effect.trace(pre_exit_state, Effect.Trace.ExitSet,
+         indexes: states_to_exit,
+         configuration: machine_state.configuration
+       )
+ 
++    post_sweep_state = machine_state
++
+     done_trace =
+-      Effect.trace(machine_state, Effect.Trace.Done,
++      Effect.trace(post_sweep_state, Effect.Trace.Done,
+         configuration: configuration_at_exit,
+         donedata: donedata
+       )
+ 
+     done_effect =
+       {:done,
+        %Effect.Done{
+          donedata: donedata,
+          configuration: configuration_at_exit,
+          macrostep: machine_state.macrostep,
+          microstep: machine_state.microstep,
+          round: machine_state.round
+        }}
+ 
