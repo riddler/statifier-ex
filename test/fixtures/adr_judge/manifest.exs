@@ -49,7 +49,7 @@
     expect: :violation,
     tier: :subtle,
     note:
-      "the exit-set trace effect is built after the departure reduce instead of before it, so it no longer records the exit-set phase boundary it names and any state-derived field it stamps would take post-departure values - payload and list position unchanged"
+      "the exit-set trace effect is built after the departure reduce instead of before it, so it no longer records the exit-set phase boundary it names and any state-derived field it stamps would take post-departure values - payload and list position unchanged. Re-anchored 2026-08-18 (st-ntf5): the trace call already sits below the reduce in production code, so the captured edit is now the sharper instance of the same violation - it deletes the `pre_exit_state` capture that existed for exactly this reason and stamps `Effect.trace/3` from the post-departure `machine_state` directly; `indexes` and `configuration` are untouched"
   },
   %{
     key: "adr-0012-debuggability",
@@ -57,7 +57,7 @@
     expect: :clean,
     tier: :subtle,
     note:
-      "the exit-set trace call moves below the departure reduce but reads a binding captured before it, so the state it is stamped against is the same one the unmoved call read"
+      "the exit-set trace call moves below the departure reduce but reads a binding captured before it, so the state it is stamped against is the same one the unmoved call read. Re-anchored 2026-08-18 (st-ntf5): that move is now the production code itself, so the captured edit is a different meaning-preserving change over the same shape - the captured pre-exit binding is renamed `pre_exit_state` -> `exit_set_state` and the post-departure configuration read is hoisted into a local (`resulting_configuration`) immediately before the trace call; neither the state the payload is stamped against nor the carried configuration changes"
   },
   %{
     key: "adr-0014-expression-spans",

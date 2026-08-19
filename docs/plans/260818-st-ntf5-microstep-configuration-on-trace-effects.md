@@ -632,13 +632,13 @@ turns up.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` green between edits.
-- [ ] Full `mix quality` green, `mix gate.verify` exits zero. This includes
+- [x] `mix quality --profile loop` green between edits.
+- [x] Full `mix quality` green, `mix gate.verify` exits zero. This includes
       `Mix.Statifier.AdrJudgeCorpusShapeTest`, which enforces that every
       manifest row's file exists, its key is registered, its tier is known,
       each `{key, tier}` still has both a `:violation` and a `:clean` fixture,
       and each fixture's diff lands in its own registry scope and no other.
-- [ ] `grep -rln "exit_entry.ex\|interpreter.ex" test/fixtures/adr_judge/ |
+- [x] `grep -rln "exit_entry.ex\|interpreter.ex" test/fixtures/adr_judge/ |
       grep -v 0012_dropped_trace.diff` returns exactly
       `0012_trace_after_departure.diff` and
       `0012_trace_prestate_captured.diff`. `0012_dropped_trace.diff` always
@@ -646,10 +646,10 @@ turns up.
       and is deliberately excluded: it is a blatant-tier fixture over
       synthetic content, out of this phase's scope, and
       `git diff --stat` must show it unchanged.
-- [ ] Each regenerated diff applies cleanly to the Phase 1 source:
+- [x] Each regenerated diff applies cleanly to the Phase 1 source:
       `git apply --check test/fixtures/adr_judge/<file>` exits zero from a
       clean tree.
-- [ ] `mix quality --profile merge` (which enables the ADR judge stage) is
+- [x] `mix quality --profile merge` (which enables the ADR judge stage) is
       green on the branch, confirming the judge does not read this branch's
       own `lib/` diff as an ADR-0012 violation. Note this makes real `claude`
       CLI calls; it is the same run `/wurk:mr` performs before pushing.
@@ -858,5 +858,37 @@ full `mix quality` is the phase gate. In interactive execution, pause here for
 the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically, and Manual Verification items are deferred.
+
+---
+
+### Phase 3
+
+- [ ] Read both regenerated diffs and confirm each one's meaning is the one
+      its manifest note claims - the violation stamps counters from the
+      post-departure state, the clean one does not.
+- [ ] Confirm the two fixtures' *judged properties* are unchanged from before
+      this branch, so st-2ts's recorded Phase 5 scorecard measurement still
+      stands (this is the same claim `b3fa844`'s commit body makes, and it is
+      a human's call on the record, not an automated one).
+- [ ] Optionally hand-run the real-CLI corpus suite for the two rows only -
+      `mix test --only fixture:0012_trace_after_departure.diff` and
+      `mix test --only fixture:0012_trace_prestate_captured.diff`, the
+      per-fixture spend control `test/mix/statifier/adr_judge_corpus_test.exs`
+      documents at its own call site (ExUnit's include beats the module's
+      `:adr_judge_corpus` exclusion, so `--only fixture:...` reaches one row
+      without running the whole paid corpus; do **not** use `--include
+      adr_judge_corpus`, which runs every row) - and confirm the judge returns
+      the expected verdicts. This costs real spend, so treat a green
+      `--profile merge` plus the reading above as sufficient if spend is a
+      concern; record which was done.
+- [ ] No regressions: the other fifteen fixtures are byte-identical to their
+      pre-branch state.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; the
+full `mix quality` is the phase gate, and `mix quality --profile merge` is the
+one this phase additionally needs. In interactive execution, pause here for
+the human to confirm the manual testing. In looped (`--loop`) execution, this
+phase's Automated Verification gates advancement automatically, and Manual
+Verification items are deferred.
 
 ---
