@@ -192,7 +192,7 @@ Loading one composes the same two-line shape the chart section above models:
 decodes.** `String.to_existing_atom/1` cannot conjure an atom for a module
 nobody has loaded yet, so `to_binary/1` writes each handler module as a
 string rather than an atom
-([ADR-0056 decision 5](adr/0056-recording-identity-and-serialization.md)),
+([ADR-0057 decision 5](adr/0057-recording-identity-and-serialization.md)),
 and `from_binary/1` resolves every one back, collecting every unresolvable
 name into a single `{:error, {:unknown_handler_modules, names}}` instead of
 failing on the first. The error is the actionable instruction: load the

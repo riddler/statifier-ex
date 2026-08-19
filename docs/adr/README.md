@@ -58,7 +58,7 @@
 | [0054](0054-durable-timers-consume-the-effect-vocabulary.md) | Durable timers consume the effect vocabulary; the host owns keying and the 6.2 discard | accepted (amended 2026-08-19: decisions 2, 3, and 4 corrected; decision 2's recorded gap decided by 0055) |
 | [0055](0055-non-self-delayed-send-routes-stay-the-librarys.md) | Non-self delayed-send routes stay the library's: `#_parent`/`#_invokeid`/`#_internal` permanently, the external-session route deferred with a named trigger; no route field joins `%SendDelayed{}` | accepted (decides 0054's recorded gap) |
 | [0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) | After a renumbering, pointer citations move (path fix plus an at-the-time note) and historical statements stand; cross-repo ADR citations must name the repo | accepted |
-| [0056](0056-recording-identity-and-serialization.md) | A recording blob nests the chart blob in the compiled `%Machine{}`'s place; the codec lives on the `@opaque` owner; `:invoke_handlers` cross the boundary as strings, never as atoms or code | accepted (answers 0052 decision 8's follow-up) |
+| [0057](0057-recording-identity-and-serialization.md) | A recording blob nests the chart blob in the compiled `%Machine{}`'s place; the codec lives on the `@opaque` owner; `:invoke_handlers` cross the boundary as strings, never as atoms or code | accepted (answers 0052 decision 8's follow-up) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

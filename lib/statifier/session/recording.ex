@@ -86,12 +86,12 @@ defmodule Statifier.Session.Recording do
 
   ## The binary contract
 
-  `to_binary/1` and `from_binary/1` (ADR-0056) give a recording a versioned
+  `to_binary/1` and `from_binary/1` (ADR-0057) give a recording a versioned
   binary envelope: `{:statifier_recording, format_version, chart_blob, opts,
   entries}`. Five slots -
 
     - `format_version` - this module's own version tag, checked before the
-      nested chart is touched (ADR-0056 decision 4): a future format this
+      nested chart is touched (ADR-0057 decision 4): a future format this
       build cannot read reports as a version mismatch rather than failing
       confusingly further in.
     - `chart_blob` - `machine` travels as a nested `Statifier.Chart.to_binary/1`
@@ -99,7 +99,7 @@ defmodule Statifier.Session.Recording do
       `from_binary/1` recompiles it through `Chart.from_binary/1`, which
       checks its own format version and its own recompiled identity in its
       own order - a chart-format bump is therefore never forced to be a
-      recording-format bump, or the reverse (ADR-0056 decision 3). A nested
+      recording-format bump, or the reverse (ADR-0057 decision 3). A nested
       chart failure surfaces wrapped as `{:error, {:chart, reason}}` rather
       than flattened, so the caller always knows which decoder refused.
     - `opts` - the normalized session options, with `:invoke_handlers`
@@ -113,7 +113,7 @@ defmodule Statifier.Session.Recording do
   `:invoke_handlers` cross the boundary as strings, never as atoms, because
   `:safe` decoding refuses to create atoms a blob names and a module's atom
   exists on a node only once that module is loaded (ADR-0052's Consequences,
-  ADR-0056 decision 5). `from_binary/1` resolves every string back with
+  ADR-0057 decision 5). `from_binary/1` resolves every string back with
   `String.to_existing_atom/1`, collecting every failure - not just the first
   - into `{:error, {:unknown_handler_modules, names}}`, sorted, so a host
   learns the whole set of modules it needs to load in one round trip.
@@ -121,7 +121,7 @@ defmodule Statifier.Session.Recording do
   What the codec does not, and cannot, verify: that a resolved handler
   module's planning callbacks (ADR-0051 decision 4) behave the way they did
   when the recording was made. Replay's determinism depends on that
-  equivalence for any recording naming a handler, and ADR-0056 decision 5
+  equivalence for any recording naming a handler, and ADR-0057 decision 5
   records it as an accepted environmental limit - the same class as
   ADR-0034's OTP `MapSet`-iteration caveat - rather than something a codec
   could check. `perform/2`, the impure half of a handler, is never called by
@@ -364,7 +364,7 @@ defmodule Statifier.Session.Recording do
   Checks run in this order: the envelope's own format version, then the
   nested chart (recompiled and identity-checked by `Chart.from_binary/1`),
   then handler-module resolution - version first because it is checked
-  before the nested chart is touched (ADR-0056 decision 4), chart before
+  before the nested chart is touched (ADR-0057 decision 4), chart before
   handlers by this project's own plan default (OQ-1).
 
   `{:error, {:chart, reason}}` carries `Chart.from_binary/1`'s own error

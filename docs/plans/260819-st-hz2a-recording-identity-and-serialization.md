@@ -9,12 +9,12 @@ status: draft
 ## Overview
 
 Give `Statifier.Session.Recording` the versioned binary contract ADR-0052
-decision 8 filed and ADR-0056 specifies: a `to_binary/1` / `from_binary/1` /
+decision 8 filed and ADR-0057 specifies: a `to_binary/1` / `from_binary/1` /
 `format_version/0` trio on the `@opaque` owner itself, whose blob nests a
 `Statifier.Chart.to_binary/1` blob in the compiled `%Machine{}`'s place and
 carries `:invoke_handlers` as module-name strings. Beads issue: `st-hz2a`.
 
-ADR-0056 is the accepted specification this plan implements. Every decision
+ADR-0057 is the accepted specification this plan implements. Every decision
 below is that record's; this plan decides only mechanics the record left to
 the implementer, and records the two it could not settle without a human.
 
@@ -69,8 +69,8 @@ the implementer, and records the two it could not settle without a human.
 
 **What is missing.** No `format_version/0`, no `to_binary/1`, no
 `from_binary/1` on `Recording`; no recording section in
-`docs/persistence.md`; ADR-0052's status line has no pointer to ADR-0056; and
-ADR-0056 itself plus its `docs/adr/README.md` index row are **uncommitted in
+`docs/persistence.md`; ADR-0052's status line has no pointer to ADR-0057; and
+ADR-0057 itself plus its `docs/adr/README.md` index row are **uncommitted in
 the working tree** (`git status`: `?? docs/adr/0056-...md`, `M
 docs/adr/README.md`).
 
@@ -86,28 +86,28 @@ recording made over an unidentified chart is refused at encode; and
 Verified by: `mix quality` green with the new tests in
 `test/statifier/session/recording_test.exs`; `git diff --stat` showing no
 change to `lib/statifier/replay.ex`; and the ADR-0052 status line naming
-ADR-0056.
+ADR-0057.
 
 ### Key Discoveries:
 
-- The `@opaque` boundary is what places the codec (ADR-0056 decision 1):
+- The `@opaque` boundary is what places the codec (ADR-0057 decision 1):
   dialyzer forbids a foreign module matching or building `%Recording{...}`,
   and rebuilding via `new/2` + the `put_*` heads would re-normalize `opts` at
   decode time - which decision 1 explicitly rejects. `from_binary/1`
   therefore constructs `%__MODULE__{}` directly, and is the *only* function
   outside `new/2`/`put_*` that may.
 - `entries` storage order is an implementation detail the blob must not bake
-  in (ADR-0056 decision 4): `to_binary/1` writes `entries(recording)` (append
+  in (ADR-0057 decision 4): `to_binary/1` writes `entries(recording)` (append
   order) and `from_binary/1` restores the reversed internal field itself.
 - The blob nests `Chart.to_binary/1`'s output rather than inlining
   source/opts/identity, so a chart-format bump is not forced to be a
   recording-format bump; nested failures come back wrapped as
-  `{:error, {:chart, reason}}`, unflattened (ADR-0056 decision 4).
+  `{:error, {:chart, reason}}`, unflattened (ADR-0057 decision 4).
 - `:safe` decoding refuses to create atoms a blob names, and a module atom
   exists on a node only once that module is loaded - hence
   `Atom.to_string/1` at encode and `String.to_existing_atom/1` at decode,
   with every failure collected into
-  `{:error, {:unknown_handler_modules, names}}` sorted (ADR-0056 decision 5).
+  `{:error, {:unknown_handler_modules, names}}` sorted (ADR-0057 decision 5).
 - ADR-0018 forbids process artifacts (bead ids) in code comments; the new
   comments cite ADR numbers only.
 - ADR-0002/Appendix D: **no Appendix D procedure is touched by this work.**
@@ -117,7 +117,7 @@ ADR-0056.
 
 ## What We're NOT Doing
 
-- **Not adding `Recording.identity/1`.** ADR-0056 decision 2:
+- **Not adding `Recording.identity/1`.** ADR-0057 decision 2:
   `Recording.machine/1` composed with `Statifier.Machine.identity/1` already
   exposes it, and a second reader of one fact is the redundancy
   `lib/statifier/machine.ex` rules out for the `Machine` itself. The
@@ -129,13 +129,13 @@ ADR-0056.
   and `t()` gains no `nil` arm.
 - **Not writing any compiled term** (ADR-0014 item 2, ADR-0052 decision 3).
 - **Not calling `Code.ensure_loaded?/1`** or verifying handler-callback
-  behavior (ADR-0056 decision 5). Handlers are code; code does not travel in
+  behavior (ADR-0057 decision 5). Handlers are code; code does not travel in
   a blob.
 - **Not adding a migration counterpart** to `Position.export/1`/`import/2`.
-  ADR-0056's "what would reopen" bullet names replaying against a different
+  ADR-0057's "what would reopen" bullet names replaying against a different
   chart revision as deliberately out of scope - replay's determinism claim is
   per-revision by construction.
-- **Not resolving ADR-0056's two recorded open questions** (identity without
+- **Not resolving ADR-0057's two recorded open questions** (identity without
   recompile; a handler planning-callback fingerprint). Both are re-listed
   under Open Questions below as deferred, and neither is implemented here.
 - **Not editing `.sobelow-conf`, `.quality.exs`, `coveralls.json`,
@@ -166,18 +166,18 @@ test.
 
 ---
 
-## Phase 1: Land ADR-0056 and point ADR-0052 at it
+## Phase 1: Land ADR-0057 and point ADR-0052 at it
 
 ### Overview
 
 Commit the accepted record and its index row, and give ADR-0052's status line
-the pointer ADR-0056's Consequences direct to the implementing branch. Docs
+the pointer ADR-0057's Consequences direct to the implementing branch. Docs
 only; no `lib/` or `test/` change.
 
 ### Changes Required:
 
 #### 1. The record and its index row (already written, uncommitted)
-**Files**: `docs/adr/0056-recording-identity-and-serialization.md` (new,
+**Files**: `docs/adr/0057-recording-identity-and-serialization.md` (new,
 untracked), `docs/adr/README.md` (modified - row 60 already added)
 **Changes**: none needed to content; these are staged and committed as-is.
 Re-read both before committing to confirm nothing else drifted into
@@ -186,7 +186,7 @@ Re-read both before committing to confirm nothing else drifted into
 #### 2. ADR-0052's status line gains a pointer
 **File**: `docs/adr/0052-chart-identity-and-position-serialization.md`
 **Changes**: extend the status line (currently lines 3-6) with a pointer to
-ADR-0056, following the ADR-0054 -> ADR-0055 precedent
+ADR-0057, following the ADR-0054 -> ADR-0055 precedent
 (`docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md:3`, which
 reads `- decision 2's recorded gap decided by ADR-0055 (2026-08-19: ...)`).
 
@@ -194,14 +194,14 @@ reads `- decision 2's recorded gap decided by ADR-0055 (2026-08-19: ...)`).
 Status: accepted (2026-08-19) - reaffirms ADR-0014 item 2's premise rather
 than amending it (decision 3 below) - amended 2026-08-19 (st-i7y7: decision
 3's corollary superseded; a chart blob carries source and compile opts,
-still no compiled term) - decision 8's named follow-up answered by ADR-0056
+still no compiled term) - decision 8's named follow-up answered by ADR-0057
 (2026-08-19: a recording blob nests the chart blob, the codec lives on the
 `@opaque` owner, `:invoke_handlers` cross as strings)
 ```
 
 Match the file's existing typography (hyphens, no em dashes) and its ~72
 column wrapping. Do **not** edit any of ADR-0052's decisions or Consequences
-prose - ADR-0056 supersedes nothing there, and the "what would reopen"
+prose - ADR-0057 supersedes nothing there, and the "what would reopen"
 bullet at `:302-303` stays as written; the status line is the whole edit.
 
 ### Success Criteria:
@@ -213,7 +213,7 @@ bullet at `:302-303` stays as written; the status line is the whole edit.
 - [x] `git status --porcelain` is empty after the commit - no leftover
       untracked ADR file.
 - [x] `grep -c "0056" docs/adr/README.md` is 1 and
-      `grep -c "ADR-0056" docs/adr/0052-chart-identity-and-position-serialization.md`
+      `grep -c "ADR-0057" docs/adr/0052-chart-identity-and-position-serialization.md`
       is 1.
 
 #### Manual Verification:
@@ -243,7 +243,7 @@ deferred and surfaced once at the end instead of blocking here.
 
 Add `format_version/0`, `to_binary/1`, and `from_binary/1` to
 `Statifier.Session.Recording`, plus the moduledoc section explaining the
-blob, plus every test ADR-0056's Consequences owe - each with its sabotage
+blob, plus every test ADR-0057's Consequences owe - each with its sabotage
 line - plus the changelog fragment for the new public API.
 
 ### Changes Required:
@@ -255,7 +255,7 @@ beside the existing `@normalized_opts`, then the three public functions after
 `size/1` (`:273`), then the private helpers. Add `Statifier.Chart` to the
 existing `alias Statifier.{Effect, Event, Machine}` line (`:88`).
 
-Envelope, exactly as ADR-0056 decision 4 fixes it:
+Envelope, exactly as ADR-0057 decision 4 fixes it:
 
 ```elixir
 @format_version 1
@@ -286,7 +286,7 @@ end
 ```
 
 `entries(recording)` - the public accessor, i.e. **append order**, not the
-reversed field (ADR-0056 decision 4). `to_binary/1` refuses exactly when
+reversed field (ADR-0057 decision 4). `to_binary/1` refuses exactly when
 `Chart.to_binary/1` refuses, so the `with` passes
 `{:error, :unidentified_chart}` straight through.
 
@@ -314,7 +314,7 @@ end
 ```
 
 Check order: **version, then nested chart, then handler resolution.** Version
-first is ADR-0056 decision 4's own words ("checked before the nested chart is
+first is ADR-0057 decision 4's own words ("checked before the nested chart is
 touched"). Chart before handlers is this plan's call - see Open Question
 OQ-1 below for the tradeoff and why this is the default.
 
@@ -415,7 +415,7 @@ immediately above it, same `rescue ArgumentError -> :error`.
 (after "Nothing here reads a clock", `:76-85`), covering: the envelope's five
 slots; why the chart travels as a nested `Chart` blob rather than a compiled
 term; why `entries` is written in append order; why handler modules cross as
-strings; and the planning-equivalence limit decision 5 records. Cite ADR-0056
+strings; and the planning-equivalence limit decision 5 records. Cite ADR-0057
 and ADR-0034 by number rather than re-arguing them. Match the file's existing
 typography (hyphens, no em dashes) - it is already ASCII-only.
 
@@ -574,7 +574,7 @@ of blocking here.
 ### Overview
 
 `docs/persistence.md` is the concern-scoped doc where ADR-0052's hazard and
-migration stories live; ADR-0056's Consequences direct a recording section to
+migration stories live; ADR-0057's Consequences direct a recording section to
 the implementing branch. Docs only.
 
 ### Changes Required:
@@ -629,7 +629,7 @@ Match the file's existing typography and its ADR-link style
 - [x] Full `mix quality` is green.
 - [x] `mix gate.verify` confirms a full, unscoped run.
 - [x] Every relative link the new section adds resolves
-      (`ls docs/adr/0056-recording-identity-and-serialization.md` and the
+      (`ls docs/adr/0057-recording-identity-and-serialization.md` and the
       ADR-0034/ADR-0052 targets it cites).
 - [x] Every module and function name the section names exists
       (`grep -n "def to_binary\|def from_binary\|def format_version"
@@ -663,7 +663,7 @@ of blocking here.
 
 All of it lands in `test/statifier/session/recording_test.exs`, which mirrors
 `lib/statifier/session/recording.ex` one-to-one per the project's suite
-layout. The twelve cases in Phase 2 are the coverage plan; the five ADR-0056
+layout. The twelve cases in Phase 2 are the coverage plan; the five ADR-0057
 explicitly owes are cases 1, 3, 4, 6, and 2.
 
 Key edge cases:
@@ -699,7 +699,7 @@ check, the raw-envelope shape check) state `# sabotage: n/a - <reason>`.
    in a file that is not compiled into the project) and confirm
    `{:error, {:unknown_handler_modules, _}}` rather than
    `:not_a_statifier_blob`. This is the single behavior that most justifies
-   ADR-0056 decision 5, and it is the one a unit test can only approximate.
+   ADR-0057 decision 5, and it is the one a unit test can only approximate.
 5. Confirm a recording over a `Statifier.Compiler.compile/1`-built machine
    still records and replays in memory while `to_binary/1` refuses it.
 
@@ -710,7 +710,7 @@ default this plan implements, so nothing blocks; each is worth a human's
 confirmation before or during review.
 
 **OQ-1 - the order of nested-chart decode versus handler resolution.**
-ADR-0056 decision 4 fixes only that the *envelope version* is checked before
+ADR-0057 decision 4 fixes only that the *envelope version* is checked before
 the nested chart is touched. It does not say whether handler-string
 resolution runs before or after the chart decode. **Default implemented:
 chart first, handlers second.** Rationale: it matches the envelope's own
@@ -739,34 +739,34 @@ validate the map's values, so a host could put a non-atom there and reach
 `Atom.to_string/1` raises `FunctionClauseError` on a non-atom**, which is a
 caller error surfaced at its source rather than a blob error surfaced later.
 Tradeoff: an `{:error, :invalid_handler_map}` arm would be gentler, but it
-widens `to_binary/1`'s public error vocabulary beyond the one arm ADR-0056's
+widens `to_binary/1`'s public error vocabulary beyond the one arm ADR-0057's
 Consequences specify (`{:error, :unidentified_chart}`), and widening a
 documented ADR return type is a direction-level call, not a plan-level one.
-If it should be an error arm instead, that is an ADR-0056 amendment.
+If it should be an error arm instead, that is an ADR-0057 amendment.
 
 **Settled (2026-08-19):** the implemented default stands - no defensive
 clause. A non-atom in `:invoke_handlers` is a caller error made at `new/2`
 and surfaced at `to_binary/1`, and a raise names the offending call site
 where an error tuple would only report that encoding failed. Turning it
-into an arm would widen a return type ADR-0056's Consequences state, which
+into an arm would widen a return type ADR-0057's Consequences state, which
 is an amendment to that record rather than a plan-level fix; that remains
 the route if a host ever needs it.
 
-**OQ-3 (deferred by ADR-0056, not this plan's to answer)** - whether a host
-needs to read a blob's identity *without* paying the recompile. ADR-0056
+**OQ-3 (deferred by ADR-0057, not this plan's to answer)** - whether a host
+needs to read a blob's identity *without* paying the recompile. ADR-0057
 defers this until a consumer asks, and points hosts at storing
 `Identity.to_binary/1` beside each blob at write time. Phase 3 documents that
 workaround; nothing in this plan implements a recompile-free identity read.
 
-**OQ-4 (deferred by ADR-0056, not this plan's to answer)** - whether handler
+**OQ-4 (deferred by ADR-0057, not this plan's to answer)** - whether handler
 planning-callback equivalence across builds ever needs a checkable
-fingerprint. ADR-0056 decision 5 records the limit instead of solving it, on
+fingerprint. ADR-0057 decision 5 records the limit instead of solving it, on
 the grounds that nothing today could consume the answer. Phase 3 documents
 the limit; nothing in this plan computes a fingerprint.
 
 ## References
 
-- Source document: `docs/adr/0056-recording-identity-and-serialization.md`
+- Source document: `docs/adr/0057-recording-identity-and-serialization.md`
   (the accepted specification this plan implements)
 - Related ADRs: `docs/adr/0052-chart-identity-and-position-serialization.md`
   (decision 8 filing this work; the st-i7y7 chart-blob amendment nested
