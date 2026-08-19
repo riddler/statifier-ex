@@ -2,7 +2,9 @@
 
 The conformance corpus is the contract for this rewrite. v1's most valuable asset is
 its test infrastructure, and it ports almost for free: the 281 SCION/W3C test files
-touch no library internals - everything goes through one `Statifier.Case` module
+touch no library internals - everything goes through one `Statifier.Testing.Case`
+module (generated files still say `Statifier.Case`, a `test/support` shim over it -
+ADR-0052)
 ([ADR-0006](adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)).
 
 ## The three suites
@@ -19,9 +21,9 @@ touch no library internals - everything goes through one `Statifier.Case` module
    Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
    entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
 
-`Statifier.Case.test_scxml/4` needs exactly four things from the library: parse,
-build/initialize, synchronous send-event, and the active leaf-state set. That is the
-whole coupling surface; keep it that way.
+`Statifier.Testing.Case.test_scxml/4` needs exactly four things from the library:
+parse, build/initialize, synchronous send-event, and the active leaf-state set. That
+is the whole coupling surface; keep it that way.
 
 ### A fourth, hand-run suite: the ADR judge corpus
 
@@ -210,7 +212,8 @@ machine-emitted and carry no notes; the corpus is sabotage-proof by construction
 since a broken interpreter shows up as a failing conformance test immediately.
 Harness plumbing that asserts no `lib/` behavior - helper round-trips, the tag table
 in `feature_detector_test.exs`, fixture loaders - is exempt too, but the exemption is
-stated, not silent:
+stated, not silent. A test covering `Statifier.Testing.*` asserts `lib/` behavior and
+is **not** exempt, no matter that it reads like harness plumbing:
 
 ```elixir
 # sabotage: n/a - asserts the sample table matches the registry, no lib/ behavior
@@ -347,8 +350,13 @@ Target pipeline:
 
 Unsupported-feature tests **fail, not skip** (v1's FeatureDetector rule, kept): a
 test that depends on an unsupported feature flunks with the feature named, so it can
-never masquerade as passing. Feature detection lives in `test/support`, not `lib/` -
-it is harness code, not library surface.
+never masquerade as passing. Feature detection lives in `lib/` under
+`Statifier.Testing`, where it is test-side surface for chart authors rather than
+engine (ADR-0052, amending ADR-0006). The load-bearing half of the old rule is
+kept in namespace terms: **no module in `lib/` outside `Statifier.Testing.*` may
+reference anything inside it.** The engine's semantics come from the Appendix D
+port (ADR-0002); an unsupported feature surfaces as a real error or a real
+conformance failure, never as a detection-gated branch.
 
 The W3C corpus also has a recorded exclusion set: tests whose `.txml` templates
 have no predicator equivalent (ADR-0004), listed with a reason atom in
@@ -369,8 +377,14 @@ is the source of truth; this paragraph does not duplicate its entries.
 - Coverage: the gate fails below **90%** (`coveralls.json`); 95%+ is the target to
   aim at. Raising the floor as the suite grows is a decision for a human, and
   lowering it is not a way to go green.
-- Coverage measures `lib/` only: `coveralls.json` skips `test/support/`, which is
-  harness code rather than library surface. The harness is still tested directly
+- Coverage measures `lib/` only, which now includes `Statifier.Testing` -
+  `Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector` count toward
+  the floor like any other library module (ADR-0052). `coveralls.json` still
+  skips `test/support/`, which now holds only the two compatibility shims
+  (`Statifier.Case`, `Statifier.FeatureDetector`) and five private harness
+  modules (`ContextRecorder`, `TestContent`, `StreamOrder`, `TmpDir`,
+  `Mix.Statifier.AdrJudgeCorpus`) that stay out of `lib/` on their own merits
+  (ADR-0052 decision 4). The harness is still tested directly
   (`feature_detector_test.exs`, `case_test.exs`) - it is just not what the floor
-  is set for, and counting it would let the harness's own line count move a
+  is set for, and counting `test/support/` would let its own line count move a
   number that exists to describe the engine.

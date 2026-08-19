@@ -85,8 +85,14 @@ Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
 inline XML heredoc (4-space base indent, pretty-printed from the transformed
-`.scxml`, comments stripped), and a single `test_scxml/4` call. Of the 198
-downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
+`.scxml`, comments stripped), and a single `test_scxml/4` call. `use
+Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
+`test/support` compatibility shims over `Statifier.Testing.Case` and
+`Statifier.Testing.FeatureDetector`, the real modules promoted into `lib/`
+(ADR-0052 decision 5) - deliberate, so the emitters and the 281 already-generated
+files need no regeneration on the promoting branch. Adopting the new names in
+generated output is a future regeneration's call, not something owed here. Of
+the 198 downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
 runtime rather than conformance cases, leaving 193 cases; 162 of those emit
 (159 mandatory + 3 optional), and the rest are filtered out (see below).
 `test/scxml_tests/` is populated.
