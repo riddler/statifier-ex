@@ -249,6 +249,7 @@
     "test/scxml_tests/mandatory/send/test183_test.exs",
     "test/scxml_tests/mandatory/send/test185_test.exs",
     "test/scxml_tests/mandatory/send/test186_test.exs",
+    "test/scxml_tests/mandatory/send/test187_test.exs",
     "test/scxml_tests/mandatory/send/test194_test.exs",
     "test/scxml_tests/mandatory/send/test198_test.exs",
     "test/scxml_tests/mandatory/send/test199_test.exs",

@@ -2,9 +2,23 @@ defmodule Statifier.Session.Invocations do
   @moduledoc """
   The parent-held invocation table, as a value (ADR-0027 decision 3):
   `invokeid -> {child_session_id, pid, monitor_ref}`, plus the `autoforward`
-  flag the delivery half (`{:forward, invoke_id, event}`, a later phase)
-  reads. A reverse index, `pid -> invoke_id`, is carried alongside so a
-  child's own `:DOWN` can be resolved with no scan.
+  flag the delivery half (`{:forward, invoke_id, event}`) reads. A reverse
+  index, `pid -> invoke_id`, is carried alongside so a child's own `:DOWN`
+  can be resolved with no scan.
+
+  ## A handler-backed entry (ADR-0051)
+
+  Not every live invocation is a child session. An `<invoke>` dispatched to
+  a non-`scxml` `Statifier.Invoke.Handler` (ADR-0051 decision 4) has no
+  process of its own, so its entry carries `session_id: nil`, `pid: nil`,
+  and `monitor_ref: nil` - there is no child to identify, hand a pid for,
+  or monitor. It still carries `type` (needed to route a later
+  `cancel_invoke`/`autoforward` effect back to the same handler) and
+  `autoforward`, exactly like a child-session entry. `put/3` skips the
+  `by_pid` reverse index for such an entry (there is no pid to index under),
+  and `pop/2` skips the matching `by_pid` delete symmetrically;
+  `pop_by_pid/2` needs no change at all - a pid-less entry was never
+  reachable through it.
 
   ## Not `Statifier.MachineState.active_invocations`
 
@@ -41,12 +55,23 @@ defmodule Statifier.Session.Invocations do
   core never holds. `session_id` is the child's own `sess_` UXID, read back
   once the child has started; `pid`/`monitor_ref` are the parent's own
   handle on it; `autoforward` is the `<invoke autoforward>` attribute,
-  copied off `Statifier.Effect.Invoke` at start time.
+  copied off `Statifier.Effect.Invoke` at start time; `type` is the
+  `<invoke type>` value itself - `Statifier.Session` writes it into every
+  entry it records, a built-in `scxml` entry included, so an
+  `invoke_handlers` map that explicitly overrides the literal `"scxml"`
+  type is honored on cancel/forward the same way it already is on start.
+  The key can still be absent (`optional/1`) on an entry built by older
+  code or by hand in a test; `Statifier.Session.Effects.plan_one/2`'s own
+  dispatch treats that the same as an unrecorded type, defaulting to the
+  built-in handler. `session_id`, `pid`, and `monitor_ref` are `nil` for a
+  handler-backed entry (see the moduledoc's "A handler-backed entry"
+  section) - there is no child process behind it.
   """
   @type entry :: %{
-          session_id: String.t(),
-          pid: pid(),
-          monitor_ref: reference(),
+          optional(:type) => String.t() | nil,
+          session_id: String.t() | nil,
+          pid: pid() | nil,
+          monitor_ref: reference() | nil,
           autoforward: boolean()
         }
 
@@ -64,17 +89,17 @@ defmodule Statifier.Session.Invocations do
 
   @doc """
   Records `entry` under `invoke_id`, and indexes it under `entry.pid` in the
-  reverse map. A second `put/3` for the same `invoke_id` (an author-written
-  `id` on a re-entered `<invoke>`, Decision 6's residual) overwrites the
-  first entry in both maps rather than merging with it.
+  reverse map - skipped when `entry.pid` is `nil` (a handler-backed entry,
+  see the moduledoc's "A handler-backed entry" section), since there is no
+  pid to index under. A second `put/3` for the same `invoke_id` (an
+  author-written `id` on a re-entered `<invoke>`, Decision 6's residual)
+  overwrites the first entry in both maps rather than merging with it.
   """
   @spec put(invocations :: t(), invoke_id :: String.t(), entry :: entry()) :: t()
   def put(%__MODULE__{entries: entries, by_pid: by_pid}, invoke_id, %{pid: pid} = entry)
       when is_binary(invoke_id) do
-    %__MODULE__{
-      entries: Map.put(entries, invoke_id, entry),
-      by_pid: Map.put(by_pid, pid, invoke_id)
-    }
+    by_pid = if pid, do: Map.put(by_pid, pid, invoke_id), else: by_pid
+    %__MODULE__{entries: Map.put(entries, invoke_id, entry), by_pid: by_pid}
   end
 
   @doc "Looks up `invoke_id`'s entry, `:error` when it names nothing live."
@@ -83,13 +108,18 @@ defmodule Statifier.Session.Invocations do
 
   @doc """
   Removes `invoke_id`'s entry from both maps, returning it (`nil` when it
-  named nothing live) alongside the table with it gone.
+  named nothing live) alongside the table with it gone. The `by_pid` delete
+  is skipped, symmetrically with `put/3`, when the popped entry's `pid` is
+  `nil` (a handler-backed entry never occupied `by_pid` to begin with).
   """
   @spec pop(invocations :: t(), invoke_id :: String.t()) :: {entry() | nil, t()}
   def pop(%__MODULE__{entries: entries, by_pid: by_pid} = invocations, invoke_id) do
     case Map.pop(entries, invoke_id) do
       {nil, ^entries} ->
         {nil, invocations}
+
+      {%{pid: nil} = entry, rest_entries} ->
+        {entry, %__MODULE__{entries: rest_entries, by_pid: by_pid}}
 
       {%{pid: pid} = entry, rest_entries} ->
         {entry, %__MODULE__{entries: rest_entries, by_pid: Map.delete(by_pid, pid)}}
@@ -125,6 +155,28 @@ defmodule Statifier.Session.Invocations do
   @doc "The whole `invoke_id => entry` map."
   @spec entries(invocations :: t()) :: %{String.t() => entry()}
   def entries(%__MODULE__{entries: entries}), do: entries
+
+  @doc """
+  Every live invocation's own `type`, `invoke_id => type` - what
+  `Statifier.Session.Effects.plan_one/2` looks a `cancel_invoke`/
+  `autoforward` effect's handler module up in (ADR-0051 decision 6). Every
+  entry `Statifier.Session` writes carries `type` (a built-in `scxml`
+  entry's own literal `type` string included, not omitted - so an
+  `invoke_handlers` map that explicitly overrides `"scxml"` is still
+  honored on cancel/forward, not just on start), but an entry built by
+  older code or by hand in a test can still leave the key off; such an
+  entry is left out of this projection entirely rather than included with
+  a `nil` value, so the caller's own `Map.get(_, invoke_id,
+  ScxmlHandler)`-shaped default does the same work either way.
+  """
+  @spec types(invocations :: t()) :: %{String.t() => String.t()}
+  def types(%__MODULE__{entries: entries}) do
+    for {invoke_id, %{} = entry} <- entries,
+        type = Map.get(entry, :type),
+        not is_nil(type),
+        into: %{},
+        do: {invoke_id, type}
+  end
 
   @typedoc """
   The public projection of one live invocation - `invoke_id` plus the child's
