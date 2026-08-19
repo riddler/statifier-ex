@@ -310,4 +310,56 @@ defmodule StatifierTest do
       refute "p" in Statifier.active_leaf_states(machine_state)
     end
   end
+
+  describe "compile/2 identity stamp" do
+    @identity_xml """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a"/>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.compile/2`'s final `with` clause is changed from
+    # `%Machine{machine | warnings: warnings, identity:
+    # Identity.of_source(source, opts)}` to `%Machine{machine | warnings:
+    # warnings}` (drop the identity stamp) -> this test reddens because
+    # `Machine.identity/1` returns `nil` instead of an `%Identity{}`
+    test "stamps a non-nil identity onto the compiled Machine" do
+      assert {:ok, machine} = Statifier.compile(@identity_xml)
+      assert %Statifier.Machine.Identity{} = Machine.identity(machine)
+    end
+
+    # sabotage: same mutation as above (drop the `identity:` key from the
+    # final `%Machine{machine | ...}` update) -> this test reddens because
+    # `Machine.identity(machine)` is `nil`, so the `%Identity{name: ...,
+    # version: ...}` pattern match below fails
+    test "chart_name and chart_version opts ride through to the stamped identity" do
+      assert {:ok, machine} =
+               Statifier.compile(@identity_xml, chart_name: "light", chart_version: "7")
+
+      assert %Statifier.Machine.Identity{name: "light", version: "7"} = Machine.identity(machine)
+    end
+
+    # sabotage: `Statifier.compile/2`'s call to `Identity.of_source(source,
+    # opts)` is changed to `Identity.of_source(source)` (drop `opts`) -> this
+    # test reddens because `chart_name`/`chart_version` no longer ride
+    # through, and the stamped identity's `name` comes back `nil` instead of
+    # `"pass-through"`
+    test "invoke_content_markup: true still threads chart_name/chart_version through" do
+      xml = """
+      <scxml version="1.0" initial="a">
+          <state id="a"/>
+      </scxml>
+      """
+
+      assert {:ok, machine} =
+               Statifier.compile(xml,
+                 invoke_content_markup: true,
+                 chart_name: "pass-through",
+                 chart_version: "1"
+               )
+
+      assert %Statifier.Machine.Identity{name: "pass-through", version: "1"} =
+               Machine.identity(machine)
+    end
+  end
 end

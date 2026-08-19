@@ -332,4 +332,16 @@ defmodule Statifier.MachineTest do
       assert Machine.initial(m) == [idx(:a)]
     end
   end
+
+  describe "identity/1" do
+    # sabotage: `Statifier.Machine`'s `defstruct` default for `identity`
+    # changes from implicit `nil` to `%Statifier.Machine.Identity{content_hash:
+    # "sha256:stub"}` -> this assertion reddens because a machine built
+    # straight through `Compiler.compile/1` (bypassing `Statifier.compile/2`,
+    # the only stamping site) now carries a non-nil identity
+    test "is nil on a machine built straight through Compiler.compile/1" do
+      m = machine()
+      assert Machine.identity(m) == nil
+    end
+  end
 end

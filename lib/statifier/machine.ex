@@ -100,10 +100,22 @@ defmodule Statifier.Machine do
   same kind of thing. It is also, per ADR-0033, the *only* surfacing seam: no
   trace effect, no logger, no telemetry - a caller (or a debugger) that wants
   a warning finds it here or nowhere.
+
+  ## `identity`: the chart revision, not the document's validity
+
+  `identity` (see ADR-0052) is the `Statifier.Machine.Identity.t()`
+  `Statifier.compile/2` stamps from the source it compiled, or `nil` for a
+  Machine built without going through that boundary -
+  `Statifier.Compiler.compile/1` called directly, or a Machine an embedder's
+  `:invoke_source` resolver returned rather than one `Statifier.compile/2`
+  produced (`Statifier.Invoke.Source.resolve/2`'s `src` clause). It defaults
+  to `nil` and is not in `@enforce_keys`, the same reasoning as
+  `global_scripts` and `warnings` above: a Machine with no identity is exactly
+  as valid as one with one. `identity/1` below is the reader.
   """
 
   alias Statifier.Compiler.Error, as: CompilerError
-  alias Statifier.Machine.{Content, Data, State, Transition}
+  alias Statifier.Machine.{Content, Data, Identity, State, Transition}
   alias Statifier.Parser.Location
   alias Statifier.Validator.Warning
 
@@ -118,6 +130,7 @@ defmodule Statifier.Machine do
     :datamodel,
     :binding,
     :location,
+    :identity,
     global_scripts: [],
     warnings: []
   ]
@@ -153,6 +166,7 @@ defmodule Statifier.Machine do
           datamodel: String.t() | nil,
           binding: :early | :late,
           location: Location.t(),
+          identity: Identity.t() | nil,
           global_scripts: [program() | {:invalid, CompilerError.t()}],
           warnings: [Warning.t()]
         }
@@ -345,6 +359,15 @@ defmodule Statifier.Machine do
   """
   @spec id(machine :: t(), index :: non_neg_integer()) :: String.t() | nil
   def id(%__MODULE__{} = machine, index), do: at(machine, index).id
+
+  @doc """
+  The chart identity `Statifier.compile/2` stamped, or `nil` for a Machine
+  built without a source: `Statifier.Compiler.compile/1` called directly, or a
+  Machine an embedder's `:invoke_source` resolver returned
+  (`Statifier.Invoke.Source.resolve/2`'s `src` clause).
+  """
+  @spec identity(machine :: t()) :: Identity.t() | nil
+  def identity(%__MODULE__{identity: identity}), do: identity
 
   @doc "`indexes` sorted ascending - document order, an integer sort (ADR-0005)."
   @spec document_order(machine :: t(), indexes :: Enumerable.t()) :: [non_neg_integer()]
