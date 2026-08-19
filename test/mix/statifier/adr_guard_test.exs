@@ -472,6 +472,159 @@ defmodule Mix.Statifier.AdrGuardTest do
     end
   end
 
+  describe "ADR-0056 - numbering invariant" do
+    defp analyze_adr(index) do
+      AdrGuard.analyze(%{diff: "", adr: index})
+    end
+
+    # sabotage: drop missing_row_findings/2's `not` (see two tests below),
+    #           so a consistent tree's linked files are wrongly flagged -> red
+    test "a consistent directory and table produce no findings" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+      | [0002](0002-second.md) | Second | accepted |
+      """
+
+      assert analyze_adr(%{files: ["0001-first.md", "0002-second.md"], readme: readme}) == []
+    end
+
+    # sabotage: change `file <- group` to `file <- Enum.take(group, 1)`, so
+    #           only one finding is emitted per collision instead of one per
+    #           file -> red
+    test "two files sharing a number produce two findings, each naming the other" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0052](0052-a.md) | A | accepted |
+      | [0052](0052-b.md) | B | accepted |
+      """
+
+      findings =
+        analyze_adr(%{files: ["0052-a.md", "0052-b.md"], readme: readme})
+        |> Enum.filter(&(&1.check == "adr-0056-duplicate-number"))
+
+      assert length(findings) == 2
+
+      assert Enum.any?(findings, fn f ->
+               f.file == "docs/adr/0052-a.md" and f.line == nil and f.message =~ "0052-b.md"
+             end)
+
+      assert Enum.any?(findings, fn f ->
+               f.file == "docs/adr/0052-b.md" and f.message =~ "0052-a.md"
+             end)
+    end
+
+    # sabotage: drop missing_row_findings/2's negation - `MapSet.member?(linked,
+    #           file)` instead of `not MapSet.member?(...)` -> red
+    test "a record with no row produces a missing-row finding naming the record" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+      """
+
+      assert [%{check: "adr-0056-readme-index", file: "docs/adr/0002-second.md", line: nil}] =
+               analyze_adr(%{files: ["0001-first.md", "0002-second.md"], readme: readme})
+    end
+
+    # sabotage: drop dangling_row_findings/2's negation - `MapSet.member?(listed,
+    #           target)` instead of `not MapSet.member?(...)` -> red
+    test "a row whose link target does not exist produces a dangling-row finding" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+      | [0002](0002-ghost.md) | Ghost | accepted |
+      """
+
+      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md", message: message}] =
+               analyze_adr(%{files: ["0001-first.md"], readme: readme})
+
+      assert message =~ "0002-ghost.md"
+    end
+
+    # sabotage: have duplicate_number_row_findings/1 group by `target` (the
+    #           same grouping duplicate_target_row_findings/1 uses) instead of
+    #           `number`, so a number reused under two distinct targets goes
+    #           undetected -> red
+    test "two rows for the same number produce a duplicate-row finding" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+      | [0001](0002-second.md) | Mislabeled | accepted |
+      """
+
+      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md", message: message}] =
+               analyze_adr(%{files: ["0001-first.md", "0002-second.md"], readme: readme})
+
+      assert message =~ "0001"
+    end
+
+    # Without this finding, a deleted README would make the bijection
+    # vacuously true - the silent-pass shape ADR-0056 exists to avoid.
+    # sabotage: have the `files != []` clause return `[]` instead of the
+    #           unreadable-README finding -> red
+    test "a nil readme with a non-empty listing produces the unreadable finding" do
+      assert [%{check: "adr-0056-readme-index", file: "docs/adr/README.md"}] =
+               analyze_adr(%{files: ["0001-first.md"], readme: nil})
+    end
+
+    # sabotage: drop the `files != []` guard from the unreadable-README clause
+    #           entirely, so it also matches the empty-checkout case -> red
+    test "an empty listing with a nil readme produces nothing" do
+      assert analyze_adr(%{files: [], readme: nil}) == []
+    end
+
+    # sabotage: drop the `^\|\s*` anchor from @readme_row_pattern, so a
+    #           row-shaped reference in footer prose (not a table row) is read
+    #           as a row too -> red
+    test "footer prose with a parenthesized .md reference produces no dangling finding" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+
+      New ADRs: see [0037](0037-unbound.md) for the historical precedent, but
+      that is prose, not a table row.
+      """
+
+      assert analyze_adr(%{files: ["0001-first.md"], readme: readme}) == []
+    end
+
+    # sabotage: widen the link-target capture from `(\d{4}-[^)\/]+\.md)` to
+    #           `([^)]+\.md)`, so a slash-bearing or non-numeric target
+    #           matches too -> red
+    test "a row linking outside docs/adr/ is ignored by both halves" do
+      readme = """
+      | # | Decision | Status |
+      |---|---|---|
+      | [0001](0001-first.md) | First | accepted |
+      | [0002](../../other/docs/adr/0002-elsewhere.md) | Elsewhere | accepted |
+      | [0003](https://example.com/0003-remote.md) | Remote | accepted |
+      """
+
+      assert analyze_adr(%{files: ["0001-first.md"], readme: readme}) == []
+    end
+
+    # sabotage: drop the `defp duplicate_number_findings(nil), do: []` head, so
+    #           a source with no :adr key raises FunctionClauseError instead of
+    #           being tolerated -> red
+    test "analyze/1 with no :adr key returns only diff-line findings" do
+      diff = """
+      diff --git a/lib/statifier/interpreter.ex b/lib/statifier/interpreter.ex
+      --- a/lib/statifier/interpreter.ex
+      +++ b/lib/statifier/interpreter.ex
+      @@ -40,0 +40,1 @@
+      +    Logger.debug("x")
+      """
+
+      assert [%{check: "adr-0003-effects"}] = AdrGuard.analyze(%{diff: diff})
+    end
+  end
+
   # Keyed by git subcommand, except `rev-parse`, which is keyed by the ref it is
   # asked to resolve - that is the call whose answer decides the base.
   defp runner(responses) do
@@ -592,6 +745,31 @@ defmodule Mix.Statifier.AdrGuardTest do
       assert_received {:read, "lib/statifier/document.ex"}
       assert_received {:read, "test/statifier/document_test.exs"}
       refute_received {:read, "docs/adr/0013-something.md"}
+    end
+
+    # sabotage: drop the @adr_filename_pattern filter from adr_index/2, so
+    #           README.md, .DS_Store, and draft.md all count as records -> red
+    test "collect/1 populates :adr from the injected lister and reader, filtering non-records" do
+      lister = fn "docs/adr" ->
+        {:ok, ["0001-first.md", "0002-second.md", "README.md", ".DS_Store", "draft.md"]}
+      end
+
+      reader = fn
+        "docs/adr/README.md" -> {:ok, "the readme text"}
+        other -> {:error, "unexpected read: #{other}"}
+      end
+
+      responses = [
+        {"origin/main", {"origin/main\n", 0}},
+        {"merge-base", {"abc123\n", 0}},
+        {"diff", {"", 0}}
+      ]
+
+      assert {:ok, %{adr: index}} =
+               AdrGuard.collect(runner: runner(responses), lister: lister, reader: reader)
+
+      assert index.files == ["0001-first.md", "0002-second.md"]
+      assert index.readme == "the readme text"
     end
 
     # sabotage: raise instead of returning {:error, _} when git fails -> red

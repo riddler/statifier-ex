@@ -4,11 +4,22 @@ defmodule Mix.Statifier.AdrGuard do
 
   Covers ADR-0002 (Appendix D naming), ADR-0003 (pure core with effects),
   ADR-0004 (predicator as the datamodel, so no `Code.eval_*`), ADR-0008
-  (generated identifier formats), and ADR-0018 (process artifacts are not code
-  comments). Each check is a name or call-site pattern over the lines a diff
-  adds - deliberately not an AST pass - so a false positive is cleared the way
-  this project already clears an Appendix D deviation: an inline comment on or
+  (generated identifier formats), ADR-0018 (process artifacts are not code
+  comments), and ADR-0056 (ADR number collisions). Each of the first five
+  checks is a name or call-site pattern over the lines a diff adds -
+  deliberately not an AST pass - so a false positive is cleared the way this
+  project already clears an Appendix D deviation: an inline comment on or
   above the flagged line naming an ADR or the word "deviation".
+
+  ADR-0056's two checks, `adr-0056-duplicate-number` and
+  `adr-0056-readme-index`, are different in kind from all five: they are
+  invariants over the working tree's `docs/adr/` listing and its README table,
+  not patterns over added diff lines. A finding from either carries `line:
+  nil` - there is no line in a diff to point at, because the defect is a
+  filename or a missing table row, not a line of code - and **neither clears
+  on the `ADR-0\\d{3}|deviation` escape hatch**. There is no such thing as a
+  justified duplicate ADR number, and an ADR citation is not a filename: the
+  fix is a renumber and a README row move, never a suppression comment.
 
   The ADR-0018 check is the exception to that escape hatch, on purpose. It
   flags a bead ID (`st-` plus the id, including a dotted child suffix) added
@@ -59,9 +70,16 @@ defmodule Mix.Statifier.AdrGuard do
           message: String.t()
         }
 
+  @type adr_index :: %{
+          :files => [String.t()],
+          :readme => String.t() | nil,
+          optional(:base_files) => [String.t()]
+        }
+
   @type source :: %{
           :diff => String.t(),
-          optional(:files) => %{String.t() => String.t()}
+          optional(:files) => %{String.t() => String.t()},
+          optional(:adr) => adr_index()
         }
 
   @lib_prefix "lib/"
@@ -155,12 +173,15 @@ defmodule Mix.Statifier.AdrGuard do
   def analyze(source) do
     files = parse_diff(source.diff)
     texts = Map.get(source, :files, %{})
+    index = Map.get(source, :adr)
 
     naming_findings(files) ++
       effects_findings(files) ++
       eval_findings(files) ++
       uxid_findings(files) ++
-      bead_id_findings(files, texts)
+      bead_id_findings(files, texts) ++
+      duplicate_number_findings(index) ++
+      readme_index_findings(index)
   end
 
   @doc """
@@ -175,27 +196,61 @@ defmodule Mix.Statifier.AdrGuard do
   list returning `{output, status}`, mirroring `Mix.Statifier.GateGuard`.
   `opts[:reader]` replaces the `File.read/1` call used to populate `:files`
   with a function of a path returning `{:ok, content} | {:error, reason}`,
-  the same shape as `File.read/1` itself.
+  the same shape as `File.read/1` itself. `opts[:lister]` replaces the
+  `File.ls/1` call used to gather `source.adr` - the `docs/adr/` numbering
+  invariant's directory listing - with the same `{:ok, entries} | {:error,
+  reason}` shape. Unlike the diff and the file reads, the `:adr` index is
+  gathered unconditionally, even when no base ref resolves: it is a
+  filesystem read, not a git one, so it costs nothing to compute up front and
+  it is what lets the tree-local numbering checks run without a base ref.
   """
   @spec collect(opts :: keyword()) :: {:ok, source()} | {:error, String.t()} | :no_base_ref
   def collect(opts) do
     runner = Keyword.get(opts, :runner, &git/1)
     reader = Keyword.get(opts, :reader, &File.read/1)
+    lister = Keyword.get(opts, :lister, &File.ls/1)
+    index = adr_index(lister, reader)
     candidates = Enum.reject([opts[:base], "origin/main", "main"], &is_nil/1)
 
     case Enum.find(candidates, &resolves?(&1, runner)) do
       nil -> :no_base_ref
-      ref -> collect_from(ref, runner, reader)
+      ref -> collect_from(ref, runner, reader, index)
     end
   end
 
-  defp collect_from(ref, runner, reader) do
+  defp collect_from(ref, runner, reader, index) do
     with {:ok, base} <- run(runner, ["merge-base", ref, "HEAD"]),
          base = String.trim(base),
          {:ok, diff} <- run(runner, ["diff", base | @diff_flags]) do
       full_diff = diff <> untracked_diff(runner)
-      {:ok, %{diff: full_diff, files: file_texts(full_diff, reader)}}
+      {:ok, %{diff: full_diff, files: file_texts(full_diff, reader), adr: index}}
     end
+  end
+
+  @adr_dir "docs/adr"
+  @adr_readme "docs/adr/README.md"
+  @adr_filename_pattern ~r/^\d{4}-.+\.md$/
+
+  # Deliberately a filesystem listing rather than a git one: the invariant is
+  # about the working tree, so an untracked record that has not been committed
+  # yet is still in scope.
+  defp adr_index(lister, reader) do
+    files =
+      case lister.(@adr_dir) do
+        {:ok, entries} ->
+          entries |> Enum.filter(&Regex.match?(@adr_filename_pattern, &1)) |> Enum.sort()
+
+        {:error, _reason} ->
+          []
+      end
+
+    readme =
+      case reader.(@adr_readme) do
+        {:ok, text} -> text
+        {:error, _reason} -> nil
+      end
+
+    %{files: files, readme: readme}
   end
 
   # Reads the post-image content of every `lib/` or `test/` path the assembled
@@ -510,6 +565,125 @@ defmodule Mix.Statifier.AdrGuard do
 
   defp finding(path, line, check, message) do
     %{file: path, line: line, severity: "error", check: check, message: message}
+  end
+
+  # -- ADR-0056: the tree-local numbering invariant --------------------------
+
+  @adr_number_pattern ~r/^(\d{4})-/
+
+  # Scoped by link target, per ADR-0056 open question 2: only rows whose link
+  # resolves to a record file in this directory are index rows. A future row
+  # linking a predicator-ex ADR, a wurk ADR, or an http(s) URL is not this
+  # check's business, and neither is the footer prose below the table.
+  @readme_row_pattern ~r/^\|\s*\[(\d{4})\]\((\d{4}-[^)\/]+\.md)\)/m
+
+  defp duplicate_number_findings(nil), do: []
+
+  defp duplicate_number_findings(%{files: files}) do
+    groups =
+      files
+      |> Enum.group_by(fn file ->
+        case Regex.run(@adr_number_pattern, file) do
+          [_all, number] -> number
+          nil -> nil
+        end
+      end)
+      |> Map.delete(nil)
+
+    for {number, group} <- groups,
+        length(group) > 1,
+        file <- group do
+      others = group |> List.delete(file) |> Enum.map(&Path.join(@adr_dir, &1))
+
+      finding(
+        Path.join(@adr_dir, file),
+        nil,
+        "adr-0056-duplicate-number",
+        "ADR number #{number} is used by two records; ADR-0056 requires one file per number " <>
+          "(also: #{Enum.join(others, ", ")})"
+      )
+    end
+  end
+
+  defp readme_index_findings(nil), do: []
+
+  defp readme_index_findings(%{files: files, readme: nil}) when files != [] do
+    [
+      finding(
+        @adr_readme,
+        nil,
+        "adr-0056-readme-index",
+        "docs/adr/README.md could not be read; ADR-0056's index cannot be checked against it"
+      )
+    ]
+  end
+
+  defp readme_index_findings(%{readme: nil}), do: []
+
+  defp readme_index_findings(%{files: files, readme: readme}) do
+    rows = Regex.scan(@readme_row_pattern, readme, capture: :all_but_first)
+
+    missing_row_findings(files, rows) ++
+      dangling_row_findings(files, rows) ++
+      duplicate_row_findings(rows)
+  end
+
+  defp missing_row_findings(files, rows) do
+    linked = MapSet.new(rows, fn [_number, target] -> target end)
+
+    for file <- files, not MapSet.member?(linked, file) do
+      finding(
+        Path.join(@adr_dir, file),
+        nil,
+        "adr-0056-readme-index",
+        "#{Path.join(@adr_dir, file)} has no docs/adr/README.md table row linking it"
+      )
+    end
+  end
+
+  defp dangling_row_findings(files, rows) do
+    listed = MapSet.new(files)
+
+    for [_number, target] <- rows, not MapSet.member?(listed, target) do
+      finding(
+        @adr_readme,
+        nil,
+        "adr-0056-readme-index",
+        "docs/adr/README.md links #{target}, which does not exist in docs/adr/"
+      )
+    end
+  end
+
+  defp duplicate_row_findings(rows) do
+    duplicate_number_row_findings(rows) ++ duplicate_target_row_findings(rows)
+  end
+
+  defp duplicate_number_row_findings(rows) do
+    rows
+    |> Enum.group_by(fn [number, _target] -> number end)
+    |> Enum.filter(fn {_number, group} -> length(group) > 1 end)
+    |> Enum.map(fn {number, _group} ->
+      finding(
+        @adr_readme,
+        nil,
+        "adr-0056-readme-index",
+        "docs/adr/README.md has more than one row for ADR number #{number}"
+      )
+    end)
+  end
+
+  defp duplicate_target_row_findings(rows) do
+    rows
+    |> Enum.group_by(fn [_number, target] -> target end)
+    |> Enum.filter(fn {_target, group} -> length(group) > 1 end)
+    |> Enum.map(fn {target, _group} ->
+      finding(
+        @adr_readme,
+        nil,
+        "adr-0056-readme-index",
+        "docs/adr/README.md has more than one row linking #{target}"
+      )
+    end)
   end
 
   # -- diff parsing ---------------------------------------------------------
