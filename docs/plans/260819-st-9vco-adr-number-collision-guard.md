@@ -809,18 +809,41 @@ without a human present, recorded so they can be overridden cheaply:
    origin/main nor main resolves; the docs/adr/ numbering invariant ran and is
    clean" - is a judgment about what a gate report should say. Any wording that
    names what still ran satisfies ADR-0056 decision 4.
+
+   **Settled (2026-08-19):** kept as written. Confirmed by the human during a
+   `/wurk:verify` walk, after the string was observed printing from a scratch
+   clone with no remotes and no `main`: it names the invariant that still ran,
+   which is what ADR-0056 decision 4 asks of it.
+
 2. **`{:no_base_ref, source}` versus folding into `{:ok, source}`.** The tuple
    keeps the pass/skip distinction honest at the task boundary. The alternative
    - always `{:ok, source}` plus a `base_ref: nil` field - is defensible and
    would leave `collect/1`'s spec simpler. Chosen the tuple because the
    sibling `Mix.Statifier.GateGuard` uses the same three-way return shape and
    the symmetry is worth keeping.
+
+   **Settled (2026-08-19):** kept as the tuple. Confirmed by the human during a
+   `/wurk:verify` walk. The same walk showed why the distinction earns its
+   keep: in a no-base-ref repo a clean tree exits 2 and a colliding tree exits
+   1, and the task can only draw that line because `collect/1` hands it the
+   index alongside the no-base-ref signal.
+
 3. **Duplicate-number findings are emitted per file, not per number.** Two
    files sharing `0052` produce two findings. This doubles the finding count
    for one problem, which inflates the stage's `finding_count`, but it means
    whichever finding a reader looks at first names a real path they can act on.
+
+   **Settled (2026-08-19):** kept as per-file. Confirmed by the human during a
+   `/wurk:verify` walk that saw the doubled output for a hand-made `0052`
+   collision: each of the two lines names a path to act on and cites the other,
+   so the pair reads as one matched finding rather than as noise.
+
 4. **The gate-ledger entry is a human's call** and is deliberately absent from
    every phase - see Deferred Manual Verification.
+
+   **Settled (2026-08-19):** confirmed by the human during a `/wurk:verify`
+   walk as a standing human task, not an oversight. It stays unticked in
+   Deferred Manual Verification, and `mix gate.check` remains green without it.
 
 ## References
 
@@ -865,16 +888,16 @@ without a human present, recorded so they can be overridden cheaply:
       check is skipped, no `.quality.exs` change.
 
 ### Phase 1
-- [ ] Sabotage-by-hand of the colliding-file and missing-row cases (step 2 and
+- [x] Sabotage-by-hand of the colliding-file and missing-row cases (step 2 and
       3 of Manual Testing Steps).
-- [ ] The README footer sentence reads as usable authoring guidance.
+- [x] The README footer sentence reads as usable authoring guidance.
 
 ### Phase 2
-- [ ] The scratch-clone no-base-ref walkthrough, clean and colliding.
-- [ ] The amended skip reason is honest about what ran.
+- [x] The scratch-clone no-base-ref walkthrough, clean and colliding.
+- [x] The amended skip reason is honest about what ran.
 
 ### Phase 3
-- [ ] The st-hbdr replay against a real `origin/main`.
-- [ ] The moduledoc's asymmetry paragraph is strong enough that a future
+- [x] The st-hbdr replay against a real `origin/main`.
+- [x] The moduledoc's asymmetry paragraph is strong enough that a future
       reader does not cite a bare-gate pass as remote evidence.
-- [ ] Confirm no fetch was introduced anywhere under `lib/mix/`.
+- [x] Confirm no fetch was introduced anywhere under `lib/mix/`.
