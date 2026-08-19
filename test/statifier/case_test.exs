@@ -1,26 +1,42 @@
-defmodule Statifier.CaseTest do
+defmodule Statifier.Testing.CaseTest do
   use ExUnit.Case, async: true
 
   alias ExUnit.AssertionError
+  alias Statifier.Testing.{Case, FeatureDetector}
 
   describe "test_scxml/4 feature gate" do
-    # sabotage: n/a - asserts the harness's gate is vacuous, no lib/ behavior
-    test "every feature the detector can emit is supported or partial" do
-      registry = Statifier.FeatureDetector.feature_registry()
+    # sabotage: validate_features/1 treats an unknown atom as :supported
+    # (Map.get's default falls back to :supported instead of :unsupported)
+    # -> red
+    test "the feature gate is vacuous by construction - no document can currently reach the flunk" do
+      registry = FeatureDetector.feature_registry()
 
       assert {:ok, _detected} =
-               Statifier.FeatureDetector.validate_features(MapSet.new(Map.keys(registry)))
+               FeatureDetector.validate_features(MapSet.new(Map.keys(registry)))
+
+      assert {:error, unsupported} =
+               FeatureDetector.validate_features(MapSet.new([:not_a_real_feature]))
+
+      assert unsupported == MapSet.new([:not_a_real_feature])
     end
 
-    # sabotage: n/a - asserts the harness fails rather than skips, no lib/ behavior
-    test "never skips - an unsupported document fails the test" do
-      xml = """
-      <scxml><state id="s1"><transition cond="ready" target="s1"/></state></scxml>
-      """
+    # `Statifier.Testing.Case`'s flunk branch is unreachable today (the test
+    # above), so the runner's gate cannot be asserted by driving a real
+    # document through it. What can be asserted is the contract the flunk
+    # branch depends on: `validate_features/1`'s `{:error, set}` names only
+    # the features it rejected, not every feature the document detected -
+    # exactly the set the runner's flunk message would interpolate.
+    #
+    # sabotage: `validate_features/1`'s `Enum.reject/2` is replaced with
+    # `detected_features` itself whenever the result is non-empty (the
+    # rejected set leaks the whole detected set instead of only the
+    # unsupported members) -> `:basic_states` is named alongside the
+    # synthetic feature -> red
+    test "never skips - the error set names only the unsupported features, not every detected one" do
+      detected = MapSet.new([:basic_states, :not_a_real_feature])
 
-      assert_raise AssertionError, fn ->
-        Statifier.Case.test_scxml(xml, "", ["s1"], [])
-      end
+      assert {:error, unsupported} = FeatureDetector.validate_features(detected)
+      assert unsupported == MapSet.new([:not_a_real_feature])
     end
   end
 
@@ -37,7 +53,7 @@ defmodule Statifier.CaseTest do
       """
 
       assert :ok =
-               Statifier.Case.test_scxml(xml, "moves on event", ["s1"], [
+               Case.test_scxml(xml, "moves on event", ["s1"], [
                  {%{"name" => "go"}, ["s2"]}
                ])
     end
@@ -54,7 +70,7 @@ defmodule Statifier.CaseTest do
       </scxml>
       """
 
-      assert :ok = Statifier.Case.test_scxml(xml, "terminates on initialize", ["pass"], [])
+      assert :ok = Case.test_scxml(xml, "terminates on initialize", ["pass"], [])
     end
 
     # sabotage: assert_configuration/3's observed_state_chart/2 always returns
@@ -71,9 +87,44 @@ defmodule Statifier.CaseTest do
       """
 
       assert :ok =
-               Statifier.Case.test_scxml(xml, "terminates on event", ["s1"], [
+               Case.test_scxml(xml, "terminates on event", ["s1"], [
                  {%{"name" => "go"}, ["pass"]}
                ])
+    end
+
+    # sabotage: Statifier.Testing.Case's send_event/2 returns the unchanged
+    # state chart on {:error, :not_running} instead of flunking -> red
+    test "flunks sending an event to a chart that has already terminated" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pass">
+          <final id="pass"/>
+      </scxml>
+      """
+
+      error =
+        assert_raise AssertionError, fn ->
+          Case.test_scxml(xml, "event after termination", ["pass"], [
+            {%{"name" => "go"}, ["pass"]}
+          ])
+        end
+
+      assert error.message =~ "state chart that has terminated"
+    end
+  end
+
+  describe "test_scxml/4 malformed documents" do
+    # sabotage: parse_document/1's {:error, errors} clause raises
+    # ArgumentError instead of calling flunk/1 -> assert_raise's exception
+    # type no longer matches ExUnit.AssertionError -> red
+    test "flunks when the document fails to compile" do
+      xml = "<not-scxml/>"
+
+      error =
+        assert_raise AssertionError, fn ->
+          Case.test_scxml(xml, "malformed document", [], [])
+        end
+
+      assert error.message =~ "did not compile"
     end
   end
 
@@ -96,7 +147,7 @@ defmodule Statifier.CaseTest do
 
       error =
         assert_raise ExUnit.AssertionError, fn ->
-          Statifier.Case.test_scxml(xml, "nameless region", ["s1"], [])
+          Case.test_scxml(xml, "nameless region", ["s1"], [])
         end
 
       assert error.message =~ "active leaf state(s) have no id"
@@ -127,7 +178,7 @@ defmodule Statifier.CaseTest do
       """
 
       assert :ok =
-               Statifier.Case.test_scxml(xml, "send with no delay", ["s1"], [
+               Case.test_scxml(xml, "send with no delay", ["s1"], [
                  {%{"name" => "start"}, ["s3"]}
                ])
     end
@@ -150,18 +201,18 @@ defmodule Statifier.CaseTest do
       </scxml>
       """
 
-      assert :ok = Statifier.Case.test_scxml(xml, "delayed send reaches its target", ["pass"], [])
+      assert :ok = Case.test_scxml(xml, "delayed send reaches its target", ["pass"], [])
     end
 
-    # sabotage: `Statifier.Case`'s `settle_short_timers/2` is changed to
-    # return `:ok` unconditionally (a no-op) -> `t2` is sent while the 10ms
-    # `ready` timer is still pending, so the b->c transition it would have
-    # driven never happens before `t2` is evaluated against "b" instead of
-    # "c", landing on "b" (no `t2` transition from there) instead of "d" ->
-    # the second `assert_configuration_eventually` reddens. Reverted and
+    # sabotage: `Statifier.Testing.Case`'s `settle_short_timers/2` is changed
+    # to return `:ok` unconditionally (a no-op) -> `t2` is sent while the
+    # 10ms `ready` timer is still pending, so the b->c transition it would
+    # have driven never happens before `t2` is evaluated against "b" instead
+    # of "c", landing on "b" (no `t2` transition from there) instead of "d"
+    # -> the second `assert_configuration_eventually` reddens. Reverted and
     # confirmed green. This is the harness's own two-wait mechanism, not
-    # `lib/` - the same shape `test/scion_tests/delayed_send/send1_test.exs`
-    # exercises for real.
+    # `lib/` interpreter behavior - the same shape
+    # `test/scion_tests/delayed_send/send1_test.exs` exercises for real.
     test "settle_short_timers/1 drains a load-bearing intermediate delay before the next event" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -181,17 +232,17 @@ defmodule Statifier.CaseTest do
       """
 
       assert :ok =
-               Statifier.Case.test_scxml(xml, "send1 shape", ["a"], [
+               Case.test_scxml(xml, "send1 shape", ["a"], [
                  {%{"name" => "t1"}, ["b"]},
                  {%{"name" => "t2"}, ["d"]}
                ])
     end
 
-    # sabotage: `Statifier.Case`'s `drain_done_effect/1` is changed to
-    # return `nil` unconditionally -> `poll_until_settled/3` never restores
-    # `Effect.Done.configuration` onto the raw snapshot, so it reads the
-    # post-exit empty configuration instead of `["done"]` -> the assertion
-    # reddens. Reverted and confirmed green.
+    # sabotage: `Statifier.Testing.Case`'s `drain_done_effect/1` is changed
+    # to return `nil` unconditionally -> `poll_until_settled/3` never
+    # restores `Effect.Done.configuration` onto the raw snapshot, so it
+    # reads the post-exit empty configuration instead of `["done"]` -> the
+    # assertion reddens. Reverted and confirmed green.
     test "a <final> reached through a delayed send restores the configuration at exit" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
@@ -205,7 +256,7 @@ defmodule Statifier.CaseTest do
       </scxml>
       """
 
-      assert :ok = Statifier.Case.test_scxml(xml, "delayed final", ["done"], [])
+      assert :ok = Case.test_scxml(xml, "delayed final", ["done"], [])
     end
 
     # The invoke sits behind a transition rather than on the initial state:
@@ -251,15 +302,16 @@ defmodule Statifier.CaseTest do
       """
 
       assert :ok =
-               Statifier.Case.test_scxml(xml, "invoked child drives the parent", ["idle"], [
+               Case.test_scxml(xml, "invoked child drives the parent", ["idle"], [
                  {%{"name" => "start"}, ["done"]}
                ])
     end
   end
 
   describe "session_required?/1" do
-    # sabotage: n/a - asserts the routing predicate itself, not lib/
-    # behavior driven through a session.
+    # sabotage: session_required?/1 drops :invoke_elements from
+    # @session_features -> a document whose only session-requiring feature
+    # is <invoke> stops routing to the session -> red
     test "a document detecting a session feature routes to the session" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">
@@ -271,11 +323,13 @@ defmodule Statifier.CaseTest do
       </scxml>
       """
 
-      assert Statifier.Case.session_required?(xml)
+      assert Case.session_required?(xml)
     end
 
-    # sabotage: n/a - asserts the routing predicate itself, not lib/
-    # behavior driven through a session.
+    # sabotage: session_required?/1's MapSet.t() clause is changed to
+    # `Enum.any?(@session_features, fn _ -> true end)` (ignores the detected
+    # set entirely) -> a document with no session feature now routes to the
+    # session too -> red
     test "a plain compound document does not route to the session" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">
@@ -286,7 +340,7 @@ defmodule Statifier.CaseTest do
       </scxml>
       """
 
-      refute Statifier.Case.session_required?(xml)
+      refute Case.session_required?(xml)
     end
   end
 end

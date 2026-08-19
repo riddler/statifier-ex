@@ -530,11 +530,11 @@ Then:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green; `mix gate.verify` attests it was unscoped.
-- [ ] **ADR guard stage green.** This is the phase's sharpest automated signal:
+- [x] Full `mix quality` green; `mix gate.verify` attests it was unscoped.
+- [x] **ADR guard stage green.** This is the phase's sharpest automated signal:
       it fails unless the `receive do` carries its ADR citation and every bead
       ID is out of the promoted file.
-- [ ] **Gate guard stage green with no ledger entry**, confirming no guarded
+- [x] **Gate guard stage green with no ledger entry**, confirming no guarded
       path moved. **STOP CONDITION**: if the Dialyzer stage reports unknown
       `ExUnit.*` functions and the fix is `dialyzer: [plt_add_apps: [:mix, :ex_unit]]`
       in `mix.exs`, that line matches `gate_guard.ex:43`'s pattern and needs an
@@ -542,15 +542,15 @@ Then:
       human's call and an agent must not write it.** Stop, report, and wait.
       ADR-0052 anticipated the PLT change and called it implementation detail;
       mechanically it is a guarded edit either way.
-- [ ] Coverage: `test/statifier/case_test.exs`'s new tests raise
+- [x] Coverage: `test/statifier/case_test.exs`'s new tests raise
       `lib/statifier/testing/case.ex` above its measured 90.1% baseline; project
       total stays above the 90% floor (it was 96.3% with `test/support`
       included).
-- [ ] `mix test --include scion --include scxml_w3` green -
+- [x] `mix test --include scion --include scxml_w3` green -
       `use Statifier.Case, async: true` still works through the shim across all
       281 files.
-- [ ] `git diff --stat test/scion_tests test/scxml_tests` is empty.
-- [ ] `mix test.regression` green.
+- [x] `git diff --stat test/scion_tests test/scxml_tests` is empty.
+- [x] `mix test.regression` green.
 
 #### Manual Verification:
 - [ ] Every replaced `n/a` note names a mutation that was performed and
@@ -924,5 +924,22 @@ before considering the plan fully landed.
 full gate is the phase gate. In interactive execution, pause here for the human
 to confirm the manual items. Under `--loop`, the Automated list gates
 advancement and the Manual items are deferred to the end.
+
+---
+
+### Phase 2
+
+- [ ] Every replaced `n/a` note names a mutation that was performed and
+      reddened its test.
+- [ ] No Appendix D procedure is touched - the promoted module drives the
+      engine from outside and implements none of the pseudocode; confirm nothing
+      under `lib/statifier/interpreter/` changed.
+- [ ] The ADR-0003 escape comment argues the case rather than asserting an
+      exemption: a reader who knows only ADR-0003 should finish it agreeing.
+- [ ] Read the corpus shim path once by hand: pick one `test/scion_tests` file
+      and one `test/scxml_tests` file and run each alone with
+      `mix test <path> --include scion` / `--include scxml_w3`.
+
+**Implementation Note**: as Phase 1.
 
 ---

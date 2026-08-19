@@ -18,7 +18,7 @@ defmodule Statifier.MixProject do
       test_coverage: [tool: ExCoveralls],
       # The regression ratchet ships as mix tasks, so Mix itself has to be in
       # the PLT or every Mix.shell/0 call reads as an unknown function.
-      dialyzer: [plt_add_apps: [:mix]],
+      dialyzer: [plt_add_apps: [:mix, :ex_unit]],
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,
