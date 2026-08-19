@@ -637,16 +637,16 @@ Sabotage: `poll_until_settled/4 ignores its deadline and recurses forever -> red
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` green; `mix gate.verify` attests it was unscoped.
-- [ ] `mix test --include scion --include scxml_w3` green - the corpus calls
+- [x] Full `mix quality` green; `mix gate.verify` attests it was unscoped.
+- [x] `mix test --include scion --include scxml_w3` green - the corpus calls
       `test_scxml/4` and must be entirely unaffected by the new default
       argument.
-- [ ] `git diff --stat test/scion_tests test/scxml_tests` is empty.
-- [ ] Coverage for `lib/statifier/testing/case.ex` improves again; project total
+- [x] `git diff --stat test/scion_tests test/scxml_tests` is empty.
+- [x] Coverage for `lib/statifier/testing/case.ex` improves again; project total
       stays above 90%.
-- [ ] Doctor green - the `## Options` section lives in the existing `@doc`, and
+- [x] Doctor green - the `## Options` section lives in the existing `@doc`, and
       the default argument adds no new `def` head Doctor would count separately.
-- [ ] `mix test.regression` green.
+- [x] `mix test.regression` green.
 
 #### Manual Verification:
 - [ ] Run the new deadline test alone and confirm it completes in well under a
@@ -939,6 +939,19 @@ advancement and the Manual items are deferred to the end.
 - [ ] Read the corpus shim path once by hand: pick one `test/scion_tests` file
       and one `test/scxml_tests` file and run each alone with
       `mix test <path> --include scion` / `--include scxml_w3`.
+
+**Implementation Note**: as Phase 1.
+
+---
+
+### Phase 3
+
+- [ ] Run the new deadline test alone and confirm it completes in well under a
+      second - proving the option is actually read and not shadowed by the
+      4-second default.
+- [ ] Confirm no Appendix D procedure is touched.
+- [ ] Read the `## Options` doc as a downstream author: does it say enough to
+      pick a value, or only that a value exists?
 
 **Implementation Note**: as Phase 1.
 
