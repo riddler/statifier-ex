@@ -730,14 +730,14 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] No Appendix D procedure is touched by this phase; `compile/2` is the
+- [x] No Appendix D procedure is touched by this phase; `compile/2` is the
       pipeline facade and `%Machine{}` is compiler output, so ADR-0002's
       deviation rule has nothing to bind here.
-- [ ] The moduledoc's stated invariant (source, compile_opts and identity are
+- [x] The moduledoc's stated invariant (source, compile_opts and identity are
       stamped together, only by `compile/2`) is true of every site that builds
       a `%Machine{}` - checked by reading, not only by test.
-- [ ] Nothing else in `lib/` reads `opts` in a way the allowlist now misses.
-- [ ] In `iex -S mix`: build a `Statifier.Session.Recording` over a compiled
+- [x] Nothing else in `lib/` reads `opts` in a way the allowlist now misses.
+- [x] In `iex -S mix`: build a `Statifier.Session.Recording` over a compiled
       chart, `:erlang.term_to_binary/1` it and decode it back, and confirm the
       embedded Machine's new `source` and `compile_opts` survive unchanged -
       the one place Phase 1's fields cross a serialization boundary that this
@@ -756,15 +756,15 @@ blocking here.
 
 ### Phase 2
 
-- [ ] No Appendix D procedure is touched by this phase; `Statifier.Chart` is a
+- [x] No Appendix D procedure is touched by this phase; `Statifier.Chart` is a
       codec and ports no pseudocode, so ADR-0002 introduces no deviation to
       justify here.
-- [ ] The check chain reads in the ADR-0052 order (tag, version, recompile,
+- [x] The check chain reads in the ADR-0052 order (tag, version, recompile,
       identity) and each arm's error term is the one `docs/persistence.md` will
       tell a host to expect.
-- [ ] `Statifier.Position`'s behavior is unchanged - its blob shape, format
+- [x] `Statifier.Position`'s behavior is unchanged - its blob shape, format
       version, and errors are untouched by this phase's diff.
-- [ ] The moduledoc argues the boundary-module placement in its own words
+- [x] The moduledoc argues the boundary-module placement in its own words
       (layering, ADR-0003, Doctor burden) rather than only pointing at
       `Statifier.Position`.
 
@@ -780,13 +780,13 @@ blocking here.
 
 ### Phase 3
 
-- [ ] The amendment explains rather than rewrites: decisions 3 and 5 are
+- [x] The amendment explains rather than rewrites: decisions 3 and 5 are
       byte-identical to their pre-amendment text, and the Status line names the
       bead and the date.
-- [ ] A host author reading `docs/persistence.md` end to end can tell which of
+- [x] A host author reading `docs/persistence.md` end to end can tell which of
       the two persistence shapes applies to them and what each costs, without
       opening the ADR.
-- [ ] No `lib/` or `test/` file is modified by this phase's diff.
+- [x] No `lib/` or `test/` file is modified by this phase's diff.
 
 **Implementation Note**: This phase changes no Elixir code, so per this repo's
 `CLAUDE.md` authority table it may commit on review of the diff alone; the full
