@@ -1,9 +1,9 @@
-defmodule Statifier.FeatureDetectorTest do
+defmodule Statifier.Testing.FeatureDetectorTest do
   use ExUnit.Case, async: true
 
-  doctest Statifier.FeatureDetector
+  doctest Statifier.Testing.FeatureDetector
 
-  alias Statifier.FeatureDetector
+  alias Statifier.Testing.FeatureDetector
 
   # One document per registry entry. The completeness test below asserts this
   # table and the registry stay in step, so a new feature cannot land undetected.
@@ -110,20 +110,22 @@ defmodule Statifier.FeatureDetectorTest do
   }
 
   describe "detect_features/1" do
-    # sabotage: n/a - FeatureDetector lives in test/support/, not lib/; each
-    #           generated test asserts one @samples entry against it
+    # sabotage: drop the `<state(\s|>|\/>)` entry from @element_features ->
+    #           "detects basic_states" and the doctest go red
     for {feature, xml} <- @samples do
       test "detects #{feature}" do
         assert unquote(feature) in FeatureDetector.detect_features(unquote(xml))
       end
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: detect_compound_states/2 always adds :compound_states,
+    #           dropping its guard -> red
     test "returns an empty set for a document with no recognised features" do
       assert MapSet.new() == FeatureDetector.detect_features(~s(<scxml version="1.0"/>))
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: drop the `<assign(\s|>|\/>)` entry from @element_features ->
+    #           red, :assign_elements missing from the subset
     test "detects several features in one document" do
       xml = """
       <scxml>
@@ -153,7 +155,8 @@ defmodule Statifier.FeatureDetectorTest do
              )
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: drop the `(\s|>|\/>)` boundary from the final_states pattern
+    #           -> matches "<finalize" too, red
     test "does not mistake finalize for a final state" do
       xml = ~s(<scxml><state id="s"><invoke><finalize/></invoke></state></scxml>)
       features = FeatureDetector.detect_features(xml)
@@ -162,7 +165,9 @@ defmodule Statifier.FeatureDetectorTest do
       refute :final_states in features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: drop the negative event lookahead from
+    #           detect_eventless_transitions/2 -> matches every <transition>
+    #           regardless of event=, red
     test "does not report eventless or targetless transitions when both are present" do
       xml = ~s(<scxml><state id="s"><transition event="go" target="t"/></state></scxml>)
       features = FeatureDetector.detect_features(xml)
@@ -171,7 +176,9 @@ defmodule Statifier.FeatureDetectorTest do
       refute :targetless_transitions in features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: detect_send_children/2 stops stripping @donedata_block before
+    #           matching -> donedata's <content> also tagged
+    #           send_content_elements, red
     test "attributes donedata's <content> to donedata_elements, not send_content_elements" do
       xml = ~s(<scxml><final id="f"><donedata><content expr="1"/></donedata></final></scxml>)
       features = FeatureDetector.detect_features(xml)
@@ -180,7 +187,9 @@ defmodule Statifier.FeatureDetectorTest do
       refute :send_content_elements in features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: detect_send_children/2 stops stripping @donedata_block before
+    #           matching -> donedata's <param> also tagged send_param_elements,
+    #           red
     test "attributes donedata's <param> to donedata_elements, not send_param_elements" do
       xml =
         ~s(<scxml><final id="f"><donedata><param name="p" expr="1"/></donedata></final></scxml>)
@@ -191,7 +200,8 @@ defmodule Statifier.FeatureDetectorTest do
       refute :send_param_elements in features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: drop the `>` alternative from the donedata_elements pattern
+    #           -> plain `<donedata>` (no attrs) no longer matches, red
     test "reports both flavors when a send child and a donedata child both appear" do
       xml = ~s"""
       <scxml>
@@ -206,7 +216,9 @@ defmodule Statifier.FeatureDetectorTest do
       assert :donedata_elements in features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: detect_send_children/2 stops stripping @donedata_block before
+    #           matching -> both donedata blocks' children also tagged
+    #           send_param_elements/send_content_elements, red
     test "strips two donedata blocks in one document, matching test294's shape" do
       xml = ~s"""
       <scxml>
@@ -290,7 +302,7 @@ defmodule Statifier.FeatureDetectorTest do
                       ])
 
   describe "feature_registry/0" do
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), not lib/ behavior
+    # sabotage: n/a - asserts the sample table matches the registry, no behavior
     test "supports exactly the current supported feature set" do
       supported =
         FeatureDetector.feature_registry()
@@ -301,7 +313,8 @@ defmodule Statifier.FeatureDetectorTest do
       assert supported == @supported_features
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: change script_elements's status from :partial to the unknown
+    #           atom :maybe -> red
     test "statuses are drawn from the known set" do
       assert Enum.all?(FeatureDetector.feature_registry(), fn {_feature, status} ->
                status in [:supported, :partial, :unsupported]
@@ -314,7 +327,8 @@ defmodule Statifier.FeatureDetectorTest do
                MapSet.new(Map.keys(@samples))
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: change script_elements's status from :partial to :unsupported
+    #           -> red
     test "no registry entry is :unsupported - the corpus feature gate is vacuous today" do
       refute Enum.any?(FeatureDetector.feature_registry(), fn {_feature, status} ->
                status == :unsupported
@@ -323,13 +337,15 @@ defmodule Statifier.FeatureDetectorTest do
   end
 
   describe "validate_features/1" do
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: swap the {:ok, _} / {:error, _} branches in validate_features/1
+    #           -> red
     test "accepts an empty set" do
       assert {:ok, features} = FeatureDetector.validate_features(MapSet.new())
       assert MapSet.size(features) == 0
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: swap the {:ok, _} / {:error, _} branches in validate_features/1
+    #           -> red
     test "reports every missing feature by name" do
       assert {:error, unsupported} =
                FeatureDetector.validate_features(
@@ -339,7 +355,8 @@ defmodule Statifier.FeatureDetectorTest do
       assert unsupported == MapSet.new([:not_a_real_feature, :another_missing_feature])
     end
 
-    # sabotage: n/a - FeatureDetector is test harness (test/support/), no lib/ behavior
+    # sabotage: swap the {:ok, _} / {:error, _} branches in validate_features/1
+    #           -> red
     test "treats a feature missing from the registry as unsupported" do
       assert {:error, unsupported} =
                FeatureDetector.validate_features(MapSet.new([:not_a_real_feature]))

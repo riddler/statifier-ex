@@ -1,6 +1,6 @@
 # ADR-0006: Reuse the v1 conformance corpus and regression ratchet; commit a generator
 
-Status: accepted (2026-08-02) - amended 2026-08-17 (st-hgyu: the four-function constraint binds the synchronous driving path; the session path's coupling is a closed nine-function set)
+Status: accepted (2026-08-02) - amended 2026-08-17 (st-hgyu: the four-function constraint binds the synchronous driving path; the session path's coupling is a closed nine-function set) - amended in part by 0052 (st-hbdr: the harness modules' home moves to `lib/`'s `Statifier.Testing` namespace; the coupling constraint stands)
 
 ## Context
 
@@ -52,3 +52,14 @@ not library surface).
   to be made in passing. The constraint's purpose is unchanged: the corpus
   still cannot widen the library surface, because every function either path
   touches is public API carried by its own record.)*
+
+*(Amended 2026-08-19, st-hbdr / ADR-0052: "feature detection moves to
+`test/support`" stops being a placement rule. `Statifier.Case` and
+`Statifier.FeatureDetector` are promoted into `lib/` as
+`Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector`, with thin
+`test/support` shims keeping the generated corpus files' names working. The
+load-bearing half of the rule is kept in namespace terms: no `lib/` module
+outside `Statifier.Testing.*` may reference anything inside it, so the engine
+still never consults feature detection, and unsupported-feature tests still
+fail with the feature named rather than skip. The coupling constraint above
+is untouched - promotion moves the module, not the driving surface.)*
