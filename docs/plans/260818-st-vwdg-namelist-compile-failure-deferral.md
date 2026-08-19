@@ -848,20 +848,35 @@ cheaply.
 
 ## Deferred Manual Verification
 
+All eleven items below were walked in a review pass on 2026-08-18 and are
+checked on that basis. The sabotage attestations were not taken on the
+implementers' word: each of the five named mutations was re-applied, the
+named test confirmed red, and the tree restored. Two of them (the
+`evaluate_param/2` clause drops) redden through a `FunctionClauseError`
+rather than through a discard, which their own notes concede; the
+`<send>` half of that pair was resolved by dropping the weaker of two
+duplicate tests, so the surviving pin reddens for the right reason. The
+four spec clauses were read from the local cache, not recalled: 6.2.2 and
+6.4.1 both type `namelist` as "List of location expressions", 5.9.4
+carries the deferral MAY, and 6.2/6.4 carry the discard and terminate
+MUSTs. No Appendix D procedure is touched. End-to-end behavior was
+probed directly: test553's document loads, emits no send effect, and
+raises exactly `error.execution`.
+
 Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The sabotage mutation each new test names was actually applied, seen red,
+- [x] The sabotage mutation each new test names was actually applied, seen red,
       and reverted, with `MIX_ENV=test mix compile --force` on both sides
       (`docs/testing.md`). This is an implementer attestation, not an automated
       criterion: `docs/testing.md:167-170` says the scan "only checks that a
       `# sabotage:` note exists above the test, never that the mutation it names
       would actually change the value under test", so no command in this repo
       can decide it.
-- [ ] Spec-conformance judgment on the touched functions: 6.2.2's "If the
+- [x] Spec-conformance judgment on the touched functions: 6.2.2's "If the
       evaluation of `<send>`'s arguments produces an error, the Processor MUST
       discard the message without attempting to deliver it" is what the new path
       produces, and 5.9.4's deferral MAY is what licenses the load-time change.
@@ -869,10 +884,10 @@ before considering the plan fully landed.
       (`$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`),
       not from memory. No Appendix D procedure is touched, so there is no
       pseudocode deviation to justify.
-- [ ] A `<send>` with a *well-formed* namelist still behaves identically -
+- [x] A `<send>` with a *well-formed* namelist still behaves identically -
       spot-check the existing `namelist`, `namelist_unbound` and
       `namelist_undeclared` cases in `send_test.exs`.
-- [ ] No regressions in `<param>`-based sends, `<donedata>` params, or
+- [x] No regressions in `<param>`-based sends, `<donedata>` params, or
       `<content expr>`: none of them should have changed shape.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
@@ -886,17 +901,17 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] The named sabotage mutations were applied, seen red, and reverted, with
+- [x] The named sabotage mutations were applied, seen red, and reverted, with
       `MIX_ENV=test mix compile --force` on both sides - an implementer
       attestation for the same reason Phase 1 records it as one.
-- [ ] Spec-conformance judgment on the touched functions: 6.4's "if the
+- [x] Spec-conformance judgment on the touched functions: 6.4's "if the
       evaluation of its arguments produces an error, the SCXML Processor MUST
       terminate the processing of the element without further action", read from
       the local spec cache. Confirm no Appendix D procedure moved.
-- [ ] A well-formed `<invoke namelist="a b">` still compiles to two ordered
+- [x] A well-formed `<invoke namelist="a b">` still compiles to two ordered
       `kind: :location` params and still seeds a child session's datamodel
       (`test/statifier/session/invoke_start_child_test.exs`).
-- [ ] `<finalize>` auto-assign still writes for a well-formed namelist
+- [x] `<finalize>` auto-assign still writes for a well-formed namelist
       (`test/statifier/interpreter/finalize_test.exs`), and the narrowed filter
       changed nothing there.
 
@@ -911,15 +926,15 @@ items are deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 3
 
-- [ ] Spec-conformance judgment on the `lib/` change: the corrected `compile/1`
+- [x] Spec-conformance judgment on the `lib/` change: the corrected `compile/1`
       `@doc` describes what the function actually returns for every class named
       in the updated `docs/datamodel.md` paragraph, with 5.9.4 cited as the
       authority for the split.
-- [ ] The `docs/datamodel.md` edit reads as an extension of the recorded
+- [x] The `docs/datamodel.md` edit reads as an extension of the recorded
       leaning ("if this is ever unified, it unifies toward deferral"), not as a
       quiet reversal, and a reader who only reads that paragraph can still tell
       which element classes reject at load time.
-- [ ] The changelog fragment is written for someone who only calls the public
+- [x] The changelog fragment is written for someone who only calls the public
       API and can tell the difference.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
