@@ -30,8 +30,25 @@
 #     under lib/statifier is scanned; only these three dev-only modules are
 #     not, and a new one is not covered by this list until someone adds it
 #     here.
+#
+# `skip: true` turns on Sobelow's inline `@sobelow_skip` annotation, which
+# silences one named check on one function rather than excluding a whole file.
+# It is here for st-m5c3's serialization contract: `:erlang.binary_to_term/2`
+# is how a versioned blob is decoded, and Misc.BinToTerm fires on every call
+# regardless of the `:safe` option. `ignore_files` is the wrong instrument for
+# that - these are shipped library modules, not dev-only Mix support, and
+# excluding one by path would take Traversal, RCE and the hardcoded-secret
+# checks off it too. The inline form keeps every other check live and puts the
+# silencing on the line it applies to, where a reviewer reads it.
+#
+# The cost, stated rather than discovered: an `@sobelow_skip` added anywhere
+# under lib/ now takes effect with no edit to this file and so no ADR-0011
+# entry. `grep -rn "@sobelow_skip" lib/` is the whole list; it is a diff-visible
+# annotation on a named function, not a threshold, and every use of it owes the
+# same in-code justification the two below carry.
 [
   exit: "low",
+  skip: true,
   ignore_files: [
     "lib/mix/statifier/gate_guard.ex",
     "lib/mix/statifier/regression_registry.ex",

@@ -4,6 +4,7 @@ defmodule Statifier.Invoke.SourceTest do
   alias Statifier.{Compiler, Lowering, Machine, Parser, Validator}
   alias Statifier.Effect.Invoke
   alias Statifier.Invoke.Source
+  alias Statifier.Machine.Identity
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -381,6 +382,43 @@ defmodule Statifier.Invoke.SourceTest do
       markup = @nested_document |> compile!() |> invoke_content("s0")
 
       assert {:ok, %Machine{}} = Source.resolve(invoke(content: markup), [])
+    end
+
+    # `resolve/2`'s markup clause goes through the public `Statifier.compile/2`
+    # (unlike this file's `compile!/1` helper, which calls `Compiler.compile/1`
+    # directly and so never stamps an identity) - the slice gets its own
+    # identity, hashed over the extracted `<content>` markup, not the parent
+    # document's source. This is asserted on purpose: an ADR-0041
+    # `<invoke><content>` slice is its own chart.
+    #
+    # sabotage: `Source.resolve/2`'s markup clause is changed from
+    # `Statifier.compile(content, invoke_content_markup: true)` to
+    # `{:ok, %Machine{}}` (skip compiling the slice, fabricate an empty
+    # Machine) -> this assertion reddens because the fabricated Machine's
+    # `identity` is `nil` instead of a non-nil `%Identity{}`
+    test "an <invoke><content> slice resolved through resolve/2 gets its own non-nil identity" do
+      parent_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+          <state id="s0">
+              <invoke type="http://www.w3.org/TR/scxml/">
+                  <content>
+                      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="c0" version="1.0">
+                          <final id="c0" />
+                      </scxml>
+                  </content>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, parent_machine} = Statifier.compile(parent_xml)
+      markup = parent_xml |> compile!() |> invoke_content("s0")
+
+      assert {:ok, child_machine} = Source.resolve(invoke(content: markup), [])
+
+      assert %Identity{} = child_identity = Machine.identity(child_machine)
+      assert %Identity{} = parent_identity = Machine.identity(parent_machine)
+      refute Identity.matches?(child_identity, parent_identity)
     end
   end
 end

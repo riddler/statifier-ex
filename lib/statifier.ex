@@ -27,6 +27,7 @@ defmodule Statifier do
 
   alias Statifier.{Compiler, Effect, Event, Interpreter, Lowering}
   alias Statifier.{Machine, MachineState, Parser, Session, Validator}
+  alias Statifier.Machine.Identity
 
   @typedoc """
   The union of every error struct any pipeline stage `compile/2` runs can
@@ -71,6 +72,15 @@ defmodule Statifier do
   general validation off-switch: a root that declares a namespace other than
   SCXML's still fails, in this mode and without it alike, and `version` must
   still be `"1.0"` either way.
+
+  Two more recognized options, `:chart_name` and `:chart_version`, ride
+  straight through to `Statifier.Machine.Identity.of_source/2` and are
+  ignored by every pipeline stage before it: `Validator.Context.build/3`
+  reads only `:invoke_content_markup` from this same `opts`, so the two
+  identity options pass through the pipeline untouched and no stage needs a
+  change to carry them. They stamp the returned `Machine.t()`'s `identity`
+  field (`Statifier.Machine.identity/1`) alongside the content hash
+  `compile/2` always takes over `source`.
   """
   @spec compile(source :: binary(), opts :: keyword()) :: {:ok, Machine.t()} | {:error, [error()]}
   def compile(source, opts \\ []) when is_binary(source) and is_list(opts) do
@@ -78,7 +88,7 @@ defmodule Statifier do
          {:ok, document} <- Lowering.lower(root, source),
          {:ok, document, warnings} <- Validator.validate(document, source, opts),
          {:ok, machine} <- Compiler.compile(document) do
-      {:ok, %Machine{machine | warnings: warnings}}
+      {:ok, %Machine{machine | warnings: warnings, identity: Identity.of_source(source, opts)}}
     else
       {:error, errors, _warnings} -> {:error, errors}
       other -> other

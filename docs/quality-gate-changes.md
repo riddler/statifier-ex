@@ -13,6 +13,49 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-18 - st-m5c3
+
+Approved-by: JohnnyT (in session)
+
+- .sobelow-conf: adds `skip: true`, turning on Sobelow's inline
+  `@sobelow_skip` annotation, and adds a comment block giving the reason and
+  naming the cost
+
+Reason: st-m5c3 gives `%Statifier.Machine{}` a content-hash identity and a
+versioned serialization contract, and decoding a versioned blob means
+`:erlang.binary_to_term/2`. Misc.BinToTerm is a high-confidence finding on
+every call site regardless of the `:safe` option, because `:safe` still
+decodes a fun term, and this project runs `exit: "low"` on purpose, so it
+blocks. There is no code-level fix: the check has no notion of a decoded term
+being pattern-matched rather than called, and hand-rolling an encoder for
+MapSets, `:queue` and nested maps would trade a reviewed OTP primitive for
+several hundred lines of bespoke parsing - a larger security surface than the
+one being silenced, not a smaller one.
+
+**The instrument matters more than the decision here.** `ignore_files` is what
+this file already uses, and it is wrong for this case: its three existing
+entries are dev-only Mix support modules that never reach the released
+library, whereas `lib/statifier/machine/identity.ex` is shipped code, and
+excluding it by path would take Traversal, RCE and the hardcoded-secret checks
+off it as well as the one finding at issue. `skip: true` narrows the silencing
+to one named check on one named private function, annotated on the line it
+applies to, where a reviewer reads it rather than in a path list three
+directories away. `exit: "low"` is unchanged, no threshold moves, no test is
+skipped, no scope narrows, and every other file and every other check is
+untouched.
+
+The cost is real and is written into `.sobelow-conf` rather than left to be
+discovered: an `@sobelow_skip` added anywhere under `lib/` now takes effect
+with no edit to a guarded path, and therefore with no entry here. That is a
+route around the guard, and it is accepted knowingly on two grounds - the
+annotation is diff-visible on a named function, unlike a threshold change
+buried in a config literal, and `grep -rn "@sobelow_skip" lib/` enumerates
+every use in one command. Two annotations are expected on this branch: this
+one, and the same shape in `Statifier.Position`'s decoder when phase 2 lands.
+A third arriving for an unrelated reason is the signal that this mechanism has
+started absorbing findings rather than documenting one, and is worth a
+maintainer's eye at that point.
+
 ## 2026-08-18 - st-383
 
 Approved-by: JohnnyT (in session)
