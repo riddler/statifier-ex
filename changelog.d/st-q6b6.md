@@ -11,6 +11,13 @@
   ordinal}`, eight components instead of seven. `[:statifier, :session,
   :effect, :send_delayed]` and `[..., :cancel]` both carry `ordinal` in
   their telemetry measurements.
-- `Statifier.Position`'s persisted format moves to version 2, which adds
-  `ordinal`. A host reading a stored version-1 `Position` keeps working -
-  version 1 is read, not refused - and new saves write version 2.
+
+### Changed
+
+- `ordinal` is enforced on both effect structs, so code that *builds* a
+  `%Statifier.Effect.SendDelayed{}` or `%Statifier.Effect.Cancel{}` by
+  hand - test fixtures and durable-scheduler harnesses, mostly - must now
+  pass it. Pattern matching on either struct is unaffected. Where a
+  hand-built effect only needs to be distinct from its neighbours, any
+  positive integer will do; where it stands in for one the engine
+  produced, use the `ordinal` the engine stamped.

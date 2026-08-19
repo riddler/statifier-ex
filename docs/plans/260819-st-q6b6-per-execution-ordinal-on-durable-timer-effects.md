@@ -796,18 +796,18 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] **Spec-conformance judgment**: no Appendix D procedure is touched, and
+- [x] **Spec-conformance judgment**: no Appendix D procedure is touched, and
       spec 6.2/6.3 observable semantics are unchanged - a chart's event
       sequence, timer set, and cancellation behavior are identical before and
       after. Confirm by reading the diff of `send.ex` and `cancel.ex`: the only
       new writes are to `timer_counter` and `ordinal`.
-- [ ] Each new test was genuinely sabotaged - the mutation was run, it reddened
+- [x] Each new test was genuinely sabotaged - the mutation was run, it reddened
       for the reason the note claims, and the note was not written from
       imagination.
-- [ ] The `timer_counter` moduledoc section reads as a sibling of
+- [x] The `timer_counter` moduledoc section reads as a sibling of
       `send_counter`'s, not as a paraphrase of it, and correctly says *two* call
       sites.
-- [ ] Every updated test literal got a meaningful ordinal, not a blanket `1`.
+- [x] Every updated test literal got a meaningful ordinal, not a blanket `1`.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run the
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -821,20 +821,20 @@ see the intermediate-state note in Implementation Approach.
 
 ### Phase 2
 
-- [ ] **Spec-conformance judgment**: `lib/statifier/position.ex` holds no
+- [x] **Spec-conformance judgment**: `lib/statifier/position.ex` holds no
       Appendix D procedure and this phase changes no interpreter behavior; the
       diff touches only serialization.
-- [ ] Read the version-1 test's fixture by hand and confirm it is a genuine
+- [x] Read the version-1 test's fixture by hand and confirm it is a genuine
       version-1 shape - `:timer_counter` actually absent from the payload map,
       not merely set to `0`. A fixture that sets it to `0` proves nothing.
-- [ ] Confirm the `check_version(1)` sabotage was really run and reddened with
+- [x] Confirm the `check_version(1)` sabotage was really run and reddened with
       `{:unsupported_format_version, 1}` - and that nobody "fixed" the test by
       inventing a mutation against `upgrade_payload/2`, which cannot redden.
-- [ ] `docs/persistence.md:43-53` now reads correctly against a two-version
+- [x] `docs/persistence.md:43-53` now reads correctly against a two-version
       `Position` - the added sentence says version 1 is read rather than
       refused, and the surrounding claim about identity mismatches is
       undisturbed.
-- [ ] No regression for a host that never persisted anything - a session that
+- [x] No regression for a host that never persisted anything - a session that
       never calls `to_binary/1` behaves identically.
 
 **Implementation Note**: Same loop/full gate discipline as Phase 1. This phase
@@ -845,16 +845,16 @@ publishable until it lands.
 
 ### Phase 3
 
-- [ ] **Spec-conformance judgment**: `telemetry.ex` sits on the session side of
+- [x] **Spec-conformance judgment**: `telemetry.ex` sits on the session side of
       ADR-0003's effect boundary and holds no Appendix D procedure; this phase
       changes no interpreter behavior.
-- [ ] The moduledoc contract table matches what `core_shape/2` actually emits,
+- [x] The moduledoc contract table matches what `core_shape/2` actually emits,
       key for key, for both rows - the table is the published contract and a
       drift between it and the code is the defect ADR-0040 exists to prevent.
-- [ ] Read `docs/durable-timers.md` end to end against the finished `lib/` and
+- [x] Read `docs/durable-timers.md` end to end against the finished `lib/` and
       confirm it describes nothing the code lacks. ADR-0059's Consequences make
       this the condition for merging the branch.
-- [ ] Confirm the changelog fragment reads as a migration note for a 1.x user,
+- [x] Confirm the changelog fragment reads as a migration note for a 1.x user,
       not a transcript of the rewrite (`changelog.d/README.md`).
 
 **Implementation Note**: Same loop/full gate discipline. This is the last phase;
