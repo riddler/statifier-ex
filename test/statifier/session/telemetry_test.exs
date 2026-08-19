@@ -153,10 +153,19 @@ defmodule Statifier.Session.TelemetryTest do
        owner: nil,
        macrostep: 1,
        microstep: 2,
-       round: 1
+       round: 1,
+       ordinal: 1
      }},
     {:cancel,
-     %Cancel{send_id: "s3", c_index: nil, owner: nil, macrostep: 1, microstep: 2, round: 1}},
+     %Cancel{
+       send_id: "s3",
+       c_index: nil,
+       owner: nil,
+       macrostep: 1,
+       microstep: 2,
+       round: 1,
+       ordinal: 2
+     }},
     {:invoke,
      %Invoke{
        invoke_id: "i1",
@@ -458,7 +467,8 @@ defmodule Statifier.Session.TelemetryTest do
         owner: nil,
         macrostep: 3,
         microstep: 4,
-        round: 2
+        round: 2,
+        ordinal: 1
       }
 
       Telemetry.effect("sess1", machine, {:send_delayed, payload})

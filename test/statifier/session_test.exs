@@ -473,7 +473,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 40,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -501,13 +502,14 @@ defmodule Statifier.SessionTest do
         delay_ms: 30,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}
+        {:cancel, %Effect.Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, ordinal: 2}}
       ])
 
       Process.sleep(60)
@@ -523,7 +525,8 @@ defmodule Statifier.SessionTest do
       {:ok, session} = Session.start_link(machine)
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "no-such-id", macrostep: 1, microstep: 1, round: 0}}
+        {:cancel,
+         %Effect.Cancel{send_id: "no-such-id", macrostep: 1, microstep: 1, round: 0, ordinal: 1}}
       ])
 
       status = Session.status(session)
@@ -542,7 +545,7 @@ defmodule Statifier.SessionTest do
       machine = compile!(two_state_doc())
       {:ok, session} = Session.start_link(machine)
 
-      for _index <- 1..2 do
+      for index <- 1..2 do
         send_delayed = %Effect.SendDelayed{
           event: "go",
           target: nil,
@@ -550,7 +553,8 @@ defmodule Statifier.SessionTest do
           delay_ms: 200,
           macrostep: 1,
           microstep: 1,
-          round: 0
+          round: 0,
+          ordinal: index
         }
 
         Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -559,7 +563,8 @@ defmodule Statifier.SessionTest do
       assert Session.status(session).pending_timers == 2
 
       Session.interpret(session, [
-        {:cancel, %Effect.Cancel{send_id: "shared", macrostep: 1, microstep: 1, round: 0}}
+        {:cancel,
+         %Effect.Cancel{send_id: "shared", macrostep: 1, microstep: 1, round: 0, ordinal: 3}}
       ])
 
       status = wait_for_status(session, fn s -> s.pending_timers == 0 end)
@@ -589,7 +594,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 1_000,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -1541,7 +1547,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 200,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       effects = [{:send_delayed, send_delayed}]
@@ -1572,7 +1579,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 20,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       effects = [{:send_delayed, send_delayed}]

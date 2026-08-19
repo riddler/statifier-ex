@@ -201,6 +201,29 @@ defmodule Statifier.MachineState do
   directly at its one call site rather than through a dedicated
   `MachineState` function.
 
+  ## `timer_counter` is the session-global durable-timer ordinal (ADR-0059)
+
+  `%Effect.SendDelayed{}` and `%Effect.Cancel{}` both carry the position
+  fields `macrostep`/`microstep`/`round`/`c_index`/`owner`, and a
+  `<foreach>` body re-executes the same content node - the same `c_index` -
+  once per iteration, in the same microstep, under the same author-written
+  id. That collision is what a durable host's dedup key cannot resolve on
+  its own; `timer_counter` mints the disambiguator, read as `ordinal` onto
+  each effect at the moment it is built.
+
+  Starts at `0` in `new/2` (no durable-timer effect has been built yet). It
+  advances on **every** construction of a `%SendDelayed{}` or a `%Cancel{}`
+  - author-written id or not, inside a `<foreach>` or not - unlike
+  `send_counter`, which only a generated id consumes. It is never reset,
+  and the increment-before-read idiom is the same one `invoke_counter` and
+  `send_counter` use: the first minted ordinal is `1`. No setter function,
+  matching `invoke_counter`'s and `send_counter`'s own precedent - but
+  unlike either of those, this field is written directly at **two** call
+  sites rather than one: `lib/statifier/machine/content/send.ex`'s
+  delayed-send construction and `lib/statifier/machine/content/cancel.ex`'s
+  `<cancel>` construction, since one session-global sequence spans both
+  effect kinds (ADR-0059).
+
   ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
@@ -347,6 +370,7 @@ defmodule Statifier.MachineState do
     active_invocations: %{},
     invoke_counter: 0,
     send_counter: 0,
+    timer_counter: 0,
     datamodel: %{},
     running: true,
     status: :running,
@@ -420,6 +444,7 @@ defmodule Statifier.MachineState do
           active_invocations: %{optional({non_neg_integer(), non_neg_integer()}) => String.t()},
           invoke_counter: non_neg_integer(),
           send_counter: non_neg_integer(),
+          timer_counter: non_neg_integer(),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -475,6 +500,7 @@ defmodule Statifier.MachineState do
       active_invocations: %{},
       invoke_counter: 0,
       send_counter: 0,
+      timer_counter: 0,
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,

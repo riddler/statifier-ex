@@ -204,7 +204,8 @@ defmodule Statifier.ReplayRoundTripTest do
         delay_ms: 30,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       log_effect = %Effect.Log{
@@ -277,7 +278,8 @@ defmodule Statifier.ReplayRoundTripTest do
         delay_ms: 5_000,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       effects = [
@@ -375,7 +377,8 @@ defmodule Statifier.ReplayRoundTripTest do
         delay_ms: 20,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       effects = [{:send_delayed, send_delayed}]
@@ -491,6 +494,47 @@ defmodule Statifier.ReplayRoundTripTest do
       # not just present on the effect, but bound identically where a
       # `<log expr="loc"/>` in this document would have read it.
       assert result.machine_state.datamodel["loc"] == live_send_id
+    end
+
+    # ADR-0059: `timer_counter` is a pure `%MachineState{}` fold field, so a
+    # replay re-driving the same recorded inputs (ADR-0034) mints
+    # byte-identical ordinals - this document's `<send delay>` then
+    # `<cancel>`, both in one `<onentry>` block, exercise decision 2's one
+    # shared sequence across both effect kinds at the same time.
+    #
+    # sabotage: `Statifier.MachineState.new/2`'s `timer_counter: 0` literal
+    # is changed to seed from `System.unique_integer([:positive])` instead
+    # of the fixed `0` -> the live run and its replay each mint unrelated
+    # starting ordinals, so `round_trip/3`'s own `assert result.stream ==
+    # stream` reddens outright before this test's own `live_ordinals ==
+    # replayed_ordinals` assertion is even reached - the same failure shape
+    # the sibling send_id determinism test's own sabotage note describes.
+    # Reverted and confirmed green.
+    test "ordinals are byte-identical across the live run and its replay" do
+      machine = compile!(send_cancel_doc())
+
+      {_recording, stream, result} =
+        round_trip(machine, [], fn session ->
+          wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+        end)
+
+      ordinals_of = fn stream ->
+        for {:effect, effect} <- stream,
+            match?({:send_delayed, %Effect.SendDelayed{}}, effect) or
+              match?({:cancel, %Effect.Cancel{}}, effect) do
+          case effect do
+            {:send_delayed, %Effect.SendDelayed{ordinal: ordinal}} -> ordinal
+            {:cancel, %Effect.Cancel{ordinal: ordinal}} -> ordinal
+          end
+        end
+      end
+
+      live_ordinals = ordinals_of.(stream)
+      replayed_ordinals = ordinals_of.(result.stream)
+
+      assert live_ordinals == [1, 2]
+      assert replayed_ordinals == [1, 2]
+      assert live_ordinals == replayed_ordinals
     end
   end
 
