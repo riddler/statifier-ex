@@ -308,7 +308,7 @@ defmodule Statifier.Session.TelemetryTest do
 
       {machine_state, _effects} = Statifier.initialize(machine, trace: true)
 
-      assert :ok = Telemetry.init("sess1", machine, machine_state, {self(), "inv1"})
+      assert :ok = Telemetry.init("sess1", machine, machine_state, {self(), "inv1"}, false)
 
       assert_received {[:statifier, :session, :init], ^ref, measurements, metadata}
       assert is_integer(measurements.system_time)
@@ -316,6 +316,7 @@ defmodule Statifier.Session.TelemetryTest do
       assert metadata.machine_name == "m"
       assert metadata.trace == true
       assert metadata.invoked_by == {self(), "inv1"}
+      assert metadata.resumed == false
     end
   end
 
@@ -1192,7 +1193,7 @@ defmodule Statifier.Session.TelemetryTest do
       machine = located_machine()
       {machine_state, _effects} = Statifier.initialize(machine)
 
-      Telemetry.init("sess1", machine, machine_state, nil)
+      Telemetry.init("sess1", machine, machine_state, nil, false)
       Telemetry.halt("sess1", :done, machine_state)
       Telemetry.terminate("sess1", :normal, :done, machine_state)
       span_ref = make_ref()

@@ -321,12 +321,13 @@ defmodule Statifier.Session do
 
   use GenServer, restart: :temporary
 
-  alias Statifier.{Effect, Event, Interpreter, Machine, MachineState}
+  alias Statifier.{Effect, Event, Interpreter, Machine, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Source
   alias Statifier.Invoke.Types, as: InvokeTypes
+  alias Statifier.Machine.Identity
   alias Statifier.Send.{Routes, Target}
   alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
 
@@ -485,6 +486,76 @@ defmodule Statifier.Session do
       a snapshot: `subscribe/2` and `unsubscribe/2` after a child has started
       do not reach that child, and `invocations/1` plus `subscribe/2` on the
       child is how an already-running child is attached to.
+    - `:resume` - boots this session at a persisted position (ADR-0060)
+      instead of running `Statifier.Interpreter.initialize/2`. Accepts
+      either a `Statifier.Position.to_binary/1` blob (decoded via
+      `Statifier.Position.from_binary/2` against `machine`, which inherits
+      the full ADR-0052 identity gate) or an already-decoded
+      `%Statifier.MachineState{}` (the `Statifier.Position.import/2`
+      migration path - checked instead against `machine`'s own identity via
+      `Statifier.Machine.Identity.matches?/2`, one identity rule for both
+      shapes). `machine` stays the positional `%Machine{}` either way; the
+      position's own `machine` field is rebound to it, so one compiled
+      `Machine` term is shared by the resumed state.
+
+      A resumed session comes up with `machine_state`'s configuration,
+      datamodel, history values, `entered_states`, `states_to_invoke`,
+      `active_invocations`, and all six counters exactly as persisted - no
+      `Interpreter.initialize/2` call, no re-entry of the chart's initial
+      states, no `<script>` or `<onentry>` block run a second time.
+      `:session_id` resolves to the caller's own option if supplied,
+      otherwise to `machine_state.datamodel["_sessionid"]`; supplying it
+      explicitly rewrites `datamodel["_sessionid"]` to agree, so the
+      `session_id == datamodel["_sessionid"]` invariant always holds.
+      `record: true` on a resumed session anchors the new
+      `Statifier.Session.Recording.t()` at the resumed position rather than
+      at the chart's initial configuration (ADR-0060 decision 6), so
+      catch-up (`subscribe/3` with `catch_up: true`) and `Statifier.Replay`
+      still reproduce exactly the notified prefix.
+
+      What a resume does **not** restore, each for a reason ADR-0060
+      decision 7 records: in-flight delayed-send timers (no scheduling
+      deadline is ever stored - a resumed session starts with
+      `Statifier.Session.Timers.new()` and an empty `timer_refs` map; a
+      durable host re-arms them itself from the `SendDelayed`/`Cancel`
+      effect vocabulary, ADR-0054/0055/0059); live invoked children (pids,
+      monitor refs, and child session ids are process-local and were never
+      part of a position - `active_invocations` carries forward verbatim as
+      the record of *what* was invoked, `Statifier.Session.Invocations`
+      starts empty, and re-establishing the processes behind those ids is
+      the host's job through the invoke handler registry, ADR-0051); and
+      the external inbox (`Statifier.Session.Inbox` lives outside
+      `%MachineState{}` by ADR-0002's core/session split - anything queued
+      but not yet dequeued at persist time is lost with the process that
+      held it).
+
+      Refuses with `{:error, {:resume, reason}}` rather than booting a
+      silently-wrong session, for `reason` in:
+
+        - `{:conflicting_options, opts}` - `:resume` was passed alongside
+          `:trace`, `:datamodel`, or `:max_macrostep_rounds`
+          (`Statifier.MachineState.new/2`'s own options, not read on this
+          path) or `:invoked_by` (a child session is always library-started,
+          never resumed).
+        - `:not_a_statifier_blob`, `{:unsupported_format_version, v}`,
+          `{:identity_mismatch, expected, actual}`, or `:unidentified_chart`
+          - `Statifier.Position.from_binary/2`'s own errors (blob form), or
+          the equivalent checks against `machine_state.machine`'s identity
+          (struct form).
+        - `:position_not_quiescent` - the position's internal event queue is
+          non-empty (`Statifier.MachineState.internal_queue_empty?/1`);
+          booting mid-macrostep would produce effects with no ADR-0048 input
+          boundary behind them. A host drains to quiescence before
+          persisting, the same instruction `Statifier.Position.export/1`
+          already gives.
+        - `:position_not_running` - the position has `running: false`
+          (`status: :done`); booting a `GenServer` that is already
+          terminated, has notified nobody, and has `halted: nil` is the
+          surprising outcome. A host that wants to inspect a finished
+          position uses `Statifier.Position.from_binary/2` and
+          `Statifier.active_leaf_states/1` directly, no session required.
+
+      See ADR-0060 for the full decision record.
   """
   @spec start_link(machine :: Machine.t(), opts :: keyword()) :: GenServer.on_start()
   def start_link(%Machine{} = machine, opts \\ []) do
@@ -744,31 +815,32 @@ defmodule Statifier.Session do
   # performed the effects this callback only plans.
   @impl GenServer
   def init({%Machine{} = machine, opts}) do
-    session_id = Keyword.get_lazy(opts, :session_id, &MachineState.generate_session_id/0)
+    case resolve_resume(opts, machine) do
+      {:ok, resume} -> init_boot(machine, opts, resume)
+      {:error, reason} -> {:stop, {:resume, reason}}
+    end
+  end
+
+  # The tail of `init/1`, shared by a fresh start and a resume: `resume` has
+  # already been resolved and refused what needed refusing
+  # (`resolve_resume/2`), so this function only ever assembles a `%State{}`
+  # and hands the `{machine_state, effects}` pair off to `handle_continue/2`
+  # - `boot/6` is the one branch point (ADR-0060's "Key Discoveries": this is
+  # the single spot `lib/statifier/session.ex:771` names).
+  @spec init_boot(machine :: Machine.t(), opts :: keyword(), resume :: resume()) ::
+          {:ok, State.t(), {:continue, tuple()}}
+  defp init_boot(machine, opts, resume) do
+    session_id = resolve_session_id(opts, resume)
     register_session(session_id)
 
     invoked_by = Keyword.get(opts, :invoked_by)
     invoke_handlers = Keyword.get(opts, :invoke_handlers, %{})
 
-    machine_opts =
-      opts
-      |> Keyword.take([:trace, :datamodel, :max_macrostep_rounds])
-      |> Keyword.put(:session_id, session_id)
-      |> Keyword.put(:routes, init_routes(session_id, invoked_by))
-      # ADR-0051 decision 3's "one constructor": the `invoke_types` snapshot
-      # the core is stamped with is derived from `invoke_handlers`'s own
-      # keys, not declared separately, so the registered-type set and the
-      # dispatch map `plan_context/1` builds below cannot diverge.
-      # `:invoke_handlers` itself rides along in `machine_opts` too, purely
-      # so `Recording.new/2` (called with this same keyword list) can
-      # normalize it into the recording (`@normalized_opts`) - `Statifier.
-      # MachineState.new/2` reads no such key and ignores it.
-      |> Keyword.put(:invoke_types, InvokeTypes.new(types: Map.keys(invoke_handlers)))
-      |> Keyword.put(:invoke_handlers, invoke_handlers)
-
     start_time = System.monotonic_time()
     span_ref = make_ref()
-    {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
+
+    {machine_state, effects, machine_opts, trigger, anchor} =
+      boot(resume, machine, opts, session_id, invoked_by, invoke_handlers)
 
     subscribers =
       opts
@@ -777,12 +849,12 @@ defmodule Statifier.Session do
 
     monitor_parent(invoked_by)
 
-    Telemetry.init(session_id, machine, machine_state, invoked_by)
-    Telemetry.macrostep_start(session_id, :initialize, nil, span_ref)
+    Telemetry.init(session_id, machine, machine_state, invoked_by, trigger == :resume)
+    Telemetry.macrostep_start(session_id, trigger, nil, span_ref)
 
     recording =
       if Keyword.get(opts, :record, false) do
-        Recording.new(machine, machine_opts)
+        Recording.new(machine, machine_opts, anchor)
       end
 
     state = %State{
@@ -800,7 +872,7 @@ defmodule Statifier.Session do
     }
 
     # `perform/3` runs from `handle_continue/2` rather than here, and the
-    # `:initialize` span closes there with it. `Statifier.start_session/2`
+    # `:initialize`/`:resume` span closes there with it. `Statifier.start_session/2`
     # blocks the `Statifier.SessionSupervisor` process for the whole of this
     # callback, and performing a `{:start_child, %Invoke{}, _}` from inside it
     # would call `DynamicSupervisor.start_child/2` on that same busy
@@ -810,6 +882,193 @@ defmodule Statifier.Session do
     # which is what keeps ADR-0039's re-entry and `{:halt, _}` in the order
     # `Statifier.Session.Effects.plan/2` produced them.
     {:ok, state, {:continue, {:initialize, effects, start_time, span_ref}}}
+  end
+
+  # -- ADR-0060: resolving and refusing :resume ----------------------------
+
+  @typedoc "What `resolve_resume/2` decided: an ordinary start, or a resumed position."
+  @type resume :: :fresh | {:resumed, MachineState.t()}
+
+  # `:resume` is never one of `MachineState.new/2`'s own options, and it is
+  # never set on a library-started invoked child - see `start_link/2`'s own
+  # `@doc`. Passing any of these five alongside `:resume` would either be
+  # silently ignored (the first three; `MachineState.new/2` is never called
+  # on this path) or is nonsensical on its face (`:invoked_by`), so all five
+  # are refused together rather than only some.
+  @resume_conflicting_opts [:trace, :datamodel, :max_macrostep_rounds, :invoked_by]
+
+  # Checks run in the order `start_link/2`'s own `@doc` states: conflicting
+  # options first (a shape check that needs no decode), then decode/identity
+  # (a wrong-revision blob reports the revision, not a confusing quiescence
+  # error further down), then the two session-boot preconditions
+  # (`:position_not_quiescent`, `:position_not_running`) `Statifier.Position.
+  # from_binary/2` itself has no opinion on - `:resume` is deliberately
+  # stricter than the codec it drives (ADR-0060 decision 4).
+  @spec resolve_resume(opts :: keyword(), machine :: Machine.t()) ::
+          {:ok, resume()} | {:error, term()}
+  defp resolve_resume(opts, machine) do
+    case Keyword.fetch(opts, :resume) do
+      :error ->
+        {:ok, :fresh}
+
+      {:ok, resume} ->
+        with :ok <- check_no_conflicting_resume_opts(opts),
+             {:ok, machine_state} <- decode_resume(resume, machine),
+             :ok <- check_position_quiescent(machine_state),
+             :ok <- check_position_running(machine_state) do
+          {:ok, {:resumed, machine_state}}
+        end
+    end
+  end
+
+  @spec check_no_conflicting_resume_opts(opts :: keyword()) ::
+          :ok | {:error, {:conflicting_options, keyword()}}
+  defp check_no_conflicting_resume_opts(opts) do
+    case Keyword.take(opts, @resume_conflicting_opts) do
+      [] -> :ok
+      conflicting -> {:error, {:conflicting_options, conflicting}}
+    end
+  end
+
+  # The blob form gets the whole ADR-0052 identity gate for free from
+  # `Position.from_binary/2` - its error vocabulary is propagated unflattened
+  # (`:not_a_statifier_blob`, `{:unsupported_format_version, _}`,
+  # `{:identity_mismatch, _, _}`, `:unidentified_chart`). The struct form
+  # (the `Position.import/2` migration path, ADR-0060 decision 1) is made to
+  # refuse identically by hand: either side unidentified is
+  # `:unidentified_chart`, and a mismatch between the two identified sides is
+  # `{:identity_mismatch, expected, actual}` - one identity rule for both
+  # shapes. Either form rebinds the position's `machine` to the supplied
+  # positional `machine`, so one compiled `Machine` term is shared from here
+  # on (the blob form already does this inside `from_binary/2`; the struct
+  # form was already identity-equal, so this only makes the sharing literal).
+  @spec decode_resume(resume :: binary() | MachineState.t(), machine :: Machine.t()) ::
+          {:ok, MachineState.t()} | {:error, term()}
+  defp decode_resume(blob, machine) when is_binary(blob) do
+    Position.from_binary(blob, machine)
+  end
+
+  defp decode_resume(%MachineState{machine: %Machine{identity: nil}}, %Machine{}) do
+    {:error, :unidentified_chart}
+  end
+
+  defp decode_resume(%MachineState{}, %Machine{identity: nil}) do
+    {:error, :unidentified_chart}
+  end
+
+  defp decode_resume(
+         %MachineState{machine: %Machine{identity: source}} = machine_state,
+         %Machine{
+           identity: target
+         } = machine
+       ) do
+    if Identity.matches?(source, target) do
+      {:ok, %{machine_state | machine: machine}}
+    else
+      {:error, {:identity_mismatch, source, target}}
+    end
+  end
+
+  @spec check_position_quiescent(machine_state :: MachineState.t()) ::
+          :ok | {:error, :position_not_quiescent}
+  defp check_position_quiescent(machine_state) do
+    if MachineState.internal_queue_empty?(machine_state) do
+      :ok
+    else
+      {:error, :position_not_quiescent}
+    end
+  end
+
+  @spec check_position_running(machine_state :: MachineState.t()) ::
+          :ok | {:error, :position_not_running}
+  defp check_position_running(%MachineState{running: false}), do: {:error, :position_not_running}
+  defp check_position_running(%MachineState{status: :done}), do: {:error, :position_not_running}
+  defp check_position_running(%MachineState{}), do: :ok
+
+  # OQ-2: the resumed session keeps the position's own `_sessionid` unless
+  # the caller supplied `:session_id`, in which case that value wins (and
+  # `boot/6`'s resumed clause rewrites `datamodel["_sessionid"]` to agree,
+  # below). A fresh start is unchanged: `MachineState.generate_session_id/0`
+  # only ever runs here, never inside `MachineState.new/2` on this path
+  # either, so the id `register_session/1` registers under is always
+  # resolved before the first drive.
+  @spec resolve_session_id(opts :: keyword(), resume :: resume()) :: String.t()
+  defp resolve_session_id(opts, :fresh) do
+    Keyword.get_lazy(opts, :session_id, &MachineState.generate_session_id/0)
+  end
+
+  defp resolve_session_id(opts, {:resumed, machine_state}) do
+    Keyword.get(opts, :session_id, machine_state.datamodel["_sessionid"])
+  end
+
+  # The one branch point ADR-0060's "Key Discoveries" names: a fresh start
+  # calls `Interpreter.initialize/2` exactly as before; a resume stamps
+  # `routes`/`invoke_types` onto the persisted position and performs no
+  # entry at all (`effects: []` - the non-restoration ADR-0060 decisions 1
+  # and 4 describe, expressed in code). Both arms return the same five-tuple
+  # so `init_boot/3` above has one tail regardless of which ran.
+  @spec boot(
+          resume :: resume(),
+          machine :: Machine.t(),
+          opts :: keyword(),
+          session_id :: String.t(),
+          invoked_by :: {pid(), String.t()} | nil,
+          invoke_handlers :: %{String.t() => module()}
+        ) :: {MachineState.t(), [Effect.t()], keyword(), :initialize | :resume, binary() | nil}
+  defp boot(:fresh, machine, opts, session_id, invoked_by, invoke_handlers) do
+    machine_opts =
+      opts
+      |> Keyword.take([:trace, :datamodel, :max_macrostep_rounds])
+      |> Keyword.put(:session_id, session_id)
+      |> Keyword.put(:routes, init_routes(session_id, invoked_by))
+      # ADR-0051 decision 3's "one constructor": the `invoke_types` snapshot
+      # the core is stamped with is derived from `invoke_handlers`'s own
+      # keys, not declared separately, so the registered-type set and the
+      # dispatch map `plan_context/1` builds below cannot diverge.
+      # `:invoke_handlers` itself rides along in `machine_opts` too, purely
+      # so `Recording.new/3` (called with this same keyword list) can
+      # normalize it into the recording (`@normalized_opts`) - `Statifier.
+      # MachineState.new/2` reads no such key and ignores it.
+      |> Keyword.put(:invoke_types, InvokeTypes.new(types: Map.keys(invoke_handlers)))
+      |> Keyword.put(:invoke_handlers, invoke_handlers)
+
+    {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
+    {machine_state, effects, machine_opts, :initialize, nil}
+  end
+
+  defp boot({:resumed, machine_state}, _machine, _opts, session_id, invoked_by, invoke_handlers) do
+    machine_state =
+      machine_state
+      |> stamp_session_id(session_id)
+      |> MachineState.put_routes(init_routes(session_id, invoked_by))
+      |> MachineState.put_invoke_types(InvokeTypes.new(types: Map.keys(invoke_handlers)))
+
+    # `resolve_resume/2` already refused a non-quiescent, unidentified, or
+    # otherwise unencodable position, so `to_binary/1`'s error arm is
+    # unreachable here - a `MatchError` on it would mean one of those checks
+    # regressed, not a third refusal this function needs to invent.
+    {:ok, anchor} = Position.to_binary(machine_state)
+
+    machine_opts = [
+      session_id: session_id,
+      trace: machine_state.trace,
+      datamodel: machine_state.datamodel,
+      max_macrostep_rounds: machine_state.max_macrostep_rounds,
+      routes: machine_state.routes,
+      invoke_types: machine_state.invoke_types,
+      invoke_handlers: invoke_handlers
+    ]
+
+    {machine_state, [], machine_opts, :resume, anchor}
+  end
+
+  # OQ-2's rewrite half: keeps `%State{}.session_id == datamodel["_sessionid"]`
+  # true regardless of whether the caller supplied `:session_id` or the
+  # position's own id was reused - a no-op write in the latter case.
+  @spec stamp_session_id(machine_state :: MachineState.t(), session_id :: String.t()) ::
+          MachineState.t()
+  defp stamp_session_id(%MachineState{datamodel: datamodel} = machine_state, session_id) do
+    %{machine_state | datamodel: Map.put(datamodel, "_sessionid", session_id)}
   end
 
   # `invoked_by` is `nil` for every session started as a plain document (the

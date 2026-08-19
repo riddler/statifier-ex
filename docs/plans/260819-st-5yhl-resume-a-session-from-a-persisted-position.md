@@ -721,14 +721,14 @@ All new tests carry sabotage lines.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (this phase's gate); coverage does not drop.
-- [ ] `mix quality --profile loop` used between edits, never as the phase gate.
-- [ ] `mix quality --format json --report -` is clean, for a looped runner to
+- [x] `mix quality` is fully green (this phase's gate); coverage does not drop.
+- [x] `mix quality --profile loop` used between edits, never as the phase gate.
+- [x] `mix quality --format json --report -` is clean, for a looped runner to
       route on.
-- [ ] `mix test test/statifier/session/resume_test.exs` passes.
-- [ ] `mix adr.check` clean: the only added I/O is inside `session.ex`, the one
+- [x] `mix test test/statifier/session/resume_test.exs` passes.
+- [x] `mix adr.check` clean: the only added I/O is inside `session.ex`, the one
       module ADR-0003 permits it in.
-- [ ] `mix gate.check` needs no `docs/quality-gate-changes.md` entry (no
+- [x] `mix gate.check` needs no `docs/quality-gate-changes.md` entry (no
       guarded file edited, no `@tag :skip` added, no ratchet shrink).
 
 #### Manual Verification:
@@ -966,6 +966,28 @@ blocking here.
 - [ ] Each sabotage line was actually performed.
 - [ ] An anchored recording's blob is inspected once by hand and confirmed to
       contain no compiled `%Machine{}` term (ADR-0052 decision 3).
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 4
+
+- [ ] **Spec conformance**: the touched functions match the W3C Appendix D
+      pseudocode line for line - no Appendix D procedure is edited here either;
+      `init/1` chooses whether to call `interpret(doc)`, and never alters it.
+- [ ] Each sabotage line was actually performed.
+- [ ] A resumed session addressed by `#_scxml_<sessionid>` from a second live
+      session is reachable at its pre-resume id (exercised by hand once).
+- [ ] The refusal messages read as actionable instructions to a host, not as
+      internal atoms.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
