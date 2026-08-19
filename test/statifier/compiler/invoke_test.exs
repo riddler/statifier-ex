@@ -75,9 +75,9 @@ defmodule Statifier.Compiler.InvokeTest do
     assert {:compiled, %Predicator.Compiled{}, "'dyn' + 'src'"} = inv4.src
   end
 
-  # sabotage: in `Statifier.Compiler.build_invoke_namelist/4`, change the
-  # `:location` kind argument passed to `build_param/6` to `:expr` -> this
-  # test's `kind: :location` assertion goes red.
+  # sabotage: in `Statifier.Compiler.build_namelist_param/5`, change the
+  # `kind: :location` field to `kind: :expr` -> this test's `kind: :location`
+  # assertion goes red.
   test "namelist entries compile to kind: :location params, in written order" do
     machine = compile!(@document)
     [_inv1, inv2, _inv3, _inv4] = state_of(machine, "s0").invoke
@@ -200,5 +200,38 @@ defmodule Statifier.Compiler.InvokeTest do
       )
 
     assert {:static, ^expected_markup} = invoke.content
+  end
+
+  # test553/test554's shape (`namelist="&quot;foo"`, an unterminated string
+  # literal): the document must still load, and the bad entry must survive
+  # in `inv.namelist` rather than being dropped, so
+  # `Interpreter.resolve_params/2` has something to intercept at execute
+  # time (ADR-0031). A well-formed sibling entry compiles normally, pinning
+  # that the deferral is per entry, not per attribute.
+  @invalid_namelist_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <invoke type="t" namelist="&quot;foo good"/>
+      </state>
+  </scxml>
+  """
+
+  # sabotage: in `Statifier.Compiler.build_invoke_namelist/3`, restore
+  # `Enum.reject(&is_nil/1)` around the mapped results and change
+  # `build_namelist_param/5` to return `nil` on a compile failure -> the
+  # invalid entry vanishes from `inv.namelist`, and this test's two-entry
+  # presence assertion goes red.
+  test "an invalid namelist entry compiles present, carrying {:invalid, error}" do
+    machine = compile!(@invalid_namelist_document)
+    [invoke] = state_of(machine, "s0").invoke
+
+    assert [
+             %MParam{name: "\"foo", kind: :location, expr: {:invalid, %Error{}}},
+             %MParam{
+               name: "good",
+               kind: :location,
+               expr: {:compiled, %Predicator.Compiled{}, "good"}
+             }
+           ] = invoke.namelist
   end
 end

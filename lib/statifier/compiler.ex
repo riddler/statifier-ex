@@ -150,10 +150,13 @@ defmodule Statifier.Compiler do
   finalize block included, is built complete during the walk and
   accumulated into `invoke_acc`, keyed by owning state index, rather than
   deferred the way `donedata_acc` is. Building inline means a `typeexpr`/
-  `srcexpr`/`<content>`/`<param>`/namelist compile failure cannot join the
-  deferred passes' own `collect/1` merge the way `build_transitions/3`'s and
+  `srcexpr`/`<content>`/`<param>` compile failure cannot join the deferred
+  passes' own `collect/1` merge the way `build_transitions/3`'s and
   `build_contents/2`'s do - `invoke_errors` is where those land instead,
-  concatenated into `compile/1`'s own error merge before the final sort.
+  concatenated into `compile/1`'s own error merge before the final sort. A
+  namelist entry's compile failure never reaches `invoke_errors`: it defers
+  to runtime instead, captured as `{:invalid, error}` on the entry's own
+  `%Machine.Param{}` (`build_namelist_param/5`, 5.9.4).
   """
   @type acc :: %{
           id_to_index: %{optional(String.t()) => non_neg_integer()},
@@ -1428,10 +1431,11 @@ defmodule Statifier.Compiler do
     build_param(name, param.location, kind, source, param_expr_location(param), owner)
   end
 
-  # The one place an `MParam` is actually built - reused by `build_dparam/4`
-  # (a `<param>` element, `<donedata>`'s or `<invoke>`'s) and directly by
-  # `build_invoke_namelist/3` (a namelist entry, which has no `%DParam{}` of
-  # its own to read `name`/`location` off of).
+  # The one place a non-deferring `MParam` is built - reused by
+  # `build_dparam/4` for a `<param>` element (`<send>`'s, `<donedata>`'s or
+  # `<invoke>`'s). A namelist entry does not go through here: it has no
+  # `%DParam{}` of its own to read `name`/`location` off of, and it defers
+  # rather than failing, so it is built by `build_namelist_param/5` instead.
   @spec build_param(
           name :: String.t(),
           location :: Location.t(),
@@ -1512,11 +1516,13 @@ defmodule Statifier.Compiler do
   # is built here too, in the same pass, purely so one function builds one
   # `%Statifier.Machine.Invoke{}` whole rather than splitting it between a
   # walk-time half and a deferred half. Any compile failure (a bad
-  # `typeexpr`/`srcexpr`, `<content expr>`, `<param>`, or namelist entry) is
-  # recorded onto `acc.invoke_errors` rather than raised - `compile/1`
-  # discards the whole machine once `invoke_errors` is non-empty, so the
-  # invoking `%Machine.Invoke{}`'s own field stays `nil` in that case rather
-  # than carrying a half-compiled expression nothing will ever read.
+  # `typeexpr`/`srcexpr`, `<content expr>`, or `<param>`) is recorded onto
+  # `acc.invoke_errors` rather than raised - `compile/1` discards the whole
+  # machine once `invoke_errors` is non-empty, so the invoking
+  # `%Machine.Invoke{}`'s own field stays `nil` in that case rather than
+  # carrying a half-compiled expression nothing will ever read. A namelist
+  # entry is the one exception: it defers instead (`build_invoke_namelist/3`,
+  # `build_namelist_param/5`), so it never reaches `invoke_errors` at all.
   @spec build_invoke(
           invokes :: [DInvoke.t()],
           state_index :: non_neg_integer(),
@@ -1536,7 +1542,7 @@ defmodule Statifier.Compiler do
 
       {content_expr, acc} = build_invoke_content(invoke.content, owner, acc)
       {params, acc} = build_invoke_params(invoke.params, owner, acc)
-      {namelist, acc} = build_invoke_namelist(invoke.namelist, invoke, owner, acc)
+      namelist = build_invoke_namelist(invoke.namelist, invoke, owner)
       {finalize, acc} = build_invoke_finalize(invoke.finalize, acc)
 
       minvoke = %MInvoke{
@@ -1626,32 +1632,26 @@ defmodule Statifier.Compiler do
   end
 
   # Each namelist entry is a raw location-expression string, not a
-  # `%DParam{}` - `build_param/6` is called directly rather than through
-  # `build_dparam/4`, with the entry's own text doing double duty as both
-  # `MParam.name` (6.4.1: "the name of the location is the attribute") and
-  # the source to compile (`kind: :location` - the same location-as-value
+  # `%DParam{}` - `build_namelist_param/5` is called directly rather than
+  # through `build_dparam/4`, with the entry's own text doing double duty as
+  # both `MParam.name` (6.4.1: "the name of the location is the attribute")
+  # and the source to compile (`kind: :location` - the same location-as-value
   # reading `Statifier.Machine.Param`'s moduledoc gives `<param location>`).
   # The whole `namelist` attribute shares one written span
   # (`invoke.attribute_locations[:namelist]`) - there is no per-entry span
-  # to point at instead.
+  # to point at instead. Unlike this state's other `<invoke>` fields, a
+  # compile failure here never reaches `acc.invoke_errors`: it is captured
+  # as `{:invalid, error}` on the entry instead (5.9.4 deferral - see
+  # `Statifier.Machine.Param`), which is why this function threads no `acc`
+  # and can never fail.
   @spec build_invoke_namelist(
           namelist :: [String.t()],
           invoke :: DInvoke.t(),
-          owner :: Expressions.owner_ref(),
-          acc :: acc()
-        ) :: {[MParam.t()], acc()}
-  defp build_invoke_namelist(namelist, invoke, owner, acc) do
+          owner :: Expressions.owner_ref()
+        ) :: [MParam.t()]
+  defp build_invoke_namelist(namelist, invoke, owner) do
     location = invoke_attr_location(invoke, :namelist)
-
-    {results, acc} =
-      Enum.map_reduce(namelist, acc, fn name, acc ->
-        collect_invoke_param(
-          build_param(name, invoke.location, :location, name, location, owner),
-          acc
-        )
-      end)
-
-    {Enum.reject(results, &is_nil/1), acc}
+    Enum.map(namelist, &build_namelist_param(&1, invoke.location, &1, location, owner))
   end
 
   @spec collect_invoke_param(

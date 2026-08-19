@@ -538,4 +538,49 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert Map.get(result.active_invocations, {s0, bad_invoke.invoke_index}) == nil
     assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
   end
+
+  #  0 scxml (root)
+  #  1   s0      (invoke namelist="&quot;foo" defers a compile failure to here; invoke id="ok" type="fine")
+  @invalid_namelist_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+      <state id="s0">
+          <invoke namelist="&quot;foo"/>
+          <invoke id="ok" type="fine"/>
+      </state>
+  </scxml>
+  """
+
+  # sabotage: `Interpreter.evaluate_param/2`'s `{:invalid, error} -> {:error,
+  # error}` clause is deleted, leaving only the fallthrough
+  # `Evaluator.evaluate(context, expr)` clause -> `Evaluator` has no clause
+  # for `{:invalid, _}`, so this test crashes on a `FunctionClauseError`
+  # instead of observing `error.execution`, reddening it (for the right
+  # reason: the interception this test pins is gone).
+  test "a deferred namelist compile failure raises error.execution with the invoke's origin, and produces no effect, but a sibling still does" do
+    m = compile!(@invalid_namelist_document)
+    {result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [ok_effect] = invoke_effects(effects)
+    assert ok_effect.invoke_id == "ok"
+
+    s0 = idx(m, "s0")
+
+    assert Enum.any?(effects, fn
+             {:trace,
+              %Effect.Trace.EventDequeued{
+                from: :internal,
+                event: %Event{name: "error.execution", cause: %{origin: {:invoke, ^s0, 0}}}
+              }} ->
+               true
+
+             _other ->
+               false
+           end)
+
+    # `s0` has no transition on `error.execution`, so the post-invoke
+    # re-check dequeues and discards it before `initialize/2` returns, the
+    # same shape the failing-`typeexpr` test above relies on.
+    assert MachineState.internal_events(result) == []
+    assert result.running
+  end
 end

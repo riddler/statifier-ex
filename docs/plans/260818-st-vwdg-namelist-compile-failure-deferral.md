@@ -548,12 +548,12 @@ rather than writing a test that can only be made to fail by constructing a
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality --profile loop` used between edits.
-- [ ] Full `mix quality` green, confirmed by `mix gate.verify`.
-- [ ] `mix test --include scxml_w3 test/scxml_tests/mandatory/invoke/test554_test.exs`
+- [x] `mix quality --profile loop` used between edits.
+- [x] Full `mix quality` green, confirmed by `mix gate.verify`.
+- [x] `mix test --include scxml_w3 test/scxml_tests/mandatory/invoke/test554_test.exs`
       passes, and test553 still passes.
-- [ ] `mix test.regression` still green.
-- [ ] Every new `lib/`-asserting test carries its sabotage line (the half the
+- [x] `mix test.regression` still green.
+- [x] Every new `lib/`-asserting test carries its sabotage line (the half the
       gate's scan checks).
 
 #### Manual Verification:
@@ -874,6 +874,31 @@ before considering the plan fully landed.
       `namelist_undeclared` cases in `send_test.exs`.
 - [ ] No regressions in `<param>`-based sends, `<donedata>` params, or
       `<content expr>`: none of them should have changed shape.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The named sabotage mutations were applied, seen red, and reverted, with
+      `MIX_ENV=test mix compile --force` on both sides - an implementer
+      attestation for the same reason Phase 1 records it as one.
+- [ ] Spec-conformance judgment on the touched functions: 6.4's "if the
+      evaluation of its arguments produces an error, the SCXML Processor MUST
+      terminate the processing of the element without further action", read from
+      the local spec cache. Confirm no Appendix D procedure moved.
+- [ ] A well-formed `<invoke namelist="a b">` still compiles to two ordered
+      `kind: :location` params and still seeds a child session's datamodel
+      (`test/statifier/session/invoke_start_child_test.exs`).
+- [ ] `<finalize>` auto-assign still writes for a well-formed namelist
+      (`test/statifier/interpreter/finalize_test.exs`), and the narrowed filter
+      changed nothing there.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for

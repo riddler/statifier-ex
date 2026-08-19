@@ -738,7 +738,12 @@ defmodule Statifier.Interpreter do
 
     {machine_state, _context, effects} =
       (invoke.namelist ++ invoke.params)
-      |> Enum.filter(&(&1.kind == :location))
+      # A deferred `namelist` entry (`{:invalid, _}`, see `Statifier.Machine.Param`)
+      # is unreachable here in practice - such an entry aborts the invocation in
+      # `invoke_one/6` before any invocation exists to finalize - but the filter
+      # states the precondition `write_finalize_target/6` pattern-matches on
+      # rather than leaving it to a `FunctionClauseError`.
+      |> Enum.filter(&(&1.kind == :location and match?({:compiled, _compiled, _source}, &1.expr)))
       |> Enum.reduce({machine_state, context, []}, fn param, {ms, ctx, effects} ->
         case Map.fetch(data, param.name) do
           {:ok, value} ->
@@ -761,11 +766,10 @@ defmodule Statifier.Interpreter do
   # The write itself, through the same `Datamodel.write_location/4` an
   # `<assign>` uses, factored out of `Statifier.Machine.Content.Assign` so
   # both call sites share it. `param.expr` for a `kind:
-  # :location` entry is always `{:compiled, _compiled, source}` -
-  # `Statifier.Compiler.Expressions.compile/3` is the only builder either a
-  # namelist entry or a `<param location>` ever goes through
-  # (`Statifier.Compiler`'s `build_param/6`), and it never returns
-  # `{:static, _}`. A write failure raises `error.execution` with origin
+  # :location` entry reaching here is always `{:compiled, _compiled, source}` -
+  # `auto_assign_finalize/5`'s own filter is what keeps that true, since a
+  # namelist entry can also carry a deferred `{:invalid, _}` (5.9.4) that
+  # never gets this far. A write failure raises `error.execution` with origin
   # `{:finalize, state_index, invoke_index}` - `Cause.origin/0`'s own arm for
   # exactly this block-less write, distinct from the `{:content, c_index,
   # owner}` arm a *populated* `<finalize>`'s own failures raise through
@@ -1430,13 +1434,17 @@ defmodule Statifier.Interpreter do
   # (spec 5.7's "MUST ignore the name and value" - each `<param>` fails
   # independently), 6.4's MUST terminates the whole element on the first
   # failure, so this stops at the first error instead of dropping it and
-  # continuing.
+  # continuing. A `namelist` entry that deferred a compile failure
+  # (`{:invalid, error}`, see `Statifier.Machine.Param`) is intercepted by
+  # `evaluate_param/2` below, ahead of `Evaluator.evaluate/2`, which has no
+  # clause for the shape - the same interception
+  # `Machine.Content.Send.resolve_params/2` already applies for `<send>`.
   @spec resolve_params(context :: Predicator.Context.t(), params :: [Param.t()]) ::
           {:ok, [{String.t(), term()}]} | {:error, term()}
   defp resolve_params(context, params) do
     result =
       Enum.reduce_while(params, {:ok, []}, fn %Param{name: name, expr: expr}, {:ok, pairs} ->
-        case Evaluator.evaluate(context, expr) do
+        case evaluate_param(context, expr) do
           {:ok, value} -> {:cont, {:ok, [{name, value} | pairs]}}
           {:error, reason} -> {:halt, {:error, reason}}
         end
@@ -1447,6 +1455,17 @@ defmodule Statifier.Interpreter do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # A `namelist` entry whose location expression did not compile (5.9.4
+  # deferral - see `Statifier.Machine.Param`). `Statifier.Evaluator` has no
+  # `{:invalid, _}` clause by design, so the shape is intercepted here,
+  # exactly as `Machine.Content.Send` intercepts theirs. The `{:error, _}`
+  # return reaches `invoke_one/6`'s `else` and `abort_invocation/4`, which is
+  # ADR-0031's terminate: no `Effect.Invoke` is produced.
+  @spec evaluate_param(context :: Predicator.Context.t(), expr :: Param.expr()) ::
+          {:ok, term()} | {:error, term()}
+  defp evaluate_param(_context, {:invalid, error}), do: {:error, error}
+  defp evaluate_param(context, expr), do: Evaluator.evaluate(context, expr)
 
   # `<content>` under `<invoke>` - `nil` when absent, `<content>`'s text
   # body coerced through `EventData.coerce({:text, _})` when static, or
