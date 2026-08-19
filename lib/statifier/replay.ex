@@ -383,8 +383,20 @@ defmodule Statifier.Replay do
     halt_override = Keyword.get(opts, :halt_override)
 
     effects
-    |> Effects.plan(state.machine_state.datamodel["_sessionid"])
+    |> Effects.plan(plan_context(state))
     |> Enum.reduce(state, &perform_instruction(&1, &2, halt_override))
+  end
+
+  # The plan context (`Statifier.Session.Effects.t:context/0`, ADR-0051
+  # decision 2), built from the `%MachineState{}` this replay already holds
+  # so the planner's `invoke_types` answer matches the one the live run was
+  # recorded under.
+  @spec plan_context(state :: State.t()) :: Effects.context()
+  defp plan_context(%State{} = state) do
+    %{
+      session_id: state.machine_state.datamodel["_sessionid"],
+      invoke_types: state.machine_state.invoke_types
+    }
   end
 
   @spec perform_instruction(

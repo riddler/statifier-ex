@@ -182,9 +182,9 @@ defmodule Statifier.Interpreter do
   alias Statifier.{Compiler, Evaluator, Event, EventData, Machine, MachineState}
   alias Statifier.Event.Cause
   alias Statifier.Interpreter.{Content, Datamodel, ExitEntry, Selection}
+  alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.{Block, Param, Transition}
   alias Statifier.Machine.Invoke, as: MInvoke
-  alias Statifier.Send.Target
 
   require Statifier.Effect, as: Effect
 
@@ -1586,18 +1586,23 @@ defmodule Statifier.Interpreter do
   end
 
   # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
-  # the only `type` this platform supports; a `type`/`typeexpr` naming
-  # anything else starts no child - `Statifier.Session.Effects.plan_invoke/2`
-  # raises 3.12.2's `error.execution` for it instead. The `Effect.Invoke` is
-  # still emitted (the session needs it to raise against), but the invocation
-  # is never live, so it is not recorded: 6.4's "MUST automatically cancel
-  # the invoked component" has no invoked component to reach, and a trace
+  # the built-in `type` this platform supports out of the box; a
+  # `type`/`typeexpr` naming anything else that is not otherwise registered
+  # starts no child - `Statifier.Session.Effects.plan_invoke/2` raises
+  # 3.12.2's `error.execution` for it instead. The `Effect.Invoke` is still
+  # emitted (the session needs it to raise against), but the invocation is
+  # never live, so it is not recorded: 6.4's "MUST automatically cancel the
+  # invoked component" has no invoked component to reach, and a trace
   # consumer must not see an invocation start that never did. Same channel
   # ADR-0031's failed-argument case already uses - absent from
-  # `active_invocations` - reached for a different reason. Calling
-  # `Statifier.Send.Target` from the core is ADR-0047 decisions 3 and 5:
-  # the classifier lives in a neutral module for this, and the supported set
-  # is static. Unlike `<send>`, this is not a rejection - nothing about the
+  # `active_invocations` - reached for a different reason. Consulting
+  # `Statifier.Invoke.Types.registered?/2` from the core is ADR-0047
+  # decisions 3 and 5, re-argued by ADR-0051 decision 3: the classifier
+  # lives in a neutral module, and the registered set is a caller-declared
+  # value read off `machine_state.invoke_types` rather than always-static -
+  # `nil` (no declaration) still answers exactly what
+  # `Statifier.Send.Target.supported_invoke_type?/1` answered before this
+  # bead. Unlike `<send>`, this is not a rejection - nothing about the
   # emitted effect or the raised error changes.
   @spec maybe_record_active_invocation(
           machine_state :: MachineState.t(),
@@ -1607,7 +1612,7 @@ defmodule Statifier.Interpreter do
           type :: term()
         ) :: MachineState.t()
   defp maybe_record_active_invocation(machine_state, state_index, invoke_index, invoke_id, type) do
-    if Target.supported_invoke_type?(type) do
+    if InvokeTypes.registered?(machine_state.invoke_types, type) do
       record_active_invocation(machine_state, state_index, invoke_index, invoke_id)
     else
       machine_state

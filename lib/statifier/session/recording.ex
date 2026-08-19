@@ -108,16 +108,27 @@ defmodule Statifier.Session.Recording do
             entries: [entry()]
           }
 
-  @normalized_opts [:session_id, :trace, :datamodel, :max_macrostep_rounds, :routes]
+  @normalized_opts [
+    :session_id,
+    :trace,
+    :datamodel,
+    :max_macrostep_rounds,
+    :routes,
+    :invoke_types
+  ]
 
   @doc """
   Starts an empty recording over `machine`, normalizing `opts` to exactly
-  `:session_id`, `:trace`, `:datamodel`, `:max_macrostep_rounds`, and
-  `:routes` (`Statifier.MachineState.new/2`'s own options), defaulted the
-  same way that function defaults them, and sorted by key so two recordings
-  of the same run compare equal regardless of the order their options were
-  supplied in. `:routes` defaults to `nil` - the session-start
-  initialization's snapshot (see the moduledoc's "route snapshot" section).
+  `:session_id`, `:trace`, `:datamodel`, `:max_macrostep_rounds`, `:routes`,
+  and `:invoke_types` (`Statifier.MachineState.new/2`'s own options),
+  defaulted the same way that function defaults them, and sorted by key so
+  two recordings of the same run compare equal regardless of the order
+  their options were supplied in. `:routes` defaults to `nil` - the
+  session-start initialization's snapshot (see the moduledoc's "route
+  snapshot" section). `:invoke_types` defaults to `nil` too - ADR-0051's
+  registered-type set, recorded once as a normalized option rather than per
+  entry, since it is fixed for the session's whole lifetime rather than
+  re-stamped per drive the way `:routes` is.
 
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
@@ -134,6 +145,7 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:datamodel, %{})
       |> Keyword.put_new(:max_macrostep_rounds, 10_000)
       |> Keyword.put_new(:routes, nil)
+      |> Keyword.put_new(:invoke_types, nil)
       |> Enum.sort()
 
     %__MODULE__{machine: machine, opts: normalized, entries: []}

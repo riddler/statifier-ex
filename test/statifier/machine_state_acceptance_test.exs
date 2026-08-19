@@ -81,7 +81,8 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :round,
     :trace,
     :max_macrostep_rounds,
-    :routes
+    :routes,
+    :invoke_types
   ]
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
@@ -107,13 +108,15 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # `invoke_counter` but its own sibling sequence rather than a shared one
   # (ADR-0035) - see that field's own moduledoc section. `routes` is the
   # ADR-0048 caller-declared route snapshot, `nil` when the driver declared
-  # nothing - see that field's own `t:routes/0` typedoc.
+  # nothing - see that field's own `t:routes/0` typedoc. `invoke_types` is
+  # the ADR-0051 caller-declared registered invoke-type set, `nil` when no
+  # declaration was made - see that field's own `t:invoke_types/0` typedoc.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a nineteenth
+  # lib/statifier/machine_state.ex - the struct then grows a twentieth
   # key, and this equality assertion reddens for exactly the "someone adds
   # a field without updating the docs" failure the plan calls out.
-  test "machine_state holds the eighteen fields, and the struct has no others" do
+  test "machine_state holds the nineteen fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)
