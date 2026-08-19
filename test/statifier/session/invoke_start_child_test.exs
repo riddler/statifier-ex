@@ -499,7 +499,7 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # `Statifier.Session.Effects.plan_invoke/2`
     # still raises `error.execution` (the session half) while
     # `Statifier.Interpreter`'s `active_invocations` bookkeeping (the core
-    # half, Phase 1) never records the invocation, so `Trace.InvokePass`
+    # half) never records the invocation, so `Trace.InvokePass`
     # never names it and exiting the state emits no `Effect.CancelInvoke`
     # for it. A core-only or a session-only regression each reddens a
     # different assertion below, which is what makes this test genuinely
@@ -509,8 +509,12 @@ defmodule Statifier.Session.InvokeStartChildTest do
     # sabotage: `Statifier.Interpreter`'s `maybe_record_active_invocation/5`
     # is changed to always call `record_active_invocation/4` (drops the
     # `Target.supported_invoke_type?(type)` guard) -> the unsupported
-    # invocation is recorded live, so `Trace.InvokePass`'s `invoke_ids`
-    # gains "bad" (reddening that assertion) and exiting state "a" emits an
+    # invocation is recorded live, so the entry-time `Trace.InvokePass`
+    # gains "bad" in its `invoke_ids` (reddening the `Enum.all?` below -
+    # which is why it is `all?` over every pass and not `any?`: this run
+    # emits a second, empty pass after the transition, and an `any?` would
+    # be satisfied by that one no matter what the first pass carried) and
+    # exiting state "a" emits an
     # `Effect.CancelInvoke{invoke_id: "bad"}` (reddening the `refute`
     # below). Reverted and confirmed green.
     test "raises error.execution, and Effect.Invoke's id never becomes live" do
@@ -558,13 +562,12 @@ defmodule Statifier.Session.InvokeStartChildTest do
                  false
              end)
 
-      assert Enum.any?(stream, fn
-               {:effect, {:trace, %Effect.Trace.InvokePass{invoke_ids: invoke_ids}}} ->
-                 "bad" not in invoke_ids
+      invoke_passes =
+        for {:effect, {:trace, %Effect.Trace.InvokePass{invoke_ids: invoke_ids}}} <- stream,
+            do: invoke_ids
 
-               _other_message ->
-                 false
-             end)
+      assert invoke_passes != []
+      assert Enum.all?(invoke_passes, &("bad" not in &1))
 
       %{invocations: invocations} = :sys.get_state(session)
       assert Invocations.count(invocations) == 0

@@ -602,7 +602,10 @@ defmodule Statifier.Interpreter do
   # One `<invoke>`'s own body of the pass. `active_invocations`'s lookup
   # stands in for Appendix D's `inv.invokeid`/`inv.id` (`MachineState`'s own
   # moduledoc section on the hoist): an invocation with no entry there never
-  # started (ADR-0031) or has already been cancelled, so it can neither
+  # started - because its argument evaluation raised `error.execution`
+  # (ADR-0031), or because its resolved `type` was unsupported (6.4.1), so
+  # no child was ever started for it - or has already been cancelled. In
+  # every case it can neither
   # match an invokeid nor be forwarded to, and both `if`s are skipped for it
   # - the same no-op a never-started or already-gone `inv` would be in the
   # pseudocode, which has no `inv.invokeid`/`inv.id` to read at all in that
@@ -1286,9 +1289,9 @@ defmodule Statifier.Interpreter do
       end)
 
     # Reads liveness (`active_invocations`), not emission: an `Effect.Invoke`
-    # is still built and emitted for an unsupported-type invocation (Phase 1
-    # Phase 1), but it was never recorded live, so it must not appear
-    # here either. Matching on the effect's own `{state_index, invoke_index}`
+    # is still built and emitted for an invocation whose resolved `type` is
+    # unsupported (6.4.1), but it was never recorded live, so it must not
+    # appear here either. Matching on the effect's own `{state_index, invoke_index}`
     # key *and* the id value means a hypothetical stale entry under the same
     # key cannot resurrect an id; `effects` is still walked in emission
     # order (entry order across states, document order within a state), so
@@ -1346,8 +1349,8 @@ defmodule Statifier.Interpreter do
   # failure, same abort, no effect. Otherwise one `{:invoke, %Effect.Invoke{}}`
   # is always emitted, but the invocation is only recorded in
   # `active_invocations` when the resolved `type` is one
-  # `Statifier.Send.Target.supported_invoke_type?/1` accepts
-  # Phase 1) - the effect is unconditional, the liveness record is not.
+  # `Statifier.Send.Target.supported_invoke_type?/1` accepts (6.4.1) - the
+  # effect is unconditional, the liveness record is not.
   @spec invoke_one(
           machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
