@@ -40,6 +40,57 @@ defmodule Statifier.Interpreter do
   resume in another process. `macrostep/1` is the same loop run to its fixed
   point, so stepping and folding are the same code path, not two.
 
+  ## Rehydrating a position
+
+  A host driving this module directly - rather than through
+  `Statifier.Session` - already has everything it needs to resume a saved
+  position; no function in this module exists solely for that purpose
+  (ADR-0060). Use `Statifier.Position.to_binary/1` and `from_binary/2`
+  instead of the raw `:erlang.term_to_binary/1` shown above: the identity
+  check `from_binary/2` runs against the supplied `Statifier.Machine.t()` is
+  the entire point - a version-1 `term_to_binary` blob decoded against the
+  wrong chart revision would silently rebuild a `%MachineState{}` that walks
+  a document it was never measured against.
+
+  `from_binary/2` restores every durable field of the position, but two
+  fields are deliberately per-driver snapshots rather than durable position
+  state (`Statifier.Position.import/2`'s own docs give the same reason) and
+  come back `nil`: re-stamp both before the first drive.
+
+      {:ok, machine_state} = Statifier.Position.from_binary(blob, machine)
+
+      machine_state =
+        machine_state
+        |> Statifier.MachineState.put_routes(routes)
+        |> Statifier.MachineState.put_invoke_types(invoke_types)
+
+      {:ok, machine_state, effects} = Interpreter.handle_event(machine_state, event)
+
+  Then call any advance entry (`handle_event/2`, `deliver_internal/5`,
+  `cancel/1`, `microstep/1`, `macrostep/1`) exactly as if the position had
+  never left this process - every one of them takes a `MachineState.t()` and
+  trusts it structurally, with no state of its own outside that struct.
+
+  What a resumed position must **not** redo is everything `initialize/2`
+  already did the one time it ran, before the position was ever saved:
+
+  - `MachineState.new/2` - the position already carries a real
+    `configuration`, `datamodel`, and counters; calling `new/2` again would
+    discard all of it and start over.
+  - `Datamodel.initialize/1` - the datamodel's `<data>` elements have
+    already been evaluated once; re-running that pass is `<data>`
+    initialization happening twice, not resumption.
+  - `run_global_scripts/2` - a top-level `<script>` already ran during the
+    original `initialize/2`; a resumed position's datamodel already carries
+    whatever it wrote.
+  - `enter_states/2` on the initial transition - the position's
+    `configuration` already reflects the states that macrostep entered;
+    entering them again duplicates `onentry` content and history recording.
+
+  A resumed position skips all four - there is no `initialize/2` call on
+  this path at all, only the re-stamp above followed by the first advance
+  entry.
+
   ## Counters
 
   `Statifier.MachineState`'s counter contract is the source of truth;
