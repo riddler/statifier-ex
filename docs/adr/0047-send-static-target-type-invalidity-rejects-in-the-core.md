@@ -2,7 +2,9 @@
 
 Status: accepted (2026-08-17) - amends 0039 in part (the rejected
 alternative is scoped to liveness); reachability stays out of the core and
-test496's fix is deferred to its own bead and record
+test496's fix is deferred to its own bead and record - decision 5 re-argued
+in part by 0051 (scoped to `<invoke>`; the `<send>` 6.2.5 processor set is
+untouched and decision 5 stands unamended for it)
 
 ## Context
 

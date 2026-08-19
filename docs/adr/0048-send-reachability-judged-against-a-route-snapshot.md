@@ -5,7 +5,9 @@ foreclosure narrows: the core still never consults the registry and never
 holds a process reference, but it may judge reachability against a
 caller-declared, point-in-time route snapshot); discharges ADR-0047
 decision 6's deferral. ADR-0027 is not amended - the registry seam does not
-move.
+move. 0051 adopts this record's snapshot-as-value shape for a second
+consumer, `Statifier.Invoke.Types`, at a per-session rather than per-drive
+cadence.
 
 ## Context
 
