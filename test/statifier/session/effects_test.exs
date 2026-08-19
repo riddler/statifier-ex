@@ -71,7 +71,8 @@ defmodule Statifier.Session.EffectsTest do
         delay_ms: 30,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }},
      [
        {:notify,
@@ -84,7 +85,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 1
          }}},
        {:schedule, "s1", 30, :self,
         Event.external("e",
@@ -102,7 +104,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 1
          }}}
      ]},
     {{:send_delayed,
@@ -113,7 +116,8 @@ defmodule Statifier.Session.EffectsTest do
         delay_ms: 30,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 2
       }},
      [
        {:notify,
@@ -125,7 +129,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 2
          }}},
        {:schedule, nil, 30, :self,
         Event.external("e", data: nil, origin: @origin, origintype: @origintype, sendid: nil),
@@ -137,7 +142,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 2
          }}}
      ]},
     {{:send_delayed,
@@ -147,7 +153,8 @@ defmodule Statifier.Session.EffectsTest do
         delay_ms: 30,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 3
       }},
      [
        {:notify,
@@ -158,7 +165,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 3
          }}},
        {:schedule, nil, 30, :internal,
         Event.internal("e", Cause.new({:content, nil, nil}, 1, 1, 0), data: nil, sendid: nil),
@@ -169,12 +177,14 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 3
          }}}
      ]},
-    {{:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}},
+    {{:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, ordinal: 4}},
      [
-       {:notify, {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}},
+       {:notify,
+        {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, ordinal: 4}}},
        {:cancel_timers, "s1"}
      ]},
     {{:invoke,
@@ -471,7 +481,7 @@ defmodule Statifier.Session.EffectsTest do
     test "a mixed list preserves order and emits one notify per effect" do
       log = {:log, %Log{macrostep: 1, microstep: 1, round: 0}}
       send_effect = {:send, %Send{event: "e", target: nil, macrostep: 1, microstep: 1, round: 0}}
-      cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0}}
+      cancel = {:cancel, %Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, ordinal: 5}}
 
       instructions = Effects.plan([log, send_effect, cancel], @context)
 
@@ -525,7 +535,8 @@ defmodule Statifier.Session.EffectsTest do
            delay_ms: 30,
            macrostep: 1,
            microstep: 1,
-           round: 0
+           round: 0,
+           ordinal: 4
          }}
 
       assert [_notify, {:schedule, nil, 30, :self, %Event{name: "e"}, ^effect}] =

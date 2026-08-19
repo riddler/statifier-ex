@@ -2,9 +2,10 @@ defmodule Statifier.Machine.Content.ForeachTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Compiler, Evaluator, ExecutableContent, Lowering}
+  alias Statifier.Effect
   alias Statifier.Effect.Log
   alias Statifier.ExecutableContent.Context
-  alias Statifier.Machine.Content.{Assign, Foreach, If}
+  alias Statifier.Machine.Content.{Assign, Cancel, Foreach, If, Send}
   alias Statifier.{MachineState, Parser, TestContent, Validator}
   alias Statifier.Parser.Location
 
@@ -74,6 +75,25 @@ defmodule Statifier.Machine.Content.ForeachTest do
       node_location: location(),
       value: compiled_expr(expr_source)
     }
+  end
+
+  # A hand-built `%Send{}` with a static `delay`, byte-identical in shape to
+  # what the compiler would produce for `<send id="..." event="e"
+  # delay="...">`, for a body that builds a `%Effect.SendDelayed{}`.
+  defp send_delay_node(c_index, id, delay) do
+    %Send{
+      c_index: c_index,
+      location: location(),
+      event: {:static, "e"},
+      id: id,
+      delay: {:static, delay}
+    }
+  end
+
+  # A hand-built `%Cancel{}` with a static `sendid`, for a body that builds
+  # a `%Effect.Cancel{}`.
+  defp cancel_content_node(c_index, sendid) do
+    %Cancel{c_index: c_index, location: location(), sendid: {:static, sendid}}
   end
 
   describe "item legality (Decision 1)" do
@@ -316,6 +336,86 @@ defmodule Statifier.Machine.Content.ForeachTest do
 
       assert {:ok, ctx, [{:log, %Log{label: "c2"}}]} = ExecutableContent.execute(node, context(m))
       assert ctx.pending_errors == [{:non_boolean_cond, "bad"}]
+    end
+  end
+
+  describe "durable-timer ordinal sharing (ADR-0059)" do
+    # ADR-0059's whole reason to exist: a `<foreach>` body re-executes the
+    # same content node - the same `c_index` - once per iteration, in the
+    # same microstep, under the same author-written `send_id`, so every
+    # other component of the dedup key is identical across iterations and
+    # only `ordinal` can tell them apart.
+    #
+    # sabotage: `Statifier.Machine.Content.Send`'s `build_effect/6` delayed
+    # clause stamps `ordinal: 1` instead of `ordinal: ms.timer_counter` ->
+    # the sharing half of this match still holds, but the three ordinals
+    # come back `1, 1, 1` instead of `1, 2, 3`, reddening this exact
+    # pattern match. Reverted and confirmed green.
+    test "three foreach iterations of one <send delay> body share every position field but ordinal" do
+      m = machine() |> machine_with_node(0, send_delay_node(0, "x", "1000ms"))
+      node = foreach_node(array: {:static, [1, 2, 3]}, item: "v", content: [0])
+
+      assert {:ok, _ctx,
+              [
+                {:send_delayed,
+                 %Effect.SendDelayed{
+                   send_id: "x",
+                   c_index: 0,
+                   owner: @owner,
+                   macrostep: 0,
+                   microstep: 0,
+                   round: 0,
+                   ordinal: 1
+                 }},
+                {:send_delayed,
+                 %Effect.SendDelayed{
+                   send_id: "x",
+                   c_index: 0,
+                   owner: @owner,
+                   macrostep: 0,
+                   microstep: 0,
+                   round: 0,
+                   ordinal: 2
+                 }},
+                {:send_delayed,
+                 %Effect.SendDelayed{
+                   send_id: "x",
+                   c_index: 0,
+                   owner: @owner,
+                   macrostep: 0,
+                   microstep: 0,
+                   round: 0,
+                   ordinal: 3
+                 }}
+              ]} = ExecutableContent.execute(node, context(m))
+    end
+
+    # Decision 2: one shared `timer_counter` sequence spans both effect
+    # kinds, so a `<send delay>` immediately followed by a `<cancel>` for
+    # the same id, repeated over two iterations, interleaves as
+    # send#1, cancel#1, send#2, cancel#2 - ordinals 1, 2, 3, 4 in emission
+    # order, not two separately-numbered sequences.
+    #
+    # sabotage: `lib/statifier/machine/content/cancel.ex`'s `execute/2` is
+    # changed to advance a hand-rolled local counter (starting its own
+    # count at 1 on every call) instead of `machine_state.timer_counter` ->
+    # the two cancels both stamp `ordinal: 1` instead of `2` and `4`,
+    # reddening this pattern match. Reverted and confirmed green.
+    test "a <send delay> then <cancel> per iteration share one ordinal sequence across effect kinds" do
+      m =
+        machine()
+        |> machine_with_node(0, send_delay_node(0, "x", "1000ms"))
+        |> machine_with_node(1, cancel_content_node(1, "x"))
+
+      node = foreach_node(array: {:static, [1, 2]}, item: "v", content: [0, 1])
+
+      assert {:ok, _ctx,
+              [
+                {:send_delayed, %Effect.SendDelayed{ordinal: 1}},
+                {:cancel, %Effect.Cancel{ordinal: 2}},
+                {:send_delayed, %Effect.SendDelayed{ordinal: 3}},
+                {:cancel, %Effect.Cancel{ordinal: 4}}
+              ]} = ExecutableContent.execute(node, context(m))
     end
   end
 end

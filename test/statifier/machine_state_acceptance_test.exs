@@ -73,6 +73,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :active_invocations,
     :invoke_counter,
     :send_counter,
+    :timer_counter,
     :datamodel,
     :running,
     :status,
@@ -106,17 +107,20 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # or a CSPRNG (ADR-0003) - see that field's own moduledoc section.
   # `send_counter` is a fifth, the same session-global pure-counter shape as
   # `invoke_counter` but its own sibling sequence rather than a shared one
-  # (ADR-0035) - see that field's own moduledoc section. `routes` is the
+  # (ADR-0035) - see that field's own moduledoc section. `timer_counter` is a
+  # sixth, the session-global durable-timer ordinal sequence `%SendDelayed{}`
+  # and `%Cancel{}` both read `ordinal` off (ADR-0059) - see that field's own
+  # moduledoc section. `routes` is the
   # ADR-0048 caller-declared route snapshot, `nil` when the driver declared
   # nothing - see that field's own `t:routes/0` typedoc. `invoke_types` is
   # the ADR-0051 caller-declared registered invoke-type set, `nil` when no
   # declaration was made - see that field's own `t:invoke_types/0` typedoc.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a twentieth
+  # lib/statifier/machine_state.ex - the struct then grows a twenty-first
   # key, and this equality assertion reddens for exactly the "someone adds
   # a field without updating the docs" failure the plan calls out.
-  test "machine_state holds the nineteen fields, and the struct has no others" do
+  test "machine_state holds the twenty fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)
@@ -132,6 +136,18 @@ defmodule Statifier.MachineStateAcceptanceTest do
     ms = MachineState.new(machine())
 
     assert ms.send_counter == 0
+  end
+
+  # AC: "the session-global durable-timer ordinal counter (ADR-0059) starts
+  # at zero - no `%SendDelayed{}`/`%Cancel{}` has been built yet, mirroring
+  # `send_counter`'s own zero start" - on both a bare `%MachineState{}` and
+  # `new/2`.
+  #
+  # sabotage: change `timer_counter: 0` to `timer_counter: 1` in `new/2`'s
+  # struct literal (`lib/statifier/machine_state.ex`) -> this reddens.
+  test "timer_counter defaults to 0 on a fresh struct and on new/2" do
+    assert %MachineState{machine: :placeholder}.timer_counter == 0
+    assert MachineState.new(machine()).timer_counter == 0
   end
 
   # AC: "External queue explicitly NOT in core state; divergence documented
@@ -174,8 +190,15 @@ defmodule Statifier.MachineStateAcceptanceTest do
   @core_effects [
     {:send, %Effect.Send{event: "e", macrostep: 0, microstep: 0, round: 0}},
     {:send_delayed,
-     %Effect.SendDelayed{event: "e", delay_ms: 1, macrostep: 0, microstep: 0, round: 0}},
-    {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0, round: 0}},
+     %Effect.SendDelayed{
+       event: "e",
+       delay_ms: 1,
+       macrostep: 0,
+       microstep: 0,
+       round: 0,
+       ordinal: 1
+     }},
+    {:cancel, %Effect.Cancel{send_id: "s", macrostep: 0, microstep: 0, round: 0, ordinal: 2}},
     {:invoke,
      %Effect.Invoke{
        invoke_id: "i",

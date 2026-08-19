@@ -403,6 +403,60 @@ defmodule Statifier.Machine.Content.SendTest do
     end
   end
 
+  describe "execute/2 - timer_counter and ordinal (ADR-0059)" do
+    # sabotage: `dispatch_or_reject/8`'s accepted arm starts the counter at
+    # 1 instead of reading `machine_state.timer_counter` before bumping
+    # (`advance_timer_counter/2` becomes `%{ms | timer_counter: 1}`, always)
+    # -> both ordinals below come back `1` instead of `1` then `2`,
+    # reddening the second assertion. Reverted and confirmed green.
+    test "two sequential delayed sends mint sequential ordinals" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:ok, ctx1, [{:send_delayed, %Effect.SendDelayed{ordinal: 1}}]} =
+               ExecutableContent.execute(send_node(m, "delay_frac"), context(ms))
+
+      assert {:ok, _ctx2, [{:send_delayed, %Effect.SendDelayed{ordinal: 2}}]} =
+               ExecutableContent.execute(send_node(m, "delay_frac"), context(ctx1.machine_state))
+    end
+
+    # Decision 5: `ordinal`/`timer_counter` exist only for the two
+    # durable-timer effects - an immediate `<send>` never builds one, so it
+    # must leave the counter untouched.
+    #
+    # sabotage: `advance_timer_counter/2`'s `when is_integer(delay_ms)`
+    # guard is dropped from its first clause, so it also matches the `nil`
+    # (immediate-send) case and bumps the counter regardless -> this test's
+    # `timer_counter == 0` assertion reddens. Reverted and confirmed green.
+    test "an immediate <send> (no delay) leaves timer_counter untouched" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:ok, ctx, [{:send, %Effect.Send{}}]} =
+               ExecutableContent.execute(send_node(m, "bare"), context(ms))
+
+      assert ctx.machine_state.timer_counter == 0
+    end
+
+    # Decision 1: a rejected delayed send builds no effect, so it must not
+    # advance the counter either.
+    #
+    # sabotage: `dispatch_or_reject/8`'s rejected arm is changed to call
+    # `advance_timer_counter(machine_state, delay_ms)` before returning the
+    # `{:error, new_context, _}` tuple (bumping the counter even on
+    # rejection) -> this test's `timer_counter == 0` assertion reddens.
+    # Reverted and confirmed green.
+    test "a rejected delayed send leaves timer_counter untouched" do
+      m = machine()
+      ms = machine_state(m)
+
+      assert {:error, new_context, _reason} =
+               ExecutableContent.execute(send_node(m, "reject_delay"), context(ms))
+
+      assert new_context.machine_state.timer_counter == 0
+    end
+  end
+
   describe "execute/2 - send id (ADR-0035)" do
     # sabotage: `generate_send_id/2`'s `is_binary(id)` clause is dropped, so
     # even an author-written `id` falls to the counter-generating clause ->

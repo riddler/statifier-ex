@@ -67,7 +67,7 @@ defmodule Statifier.ReplayTest do
 
   defp event(name), do: Event.external(name)
 
-  defp send_delayed(send_id, delay_ms) do
+  defp send_delayed(send_id, delay_ms, ordinal \\ 1) do
     %Effect.SendDelayed{
       event: "go",
       target: nil,
@@ -75,12 +75,13 @@ defmodule Statifier.ReplayTest do
       delay_ms: delay_ms,
       macrostep: 1,
       microstep: 1,
-      round: 0
+      round: 0,
+      ordinal: ordinal
     }
   end
 
-  defp cancel_effect(send_id) do
-    %Effect.Cancel{send_id: send_id, macrostep: 1, microstep: 1, round: 0}
+  defp cancel_effect(send_id, ordinal \\ 2) do
+    %Effect.Cancel{send_id: send_id, macrostep: 1, microstep: 1, round: 0, ordinal: ordinal}
   end
 
   defp state_index(machine, id) do

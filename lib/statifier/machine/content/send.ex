@@ -181,6 +181,8 @@ defmodule Statifier.Machine.Content.Send do
 
       case reject_reason(fields.target, fields.type, delay_ms, machine_state.routes) do
         nil ->
+          machine_state = advance_timer_counter(machine_state, delay_ms)
+          new_context = %{new_context | machine_state: machine_state}
           fields = Map.put(fields, :data, data(node, raw_params, content))
           effect = build_effect(node, fields, send_id, delay_ms, owner, machine_state)
 
@@ -388,6 +390,20 @@ defmodule Statifier.Machine.Content.Send do
       {"send_" <> Integer.to_string(counter + 1), machine_state}
     end
 
+    # ADR-0059: `timer_counter` advances on every `%Effect.SendDelayed{}`
+    # construction, author-written id or not - unlike `generate_send_id/2`
+    # above, which only a generated id consumes. `nil` delay means an
+    # immediate `<send>`, which never builds a `%SendDelayed{}` and must
+    # leave the counter untouched (decision 5). Increment-before-read,
+    # exactly as `generate_send_id/2` does.
+    @spec advance_timer_counter(machine_state :: MachineState.t(), delay_ms :: term()) ::
+            MachineState.t()
+    defp advance_timer_counter(%MachineState{timer_counter: n} = machine_state, delay_ms)
+         when is_integer(delay_ms),
+         do: %{machine_state | timer_counter: n + 1}
+
+    defp advance_timer_counter(%MachineState{} = machine_state, nil), do: machine_state
+
     # `idlocation`'s write (6.2.1) - a no-op tuple shaped like
     # `Interpreter.Datamodel.write_location/4`'s own success return when the
     # attribute is absent, so the caller's `case` needs only one shape
@@ -495,6 +511,7 @@ defmodule Statifier.Machine.Content.Send do
          macrostep: ms.macrostep,
          microstep: ms.microstep,
          round: ms.round,
+         ordinal: ms.timer_counter,
          id_from_author?: id_from_author?(node)
        }}
     end

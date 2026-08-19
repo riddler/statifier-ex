@@ -105,6 +105,25 @@ defmodule Statifier.Machine.Content.CancelTest do
       assert {:ok, _ctx, [{:cancel, %Effect.Cancel{round: 9}}]} =
                ExecutableContent.execute(node, context(ms))
     end
+
+    # ADR-0059: `timer_counter` advances by 1 on every `<cancel>`
+    # construction and is read back verbatim as the effect's `ordinal`.
+    #
+    # sabotage: `execute/2`'s `machine_state = %{machine_state |
+    # timer_counter: machine_state.timer_counter + 1}` line is deleted (the
+    # effect still reads `ordinal: machine_state.timer_counter`, off the
+    # un-bumped value) -> the ordinal comes back `0` instead of `1`,
+    # reddening this test. Reverted and confirmed green.
+    test "timer_counter advances and is read back as ordinal" do
+      m = machine()
+      ms = machine_state(m)
+      node = cancel_node(m, "bare")
+
+      assert {:ok, ctx, [{:cancel, %Effect.Cancel{ordinal: 1}}]} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert ctx.machine_state.timer_counter == 1
+    end
   end
 
   describe "execute/2 - an unmatched send_id is emitted anyway" do
@@ -141,6 +160,33 @@ defmodule Statifier.Machine.Content.CancelTest do
       node = cancel_node(m, "fail_sendidexpr")
 
       assert {:error, _reason} = ExecutableContent.execute(node, context(ms))
+    end
+
+    # Decision 1: a `<cancel>` whose `sendidexpr` fails to resolve builds no
+    # effect, so it must not advance `timer_counter` either - the bump lives
+    # inside the `with` body, after `resolve_expr/2` succeeds, and this
+    # file's own moduledoc states the failure path returns the bare
+    # two-element `{:error, reason}` form.
+    #
+    # sabotage: n/a - the bump line living inside the `with` body means a
+    # failed `resolve_expr/2` never reaches it, and the two-element
+    # `{:error, reason}` shape has no `machine_state` slot for a bump to
+    # leak through even if it did: `Statifier.Interpreter.Content.run_nodes/2`
+    # (the sole caller, `lib/statifier/interpreter/content.ex`'s
+    # `{:error, reason} -> {:halt, {context, ...` clause) discards to the
+    # fold's pre-call context on exactly that shape, by construction. The
+    # test above ("a failing sendidexpr yields {:error, _} and no effect")
+    # already sabotage-covers the one mutation that could defeat this - a
+    # rewrite that swallows the error and builds an effect anyway, changing
+    # the return shape - so this test documents the invariant `ordinal`
+    # depends on without inventing a second, unfalsifiable mutation for it.
+    test "a failing sendidexpr leaves timer_counter untouched (structural: no bump on the error path)" do
+      m = machine()
+      ms = machine_state(m)
+      node = cancel_node(m, "fail_sendidexpr")
+
+      assert {:error, _reason} = ExecutableContent.execute(node, context(ms))
+      assert ms.timer_counter == 0
     end
   end
 end

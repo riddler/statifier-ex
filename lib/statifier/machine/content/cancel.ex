@@ -58,16 +58,19 @@ defmodule Statifier.Machine.Content.Cancel do
         context
 
       with {:ok, send_id} <- resolve_expr(datamodel_context, node.sendid) do
+        machine_state = %{machine_state | timer_counter: machine_state.timer_counter + 1}
+
         effect = %Effect.Cancel{
           send_id: send_id,
           c_index: node.c_index,
           owner: owner,
           macrostep: machine_state.macrostep,
           microstep: machine_state.microstep,
-          round: machine_state.round
+          round: machine_state.round,
+          ordinal: machine_state.timer_counter
         }
 
-        {:ok, context, [{:cancel, effect}]}
+        {:ok, %{context | machine_state: machine_state}, [{:cancel, effect}]}
       end
     end
 

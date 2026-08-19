@@ -15,6 +15,14 @@ defmodule Statifier.Effect.SendDelayed do
   `id_from_author?` is `true` when the document wrote `id` or `idlocation`
   on this `<send>`, `false` when `send_id` was generated - the same C.1
   empty-`sendid` flag `Statifier.Effect.Send`'s own moduledoc explains.
+
+  `ordinal` is a per-execution sequence number minted from
+  `Statifier.MachineState`'s session-global `timer_counter` (ADR-0059). It is
+  what makes a durable host's dedup key per-instance where the counter triple
+  and the content position cannot - two iterations of a `<foreach>` body
+  execute the same content node, in the same microstep, under the same
+  author-written id, and only `ordinal` tells them apart. It replays
+  identically because the counter is pure fold state.
   """
 
   alias Statifier.Machine.Content
@@ -22,7 +30,7 @@ defmodule Statifier.Effect.SendDelayed do
   @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
-  @enforce_keys [:event, :delay_ms, :macrostep, :microstep, :round]
+  @enforce_keys [:event, :delay_ms, :macrostep, :microstep, :round, :ordinal]
   defstruct [
     :event,
     :target,
@@ -35,6 +43,7 @@ defmodule Statifier.Effect.SendDelayed do
     :macrostep,
     :microstep,
     :round,
+    :ordinal,
     id_from_author?: false
   ]
 
@@ -50,6 +59,7 @@ defmodule Statifier.Effect.SendDelayed do
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
           round: non_neg_integer(),
+          ordinal: pos_integer(),
           id_from_author?: boolean()
         }
 end
