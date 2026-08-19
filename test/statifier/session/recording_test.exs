@@ -1,31 +1,77 @@
 defmodule Statifier.Session.RecordingTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.{Compiler, Event, Lowering, Machine, Parser, Validator}
+  alias Statifier.{Compiler, Effect, Event, Lowering, Machine, Parser, Replay, Session, Validator}
   alias Statifier.Effect.Log
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
 
-  defp compile! do
-    xml = """
-    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
-        <state id="a">
-            <transition event="go" target="b"/>
-        </state>
-        <state id="b"/>
-    </scxml>
-    """
+  @xml """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+      <state id="a">
+          <transition event="go" target="b"/>
+      </state>
+      <state id="b">
+          <transition event="next" target="c"/>
+      </state>
+      <state id="c"/>
+  </scxml>
+  """
 
-    {:ok, root} = Parser.parse(xml)
-    {:ok, document} = Lowering.lower(root, xml)
-    {:ok, document, _warnings} = Validator.validate(document, xml)
+  # A minimal `Statifier.Invoke.Handler` used only to name a resolvable
+  # module in the codec's `:invoke_handlers` opts - modeled on
+  # `test/statifier/replay_test.exs:14-27`. Its callbacks are never invoked
+  # by anything in this file; only its module atom matters.
+  defmodule TestHandler do
+    @moduledoc false
+    @behaviour Statifier.Invoke.Handler
+
+    @impl Statifier.Invoke.Handler
+    def start(%Effect.Invoke{invoke_id: invoke_id}, _ctx),
+      do: {:ok, [{:handler, __MODULE__, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def cancel(invoke_id, _ctx), do: {:ok, [{:stop_child, invoke_id}]}
+
+    @impl Statifier.Invoke.Handler
+    def forward(invoke_id, event, _ctx), do: {:ok, [{:forward, invoke_id, event}]}
+  end
+
+  # A Machine built by the raw pipeline stages rather than `Statifier.compile/2`
+  # - carries no `identity` and no `source`, exactly the fixture
+  # `to_binary/1`'s `:unidentified_chart` refusal test wants.
+  defp compile! do
+    {:ok, root} = Parser.parse(@xml)
+    {:ok, document} = Lowering.lower(root, @xml)
+    {:ok, document, _warnings} = Validator.validate(document, @xml)
     {:ok, machine} = Compiler.compile(document)
+    machine
+  end
+
+  # An identified Machine, built through `Statifier.compile/2` so it carries
+  # both `identity` and `source` - what `to_binary/1` needs to produce a blob.
+  defp compile_identified!(opts \\ []) do
+    {:ok, machine} = Statifier.compile(@xml, opts)
     machine
   end
 
   defp event(name), do: Event.external(name)
 
   defp routes, do: Routes.new(sessions: ["sess_peer"], parent?: true, invokes: ["inv1"])
+
+  defp wait_for_status(session, pred, attempts \\ 50)
+  defp wait_for_status(_session, _pred, 0), do: flunk("status/1 never satisfied the predicate")
+
+  defp wait_for_status(session, pred, attempts) do
+    status = Session.status(session)
+
+    if pred.(status) do
+      status
+    else
+      Process.sleep(5)
+      wait_for_status(session, pred, attempts - 1)
+    end
+  end
 
   describe "new/2" do
     # sabotage: `new/2`'s default for `:max_macrostep_rounds` changed from
@@ -54,12 +100,9 @@ defmodule Statifier.Session.RecordingTest do
       assert Keyword.get(opts, :trace) == true
     end
 
-    # sabotage: `new/2` drops the `Keyword.put_new(:routes, nil)` call ->
-    # `Keyword.get(opts, :routes)` returns `nil` from the missing key rather
-    # than the normalized default, indistinguishable by this assertion alone,
-    # so the mutation is instead: `new/2`'s `Keyword.take/2` key list drops
-    # `:routes` -> a supplied `:routes` value never reaches `opts/1`,
-    # reddening the second assertion below.
+    # sabotage: `new/2`'s `Keyword.take/2` key list drops `:routes` -> a
+    # supplied `:routes` value never reaches `opts/1`, reddening the second
+    # assertion below.
     test "normalizes :routes into opts/1, defaulting nil" do
       empty = Recording.new(compile!())
       assert Keyword.get(Recording.opts(empty), :routes) == nil
@@ -69,9 +112,9 @@ defmodule Statifier.Session.RecordingTest do
     end
 
     # sabotage: `new/2` keeps every key `opts` was called with instead of
-    # `Keyword.take/2`-ing the normalized five -> this assertion reddens on
+    # `Keyword.take/2`-ing the normalized seven -> this assertion reddens on
     # the stray `:name` key surviving into `opts/1`
-    test "drops any option outside the normalized five" do
+    test "drops any option outside the normalized seven" do
       recording = Recording.new(compile!(), name: :ignored, session_id: "sess_x")
 
       refute Keyword.has_key?(Recording.opts(recording), :name)
@@ -245,6 +288,323 @@ defmodule Statifier.Session.RecordingTest do
         |> :erlang.binary_to_term()
 
       assert round_tripped == recording
+    end
+  end
+
+  describe "to_binary/1 then from_binary/1 live round trip" do
+    # This is the central test ADR-0056's Consequences owe: a live recorded
+    # run, replayed both in memory and after a full encode/decode round
+    # trip, must reach the same terminal position and stream.
+    #
+    # sabotage: `from_binary/1`'s `Enum.reverse(entries)` call is dropped
+    # (the decoded struct stores `entries` in the blob's own append order
+    # instead of restoring the internal reversed representation) -> this
+    # test reddens because the decoded recording replays its entries in
+    # reverse order, so its final configuration diverges from the live run's
+    test "a live recording and its decoded round trip replay to the same terminal position and stream" do
+      machine = compile_identified!()
+      {:ok, session} = Session.start_link(machine, record: true)
+
+      Session.send_event(session, "go")
+      Session.send_event(session, "next")
+
+      live_status = wait_for_status(session, fn s -> s.configuration == MapSet.new(["c"]) end)
+
+      {:ok, live_recording} = Session.recording(session)
+      assert {:ok, live_result} = Replay.run(live_recording)
+
+      assert {:ok, blob} = Recording.to_binary(live_recording)
+      assert {:ok, decoded_recording} = Recording.from_binary(blob)
+      assert {:ok, decoded_result} = Replay.run(decoded_recording)
+
+      assert decoded_result.stream == live_result.stream
+      assert decoded_result.status == live_result.status
+      assert decoded_result.machine_state.configuration == live_result.machine_state.configuration
+
+      live_configuration =
+        live_result.machine_state.configuration
+        |> Enum.map(&Machine.id(machine, &1))
+        |> Enum.reject(&is_nil/1)
+        |> MapSet.new()
+
+      assert live_configuration == live_status.configuration
+    end
+  end
+
+  describe "to_binary/1 then from_binary/1 append-order stability" do
+    # sabotage: `to_binary/1`'s tuple writes the struct's own reversed
+    # `entries` field (via `recording.entries`) instead of calling the
+    # public `entries(recording)` accessor -> this test reddens because the
+    # decoded recording's entries come back in reverse order relative to the
+    # original
+    test "entries/1 comes back in the same append order after a round trip" do
+      log_effect = {:log, %Log{label: "l", value: nil, macrostep: 0, microstep: 0, round: 0}}
+
+      recording =
+        compile_identified!()
+        |> Recording.new()
+        |> Recording.put_event(event("a"), nil)
+        |> Recording.put_cancel(nil)
+        |> Recording.put_timer("s1", event("b"), nil)
+        |> Recording.put_interpret([log_effect], nil)
+        |> Recording.put_event(event("c"), nil)
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert {:ok, decoded} = Recording.from_binary(blob)
+
+      assert Recording.entries(decoded) == Recording.entries(recording)
+    end
+  end
+
+  describe "to_binary/1 on an unidentified chart" do
+    # sabotage: `to_binary/1`'s `with {:ok, chart_blob} <- Chart.to_binary(machine)`
+    # is replaced with an unconditional `{:ok, chart_blob} = Chart.to_binary(machine)`
+    # match (bypassing the `with`'s error path) -> this test reddens with a
+    # `MatchError` instead of the recording's own `{:error, :unidentified_chart}`
+    test "refuses to encode a recording made over an unidentified Machine" do
+      recording = Recording.new(compile!())
+
+      assert Recording.to_binary(recording) == {:error, :unidentified_chart}
+    end
+  end
+
+  describe "from_binary/1 on a wrapped chart identity mismatch" do
+    # sabotage: `decode_chart/1`'s `{:error, reason} -> {:error, {:chart, reason}}`
+    # clause is changed to `{:error, _reason} -> {:error, :not_a_statifier_blob}`
+    # (flattening the nested chart's own error into the recording envelope's
+    # generic shape error) -> this test reddens because the returned error no
+    # longer matches `{:chart, {:identity_mismatch, _, _}}`
+    test "wraps a nested chart identity mismatch as {:chart, {:identity_mismatch, _, _}}" do
+      machine = compile_identified!()
+      other_machine = compile_identified!(chart_name: "other")
+
+      swapped_chart_blob =
+        :erlang.term_to_binary(
+          {:statifier_chart, Statifier.Chart.format_version(), Machine.identity(other_machine),
+           @xml, []}
+        )
+
+      envelope =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), swapped_chart_blob, [], []}
+        )
+
+      assert {:error, {:chart, {:identity_mismatch, expected, actual}}} =
+               Recording.from_binary(envelope)
+
+      assert expected == Machine.identity(other_machine)
+      assert actual == Machine.identity(machine)
+    end
+  end
+
+  describe "from_binary/1 on a wrapped chart version mismatch" do
+    # sabotage: `decode_chart/1`'s `{:error, reason} -> {:error, {:chart, reason}}`
+    # clause is changed to `{:error, _reason} -> {:error, :not_a_statifier_blob}`
+    # (flattening the nested chart's own error into the recording envelope's
+    # generic shape error) -> this test reddens because the returned error no
+    # longer matches `{:chart, {:unsupported_format_version, 99}}`
+    test "wraps a nested chart version mismatch distinctly from the envelope's own version arm" do
+      machine = compile_identified!()
+      identity = Machine.identity(machine)
+
+      future_chart_blob = :erlang.term_to_binary({:statifier_chart, 99, identity, @xml, []})
+
+      envelope =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), future_chart_blob, [], []}
+        )
+
+      assert Recording.from_binary(envelope) ==
+               {:error, {:chart, {:unsupported_format_version, 99}}}
+    end
+  end
+
+  describe "from_binary/1 on opts with no :invoke_handlers key" do
+    # `Keyword.fetch/2` leaves an opts list with no `:invoke_handlers` key
+    # untouched rather than inventing one - see the moduledoc's "The binary
+    # contract" section on `from_binary/1` being a restorer, not a
+    # normalizer.
+    #
+    # sabotage: `decode_opts/1`'s `:error -> {:ok, opts}` clause is changed
+    # to `:error -> {:error, {:unknown_handler_modules, []}}` -> this test
+    # reddens because a well-formed envelope whose `opts` carries no
+    # `:invoke_handlers` key at all now fails to decode instead of
+    # succeeding with `opts` untouched
+    test "decodes successfully, leaving opts without the key" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      envelope =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), chart_blob, [session_id: "sess_x"],
+           []}
+        )
+
+      assert {:ok, decoded} = Recording.from_binary(envelope)
+      opts = Recording.opts(decoded)
+
+      assert Keyword.get(opts, :session_id) == "sess_x"
+      refute Keyword.has_key?(opts, :invoke_handlers)
+    end
+  end
+
+  describe "from_binary/1 on unknown handler modules" do
+    # sabotage: `resolve_handlers/2`'s `case unknown do` is changed to
+    # `case [] do` (always take the `[]` branch) -> this test reddens
+    # because an envelope naming unresolvable handler modules decodes
+    # successfully instead of returning `{:error, {:unknown_handler_modules, _}}`
+    test "returns every unknown handler module name, sorted, in one round trip" do
+      machine = compile_identified!()
+
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      unique = System.unique_integer([:positive])
+
+      handlers = %{
+        "b" => "Elixir.Statifier.NoSuchHandler#{unique}B",
+        "a" => "Elixir.Statifier.NoSuchHandler#{unique}A"
+      }
+
+      envelope =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), chart_blob,
+           [invoke_handlers: handlers], []}
+        )
+
+      assert {:error, {:unknown_handler_modules, names}} = Recording.from_binary(envelope)
+
+      assert names ==
+               Enum.sort([
+                 "Elixir.Statifier.NoSuchHandler#{unique}A",
+                 "Elixir.Statifier.NoSuchHandler#{unique}B"
+               ])
+    end
+  end
+
+  describe "from_binary/1 handler round trip" do
+    # sabotage: `existing_atom/1`'s success clause returns `{:ok, name}`
+    # (the raw string) instead of `{:ok, String.to_existing_atom(name)}` ->
+    # this test reddens because the decoded `:invoke_handlers` map's value
+    # comes back as a binary rather than the `TestHandler` module atom.
+    # Confirmed: also reddens "returns every unknown handler module name"
+    # above for the same reason (no name is ever collected as unknown).
+    test "a recording naming TestHandler decodes its :invoke_handlers back to the module atom" do
+      machine = compile_identified!()
+
+      recording =
+        Recording.new(machine, invoke_handlers: %{"custom" => TestHandler})
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert {:ok, decoded} = Recording.from_binary(blob)
+
+      assert Recording.opts(decoded)[:invoke_handlers] == %{"custom" => TestHandler}
+    end
+  end
+
+  describe "from_binary/1 recording envelope version mismatch" do
+    # sabotage: `check_version/1`'s exact-match clause head is widened from
+    # `defp check_version(@format_version)` to `defp check_version(_version)`
+    # (accept any version) -> this test reddens because a blob whose
+    # envelope version is bumped to 99 now proceeds to decode the nested
+    # chart instead of returning `{:error, {:unsupported_format_version, 99}}`
+    test "a blob whose envelope version is bumped returns {:error, {:unsupported_format_version, 99}} unwrapped" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      future_envelope =
+        :erlang.term_to_binary({:statifier_recording, 99, chart_blob, [], []})
+
+      assert Recording.from_binary(future_envelope) == {:error, {:unsupported_format_version, 99}}
+    end
+  end
+
+  describe "from_binary/1 on a foreign or malformed blob" do
+    # sabotage: `from_binary/1`'s catch-all `_other -> {:error,
+    # :not_a_statifier_blob}` clause's returned atom is changed to
+    # `:invalid_blob` -> all three assertions below redden because the
+    # actual returned error atom no longer matches
+    test "a foreign term_to_binary blob returns {:error, :not_a_statifier_blob}" do
+      assert Recording.from_binary(:erlang.term_to_binary(:hello)) ==
+               {:error, :not_a_statifier_blob}
+    end
+
+    # sabotage: same mutation as above (`from_binary/1`'s catch-all clause's
+    # returned atom changed to `:invalid_blob`) -> this test reddens too,
+    # since a random binary reaches the same catch-all via `safe_decode/1`'s
+    # `rescue` clause rather than a non-matching decoded term
+    test "a random binary returns {:error, :not_a_statifier_blob} rather than raising" do
+      random_binary = :crypto.strong_rand_bytes(64)
+
+      assert Recording.from_binary(random_binary) == {:error, :not_a_statifier_blob}
+    end
+
+    # sabotage: `from_binary/1`'s decoded-tuple guard is widened from
+    # `is_binary(chart_blob) and is_list(opts) and is_list(entries)` to
+    # `true` (accept any shape) -> this test reddens because a `chart_blob`
+    # slot carrying an atom instead of a binary now reaches `decode_chart/1`,
+    # which raises inside `Chart.from_binary/1`'s own `is_binary/1` guard
+    # instead of returning `{:error, :not_a_statifier_blob}`
+    test "a well-formed envelope whose chart_blob slot is not a binary returns {:error, :not_a_statifier_blob}" do
+      malformed_blob =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), :not_a_binary, [], []}
+        )
+
+      assert Recording.from_binary(malformed_blob) == {:error, :not_a_statifier_blob}
+    end
+  end
+
+  describe "format_version/0" do
+    # sabotage: `format_version/0` is changed to return `@format_version +
+    # 1` instead of `@format_version` -> this test reddens because the
+    # returned value (2) no longer equals the version tag actually written
+    # into every blob by `to_binary/1`
+    test "matches the version tag to_binary/1 writes" do
+      recording = Recording.new(compile_identified!())
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+
+      assert {:statifier_recording, version, _chart_blob, _opts, _entries} =
+               :erlang.binary_to_term(blob)
+
+      assert version == Recording.format_version()
+    end
+  end
+
+  describe "a non-binary handler value in a doctored blob" do
+    # sabotage: `handler_name/1`'s catch-all `defp handler_name(name), do:
+    # inspect(name)` clause is dropped, leaving only the `is_binary(name)`
+    # guarded clause -> this test reddens with an unhandled
+    # `FunctionClauseError` on `handler_name(42)` instead of the
+    # `{:unknown_handler_modules, ["42"]}` return (confirmed:
+    # `existing_atom/1`'s own guard is not what saves this path -
+    # `String.to_existing_atom/1` already raises `ArgumentError` for a
+    # non-binary argument, which the existing `rescue` clause catches either
+    # way)
+    test "a non-binary handler value collects as an unknown name rather than raising" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      envelope =
+        :erlang.term_to_binary(
+          {:statifier_recording, Recording.format_version(), chart_blob,
+           [invoke_handlers: %{"t" => 42}], []}
+        )
+
+      assert Recording.from_binary(envelope) == {:error, {:unknown_handler_modules, ["42"]}}
+    end
+  end
+
+  describe "the blob carries no compiled term" do
+    # sabotage: n/a - this test asserts a structural property of
+    # `to_binary/1`'s output (no `Predicator.Compiled` byte sequence) rather
+    # than a behavior any single mutation of `lib/` code would flip without
+    # also breaking the round-trip test above
+    test "contains no Predicator.Compiled tag" do
+      recording = Recording.new(compile_identified!())
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert :binary.match(blob, "Predicator.Compiled") == :nomatch
     end
   end
 end

@@ -83,9 +83,52 @@ defmodule Statifier.Session.Recording do
   a clock reading. This module calls no `Process.*` or `System.*` time
   function, and the `Mix.Statifier.AdrGuard` allowlist that lets
   `Statifier.Session` alone touch wall-clock time does not name this file.
+
+  ## The binary contract
+
+  `to_binary/1` and `from_binary/1` (ADR-0056) give a recording a versioned
+  binary envelope: `{:statifier_recording, format_version, chart_blob, opts,
+  entries}`. Five slots -
+
+    - `format_version` - this module's own version tag, checked before the
+      nested chart is touched (ADR-0056 decision 4): a future format this
+      build cannot read reports as a version mismatch rather than failing
+      confusingly further in.
+    - `chart_blob` - `machine` travels as a nested `Statifier.Chart.to_binary/1`
+      blob, never a compiled term (ADR-0014 item 2, ADR-0052 decision 3).
+      `from_binary/1` recompiles it through `Chart.from_binary/1`, which
+      checks its own format version and its own recompiled identity in its
+      own order - a chart-format bump is therefore never forced to be a
+      recording-format bump, or the reverse (ADR-0056 decision 3). A nested
+      chart failure surfaces wrapped as `{:error, {:chart, reason}}` rather
+      than flattened, so the caller always knows which decoder refused.
+    - `opts` - the normalized session options, with `:invoke_handlers`
+      written as module name strings rather than atoms.
+    - `entries` - written in `entries/1`'s append order, not the struct
+      field's internal reversed order; that reversal is a prepend-list
+      storage optimization this module alone knows about (decision 1 is what
+      makes restoring it on decode legal), and a blob that copied the raw
+      field would bake that implementation detail into the format.
+
+  `:invoke_handlers` cross the boundary as strings, never as atoms, because
+  `:safe` decoding refuses to create atoms a blob names and a module's atom
+  exists on a node only once that module is loaded (ADR-0052's Consequences,
+  ADR-0056 decision 5). `from_binary/1` resolves every string back with
+  `String.to_existing_atom/1`, collecting every failure - not just the first
+  - into `{:error, {:unknown_handler_modules, names}}`, sorted, so a host
+  learns the whole set of modules it needs to load in one round trip.
+
+  What the codec does not, and cannot, verify: that a resolved handler
+  module's planning callbacks (ADR-0051 decision 4) behave the way they did
+  when the recording was made. Replay's determinism depends on that
+  equivalence for any recording naming a handler, and ADR-0056 decision 5
+  records it as an accepted environmental limit - the same class as
+  ADR-0034's OTP `MapSet`-iteration caveat - rather than something a codec
+  could check. `perform/2`, the impure half of a handler, is never called by
+  replay at all (`lib/statifier/replay.ex`), so it needs no equivalence.
   """
 
-  alias Statifier.{Effect, Event, Machine}
+  alias Statifier.{Chart, Effect, Event, Machine}
   alias Statifier.Event.Cause
   alias Statifier.Send.Routes
 
@@ -117,6 +160,16 @@ defmodule Statifier.Session.Recording do
     :invoke_types,
     :invoke_handlers
   ]
+
+  @format_version 1
+
+  # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
+  # runtime, so the compiler sees an attribute that is set and never used and
+  # rejects the build under `--warnings-as-errors`. Registering it as
+  # persisted is what makes it a declaration rather than dead code; see its
+  # one use site below, and .sobelow-conf for the mechanism (the same one
+  # `lib/statifier/chart.ex` already uses).
+  Module.register_attribute(__MODULE__, :sobelow_skip, persist: true)
 
   @doc """
   Starts an empty recording over `machine`, normalizing `opts` to exactly
@@ -271,4 +324,165 @@ defmodule Statifier.Session.Recording do
   @doc "The number of recorded entries."
   @spec size(recording :: t()) :: non_neg_integer()
   def size(%__MODULE__{entries: entries}), do: length(entries)
+
+  @doc """
+  The version tag `to_binary/1` writes and `from_binary/1` checks. A bare
+  integer, so a future format change is a version bump here rather than an
+  inference from the blob's shape.
+  """
+  @spec format_version() :: pos_integer()
+  def format_version, do: @format_version
+
+  @doc """
+  Encodes `recording` as a tagged, versioned binary envelope carrying its
+  chart as a nested `Statifier.Chart.to_binary/1` blob, its normalized
+  `opts` (with `:invoke_handlers` written as module name strings), and its
+  `entries/1` in append order - never a compiled term (see the moduledoc's
+  "The binary contract" section).
+
+  Returns `{:error, :unidentified_chart}` exactly when `Chart.to_binary/1`
+  refuses `recording`'s `machine` - a recording made over a `Machine` built
+  without `Statifier.compile/2` (so carrying no `identity` and no `source`)
+  has nothing for a future `from_binary/1` to recompile from or check
+  against, so no blob is produced for it at all. Recording and replaying
+  such a session in memory is unaffected; only persistence is refused.
+  """
+  @spec to_binary(recording :: t()) :: {:ok, binary()} | {:error, :unidentified_chart}
+  def to_binary(%__MODULE__{machine: machine, opts: opts} = recording) do
+    with {:ok, chart_blob} <- Chart.to_binary(machine) do
+      {:ok,
+       :erlang.term_to_binary(
+         {:statifier_recording, @format_version, chart_blob, encode_opts(opts),
+          entries(recording)}
+       )}
+    end
+  end
+
+  @doc """
+  Decodes a `to_binary/1` envelope back into a `t()`.
+
+  Checks run in this order: the envelope's own format version, then the
+  nested chart (recompiled and identity-checked by `Chart.from_binary/1`),
+  then handler-module resolution - version first because it is checked
+  before the nested chart is touched (ADR-0056 decision 4), chart before
+  handlers by this project's own plan default (OQ-1).
+
+  `{:error, {:chart, reason}}` carries `Chart.from_binary/1`'s own error
+  tuple unflattened - two envelopes means two version namespaces, and an
+  unwrapped `{:unsupported_format_version, v}` would not say which decoder
+  refused.
+
+  `{:error, {:unknown_handler_modules, names}}` collects every unresolvable
+  handler-module name in one round trip, sorted - not just the first - so a
+  host learns the whole set of modules it must load before it can decode
+  this blob.
+
+  Returns `{:error, :not_a_statifier_blob}` for anything that is not this
+  module's tagged envelope - a foreign `term_to_binary` blob, garbage bytes,
+  or a well-formed envelope whose `chart_blob` is not a binary or whose
+  `opts`/`entries` are not lists.
+  """
+  @spec from_binary(blob :: binary()) ::
+          {:ok, t()}
+          | {:error, :not_a_statifier_blob}
+          | {:error, {:unsupported_format_version, term()}}
+          | {:error, {:chart, term()}}
+          | {:error, {:unknown_handler_modules, [String.t()]}}
+  def from_binary(blob) when is_binary(blob) do
+    case safe_decode(blob) do
+      {:ok, {:statifier_recording, version, chart_blob, opts, entries}}
+      when is_binary(chart_blob) and is_list(opts) and is_list(entries) ->
+        with :ok <- check_version(version),
+             {:ok, machine} <- decode_chart(chart_blob),
+             {:ok, opts} <- decode_opts(opts) do
+          {:ok, %__MODULE__{machine: machine, opts: opts, entries: Enum.reverse(entries)}}
+        end
+
+      _other ->
+        {:error, :not_a_statifier_blob}
+    end
+  end
+
+  @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
+  defp check_version(@format_version), do: :ok
+  defp check_version(version), do: {:error, {:unsupported_format_version, version}}
+
+  @spec decode_chart(chart_blob :: binary()) :: {:ok, Machine.t()} | {:error, {:chart, term()}}
+  defp decode_chart(chart_blob) do
+    case Chart.from_binary(chart_blob) do
+      {:ok, machine} -> {:ok, machine}
+      {:error, reason} -> {:error, {:chart, reason}}
+    end
+  end
+
+  defp encode_opts(opts) do
+    Keyword.replace_lazy(opts, :invoke_handlers, fn handlers ->
+      Map.new(handlers, fn {type, module} -> {type, Atom.to_string(module)} end)
+    end)
+  end
+
+  @spec decode_opts(opts :: keyword()) ::
+          {:ok, keyword()} | {:error, {:unknown_handler_modules, [String.t()]}}
+  defp decode_opts(opts) do
+    case Keyword.fetch(opts, :invoke_handlers) do
+      {:ok, handlers} -> resolve_handlers(opts, handlers)
+      :error -> {:ok, opts}
+    end
+  end
+
+  @spec resolve_handlers(opts :: keyword(), handlers :: map()) ::
+          {:ok, keyword()} | {:error, {:unknown_handler_modules, [String.t()]}}
+  defp resolve_handlers(opts, handlers) do
+    {resolved, unknown} =
+      Enum.reduce(handlers, {%{}, []}, fn {type, name}, {resolved, unknown} ->
+        case existing_atom(name) do
+          {:ok, module} -> {Map.put(resolved, type, module), unknown}
+          :error -> {resolved, [handler_name(name) | unknown]}
+        end
+      end)
+
+    case unknown do
+      [] -> {:ok, Keyword.put(opts, :invoke_handlers, resolved)}
+      names -> {:error, {:unknown_handler_modules, Enum.sort(names)}}
+    end
+  end
+
+  # `String.to_existing_atom/1` has no non-raising variant, so the rescue is
+  # function-level here - the same shape `safe_decode/1` below uses, rather
+  # than a `try` block inline in the reduce. This is not a rescue-to-default
+  # at a leaf (CLAUDE.md): `:error` is collected into a named error arm, never
+  # silently substituted for a value.
+  defp existing_atom(name) when is_binary(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
+  end
+
+  defp existing_atom(_name), do: :error
+
+  # Keeps `{:unknown_handler_modules, [String.t()]}` honest for a doctored
+  # blob whose handler map holds a non-binary value.
+  defp handler_name(name) when is_binary(name), do: name
+  defp handler_name(name), do: inspect(name)
+
+  # Same rationale as `Statifier.Chart`'s own `safe_decode/1`
+  # (`lib/statifier/chart.ex:162-181`): `:safe` refuses to create atoms a
+  # blob names, so a hostile or corrupt blob cannot grow the atom table, and
+  # `:erlang.binary_to_term/2` raises `ArgumentError` on a blob it cannot
+  # decode at all, which collapses to `:error` here rather than escaping as
+  # an exception.
+  #
+  # Sobelow's Misc.BinToTerm fires on every `binary_to_term` call site,
+  # `:safe` or not, because `:safe` still decodes a fun term. Nothing here
+  # ever calls what it decodes: the result is matched against one literal
+  # five-tuple shape and used only as data, and anything else becomes
+  # `:not_a_statifier_blob`. The skip is per-function and named, so the rest
+  # of this module stays scanned - see .sobelow-conf for why the file is not
+  # excluded by path instead.
+  @sobelow_skip ["Misc.BinToTerm"]
+  defp safe_decode(blob) do
+    {:ok, :erlang.binary_to_term(blob, [:safe])}
+  rescue
+    ArgumentError -> :error
+  end
 end

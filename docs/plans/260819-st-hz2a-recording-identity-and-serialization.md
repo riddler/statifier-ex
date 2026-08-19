@@ -516,11 +516,11 @@ is an accessory of the pair, not a separate user-facing capability.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full `mix quality` is green (`mix quality --profile loop` while
+- [x] Full `mix quality` is green (`mix quality --profile loop` while
       iterating; a loop-profile or scoped green does not satisfy this phase).
-- [ ] `mix gate.verify` confirms the run was full, unprofiled, unscoped, and
+- [x] `mix gate.verify` confirms the run was full, unprofiled, unscoped, and
       not `--skip`-ed.
-- [ ] The Sobelow stage passes with no `Misc.BinToTerm` finding, and the
+- [x] The Sobelow stage passes with no `Misc.BinToTerm` finding, and the
       module carries exactly one real skip *attribute* -
       `grep -c '^  @sobelow_skip \["Misc.BinToTerm"\]'
       lib/statifier/session/recording.ex` is 1. Count the attribute, not the
@@ -528,17 +528,17 @@ is an accessory of the pair, not a separate user-facing capability.
       by name (as it does in `lib/statifier/chart.ex`, where a bare
       `grep -rn "@sobelow_skip"` legitimately returns two lines), so a
       substring count would never go green for a correct implementation.
-- [ ] Dialyzer passes - specifically no opacity violation, which is what
+- [x] Dialyzer passes - specifically no opacity violation, which is what
       proves the codec is legal only on the owning module.
-- [ ] The coverage stage passes `coveralls.json`'s `minimum_coverage: 90`
+- [x] The coverage stage passes `coveralls.json`'s `minimum_coverage: 90`
       (decided by the full gate, not judged by eye), and
       `mix coveralls.html` shows every error arm of `from_binary/1` and both
       arms of `to_binary/1` covered.
-- [ ] `git diff --stat origin/main -- lib/statifier/replay.ex` is empty.
-- [ ] `mix quality --format json --report -` is available for a looped runner
+- [x] `git diff --stat origin/main -- lib/statifier/replay.ex` is empty.
+- [x] `mix quality --format json --report -` is available for a looped runner
       that needs to route on stage results.
-- [ ] `changelog.d/st-hz2a.md` exists and `CHANGELOG.md` is unmodified.
-- [ ] No conformance results move, so `mix test.regression` /
+- [x] `changelog.d/st-hz2a.md` exists and `CHANGELOG.md` is unmodified.
+- [x] No conformance results move, so `mix test.regression` /
       `mix test.baseline add` are not expected to change
       `test/passing_tests.json` - run `mix test.regression` anyway and
       confirm it is green and the file is untouched.
@@ -798,5 +798,32 @@ manual testing before moving to the next phase. In looped (`--loop`)
 execution, this phase's Automated Verification gates advancement
 automatically (via `/wurk:commit --auto`), and Manual Verification items are
 deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] **Spec conformance**: confirm no W3C Appendix D-named procedure was
+      touched (`select_transitions`, `microstep`, `enter_states`, and the
+      rest are all absent from the diff) - the codec is session-boundary work
+      with no pseudocode counterpart, so there is no deviation to justify
+      under ADR-0002.
+- [ ] Each sabotage comment was actually produced by running its mutation and
+      seeing red, not written from inference.
+- [ ] The moduledoc section reads as an explanation of the artifact a host
+      persists, not a restatement of the code beneath it.
+- [ ] `to_binary/1` on a recording over an unidentified chart refuses, while
+      recording and replaying that same session in memory still works
+      unchanged - persistence is the only thing refused.
+- [ ] No regressions in related features (`Replay`, `Session` recording,
+      `subscribe(catch_up: true)`).
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
 
 ---
