@@ -102,8 +102,14 @@
         "site; `enter_states/2` is a third and is deliberately unfixtured, because " <>
         "the corpus is indexed by rule and tier rather than by production site and " <>
         "this row earns its place on the two-trace discrimination, not on the path " <>
-        "string. UNMEASURED as of st-6f7h Phase 1; no gate path runs this row - " <>
-        "first measured in " <>
+        "string. MEASURED 2026-08-19 (st-6f7h Phase 2): claude-sonnet-5, seeds " <>
+        "101/202/303, unanimous majority false negative, no flap. Seeds 202 and " <>
+        "303 each 'produced no surviving finding'; seed 101 also missed (exit " <>
+        "status 2) but its assertion text was not captured (terminal output " <>
+        "truncated before it could be read), so that cell is recorded as an " <>
+        "uncaptured miss rather than inferred from the other two. The judge's " <>
+        "propose step returned no candidate at all on this row, so the miss is a " <>
+        "failure to propose, not a refute-pass over-rejection - see " <>
         "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
   },
   %{
@@ -120,8 +126,10 @@
         "a legitimately post-mutation STAMP - " <>
         "0012_configuration_read_post_departure.diff probes a legitimately " <>
         "post-mutation FIELD. A judge that learned 'stamp pre-mutation' as an " <>
-        "unconditional rule scores a false positive here. UNMEASURED as of " <>
-        "st-6f7h Phase 1; first measured in " <>
+        "unconditional rule scores a false positive here. MEASURED 2026-08-19 " <>
+        "(st-6f7h Phase 2): claude-sonnet-5, seeds 101/202/303, unanimous ok " <>
+        "(no finding survived on any seed), no flap. The judge did not fire the " <>
+        "over-generalization this row was cut to catch - see " <>
         "docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md Phase 2"
   },
   %{

@@ -102,13 +102,15 @@ from the three above in kind, not just in tag:
   that amendment obliged is the third row below. A seventh ADR-0012 pair
   landed later still (st-6f7h), separating a wrongly post-mutation `Trace.ExitSet`
   stamp from a rightly post-mutation `Trace.Done` stamp, both trace calls
-  visible in the same hunk; it is unmeasured as of that plan's Phase 1.
+  visible in the same hunk; it was measured on 2026-08-19 (the fourth row
+  below).
 
   | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
   |---|---|---|---|---|---|
   | subtle | `claude-sonnet-5` | 3/5 | 0/5 | 3/10 | 145.7s |
   | subtle | `claude-haiku-4-5-20251001` | 1/5 | 0/5 | 3/10 | 890.6s |
   | ADR-0012 subtle only, 6 rows (partial, st-xsb1) | `claude-sonnet-5` | 1/3 | 0/3 | 0/6 | 21.5s |
+  | ADR-0012 subtle, 2 new rows, first measurement (st-6f7h) | `claude-sonnet-5` | 1/2 | 0/2 | 0/2 | 17.9s |
 
   The third row is a **partial re-measurement and supersedes nothing**. The two
   rows above it were measured over the whole ten-fixture tier on two models and
@@ -120,6 +122,24 @@ from the three above in kind, not just in tag:
   `0012_location_precision_one_caller.diff` remains missed, as it was before the
   amendment; the plan's Phase 5 holds the per-fixture matrix and the reason that
   row indicts the ADR's wording rather than the judge.
+
+  The fourth row is a **first measurement of two new rows and supersedes
+  nothing**; it is not a re-measurement of anything above it, and the three
+  rows above it were measured over wider tiers (ten- and six-fixture slices)
+  than this two-fixture pair. It covers the site-B `exit_interpreter/1` pair
+  st-6f7h Phase 1 added, on `claude-sonnet-5` only: the violation row
+  (`0012_exit_sweep_stamp_swapped_beside_done.diff`) missed unanimously across
+  seeds 101/202/303 (one cell uncaptured - a real miss whose assertion text
+  was not recorded), and the clean row
+  (`0012_done_trace_stamped_post_sweep.diff`) was acquitted unanimously. That
+  is the inverse of what the plan predicted: it expected the clean row, not
+  the violation row, to be the likely miss. The judge's propose step returned
+  no candidate at all on the violation row, so the miss is a failure to
+  propose rather than a refute-pass over-rejection. The full matrix, the
+  provenance note, and the open question of whether content, hunk width, or
+  production site explains the miss are in
+  `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`'s Phase 5 subsection
+  and `docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md`.
 
   Two things follow, and the plan's Phase 5 holds the per-fixture matrices
   behind both. First, the subtle tier separates the two models where the

@@ -1094,6 +1094,91 @@ corpus-equivalent**, drawn from the 1.2-run reserve this phase left unspent.
 Cumulative against Decision 3's ceiling of 8: **5.2**. Wall time was 6.4
 minutes. The budget was not exceeded and no fixture was re-run.
 
+##### First measurement of two new rows, 2026-08-19 (st-6f7h)
+
+**This is a first measurement of two new rows, not a re-measurement.** It
+covers the two ADR-0012 `:subtle` fixtures st-6f7h Phase 1 added at
+`exit_interpreter/1` (site B) - `0012_exit_sweep_stamp_swapped_beside_done.diff`
+(violation) and `0012_done_trace_stamped_post_sweep.diff` (clean) - on one
+model (`claude-sonnet-5`). Every table above, including the st-xsb1 partial
+re-measurement, stands unchanged; neither of these two rows appeared in any
+prior measurement, so there is nothing to supersede.
+
+Same repeat policy as above: seeds 101/202/303, majority of three, flaps
+counted separately and never folded into the score.
+
+| Fixture | sonnet 101/202/303 | Wall 101/202/303 |
+|---|---|---|
+| `0012_exit_sweep_stamp_swapped_beside_done.diff` (violation, new) | uncaptured, FN, FN | uncaptured, 8.1s, 8.3s |
+| `0012_done_trace_stamped_post_sweep.diff` (clean, new) | ok, ok, ok | 34.2s, 23.5s, 15.3s |
+
+Seed 101's violation-row run exited 2 (an ExUnit failure, consistent with a
+miss), but its assertion text was not captured - the terminal output was
+truncated before it could be read. Per the plan's manual criterion, that cell
+is recorded as an uncaptured miss and is not inferred from the other two
+seeds. The majority verdict for the row is unaffected: seeds 202 and 303 are
+both unambiguous false negatives, which already forms a majority of three
+regardless of what seed 101's specific assertion said.
+
+| Slice | Model | FN (majority) | FP (majority) | Flaps | Wall (mean, captured cells) |
+|---|---|---|---|---|---|
+| ADR-0012 subtle, 2 new rows (3 runs) | claude-sonnet-5 | 1/2 | 0/2 | 0/2 | 17.9s |
+
+**What the numbers say.**
+
+1. **The violation row missed unanimously; the clean row was acquitted
+   unanimously - the inverse of what the plan predicted.** The plan expected
+   the clean row (a legitimately post-sweep `Trace.Done` stamp, made maximally
+   conspicuous) to be the likelier miss, on the theory that a judge which had
+   internalized "stamp pre-mutation" as an unconditional rule would fire a
+   false positive on it. Instead the clean row was caught clean on all three
+   seeds, and the violation row - the swapped `Trace.ExitSet` stamp beside the
+   untouched, correctly post-sweep `Trace.Done` call - was missed on all
+   three. Read plainly: on this wide two-trace hunk the judge did not indict
+   the swapped stamp at all.
+2. **The miss is a failure to propose, not a refute-pass over-rejection.**
+   The violation row's runs completed in roughly 6.0s of sync time against the
+   clean row's 13-32s. The judge's propose step returned no candidate at all
+   on the violation row - no candidate means no refute call, which is why the
+   run is short. On the clean row the judge proposed candidates and then
+   refuted them away, the longer round trip. The distinction matters: this is
+   not a case of the judge seeing a violation and being talked out of it by
+   its own refute step, it never saw one to begin with.
+3. **The measurement cannot separate content from context or from site.**
+   `0012_trace_stamp_swapped_comment_kept.diff` - the comment-kept stamp swap
+   at the *other* governed `Trace.ExitSet` site (site A, `exit_states/2`) -
+   was previously measured caught unanimously (st-xsb1, above). This new
+   violation row differs from that fixture in at least three ways at once:
+   the wider `--unified=14` context (no prior fixture used more than 3), the
+   presence of a second, legitimately post-sweep trace call in the same hunk,
+   and the different production site. Any of the three could explain why this
+   row misses where that one caught. The budget spent here (six fixture-runs)
+   cannot isolate which; separating them would be a second measurement pass
+   and is explicitly out of this phase's scope. This is reported as an open
+   question, not resolved.
+4. **No false positive was introduced on the clean row.** The clean row was
+   cut specifically to probe whether the judge had over-generalized "stamp
+   pre-mutation" unconditionally - the risk ADR-0012's amendment's second
+   paragraph exists to bound. It did not fire here, unanimously.
+
+**Provenance.** The runs were executed by an agent, not by a human at the
+keyboard. Per this plan's Phase 5 (Phase 2 of st-6f7h) manual criterion, a
+human decided to start the phase and authorized the spend - the user
+explicitly said to go ahead and run the six commands - and the agent ran them.
+Recorded here as a deviation rather than ticked, following the st-xsb1
+precedent above. Additionally, and distinctly from that precedent: one cell
+(violation row, seed 101) has no captured assertion text, because the agent's
+first invocation was run without redirecting output and the terminal output
+was truncated before the text could be read. The verdict for that cell (a
+miss, exit status 2) is sound; the specific assertion is not on the record.
+This is stated plainly rather than papered over.
+
+**Spend.** 6 fixture-runs (2 fixtures x 3 seeds x 1 model) = **0.33
+corpus-equivalents**. Cumulative against Decision 3's ceiling of 8, with 4.2
+(st-2ts, above) and 1.0 (st-xsb1, above) already spent: **5.53 of 8**, leaving
+2.47. The budget was not exceeded: 6 of 6 planned runs, no fixture was
+re-run, no second model was added, no tier-wide selector was used.
+
 ### Success Criteria:
 
 #### Automated Verification:
