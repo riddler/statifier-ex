@@ -725,6 +725,14 @@ all. If a host ever reports the double-compile as a real cost, this is a
 one-line reorder inside the `with`, observable only in which error arrives
 first.
 
+**Settled (2026-08-19):** the implemented default stands - chart first,
+handlers second. The double-compile it costs is hypothetical (no host has
+reported it) while the alternative's cost is real on every malformed blob:
+handler-first would report a missing handler module for a blob whose chart
+no longer decodes at all, sending a host to load code that would not have
+helped. Reopen if a host measures the retry-after-loading-handlers path as
+a real cost; the change stays a one-line reorder inside the `with`.
+
 **OQ-2 - `:invoke_handlers` values that are not atoms.** `new/2` does not
 validate the map's values, so a host could put a non-atom there and reach
 `Atom.to_string/1` at encode. **Default implemented: no defensive clause -
@@ -735,6 +743,14 @@ widens `to_binary/1`'s public error vocabulary beyond the one arm ADR-0056's
 Consequences specify (`{:error, :unidentified_chart}`), and widening a
 documented ADR return type is a direction-level call, not a plan-level one.
 If it should be an error arm instead, that is an ADR-0056 amendment.
+
+**Settled (2026-08-19):** the implemented default stands - no defensive
+clause. A non-atom in `:invoke_handlers` is a caller error made at `new/2`
+and surfaced at `to_binary/1`, and a raise names the offending call site
+where an error tuple would only report that encoding failed. Turning it
+into an arm would widen a return type ADR-0056's Consequences state, which
+is an amendment to that record rather than a plan-level fix; that remains
+the route if a host ever needs it.
 
 **OQ-3 (deferred by ADR-0056, not this plan's to answer)** - whether a host
 needs to read a blob's identity *without* paying the recompile. ADR-0056
@@ -781,13 +797,13 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The ADR-0052 status line reads as one sentence a reviewer can follow,
+- [x] The ADR-0052 status line reads as one sentence a reviewer can follow,
       and its clause ordering matches ADR-0054's precedent.
-- [ ] No Appendix D-named function was touched (this phase changes no
+- [x] No Appendix D-named function was touched (this phase changes no
       `lib/` file at all, so the project's spec-conformance criterion is
       satisfied vacuously - confirm by `git diff --stat` showing only
       `docs/`).
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. This phase touches no Elixir
@@ -803,19 +819,19 @@ deferred and surfaced once at the end instead of blocking here.
 
 ### Phase 2
 
-- [ ] **Spec conformance**: confirm no W3C Appendix D-named procedure was
+- [x] **Spec conformance**: confirm no W3C Appendix D-named procedure was
       touched (`select_transitions`, `microstep`, `enter_states`, and the
       rest are all absent from the diff) - the codec is session-boundary work
       with no pseudocode counterpart, so there is no deviation to justify
       under ADR-0002.
-- [ ] Each sabotage comment was actually produced by running its mutation and
+- [x] Each sabotage comment was actually produced by running its mutation and
       seeing red, not written from inference.
-- [ ] The moduledoc section reads as an explanation of the artifact a host
+- [x] The moduledoc section reads as an explanation of the artifact a host
       persists, not a restatement of the code beneath it.
-- [ ] `to_binary/1` on a recording over an unidentified chart refuses, while
+- [x] `to_binary/1` on a recording over an unidentified chart refuses, while
       recording and replaying that same session in memory still works
       unchanged - persistence is the only thing refused.
-- [ ] No regressions in related features (`Replay`, `Session` recording,
+- [x] No regressions in related features (`Replay`, `Session` recording,
       `subscribe(catch_up: true)`).
 
 **Implementation Note**: Use the project's loop gate between edits while
@@ -830,15 +846,15 @@ of blocking here.
 
 ### Phase 3
 
-- [ ] The new section reads as guidance to a host deciding what to persist,
+- [x] The new section reads as guidance to a host deciding what to persist,
       not as API reference duplicated from the moduledoc.
-- [ ] The elixir example compiles conceptually against the real signatures
+- [x] The elixir example compiles conceptually against the real signatures
       (paste it into `iex -S mix` over a real recording once).
-- [ ] The `## Explicitly not the *compiled* chart` section that follows still
+- [x] The `## Explicitly not the *compiled* chart` section that follows still
       reads correctly now that three artifacts precede it rather than two.
-- [ ] No Appendix D-named function was touched (this phase changes no `lib/`
+- [x] No Appendix D-named function was touched (this phase changes no `lib/`
       file - confirm by `git diff --stat`).
-- [ ] No regressions in related features.
+- [x] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution,

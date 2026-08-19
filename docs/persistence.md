@@ -233,12 +233,14 @@ gives positions.
 
 ## Explicitly not the *compiled* chart
 
-What is still never persisted, in either shape above, is the *compiled*
-`%Statifier.Machine{}` struct. `Position.to_binary/1` refuses to encode one
-at all (`{:error, :unidentified_chart}` for an unidentified chart, and the
-compiled chart is never written to the blob for an identified one either),
-and `Statifier.Chart.to_binary/1` refuses the same way for the same reason -
-see
+What is still never persisted, in any of the three shapes above, is the
+*compiled* `%Statifier.Machine{}` struct. `Position.to_binary/1` refuses to
+encode one at all (`{:error, :unidentified_chart}` for an unidentified
+chart, and the compiled chart is never written to the blob for an identified
+one either), and `Statifier.Chart.to_binary/1` and
+`Statifier.Session.Recording.to_binary/1` refuse the same way for the same
+reason - a recording's blob nests the chart's, so it inherits the refusal
+rather than restating it - see
 [ADR-0052 decision 3](adr/0052-chart-identity-and-position-serialization.md)
 and its
 [st-i7y7 amendment](adr/0052-chart-identity-and-position-serialization.md).
