@@ -999,13 +999,18 @@ defmodule Statifier.Compiler do
   # uncompiled path string (`Machine.Invoke.idlocation`'s own reasoning: a
   # location path cannot be resolved any earlier than execute time). Any
   # single compile failure - `event`/`target`/`type`/`delay`, `<content
-  # expr>`, a `<param>`, or a `namelist` entry - stops the `with` and is
-  # returned whole, mirroring `%DLog{}`'s own single-error shape rather than
-  # `%DIf{}`'s multi-error `collect/1` merge: unlike an `<if>`'s independent
-  # branches, `<send>`'s own attributes have no reason to keep compiling
-  # once one of them is already known bad.
+  # expr>`, or a `<param>` - stops the `with` and is returned whole,
+  # mirroring `%DLog{}`'s own single-error shape rather than `%DIf{}`'s
+  # multi-error `collect/1` merge: unlike an `<if>`'s independent branches,
+  # `<send>`'s own attributes have no reason to keep compiling once one of
+  # them is already known bad. A `namelist` entry is the one exception: it no
+  # longer stops the `with` at all, because `build_send_namelist/3` defers a
+  # compile failure onto the entry as `{:invalid, error}` instead of
+  # returning it (5.9.4 deferral, see `Statifier.Machine.Param`) - it is
+  # built as a plain binding before the `with`, not one of its clauses.
   defp build_content_node(c_index, %DSend{} = send_node) do
     owner = {:content, c_index}
+    namelist = build_send_namelist(send_node.namelist, send_node, owner)
 
     with {:ok, event_expr} <-
            build_send_pair(send_node.event, send_node.eventexpr, :eventexpr, send_node, owner),
@@ -1016,8 +1021,7 @@ defmodule Statifier.Compiler do
          {:ok, delay_expr} <-
            build_send_pair(send_node.delay, send_node.delayexpr, :delayexpr, send_node, owner),
          {:ok, content_expr} <- build_send_content(send_node.content, owner),
-         {:ok, params} <- build_send_params(send_node.params, owner),
-         {:ok, namelist} <- build_send_namelist(send_node.namelist, send_node, owner) do
+         {:ok, params} <- build_send_params(send_node.params, owner) do
       {:ok,
        %MSend{
          c_index: c_index,
@@ -1149,18 +1153,18 @@ defmodule Statifier.Compiler do
   # `%DParam{}` - mirrors `build_invoke_namelist/4`'s own reasoning: the
   # entry's own text doing double duty as both `MParam.name` and the source
   # to compile (`kind: :location`). The whole `namelist` attribute shares
-  # one written span - there is no per-entry span to point at instead.
+  # one written span - there is no per-entry span to point at instead. A
+  # compile failure no longer stops this function: it defers to `{:invalid,
+  # error}` on the entry (`build_namelist_param/5`), so this can never return
+  # `{:error, _}` and has nothing to `collect/1`.
   @spec build_send_namelist(
           namelist :: [String.t()],
           send_node :: DSend.t(),
           owner :: Expressions.owner_ref()
-        ) :: {:ok, [MParam.t()]} | {:error, [Error.t()]}
+        ) :: [MParam.t()]
   defp build_send_namelist(namelist, send_node, owner) do
     location = send_attr_location(send_node, :namelist)
-
-    namelist
-    |> Enum.map(&build_param(&1, send_node.location, :location, &1, location, owner))
-    |> collect()
+    Enum.map(namelist, &build_namelist_param(&1, send_node.location, &1, location, owner))
   end
 
   # `send_node.attribute_locations[attr]`'s value span when the author wrote
@@ -1451,6 +1455,39 @@ defmodule Statifier.Compiler do
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # A `namelist` entry is a location expression (6.2.2, 6.4.1, both pointing at
+  # 5.9.2), compiled exactly as `build_param/6` compiles one - but a compile
+  # failure is captured as `{:invalid, error}` on the `%MParam{}` instead of
+  # being returned, the same deferral shape `<data expr>` (:1744), `<assign
+  # expr>` (:949) and `<script>` (:976, :1194) already use. 5.9.4 permits
+  # either timing and `docs/datamodel.md` records this engine's leaning toward
+  # deferral; deferring is what lets ADR-0036's discard and ADR-0031's abort
+  # actually run instead of being preempted by an unloadable document
+  # (test553, test554). `<param>` is deliberately not deferred - see the
+  # per-element-class policy in docs/datamodel.md.
+  @spec build_namelist_param(
+          name :: String.t(),
+          location :: Location.t(),
+          source :: String.t(),
+          expr_location :: Location.t(),
+          owner :: Expressions.owner_ref()
+        ) :: MParam.t()
+  defp build_namelist_param(name, location, source, expr_location, owner) do
+    expr =
+      case Expressions.compile(source, owner, expr_location) do
+        {:ok, expr} -> expr
+        {:error, error} -> {:invalid, error}
+      end
+
+    %MParam{
+      name: name,
+      kind: :location,
+      expr: expr,
+      expr_location: expr_location,
+      location: location
+    }
   end
 
   # `attribute_locations[:expr]` when `expr` was written,
