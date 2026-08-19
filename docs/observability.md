@@ -218,7 +218,9 @@ promotion path.
   session's current recording produces exactly the messages the session has
   notified so far - which generalizes the end-of-run equality
   `test/statifier/replay_round_trip_test.exs` asserts to every quiescent
-  point.
+  point. For a session started with `resume:`, the catch-up prefix begins at
+  the resumed position rather than at the chart's initial configuration; see
+  [docs/persistence.md](persistence.md#resuming-a-session).
   Observation is per session, and an invoke tree is a tree of sessions: `Statifier.Session.start_link/2`'s
   `:inherit_observers` (ADR-0050) starts each invoked child with the
   parent's `:trace` and subscribers so one attach at the root covers the

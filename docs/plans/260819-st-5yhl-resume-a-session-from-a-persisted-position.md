@@ -805,13 +805,13 @@ is a capability v1 never had, so it qualifies under `changelog.d/README.md`'s
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (this phase's gate). A docs-and-fragment
+- [x] `mix quality` is fully green (this phase's gate). A docs-and-fragment
       change runs the gate anyway; the ADR guard and doc stages are the ones
       with something to say.
-- [ ] `mix quality --format json --report -` is clean, for a looped runner to
+- [x] `mix quality --format json --report -` is clean, for a looped runner to
       route on.
-- [ ] `changelog.d/st-5yhl.md` exists and `CHANGELOG.md` is untouched.
-- [ ] No `docs/adr/` renumbering: `mix adr.check` still reports no
+- [x] `changelog.d/st-5yhl.md` exists and `CHANGELOG.md` is untouched.
+- [x] No `docs/adr/` renumbering: `mix adr.check` still reports no
       `adr-0058-readme-index` finding.
 
 #### Manual Verification:
@@ -988,6 +988,27 @@ blocking here.
       session is reachable at its pre-resume id (exercised by hand once).
 - [ ] The refusal messages read as actionable instructions to a host, not as
       internal atoms.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 5
+
+- [ ] A host who has read only `docs/persistence.md` could resume a session,
+      and would know which of their own obligations (timers, children,
+      unacknowledged inbox events) they still own.
+- [ ] Every non-restoration item names *why* it cannot be restored, not just
+      that it is not.
+- [ ] The house style of `docs/persistence.md` is matched (its existing
+      hyphenation and heading conventions), not converted.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
