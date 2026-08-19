@@ -55,7 +55,8 @@
 | [0051](0051-invoke-handlers-are-registered-per-session.md) | Invoke handlers are registered per session; the registered invoke-type set becomes core-visible deployment state | accepted |
 | [0052](0052-chart-identity-and-position-serialization.md) | Chart identity is a content hash of the SCXML source; a position blob carries identity and a format version, checked before use | accepted |
 | [0053](0053-chart-test-helpers-ship-in-lib-under-statifier-testing.md) | The chart-author test helpers ship in `lib/` under `Statifier.Testing` | accepted (amends 0006 in part) |
-| [0052](0052-durable-timers-consume-the-effect-vocabulary.md) | Durable timers consume the effect vocabulary; the host owns keying and the 6.2 discard | accepted (amended 2026-08-19: decisions 2, 3, and 4 corrected) |
+| [0052](0052-durable-timers-consume-the-effect-vocabulary.md) | Durable timers consume the effect vocabulary; the host owns keying and the 6.2 discard | accepted (amended 2026-08-19: decisions 2, 3, and 4 corrected; decision 2's recorded gap decided by 0053) |
+| [0053](0053-non-self-delayed-send-routes-stay-the-librarys.md) | Non-self delayed-send routes stay the library's: `#_parent`/`#_invokeid`/`#_internal` permanently, the external-session route deferred with a named trigger; no route field joins `%SendDelayed{}` | accepted (decides 0052's recorded gap) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`.

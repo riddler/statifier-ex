@@ -533,22 +533,40 @@ any authority an agent currently holds here. See the open questions.
    branch; no row addresses acting inside another repository, and initializing a
    beads database there is a new tracker, not a task. Treated as unauthorized
    and untouched for this research. A human's call.
+
+   **Settled (2026-08-19):** Yes, on an explicit human ask this session -
+   not by an agent deciding it was allowed. `statifier_oban` now holds a mix
+   project, a `.gitignore`-only first commit, and a beads database under the
+   `sob` prefix. The standing rule is unchanged: no agent acts inside another
+   repository without being asked to, and this question was answered by the
+   asking, not by the reasoning.
 2. **Does the in-repo half warrant its own bead?** st-rsyx is chartered for
    transfer, but AC clause 3 (the durable-timers recipe) is deliverable here and
    will be orphaned if the bead moves before it is written. Splitting an
    `area:docs` bead for the recipe, leaving the charter to transfer intact, is
    the obvious shape - but filing it is a scheduling decision, not a research
    finding.
+
+   **Settled (2026-08-19):** Yes. `st-ifa3` carries the recipe and owns the
+   three commits on this branch; `st-rsyx` stays the charter and transfers to
+   the `sob` tracker unencumbered.
 3. **New doc, or widen `docs/extending.md`?** extending.md is the only
    host-facing recipe-shaped doc and already addresses the process-less durable
    host (`:43-49`), but its title and scope are `<invoke>` handlers
    specifically. Evidence points both ways; not settled here.
+
+   **Settled (2026-08-19):** A new document, `docs/durable-timers.md`.
+   `docs/extending.md` keeps its `<invoke>` scope and gained exactly one
+   cross-reference sentence.
 4. **Does the recipe need an ADR?** ADR-0003's Consequences already sanction the
    pattern by name, which argues no. Against: nothing today states the
    effect-vocabulary-versus-instruction-vocabulary boundary for a *timer*
    consumer, nor what replaces spec 6.2's discard-on-termination when the
    scheduler is external. Those are contract statements, and this project puts
    contract statements in ADRs.
+
+   **Settled (2026-08-19):** Yes - ADR-0052, amended the same day for the
+   plan critic's findings.
 5. **How should uniqueness be keyed?** The charter says "unique per send id",
    but `send_counter` restarts at 0 per `%MachineState{}`
    ([`lib/statifier/machine_state.ex:349`](https://github.com/riddler/statifier-ex/blob/f7fcaa83c7835b857ff6ce727df6831f167646e7/lib/statifier/machine_state.ex#L349)), so `send_id` is unique only within a
@@ -556,13 +574,31 @@ any authority an agent currently holds here. See the open questions.
    states that as a rule or the package decides it is unresolved - and it
    partly depends on st-m5c3 (Machine identity / serialization contract), which
    st-q6xl already depends on.
+
+   **Settled (2026-08-19):** Two compound keys, not one, recorded as ADR-0052
+   decision 3. Cancellation is `{session scope, send_id}` and legitimately
+   matches many rows; deduplication is `{session scope, send_id, macrostep,
+   microstep, round, c_index, owner}`. Session scoping is mandatory for the
+   reason this question names. The `<foreach>` residual the key cannot resolve
+   is filed as `st-q6b6`.
 6. **What is the documented substitute for spec 6.2's discard-on-termination?**
    `terminate/2` cancels every pending timer so nothing scheduled survives the
    process ([`lib/statifier/session.ex:1182-1201`](https://github.com/riddler/statifier-ex/blob/f7fcaa83c7835b857ff6ce727df6831f167646e7/lib/statifier/session.ex#L1182-L1201)). An external scheduler
    deliberately inverts that. Whether the recipe prescribes a cancel-on-run-end
    hook, a validity check at fire time, or leaves it to the host is open.
+
+   **Settled (2026-08-19):** A host-side liveness check at fire time, recorded
+   as ADR-0052 decision 4: registry lookup first, then `status/1`, discarding
+   the message unless the session is live. "Live" excludes a halted session as
+   well as a terminated one. Cancel-on-run-end is best-effort only, because the
+   node death this feature exists to survive takes any termination hook with it.
 7. **Is a "no clock in the core" invariant worth mechanizing?** Finding 3 shows
    it holds today by construction and by review, but nothing in the gate
    enforces it. The charter treats it as a scope bullet; this repo has a habit
    of turning such claims into checks (ADR-0011's guard ledger, `mix gate.check`).
    Not proposed here - noted as unmeasured.
+
+   **Settled (2026-08-19):** Not mechanized, and deliberately not filed.
+   ADR-0011 makes gate configuration a human's call on the record, so an agent
+   proposing a new gate check here would be the exact move that ADR forbids.
+   The invariant holds by construction today and stays a review item.

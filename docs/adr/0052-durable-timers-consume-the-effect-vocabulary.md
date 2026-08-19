@@ -1,6 +1,6 @@
 # ADR-0052: Durable timers consume the effect vocabulary
 
-Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:57-58's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected)
+Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:58-59's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected) - decision 2's recorded gap decided by ADR-0053 (2026-08-19: the limit is standing for `#_parent`/`#_invokeid`/`#_internal`, deferred with a named trigger for the external-session route)
 
 ## Context
 
@@ -18,7 +18,7 @@ defines the shape it schedules" (`lib/statifier/effect/send_delayed.ex:5-7`).
 A live host reads both effects off `Statifier.Session.subscribe/2,3`
 (`lib/statifier/session.ex:676-719`); a process-less host reads them off the
 `[effect]` half of `Statifier.Interpreter`'s return, the audience
-`docs/extending.md:43-49` already names. The fired event re-enters through
+`docs/extending.md:44-50` already names. The fired event re-enters through
 `Statifier.Session.send_event/2` (`lib/statifier/session.ex:530-536`).
 
 `Statifier.Session` is one executor of that seam, not the seam itself.
@@ -37,7 +37,7 @@ interpreter (e.g. queue delayed sends into Oban instead of process timers)"
 reopen that sanction. It discharges it with rules ADR-0003 never stated,
 because three questions have no recorded answer anywhere in this repository:
 
-1. **Which vocabulary a timer consumer reads.** `docs/extending.md:57-58`
+1. **Which vocabulary a timer consumer reads.** `docs/extending.md:58-59`
    already declares the instruction vocabulary opaque outside the library,
    with `{:handler, __MODULE__, payload}` the sole exception: "The
    instruction vocabulary a planning callback returns is opaque outside the
@@ -75,7 +75,7 @@ instruction vocabulary.** The two consumption points are
 `{:send_delayed, %SendDelayed{}}` and `{:cancel, %Cancel{}}`
 (`lib/statifier/effect.ex:120-147`). `{:schedule, ...}` and
 `{:cancel_timers, ...}` (`lib/statifier/session/effects.ex:161-174`) remain
-opaque, which is `docs/extending.md:57-58`'s existing rule applied to this
+opaque, which is `docs/extending.md:58-59`'s existing rule applied to this
 consumer rather than a new one. The charter's own scope wording ("honoring
 cancel (the cancel_timers instruction)") is corrected by this decision: it
 names the opaque half, and the effect - `{:cancel, %Cancel{}}` - is what a
@@ -248,6 +248,9 @@ instead.
   rides on the opaque `{:schedule, ...}` instruction, not on the
   `%SendDelayed{}` effect. This gap is recorded here, not only in the plan
   that produced this amendment, so it is discoverable from the ADR itself.
+  *(Decided by ADR-0053, 2026-08-19: standing for
+  `#_parent`/`#_invokeid`/`#_internal` on semantic grounds; deferred with a
+  named trigger for an external session id.)*
 - This constrains `statifier_oban` before it is written: its uniqueness
   design is decided here, not there. A package that keys stored jobs on
   `send_id` alone, or that treats the cancellation key and the dedup key as

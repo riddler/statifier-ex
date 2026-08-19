@@ -68,7 +68,7 @@ These are the **only** two things a durable-timer host reads. The instruction
 vocabulary - `{:schedule, ...}` and `{:cancel_timers, ...}`
 (`lib/statifier/session/effects.ex:161-174`) - is not yours to read, even
 though the two names look like an obvious match for "schedule a timer" and
-"cancel a timer." `docs/extending.md:57-58` already states the general rule:
+"cancel a timer." `docs/extending.md:58-59` already states the general rule:
 "The instruction vocabulary a planning callback returns is opaque outside the
 library." ADR-0052 decision 1 applies that same rule to the timer case by
 name, because `{:schedule, ...}` and `{:cancel_timers, ...}` are how
@@ -103,8 +103,15 @@ outside the session that reconstructs any of this for `#_parent`,
 `%SendDelayed{}` whose `target` is `nil`, and **ignore** (leave to the
 library) any other target - the effect stream is observational, so ignoring
 one costs nothing and the session's own `Process.send_after/3` still fires it.
-This is a real gap, not an oversight; see Open Question 1 in ADR-0052's
-Consequences.
+This is a deliberate limit, decided rather than pending:
+`docs/adr/0053-non-self-delayed-send-routes-stay-the-librarys.md` makes it
+permanent for `#_parent`, `#_invokeid`, and `#_internal` (those routes name
+the sending session's live process bookkeeping, which a durable timer by
+definition outlives) and defers the external-session route behind a named
+trigger. If your document wants a durable delayed send to reach its parent
+or an invoked child, restructure it: delay a send to yourself, and let the
+transition it triggers do an immediate `<send target="#_parent">` from the
+live session.
 
 `{:halted, reason}` is end-of-stream on this subscriber channel (ADR-0044
 decision 2, `lib/statifier/session.ex:483`): once you see it, no further
@@ -199,7 +206,7 @@ whatever else is already waiting and processed in that order.
 If you are not running `Statifier.Session` at all - driving
 `Statifier.Interpreter` directly against a persisted `%MachineState{}` - you
 read the same two effects off the `[effect]` half of the interpreter's
-return instead of subscribing to anything. `docs/extending.md:43-49`
+return instead of subscribing to anything. `docs/extending.md:44-50`
 describes the same audience for `<invoke>` handlers: "This is what lets a
 durable host that drives `Statifier.Interpreter` directly, with no
 `Statifier.Session` process at all, plan invocations the same way
@@ -391,5 +398,5 @@ The chartered `statifier_oban` package is the packaged consumer of exactly
 this recipe - an Oban-backed implementation of Route A, keyed and
 liveness-checked per ADR-0052. If you are building an invoke handler
 alongside your durable timers, its own at-least-once contract lives in
-`docs/extending.md:177-189` ("At-least-once: handlers must be idempotent"),
+`docs/extending.md:178-190` ("At-least-once: handlers must be idempotent"),
 not here - the two seams share a host but not a rulebook.

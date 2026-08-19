@@ -1002,21 +1002,42 @@ revision was written and none of them blocks Phase 3.
    durable host cannot today redeliver a `#_parent`, `#_invokeid`, `#_internal`,
    or external-session delayed send, because the resolved route rides on the
    opaque `{:schedule, ...}` instruction and the delivered `%Statifier.Event{}`
-   is built inside the session. Closing this would mean either putting the
-   resolved route on `%SendDelayed{}` or opening a public delivery door - both
-   `lib/` changes, both needing their own bead and their own ADR. **Recommended
+   is built inside the session. Closing this would mean either putting
+   the resolved route on `%SendDelayed{}` or opening a public delivery
+   door - both `lib/` changes, both needing their own bead and their own ADR. **Recommended
    follow-up:** file an `area:docs`-adjacent `lib/` bead for it. Not filed here,
    because filing it is a scoping decision about the seam rather than a
    correction to this plan.
+
+   **Settled (2026-08-19):** Decided at the direction level and recorded as
+   ADR-0053, `docs/adr/0053-non-self-delayed-send-routes-stay-the-librarys.md`.
+   `#_parent`, `#_invokeid`, and `#_internal` stay the library's permanently, on
+   semantic grounds: each names the sending session's live process bookkeeping,
+   which a durable timer outlives by definition. The external-session route is
+   deferred behind a named trigger rather than foreclosed. No resolved-route
+   field joins `%SendDelayed{}` - `Statifier.Send.Target.parse/1` is already
+   public, pure, and deterministic, so a host can reproduce the planner's
+   resolution; what is genuinely missing is the delivered-event construction and
+   the delivery/miss doors, not route visibility. ADR-0053 carries its own open
+   question about `error.communication` when a fired non-self send misses and
+   the sending session is gone.
 2. **The `<foreach>` dedup residual.** The workaround (do not author an `id` on
    a `<send delay>` inside a `<foreach>`) is a documented constraint on the
    state chart author, not a property of the library. Whether the library should
    grow a per-execution ordinal on `%SendDelayed{}` is a `lib/` question for its
    own bead.
+
+   **Settled (2026-08-19):** Filed as `st-q6b6` (P3, `area:interpreter`),
+   which depends on `st-ifa3`. The documented constraint stands in ADR-0052
+   and `docs/durable-timers.md` until that bead decides otherwise.
 3. **ADR-0051's missing index row** in `docs/adr/README.md`, found during the
    original plan review and declined as an unrelated change (see "What We're NOT
    Doing"). Still open, still declined here, still wants its own one-line
    `area:docs` chore.
+
+   **Settled (2026-08-19):** Filed as `st-8pya` (P4, `area:docs`). Still
+   declined on this branch - backfilling it here is the unrelated change the
+   plan refused, and it needs its own branch.
 
 ---
 
@@ -1122,20 +1143,20 @@ then Phase 3's own.
 
 ### Phase 1
 
-- [ ] The Context section's every `file:line` reference resolves to what it
+- [x] The Context section's every `file:line` reference resolves to what it
       claims, checked by opening each one.
-- [ ] Decision 4's spec quotation matches the local cache verbatim - read it
+- [x] Decision 4's spec quotation matches the local cache verbatim - read it
       from
       `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/scxml-rec.html`,
       not from memory, per the CLAUDE.md convention.
-- [ ] Decision 1 does not contradict `docs/extending.md:57-58`; it restates that
+- [x] Decision 1 does not contradict `docs/extending.md:57-58`; it restates that
       rule for a second consumer, and a reader of both should see one rule, not
       two.
-- [ ] Decision 3's dedup key really is deterministic across a re-run - confirm
+- [x] Decision 3's dedup key really is deterministic across a re-run - confirm
       by reading `lib/statifier/machine/content/send.ex:383-389` and
       `lib/statifier/effect/send_delayed.ex:11-13` that no clock, no CSPRNG, and
       no pid enters any component.
-- [ ] No regressions in related features: nothing in `lib/` or `test/` changed,
+- [x] No regressions in related features: nothing in `lib/` or `test/` changed,
       so this is a diff review rather than a behavioral check.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run the
@@ -1150,7 +1171,7 @@ end instead of blocking here.
 
 ### Phase 2
 
-- [ ] Each Elixir snippet in the guide is checked by hand against the real
+- [x] Each Elixir snippet in the guide is checked by hand against the real
       signatures - `subscribe/2,3` (`lib/statifier/session.ex:676-719`),
       `send_event/2` (`:530-536`), and the two effect structs
       (`lib/statifier/effect/send_delayed.ex:25-54`,
@@ -1158,13 +1179,13 @@ end instead of blocking here.
       are not compiled by the gate, so a wrong arity or a renamed field ships
       silently; this check is the only thing standing between the reader and
       that.
-- [ ] The end-state acceptance read: someone who has not seen `lib/` can name,
+- [x] The end-state acceptance read: someone who has not seen `lib/` can name,
       from this document alone, the two effects, the door back in, the compound
       key, and the liveness check.
-- [ ] The guide contradicts nothing in ADR-0052 - read them side by side.
-- [ ] The `docs/extending.md` edit is genuinely one sentence and the document's
+- [x] The guide contradicts nothing in ADR-0052 - read them side by side.
+- [x] The `docs/extending.md` edit is genuinely one sentence and the document's
       scope is unchanged.
-- [ ] No regressions in related features: the diff is documentation only.
+- [x] No regressions in related features: the diff is documentation only.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run the
 full `mix quality` plus `mix gate.verify` as the phase gate. `--profile merge`
@@ -1178,22 +1199,22 @@ items are deferred to the end.
 
 ### Phase 3
 
-- [ ] Amended decision 2 is read against `lib/statifier/session/effects.ex:270-288`,
+- [x] Amended decision 2 is read against `lib/statifier/session/effects.ex:270-288`,
       `lib/statifier/session.ex:1829-1833`, and `effects.ex:392-399`/`:414-427`
       side by side, and claims nothing those four passages do not support.
-- [ ] Amended decision 3 is read against `lib/statifier/effect/send_delayed.ex:33-34`
+- [x] Amended decision 3 is read against `lib/statifier/effect/send_delayed.ex:33-34`
       and `lib/statifier/machine/content/foreach.ex:320-340`, confirming that
       `c_index` is a static document-order identity and therefore that the
       `<foreach>` residual is real rather than hypothetical.
-- [ ] Amended decision 4's two-step check is read against
+- [x] Amended decision 4's two-step check is read against
       `lib/statifier/session.ex:644-645` and `:155-160`, confirming that the
       first step never calls into a possibly-dead process.
-- [ ] The guide and the amended ADR are read side by side and agree on all four
+- [x] The guide and the amended ADR are read side by side and agree on all four
       decisions.
-- [ ] The amendment markers read like the ones already in the corpus - compare
+- [x] The amendment markers read like the ones already in the corpus - compare
       against `docs/adr/0035-send-id-is-a-machinestate-counter.md:3` and `:84`,
       and against the 0008 and 0014 rows in `docs/adr/README.md`.
-- [ ] No regressions in related features: the diff is documentation only.
+- [x] No regressions in related features: the diff is documentation only.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run the
 full `mix quality` plus `mix gate.verify` plus `mix quality --profile merge` as
