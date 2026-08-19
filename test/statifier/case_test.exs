@@ -259,6 +259,41 @@ defmodule Statifier.Testing.CaseTest do
       assert :ok = Case.test_scxml(xml, "delayed final", ["done"], [])
     end
 
+    # A permanent 200ms guard timer keeps `pending_timers != 0` for the whole
+    # 50ms `:configuration_deadline_ms` window below, so `poll_until_settled/4`
+    # can only exit through the deadline clause - never through the "cannot
+    # change again" stability exit, which needs `pending_timers == 0`.
+    #
+    # sabotage: `poll_until_settled/4`'s
+    # `System.monotonic_time(:millisecond) >= deadline -> observed` clause is
+    # changed to `System.monotonic_time(:millisecond) >= :infinity -> observed`
+    # (a condition that can never be true) -> the loop never exits on its own
+    # and the test hangs instead of failing cleanly, so it was run under a
+    # shell-level `timeout` to observe the red. Reverted and confirmed green.
+    test "exits the poll on its deadline when the expected configuration is never reached" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="loop">
+          <state id="loop">
+              <onentry>
+                  <send event="tick" delay="200ms"/>
+              </onentry>
+              <transition event="tick" target="loop"/>
+          </state>
+      </scxml>
+      """
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          Case.test_scxml(xml, "unreachable configuration", ["unreachable"], [],
+            configuration_deadline_ms: 50
+          )
+        end
+
+      assert error.message =~ "Expected active states"
+      assert error.message =~ "unreachable"
+      assert error.message =~ "loop"
+    end
+
     # The invoke sits behind a transition rather than on the initial state:
     # `Statifier.start_session/2`'s own `DynamicSupervisor.start_child/2`
     # call is still in flight (waiting on this session's own `init/1`) until

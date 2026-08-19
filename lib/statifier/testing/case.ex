@@ -114,12 +114,12 @@ defmodule Statifier.Testing.Case do
   # out a pending timer before the *next* event drains the first population and
   # never the second. Costs nothing when no timer is pending, which is most of
   # the corpus.
-  @settle_window_ms 100
+  @default_settle_window_ms 100
 
   # The longest load-bearing delay in the corpus is 1.5s
   # (mandatory/cancel/test208). 4s clears it with margin. This bounds only the
   # wrong answer: a chart that cannot change again exits the poll immediately.
-  @configuration_deadline_ms 4_000
+  @default_configuration_deadline_ms 4_000
   @poll_interval_ms 5
 
   @doc """
@@ -130,21 +130,38 @@ defmodule Statifier.Testing.Case do
   - `expected_initial_config` - active leaf state IDs expected after initialize
   - `events` - list of `{event_map, expected_states}` tuples, where `event_map`
     carries the event name under `"name"`
+  - `opts` - see `Options` below
 
   Flunks with the feature named if the document depends on an SCXML feature v2
   does not support yet, rather than reporting a false pass.
+
+  ## Options
+
+  Both default to values tuned for this repo's conformance corpus. A downstream
+  chart whose load-bearing delay is longer than the corpus's needs the knob.
+  Both are ignored on the synchronous path, which has no timing to tune.
+
+  - `:settle_window_ms` (default `#{@default_settle_window_ms}`) - how long to
+    wait for pending timers to drain before sending the next event. Long enough
+    to drain load-bearing intermediate delays, short enough never to let a guard
+    send fire.
+  - `:configuration_deadline_ms` (default
+    `#{@default_configuration_deadline_ms}`) - upper bound on waiting for a
+    session to reach an expected configuration. Bounds only the wrong answer: a
+    chart that cannot change again exits the poll immediately.
   """
   @spec test_scxml(
           xml :: String.t(),
           description :: String.t(),
           expected_initial_config :: [String.t()],
-          events :: [{map(), [String.t()]}]
+          events :: [{map(), [String.t()]}],
+          opts :: keyword()
         ) :: :ok
-  def test_scxml(xml, description, expected_initial_config, events) do
+  def test_scxml(xml, description, expected_initial_config, events, opts \\ []) do
     detected = validate_features!(xml, description)
 
     if session_required?(detected) do
-      drive_through_session(xml, expected_initial_config, events)
+      drive_through_session(xml, expected_initial_config, events, opts)
     else
       drive_synchronously(xml, expected_initial_config, events)
     end
@@ -184,17 +201,17 @@ defmodule Statifier.Testing.Case do
   # harness stops each one itself - which is also what cancels any guard timer
   # still pending when the test ends (`terminate/2`, spec 6.2's
   # discard-on-termination).
-  defp drive_through_session(xml, expected_initial_config, events) do
+  defp drive_through_session(xml, expected_initial_config, events, opts) do
     machine = parse_document(xml)
     {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
 
     try do
-      assert_configuration_eventually(session, expected_initial_config)
+      assert_configuration_eventually(session, expected_initial_config, opts)
 
       Enum.each(events, fn {%{"name" => name}, expected_states} ->
-        settle_short_timers(session)
+        settle_short_timers(session, opts)
         :ok = Session.send_event(session, name)
-        assert_configuration_eventually(session, expected_states)
+        assert_configuration_eventually(session, expected_states, opts)
       end)
     after
       Session.stop(session)
@@ -214,9 +231,13 @@ defmodule Statifier.Testing.Case do
   # own comment explains the debounce); or the deadline. Then performs the
   # ordinary `assert_every_leaf_named/2` plus set-equality assertion, so a
   # failure message is identical in shape to the synchronous path's.
-  defp assert_configuration_eventually(session, expected_state_ids) do
+  defp assert_configuration_eventually(session, expected_state_ids, opts) do
     expected = MapSet.new(expected_state_ids)
-    deadline = System.monotonic_time(:millisecond) + @configuration_deadline_ms
+
+    configuration_deadline_ms =
+      Keyword.get(opts, :configuration_deadline_ms, @default_configuration_deadline_ms)
+
+    deadline = System.monotonic_time(:millisecond) + configuration_deadline_ms
 
     observed = poll_until_settled(session, expected, deadline)
     actual = active_leaf_states(observed)
@@ -273,16 +294,18 @@ defmodule Statifier.Testing.Case do
     end
   end
 
-  # `settle_short_timers/1` returns immediately when `status.pending_timers ==
-  # 0`, and otherwise polls until it reaches 0 or `@settle_window_ms` elapses -
-  # draining the load-bearing intermediate delays (1ms/2ms/10ms) before the
-  # next event is sent, and never a guard send timed to outlive the test.
-  defp settle_short_timers(session) do
-    deadline = System.monotonic_time(:millisecond) + @settle_window_ms
-    settle_short_timers(session, deadline)
+  # `settle_short_timers/2` returns immediately when `status.pending_timers ==
+  # 0`, and otherwise polls until it reaches 0 or `:settle_window_ms` (default
+  # `@default_settle_window_ms`) elapses - draining the load-bearing
+  # intermediate delays (1ms/2ms/10ms) before the next event is sent, and
+  # never a guard send timed to outlive the test.
+  defp settle_short_timers(session, opts) do
+    settle_window_ms = Keyword.get(opts, :settle_window_ms, @default_settle_window_ms)
+    deadline = System.monotonic_time(:millisecond) + settle_window_ms
+    settle_short_timers_until(session, deadline)
   end
 
-  defp settle_short_timers(session, deadline) do
+  defp settle_short_timers_until(session, deadline) do
     if Session.status(session).pending_timers == 0 do
       :ok
     else
@@ -290,7 +313,7 @@ defmodule Statifier.Testing.Case do
         :ok
       else
         Process.sleep(@poll_interval_ms)
-        settle_short_timers(session, deadline)
+        settle_short_timers_until(session, deadline)
       end
     end
   end
