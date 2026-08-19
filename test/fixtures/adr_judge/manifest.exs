@@ -68,9 +68,11 @@
       "the exit-set trace's counters are stamped from the post-departure state ... " <>
         "the six-line ADR-0012 comment naming the rule is left in place, so the only " <>
         "signal is the stamp swap itself. Measured a FALSE NEGATIVE by hand on " <>
-        "2026-08-18 (st-ntf5) against the real CLI; landed under st-xsb1 as the row " <>
-        "that isolates that gap. No gate path runs this row - next measured in " <>
-        "docs/plans/260818-st-xsb1-adr-0012-pre-mutation-fixture.md Phase 3"
+        "2026-08-18 (st-ntf5) against the real CLI, which is why ADR-0012 grew its " <>
+        "pre-mutation-stamping amendment under st-xsb1. Re-measured 2026-08-18 " <>
+        "against the amended rubric at seeds 101/202/303 on claude-sonnet-5: caught " <>
+        "on all three. The gap this row isolates is closed; it now guards against " <>
+        "the amendment being dropped. No gate path runs this row"
   },
   %{
     key: "adr-0012-debuggability",

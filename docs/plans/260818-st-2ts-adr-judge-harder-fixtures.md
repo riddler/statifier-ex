@@ -1018,6 +1018,73 @@ is **4.2 of Decision 3's ceiling of 8**. Wall time was about 63 minutes, the
 bulk of it haiku's. No re-measurement was needed, so the 1.2-run reserve is
 unspent.
 
+##### Partial re-measurement, 2026-08-18 (st-xsb1)
+
+**This is a partial re-measurement, not a replacement.** It covers six
+ADR-0012 `:subtle` rows on one model (`claude-sonnet-5`); the ten-fixture,
+two-model tables above are the standing measurement and are not superseded.
+It was bought because st-xsb1 amended ADR-0012 with a sentence on pre-mutation
+stamping, and an amendment to the rubric text invalidates the prior ADR-0012
+numbers without saying which way.
+
+Same repeat policy as above: seeds 101/202/303, majority of three, flaps
+counted separately and never folded into the score.
+
+| Fixture | sonnet 101/202/303 | Prior (st-2ts) |
+|---|---|---|
+| `0012_trace_stamp_swapped_comment_kept.diff` (violation, new) | ok, ok, ok | FN (st-ntf5 hand-run, unamended) |
+| `0012_configuration_read_post_departure.diff` (clean, new) | ok, ok, ok | n/a |
+| `0012_trace_after_departure.diff` (violation) | ok, ok, ok | ok, FN, FN |
+| `0012_trace_prestate_captured.diff` (clean) | ok, ok, ok | ok, ok, ok |
+| `0012_location_precision_one_caller.diff` (violation) | FN, FN, FN | ok, FN, FN |
+| `0012_location_helper_extracted.diff` (clean) | ok, ok, ok | ok, ok, ok |
+
+| Slice | Model | FN (majority) | FP (majority) | Flaps | Wall (mean) |
+|---|---|---|---|---|---|
+| ADR-0012 subtle, 6 rows (3 runs) | claude-sonnet-5 | 1/3 | 0/3 | 0/6 | 21.5s |
+
+**What the numbers say.**
+
+1. **The amendment closed the gap st-xsb1 was opened for.**
+   `0012_trace_stamp_swapped_comment_kept.diff` - the stamp swap with the
+   ADR-0012 comment left in place - was a measured false negative against the
+   unamended rubric (st-ntf5, hand-run). It is now caught unanimously. The
+   signal no longer depends on the diff also deleting the comment that names
+   the rule.
+2. **It carried `0012_trace_after_departure.diff` with it**, from a majority
+   false negative (ok, FN, FN) to unanimous ok. Both rows turn on the same
+   question, so one sentence of ADR text fixing both is the expected shape.
+3. **No false positive was introduced.** The clean half deliberately reads
+   `configuration` post-mutation, which is exactly the read a judge that
+   over-learned "anything after the reduce is a violation" would flag. It is
+   clean on all three seeds, as is the pre-existing clean partner. This is the
+   specific risk the pair was added to detect, and it did not fire.
+4. **`0012_location_precision_one_caller.diff` remains the standing miss**, and
+   is now unanimous (3/3 FN) where st-2ts measured 2/3. It was already a
+   majority false negative on both models before this amendment, and st-2ts's
+   finding 4 diagnosed it as an ADR-text question - the record never says a
+   location must be the finest-grained one available - rather than a judge
+   failure. **The one-seed move from 2/3 to 3/3 is not separable from noise at
+   three runs**, against a measured flap rate of 3/10 in the standing tables.
+   It is reported, not explained; buying the runs that would separate the two
+   is a second measurement pass and is not budgeted.
+5. **Zero flaps across all six rows**, where the standing tables measured 3/10
+   on each model. Six rows is too small a sample to read as a trend, and it is
+   recorded rather than interpreted.
+
+**Provenance.** The runs were executed by an agent under explicit human
+authorization, not by a human at the keyboard. Phase 3's manual criterion asks
+that a human run every command; the human decided to start the phase and
+authorized the spend, and the agent ran the eighteen commands. The raw ExUnit
+output for all eighteen was read directly rather than summarized by the process
+that produced it. Recorded here as a deviation rather than ticked, so a later
+reader weighs these cells accordingly.
+
+**Spend.** 18 fixture-runs (6 fixtures x 3 seeds x 1 model) = **1.0
+corpus-equivalent**, drawn from the 1.2-run reserve this phase left unspent.
+Cumulative against Decision 3's ceiling of 8: **5.2**. Wall time was 6.4
+minutes. The budget was not exceeded and no fixture was re-run.
+
 ### Success Criteria:
 
 #### Automated Verification:

@@ -535,18 +535,37 @@ symptom. The check is on the record, not on the measurement, and it does not
 substitute for anything below.
 
 #### Manual Verification:
-- [ ] A human, not an agent, decided to start this phase and ran every command
-- [ ] Every recorded cell came from a real run - a command can see a table, only
-      a reader can see whether its cells were measured
-- [ ] The spend is recorded in corpus-equivalents next to Decision 3's ceiling
-      of 8, cumulative with st-2ts's 4.2
-- [ ] The budget above was not exceeded; if it was reached mid-measurement, the
-      partial scorecard was reported rather than the run continued
-- [ ] The entry is unambiguously labeled a partial re-measurement, and st-2ts's
+- [~] A human, not an agent, decided to start this phase and ran every command -
+      **half met, recorded as a deviation.** The human decided to start the
+      phase and authorized the spend; an agent ran the eighteen commands. The
+      deviation is written into the scorecard entry itself rather than ticked
+      away, so a later reader can weigh the cells. Noted 2026-08-18
+- [x] Every recorded cell came from a real run - every cell traces to one
+      `mix test --only fixture:<name> --seed <n>` invocation whose raw ExUnit
+      output was read directly; no cell was inferred from another
+- [x] The spend is recorded in corpus-equivalents next to Decision 3's ceiling
+      of 8, cumulative with st-2ts's 4.2 - 1.0 spent, cumulative 5.2 of 8
+- [x] The budget above was not exceeded; if it was reached mid-measurement, the
+      partial scorecard was reported rather than the run continued - 18 of 18
+      runs, no fixture re-run, no second model, no tier-wide selector
+- [x] The entry is unambiguously labeled a partial re-measurement, and st-2ts's
       existing tables are left standing
-- [ ] `docs/testing.md`'s mirrored row carries the same label
-- [ ] If the violation row is still missed, the finding is written down and no
-      further paid run was made
+- [x] `docs/testing.md`'s mirrored row carries the same label
+- [n/a] If the violation row is still missed, the finding is written down and no
+      further paid run was made - **change 4's branch was not taken.** The
+      violation half was caught on all three seeds, so there is no surviving
+      false negative to record for it. No further paid run was made either way
+
+**Outcome, 2026-08-18.** The amendment worked. Both ADR-0012 stamp-swap
+violation rows are now caught unanimously, including the one st-ntf5 measured
+as a false negative against the unamended rubric, and neither clean row drew a
+false positive - so the amendment did not buy its recall by teaching the judge
+that any post-reduce read is a violation, which was the specific failure the
+fixture pair exists to detect. `0012_location_precision_one_caller.diff` is
+still missed and is now unanimous where it was 2/3; it was already a majority
+false negative on both models before this amendment, st-2ts's finding 4 already
+diagnosed it as an ADR-wording question, and the one-seed move is not separable
+from noise at three runs. Full matrix and spend in st-2ts's Phase 5 subsection.
 
 **Implementation Note**: There is no `--loop` execution of this phase. An agent
 reaching it stops, reports that Phases 1 and 2 are complete, and states plainly
