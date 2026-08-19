@@ -37,10 +37,17 @@ defmodule Mix.Tasks.Adr.Check do
     * `--format json` - print the ExQuality finding contract instead of prose
 
   Exit status is 0 when nothing looks off, 1 when something does, and 2 when no
-  base ref resolves and there is nothing to diff against - which the stage's
-  `skip_exit_code: 2` turns into a skip with its own reason rather than a pass.
-  A diff that simply touches no `lib/` file is a pass, not a skip: there was
-  something to check and nothing was wrong with it.
+  base ref resolves - **but 2 no longer means nothing ran.** The
+  `docs/adr/` numbering invariant needs no base ref, so it runs regardless; 2
+  means only that the diff-based and base-ref checks had no base ref to run
+  against, and that the numbering invariant ran and was clean. Exit 1 is
+  possible with no base ref at all, when the numbering invariant itself finds
+  a collision - a duplicate number or a README bijection failure sitting in
+  the tree fails the stage whether or not `origin/main` resolves. The
+  `skip_exit_code: 2` stage config turns a real exit-2 skip into a reasoned
+  skip rather than a pass; a diff that simply touches no `lib/` file is a
+  pass, not a skip, since there was something to check and nothing was wrong
+  with it.
   """
 
   use Mix.Task
@@ -49,7 +56,8 @@ defmodule Mix.Tasks.Adr.Check do
 
   @switches [base: :string, format: :string]
 
-  @skip_reason "no base ref: neither origin/main nor main resolves"
+  @skip_reason "no base ref: neither origin/main nor main resolves; " <>
+                 "the docs/adr/ numbering invariant ran and is clean"
 
   @advice """
   Each finding names the ADR it is about; docs/adr/ has the reasoning. If the
@@ -87,7 +95,7 @@ defmodule Mix.Tasks.Adr.Check do
 
     case AdrGuard.collect(collect_opts(parsed, opts)) do
       {:ok, source} -> source |> AdrGuard.analyze() |> respond(json?)
-      :no_base_ref -> {:skip, skipped(json?)}
+      {:no_base_ref, source} -> source |> AdrGuard.analyze() |> respond_partial(json?)
       {:error, reason} -> {:error, failed(reason, json?)}
     end
   end
@@ -99,6 +107,17 @@ defmodule Mix.Tasks.Adr.Check do
   defp respond([], json?), do: {:ok, document("No likely ADR violations", [], json?)}
 
   defp respond(findings, json?), do: {:error, document(summary(findings), findings, json?)}
+
+  # The no-base-ref path: the tree-local numbering invariant still ran (it
+  # needs no base ref), so a real finding fails the stage exactly as it would
+  # with a base ref - a collision sitting in the tree is not excused by a
+  # missing origin/main. Only a clean tree-local result falls through to the
+  # skip, and the skip reason says what still ran so it is never mistaken for
+  # nothing having run at all.
+  defp respond_partial([], json?), do: {:skip, skipped(json?)}
+
+  defp respond_partial(findings, json?),
+    do: {:error, document(summary(findings), findings, json?)}
 
   defp summary(findings), do: "#{length(findings)} likely ADR #{violations(findings)}"
 
