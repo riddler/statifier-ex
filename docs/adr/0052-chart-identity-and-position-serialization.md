@@ -1,7 +1,9 @@
 # ADR-0052: Chart identity and position serialization
 
 Status: accepted (2026-08-19) - reaffirms ADR-0014 item 2's premise rather
-than amending it (decision 3 below)
+than amending it (decision 3 below) - amended 2026-08-19 (st-i7y7: decision
+3's corollary superseded; a chart blob carries source and compile opts,
+still no compiled term)
 
 ## Context
 
@@ -190,6 +192,84 @@ question both need their own argument - but it is a different struct with a
 different consumer and a different embedding decision already on record, so
 it is filed as its own follow-up (st-hz2a) rather than folded into this
 record by proximity.
+
+**Amendment (st-i7y7):** no compiled term of any kind is serialized by
+anything this amendment adds. Decision 3's literal rule and ADR-0014 item
+2's premise are both untouched, and neither needs its own amendment for
+that reason.
+
+What decision 3 also carried, unstated as its own clause, was an implicit
+corollary: that the library therefore ships no chart-level binary contract
+at all, and leaves "persist the source and recompile" as advice for every
+host to implement for itself. That corollary is what this amendment
+supersedes. `Statifier.Chart.to_binary/1` and `from_binary/1`
+(`lib/statifier/chart.ex`) mechanize that advice: a host calls one function
+to get a blob and one function to get a `Machine.t()` back, rather than
+inventing its own envelope around `Machine.source/1` and
+`Machine.compile_opts/1`.
+
+Encoding the compiled `Machine` itself was considered and rejected, for a
+reason worth recording here so the next reader does not re-derive it.
+Upstream, predicator's `compiled.ex:32-38` hazard is a *re-pairing* hazard:
+instructions and a span table stored separately, and re-paired against each
+other incorrectly on load. A whole-struct round trip of a `Machine.t()`
+cannot trigger that specific hazard, because there is nothing to re-pair -
+everything travels together in one term. But recompiling from source
+sidesteps a different hazard entirely: predicator ISA skew across a library
+upgrade. A build that recompiles the stored source always evaluates
+instructions it compiled itself, so there is no compiled-instruction format
+whose compatibility across a predicator version bump this library would
+ever need to reason about.
+
+`Statifier.Chart.to_binary/1` writes `machine.source` and
+`machine.compile_opts` verbatim, and `compile_opts` is filtered through the
+same closed allowlist `Statifier.compile/2` already stamps onto every
+`Machine` it produces: `:invoke_content_markup`, `:chart_name`,
+`:chart_version`. The allowlist is closed rather than open for a
+decode-safety reason, not a completeness one - `Identity.from_binary/1` and
+`Position.from_binary/2` already decode with `:erlang.binary_to_term/2` and
+the `:safe` option (Consequences, below), which refuses to create atoms a
+blob names; an open `compile_opts` set would let an embedder's own
+unrecognized option key end up in a blob this library wrote, making that
+blob undecodable by a build that never saw the embedder's atom. Adding a
+fourth recognized `compile/2` option therefore carries an obligation this
+amendment makes explicit: decide whether the new option belongs in
+`@persisted_compile_opts` or is provably inert for compilation, the same
+choice `lib/statifier.ex`'s own comment above that allowlist already
+states for the three keys it holds today.
+
+`Statifier.Chart` lives as its own module, not as functions on `Machine`,
+for the same reason `Statifier.Position` does not live on `MachineState`:
+decision 5's boundary-module rule extends to the chart codec unchanged.
+Here the layering argument is sharper than it is for `Position`, because it
+is not just a style preference - `from_binary/1` calls `Statifier.compile/2`
+to rebuild its result, and `Statifier.compile/2` itself produces a
+`Machine.t()`. Putting the codec on `Machine` would have the thing produced
+call back into its own producer, which ADR-0003's layering already rules
+out; `Position.from_binary/2` has no comparable call into `Statifier`, so
+for `Position` decision 5's placement is a boundary-cleanliness argument
+only. The bead that requested this work said `Machine.to_binary/1`; the
+shipped pair is `Statifier.Chart.to_binary/1` and `from_binary/1` instead -
+the same module substitution decision 5 already made when it put
+`Position`'s codec on a dedicated module rather than on `MachineState`
+itself.
+
+Consequences of shipping this pair: every `from_binary/1` call pays a
+compile on load, in exchange for never needing an ISA-version check or a
+compiled-format compatibility story at all. And every `Machine` that
+carries `source` and `compile_opts` now retains its source binary for its
+whole lifetime, not only at the moment `compile/2` returns it - which also
+enlarges every `Session.Recording` that embeds such a `Machine`, since a
+recording's `@opaque` boundary embeds the whole `Machine` it re-drives
+against (decision 8). That is still out of scope here, for the same reason
+decision 8 gave: it is filed under st-hz2a, not folded into this amendment
+by proximity.
+
+What would reopen this amendment: recompilation cost on load becoming a
+measured operational problem for some host, rather than an accepted one.
+That is exactly the case for storing a compiled form instead - and
+therefore for the ISA-version check and the compiled-format compatibility
+story this shape exists to avoid needing at all.
 
 ## Consequences
 

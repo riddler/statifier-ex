@@ -58,7 +58,7 @@ defmodule Statifier.ChartTest do
 
   # A Machine built by the raw pipeline stages rather than `Statifier.compile/2`
   # - carries no `identity` and no `source`, exactly like a chart compiled
-  # before st-i7y7 landed.
+  # before source retention existed.
   defp compile_without_identity!(xml) do
     {:ok, root} = Parser.parse(xml)
     {:ok, document} = Lowering.lower(root, xml)
