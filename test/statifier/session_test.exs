@@ -1423,7 +1423,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 200,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
@@ -1453,7 +1454,8 @@ defmodule Statifier.SessionTest do
         delay_ms: 200,
         macrostep: 1,
         microstep: 1,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       Session.interpret(session, [{:send_delayed, send_delayed}])
