@@ -298,10 +298,27 @@ and no squash or cleanup pass is required before opening a PR.
 ## Versioning and the changelog
 
 `mix.exs` holds `2.0.0-dev` for the whole rewrite. Nothing is published until
-2.0.0 is complete - no alpha, beta, or release-candidate versions along the way,
-because there is no audience for a pre-release of an engine that cannot yet run
-a statechart. Progress is tracked by beads phases and by the regression ratchet,
-which are better signals than a version number.
+2.0.0 is complete - no alpha, beta, or release-candidate versions along the
+way. The old justification does not survive: satellite packages and production
+embedders take the dependency today, so an absent audience is no longer the
+reason. The reason instead is that every one of those consumers
+is git-capable, that a Hex pre-release is a permanent public artifact plus a
+recurring human publish ceremony this pre-alpha project does not want yet, and
+that pre-release sections would fracture the single 2.0.0 migration document
+the `changelog.d/` design exists to produce (ADR-0061 decision 1). Progress is
+tracked by beads phases and by the regression ratchet, which are better
+signals than a version number.
+
+Until 2.0.0, a consumer depends on a commit reachable from `main` as a git
+dependency, under the pinning contract ADR-0061 documents (decision 2):
+every pinned commit has passed the full gate, but any public API or
+observable behavior may change between two pins with no deprecation or
+notice. `package/0` metadata already lives in `mix.exs`, so publishing to Hex
+is a decision rather than a project (decision 4). The no-publish rule itself
+is not permanent - it stands until a named trigger fires: a satellite package
+needing to publish to Hex itself, or an embedder whose dependency policy
+forbids git dependencies (decision 5). Completion of 2.0.0 ends the contract
+on its own, when SemVer and `CHANGELOG.md` take over.
 
 `CHANGELOG.md` carries v1's `0.1.0`-`1.9.0` history (same package continuing to
 2.0.0, so upgraders keep one continuous record) under a single `[Unreleased]`

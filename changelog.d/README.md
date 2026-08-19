@@ -52,6 +52,17 @@ did is invisible to a user and gets no fragment.
 Rewrite progress is tracked by beads phases and by the regression ratchet
 (`test/passing_tests.json`), which are better signals than a changelog anyway.
 
+The rule widens by one clause under the SHA-pinning contract (ADR-0061
+decision 3): a change that breaks code or persisted data written against an
+earlier `main` SHA gets a fragment touch too, even when it re-touches a
+v2-only feature that already has one. Make that touch by editing the issue's
+existing fragment in place, not by appending a new one - the `git diff`
+between two pins already carries the between-pins signal, so the fragment
+itself can stay a clean v1-to-v2 migration statement for release assembly
+rather than a transcript of intermediate churn. Consumers rely on the diff
+between pins being complete (decision 2), so a change that reshapes v2-only
+public surface with no fragment touch to show for it is a review finding.
+
 ## Format
 
 One file per issue, named for the beads issue ID:
