@@ -1,7 +1,19 @@
 defmodule Statifier.ReplayTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Replay, Session, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Interpreter,
+    Lowering,
+    Parser,
+    Position,
+    Replay,
+    Session,
+    Validator
+  }
+
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
@@ -30,6 +42,15 @@ defmodule Statifier.ReplayTest do
     {:ok, document} = Lowering.lower(root, xml)
     {:ok, document, _warnings} = Validator.validate(document, xml)
     {:ok, machine} = Compiler.compile(document)
+    machine
+  end
+
+  # An identified Machine, built through `Statifier.compile/2` so it carries
+  # both `identity` and `source` - what `Statifier.Position.to_binary/1`
+  # needs to produce an anchor blob (mirrors
+  # `test/statifier/session/recording_test.exs`'s own `compile_identified!/1`).
+  defp compile_identified!(xml, opts \\ []) do
+    {:ok, machine} = Statifier.compile(xml, opts)
     machine
   end
 
@@ -658,6 +679,67 @@ defmodule Statifier.ReplayTest do
         end
 
       assert unstamped == []
+    end
+  end
+
+  # -- anchored replay (ADR-0060 decision 6) -------------------------------
+
+  describe "run/1 over an anchored recording" do
+    # sabotage: `start_state/1`'s `blob ->` clause is changed to ignore the
+    # anchor and call `Interpreter.initialize/2` instead of
+    # `Position.from_binary/2` (the same shape as the `nil` clause) -> replay
+    # starts over from the chart's initial configuration "a" instead of the
+    # anchored position "b", so the recorded "go" event that follows lands on
+    # "c" from "a"'s own first "go" transition (to "b") rather than advancing
+    # from "b" to "c" - the final configuration comes back `MapSet.new([0,
+    # state_index(machine, "b")])` instead of "c", reddening the
+    # configuration assertion. It also reintroduces the initial
+    # `{:effect, {:datamodel_init, _}}` at the head of `result.stream`,
+    # reddening the `refute match?/2` too. Reverted and confirmed green.
+    test "replays from the anchor, not the chart's initial configuration, and emits no initialization effects" do
+      machine = compile_identified!(two_state_doc())
+
+      {machine_state, _init_effects} =
+        Interpreter.initialize(machine, session_id: "sess_anchor_test")
+
+      {:ok, anchored_state, _effects} = Interpreter.handle_event(machine_state, event("go"))
+
+      assert {:ok, anchor_blob} = Position.to_binary(anchored_state)
+
+      recording =
+        machine
+        |> Recording.new([session_id: "sess_anchor_test"], anchor_blob)
+        |> Recording.put_event(event("go"), nil)
+
+      assert {:ok, result} = Replay.run(recording)
+
+      assert result.machine_state.configuration == MapSet.new([0, state_index(machine, "c")])
+      refute match?([{:effect, {:datamodel_init, _}} | _], result.stream)
+    end
+
+    # sabotage: `start_state/1`'s whole `blob ->` clause is replaced with the
+    # same body as the `nil` clause (the same shape the pin above uses),
+    # dropping `Position.from_binary/2` entirely -> the mismatched anchor is
+    # never decoded or identity-checked at all, and `Replay.run/1` instead
+    # tries to `Interpreter.initialize/2` this recording's own `opts`, which
+    # carries no `:session_id` - confirmed to raise a `FunctionClauseError`
+    # from `Statifier.Evaluator.SystemVariables.initial/2` rather than
+    # return the expected `{:error, {:anchor, {:identity_mismatch, _, _}}}`,
+    # reddening this assertion either way. Reverted and confirmed green.
+    test "an anchor whose identity does not match the recording's machine returns {:error, {:anchor, {:identity_mismatch, _, _}}}" do
+      machine = compile_identified!(two_state_doc())
+      other_machine = compile_identified!(two_state_doc(), chart_name: "other")
+
+      {other_state, _effects} = Interpreter.initialize(other_machine, [])
+      assert {:ok, anchor_blob} = Position.to_binary(other_state)
+
+      recording = Recording.new(machine, [], anchor_blob)
+
+      assert Replay.run(recording) ==
+               {:error,
+                {:anchor,
+                 {:identity_mismatch, Statifier.Machine.identity(other_machine),
+                  Statifier.Machine.identity(machine)}}}
     end
   end
 

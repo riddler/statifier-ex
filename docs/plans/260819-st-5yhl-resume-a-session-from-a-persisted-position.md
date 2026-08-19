@@ -575,15 +575,15 @@ All new tests carry sabotage lines.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (this phase's gate); coverage does not drop.
-- [ ] `mix quality --profile loop` used between edits, never as the phase gate.
-- [ ] `mix quality --format json --report -` is clean, for a looped runner to
+- [x] `mix quality` is fully green (this phase's gate); coverage does not drop.
+- [x] `mix quality --profile loop` used between edits, never as the phase gate.
+- [x] `mix quality --format json --report -` is clean, for a looped runner to
       route on.
-- [ ] `mix test test/statifier/replay_test.exs test/statifier/session/recording_test.exs`
+- [x] `mix test test/statifier/replay_test.exs test/statifier/session/recording_test.exs`
       passes.
-- [ ] `Recording.format_version/0` returns `2` and a version-1 envelope still
+- [x] `Recording.format_version/0` returns `2` and a version-1 envelope still
       decodes - asserted by test, not by inspection.
-- [ ] No new `@tag :skip`, no `test/passing_tests.json` shrink, no
+- [x] No new `@tag :skip`, no `test/passing_tests.json` shrink, no
       `.quality.exs` / `.credo.exs` / `coveralls.json` / `.sobelow-conf` /
       `.doctor.exs` edit (so `mix gate.check` needs no
       `docs/quality-gate-changes.md` entry).
@@ -946,6 +946,26 @@ blocking here.
       the test went red, and the change was reverted.
 - [ ] The moduledoc's rehydration section reads correctly to a host who has not
       read this plan.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 3
+
+- [ ] **Spec conformance**: no Appendix D procedure is touched; `Replay`'s
+      entry fold still drives the core through the same advance entries in the
+      same order a live session does.
+- [ ] Each sabotage line was actually performed.
+- [ ] An anchored recording's blob is inspected once by hand and confirmed to
+      contain no compiled `%Machine{}` term (ADR-0052 decision 3).
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use the project's loop gate between edits while
