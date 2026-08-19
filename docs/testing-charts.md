@@ -13,7 +13,7 @@ W3C conformance test in this repository: an expected initial configuration,
 then a list of `{event, expected configuration}` steps. `Statifier.Testing.FeatureDetector` is
 what keeps a document that uses an SCXML feature the engine does not support
 from silently passing. Both are public API, versioned with the engine
-(ADR-0052), so you get the same runner without copying any file out of this
+(ADR-0053), so you get the same runner without copying any file out of this
 repository.
 
 ## Add the dependency

@@ -16,7 +16,7 @@ and into `lib/` as `Statifier.Testing.Case` and
 `{event, expected_configuration}` steps) without copying harness files. Thin
 `test/support` shims keep the 281 generated corpus files and the `tools/corpus`
 generators working untouched. Direction is settled by
-[ADR-0052](../adr/0052-chart-test-helpers-ship-in-lib-under-statifier-testing.md),
+[ADR-0053](../adr/0053-chart-test-helpers-ship-in-lib-under-statifier-testing.md),
 which amends [ADR-0006](../adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)
 in part. Bead: st-hbdr.
 
@@ -41,7 +41,7 @@ in part. Bead: st-hbdr.
   `Statifier.FeatureDetector.detect_features/1`, because `mix run` is `:dev`
   and `test/support` is not compiled there.
 
-**The rules that stand in the way**, both amended by ADR-0052 decision 3:
+**The rules that stand in the way**, both amended by ADR-0053 decision 3:
 
 - `docs/testing.md:348-351` - "Feature detection lives in `test/support`, not
   `lib/` - it is harness code, not library surface."
@@ -63,7 +63,7 @@ in part. Bead: st-hbdr.
   - 256, 259 - `poll_until_settled/4`'s "stable twice in a row" and "deadline
     reached" exits.
 - **The fail-not-skip guarantee is currently asserted vacuously.** This
-  contradicts ADR-0052's Consequences claim that both modules "already have
+  contradicts ADR-0053's Consequences claim that both modules "already have
   direct tests ... so this is pressure to keep, not a gap to open."
   `test/statifier/case_test.exs:16` is named "never skips - an unsupported
   document fails the test" and feeds a document using `cond=`. Measured:
@@ -99,7 +99,7 @@ in part. Bead: st-hbdr.
   control call to `:public_key` in the same project *did* warn, so the check was
   live. **No `mix.exs` `application/0` change is needed.**
 
-**Two hazards ADR-0052 did not anticipate**, both found by reading
+**Two hazards ADR-0053 did not anticipate**, both found by reading
 `lib/mix/statifier/adr_guard.ex`:
 
 1. **ADR-0003 effects check.** `@effect_call_pattern` (adr_guard.ex:110) matches
@@ -121,7 +121,7 @@ in part. Bead: st-hbdr.
 
 **Gate-config exposure.** `lib/mix/statifier/gate_guard.ex:43` guards `mix.exs`
 by line content: `~r/test_coverage|dialyzer:|warnings_as_errors|aliases|:ex_quality|:credo|:excoveralls|:dialyxir|:sobelow|:doctor/`.
-The `dialyzer: [plt_add_apps: [:mix]]` line matches. ADR-0052 anticipates
+The `dialyzer: [plt_add_apps: [:mix]]` line matches. ADR-0053 anticipates
 possibly adding `:ex_unit` to the PLT apps and calls it "implementation detail";
 mechanically it is a guarded `mix.exs` edit that would demand an entry in
 `docs/quality-gate-changes.md` with an `Approved-by:` line. See Phase 2's
@@ -179,7 +179,7 @@ Verification that the end state holds:
 
 ### Key Discoveries:
 
-- ADR-0052 decision 5 pins the shim strategy; ADR-0006's nine-function coupling
+- ADR-0053 decision 5 pins the shim strategy; ADR-0006's nine-function coupling
   surface is untouched because promotion moves the module, not the coupling.
 - `ExUnit.CaseTemplate.__proxy__/2`
   (`elixir/lib/ex_unit/lib/ex_unit/case_template.ex`) injects `use ExUnit.Case`
@@ -197,21 +197,21 @@ Verification that the end state holds:
 
 ## What We're NOT Doing
 
-- **No `statifier_test` hex package.** Rejected by ADR-0052 decision 2.
+- **No `statifier_test` hex package.** Rejected by ADR-0053 decision 2.
 - **No corpus regeneration.** The 281 generated files keep saying
-  `use Statifier.Case`. ADR-0052 decision 5 calls adopting the new names a later
+  `use Statifier.Case`. ADR-0053 decision 5 calls adopting the new names a later
   housekeeping call. Any diff under `test/scion_tests/` or `test/scxml_tests/`
   on this branch is a defect.
 - **No change to `mix.exs`'s `elixirc_paths`, `version`, or `application/0`.**
   `2.0.0-dev` stays; `:ex_unit` is not added to `extra_applications` (measured
   unnecessary above).
-- **`Statifier.StreamOrder` stays private.** ADR-0052 decision 4 and open
+- **`Statifier.StreamOrder` stays private.** ADR-0053 decision 4 and open
   question 3 put it out of scope; it asserts the ADR-0044/0046 subscriber-stream
   delivery contract, which is not a chart author's concern.
 - **`Statifier.ContextRecorder`, `Statifier.TestContent`, `Statifier.TmpDir`,
   and `Mix.Statifier.AdrJudgeCorpus` stay private**, each for the reason
-  ADR-0052 decision 4 gives.
-- **No mechanical enforcement of the new namespace rule.** ADR-0052 states the
+  ADR-0053 decision 4 gives.
+- **No mechanical enforcement of the new namespace rule.** ADR-0053 states the
   rule in prose and in `docs/testing.md`; adding a fifth check to
   `lib/mix/statifier/adr_guard.ex` would be a widening of the gate and is
   welcome, but it is new scope this bead did not ask for. File a follow-up bead
@@ -221,10 +221,10 @@ Verification that the end state holds:
   `Statifier.Testing.*` belongs with the release bead.
 - **No renaming of `test_scxml/4`** - see the decision record below.
 
-### Decisions taken on ADR-0052's open questions
+### Decisions taken on ADR-0053's open questions
 
 **Open question 1 - keep `test_scxml/4` or add a friendlier alias: keep it,
-unaliased.** ADR-0052's stated default, adopted for three reasons. The name is
+unaliased.** ADR-0053's stated default, adopted for three reasons. The name is
 what 281 committed files and both generators already say, so a second spelling
 would immediately have two populations of examples with no way to tell a reader
 which is canonical. It doubles the documented surface at the exact moment the
@@ -244,7 +244,7 @@ would invite tuning the wrong knob.
 The mechanism is `def test_scxml(xml, description, expected_initial_config, events, opts \\ [])`.
 A default argument defines both `test_scxml/4` and `test_scxml/5`, so the corpus
 call shape and ADR-0006's enumerated coupling surface are literally unchanged,
-and ADR-0052 decision 1's "keeping `test_scxml/4`'s shape" is honored. Rejected
+and ADR-0053 decision 1's "keeping `test_scxml/4`'s shape" is honored. Rejected
 alternatives: `use Statifier.Testing.Case, settle_window_ms: ...` (module-level
 opts are invisible at the call site that actually needs them, and the `using`
 block would have to shadow the imported `test_scxml/4`); and application
@@ -313,7 +313,7 @@ convert the detector's tests from exempt to sabotaged.
 ```
   Test-side surface for chart authors, versioned with the engine: no module in
   `lib/` outside `Statifier.Testing.*` may reference anything inside it, so the
-  engine never consults feature detection to decide behavior (ADR-0052,
+  engine never consults feature detection to decide behavior (ADR-0053,
   amending ADR-0006).
 ```
 
@@ -339,7 +339,7 @@ defmodule Statifier.FeatureDetector do
   @moduledoc """
   Compatibility shim: the real module is `Statifier.Testing.FeatureDetector`,
   in `lib/`. This name is kept so the 281 generated corpus files and the
-  `tools/corpus` generators need no regeneration (ADR-0052 decision 5).
+  `tools/corpus` generators need no regeneration (ADR-0053 decision 5).
   """
 
   alias Statifier.Testing.FeatureDetector
@@ -454,7 +454,7 @@ fail-not-skip test.
 ```elixir
   # ADR-0003 scopes "no side effects in the pure core" to the engine. This
   # module is `Statifier.Testing`, the test-side surface the same `lib/` tree
-  # now carries (ADR-0052), not the core: it drives a session from outside and
+  # now carries (ADR-0053), not the core: it drives a session from outside and
   # reads its own subscriber mailbox. Draining here rather than returning an
   # effect is the point - there is no interpreter above this frame to run one.
   defp drain_done_effect(_session) do
@@ -479,7 +479,7 @@ defmodule Statifier.Case do
   @moduledoc """
   Compatibility shim: the real case template is `Statifier.Testing.Case`, in
   `lib/`. This name is kept so the 281 generated corpus files need no
-  regeneration (ADR-0052 decision 5).
+  regeneration (ADR-0053 decision 5).
   """
 
   @doc false
@@ -540,7 +540,7 @@ Then:
       in `mix.exs`, that line matches `gate_guard.ex:43`'s pattern and needs an
       `Approved-by:` entry in `docs/quality-gate-changes.md`. **That entry is a
       human's call and an agent must not write it.** Stop, report, and wait.
-      ADR-0052 anticipated the PLT change and called it implementation detail;
+      ADR-0053 anticipated the PLT change and called it implementation detail;
       mechanically it is a guarded edit either way.
 - [x] Coverage: `test/statifier/case_test.exs`'s new tests raise
       `lib/statifier/testing/case.ex` above its measured 90.1% baseline; project
@@ -682,7 +682,7 @@ Unsupported-feature tests **fail, not skip** (v1's FeatureDetector rule, kept): 
 test that depends on an unsupported feature flunks with the feature named, so it can
 never masquerade as passing. Feature detection lives in `lib/` under
 `Statifier.Testing`, where it is test-side surface for chart authors rather than
-engine (ADR-0052, amending ADR-0006). The load-bearing half of the old rule is
+engine (ADR-0053, amending ADR-0006). The load-bearing half of the old rule is
 kept in namespace terms: **no module in `lib/` outside `Statifier.Testing.*` may
 reference anything inside it.** The engine's semantics come from the Appendix D
 port (ADR-0002); an unsupported feature surfaces as a real error or a real
@@ -705,7 +705,7 @@ conformance failure, never as a detection-gated branch.
 **File**: `tools/corpus/README.md`
 **Changes**: at `:85-96`, note that `use Statifier.Case` and
 `Statifier.FeatureDetector` in generated output are the `test/support` shims
-over `Statifier.Testing.*`, that this is deliberate (ADR-0052 decision 5), and
+over `Statifier.Testing.*`, that this is deliberate (ADR-0053 decision 5), and
 that adopting the new names is a future regeneration's call.
 
 ### Success Criteria:
@@ -720,7 +720,7 @@ that adopting the new names is a future regeneration's call.
 #### Manual Verification:
 - [ ] A reader who knows only `docs/testing.md` can state the new rule
       correctly, including which direction it forbids.
-- [ ] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
+- [ ] The amendment marker on ADR-0006 and ADR-0053's decision 3 agree with the
       new prose word for word in substance.
 - [ ] No Appendix D procedure is touched (documentation only).
 
@@ -746,7 +746,7 @@ opens by naming the seam and pointing elsewhere for architecture. Sections:
 
 - What this gives you: the engine tests itself this way, and now so can you.
 - Add the dep. No `only: :test` companion is needed:
-  `Statifier.Testing.Case` ships in `lib/` (ADR-0052 decision 6), the same shape
+  `Statifier.Testing.Case` ships in `lib/` (ADR-0053 decision 6), the same shape
   as `Plug.Test` and `Phoenix.ConnTest`, and ExUnit ships with Elixir.
 - Write a test: `use Statifier.Testing.Case, async: true` plus the
   `test_scxml/4` example from "Desired End State" above.
@@ -872,7 +872,7 @@ whole point of the bead is that these modules stop being harness.
 - **No corpus regeneration on this branch.** All 281 files under
   `test/scion_tests/` and `test/scxml_tests/` stay byte-identical; check with
   `git diff --stat test/scion_tests test/scxml_tests` at every phase gate. The
-  shims exist precisely to buy this (ADR-0052 decision 5).
+  shims exist precisely to buy this (ADR-0053 decision 5).
 - **No `test/passing_tests.json` change.** Its `internal_tests` globs are
   `test/mix/**/*_test.exs` and `test/statifier/**/*_test.exs`; both repointed
   test files stay at their existing paths under `test/statifier/`, so the
@@ -888,7 +888,7 @@ whole point of the bead is that these modules stop being harness.
 
 ## References
 
-- Governing decision: `docs/adr/0052-chart-test-helpers-ship-in-lib-under-statifier-testing.md`
+- Governing decision: `docs/adr/0053-chart-test-helpers-ship-in-lib-under-statifier-testing.md`
 - Amended record: `docs/adr/0006-reuse-conformance-corpus-and-regression-ratchet.md`
 - Rules being rewritten: `docs/testing.md:207-216,348-351,372-378`
 - Guard mechanics: `lib/mix/statifier/adr_guard.ex:110,124,276,317`;
@@ -961,7 +961,7 @@ advancement and the Manual items are deferred to the end.
 
 - [x] A reader who knows only `docs/testing.md` can state the new rule
       correctly, including which direction it forbids.
-- [x] The amendment marker on ADR-0006 and ADR-0052's decision 3 agree with the
+- [x] The amendment marker on ADR-0006 and ADR-0053's decision 3 agree with the
       new prose word for word in substance.
 - [x] No Appendix D procedure is touched (documentation only).
 

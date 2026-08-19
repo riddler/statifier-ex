@@ -4,7 +4,7 @@ The conformance corpus is the contract for this rewrite. v1's most valuable asse
 its test infrastructure, and it ports almost for free: the 281 SCION/W3C test files
 touch no library internals - everything goes through one `Statifier.Testing.Case`
 module (generated files still say `Statifier.Case`, a `test/support` shim over it -
-ADR-0052)
+ADR-0053)
 ([ADR-0006](adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)).
 
 ## The three suites
@@ -352,7 +352,7 @@ Unsupported-feature tests **fail, not skip** (v1's FeatureDetector rule, kept): 
 test that depends on an unsupported feature flunks with the feature named, so it can
 never masquerade as passing. Feature detection lives in `lib/` under
 `Statifier.Testing`, where it is test-side surface for chart authors rather than
-engine (ADR-0052, amending ADR-0006). The load-bearing half of the old rule is
+engine (ADR-0053, amending ADR-0006). The load-bearing half of the old rule is
 kept in namespace terms: **no module in `lib/` outside `Statifier.Testing.*` may
 reference anything inside it.** The engine's semantics come from the Appendix D
 port (ADR-0002); an unsupported feature surfaces as a real error or a real
@@ -379,12 +379,12 @@ is the source of truth; this paragraph does not duplicate its entries.
   lowering it is not a way to go green.
 - Coverage measures `lib/` only, which now includes `Statifier.Testing` -
   `Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector` count toward
-  the floor like any other library module (ADR-0052). `coveralls.json` still
+  the floor like any other library module (ADR-0053). `coveralls.json` still
   skips `test/support/`, which now holds only the two compatibility shims
   (`Statifier.Case`, `Statifier.FeatureDetector`) and five private harness
   modules (`ContextRecorder`, `TestContent`, `StreamOrder`, `TmpDir`,
   `Mix.Statifier.AdrJudgeCorpus`) that stay out of `lib/` on their own merits
-  (ADR-0052 decision 4). The harness is still tested directly
+  (ADR-0053 decision 4). The harness is still tested directly
   (`feature_detector_test.exs`, `case_test.exs`) - it is just not what the floor
   is set for, and counting `test/support/` would let its own line count move a
   number that exists to describe the engine.
