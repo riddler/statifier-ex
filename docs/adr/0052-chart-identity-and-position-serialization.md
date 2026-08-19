@@ -3,7 +3,7 @@
 Status: accepted (2026-08-19) - reaffirms ADR-0014 item 2's premise rather
 than amending it (decision 3 below) - amended 2026-08-19 (st-i7y7: decision
 3's corollary superseded; a chart blob carries source and compile opts,
-still no compiled term) - decision 8's named follow-up answered by ADR-0056
+still no compiled term) - decision 8's named follow-up answered by ADR-0057
 (2026-08-19: a recording blob nests the chart blob, the codec lives on the
 `@opaque` owner, `:invoke_handlers` cross as strings)
 

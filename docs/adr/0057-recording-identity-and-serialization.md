@@ -1,4 +1,4 @@
-# ADR-0056: Recording identity and serialization
+# ADR-0057: Recording identity and serialization
 
 Status: accepted (2026-08-19) - answers ADR-0052 decision 8's named
 follow-up (st-hz2a); consumes 0052's identity and chart-codec machinery

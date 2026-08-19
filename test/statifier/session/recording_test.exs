@@ -292,7 +292,7 @@ defmodule Statifier.Session.RecordingTest do
   end
 
   describe "to_binary/1 then from_binary/1 live round trip" do
-    # This is the central test ADR-0056's Consequences owe: a live recorded
+    # This is the central test ADR-0057's Consequences owe: a live recorded
     # run, replayed both in memory and after a full encode/decode round
     # trip, must reach the same terminal position and stream.
     #
