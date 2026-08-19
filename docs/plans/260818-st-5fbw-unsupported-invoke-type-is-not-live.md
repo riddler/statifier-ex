@@ -531,10 +531,10 @@ commit body.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (loop gate between edits only).
-- [ ] `mix gate.verify` exits zero.
-- [ ] `mix test test/statifier/session/invoke_start_child_test.exs` passes.
-- [ ] `mix test.regression` is green; the ratchet is unchanged by a test-only
+- [x] `mix quality` is fully green (loop gate between edits only).
+- [x] `mix gate.verify` exits zero.
+- [x] `mix test test/statifier/session/invoke_start_child_test.exs` passes.
+- [x] `mix test.regression` is green; the ratchet is unchanged by a test-only
       phase.
 
 #### Manual Verification:
@@ -639,6 +639,25 @@ before considering the plan fully landed.
       node appear and disappear.
 - [ ] No regressions in `<finalize>` or autoforward behavior for supported
       invocations (they read the same map).
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The test genuinely exercises both halves in one run - reading it, a
+      reviewer can see that a core-side change alone or a session-side change
+      alone would redden it.
+- [ ] The observed effect stream, read in order, tells a coherent story: an
+      `Effect.Invoke`, an `error.execution`, no invocation in the pass trace, no
+      cancel on exit.
+- [ ] No regressions in the module's existing start-child tests.
 
 **Implementation Note**: Use the project's loop gate between edits while
 iterating; run the full gate as the phase gate. In interactive execution, pause
