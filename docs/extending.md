@@ -137,10 +137,10 @@ Statifier.Session.start_link(machine,
 which registers no type beyond the built-in `scxml`/bare-URI set - passing
 nothing changes no observable behavior (ADR-0051).
 
-Registration is **per session, not global**, on purpose (bead note 4 of
-`st-cmq.8`): a multi-tenant host that runs different chart deployments for
-different tenants can give each session a different handler palette, rather
-than every deployed handler being reachable from every session process-wide.
+Registration is **per session, not global**, on purpose: a multi-tenant host
+that runs different chart deployments for different tenants can give each
+session a different handler palette, rather than every deployed handler being
+reachable from every session process-wide.
 
 The set is also **fixed for the session's whole lifetime**: it is a
 `start_link/2` option, exactly like `:max_macrostep_rounds`, not something

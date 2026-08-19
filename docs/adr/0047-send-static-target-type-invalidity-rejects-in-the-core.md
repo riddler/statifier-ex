@@ -172,6 +172,14 @@ becomes deployment state and moves back to the boundary (or into a
 caller-supplied capability), and this decision is re-argued in that record -
 the 6.2.4 target check is unaffected either way.
 
+That trigger has since fired for one half only. ADR-0051 makes the
+`<invoke>` service-type set embedder-registrable and re-argues this decision
+for `<invoke>` alone: the registered set becomes a caller-declared value on
+`%MachineState{}`, so the check is deployment state that the core may still
+read. The `<send>` 6.2.5 Event I/O Processor set is untouched - it remains a
+fixed string test, and this decision stands unamended for it. Decision 4's
+shared-classifier property is preserved on both sides.
+
 **6. test496 - the liveness half - is explicitly deferred to its own bead
 and its own record.** st-yizi fixes test159 (and keeps test332 green);
 test496 stays red, outside the ratchet, until the follow-on lands. The
