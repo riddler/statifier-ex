@@ -1030,14 +1030,19 @@ numbers without saying which way.
 Same repeat policy as above: seeds 101/202/303, majority of three, flaps
 counted separately and never folded into the score.
 
-| Fixture | sonnet 101/202/303 | Prior (st-2ts) |
-|---|---|---|
-| `0012_trace_stamp_swapped_comment_kept.diff` (violation, new) | ok, ok, ok | FN (st-ntf5 hand-run, unamended) |
-| `0012_configuration_read_post_departure.diff` (clean, new) | ok, ok, ok | n/a |
-| `0012_trace_after_departure.diff` (violation) | ok, ok, ok | ok, FN, FN |
-| `0012_trace_prestate_captured.diff` (clean) | ok, ok, ok | ok, ok, ok |
-| `0012_location_precision_one_caller.diff` (violation) | FN, FN, FN | ok, FN, FN |
-| `0012_location_helper_extracted.diff` (clean) | ok, ok, ok | ok, ok, ok |
+| Fixture | sonnet 101/202/303 | Wall 101/202/303 | Prior (st-2ts) |
+|---|---|---|---|
+| `0012_trace_stamp_swapped_comment_kept.diff` (violation, new) | ok, ok, ok | 30.4s, 38.2s, 44.1s | FN (st-ntf5 hand-run, unamended) |
+| `0012_configuration_read_post_departure.diff` (clean, new) | ok, ok, ok | 8.3s, 8.5s, 14.8s | n/a |
+| `0012_trace_after_departure.diff` (violation) | ok, ok, ok | 39.1s, 31.3s, 36.1s | ok, FN, FN |
+| `0012_trace_prestate_captured.diff` (clean) | ok, ok, ok | 6.1s, 8.6s, 5.9s | ok, ok, ok |
+| `0012_location_precision_one_caller.diff` (violation) | FN, FN, FN | 28.1s, 37.4s, 31.3s | ok, FN, FN |
+| `0012_location_helper_extracted.diff` (clean) | ok, ok, ok | 6.0s, 6.8s, 5.7s | ok, ok, ok |
+
+Wall times are the ExUnit-reported duration of each fixture's own test, which is
+the judge round trip and nothing else. The violation rows cost three to six
+times the clean ones because a surviving candidate buys a second CLI call: the
+clean rows are one propose pass, the violation rows are propose plus refute.
 
 | Slice | Model | FN (majority) | FP (majority) | Flaps | Wall (mean) |
 |---|---|---|---|---|---|

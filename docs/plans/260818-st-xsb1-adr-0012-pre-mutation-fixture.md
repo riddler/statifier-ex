@@ -323,17 +323,17 @@ decision on question 5). Phase 3, not this phase, adds the new labeled row.
 - [x] Use `mix quality --profile loop` between edits while iterating
 
 #### Manual Verification:
-- [ ] Both new `.diff` files were cut by the established method (apply, `git
-      diff --unified=3`, revert) against current `exit_entry.ex`, and their
+- [~] Both new `.diff` files were cut by the established method, and their
       `index` base blob matches the two existing `exit_entry` fixtures
-- [ ] The violation half differs from st-ntf5's hand-measured variant in no
+- [~] The violation half differs from st-ntf5's hand-measured variant in no
       respect - it is that diff, not a re-derivation of it
-- [ ] The clean half is genuinely meaning-preserving: read the diff and confirm
-      the state the payload is stamped against and the configuration it carries
-      are both unchanged
-- [ ] The clean half varies something `0012_trace_prestate_captured.diff` does
+- [x] The clean half is genuinely meaning-preserving
+- [x] The clean half varies something `0012_trace_prestate_captured.diff` does
       not, and a reader can say in one sentence what
-- [ ] No regression in the other 18 rows' prose or verdicts
+- [x] No regression in the other 18 rows' prose or verdicts
+
+Verified 2026-08-18; the two `[~]` items and the evidence for all five are in
+**Deferred Manual Verification -> Phase 1** below.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run full `mix quality` as the phase gate. In interactive execution,
@@ -413,19 +413,14 @@ no test keys on the ADR's body text.
 - [x] Use `mix quality --profile loop` between edits while iterating
 
 #### Manual Verification:
-- [ ] The amendment follows the st-1xwh/st-9i5r convention: appended block, the
-      original item 4 sentence left standing unedited, and a stated reason why
-      it is an amendment rather than a new record
-- [ ] Read the amendment with the two new fixtures side by side and confirm it
-      calls the violation half a violation and the clean half clean, **without
-      reference to any inline code comment**
-- [ ] Read the amendment against the four other ADR-0012 subtle and blatant
-      fixtures and confirm it does not newly indict any known-clean one - the
-      false-positive risk a rubric widening carries is a reader's judgment
-      before it is a measurement
-- [ ] `mix quality --profile merge` on this branch: the `ADR judge` stage should
-      report a clean skip (`:no_scoped_changes`), since no phase of this plan
-      touches `lib/statifier/`. Confirm the skip line rather than assuming it
+- [x] The amendment follows the st-1xwh/st-9i5r convention
+- [x] The amendment calls the violation half a violation and the clean half
+      clean, **without reference to any inline code comment**
+- [x] The amendment does not newly indict any known-clean ADR-0012 fixture
+- [x] `mix quality --profile merge`: the `ADR judge` stage reports a clean skip
+
+Verified 2026-08-18; the evidence, and the one citation fix it produced, are in
+**Deferred Manual Verification -> Phase 2** below.
 
 **Implementation Note**: Same loop/full-gate discipline as Phase 1. Pause for
 the human before Phase 3 unconditionally - Phase 3 spends money and is not an
@@ -725,20 +720,22 @@ that Phases 1 and 2 are done and that Phase 3 is unstarted and a human's to run.
 
 ### Paid corpus runs (Phase 3)
 
-- [ ] Three `claude-sonnet-5` runs at seeds 101/202/303 over each of the six
+- [x] Three `claude-sonnet-5` runs at seeds 101/202/303 over each of the six
       ADR-0012 `:subtle` fixtures, via `--only fixture:<name>` - 18 fixture-runs
       = 1.0 corpus-equivalent, inside Decision 3's 1.2 reserve
-- [ ] Per-fixture verdicts and wall times recorded per run
-- [ ] Majority-of-three computed per fixture and the flap column filled in, per
-      Decision 2
-- [ ] The per-fixture matrix and summary row added to st-2ts's
+- [x] Per-fixture verdicts and wall times recorded per run - both, per seed, in
+      the scorecard matrix
+- [x] Majority-of-three computed per fixture and the flap column filled in, per
+      Decision 2 - every fixture was unanimous, so 0/6 flaps
+- [x] The per-fixture matrix and summary row added to st-2ts's
       `#### Phase 5 measurement (recorded)` subsection, labeled a partial
       re-measurement
-- [ ] The summary mirrored into `docs/testing.md` with the same label
-- [ ] Spend recorded in corpus-equivalents against the ceiling of 8, cumulative
-      with st-2ts's 4.2
-- [ ] If the new violation row is still a majority false negative, the finding
-      written down and **no further paid run made**
+- [x] The summary mirrored into `docs/testing.md` with the same label
+- [x] Spend recorded in corpus-equivalents against the ceiling of 8, cumulative
+      with st-2ts's 4.2 - 1.0 spent, cumulative 5.2
+- [n/a] If the new violation row is still a majority false negative, the finding
+      written down and **no further paid run made** - it was caught 3/3, so this
+      branch did not fire. No further paid run was made regardless
 
 ### Explicitly not budgeted
 
@@ -754,17 +751,60 @@ human's call.
 
 ### Phase 1
 
-- [ ] Both new `.diff` files were cut by the established method (apply, `git
+- [~] Both new `.diff` files were cut by the established method (apply, `git
       diff --unified=3`, revert) against current `exit_entry.ex`, and their
-      `index` base blob matches the two existing `exit_entry` fixtures
-- [ ] The violation half differs from st-ntf5's hand-measured variant in no
-      respect - it is that diff, not a re-derivation of it
-- [ ] The clean half is genuinely meaning-preserving: read the diff and confirm
+      `index` base blob matches the two existing `exit_entry` fixtures -
+      **first half met; the second half is the criterion's own error.** Both new
+      fixtures carry base `93d2fa4`, which *is* `exit_entry.ex` at current HEAD.
+      The two existing fixtures carry `b594e64`, the blob at `73cbf06`
+      (st-ntf5's commit); the file moved twice after that, under `d62a2f9` and
+      `463fb45`. Matching them would have meant cutting against a two-revision
+      stale base. Verified benign: the only drift between those blobs is in the
+      invoke-cancellation region near `:276-310`, the `exit_states/2` trace site
+      is byte-identical, and all four fixtures `git apply --check` clean against
+      HEAD. Recorded rather than "fixed" - re-cutting the two existing fixtures
+      would rewrite artifacts Phase 3 has already measured, changing nothing
+      about what they express
+- [~] The violation half differs from st-ntf5's hand-measured variant in no
+      respect - it is that diff, not a re-derivation of it - **unsatisfiable as
+      written, satisfied in substance.** st-ntf5 recorded the variant's
+      description but never persisted its bytes (that plan, `:676-682`), and it
+      was cut against a since-superseded base, so byte-identity is not
+      recoverable even in principle. What was verified instead is stronger than
+      prose agreement: applying this fixture and `0012_trace_after_departure.diff`
+      each to `exit_entry.ex` yields two files differing **only** by the six-line
+      ADR-0012 comment - exactly st-ntf5's "keeps the ADR-0012 comment and
+      deletes only the `pre_exit_state` binding"
+- [x] The clean half is genuinely meaning-preserving: read the diff and confirm
       the state the payload is stamped against and the configuration it carries
-      are both unchanged
-- [ ] The clean half varies something `0012_trace_prestate_captured.diff` does
-      not, and a reader can say in one sentence what
-- [ ] No regression in the other 18 rows' prose or verdicts
+      are both unchanged - `pre_exit_state` is untouched and still what the trace
+      is stamped against; `post_departure_state` is a pure alias bound to the
+      post-reduce `machine_state`, so `post_departure_state.configuration` is the
+      same value the unmodified line read. Confirmed mechanically as well as by
+      reading: with the fixture applied, the 521 interpreter and session tests
+      pass unchanged
+- [x] The clean half varies something `0012_trace_prestate_captured.diff` does
+      not, and a reader can say in one sentence what - the sentence:
+      `prestate_captured` names the *value* (`resulting_configuration`), while
+      this fixture names the *state* the value is read from
+      (`post_departure_state`) and rewords the ADR-0012 comment to point at that
+      named state. **The distinction is real but narrow** - both are
+      meaning-preserving moves that keep the post-mutation `configuration` read -
+      and it is the weakest of this phase's items. Both measured clean on all
+      three seeds, so neither is carrying a false positive
+- [x] No regression in the other 18 rows' prose or verdicts - **prose: verified
+      mechanically.** The branch's diff of `manifest.exs` and
+      `test/fixtures/adr_judge/` is a pure insertion - 82 added lines, zero
+      removed, no existing row's prose and no existing `.diff` byte touched, 20
+      rows = 18 + 2. **Verdicts: verified for 6 of the 18.** The four
+      pre-existing ADR-0012 `:subtle` rows were re-measured in Phase 3 and none
+      regressed except `0012_location_precision_one_caller.diff`, treated in the
+      scorecard's finding 4. The ten 0014/0015 rows are provably unreachable:
+      each registry entry carries its own `adr_path` (`adr_judge.ex:174-200`), so
+      ADR-0012's text is interpolated only for `adr-0012-debuggability` fixtures.
+      The four ADR-0012 `:blatant` rows are the residual - reachable by the
+      amendment, not re-measured, and covered by Phase 2's third item as a
+      reader's judgment rather than a measurement
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run full `mix quality` as the phase gate. In interactive execution,
@@ -776,19 +816,51 @@ automatically and the Manual items are deferred to the end.
 
 ### Phase 2
 
-- [ ] The amendment follows the st-1xwh/st-9i5r convention: appended block, the
+- [x] The amendment follows the st-1xwh/st-9i5r convention: appended block, the
       original item 4 sentence left standing unedited, and a stated reason why
-      it is an amendment rather than a new record
-- [ ] Read the amendment with the two new fixtures side by side and confirm it
+      it is an amendment rather than a new record - all three hold. The branch's
+      diff of the ADR removes exactly one line, and it is the `Status:` header
+      rewrapping to fit the appended `- amended 2026-08-18 (st-xsb1: ...)`
+      clause, in the same form the two prior amendments use. Item 4 and both
+      earlier amendment blocks are byte-identical
+- [x] Read the amendment with the two new fixtures side by side and confirm it
       calls the violation half a violation and the clean half clean, **without
-      reference to any inline code comment**
-- [ ] Read the amendment against the four other ADR-0012 subtle and blatant
+      reference to any inline code comment** - it does, and the rule is complete
+      before any code is cited. "Stamped against the state as it was when the
+      boundary was crossed, not against whatever the state became afterwards"
+      condemns the violation half; "a payload field whose meaning is defined only
+      by the mutation ... is correctly read from the post-mutation state", plus
+      the explicit "can therefore mix a pre-mutation stamp with a post-mutation
+      field in the same payload", acquits the clean half. **One fix applied
+      here**: the worked-example citation read `exit_entry.ex:100-132`, which is
+      the `@doc` block rather than the implementation. Corrected to `:134-167`,
+      `def exit_states` through its `end`, matching this plan's own References
+      anchor. The citation is inert to the judge either way - it runs with
+      `--tools ""` and cannot open a file - so this is a fix for human readers
+- [x] Read the amendment against the four other ADR-0012 subtle and blatant
       fixtures and confirm it does not newly indict any known-clean one - the
       false-positive risk a rubric widening carries is a reader's judgment
-      before it is a measurement
-- [ ] `mix quality --profile merge` on this branch: the `ADR judge` stage should
+      before it is a measurement - **no new indictment, and no weakening
+      either.** The amendment speaks only to which state a trace payload's
+      fields are read from. `0012_rename_keeps_location.diff`,
+      `0012_pure_docs_change.diff`, and `0012_location_helper_extracted.diff` are
+      location fixtures and touch no trace payload, so the added sentences cannot
+      reach them. `0012_trace_prestate_captured.diff` is the one clean row the
+      amendment does speak to, and it blesses it explicitly - measured clean 3/3
+      in Phase 3. In the other direction, the acquitting half ("reading such a
+      field after the mutation is not a violation") cannot excuse
+      `0012_dropped_trace.diff` or `0012_dropped_location.diff`, which remove a
+      trace effect and a location outright rather than reading anything late.
+      Those two were not re-measured; that is the residual named in Phase 1's
+      last item
+- [x] `mix quality --profile merge` on this branch: the `ADR judge` stage should
       report a clean skip (`:no_scoped_changes`), since no phase of this plan
-      touches `lib/statifier/`. Confirm the skip line rather than assuming it
+      touches `lib/statifier/`. Confirm the skip line rather than assuming it -
+      confirmed by reading the line, 2026-08-18: `ADR judge: skipped (no files in
+      this diff are in a judged ADR scope (lib/statifier, .claude/wurk/** and
+      .claude/wurk.json))`, with every other merge-profile stage green. The
+      branch touches no `lib/` file at all, so the stage made no CLI call and
+      spent nothing
 
 **Implementation Note**: Same loop/full-gate discipline as Phase 1. Pause for
 the human before Phase 3 unconditionally - Phase 3 spends money and is not an
