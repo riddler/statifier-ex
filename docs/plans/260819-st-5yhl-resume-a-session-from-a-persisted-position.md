@@ -352,16 +352,16 @@ Neither record is superseded; both are extended, and the pointers say so.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` is fully green (this phase's gate).
-- [ ] `mix quality --profile loop` used between edits, never as the phase gate.
-- [ ] `mix quality --format json --report -` is clean, for a looped runner to
+- [x] `mix quality` is fully green (this phase's gate).
+- [x] `mix quality --profile loop` used between edits, never as the phase gate.
+- [x] `mix quality --format json --report -` is clean, for a looped runner to
       route on.
-- [ ] `mix adr.check` reports no `adr-0058-duplicate-number` and no
+- [x] `mix adr.check` reports no `adr-0058-duplicate-number` and no
       `adr-0058-readme-index` finding.
-- [ ] `mix adr.check` reports no `adr-0058-readme-index` finding after the
+- [x] `mix adr.check` reports no `adr-0058-readme-index` finding after the
       ADR-0057 and ADR-0049 status-line edits (a status-line edit must not
       disturb the README table bijection).
-- [ ] `mix quality --profile merge` (which re-enables the ADR judge that
+- [x] `mix quality --profile merge` (which re-enables the ADR judge that
       `.quality.exs:23` disables for bare runs) accepts ADR-0060.
 
 #### Manual Verification:
@@ -910,3 +910,28 @@ phase, not a ratchet update: `mix test.regression` must stay green without
   outside a session), `lib/statifier/session.ex:746-813` (`init/1`)
 - Prior plan that scoped this bead out: `docs/plans/260818-st-m5c3-machine-identity-and-position-serialization.md:206-207`
 - Bead: st-5yhl (depends on st-m5c3, blocks st-q6xl and st-ewd7)
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] Each of the seven decisions is stated as a decision with its own
+      rationale, not as a restatement of the plan.
+- [ ] No decision contradicts ADR-0002, 0003, 0005, 0012, 0027, 0034, 0048,
+      0049, 0050, 0051, 0052, 0054, 0055, 0057, or 0059; each superseded or
+      extended record is cited by number.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution, pause
+here for the human to confirm the manual testing before moving to the next
+phase. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---

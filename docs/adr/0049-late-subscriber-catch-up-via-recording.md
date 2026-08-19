@@ -2,7 +2,10 @@
 
 Status: accepted (2026-08-18) - amends nothing; builds on 0029, 0034,
 0044, and 0046 as accepted. `docs/observability.md`'s non-goals stand
-unedited (decision 4).
+unedited (decision 4) - the catch-up invariant extended by ADR-0060
+(2026-08-19: for a resumed session, the invariant holds over a recording
+anchored at the resumed position rather than at
+`Interpreter.initialize/2`)
 
 ## Context
 
