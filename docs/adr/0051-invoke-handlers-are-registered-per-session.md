@@ -57,8 +57,8 @@ Two more constraints bound the shape:
 
 The bead's acceptance criterion cites "per spec 6.4" for the unregistered-type
 error. Section 6.4 of the local spec cache, isolated from its normative
-heading to the next section's, is 11,256 characters and contains zero
-occurrences of `error.execution` and zero of `error.communication`. The
+heading to the next section's, contains zero occurrences of
+`error.execution` and zero of `error.communication`. The
 outcome the criterion names is right; its citation is not, and this record
 gives the outcome its actual ground rather than repeating the citation.
 

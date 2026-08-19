@@ -1369,8 +1369,9 @@ defmodule Statifier.Interpreter do
   # failure, same abort, no effect. Otherwise one `{:invoke, %Effect.Invoke{}}`
   # is always emitted, but the invocation is only recorded in
   # `active_invocations` when the resolved `type` is one
-  # `Statifier.Send.Target.supported_invoke_type?/1` accepts (6.4.1) - the
-  # effect is unconditional, the liveness record is not.
+  # `Statifier.Invoke.Types.registered?/2` accepts (6.4.1) - the built-in
+  # set plus whatever the caller declared for this session (ADR-0051
+  # decision 2) - the effect is unconditional, the liveness record is not.
   @spec invoke_one(
           machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
