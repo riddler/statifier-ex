@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement ADR-0056 (`docs/adr/0056-adr-number-collisions-fail-the-gate-tree-locally.md`,
+Implement ADR-0058 (`docs/adr/0058-adr-number-collisions-fail-the-gate-tree-locally.md`,
 accepted 2026-08-19, uncommitted on this branch): make a concurrent ADR number
 collision a named `mix quality` failure instead of a human catch at rebase
 time. The mechanism is a **tree-local numbering invariant** enforced inside the
@@ -13,7 +13,7 @@ skipped while a collision sits in the tree.
 Bead: **st-9vco** (`area:gate-tooling`), the prevention half of the pair split
 from st-8d5e (the stale-citation cleanup half).
 
-This plan implements an accepted record. It does not re-open ADR-0056's
+This plan implements an accepted record. It does not re-open ADR-0058's
 alternatives (a plan-time number reservation, or a cheap renumber-and-repoint
 script), both of which decision 7 weighed and declined; it does not add a new
 gate stage, a fetch, or a new skip line, all of which decision 3 forbids.
@@ -60,7 +60,7 @@ file's only link-bearing structure, so a link-target-scoped parser sees exactly
 the record rows.
 
 **The branch's own tree is already the first test case.** This branch adds
-`docs/adr/0056-...md` (untracked) and its README row (modified). Both were
+`docs/adr/0058-...md` (untracked) and its README row (modified). Both were
 placed correctly, so the invariant this plan adds must pass against the very
 branch that adds it - which is the self-referential hazard Phase 1's success
 criteria verify explicitly rather than discovering at commit time.
@@ -94,8 +94,8 @@ gate-relevant `mix.exs` lines, `@tag :skip` additions, and a shrinking
 - The `runner/1` stub shape - `test/mix/statifier/adr_guard_test.exs:477-483`
   and `test/mix/tasks/adr_check_test.exs:10-24`; `rev-parse` is keyed by the
   ref it is asked to resolve.
-- ADR-0056 decisions 1-7 and its two Open Questions
-  (`docs/adr/0056-...md:199-218`), both resolved below.
+- ADR-0058 decisions 1-7 and its two Open Questions
+  (`docs/adr/0058-...md:199-218`), both resolved below.
 - ADR-0011 and st-wjg's precedent - `docs/quality-gate-changes.md:280-310`.
 - Sabotage note format - `docs/testing.md:146-176`:
   `# sabotage: <what was broken> -> red`, above the `test` line.
@@ -131,26 +131,26 @@ deleting a README row makes it red on the bijection; both revert to green.
 
 ## What We're NOT Doing
 
-- **No `.git/FETCH_HEAD`-mtime freshness advisory.** ADR-0056's Open Question 1
+- **No `.git/FETCH_HEAD`-mtime freshness advisory.** ADR-0058's Open Question 1
   raises it and declines it by default: an mtime heuristic mislabels a fresh
   clone and adds a claim the check cannot fully stand behind. This plan takes
   the record's default and does not implement it. The `.claude/wurk/mr.md`
   fetch-then-gate sequence is the freshness guarantee; a per-run advisory would
   restate it less reliably.
 - **No new `.quality.exs` stage, no `enabled: false` entry, no fetch inside the
-  gate.** ADR-0056 decision 3. A second stage matching
+  gate.** ADR-0058 decision 3. A second stage matching
   `^disabled in \.quality\.exs$` would silently widen CLAUDE.md's
   not-applicable classification, and a fetch-dependent stage that skips when
   offline is the self-skipping shape the bead's acceptance criterion forbids.
-- **No renumber-and-repoint script.** ADR-0056 decision 7 declines it as the
+- **No renumber-and-repoint script.** ADR-0058 decision 7 declines it as the
   primary mechanism; it remains available to st-8d5e or a successor.
 - **No citation checking outside `docs/adr/`.** Stale citations in `lib/`
-  moduledocs, plans, or the gate ledger are st-8d5e's scope (ADR-0056
+  moduledocs, plans, or the gate ledger are st-8d5e's scope (ADR-0058
   Consequences). The bijection covers `docs/adr/` and its README only. This is
-  also what keeps the check clear of ADR-0056's own warning that a mechanical
+  also what keeps the check clear of ADR-0058's own warning that a mechanical
   link check over ADR citations must distinguish pointer sites from
   historical-statement sites.
-- **No parsing of the README's Decision or Status prose columns.** ADR-0056
+- **No parsing of the README's Decision or Status prose columns.** ADR-0058
   decision 5 scopes the machine-read half to the number, the link target, and
   row uniqueness. "superseded by 0017", "amends 0015 in part" and similar stay
   human-owned.
@@ -159,10 +159,10 @@ deleting a README row makes it red on the bijection; both revert to green.
   It is listed under Deferred Manual Verification as a human task, with the
   finding that `mix gate.check` does not block the branch without it.
 - **No changelog fragment.** `changelog.d/README.md:33` excludes gate tooling.
-- **Not correcting the "untracked" description of `0056` in Current State
+- **Not correcting the "untracked" description of `0058` in Current State
   Analysis.** The plan critic read the working tree as clean and flagged the
   wording as stale. It is not: `git status --short` at planning time reports
-  `?? docs/adr/0056-adr-number-collisions-fail-the-gate-tree-locally.md` and
+  `?? docs/adr/0058-adr-number-collisions-fail-the-gate-tree-locally.md` and
   ` M docs/adr/README.md`. Recorded here so the discrepancy is not
   re-investigated. The framing is load-bearing either way, since the tree-local
   check reads the filesystem and does not care about git status - which is
@@ -175,7 +175,7 @@ full `mix quality`, ordered so that no phase leaves a half-wired structure
 behind:
 
 - **Phase 1** adds the tree-local invariant end to end - data on `source`,
-  checks in `analyze/1`, reporting through `mix adr.check` - plus ADR-0056
+  checks in `analyze/1`, reporting through `mix adr.check` - plus ADR-0058
   decision 6's README footer sentence. It is complete and useful on its own,
   and its gate run is the self-referential proof that this branch's own tree
   satisfies the invariant it introduces.
@@ -206,7 +206,7 @@ what makes the check fire on a record before it is ever committed. That means
 ### Overview
 
 `collect/1` gathers the `docs/adr/` listing and the README text; `analyze/1`
-gains `adr-0056-duplicate-number` and `adr-0056-readme-index` checks; the task
+gains `adr-0058-duplicate-number` and `adr-0058-readme-index` checks; the task
 prints file-level findings correctly; the README footer gains the
 fetch-before-picking sentence.
 
@@ -315,12 +315,12 @@ Group the listed filenames by their four-digit prefix; any group with more than
 one member is one finding **per file in the group**, each naming the other
 paths in its message so the gate output identifies both sides of the collision
 regardless of which finding the reader looks at first. `line: nil`, severity
-`"error"`, check `"adr-0056-duplicate-number"`.
+`"error"`, check `"adr-0058-duplicate-number"`.
 
 Message shape:
 
 ```
-ADR number 0052 is used by two records; ADR-0056 requires one file per number
+ADR number 0052 is used by two records; ADR-0058 requires one file per number
 (also: docs/adr/0052-chart-identity-and-position-serialization.md)
 ```
 
@@ -329,19 +329,19 @@ ADR number 0052 is used by two records; ADR-0056 requires one file per number
 **File**: `lib/mix/statifier/adr_guard.ex`
 **Changes**: new private `readme_index_findings/1`, added to `analyze/1`.
 
-Parse rows with a link-target-scoped pattern - this resolves ADR-0056's Open
+Parse rows with a link-target-scoped pattern - this resolves ADR-0058's Open
 Question 2 by implementing the scoping from the start, as the record's own
 guidance instructs:
 
 ```elixir
-# Scoped by link target, per ADR-0056 open question 2: only rows whose link
+# Scoped by link target, per ADR-0058 open question 2: only rows whose link
 # resolves to a record file in this directory are index rows. A future row
 # linking a predicator-ex ADR, a wurk ADR, or an http(s) URL is not this
 # check's business, and neither is the footer prose below the table.
 @readme_row_pattern ~r/^\|\s*\[(\d{4})\]\((\d{4}-[^)\/]+\.md)\)/m
 ```
 
-Four findings, all `line: nil`, check `"adr-0056-readme-index"`:
+Four findings, all `line: nil`, check `"adr-0058-readme-index"`:
 
 - **missing row**: a listed record file has no row whose link target equals its
   basename. `file:` is the record path.
@@ -351,7 +351,7 @@ Four findings, all `line: nil`, check `"adr-0056-readme-index"`:
   `file:` is `docs/adr/README.md`.
 - **unreadable README**: `readme` is `nil` while `files` is non-empty. `file:`
   is `docs/adr/README.md`. (Without this, deleting the README would make the
-  bijection vacuously true - the silent-pass shape ADR-0056 exists to avoid.)
+  bijection vacuously true - the silent-pass shape ADR-0058 exists to avoid.)
 
 A row whose displayed number disagrees with its link target's prefix
 (`| [0052](0053-...md) |`) is a duplicate-or-missing pairing under the rules
@@ -401,7 +401,7 @@ justified duplicate ADR number, and an ADR citation is not a filename. Add one
 sentence to `@advice` telling the reader the fix is a renumber plus a README
 row move, not a suppression comment.
 
-#### 8. ADR-0056 decision 6: the README footer sentence
+#### 8. ADR-0058 decision 6: the README footer sentence
 
 **File**: `docs/adr/README.md`
 **Changes**: extend the existing footer paragraph.
@@ -423,7 +423,7 @@ read as one.
 
 **File**: `test/mix/statifier/adr_guard_test.exs`
 
-A new `describe "ADR-0056 - numbering invariant"` block, driving `analyze/1`
+A new `describe "ADR-0058 - numbering invariant"` block, driving `analyze/1`
 with hand-built `%{diff: "", adr: %{files: [...], readme: "..."}}` maps - no
 fixture repository, matching the file's existing convention. Cases:
 
@@ -438,7 +438,7 @@ fixture repository, matching the file's existing convention. Cases:
 - a README whose table is followed by footer prose containing a parenthesized
   `.md` reference produces no dangling finding (scoping);
 - a row linking outside `docs/adr/` (`../../other/docs/adr/0001-x.md`, or an
-  `https://` target) is ignored by both halves (ADR-0056 open question 2);
+  `https://` target) is ignored by both halves (ADR-0058 open question 2);
 - `analyze/1` on a source with no `:adr` key returns only the diff-line
   findings.
 
@@ -467,7 +467,7 @@ and confirming red. Examples: `# sabotage: group duplicate prefixes but return
 - [x] `mix gate.verify` exits zero, proving the run was a full, unprofiled,
       unscoped, un-`--skip`-ed gate.
 - [x] `mix adr.check` alone exits 0 against this branch's tree.
-- [x] **The self-referential check**: with `docs/adr/0056-...md` and its README
+- [x] **The self-referential check**: with `docs/adr/0058-...md` and its README
       row present in the tree, the new checks find nothing. This is the phase's
       whole point and is verified by the gate run itself, not by inspection.
 - [x] The finding contract for a numbering finding carries `line: nil` in both
@@ -505,7 +505,7 @@ advancement and the manual items defer to the end.
 
 ### Overview
 
-ADR-0056 decision 4: the tree-local invariant needs no base ref, so it runs
+ADR-0058 decision 4: the tree-local invariant needs no base ref, so it runs
 regardless. The stage reserves its skip for the diff-based checks only, and can
 no longer report itself skipped while a collision sits in the tree.
 
@@ -609,7 +609,7 @@ that still names a mutation in the code path they now cover (e.g.
       in a normal worktree (where `origin/main` resolves), i.e. this phase does
       not turn ordinary runs into skips.
 - [x] No new pattern in `.claude/wurk.json`'s `gate.project_level_skips` or
-      `gate.not_applicable_skips`, and no edit to `.quality.exs` - ADR-0056
+      `gate.not_applicable_skips`, and no edit to `.quality.exs` - ADR-0058
       decision 4 turns on this being true, and ADR-0017 point 6's re-argument
       obligation is not triggered.
 
@@ -631,7 +631,7 @@ that still names a mutation in the code path they now cover (e.g.
 
 ### Overview
 
-ADR-0056 decision 2: a branch-added `docs/adr/NNNN-*.md` whose number exists on
+ADR-0058 decision 2: a branch-added `docs/adr/NNNN-*.md` whose number exists on
 the base ref under a different filename is a finding. This half moves detection
 earlier on runs that happen to have fresh refs; it guarantees nothing, and the
 code says so.
@@ -674,7 +674,7 @@ this branch* distinguishable.
 For each number present in `files` but under a filename absent from
 `base_files`, where the same number *is* present in `base_files` under a
 different filename: one finding on the branch's file path, check
-`"adr-0056-base-number"`, `line: nil`, message naming the base ref's filename
+`"adr-0058-base-number"`, `line: nil`, message naming the base ref's filename
 for that number and directing the author to renumber.
 
 Absent `:base_files` (Phase 2's no-base-ref source, or a hand-built source)
@@ -689,7 +689,7 @@ rebase, only this one can. Neither subsumes the other.
 **Files**: `lib/mix/statifier/adr_guard.ex` (moduledoc),
 `lib/mix/tasks/adr.check.ex` (moduledoc)
 
-A short paragraph, quoting ADR-0056 decision 2's own framing: a finding from
+A short paragraph, quoting ADR-0058 decision 2's own framing: a finding from
 this half is always real, a pass promises nothing when `origin/main` is stale,
 and **no document, skill, or report may cite a bare-gate ADR guard pass as
 evidence that no collision exists on the remote.** The guarantee lives in the
@@ -714,17 +714,17 @@ Each with its sabotage note.
 #### Automated Verification:
 - [x] Full `mix quality` is green; `mix gate.verify` exits zero.
 - [x] `git fetch origin && mix adr.check` exits 0 on this branch. **The fetch
-      is part of the criterion, not a preamble to it.** ADR-0056 decision 2
+      is part of the criterion, not a preamble to it.** ADR-0058 decision 2
       says a pass from this half "promises nothing when `origin/main` is
       stale", and that "no document, skill, or report may cite a bare-gate ADR
       guard pass as evidence that no collision exists on the remote" - a plan
       checkbox is such a report. Run without an immediately preceding fetch,
-      this box is not checkable; with one, it mechanically confirms ADR-0056's
+      this box is not checkable; with one, it mechanically confirms ADR-0058's
       Consequences claim that 0055 was the highest number on the remote and
       0056 is free on both sides.
 - [x] With a scratch branch that copies an existing on-main record to a new
       filename under the same number, `mix adr.check` exits 1 with an
-      `adr-0056-base-number` finding.
+      `adr-0058-base-number` finding.
 - [x] `mix quality --format json --report -` still shows `ADR guard` passed.
 
 #### Manual Verification:
@@ -734,7 +734,7 @@ Each with its sabotage note.
 - [ ] The moduledoc's asymmetry paragraph is strong enough that a future reader
       does not cite a bare-gate pass as remote evidence.
 - [ ] Confirm no `git fetch` was added anywhere in the guard or the task
-      (ADR-0056 decision 3): `grep -rn "fetch" lib/mix/` returns nothing new.
+      (ADR-0058 decision 3): `grep -rn "fetch" lib/mix/` returns nothing new.
 
 **Implementation Note**: as Phase 1.
 
@@ -765,7 +765,7 @@ Each with its sabotage note.
 ### Manual Testing Steps:
 
 1. On this branch, run `mix quality`. It must be green - the branch's own
-   `0056` record and README row satisfy the invariant the branch introduces.
+   `0058` record and README row satisfy the invariant the branch introduces.
 2. `cp -f docs/adr/0051-invoke-handlers-are-registered-per-session.md
    docs/adr/0052-duplicate-for-testing.md`; run `mix adr.check`. Expect exit 1
    naming both `0052-*` paths and a missing-row finding for the copy.
@@ -781,7 +781,7 @@ Each with its sabotage note.
 
 ## Resolved Questions
 
-ADR-0056 records two open questions (`docs/adr/0056-...md:199-218`). Both are
+ADR-0058 records two open questions (`docs/adr/0058-...md:199-218`). Both are
 resolved here, at implementation time, without reopening the decision - which
 is what the record itself says is allowed. Neither remains open in this plan.
 
@@ -808,12 +808,12 @@ without a human present, recorded so they can be overridden cheaply:
    tests assert it verbatim. The wording chosen - "no base ref: neither
    origin/main nor main resolves; the docs/adr/ numbering invariant ran and is
    clean" - is a judgment about what a gate report should say. Any wording that
-   names what still ran satisfies ADR-0056 decision 4.
+   names what still ran satisfies ADR-0058 decision 4.
 
    **Settled (2026-08-19):** kept as written. Confirmed by the human during a
    `/wurk:verify` walk, after the string was observed printing from a scratch
    clone with no remotes and no `main`: it names the invariant that still ran,
-   which is what ADR-0056 decision 4 asks of it.
+   which is what ADR-0058 decision 4 asks of it.
 
 2. **`{:no_base_ref, source}` versus folding into `{:ok, source}`.** The tuple
    keeps the pass/skip distinction honest at the task boundary. The alternative
@@ -847,7 +847,7 @@ without a human present, recorded so they can be overridden cheaply:
 
 ## References
 
-- Direction record: `docs/adr/0056-adr-number-collisions-fail-the-gate-tree-locally.md`
+- Direction record: `docs/adr/0058-adr-number-collisions-fail-the-gate-tree-locally.md`
   (accepted 2026-08-19, uncommitted on this branch)
 - Related ADRs: `docs/adr/0011-quality-gate-config-not-agent-editable.md`,
   `docs/adr/0017-*.md` (point 6, skip reclassification),
@@ -862,11 +862,22 @@ without a human present, recorded so they can be overridden cheaply:
 - Changelog policy: `changelog.d/README.md:29-33`
 - Bead: `st-9vco` (prevention half; `st-8d5e` is the cleanup half)
 
+## Renumbering note
+
+This plan was written when the record it implements was ADR-0056. ADR-0056
+(st-8d5e) and ADR-0057 (st-hz2a) both landed on main while this branch was in
+flight, so the record was renumbered to **ADR-0058** at merge time and every
+pointer citation in this document moved with it, per ADR-0056 decision 4. Two
+statements are left at 0056 on purpose, per that record's decision 3: the
+success criterion recording that a fetch confirmed 0056 free at plan time, and
+the record's own Consequences bullet saying the same. Rewriting either would
+falsify what was verified then.
+
 ## Deferred Manual Verification
 
 ### Human tasks - not for an agent
 
-- [ ] **The `docs/quality-gate-changes.md` entry.** ADR-0056 decision 3 and its
+- [ ] **The `docs/quality-gate-changes.md` entry.** ADR-0058 decision 3 and its
       Consequences call for a **voluntary** entry with a human `Approved-by:`
       line, per st-wjg's precedent. CLAUDE.md states plainly that this entry
       "is a human's call on the record, not one an agent writes for itself", so

@@ -5,14 +5,14 @@ defmodule Mix.Statifier.AdrGuard do
   Covers ADR-0002 (Appendix D naming), ADR-0003 (pure core with effects),
   ADR-0004 (predicator as the datamodel, so no `Code.eval_*`), ADR-0008
   (generated identifier formats), ADR-0018 (process artifacts are not code
-  comments), and ADR-0056 (ADR number collisions). Each of the first five
+  comments), and ADR-0058 (ADR number collisions). Each of the first five
   checks is a name or call-site pattern over the lines a diff adds -
   deliberately not an AST pass - so a false positive is cleared the way this
   project already clears an Appendix D deviation: an inline comment on or
   above the flagged line naming an ADR or the word "deviation".
 
-  ADR-0056's tree-local checks, `adr-0056-duplicate-number` and
-  `adr-0056-readme-index`, are different in kind from all five: they are
+  ADR-0058's tree-local checks, `adr-0058-duplicate-number` and
+  `adr-0058-readme-index`, are different in kind from all five: they are
   invariants over the working tree's `docs/adr/` listing and its README table,
   not patterns over added diff lines. A finding from either carries `line:
   nil` - there is no line in a diff to point at, because the defect is a
@@ -21,10 +21,10 @@ defmodule Mix.Statifier.AdrGuard do
   justified duplicate ADR number, and an ADR citation is not a filename: the
   fix is a renumber and a README row move, never a suppression comment.
 
-  ADR-0056 adds a third check, `adr-0056-base-number`: a branch-added
+  ADR-0058 adds a third check, `adr-0058-base-number`: a branch-added
   `docs/adr/NNNN-*.md` whose number already exists on the base ref under a
   different filename. It differs from the two tree-local checks in a way
-  ADR-0056 decision 2 states directly: "a finding from this half is always
+  ADR-0058 decision 2 states directly: "a finding from this half is always
   real (a collision it can see is a collision), but a pass from it promises
   nothing when `origin/main` is stale." The guarantee against a collision
   lives in the tree-local checks above, which run at the post-fetch,
@@ -35,7 +35,7 @@ defmodule Mix.Statifier.AdrGuard do
   tree-local checks fire too. What it alone catches is a branch that renames
   or renumbers an on-main record: one file per number in the tree keeps the
   duplicate check silent, while the merge-base still holds the number under
-  the old filename (ADR-0056 decision 2 as amended 2026-08-19). **No
+  the old filename (ADR-0058 decision 2 as amended 2026-08-19). **No
   document, skill, or report may cite a bare-gate ADR guard pass as evidence
   that no collision exists on the remote.**
 
@@ -608,11 +608,11 @@ defmodule Mix.Statifier.AdrGuard do
     %{file: path, line: line, severity: "error", check: check, message: message}
   end
 
-  # -- ADR-0056: the tree-local numbering invariant --------------------------
+  # -- ADR-0058: the tree-local numbering invariant --------------------------
 
   @adr_number_pattern ~r/^(\d{4})-/
 
-  # Scoped by link target, per ADR-0056 open question 2: only rows whose link
+  # Scoped by link target, per ADR-0058 open question 2: only rows whose link
   # resolves to a record file in this directory are index rows. A future row
   # linking a predicator-ex ADR, a wurk ADR, or an http(s) URL is not this
   # check's business, and neither is the footer prose below the table.
@@ -641,8 +641,8 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         Path.join(@adr_dir, file),
         nil,
-        "adr-0056-duplicate-number",
-        "ADR number #{number} is used by two records; ADR-0056 requires one file per number " <>
+        "adr-0058-duplicate-number",
+        "ADR number #{number} is used by two records; ADR-0058 requires one file per number " <>
           "(also: #{Enum.join(others, ", ")})"
       )
     end
@@ -655,8 +655,8 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         @adr_readme,
         nil,
-        "adr-0056-readme-index",
-        "docs/adr/README.md could not be read; ADR-0056's index cannot be checked against it"
+        "adr-0058-readme-index",
+        "docs/adr/README.md could not be read; ADR-0058's index cannot be checked against it"
       )
     ]
   end
@@ -678,7 +678,7 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         Path.join(@adr_dir, file),
         nil,
-        "adr-0056-readme-index",
+        "adr-0058-readme-index",
         "#{Path.join(@adr_dir, file)} has no docs/adr/README.md table row linking it"
       )
     end
@@ -691,7 +691,7 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         @adr_readme,
         nil,
-        "adr-0056-readme-index",
+        "adr-0058-readme-index",
         "docs/adr/README.md links #{target}, which does not exist in docs/adr/"
       )
     end
@@ -709,7 +709,7 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         @adr_readme,
         nil,
-        "adr-0056-readme-index",
+        "adr-0058-readme-index",
         "docs/adr/README.md has more than one row for ADR number #{number}"
       )
     end)
@@ -723,15 +723,15 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         @adr_readme,
         nil,
-        "adr-0056-readme-index",
+        "adr-0058-readme-index",
         "docs/adr/README.md has more than one row linking #{target}"
       )
     end)
   end
 
-  # -- ADR-0056: the base-ref early-warning half ------------------------------
+  # -- ADR-0058: the base-ref early-warning half ------------------------------
 
-  # Early warning only, per ADR-0056 decision 2: a finding is always real, but
+  # Early warning only, per ADR-0058 decision 2: a finding is always real, but
   # a pass promises nothing when the base ref (`:base_files`) is stale - see
   # the moduledoc. Absent `:base_files` (the no-base-ref source, or any
   # hand-built source) this returns [] rather than raising, so the guard's
@@ -748,9 +748,9 @@ defmodule Mix.Statifier.AdrGuard do
       finding(
         Path.join(@adr_dir, file),
         nil,
-        "adr-0056-base-number",
+        "adr-0058-base-number",
         "ADR number #{number} already exists on the base ref as " <>
-          "#{Path.join(@adr_dir, base_file)}; ADR-0056 requires renumbering before merge"
+          "#{Path.join(@adr_dir, base_file)}; ADR-0058 requires renumbering before merge"
       )
     end
   end

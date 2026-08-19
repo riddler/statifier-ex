@@ -151,7 +151,7 @@ defmodule Mix.Tasks.Adr.CheckTest do
     refute tag == :skip
   end
 
-  describe "ADR-0056 - numbering findings reported by the task" do
+  describe "ADR-0058 - numbering findings reported by the task" do
     # sabotage: have execute/2's :ok clause reject `line: nil` findings before
     #           calling respond/2, so a numbering finding never reaches the
     #           task's response -> red
@@ -177,7 +177,7 @@ defmodule Mix.Tasks.Adr.CheckTest do
                )
 
       assert {:ok, %{"findings" => findings}} = JSON.decode(json)
-      assert Enum.any?(findings, &(&1["check"] == "adr-0056-duplicate-number"))
+      assert Enum.any?(findings, &(&1["check"] == "adr-0058-duplicate-number"))
       assert Enum.all?(findings, &(&1["line"] in [nil]))
     end
 
@@ -223,7 +223,7 @@ defmodule Mix.Tasks.Adr.CheckTest do
                )
 
       assert {:ok, %{"findings" => findings}} = JSON.decode(json)
-      assert Enum.any?(findings, &(&1["check"] == "adr-0056-duplicate-number"))
+      assert Enum.any?(findings, &(&1["check"] == "adr-0058-duplicate-number"))
     end
 
     # sabotage: have respond_partial/2's [] clause return {:error, _} instead
