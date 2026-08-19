@@ -1,6 +1,6 @@
 # ADR-0054: Durable timers consume the effect vocabulary
 
-Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:58-59's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected) - decision 2's recorded gap decided by ADR-0055 (2026-08-19: the limit is standing for `#_parent`/`#_invokeid`/`#_internal`, deferred with a named trigger for the external-session route)
+Status: accepted (2026-08-19) - discharges ADR-0003's Consequences for the delayed-send half; scopes docs/extending.md:58-59's opaque-instruction rule to the timer consumer; reads ADR-0035's run-local send id as a cancellation key, not a uniqueness key - amended 2026-08-19 (st-ifa3: decision 2 scoped to self-routed sends; decision 3's dedup key gains the position fields; decision 4's liveness door corrected) - decision 2's recorded gap decided by ADR-0055 (2026-08-19: the limit is standing for `#_parent`/`#_invokeid`/`#_internal`, deferred with a named trigger for the external-session route) - decision 3's residual foreach collision decided by ADR-0059 (2026-08-19: `%SendDelayed{}` and `%Cancel{}` gain a per-execution `ordinal`, the dedup key gains it as its eighth component, and the author-side foreach guidance retires)
 
 ## Context
 
@@ -172,7 +172,12 @@ the same key.** This is the correction of the charter's "unique per send id":
   a store keyed without `c_index` would silently collapse them into one,
   dropping a timer the state chart expects to fire.
 
-  **Residual collision, stated honestly.** Even with `c_index` and `owner`,
+  **Residual collision, stated honestly.** *(Decided by ADR-0059,
+  2026-08-19 - `%SendDelayed{}` and `%Cancel{}` gain a per-execution
+  `ordinal` off a new `timer_counter`, the dedup key gains it as its
+  eighth component, and the guidance below retires once the field ships.
+  The paragraph stands as this record's honest statement of the key as it
+  was.)* Even with `c_index` and `owner`,
   the key is *not* strictly per-instance. A `<send id="x" delay="...">` inside
   a `<foreach>` body executes once per iteration from the **same** content
   position, in the same microstep, under the same author id - confirmed by
