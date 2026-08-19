@@ -122,7 +122,7 @@ defmodule Statifier.Replay do
   `externalQueue.dequeue()`.
   """
 
-  alias Statifier.{Effect, Event, Interpreter, MachineState}
+  alias Statifier.{Effect, Event, Interpreter, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Session.{Effects, Inbox, Recording}
@@ -182,10 +182,25 @@ defmodule Statifier.Replay do
         }
 
   @doc """
-  Replays `recording` from scratch: `Statifier.Interpreter.initialize/2`
-  over `Recording.machine/1` and `Recording.opts/1`, then folds
-  `Recording.entries/1` in order, draining after each one exactly as the
-  live session that produced the recording did.
+  Replays `recording` from its starting point, then folds `Recording.entries/1`
+  in order, draining after each one exactly as the live session that produced
+  the recording did.
+
+  The starting point is `Recording.anchor/1`: `nil` (every recording made
+  before ADR-0060, and any made since without a resume behind it) replays
+  from scratch, `Statifier.Interpreter.initialize/2` over `Recording.machine/1`
+  and `Recording.opts/1` - today's path, unchanged. A blob anchor instead
+  decodes the persisted position via `Statifier.Position.from_binary/2`
+  against `Recording.machine/1`, performing no effects and draining nothing
+  before the first entry - a resumed session performed no initialization
+  either (see the moduledoc's anchored-recordings cross-reference and
+  `Statifier.Session.Recording`'s "Anchored recordings" section).
+
+  Returns `{:error, {:anchor, reason}}` when the anchor blob's identity does
+  not match `Recording.machine/1`, or is otherwise malformed -
+  `Statifier.Position.from_binary/2`'s own error, wrapped rather than
+  flattened so a caller can tell an anchor failure from an
+  `{:unscheduled_timer_firing, _}` one.
 
   Returns `{:error, {:unscheduled_timer_firing, send_id}}` the moment a
   `{:timer, send_id, _event}` entry has no credit in either the `pending`
@@ -199,20 +214,29 @@ defmodule Statifier.Replay do
   caller for a late subscriber to catch up on (ADR-0049).
   """
   @spec run(recording :: Recording.t()) ::
-          {:ok, result()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}
+          {:ok, result()}
+          | {:error, {:unscheduled_timer_firing, String.t() | nil}}
+          | {:error, {:anchor, term()}}
   def run(recording) do
-    {machine_state, effects} =
-      Interpreter.initialize(Recording.machine(recording), Recording.opts(recording))
+    with {:ok, machine_state, effects} <- start_state(recording) do
+      invoke_handlers = Keyword.get(Recording.opts(recording), :invoke_handlers, %{})
 
-    invoke_handlers = Keyword.get(Recording.opts(recording), :invoke_handlers, %{})
+      state =
+        %State{
+          machine_state: machine_state,
+          inbox: Inbox.new(),
+          invoke_handlers: invoke_handlers
+        }
+        |> perform(effects)
+        |> drain()
 
-    state =
-      %State{machine_state: machine_state, inbox: Inbox.new(), invoke_handlers: invoke_handlers}
-      |> perform(effects)
-      |> drain()
+      fold_entries(Recording.entries(recording), state)
+    end
+  end
 
-    entries = Recording.entries(recording)
-
+  @spec fold_entries(entries :: [Recording.entry()], state :: State.t()) ::
+          {:ok, result()} | {:error, {:unscheduled_timer_firing, String.t() | nil}}
+  defp fold_entries(entries, state) do
     result =
       Enum.reduce_while(entries, state, fn entry, state ->
         case apply_entry(entry, state) do
@@ -224,6 +248,35 @@ defmodule Statifier.Replay do
     case result do
       %State{} = state -> {:ok, to_result(state)}
       {:error, _reason} = error -> error
+    end
+  end
+
+  # `Recording.anchor/1`'s two branches (moduledoc's "Anchored recordings"
+  # cross-reference, ADR-0060 decision 6): `nil` replays from scratch exactly
+  # as before this decision existed; a blob decodes the persisted position
+  # instead, re-stamping `:invoke_types` the way
+  # `Statifier.Interpreter`'s own "Rehydrating a position" moduledoc section
+  # documents for a live resume, and performing no effects - a resumed
+  # session's own boot performs none either.
+  @spec start_state(recording :: Recording.t()) ::
+          {:ok, MachineState.t(), [Effect.t()]} | {:error, {:anchor, term()}}
+  defp start_state(recording) do
+    case Recording.anchor(recording) do
+      nil ->
+        {machine_state, effects} =
+          Interpreter.initialize(Recording.machine(recording), Recording.opts(recording))
+
+        {:ok, machine_state, effects}
+
+      blob ->
+        case Position.from_binary(blob, Recording.machine(recording)) do
+          {:ok, machine_state} ->
+            invoke_types = Keyword.get(Recording.opts(recording), :invoke_types)
+            {:ok, MachineState.put_invoke_types(machine_state, invoke_types), []}
+
+          {:error, reason} ->
+            {:error, {:anchor, reason}}
+        end
     end
   end
 

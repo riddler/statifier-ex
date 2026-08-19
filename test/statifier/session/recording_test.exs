@@ -1,7 +1,20 @@
 defmodule Statifier.Session.RecordingTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.{Compiler, Effect, Event, Lowering, Machine, Parser, Replay, Session, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Interpreter,
+    Lowering,
+    Machine,
+    Parser,
+    Position,
+    Replay,
+    Session,
+    Validator
+  }
+
   alias Statifier.Effect.Log
   alias Statifier.Send.Routes
   alias Statifier.Session.Recording
@@ -264,6 +277,23 @@ defmodule Statifier.Session.RecordingTest do
     end
   end
 
+  describe "new/3 and anchor/1" do
+    # sabotage: `new/3`'s struct build drops the `anchor:` field (always
+    # stores `nil` regardless of the third argument) -> the first assertion
+    # below reddens because the supplied blob never reaches `anchor/1`
+    test "new/3 stores the supplied anchor; new/2 callers still default to nil" do
+      machine = compile_identified!()
+      {machine_state, _effects} = Interpreter.initialize(machine, [])
+      assert {:ok, anchor_blob} = Position.to_binary(machine_state)
+
+      anchored = Recording.new(machine, [], anchor_blob)
+      assert Recording.anchor(anchored) == anchor_blob
+
+      unanchored = Recording.new(machine, [])
+      assert Recording.anchor(unanchored) == nil
+    end
+  end
+
   describe "term_to_binary/1 and binary_to_term/1" do
     # sabotage: n/a - this test only checks that `%Recording{}` carries no
     # pid/ref/port/fun that would break a term round trip, not a specific
@@ -353,6 +383,43 @@ defmodule Statifier.Session.RecordingTest do
       assert {:ok, decoded} = Recording.from_binary(blob)
 
       assert Recording.entries(decoded) == Recording.entries(recording)
+    end
+  end
+
+  describe "to_binary/1 then from_binary/1 anchor round trip" do
+    # sabotage: `to_binary/1`'s envelope tuple hardcodes `nil` for the
+    # trailing anchor slot instead of reading `recording.anchor` -> the
+    # decoded recording's `anchor/1` comes back `nil` instead of the
+    # original blob, reddening the equality assertion
+    test "round-trips a non-nil anchor blob" do
+      machine = compile_identified!()
+      {machine_state, _effects} = Interpreter.initialize(machine, [])
+      assert {:ok, anchor_blob} = Position.to_binary(machine_state)
+
+      recording = Recording.new(machine, [], anchor_blob)
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert {:ok, decoded} = Recording.from_binary(blob)
+
+      assert Recording.anchor(decoded) == anchor_blob
+    end
+  end
+
+  describe "from_binary/1 on a hand-built version-1 envelope" do
+    # sabotage: `from_binary/1`'s five-element clause is changed to call
+    # `decode_envelope(version, chart_blob, opts, entries, :stray)` instead of
+    # `decode_envelope(version, chart_blob, opts, entries, nil)` -> this
+    # assertion reddens because the decoded recording's `anchor/1` comes back
+    # `:stray` instead of `nil`
+    test "decodes with anchor: nil" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      version_1_envelope =
+        :erlang.term_to_binary({:statifier_recording, 1, chart_blob, [], []})
+
+      assert {:ok, decoded} = Recording.from_binary(version_1_envelope)
+      assert Recording.anchor(decoded) == nil
     end
   end
 
@@ -555,6 +622,12 @@ defmodule Statifier.Session.RecordingTest do
   end
 
   describe "format_version/0" do
+    # sabotage: `@format_version` is changed from `2` back to `1` -> this
+    # reddens directly
+    test "returns 2" do
+      assert Recording.format_version() == 2
+    end
+
     # sabotage: `format_version/0` is changed to return `@format_version +
     # 1` instead of `@format_version` -> this test reddens because the
     # returned value (2) no longer equals the version tag actually written
@@ -564,7 +637,7 @@ defmodule Statifier.Session.RecordingTest do
 
       assert {:ok, blob} = Recording.to_binary(recording)
 
-      assert {:statifier_recording, version, _chart_blob, _opts, _entries} =
+      assert {:statifier_recording, version, _chart_blob, _opts, _entries, _anchor} =
                :erlang.binary_to_term(blob)
 
       assert version == Recording.format_version()

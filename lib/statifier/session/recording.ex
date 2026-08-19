@@ -88,7 +88,9 @@ defmodule Statifier.Session.Recording do
 
   `to_binary/1` and `from_binary/1` (ADR-0057) give a recording a versioned
   binary envelope: `{:statifier_recording, format_version, chart_blob, opts,
-  entries}`. Five slots -
+  entries, anchor}`. A version-1 envelope omits the trailing `anchor` slot
+  entirely (five elements, not six carrying `nil`); `from_binary/1` reads
+  both shapes (see below). Six slots -
 
     - `format_version` - this module's own version tag, checked before the
       nested chart is touched (ADR-0057 decision 4): a future format this
@@ -109,6 +111,10 @@ defmodule Statifier.Session.Recording do
       storage optimization this module alone knows about (decision 1 is what
       makes restoring it on decode legal), and a blob that copied the raw
       field would bake that implementation detail into the format.
+    - `anchor` - `anchor/1`'s blob, or `nil` - see the moduledoc's "Anchored
+      recordings" section (ADR-0060 decision 6). Present only in a version-2
+      envelope; a version-1 envelope's absent sixth slot decodes to the same
+      `nil`.
 
   `:invoke_handlers` cross the boundary as strings, never as atoms, because
   `:safe` decoding refuses to create atoms a blob names and a module's atom
@@ -126,6 +132,24 @@ defmodule Statifier.Session.Recording do
   ADR-0034's OTP `MapSet`-iteration caveat - rather than something a codec
   could check. `perform/2`, the impure half of a handler, is never called by
   replay at all (`lib/statifier/replay.ex`), so it needs no equivalence.
+
+  ## Anchored recordings
+
+  ADR-0060 decision 6: a recording made by a *resumed* session begins
+  somewhere other than the chart's initial configuration - the position the
+  session was resumed from. `anchor/1` carries that starting point as a
+  `Statifier.Position.to_binary/1` blob, never a `%MachineState{}` and never
+  a `%Machine{}` - the blob keeps "no compiled term is ever serialized" true
+  by construction (ADR-0052 decision 3), and it is what
+  `Statifier.Position.from_binary/2` already knows how to identity-check
+  against `machine/1` on replay. `anchor: nil` (the default, and what every
+  recording made before this decision decodes to) means "start at
+  `Statifier.Interpreter.initialize/2`," exactly as before this field
+  existed. An anchored recording's `entries/1` stream contains no
+  initialization effects, because a resumed session performs no
+  initialization (ADR-0060 decisions 1 and 4 skip `initialize/2` entirely) -
+  `Statifier.Replay.run/1`'s anchored branch reflects that by performing no
+  effects of its own before folding the first entry.
   """
 
   alias Statifier.{Chart, Effect, Event, Machine}
@@ -133,7 +157,7 @@ defmodule Statifier.Session.Recording do
   alias Statifier.Send.Routes
 
   @enforce_keys [:machine, :opts, :entries]
-  defstruct [:machine, :opts, entries: []]
+  defstruct [:machine, :opts, entries: [], anchor: nil]
 
   @typedoc "One recorded input, in the session's serialized input order."
   @type entry ::
@@ -148,7 +172,8 @@ defmodule Statifier.Session.Recording do
   @opaque t :: %__MODULE__{
             machine: Machine.t(),
             opts: keyword(),
-            entries: [entry()]
+            entries: [entry()],
+            anchor: binary() | nil
           }
 
   @normalized_opts [
@@ -161,7 +186,7 @@ defmodule Statifier.Session.Recording do
     :invoke_handlers
   ]
 
-  @format_version 1
+  @format_version 2
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -193,9 +218,13 @@ defmodule Statifier.Session.Recording do
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
   passed when starting it - see the moduledoc's "`:session_id` is resolved,
   not supplied" section.
+
+  `anchor`, defaulted `nil`, is the recording's starting point - see the
+  moduledoc's "Anchored recordings" section. Every existing two-argument
+  call site is unaffected by this arity widening.
   """
-  @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
-  def new(%Machine{} = machine, opts \\ []) do
+  @spec new(machine :: Machine.t(), opts :: keyword(), anchor :: binary() | nil) :: t()
+  def new(%Machine{} = machine, opts \\ [], anchor \\ nil) do
     normalized =
       opts
       |> Keyword.take(@normalized_opts)
@@ -208,7 +237,7 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:invoke_handlers, %{})
       |> Enum.sort()
 
-    %__MODULE__{machine: machine, opts: normalized, entries: []}
+    %__MODULE__{machine: machine, opts: normalized, entries: [], anchor: anchor}
   end
 
   @doc """
@@ -317,6 +346,15 @@ defmodule Statifier.Session.Recording do
   @spec opts(recording :: t()) :: keyword()
   def opts(%__MODULE__{opts: opts}), do: opts
 
+  @doc """
+  This recording's starting point - a `Statifier.Position.to_binary/1` blob,
+  or `nil` for a recording that starts at
+  `Statifier.Interpreter.initialize/2` (see the moduledoc's "Anchored
+  recordings" section). This is the reader `Statifier.Replay` uses.
+  """
+  @spec anchor(recording :: t()) :: binary() | nil
+  def anchor(%__MODULE__{anchor: anchor}), do: anchor
+
   @doc "Every recorded entry, in append order."
   @spec entries(recording :: t()) :: [entry()]
   def entries(%__MODULE__{entries: entries}), do: Enum.reverse(entries)
@@ -346,14 +384,17 @@ defmodule Statifier.Session.Recording do
   has nothing for a future `from_binary/1` to recompile from or check
   against, so no blob is produced for it at all. Recording and replaying
   such a session in memory is unaffected; only persistence is refused.
+
+  Writes `anchor/1`'s blob (or `nil`) as the envelope's trailing slot -
+  see the moduledoc's "Anchored recordings" section.
   """
   @spec to_binary(recording :: t()) :: {:ok, binary()} | {:error, :unidentified_chart}
-  def to_binary(%__MODULE__{machine: machine, opts: opts} = recording) do
+  def to_binary(%__MODULE__{machine: machine, opts: opts, anchor: anchor} = recording) do
     with {:ok, chart_blob} <- Chart.to_binary(machine) do
       {:ok,
        :erlang.term_to_binary(
          {:statifier_recording, @format_version, chart_blob, encode_opts(opts),
-          entries(recording)}
+          entries(recording), anchor}
        )}
     end
   end
@@ -381,6 +422,12 @@ defmodule Statifier.Session.Recording do
   module's tagged envelope - a foreign `term_to_binary` blob, garbage bytes,
   or a well-formed envelope whose `chart_blob` is not a binary or whose
   `opts`/`entries` are not lists.
+
+  A version-1 envelope (five slots, written before `anchor` existed) is
+  read, not refused: it decodes to `anchor: nil` - the same
+  read-the-old-version courtesy `Statifier.Position.from_binary/2` extends
+  to its own version 1 (ADR-0059 decision 4, ADR-0060 decision 6's
+  Consequences).
   """
   @spec from_binary(blob :: binary()) ::
           {:ok, t()}
@@ -392,19 +439,65 @@ defmodule Statifier.Session.Recording do
     case safe_decode(blob) do
       {:ok, {:statifier_recording, version, chart_blob, opts, entries}}
       when is_binary(chart_blob) and is_list(opts) and is_list(entries) ->
-        with :ok <- check_version(version),
-             {:ok, machine} <- decode_chart(chart_blob),
-             {:ok, opts} <- decode_opts(opts) do
-          {:ok, %__MODULE__{machine: machine, opts: opts, entries: Enum.reverse(entries)}}
-        end
+        decode_envelope(version, chart_blob, opts, entries, nil)
+
+      {:ok, {:statifier_recording, version, chart_blob, opts, entries, anchor}}
+      when is_binary(chart_blob) and is_list(opts) and is_list(entries) ->
+        decode_anchored_envelope(version, chart_blob, opts, entries, anchor)
 
       _other ->
         {:error, :not_a_statifier_blob}
     end
   end
 
+  @spec decode_anchored_envelope(
+          version :: term(),
+          chart_blob :: binary(),
+          opts :: keyword(),
+          entries :: [entry()],
+          anchor :: term()
+        ) ::
+          {:ok, t()}
+          | {:error, :not_a_statifier_blob}
+          | {:error, {:unsupported_format_version, term()}}
+          | {:error, {:chart, term()}}
+          | {:error, {:unknown_handler_modules, [String.t()]}}
+  defp decode_anchored_envelope(version, chart_blob, opts, entries, anchor)
+       when is_binary(anchor) or is_nil(anchor) do
+    decode_envelope(version, chart_blob, opts, entries, anchor)
+  end
+
+  defp decode_anchored_envelope(_version, _chart_blob, _opts, _entries, _anchor),
+    do: {:error, :not_a_statifier_blob}
+
+  @spec decode_envelope(
+          version :: term(),
+          chart_blob :: binary(),
+          opts :: keyword(),
+          entries :: [entry()],
+          anchor :: binary() | nil
+        ) ::
+          {:ok, t()}
+          | {:error, {:unsupported_format_version, term()}}
+          | {:error, {:chart, term()}}
+          | {:error, {:unknown_handler_modules, [String.t()]}}
+  defp decode_envelope(version, chart_blob, opts, entries, anchor) do
+    with :ok <- check_version(version),
+         {:ok, machine} <- decode_chart(chart_blob),
+         {:ok, opts} <- decode_opts(opts) do
+      {:ok,
+       %__MODULE__{
+         machine: machine,
+         opts: opts,
+         entries: Enum.reverse(entries),
+         anchor: anchor
+       }}
+    end
+  end
+
   @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
   defp check_version(@format_version), do: :ok
+  defp check_version(1), do: :ok
   defp check_version(version), do: {:error, {:unsupported_format_version, version}}
 
   @spec decode_chart(chart_blob :: binary()) :: {:ok, Machine.t()} | {:error, {:chart, term()}}
