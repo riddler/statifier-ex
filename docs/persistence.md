@@ -156,6 +156,16 @@ advice the three-item list above already follows by hand; see the
 [ADR-0052 amendment (st-i7y7)](adr/0052-chart-identity-and-position-serialization.md)
 for why it ships as its own module rather than as functions on `Machine`.
 
+Anything that is not this library's own chart envelope - a foreign
+`term_to_binary` blob, corrupt bytes, or an envelope whose source or options
+are the wrong shape - comes back as `{:error, :not_a_statifier_blob}`, decided
+before any version, compile, or identity check runs. The other three arms are
+`{:error, {:unsupported_format_version, version}}`,
+`{:error, {:compile_failed, errors}}`, and
+`{:error, {:identity_mismatch, expected, actual}}`, in the order
+`from_binary/1` checks them; `Statifier.Chart.to_binary/1`'s one refusal is
+`{:error, :unidentified_chart}`.
+
 ## Explicitly not the *compiled* chart
 
 What is still never persisted, in either shape above, is the *compiled*
