@@ -43,7 +43,7 @@ defmodule Statifier.MixProject do
     [
       name: "statifier",
       licenses: ["MIT"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md),
+      files: ~w(lib/statifier lib/statifier.ex mix.exs README.md LICENSE CHANGELOG.md),
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
