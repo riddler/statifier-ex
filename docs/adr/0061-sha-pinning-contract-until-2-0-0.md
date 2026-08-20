@@ -178,6 +178,11 @@ briefing. `docs/workflow.md` carries the maintainer-facing half
   human step; nothing in this record or its implementation depends on it
   until a decision-5 trigger fires, but the assumption should be checked
   before that day.
+
+  **Settled (2026-08-20):** the maintainer confirmed holding Hex
+  ownership and credentials for the `statifier` package. Decision 4's
+  assumption stands, and a decision-5 trigger has no ownership work in
+  front of it.
 - **Whether the satellites adopt a shared pin.** Whether
   `statifier_ui`, `statifier_persistence`, and `statifier_oban`
   coordinate on one statifier SHA or move independently is those repos'

@@ -708,20 +708,20 @@ stage of it, so a malformed `package/0` fails the gate immediately.
 Everything here is unverifiable in this worktree and must be walked after the
 branch is pushed - `/wurk:verify` is the mechanism.
 
-- [ ] **The workflow runs at all.** Its first pull-request run completes rather
+- [x] **The workflow runs at all.** Its first pull-request run completes rather
       than failing on syntax, a missing action version, or a permissions error.
-- [ ] **The gate is green in CI, not merely locally.** `mix gate.verify` exits
+- [x] **The gate is green in CI, not merely locally.** `mix gate.verify` exits
       0 on the runner. A first red run that is red for an environment reason
       (a `Statifier.TmpDir` path, a timezone, a locale) is a finding about the
       suite, not a reason to narrow the CI command.
-- [ ] **The base-ref fetch works.** The `Gate guard` and `ADR guard` stages
+- [x] **The base-ref fetch works.** The `Gate guard` and `ADR guard` stages
       report real results in the CI log rather than skipping with "no base
       ref". A skip here is silent by design and will not turn CI red on its
       own, which is exactly why a human has to look once.
-- [ ] **The version-extraction step reads `mise.toml` correctly on the
+- [x] **The version-extraction step reads `mise.toml` correctly on the
       runner**, and `setup-beam` accepts both strings verbatim
       (`27.3`, `1.18.3-otp-27`).
-- [ ] **Wall-clock and caching.** The run finishes inside
+- [x] **Wall-clock and caching.** The run finishes inside
       `timeout-minutes: 45`, and a second run on an unchanged `mix.lock`
       restores `deps`/`_build` and does not rebuild the Dialyzer PLT from
       scratch. Raise the timeout or split the PLT into its own cache if not.
@@ -729,10 +729,22 @@ branch is pushed - `/wurk:verify` is the mechanism.
 - [x] **`mix hex.build` tarball contents** reviewed by a human (manual testing
       step 1 above), since nothing automated judges whether the `files` list is
       the right list.
-- [ ] **ADR-0061's own open question**: that the maintainer holds Hex ownership
+- [x] **ADR-0061's own open question**: that the maintainer holds Hex ownership
       and credentials for the existing `statifier` package. Nothing in this
       plan depends on it; it becomes load-bearing the day a decision-5 trigger
       fires.
+
+**Walked 2026-08-20 (`/wurk:verify`).** Settled against PR #205's runs. The
+first run was red for an environment reason, which this section's second item
+anticipated: `adr_judge_test.exs` pinned a skip reason that only holds where
+the `claude` CLI is on PATH, latent on `main` and green everywhere it had run
+until a runner ran it. Fixed as a suite finding, not by narrowing the CI
+command. The base-ref fetch works - `Gate guard` and `ADR guard` report real
+results (7.3s, 6.8s) rather than the silent skip. Wall-clock: 3m44s cold
+against a 45-minute timeout, and a re-run restored the cache on the exact key
+with no PLT rebuild - Dialyzer 27.3s against 140.9s, whole run 1m4s. No
+timeout raise and no separate PLT cache needed. The badge items stay open: the
+workflow is not on `main` yet, so nothing renders until this merges.
 
 
 ### Phase 1
@@ -786,7 +798,7 @@ continue regardless.
 
 ### Phase 3
 
-- [ ] **Deferred until after push** - see "Deferred Manual Verification". A
+- [x] **Deferred until after push** - see "Deferred Manual Verification". A
       workflow that has never run is unverified by definition, and no local
       command can change that.
 
