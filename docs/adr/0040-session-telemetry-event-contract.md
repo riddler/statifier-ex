@@ -9,7 +9,10 @@ gains `round`, and `round` joins every core-effect event's measurements; the
 `:budget_exhausted`-only exception in the core-effect measurements line below
 is superseded) - amended in part by ADR-0059 (2026-08-19, st-q6b6:
 `%SendDelayed{}` and `%Cancel{}` gain a per-execution `ordinal`, which joins
-the `:send_delayed` and `:cancel` events' measurements)
+the `:send_delayed` and `:cancel` events' measurements) - amended in part by
+ADR-0063 (2026-08-20, st-yoi0: an opaque `caller_context` joins the
+`:macrostep, :start`/`:stop`, `:send_delayed`, and `:cancel` events'
+metadata, carried from external events and the durable-timer effects)
 
 ## Context
 
