@@ -63,6 +63,7 @@
 | [0059](0059-per-execution-ordinal-on-durable-timer-effects.md) | `%SendDelayed{}` and `%Cancel{}` carry a per-execution `ordinal` off a new `timer_counter`; the durable dedup key gains it as its eighth component and the foreach author guidance retires | accepted (amends 0054 in part; amends 0040 in part) |
 | [0060](0060-resuming-a-session-from-a-persisted-position.md) | `Session.start_link/2` gains a `:resume` option for a position blob or `%MachineState{}`; resume requires an identified chart, keeps the position's `_sessionid`, refuses a non-quiescent or terminated position, carries `active_invocations` verbatim, and anchors a resumed session's recording at the resumed position | accepted (amends 0057 in part; amends 0049 in part) |
 | [0061](0061-sha-pinning-contract-until-2-0-0.md) | Consumers pin `main` SHAs under a documented contract until 2.0.0: no pre-release is published, `2.0.0-dev` stands on updated grounds, the fragment rule widens to cover breaks between pins, `package/0` metadata lands without publishing, and the no-publish rule defers to a named trigger | accepted |
+| [0062](0062-opentelemetry-bridge-is-a-separate-package.md) | The OpenTelemetry bridge is a separate package, `opentelemetry_statifier`: family-scoped, public-events-only, git-pinned and unpublished until statifier is on Hex; span topology and propagation in `docs/opentelemetry.md` | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`. Pick the number

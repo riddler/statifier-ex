@@ -203,6 +203,10 @@ promotion path.
   `:telemetry` bridge attaches at that same boundary - `Statifier.Session.Telemetry`,
   the authoritative reference for every `[:statifier, :session, ...]` event
   (ADR-0040). Live tooling attaches there; the core is untouched.
+  OpenTelemetry rides that contract from outside the repo: the bridge is
+  the separate `opentelemetry_statifier` package (ADR-0062), and
+  [docs/opentelemetry.md](opentelemetry.md) holds the span topology and
+  propagation design it implements.
   `{:halted, :done | :cancelled | :budget_exhausted}` is the last message a
   session sends its subscribers for the run, so a consumer may treat it as
   end-of-stream (ADR-0044 decision 2) - constraint 2's cross-batch ordering
