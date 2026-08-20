@@ -16,6 +16,8 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   @no_scoped_changes_summary "no files in this diff are in a judged ADR scope " <>
                                "(lib/statifier, .claude/wurk/** and .claude/wurk.json)"
 
+  @no_cli_summary "claude CLI not on PATH"
+
   # The task's only side effects are a `git` shell-out and a model call, so
   # every test drives it with a stub runner and/or a stub caller - never the
   # real network. `rev-parse` is keyed by the ref it is asked to resolve,
@@ -322,23 +324,22 @@ defmodule Mix.Tasks.Adr.JudgeTest do
   # every registered ADR, not just the lib/statifier/ ones - the skip still
   # fires the same way.
   #
-  # This still assumes the `claude` CLI is on PATH in the environment running
-  # this suite (true of every developer/CI environment this task is built
-  # for - it is the tool `mix adr.judge` itself shells out to). If that
-  # assumption ever stops holding here, this test needs `cli_available: true`
-  # added back like every other test in the file - at the cost of no longer
-  # covering the default clause.
+  # What the skip reason is depends on the environment, and deliberately is
+  # not pinned: a developer machine has the `claude` CLI on PATH and reaches
+  # the scope check, while CI does not have it and stops at the CLI check
+  # first. Both outcomes prove the same thing this test exists to prove -
+  # that the default clause reached the real checks rather than an injected
+  # stub - so the expectation is derived the same way the default clause
+  # derives it, rather than assuming a PATH the suite does not control.
+  # Pinning it to the scope reason is what made this test pass on every
+  # developer machine and fail the first time it ran on a runner.
   #
   # See `scratch_repo_dir/0` for why the repo's path is not the usual
   # `@tag :isolated_tmp_dir` one.
-  # sabotage: change execute/2's default opts from `[]` to
-  #           `[cli_available: false]` -> red: the unsabotaged default reaches
-  #           git and finds no in-scope diff against the scratch repo's HEAD
-  #           for either registered scope, while the sabotaged default never
-  #           gets past the CLI check, so the skip reason changes from "no
-  #           files in this diff are in a judged ADR scope (lib/statifier,
-  #           .claude/wurk/** and .claude/wurk.json)" to "claude CLI not on
-  #           PATH"
+  # sabotage: replace `Keyword.get_lazy(opts, :cli_available, ...)` in
+  #           AdrJudge.collect/1 with a literal `false`, so the default clause
+  #           reports the CLI missing on a machine that has it -> red on any
+  #           machine with the CLI on PATH, which is where this was run
   test "execute/1 falls back to the real cli_available and git checks" do
     repo_dir = scratch_repo_dir()
     File.rm_rf!(repo_dir)
@@ -350,7 +351,12 @@ defmodule Mix.Tasks.Adr.JudgeTest do
     assert {:skip, json} =
              File.cd!(repo_dir, fn -> Judge.execute(["--base", "HEAD", "--format", "json"]) end)
 
-    assert {:ok, %{"summary" => @no_scoped_changes_summary}} = JSON.decode(json)
+    expected =
+      if System.find_executable("claude"),
+        do: @no_scoped_changes_summary,
+        else: @no_cli_summary
+
+    assert {:ok, %{"summary" => ^expected}} = JSON.decode(json)
   end
 
   describe "without --format json" do
