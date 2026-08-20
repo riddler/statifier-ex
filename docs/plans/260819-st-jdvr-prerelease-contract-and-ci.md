@@ -726,7 +726,7 @@ branch is pushed - `/wurk:verify` is the mechanism.
       restores `deps`/`_build` and does not rebuild the Dialyzer PLT from
       scratch. Raise the timeout or split the PLT into its own cache if not.
 - [ ] **The README badge** renders, is green, and links to this workflow.
-- [ ] **`mix hex.build` tarball contents** reviewed by a human (manual testing
+- [x] **`mix hex.build` tarball contents** reviewed by a human (manual testing
       step 1 above), since nothing automated judges whether the `files` list is
       the right list.
 - [ ] **ADR-0061's own open question**: that the maintainer holds Hex ownership
@@ -737,9 +737,9 @@ branch is pushed - `/wurk:verify` is the mechanism.
 
 ### Phase 1
 
-- [ ] The committed ADR is byte-identical to what the Direction stage wrote -
+- [x] The committed ADR is byte-identical to what the Direction stage wrote -
       no decisions were reworded on the way in.
-- [ ] The README table row's link resolves to the file's real name.
+- [x] The README table row's link resolves to the file's real name.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 the full gate as the phase gate. In interactive execution, pause here for the
@@ -752,11 +752,22 @@ and surfaced once at the end.
 
 ### Phase 2
 
-- [ ] A human reads the `files` list and agrees it is what a consumer should
+- [x] A human reads the `files` list and agrees it is what a consumer should
       receive - in particular that omitting `changelog.d/` is right, given
       that ADR-0061's upgrade briefing is a `git diff` against the repository
       rather than a file read out of a tarball.
-- [ ] The `links` URLs resolve.
+- [x] The `links` URLs resolve.
+
+**Walked 2026-08-19 (`/wurk:verify`).** The `files` review was not a
+rubber stamp: bare `lib` shipped `lib/mix/` - this project's own gate
+tooling (`gate.check`, `gate.verify`, `adr.check`, `adr.judge`,
+`test.baseline`, `test.regression`) and its four support modules - into
+the consumer's `mix help`, where those tasks would read this repo's
+`.quality.exs` and `docs/adr/` against the consumer's tree. The list now
+names `lib/statifier lib/statifier.ex`, dropping ten files while keeping
+`Statifier.Testing` (ADR-0053). Re-verified with `mix hex.build`: 143
+files, no `lib/mix/`. Omitting `changelog.d/` was confirmed correct as
+written.
 
 **BLOCKING NOTE - the ledger question.** CLAUDE.md and ADR-0011 say a
 gate-relevant `mix.exs` edit needs an entry in `docs/quality-gate-changes.md`,
@@ -788,11 +799,11 @@ green local gate alone.
 
 ### Phase 4
 
-- [ ] A reader who has never seen this repository can, from `README.md` alone,
+- [x] A reader who has never seen this repository can, from `README.md` alone,
       add the dependency and state what a pin does and does not promise.
-- [ ] The four README bullets say the same thing as ADR-0061 decision 2 - no
+- [x] The four README bullets say the same thing as ADR-0061 decision 2 - no
       promise is widened or narrowed in the retelling.
-- [ ] `docs/workflow.md`'s new justification is the ADR's, not a paraphrase
+- [x] `docs/workflow.md`'s new justification is the ADR's, not a paraphrase
       that reintroduces "no audience" by another name.
 - [ ] The badge renders green on GitHub and links to the right workflow
       (deferred until Phase 3's workflow has run - see below).
