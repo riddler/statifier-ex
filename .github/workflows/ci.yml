@@ -70,18 +70,16 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
-      # The full gate, attested. .quality.exs registers the gate guard, the
-      # regression ratchet, and the ADR guard as custom stages of mix quality,
-      # and gate.verify runs mix quality and fails if the run was profiled,
-      # scoped, --quick-ed or --skip-ed. So this one command is the same gate
-      # a developer must have green before committing. The ADR judge stays
-      # disabled here, exactly as .quality.exs:23 intends.
+      # The full gate, attested, and the only gate run in this job: gate.verify
+      # prints each stage as it lands and the full detail under every failing
+      # one, so a red run needs no second pass to be diagnosable.
+      #
+      # .quality.exs registers the gate guard, the regression ratchet, and the
+      # ADR guard as custom stages of mix quality, and gate.verify runs mix
+      # quality and fails if the run was profiled, scoped, --quick-ed or
+      # --skip-ed. So this one command is the same gate a developer must have
+      # green before committing. The ADR judge stays disabled here, exactly as
+      # .quality.exs:23 intends - it shells out to the claude CLI, which is
+      # not on PATH on a runner.
       - name: Full quality gate
         run: mix gate.verify
-
-      # gate.verify captures the gate's output to parse its JSON report, so a
-      # red run reports failing stage names without the detail underneath.
-      # Only a failed run pays for the second pass.
-      - name: Gate detail on failure
-        if: failure()
-        run: mix quality
