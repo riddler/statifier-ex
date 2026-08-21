@@ -65,6 +65,7 @@
 | [0061](0061-sha-pinning-contract-until-2-0-0.md) | Consumers pin `main` SHAs under a documented contract until 2.0.0: no pre-release is published, `2.0.0-dev` stands on updated grounds, the fragment rule widens to cover breaks between pins, `package/0` metadata lands without publishing, and the no-publish rule defers to a named trigger | accepted |
 | [0062](0062-opentelemetry-bridge-is-a-separate-package.md) | The OpenTelemetry bridge is a separate package, `opentelemetry_statifier`: family-scoped, public-events-only, git-pinned and unpublished until statifier is on Hex; span topology and propagation in `docs/opentelemetry.md` | accepted |
 | [0063](0063-caller-context-on-external-events-and-durable-timer-effects.md) | An opaque `caller_context :: term()` (default `nil`, never read by the library) rides `%Event{}` via `external/2`, is stamped by the core onto `%SendDelayed{}`/`%Cancel{}`, surfaces in four telemetry events' metadata, and recordings carry it (format 2 -> 3); ADR-0054's keys untouched | accepted (amends 0040 in part) |
+| [0064](0064-position-blob-drops-the-per-drive-snapshot-fields.md) | The position blob drops `routes` and `invoke_types`: `to_binary/1` omits both alongside `:machine`, `from_binary/2` blanks both on decode regardless of blob vintage, and the format version stays 2 | accepted (amends 0052 in part) |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`. Pick the number
