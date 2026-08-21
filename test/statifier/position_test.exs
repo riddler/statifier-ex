@@ -258,6 +258,69 @@ defmodule Statifier.PositionTest do
     end
   end
 
+  describe "to_binary/1 then from_binary/2 drop routes and invoke_types (ADR-0064)" do
+    # sabotage: `to_binary/1`'s `Map.drop([:machine, :routes,
+    # :invoke_types])` call is changed to `Map.delete(:machine)` (routes and
+    # invoke_types no longer dropped from the payload) -> this test reddens
+    # because the raw-decoded payload map carries both keys with their
+    # save-time (non-nil) values
+    test "the blob does not contain routes or invoke_types" do
+      machine = compile!(@xml)
+
+      machine_state =
+        machine
+        |> MachineState.new()
+        |> Map.put(:routes, Routes.new(sessions: ["sess_stale"]))
+        |> Map.put(:invoke_types, InvokeTypes.new(types: ["http://example.com/custom"]))
+
+      assert {:ok, blob} = Position.to_binary(machine_state)
+
+      assert {:statifier_position, 2, _identity, payload} = :erlang.binary_to_term(blob)
+      refute Map.has_key?(payload, :routes)
+      refute Map.has_key?(payload, :invoke_types)
+    end
+
+    # A normal round trip already proves nil via `to_binary/1`'s own drop
+    # (the "blob does not contain routes or invoke_types" test above), and
+    # `from_binary/2`'s decode-side drop is unconditional, so it blanks
+    # regardless of whether the payload ever carried the keys - proven
+    # independently below against a payload that does carry them. Pins
+    # decision 1's "regardless of what the blob carries" clause: a
+    # hand-built envelope standing in for an old-encoder blob that still
+    # wrote routes/invoke_types with non-nil values must decode to nil just
+    # the same, not merely a freshly-encoded one.
+    #
+    # sabotage: same mutation as the test above (`from_binary/2`'s
+    # `Map.drop([:routes, :invoke_types])` call on `upgraded_payload`
+    # deleted) -> this test reddens because the decoded position's
+    # `routes`/`invoke_types` come back as the stale values the hand-built
+    # payload carried instead of `nil`
+    test "an old-encoder blob carrying stale non-nil routes/invoke_types still decodes to nil" do
+      machine = compile!(@xml)
+      identity = Machine.identity(machine)
+      machine_state = MachineState.new(machine)
+
+      # A pre-ADR-0064 encoder wrote routes/invoke_types with their
+      # save-time values - built directly here rather than through
+      # to_binary/1, since the current encoder never writes these keys at
+      # all.
+      stale_payload =
+        machine_state
+        |> Map.from_struct()
+        |> Map.delete(:machine)
+        |> Map.put(:routes, Routes.new(sessions: ["sess_stale"]))
+        |> Map.put(:invoke_types, InvokeTypes.new(types: ["http://example.com/custom"]))
+
+      old_encoder_blob =
+        :erlang.term_to_binary({:statifier_position, 2, identity, stale_payload})
+
+      assert {:ok, decoded} = Position.from_binary(old_encoder_blob, machine)
+
+      assert decoded.routes == nil
+      assert decoded.invoke_types == nil
+    end
+  end
+
   describe "to_binary/1 on an unidentified chart" do
     # sabotage: `to_binary/1`'s `identity: nil` guard clause is dropped, so
     # a `nil`-identity machine_state falls through to the general clause

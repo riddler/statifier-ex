@@ -49,7 +49,10 @@ defmodule Statifier.Position do
   produced it. A host reading the map should not conclude any of the four
   was forgotten; `import/2` always sets `internal_queue` to a fresh empty
   queue and `routes`/`invoke_types` to `nil`, leaving both for the driver
-  to re-stamp.
+  to re-stamp. `routes` and `invoke_types` are omitted the same way from
+  `to_binary/1`'s payload, and `from_binary/2` blanks both to `nil` on
+  decode regardless of what the blob carries (ADR-0064): the omission is
+  common to both vocabularies, not particular to the export one.
   """
 
   alias Statifier.{Machine, MachineState}
@@ -82,16 +85,22 @@ defmodule Statifier.Position do
   built without a recorded source has nothing for `from_binary/2` to check a
   future load against, so no blob is produced for it at all.
 
-  On success, the payload is `machine_state` as a plain map with `:machine`
-  deleted - never `%{machine_state | machine: nil}`. `MachineState`'s `t()`
-  declares `machine: Machine.t()`, not `Machine.t() | nil`
-  (`lib/statifier/machine_state.ex:415`), so assigning `nil` there is a
-  dialyzer contract violation, and dialyzer is a full-gate stage. Dropping
-  `:machine` from the payload instead violates no type, keeps ADR-0014 item
-  2's premise true (no `%Predicator.Compiled{}` instruction list or span
-  table is ever written to a blob), and is what makes the blob far smaller
-  than a naive `term_to_binary(machine_state)` - the compiled chart is the
-  overwhelming majority of a small position's bytes.
+  On success, the payload is `machine_state` as a plain map with `:machine`,
+  `:routes`, and `:invoke_types` deleted - never `%{machine_state | machine:
+  nil}`. `MachineState`'s `t()` declares `machine: Machine.t()`, not
+  `Machine.t() | nil` (`lib/statifier/machine_state.ex:415`), so assigning
+  `nil` there is a dialyzer contract violation, and dialyzer is a full-gate
+  stage. Dropping `:machine` from the payload instead violates no type,
+  keeps ADR-0014 item 2's premise true (no `%Predicator.Compiled{}`
+  instruction list or span table is ever written to a blob), and is what
+  makes the blob far smaller than a naive `term_to_binary(machine_state)` -
+  the compiled chart is the overwhelming majority of a small position's
+  bytes. `routes` and `invoke_types` are dropped for the same reason
+  `export/1` drops them (this module's "`export/1` and `import/2`" section
+  above, and ADR-0064): both are per-drive/per-session snapshots a driver
+  re-stamps before the next drive, not durable position state, and
+  `Routes.t()` in particular holds live session ids that have no business
+  sitting in a durable blob at rest.
   """
   @spec to_binary(machine_state :: MachineState.t()) ::
           {:ok, binary()} | {:error, :unidentified_chart}
@@ -99,7 +108,11 @@ defmodule Statifier.Position do
     do: {:error, :unidentified_chart}
 
   def to_binary(%MachineState{machine: %Machine{identity: identity}} = machine_state) do
-    payload = machine_state |> Map.from_struct() |> Map.delete(:machine)
+    payload =
+      machine_state
+      |> Map.from_struct()
+      |> Map.drop([:machine, :routes, :invoke_types])
+
     {:ok, :erlang.term_to_binary({:statifier_position, @format_version, identity, payload})}
   end
 
@@ -118,6 +131,15 @@ defmodule Statifier.Position do
   refused: its payload is upgraded with `timer_counter: 0` before the struct
   is rebuilt (ADR-0059 decision 4) - `0` is the only correct value, since no
   ordinal was ever minted against a version-1 position.
+
+  `routes` and `invoke_types` are dropped from the decoded payload before
+  the struct is rebuilt, unconditionally - regardless of blob vintage, and
+  regardless of what a hand-written or old-encoder blob carries for either
+  key. Both come back `nil` (`struct!/2` fills the now-absent keys with
+  their defaults, and both fields default to `nil`), the same contract
+  `import/2` already gives them: per-drive/per-session snapshots a driver
+  re-stamps before the next drive, never durable position state
+  (ADR-0064).
 
   `{:error, {:identity_mismatch, expected, actual}}`'s `expected` is the
   blob's own identity and `actual` is the supplied `machine`'s - both carried
@@ -144,7 +166,11 @@ defmodule Statifier.Position do
       {:ok, {:statifier_position, version, identity, payload}} when is_map(payload) ->
         with :ok <- check_version(version),
              :ok <- check_identity(identity, machine) do
-          upgraded_payload = upgrade_payload(version, payload)
+          upgraded_payload =
+            version
+            |> upgrade_payload(payload)
+            |> Map.drop([:routes, :invoke_types])
+
           {:ok, struct!(MachineState, Map.put(upgraded_payload, :machine, machine))}
         end
 
