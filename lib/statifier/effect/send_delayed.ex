@@ -23,6 +23,14 @@ defmodule Statifier.Effect.SendDelayed do
   execute the same content node, in the same microstep, under the same
   author-written id, and only `ordinal` tells them apart. It replays
   identically because the counter is pure fold state.
+
+  `caller_context` is the opaque host term the current macrostep's
+  triggering external event carried (ADR-0063), copied off
+  `Statifier.MachineState`'s transient slot at construction - `nil` when
+  no context was attached. A durable store carries it as row data beside
+  the key components (never a key component itself, ADR-0063 decision 6)
+  and restores it at firing time so the firing site can attribute back to
+  the scheduling trace. The library never reads the value.
   """
 
   alias Statifier.Machine.Content
@@ -44,7 +52,8 @@ defmodule Statifier.Effect.SendDelayed do
     :microstep,
     :round,
     :ordinal,
-    id_from_author?: false
+    id_from_author?: false,
+    caller_context: nil
   ]
 
   @type t :: %__MODULE__{
@@ -60,6 +69,7 @@ defmodule Statifier.Effect.SendDelayed do
           microstep: non_neg_integer(),
           round: non_neg_integer(),
           ordinal: pos_integer(),
-          id_from_author?: boolean()
+          id_from_author?: boolean(),
+          caller_context: term()
         }
 end

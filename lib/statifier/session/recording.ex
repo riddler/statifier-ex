@@ -90,7 +90,12 @@ defmodule Statifier.Session.Recording do
   binary envelope: `{:statifier_recording, format_version, chart_blob, opts,
   entries, anchor}`. A version-1 envelope omits the trailing `anchor` slot
   entirely (five elements, not six carrying `nil`); `from_binary/1` reads
-  both shapes (see below). Six slots -
+  both shapes (see below). A version-2 envelope has all six slots but
+  predates `caller_context` on `%Statifier.Event{}` and the two
+  durable-timer effect structs (ADR-0063): its stored inputs decode with
+  `caller_context: nil` defaulted on import, which is safe exactly because
+  no context was ever attached to the inputs an older blob holds. Six
+  slots -
 
     - `format_version` - this module's own version tag, checked before the
       nested chart is touched (ADR-0057 decision 4): a future format this
@@ -186,7 +191,7 @@ defmodule Statifier.Session.Recording do
     :invoke_handlers
   ]
 
-  @format_version 2
+  @format_version 3
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -427,7 +432,10 @@ defmodule Statifier.Session.Recording do
   read, not refused: it decodes to `anchor: nil` - the same
   read-the-old-version courtesy `Statifier.Position.from_binary/2` extends
   to its own version 1 (ADR-0059 decision 4, ADR-0060 decision 6's
-  Consequences).
+  Consequences). A version-2 envelope (six slots, written before
+  `caller_context` existed) is read the same way: its stored events and
+  durable-timer effects gain `caller_context: nil` on import (ADR-0063
+  decision 5's blessed default).
   """
   @spec from_binary(blob :: binary()) ::
           {:ok, t()}
@@ -489,14 +497,58 @@ defmodule Statifier.Session.Recording do
        %__MODULE__{
          machine: machine,
          opts: opts,
-         entries: Enum.reverse(entries),
+         entries: entries |> upgrade_entries(version) |> Enum.reverse(),
          anchor: anchor
        }}
     end
   end
 
+  # ADR-0063 decision 5: version 3 added `caller_context` to
+  # `%Statifier.Event{}` and to the two durable-timer effect structs, so a
+  # blob written before the field decodes to struct-shaped maps missing the
+  # key - reading such a map as the new struct is exactly the silent misread
+  # ADR-0057 decision 4's obligation names. Defaulting `caller_context: nil`
+  # on import is safe exactly because an older blob predates the field: no
+  # context was ever attached to the inputs it holds. `:internal` entries
+  # store no struct of either kind, so they pass through untouched.
+  @spec upgrade_entries(entries :: [entry()], version :: pos_integer()) :: [entry()]
+  defp upgrade_entries(entries, version) when version < 3,
+    do: Enum.map(entries, &upgrade_entry/1)
+
+  defp upgrade_entries(entries, _version), do: entries
+
+  defp upgrade_entry({:event, event, routes}),
+    do: {:event, default_caller_context(event), routes}
+
+  defp upgrade_entry({:invoked_event, invoke_id, event, routes}),
+    do: {:invoked_event, invoke_id, default_caller_context(event), routes}
+
+  defp upgrade_entry({:timer, send_id, event, routes}),
+    do: {:timer, send_id, default_caller_context(event), routes}
+
+  defp upgrade_entry({:interpret, effects, routes}),
+    do: {:interpret, Enum.map(effects, &upgrade_effect/1), routes}
+
+  defp upgrade_entry(entry), do: entry
+
+  defp upgrade_effect({:send_delayed, send}),
+    do: {:send_delayed, default_caller_context(send)}
+
+  defp upgrade_effect({:cancel, cancel}),
+    do: {:cancel, default_caller_context(cancel)}
+
+  defp upgrade_effect(effect), do: effect
+
+  # `Map.put_new/3` on a decoded struct-shaped map: a value that already
+  # carries the key (impossible for a well-formed old blob, harmless
+  # otherwise) is left alone, and everything else gains the default the
+  # pre-field world implied.
+  defp default_caller_context(%{__struct__: _module} = struct_map),
+    do: Map.put_new(struct_map, :caller_context, nil)
+
   @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
   defp check_version(@format_version), do: :ok
+  defp check_version(2), do: :ok
   defp check_version(1), do: :ok
   defp check_version(version), do: {:error, {:unsupported_format_version, version}}
 

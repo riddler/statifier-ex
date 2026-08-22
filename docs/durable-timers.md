@@ -44,11 +44,12 @@ carry the whole seam:
   microstep: non_neg_integer(),
   round: non_neg_integer(),
   ordinal: pos_integer(),
-  id_from_author?: boolean()
+  id_from_author?: boolean(),
+  caller_context: term()
 }
 ```
 
-(`lib/statifier/effect/send_delayed.ex:25-54`). `delay_ms` is **relative**,
+(`lib/statifier/effect/send_delayed.ex:41-75`). `delay_ms` is **relative**,
 not an absolute deadline - it is milliseconds from the moment the send was
 scheduled, so your store needs to compute (or record) the fire time itself.
 
@@ -60,15 +61,26 @@ scheduled, so your store needs to compute (or record) the fire time itself.
   macrostep: non_neg_integer(),
   microstep: non_neg_integer(),
   round: non_neg_integer(),
-  ordinal: pos_integer()
+  ordinal: pos_integer(),
+  caller_context: term()
 }
 ```
 
-(`lib/statifier/effect/cancel.ex:31-39`). `ordinal` on both structs is a
+(`lib/statifier/effect/cancel.ex:37-58`). `ordinal` on both structs is a
 per-execution sequence number off `machine_state.timer_counter`, decided by
 `docs/adr/0059-per-execution-ordinal-on-durable-timer-effects.md` - it is
 what keeps two executions of the same `<send delay>` or `<cancel>` node
 (a `<foreach>` body iterating) distinct in your store's dedup key below.
+
+`caller_context` on both structs is ADR-0063's opaque host slot: whatever
+correlation term the current macrostep's triggering external event carried
+(an OTel span context, a request id), copied onto the effect at
+construction and never read by the library. Carry it as **row data beside
+the key components, never a key component itself** (ADR-0063 decision 6:
+an opaque host term is not comparable across hosts, not bounded, and not
+replay-relevant to identity), and read it back at firing or cancellation
+time so the firing site can link to the trace that scheduled the timer.
+`nil` means no context was attached.
 
 These are the **only** two things a durable-timer host reads. The instruction
 vocabulary - `{:schedule, ...}` and `{:cancel_timers, ...}`

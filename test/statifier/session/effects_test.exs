@@ -544,6 +544,75 @@ defmodule Statifier.Session.EffectsTest do
     end
   end
 
+  describe "caller_context is copied onto the scheduled event (ADR-0063)" do
+    # sabotage: `delivered_event/2` drops the `caller_context:
+    # caller_context_of(send)` option -> the scheduled external event's
+    # slot comes back `nil` instead of the effect's term, and this
+    # assertion reddens. Decision 3's firing-time copy: an in-process
+    # timer firing re-enters `handle_event/2` carrying the scheduler's
+    # context with no session-side code.
+    test "an external-route delayed send's event carries the effect's slot" do
+      host_context = %{trace_id: "abc"}
+
+      effect =
+        {:send_delayed,
+         %SendDelayed{
+           event: "e",
+           target: nil,
+           send_id: "s1",
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1,
+           round: 0,
+           ordinal: 1,
+           caller_context: host_context
+         }}
+
+      assert [_notify, {:schedule, "s1", 30, :self, %Event{} = event, ^effect}] =
+               Effects.plan([effect], @context)
+
+      assert event.caller_context == host_context
+    end
+
+    # sabotage: `internal_event/1`'s trailing `%{event | caller_context:
+    # caller_context_of(send)}` update is deleted -> the internal carrier
+    # event keeps `Event.internal/3`'s `nil` and this assertion reddens.
+    test "an internal-target delayed send's carrier event carries the effect's slot" do
+      host_context = %{trace_id: "abc"}
+
+      effect =
+        {:send_delayed,
+         %SendDelayed{
+           event: "e",
+           target: "#_internal",
+           delay_ms: 30,
+           macrostep: 1,
+           microstep: 1,
+           round: 0,
+           ordinal: 1,
+           caller_context: host_context
+         }}
+
+      assert [_notify, {:schedule, nil, 30, :internal, %Event{} = event, ^effect}] =
+               Effects.plan([effect], @context)
+
+      assert event.caller_context == host_context
+    end
+
+    # sabotage: `caller_context_of/1`'s `%Send{}` clause is changed to read
+    # a hardcoded non-nil term -> this assertion reddens. An immediate
+    # `%Send{}` has no slot to copy (ADR-0063 decision 2), so its enqueued
+    # event attaches none.
+    test "an immediate send's enqueued event carries nil" do
+      effect =
+        {:send,
+         %Send{event: "e", target: nil, data: %{k: 1}, macrostep: 1, microstep: 1, round: 0}}
+
+      assert [_notify, {:enqueue_event, %Event{caller_context: nil}}] =
+               Effects.plan([effect], @context)
+    end
+  end
+
   describe "an unsupported <invoke type> raises error.execution instead of :unroutable" do
     # sabotage: `plan_invoke/2`'s `else` branch drops the `invoke_index` from
     # the raised origin, hardcoding `0` -> this assertion reddens for a

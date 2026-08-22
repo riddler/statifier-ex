@@ -17,6 +17,7 @@ defmodule Statifier.Session.TelemetryTest do
   }
 
   alias Statifier.{Event, Machine, Session}
+  alias Statifier.Event.Cause
   alias Statifier.Session.Telemetry
 
   # Handlers are global to the VM (`:telemetry.attach_many/4` registers on a
@@ -409,6 +410,62 @@ defmodule Statifier.Session.TelemetryTest do
       assert metadata.event_name == nil
       assert metadata.span_ref == span_ref
     end
+
+    # sabotage: `event_caller_context/1`'s `:external` clause returns `nil`
+    # unconditionally -> red, both `== host_context` assertions fail -
+    # reverted and confirmed green. ADR-0063 decision 4: both halves carry
+    # the triggering external event's slot, so a consumer attaching to only
+    # one half still attributes.
+    test "start and stop carry the external event's caller_context", %{ref: ref} do
+      machine = located_machine()
+      {machine_state, _effects} = Statifier.initialize(machine)
+      host_context = %{trace_id: "abc"}
+      event = Event.external("go", caller_context: host_context)
+      span_ref = make_ref()
+
+      assert :ok = Telemetry.macrostep_start("sess1", :event, event, span_ref)
+
+      assert_received {[:statifier, :session, :macrostep, :start], ^ref, _measurements, metadata}
+      assert metadata.caller_context == host_context
+
+      assert :ok =
+               Telemetry.macrostep_stop(
+                 "sess1",
+                 :event,
+                 machine_state,
+                 event,
+                 :quiescent,
+                 System.monotonic_time() - 1,
+                 span_ref
+               )
+
+      assert_received {[:statifier, :session, :macrostep, :stop], ^ref, _measurements,
+                       stop_metadata}
+
+      assert stop_metadata.caller_context == host_context
+    end
+
+    # sabotage: `event_caller_context/1`'s catch-all clause is deleted and
+    # the `:external` guard dropped, so any event's slot is read -> red,
+    # the internal-carrier assertion below fails - reverted and confirmed
+    # green. ADR-0063 decision 4: the macrostep halves carry `nil` for the
+    # `:initialize`/`:cancel`/`:internal`/`:resume` triggers - an internal
+    # carrier event's slot (the `internal_event/1` copy) attributes the
+    # *scheduling*, never this macrostep.
+    test "a nil event and an internal carrier event both yield caller_context nil", %{ref: ref} do
+      span_ref = make_ref()
+
+      assert :ok = Telemetry.macrostep_start("sess1", :initialize, nil, span_ref)
+      assert_received {[:statifier, :session, :macrostep, :start], ^ref, _m, metadata}
+      assert metadata.caller_context == nil
+
+      cause = Cause.new({:content, 0, {:onentry, 0, 0}}, 1, 1, 1)
+      carrier = %{Event.internal("tick", cause) | caller_context: %{trace_id: "abc"}}
+
+      assert :ok = Telemetry.macrostep_start("sess1", :internal, carrier, span_ref)
+      assert_received {[:statifier, :session, :macrostep, :start], ^ref, _m2, metadata2}
+      assert metadata2.caller_context == nil
+    end
   end
 
   describe "interpret/3" do
@@ -484,6 +541,47 @@ defmodule Statifier.Session.TelemetryTest do
       assert measurements.ordinal == 9
       assert metadata.send_id == "sd1"
       assert metadata.target == "#_parent"
+    end
+
+    # sabotage: `core_shape/2`'s `SendDelayed` clause drops `caller_context`
+    # from its metadata map -> red, the `KeyError` fails the first
+    # assertion - reverted and confirmed green. ADR-0063 decision 4: the
+    # explicit key keeps a bridge's read uniform with the macrostep events
+    # instead of destructuring `metadata.effect`.
+    test "puts caller_context in metadata for :send_delayed and :cancel", %{ref: ref} do
+      machine = located_machine()
+      host_context = %{trace_id: "abc"}
+
+      send_payload = %SendDelayed{
+        event: "e",
+        delay_ms: 750,
+        macrostep: 3,
+        microstep: 4,
+        round: 2,
+        ordinal: 9,
+        caller_context: host_context
+      }
+
+      Telemetry.effect("sess1", machine, {:send_delayed, send_payload})
+
+      assert_received {[:statifier, :session, :effect, :send_delayed], ^ref, _measurements,
+                       metadata}
+
+      assert metadata.caller_context == host_context
+
+      cancel_payload = %Cancel{
+        send_id: "c1",
+        macrostep: 3,
+        microstep: 4,
+        round: 2,
+        ordinal: 11,
+        caller_context: host_context
+      }
+
+      Telemetry.effect("sess1", machine, {:cancel, cancel_payload})
+
+      assert_received {[:statifier, :session, :effect, :cancel], ^ref, _m2, cancel_metadata}
+      assert cancel_metadata.caller_context == host_context
     end
 
     # sabotage: `core_shape/2`'s `Cancel` clause drops `ordinal` from its

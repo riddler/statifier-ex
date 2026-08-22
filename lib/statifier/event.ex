@@ -51,6 +51,21 @@ defmodule Statifier.Event do
   those four to `:undefined` happens one layer out, in
   `Statifier.Evaluator.SystemVariables.event/1`, where `_event`'s fields are
   built.
+
+  ## `caller_context` is an opaque host slot (ADR-0063)
+
+  `caller_context :: term()` carries whatever correlation value the sending
+  host attached at send time - an OTel span context, a request id, any
+  term. This library never reads it: the value is copied onto the
+  durable-timer effects, exposed in four telemetry events' metadata, and
+  handed back otherwise untouched (ADR-0063 decision 1). It is settable
+  only through `external/2`'s opts - `internal/3` and `platform/3` never
+  read it, because an event the chart raised has no external caller.
+  `nil` means "no context attached"; a datamodel null can never be a
+  caller context, so `nil` is unambiguous here for the same reason it is
+  on `sendid` and `origin` above. The slot never reaches the datamodel:
+  `Statifier.Evaluator.SystemVariables.event/1` does not surface it, so
+  `_event` is unchanged (spec 5.10.1 fixes `_event`'s fields).
   """
 
   alias Statifier.Event.Cause
@@ -64,7 +79,8 @@ defmodule Statifier.Event do
     invokeid: nil,
     origin: nil,
     origintype: nil,
-    sendid: nil
+    sendid: nil,
+    caller_context: nil
   ]
 
   @typedoc "Spec 5.10.1's three event types - provenance, not queue routing."
@@ -78,7 +94,8 @@ defmodule Statifier.Event do
           invokeid: String.t() | nil,
           origin: String.t() | nil,
           origintype: String.t() | nil,
-          sendid: String.t() | nil
+          sendid: String.t() | nil,
+          caller_context: term()
         }
 
   @doc """
@@ -90,7 +107,9 @@ defmodule Statifier.Event do
   child's session passes `invokeid: invoke_id`. `origin`, `origintype` and
   `sendid` (spec 5.10.1 / C.1) default to `nil` too; `Statifier.Session.Effects`'
   delivery path is the caller that passes them for a `<send>` with no
-  `target`.
+  `target`. `caller_context` (ADR-0063) defaults to `nil` - a host
+  attaching its own correlation value passes `caller_context: ctx`; the
+  library carries the term opaquely and never reads it.
   """
   @spec external(name :: String.t(), opts :: keyword()) :: t()
   def external(name, opts \\ []) do
@@ -101,7 +120,8 @@ defmodule Statifier.Event do
       invokeid: Keyword.get(opts, :invokeid),
       origin: Keyword.get(opts, :origin),
       origintype: Keyword.get(opts, :origintype),
-      sendid: Keyword.get(opts, :sendid)
+      sendid: Keyword.get(opts, :sendid),
+      caller_context: Keyword.get(opts, :caller_context)
     }
   end
 

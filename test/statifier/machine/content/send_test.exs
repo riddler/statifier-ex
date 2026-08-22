@@ -457,6 +457,34 @@ defmodule Statifier.Machine.Content.SendTest do
     end
   end
 
+  describe "execute/2 - caller_context (ADR-0063)" do
+    # sabotage: `build_effect/6`'s delayed clause stores `caller_context:
+    # nil` instead of reading `ms.caller_context` -> the first assertion
+    # reddens. Decision 3: the effect copies the machine state's transient
+    # slot at the same site that reads the counters.
+    test "a delayed <send> copies machine_state.caller_context onto the effect" do
+      m = machine()
+      host_context = %{trace_id: "abc"}
+      ms = %{machine_state(m) | caller_context: host_context}
+
+      assert {:ok, _ctx, [{:send_delayed, %Effect.SendDelayed{} = effect}]} =
+               ExecutableContent.execute(send_node(m, "delay_frac"), context(ms))
+
+      assert effect.caller_context == host_context
+    end
+
+    # sabotage: `build_effect/6`'s delayed clause hardcodes a non-nil
+    # `caller_context` instead of reading `ms.caller_context` -> this
+    # assertion reddens. A machine state whose macrostep attached no
+    # context stamps `nil`, ADR-0063 decision 1's "no context attached".
+    test "a delayed <send> under no caller context stamps nil" do
+      m = machine()
+
+      assert {:ok, _ctx, [{:send_delayed, %Effect.SendDelayed{caller_context: nil}}]} =
+               ExecutableContent.execute(send_node(m, "delay_frac"), context(machine_state(m)))
+    end
+  end
+
   describe "execute/2 - send id (ADR-0035)" do
     # sabotage: `generate_send_id/2`'s `is_binary(id)` clause is dropped, so
     # even an author-written `id` falls to the counter-generating clause ->

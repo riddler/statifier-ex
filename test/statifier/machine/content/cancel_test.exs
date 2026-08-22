@@ -124,6 +124,26 @@ defmodule Statifier.Machine.Content.CancelTest do
 
       assert ctx.machine_state.timer_counter == 1
     end
+
+    # sabotage: `execute/2`'s effect literal stores `caller_context: nil`
+    # instead of reading `machine_state.caller_context` -> the first
+    # assertion reddens. ADR-0063 decision 3: `<cancel>` copies the
+    # transient slot at the same site that reads the counters, the same
+    # both-or-neither symmetry that gave `%Cancel{}` its `ordinal`.
+    test "caller_context is copied from machine_state (ADR-0063)" do
+      m = machine()
+      host_context = %{trace_id: "abc"}
+      ms = %{machine_state(m) | caller_context: host_context}
+      node = cancel_node(m, "bare")
+
+      assert {:ok, _ctx, [{:cancel, %Effect.Cancel{} = effect}]} =
+               ExecutableContent.execute(node, context(ms))
+
+      assert effect.caller_context == host_context
+
+      assert {:ok, _ctx, [{:cancel, %Effect.Cancel{caller_context: nil}}]} =
+               ExecutableContent.execute(node, context(machine_state(m)))
+    end
   end
 
   describe "execute/2 - an unmatched send_id is emitted anyway" do
