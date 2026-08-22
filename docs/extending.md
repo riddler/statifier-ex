@@ -210,6 +210,40 @@ that is `error.communication`, because communication genuinely was attempted
 and failed. See ADR-0051 for the full argument and the corpus that pins both
 outcomes.
 
+## Testing your handler: the conformance case
+
+Everything this document requires of a handler is also pinned mechanically:
+`Statifier.Testing.HandlerCase` (ADR-0065) generates a conformance suite for
+your implementation from two lines in a test module:
+
+```elixir
+defmodule MyApp.EnrichHandlerConformanceTest do
+  use ExUnit.Case, async: false
+
+  use Statifier.Testing.HandlerCase,
+    handler: MyApp.EnrichHandler,
+    type: "myapp:enrich"
+
+  # The observation point for the idempotency check: return the observable
+  # effects attributable to invoke_id - enqueued jobs, written rows,
+  # whatever your perform/2 produces.
+  def observed_effects(invoke_id) do
+    MyApp.Jobs.EnrichJob.enqueued_for(invoke_id)
+  end
+end
+```
+
+The generated tests verify the planning callbacks are deterministic and
+effect-free, `perform/2` is idempotent on `invoke_id` (the "At-least-once"
+section above, judged against your `observed_effects/1`), cancel of an
+unknown `invoke_id` never raises, `{:error, _}` from `start/2` surfaces as
+`error.execution` in a minimal driving chart, and handler exceptions
+propagate un-rescued. Fixtures are overridable (`conformance_invoke/0`,
+`conformance_ctx/0`, `conformance_event/0`) for a handler that reads
+`params`, `src`, or `content`; every check is also a plain public function
+on the module for suites that want them one at a time. See the module's own
+documentation for the full contract of each check.
+
 ## A naming note
 
 `Statifier.Invoke.Handler` (and its registration) is not
