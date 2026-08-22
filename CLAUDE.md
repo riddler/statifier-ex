@@ -123,6 +123,12 @@ files - `commit.md`, `mr.md`, `plan.md`, `iterate.md`, `implement.md`,
 calls only this project needs, additive to and never overriding the generic
 skill.
 
+This repo is also the family's reference for those agent-facing conventions -
+this file's authority, beads and gate sections, and `.claude/wurk/`. Which of
+them a sibling repo may copy, and whether verbatim or adapted down, is recorded
+in `docs/family-reference.md`. Read it before copying anything out of here into
+another repo, and before treating a difference between two repos as drift.
+
 Read before making design decisions:
 
 - `docs/architecture.md` - layers, design principles
@@ -131,6 +137,8 @@ Read before making design decisions:
 - `docs/persistence.md` - the interned-index hazard, chart identity, migration (ADR-0052)
 - `docs/testing.md` - conformance corpus, regression ratchet
 - `docs/workflow.md` - model roles, beads, worktrees
+- `docs/family-reference.md` - which agent-facing sections the sibling repos
+  copy, verbatim or adapted, and which are deliberately not copied
 - `docs/adr/` - the reasoning; cite ADR numbers instead of re-arguing them
 
 ## Build & Test
