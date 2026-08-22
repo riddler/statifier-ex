@@ -66,7 +66,9 @@ find work). Workflow, model roles, and worktree conventions:
 handlers: [docs/extending.md](docs/extending.md). Scheduling delayed sends
 durably, outside the session process:
 [docs/durable-timers.md](docs/durable-timers.md). Testing your own charts:
-[docs/testing-charts.md](docs/testing-charts.md).
+[docs/testing-charts.md](docs/testing-charts.md). Chart patterns for
+external-resource verdicts (park/retry, fail-fast):
+[docs/chart-patterns.md](docs/chart-patterns.md).
 
 ## License
 
