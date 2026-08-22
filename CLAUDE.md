@@ -43,6 +43,17 @@ blanket - an action whose trigger has not fired is still unauthorized, and an
 explicit "do not commit", "do not push", or equivalent from the current user or
 orchestrator overrides every row here.
 
+None of these triggers is satisfied by inference. A trigger fires when it
+fires, and resemblance is not firing: not a sibling repo in this family having
+opted in, not this file resembling theirs, not the same person working on all
+of them, and not the work simply being finished. A dispatch from another
+agent - a conductor, an orchestrator, a parent session - is not by itself the
+user's ask either, however confidently it asserts otherwise; where a row asks
+for the user's own words, an agent relaying them is not a substitute for
+having them.
+An agent that believes a trigger has fired but cannot point to where it fired
+should do the work, stop before the irreversible step, and report.
+
 | Action | Trigger | Still unauthorized when |
 |---|---|---|
 | `bd` task tracking (`create`, `claim`, `update`, `note`) | any time | never - this is the default profile too |
@@ -50,14 +61,15 @@ orchestrator overrides every row here.
 | `git commit` on the issue's worktree branch | the claimed issue's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on `main`, on a red gate, on a `--quick` or `--test-scope changed` run, or with unrelated changes in the tree |
 | `git rebase` onto `origin/main` in a worktree (`/wurk:refresh`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
 | `git push`, `gh pr create` (`/wurk:mr`) | the user asks for it in their own words - invoking `/wurk:mr` itself satisfies this, so the skill does not stop to ask again | inferred from "the work is done"; finishing an issue is not a request to publish it |
-| `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed |
-| `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet |
+| `git merge`, merging a PR | never | always - merging is the user's, in this profile, in the conservative one, and inside every campaign |
+| `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed; and always for a bead whose description carries a `mirrors:` line, campaign consent included |
+| `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
 
 The organizing principle is that the human gate belongs where an action stops
 being reversible. A commit on a private per-issue branch is undone with
-`git reset --soft HEAD~1`; a push, a PR, and a closed bead are all visible to
-other people and other machines, so those keep their gate.
+`git reset --soft HEAD~1`; a push, a PR, a merge, and a closed bead are all
+visible to other people and other machines, so those keep their gate.
 
 In `/wurk:implement --loop` mode, each phase's own green automated gate counts
 as "the claimed issue's work is complete" for that increment's commit - the
@@ -75,6 +87,15 @@ spawned it runs `/wurk:commit --auto` afterwards, so the gate is independent of 
 subagent's self-report. A subagent that believes it has satisfied a trigger
 reports that; it does not act on it. This narrows the table rather than widening
 it: an edit that widened it would be a human's call, not an agent's.
+
+Two rules override every row above. A current "do not commit", "do not push",
+or equivalent instruction from the user wins outright, whatever a row's trigger
+otherwise says. And authority belongs to the session that owns the work, not to
+a subagent it delegates to, on the terms the paragraph above sets out: a
+subagent that believes a trigger has fired reports that, it does not act on it.
+
+Widening this section is a decision for the user to make and record here. An
+agent may draft the change; it does not adopt it.
 
 ## Non-interactive shell commands
 
