@@ -18,6 +18,15 @@ defmodule Statifier.Effect.Cancel do
   execute the same content node, in the same microstep, under the same
   author-written id, and only `ordinal` tells them apart. It replays
   identically because the counter is pure fold state.
+
+  `caller_context` is the opaque host term the current macrostep's
+  triggering external event carried (ADR-0063), copied off
+  `Statifier.MachineState`'s transient slot at construction - `nil` when
+  no context was attached. Both durable-timer effects carry it, not just
+  the send: the same store processes both, and the cancellation act wants
+  the same attribution as the firing (ADR-0063 decision 2). Row data
+  beside the key, never a key component (decision 6); the library never
+  reads the value.
   """
 
   alias Statifier.Machine.Content
@@ -26,7 +35,16 @@ defmodule Statifier.Effect.Cancel do
   @type owner :: Content.owner()
 
   @enforce_keys [:send_id, :macrostep, :microstep, :round, :ordinal]
-  defstruct [:send_id, :c_index, :owner, :macrostep, :microstep, :round, :ordinal]
+  defstruct [
+    :send_id,
+    :c_index,
+    :owner,
+    :macrostep,
+    :microstep,
+    :round,
+    :ordinal,
+    caller_context: nil
+  ]
 
   @type t :: %__MODULE__{
           send_id: String.t(),
@@ -35,6 +53,7 @@ defmodule Statifier.Effect.Cancel do
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
           round: non_neg_integer(),
-          ordinal: pos_integer()
+          ordinal: pos_integer(),
+          caller_context: term()
         }
 end

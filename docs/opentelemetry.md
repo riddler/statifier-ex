@@ -116,22 +116,29 @@ previous one closed; a child session outlives the invoking macrostep). The
 alternative - one trace per session - was rejected with the
 session-lifetime span and for the same reason: unbounded traces.
 
-**The session-process caveat, and why caller attachment is future work.**
+**The session-process caveat, and how `caller_context` closes it.**
 `:telemetry.execute/3` is synchronous, so the bridge's handlers run in the
 session's own GenServer process. OTel context is process-local, which means
 the *sender's* current span context is never ambient where the bridge
 runs: by the time a macrostep span opens, the caller's context stayed in
-the caller's process. The bead's "probably yes - the sender's trace wants
-to see the statechart react" is therefore not implementable from the
-public events as they stand, and under the constraints above the fix is an
-upstream field, not a bridge workaround. The named follow-up (tracked as
-its own bead, cross-repo mirrored): external events and the delayed-send
-effect vocabulary gain an opaque caller-context slot the host sets at send
-time and the bridge reads at emission - which is the same field a durable
-timer host (`statifier_oban`) needs so that a delayed send firing hours
-later can link back to the trace that scheduled it. Until that field
-exists, macrostep traces are detached and the previous-macrostep /
-invoke-parent links above are the whole correlation story.
+the caller's process. The fix is the upstream field ADR-0063 decided, not
+a bridge workaround: `caller_context :: term()`, an opaque slot the host
+sets at send time (`Statifier.Event.external(name, caller_context: ctx)`)
+and the library carries without ever reading. The bridge's read points are
+the four metadata keys ADR-0063 decision 4 added: `caller_context` on
+`[:statifier, :session, :macrostep, :start]` and `[..., :stop]` (the
+triggering external event's slot - `nil` for the
+`:initialize`/`:cancel`/`:internal`/`:resume` triggers and for an event
+sent without one) is what attaches a macrostep span to the sender's trace,
+and `caller_context` on `[..., :effect, :send_delayed]` and
+`[..., :effect, :cancel]` is what a durable timer host (`statifier_oban`)
+stores as row data so a delayed send firing hours later can link back to
+the trace that scheduled it. The bridge *uses* the value (to parent or
+link) and never flattens it into span attributes - the same line the
+attribute mapping below draws for `metadata.effect`. A macrostep whose
+trigger attached no context stays detached, and the
+previous-macrostep / invoke-parent links above remain its correlation
+story.
 
 ## Attribute mapping
 

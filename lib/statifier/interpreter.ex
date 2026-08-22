@@ -265,6 +265,12 @@ defmodule Statifier.Interpreter do
       |> MachineState.begin_macrostep()
       |> MachineState.begin_microstep()
 
+    # ADR-0063 decision 3: the initialization macrostep has no sending
+    # caller, so its `caller_context` stamp is `nil`. Redundant over
+    # `MachineState.new/2`'s default, and written anyway so all three
+    # macrostep-opening entry points are literal writers of the field.
+    machine_state = %{machine_state | caller_context: nil}
+
     # `datamodel = new Datamodel(doc)` / `if doc.binding == "early":
     # initializeDatamodel(datamodel, doc)` (Appendix D `:101-102`), fused
     # into one unconditional call. The pseudocode's `if doc.binding ==
@@ -480,6 +486,14 @@ defmodule Statifier.Interpreter do
 
   def handle_event(%MachineState{} = machine_state, %Event{} = event) do
     machine_state = MachineState.begin_macrostep(machine_state)
+
+    # ADR-0063 decision 3: the triggering event's opaque caller context is
+    # stamped onto the fold at the macrostep's head, so the durable-timer
+    # effect constructors read this macrostep's caller and never a stale
+    # one. One of the field's three writers (with `initialize/2` and
+    # `cancel/1`, which write `nil`); written directly, matching
+    # `timer_counter`'s no-setter precedent.
+    machine_state = %{machine_state | caller_context: event.caller_context}
 
     dequeued =
       Effect.trace(machine_state, Effect.Trace.EventDequeued, event: event, from: :external)
@@ -912,8 +926,12 @@ defmodule Statifier.Interpreter do
   def cancel(%MachineState{running: false}), do: {:error, :not_running}
 
   def cancel(%MachineState{} = machine_state) do
+    # ADR-0063 decision 3: a cancellation macrostep has no sending caller,
+    # so the stamp is `nil` - overwriting whatever the previous macrostep's
+    # trigger left, so `exit_interpreter/1`'s effects never attribute to a
+    # stale caller. One of the field's three writers.
     {machine_state, effects} =
-      %{machine_state | running: false}
+      %{machine_state | running: false, caller_context: nil}
       |> exit_interpreter()
 
     {:ok, machine_state, effects}

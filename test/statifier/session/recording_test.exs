@@ -405,6 +405,107 @@ defmodule Statifier.Session.RecordingTest do
     end
   end
 
+  describe "caller_context rides the recording (ADR-0063)" do
+    # sabotage: `put_event/3` is changed to strip the slot before appending
+    # (`%{event | caller_context: nil}`) -> both assertions below redden.
+    # Decision 5: the appenders store the `%Event{}` as given, and replay
+    # reproduces the live effect stream only if the recorded events still
+    # carry the input the effect-constructor copy reads.
+    test "a non-nil caller_context survives a to_binary/from_binary round trip" do
+      host_context = %{trace_id: "abc", span_id: 123}
+      recorded_event = Event.external("go", caller_context: host_context)
+
+      recording =
+        compile_identified!()
+        |> Recording.new()
+        |> Recording.put_event(recorded_event, nil)
+
+      assert [{:event, %Event{caller_context: ^host_context}, nil}] =
+               Recording.entries(recording)
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert {:ok, decoded} = Recording.from_binary(blob)
+
+      assert [{:event, %Event{caller_context: ^host_context}, nil}] = Recording.entries(decoded)
+    end
+  end
+
+  describe "from_binary/1 on a hand-built version-2 envelope" do
+    # A version-2 blob's stored structs predate `caller_context`, simulated
+    # here by deleting the key off the struct-shaped maps before encoding -
+    # exactly what decoding a real pre-field blob produces.
+    #
+    # sabotage: `decode_envelope/5`'s `upgrade_entries(entries, version)`
+    # call is dropped (entries reversed as-is) -> every `caller_context`
+    # read below raises `KeyError`, reddening the test. Decision 5's
+    # blessed default: no context was ever attached to the inputs an older
+    # blob holds, so `nil` is what the pre-field world implied.
+    test "defaults caller_context: nil onto stored events and durable-timer effects" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      old_event = Map.delete(event("go"), :caller_context)
+
+      old_send_delayed =
+        Map.delete(
+          %Effect.SendDelayed{
+            event: "e",
+            delay_ms: 30,
+            macrostep: 1,
+            microstep: 1,
+            round: 0,
+            ordinal: 1
+          },
+          :caller_context
+        )
+
+      old_cancel =
+        Map.delete(
+          %Effect.Cancel{send_id: "s1", macrostep: 1, microstep: 1, round: 0, ordinal: 2},
+          :caller_context
+        )
+
+      entries = [
+        {:event, old_event, nil},
+        {:invoked_event, "inv1", Map.delete(event("child.done"), :caller_context), nil},
+        {:timer, "s1", Map.delete(event("tick"), :caller_context), nil},
+        {:interpret, [{:send_delayed, old_send_delayed}, {:cancel, old_cancel}], nil},
+        {:cancel, nil}
+      ]
+
+      version_2_envelope =
+        :erlang.term_to_binary({:statifier_recording, 2, chart_blob, [], entries, nil})
+
+      assert {:ok, decoded} = Recording.from_binary(version_2_envelope)
+
+      assert [
+               {:event, %Event{name: "go", caller_context: nil}, nil},
+               {:invoked_event, "inv1", %Event{caller_context: nil}, nil},
+               {:timer, "s1", %Event{caller_context: nil}, nil},
+               {:interpret,
+                [
+                  {:send_delayed, %Effect.SendDelayed{caller_context: nil}},
+                  {:cancel, %Effect.Cancel{caller_context: nil}}
+                ], nil},
+               {:cancel, nil}
+             ] = Recording.entries(decoded)
+    end
+
+    # sabotage: `check_version/1`'s `defp check_version(2), do: :ok` clause
+    # is deleted -> this assertion reddens with
+    # `{:error, {:unsupported_format_version, 2}}`. The read-the-old-version
+    # courtesy version 1 already gets.
+    test "a version-2 envelope is read, not refused" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      version_2_envelope =
+        :erlang.term_to_binary({:statifier_recording, 2, chart_blob, [], [], nil})
+
+      assert {:ok, _decoded} = Recording.from_binary(version_2_envelope)
+    end
+  end
+
   describe "from_binary/1 on a hand-built version-1 envelope" do
     # sabotage: `from_binary/1`'s five-element clause is changed to call
     # `decode_envelope(version, chart_blob, opts, entries, :stray)` instead of
@@ -622,10 +723,12 @@ defmodule Statifier.Session.RecordingTest do
   end
 
   describe "format_version/0" do
-    # sabotage: `@format_version` is changed from `2` back to `1` -> this
-    # reddens directly
-    test "returns 2" do
-      assert Recording.format_version() == 2
+    # sabotage: `@format_version` is changed from `3` back to `2` -> this
+    # reddens directly. 3 is ADR-0063's bump: `%Statifier.Event{}` and the
+    # two durable-timer effect structs gained a defstruct key, changing the
+    # shape of the structs inside a blob's `entries`.
+    test "returns 3" do
+      assert Recording.format_version() == 3
     end
 
     # sabotage: `format_version/0` is changed to return `@format_version +

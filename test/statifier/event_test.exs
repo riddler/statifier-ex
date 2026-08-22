@@ -43,6 +43,16 @@ defmodule Statifier.EventTest do
       assert Event.external("go").data == :undefined
       assert Event.external("go", data: nil).data == nil
     end
+
+    # sabotage: `Event.external/2` ignores the `:caller_context` option and
+    # always stores `nil` -> the second assertion reddens (ADR-0063
+    # decision 2: the opt is `external/2`'s alone).
+    test "caller_context defaults to nil and is carried through opaquely" do
+      assert Event.external("go").caller_context == nil
+
+      context = %{trace_id: "abc", span_id: 123}
+      assert Event.external("go", caller_context: context).caller_context == context
+    end
   end
 
   describe "internal/3" do
@@ -72,6 +82,15 @@ defmodule Statifier.EventTest do
     test "sendid option is carried through" do
       assert Event.internal("done.state.a", @cause, sendid: "send1").sendid == "send1"
     end
+
+    # sabotage: `Event.internal/3` reads `:caller_context` from opts the way
+    # `external/2` does -> this assertion reddens. ADR-0063 decision 2: an
+    # event the chart raised has no external caller, so the constructor
+    # never reads the slot from opts.
+    test "never reads caller_context from opts" do
+      event = Event.internal("done.state.a", @cause, caller_context: %{trace_id: "abc"})
+      assert event.caller_context == nil
+    end
   end
 
   describe "platform/3" do
@@ -93,6 +112,14 @@ defmodule Statifier.EventTest do
     # stores the `:undefined` default -> this assertion reddens.
     test "data option is carried through" do
       assert Event.platform("error.execution", @cause, data: %{value: 1}).data == %{value: 1}
+    end
+
+    # sabotage: `Event.platform/3` reads `:caller_context` from opts the way
+    # `external/2` does -> this assertion reddens. Same ADR-0063 decision 2
+    # rule `internal/3` pins above.
+    test "never reads caller_context from opts" do
+      event = Event.platform("error.execution", @cause, caller_context: %{trace_id: "abc"})
+      assert event.caller_context == nil
     end
   end
 end

@@ -67,7 +67,10 @@ defmodule Statifier.Machine.Content.Cancel do
           macrostep: machine_state.macrostep,
           microstep: machine_state.microstep,
           round: machine_state.round,
-          ordinal: machine_state.timer_counter
+          ordinal: machine_state.timer_counter,
+          # ADR-0063 decision 3: the current macrostep's opaque caller
+          # context, copied at the same site that reads the counters.
+          caller_context: machine_state.caller_context
         }
 
         {:ok, %{context | machine_state: machine_state}, [{:cancel, effect}]}
