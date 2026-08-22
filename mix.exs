@@ -58,7 +58,7 @@ defmodule Statifier.MixProject do
       {:telemetry, "~> 1.3"},
 
       # Dev / test
-      {:ex_quality, "~> 0.13", only: :dev, runtime: false},
+      {:ex_quality, "~> 0.14", only: :dev, runtime: false},
       # 1.8.0-dev, tracked as a git dep, for exactly one check:
       # Credo.Check.Readability.SpecParameterNames, which is absent from 1.7.x.
       # mix.lock pins the SHA, so builds stay reproducible.

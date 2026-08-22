@@ -159,9 +159,10 @@ corpus (`mise tasks` lists the stages, `tools/corpus/README.md` explains them);
 Conventions below.
 
 Run `mix quality --profile loop` between edits; full `mix quality` must be green
-before any commit. The gate formats your code for you - do not run `mix format`
-as a separate step. See the ExQuality section at the end of this file for the
-rules the gate expects you to follow.
+before any commit. The Format stage runs in check mode (`format: [check: true]`
+in `.quality.exs`): drift fails the gate and nothing is rewritten, so run
+`mix format` yourself before committing. See the ExQuality section at the end
+of this file for the rules the gate expects you to follow.
 
 ## Conventions
 

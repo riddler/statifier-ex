@@ -18,6 +18,10 @@
 # Agents: prefer `--format json --report -` when you want to route on results.
 
 [
+  format: [
+    check: true
+  ],
+
   compile: [
     warnings_as_errors: true
   ],
