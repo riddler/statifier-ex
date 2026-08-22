@@ -13,6 +13,32 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-22 - st-k7pm
+
+Approved-by: JohnnyT (operator ruling on sui-b5y, confirmed 2026-08-22,
+campaign 003 consent)
+
+- .quality.exs: adds `format: [check: true]`, moving the Format stage from
+  rewrite mode to check mode (`mix format --check-formatted`)
+- mix.exs: bumps the `:ex_quality` dev dependency from `~> 0.13` to `~> 0.14`,
+  the release that ships the check-mode option
+
+Reason: the operator-approved ruling, recorded here rather than re-argued.
+Check-mode was requested via the deciding bead sui-b5y in statifier-ui,
+designed as PLAN-format-check-mode.md in ex_quality, and ruled fleet-wide by
+the operator on 2026-08-22: the Format stage checks and fails on drift instead
+of rewriting files, and agents run `mix format` themselves before committing.
+The campaign 003 consent authorizes exactly this `.quality.exs` change and
+nothing else in that file.
+
+This is a strengthening, not a weakening: before the change formatting could
+never fail a run because the gate silently rewrote drifting files; after it,
+drift is a named red with the file list, and the gate writes nothing. No stage
+is removed, no threshold moves, no test is skipped, and no scope narrows. The
+dep bump is what makes the option exist (`ex_quality` 0.14.0's Format stage
+modes); the tree was verified fully formatted before the flip, so no
+formatting commit was needed ahead of it.
+
 ## 2026-08-19 - st-hbdr
 
 Approved-by: JohnnyT (in session)
