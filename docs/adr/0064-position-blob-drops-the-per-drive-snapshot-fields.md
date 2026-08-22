@@ -141,8 +141,10 @@ exists precisely to be deleted when this decision lands.
   covers the break). Their fix is deleting the pin test and reverting the
   doc paragraph that described the stale behaviour; no compensation code
   exists to unwind. The implementation session for this record should
-  leave a dated note on the downstream tracker's pinning bead when the
-  change lands, since st-otr0 itself carries `mirrors: none`.
+  leave a dated note on the downstream tracker's coordination bead when
+  the change lands: st-otr0 carries `mirrors: sp-3m3` and sp-3m3 carries
+  `mirrors: st-otr0`, so the mirror rule already obliges a fresh dated
+  note on both halves.
 - Blob bytes shrink slightly and, more to the point, durable position
   blobs no longer contain any live session id - `Routes.t().sessions` was
   the one liveness-adjacent value that had been crossing the persistence
