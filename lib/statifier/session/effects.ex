@@ -394,7 +394,8 @@ defmodule Statifier.Session.Effects do
       data: send.data,
       origin: SystemVariables.scxml_location(session_id),
       origintype: SystemVariables.scxml_event_processor(),
-      sendid: if(send.id_from_author?, do: send.send_id)
+      sendid: if(send.id_from_author?, do: send.send_id),
+      caller_context: caller_context_of(send)
     )
   end
 
@@ -420,9 +421,27 @@ defmodule Statifier.Session.Effects do
         send.round
       )
 
-    Event.internal(send.event, cause,
-      data: send.data,
-      sendid: if(send.id_from_author?, do: send.send_id)
-    )
+    event =
+      Event.internal(send.event, cause,
+        data: send.data,
+        sendid: if(send.id_from_author?, do: send.send_id)
+      )
+
+    # ADR-0063 decision 3: the scheduler's opaque caller context travels
+    # onto the event this carrier will deliver. Written directly rather
+    # than through `Event.internal/3`'s opts, which deliberately never
+    # read the slot (decision 2) - this is the one copy site, not a
+    # constructor surface.
+    %{event | caller_context: caller_context_of(send)}
   end
+
+  # ADR-0063 decision 3's firing-time copy source. Only `%SendDelayed{}`
+  # (and `%Cancel{}`, which never reaches these builders) carries the
+  # slot; an immediate `%Send{}` is delivered inside the macrostep whose
+  # telemetry already carries the context, so it has no field to copy
+  # (decision 2) and contributes `nil`. Dispatch is on the struct, never
+  # on the value - the library still never reads what the slot holds.
+  @spec caller_context_of(send :: Send.t() | SendDelayed.t()) :: term()
+  defp caller_context_of(%SendDelayed{caller_context: caller_context}), do: caller_context
+  defp caller_context_of(%Send{}), do: nil
 end

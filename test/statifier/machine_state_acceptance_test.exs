@@ -74,6 +74,7 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :invoke_counter,
     :send_counter,
     :timer_counter,
+    :caller_context,
     :datamodel,
     :running,
     :status,
@@ -110,17 +111,20 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # (ADR-0035) - see that field's own moduledoc section. `timer_counter` is a
   # sixth, the session-global durable-timer ordinal sequence `%SendDelayed{}`
   # and `%Cancel{}` both read `ordinal` off (ADR-0059) - see that field's own
-  # moduledoc section. `routes` is the
+  # moduledoc section. `caller_context` is transient per-macrostep fold
+  # state naming the opaque host term the macrostep's triggering external
+  # event carried (ADR-0063) - see that field's own moduledoc section.
+  # `routes` is the
   # ADR-0048 caller-declared route snapshot, `nil` when the driver declared
   # nothing - see that field's own `t:routes/0` typedoc. `invoke_types` is
   # the ADR-0051 caller-declared registered invoke-type set, `nil` when no
   # declaration was made - see that field's own `t:invoke_types/0` typedoc.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a twenty-first
+  # lib/statifier/machine_state.ex - the struct then grows a twenty-second
   # key, and this equality assertion reddens for exactly the "someone adds
   # a field without updating the docs" failure the plan calls out.
-  test "machine_state holds the twenty fields, and the struct has no others" do
+  test "machine_state holds the twenty-one fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)

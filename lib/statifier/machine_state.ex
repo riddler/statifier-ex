@@ -224,6 +224,29 @@ defmodule Statifier.MachineState do
   `<cancel>` construction, since one session-global sequence spans both
   effect kinds (ADR-0059).
 
+  ## `caller_context` is the current macrostep's caller (ADR-0063)
+
+  `caller_context :: term()` is transient per-macrostep fold state naming
+  the opaque host term the macrostep's triggering external event carried -
+  `nil` when nothing sent one (initialization, cancellation, an event sent
+  without a context). Every macrostep-opening core entry point overwrites
+  it, so it never holds a stale value, and there are exactly three
+  writers, all in `Statifier.Interpreter`: `handle_event/2` writes the
+  triggering event's `caller_context` at the macrostep's head, and
+  `initialize/2` and `cancel/1` write `nil` - their macrosteps have no
+  sending caller. Internal-event rounds never touch it: an internal event
+  was raised by the chart inside the same macrostep, so the macrostep's
+  attribution stands. The two durable-timer effect constructors
+  (`lib/statifier/machine/content/send.ex`'s delayed branch and
+  `lib/statifier/machine/content/cancel.ex`) copy it onto
+  `%Effect.SendDelayed{}`/`%Effect.Cancel{}` at the same sites that read
+  `timer_counter`. Because the field is pure fold state, replay re-mints
+  it byte-identically from the recorded events (ADR-0034). No setter
+  function, matching `timer_counter`'s precedent: written directly at its
+  three call sites. It is deliberately absent from `Statifier.Position`'s
+  export - a position is written at quiescence, where no macrostep is
+  open and the value attributes nothing (ADR-0063 decision 5).
+
   ## `running` and `status` differ only across `exit_interpreter`
 
   `running` is Appendix D's `running` flag verbatim: the interpreter loop's
@@ -371,6 +394,7 @@ defmodule Statifier.MachineState do
     invoke_counter: 0,
     send_counter: 0,
     timer_counter: 0,
+    caller_context: nil,
     datamodel: %{},
     running: true,
     status: :running,
@@ -445,6 +469,7 @@ defmodule Statifier.MachineState do
           invoke_counter: non_neg_integer(),
           send_counter: non_neg_integer(),
           timer_counter: non_neg_integer(),
+          caller_context: term(),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -501,6 +526,7 @@ defmodule Statifier.MachineState do
       invoke_counter: 0,
       send_counter: 0,
       timer_counter: 0,
+      caller_context: nil,
       datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
       running: true,
       status: :running,

@@ -116,8 +116,8 @@ defmodule Statifier.Session.Telemetry do
   | `[:statifier, :session, :init]` | `system_time` | `session_id`, `machine_name`, `trace`, `invoked_by`, `resumed` |
   | `[:statifier, :session, :halt]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `configuration` |
   | `[:statifier, :session, :terminate]` | `macrostep`, `microstep`, `round` | `session_id`, `reason`, `status` |
-  | `[:statifier, :session, :macrostep, :start]` | `system_time`, `monotonic_time` | `session_id`, `trigger`, `event_name`, `span_ref` |
-  | `[:statifier, :session, :macrostep, :stop]` | `duration`, `macrostep`, `microsteps`, `rounds`, `monotonic_time` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration`, `span_ref` |
+  | `[:statifier, :session, :macrostep, :start]` | `system_time`, `monotonic_time` | `session_id`, `trigger`, `event_name`, `caller_context`, `span_ref` |
+  | `[:statifier, :session, :macrostep, :stop]` | `duration`, `macrostep`, `microsteps`, `rounds`, `monotonic_time` | `session_id`, `trigger`, `outcome`, `event_name`, `configuration`, `caller_context`, `span_ref` |
   | `[:statifier, :session, :interpret]` | `effect_count`, `macrostep`, `microstep` | `session_id` |
   | `[:statifier, :session, :unroutable]` | `macrostep`, `microstep` | `session_id`, `effect`, `target`, `send_id`, `location` |
 
@@ -134,13 +134,26 @@ defmodule Statifier.Session.Telemetry do
   own convention - unit conversion (`System.convert_time_unit/3`) is left to
   the consumer.
 
+  `caller_context` (on both macrostep halves here, and on the
+  `:send_delayed`/`:cancel` effect events below) is ADR-0063's opaque host
+  slot: the triggering external event's `caller_context`, `nil` for the
+  `:initialize`/`:cancel`/`:internal`/`:resume` triggers and for an event
+  sent without one. Identity, never a number, so it is metadata everywhere
+  and a measurement nowhere (ADR-0040's split). Both halves carry it for
+  the same reason both carry `trigger` and `event_name`: a consumer
+  attaching to only one half still attributes. On the two effect events
+  the value also rides in `metadata.effect` verbatim; the explicit key
+  keeps a bridge's read uniform with the macrostep events. A consumer
+  treats the term as opaque - something to parent or link with, never to
+  flatten into exported attributes.
+
   ## Core effect events (11), emitted regardless of `trace`
 
   | Event | Measurements | Metadata |
   |---|---|---|
   | `[:statifier, :session, :effect, :send]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `round`, `delay_ms`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
-  | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep`, `round`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner` |
+  | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `round`, `delay_ms`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner`, `caller_context` |
+  | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep`, `round`, `ordinal` | `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner`, `caller_context` |
   | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index` |
   | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep`, `round` | `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
@@ -367,6 +380,7 @@ defmodule Statifier.Session.Telemetry do
         session_id: session_id,
         trigger: trigger,
         event_name: event_name(event),
+        caller_context: event_caller_context(event),
         span_ref: span_ref
       }
     )
@@ -408,6 +422,7 @@ defmodule Statifier.Session.Telemetry do
         outcome: outcome,
         event_name: event_name(event),
         configuration: configuration_ids(machine_state),
+        caller_context: event_caller_context(event),
         span_ref: span_ref
       }
     )
@@ -506,7 +521,8 @@ defmodule Statifier.Session.Telemetry do
        send_id: send.send_id,
        target: send.target,
        c_index: send.c_index,
-       owner: send.owner
+       owner: send.owner,
+       caller_context: send.caller_context
      }}
   end
 
@@ -521,7 +537,8 @@ defmodule Statifier.Session.Telemetry do
        location: location(machine, cancel),
        send_id: cancel.send_id,
        c_index: cancel.c_index,
-       owner: cancel.owner
+       owner: cancel.owner,
+       caller_context: cancel.caller_context
      }}
   end
 
@@ -720,4 +737,16 @@ defmodule Statifier.Session.Telemetry do
   @spec event_name(event :: Statifier.Event.t() | nil) :: String.t() | nil
   defp event_name(nil), do: nil
   defp event_name(%Statifier.Event{name: name}), do: name
+
+  # ADR-0063 decision 4: the macrostep halves carry the triggering
+  # *external* event's slot - `nil` for the `:initialize`/`:cancel`/
+  # `:internal`/`:resume` triggers, whose events (when they have one at
+  # all) never carry an external caller's context. Dispatch is on the
+  # event's type, never on the value: the library still never reads what
+  # the slot holds.
+  @spec event_caller_context(event :: Statifier.Event.t() | nil) :: term()
+  defp event_caller_context(%Statifier.Event{type: :external, caller_context: caller_context}),
+    do: caller_context
+
+  defp event_caller_context(_event), do: nil
 end

@@ -512,7 +512,10 @@ defmodule Statifier.Machine.Content.Send do
          microstep: ms.microstep,
          round: ms.round,
          ordinal: ms.timer_counter,
-         id_from_author?: id_from_author?(node)
+         id_from_author?: id_from_author?(node),
+         # ADR-0063 decision 3: the current macrostep's opaque caller
+         # context, copied at the same site that reads the counters.
+         caller_context: ms.caller_context
        }}
     end
 
