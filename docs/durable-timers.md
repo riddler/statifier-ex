@@ -223,13 +223,17 @@ live session's subscriber stream, in the same order.
 The fired event goes in as the input to your host's *next* drive, not
 through any function call - there is no running process to call into.
 
-Be honest with yourself about a real gap here: `%MachineState{}` is "a
-complete, inspectable, resumable position" (`docs/observability.md:36-38`),
-but **no serialization function for it exists in `lib/` today** - no
-`Jason.Encoder`, no `to_map`/`from_map`. Persisting the position between
-drives is entirely your responsibility, and `st-m5c3` (Machine identity /
-serialization contract) is the bead that owns closing that gap. This guide
-does not invent a format for you.
+Persisting the position between drives is your responsibility, but the
+format is not: `Statifier.Position.to_binary/1` writes a `%MachineState{}`
+to a version-stamped, identity-checked blob, and
+`Statifier.Position.from_binary/2` reads it back against the compiled
+`Machine`, refusing with a typed error on a format-version or
+chart-identity mismatch (ADR-0052, ADR-0060). Two fields come back `nil`
+on purpose - `routes` and `invoke_types` are per-driver snapshots, not
+durable position state (ADR-0064) - so re-stamp them before the next
+drive. `docs/persistence.md` is the full guide: the identity checks, the
+migration stories, and the rehydration recipe for a host driving the
+interpreter directly. Do not invent a format of your own.
 
 ## Keying your store
 
