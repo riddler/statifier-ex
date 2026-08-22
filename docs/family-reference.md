@@ -38,7 +38,7 @@ machinery it has nothing to protect with.
 | ExQuality (`mix quality`) marker block | `CLAUDE.md` | reference, copy-verbatim |
 | The `deps/ex_quality/usage-rules.md` pointer | `CLAUDE.md`, inside that block | reference, copy-verbatim |
 | The `.claude/wurk/` extension mechanism | `.claude/wurk/*.md` | reference, adapt-per-repo |
-| `mix gate.verify` and the `gate.attest` manifest key | `lib/mix/tasks/gate.verify.ex`, `.claude/wurk.json` | reference, copy-verbatim (with per-repo wiring) |
+| `mix gate.verify` and the `gate.attest` manifest key | `lib/mix/tasks/gate.verify.ex`, `.claude/wurk.json` | reference, copy-verbatim only for a repo not on statifier as a git dep - see the caveat |
 | The gate guard (`mix gate.check`) and its `guard_ledger` | `lib/mix/`, `.claude/wurk.json`, `docs/quality-gate-changes.md` | **not reference** |
 | The ADR guard and the ADR judge | `lib/mix/` | **not reference** |
 | The regression ratchet | `lib/mix/`, `test/passing_tests.json` | **not reference** |
@@ -177,16 +177,44 @@ declares no attestation command, and `/wurk:commit` then refuses to proceed. A
 repo without it has a broken unattended commit path, which is a mechanical
 problem rather than a stylistic one.
 
-An adopter must change: nothing in the task body, but the wiring is per-repo -
-set `gate.attest` in `.claude/wurk.json` to `["mix", "gate.verify"]`, and check
-the task's expectations against the ex_quality version that repo depends on.
+An adopter must change: nothing in the task body - but read the caveat below
+before deciding whether there is a task body to copy at all.
 
-Expect the copies to be temporary. `gate.verify` is being extracted upstream
-into ex_quality as a task that package ships (bead `st-wgr0`; design at
-`~/Dev/github/ex_quality/PLAN-quality-verify.md`), after which each adopter
-points `gate.attest` at the upstream task and deletes its copy. Do not block
-the five adoptions on that extraction - the copies are small and the collapse
-is mechanical.
+**The caveat (st-hcgl, closed 2026-08-22): a git-dep consumer does not take a
+verbatim copy.** Any repo depending on statifier as a git dep - which is every
+sibling in this family today, per ADR-0061's git-dep pin pending Hex - compiles
+this repo's entire `lib/` into its build. `Mix.Tasks.Gate.Verify` (and the
+other custom gate tasks) land on the consumer's code path whether or not that
+repo's `.quality.exs` calls them. A verbatim local copy of `gate.verify` then
+redefines a module that already exists on that path: a "redefining module"
+warning, promoted to a red gate by `warnings_as_errors`. This is exactly the
+collision the four consumer adoptions hit on 2026-08-22/23, and it is not a
+copy that happened to go wrong - it recurs for any git-dep consumer that takes
+this section literally.
+
+The Hex package excludes `lib/mix` (the files list in `mix.exs`), so the
+collision is specific to the git-dep form and disappears once statifier
+publishes to Hex - but that is not the state adopters are in today.
+
+The operator ruling on st-hcgl (2026-08-22) is option (a): **a git-dep
+consumer wires `gate.attest` in `.claude/wurk.json` straight to the
+dep-provided task and takes no local copy at all.** All four consumer repos
+landed that wiring (statifier-ui #26, statifier_persistence #11,
+statifier_oban #11, opentelemetry_statifier #10), each verified green with
+attestation firing from the dependency's own task. So the practical adoption
+instruction for a git-dep consumer is: set `gate.attest` to
+`["mix", "gate.verify"]` and stop there - do not also copy
+`gate.verify.ex`. The verbatim-copy path in the paragraphs above remains live
+only for a repo that does **not** take statifier as a git dep.
+
+Expect this to be temporary either way. `gate.verify` is being extracted
+upstream into ex_quality as a task that package ships (bead `st-wgr0`; design
+at `~/Dev/github/ex_quality/PLAN-quality-verify.md`), after which every
+adopter - git-dep wirer and local-copy taker alike - points `gate.attest` at
+the upstream task and drops whatever it had before. st-wgr0 was deliberately
+deferred rather than accelerated when st-hcgl was decided; it is the eventual
+fix, not the one adopted here. Do not block on it - the wiring above is small
+and the eventual collapse onto ex_quality's task is mechanical.
 
 ## What is not reference and never was
 
@@ -196,3 +224,27 @@ on this one should end up with the same *keys* it needs and its own *values*.
 The section-by-section markings above are about prose and about
 `gate.verify.ex`; they say nothing about config files beyond the
 `gate.attest` key named in the exception.
+
+### Two CI rules that are not reference either, but are worth stating
+
+The CI workflow staying per-repo configuration does not mean every adopting
+repo has to relearn its failure modes from scratch. Two rules surfaced during
+the 2026-08 fleet campaigns, both the hard way, and neither is obvious from
+reading a workflow file in isolation.
+
+**CI must run the gate in the same env the gate tooling is defined for.** A
+workflow that sets a global `MIX_ENV` can silently drop the gate task off the
+build it is meant to protect. predicator-ex's gate workflow set
+`MIX_ENV=test` globally, and ex_quality is `only: :dev` - so the gate task did
+not exist in that CI environment at all, a gap caught only on the first live
+run rather than by reading the workflow. statifier-ui's workflow avoids the
+same trap by setting no `MIX_ENV`, which is the safer default whenever the
+gate tooling is a dev-only dependency.
+
+**CI trigger behavior for requests based on non-default branches (stacked
+requests) must be verified per repo on a live request, never asserted from
+reading the workflow file.** A campaign report claimed stacked requests get no
+CI run in one repo; the very next stacked request in that same repo ran CI
+anyway. The workflow file describes what the repo asked the forge to do, not
+what the forge actually triggers - the two can diverge, and only a live
+request settles which.
