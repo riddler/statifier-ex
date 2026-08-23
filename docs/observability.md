@@ -196,13 +196,24 @@ promotion path.
 
 ## Constraint 6: observe and record at the boundary
 
-`Statifier.Session` is the session boundary. Two properties it preserves:
+`Statifier.Session` is *a* session boundary - the process that first hosted
+one, and the one every property below is stated against - but the property
+itself belongs to the logical session, not to the process. Two properties a
+session boundary preserves:
 
 - **Observation**: the session forwards its effect/trace stream to every
   subscriber pid as `{:statifier, session_id, {:effect, effect}}`, and a
-  `:telemetry` bridge attaches at that same boundary - `Statifier.Session.Telemetry`,
-  the authoritative reference for every `[:statifier, :session, ...]` event
-  (ADR-0040). Live tooling attaches there; the core is untouched.
+  `:telemetry` bridge attaches at that same boundary. The authoritative
+  reference for every `[:statifier, :session, ...]` event is now
+  `Statifier.Telemetry` (ADR-0040, amended by ADR-0067): a caller-agnostic
+  emitter called from wherever a driver steps a chart.
+  `Statifier.Session.Telemetry` is the `driver: :session` facade over it -
+  the nine functions 2.0.0 published, unchanged in arity, still the entry
+  point for a `Statifier.Session` consumer. A driver stepping the pure
+  interpreter directly, with no `Statifier.Session` process anywhere, emits
+  the same contract by calling `Statifier.Telemetry` at its own step seam
+  instead; see [docs/persistence.md](persistence.md) for what that loop
+  looks like. Live tooling attaches at whichever boundary its driver runs.
   OpenTelemetry rides that contract from outside the repo: the bridge is
   the separate `opentelemetry_statifier` package (ADR-0062), and
   [docs/opentelemetry.md](opentelemetry.md) holds the span topology and

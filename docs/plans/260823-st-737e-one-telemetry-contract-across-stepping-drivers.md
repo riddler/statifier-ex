@@ -725,13 +725,13 @@ logical session rather than to the process.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` passes (full gate).
-- [ ] `mix quality --profile loop` is the command to use while iterating.
-- [ ] `mix format` has been run (Format runs in check mode).
-- [ ] `grep -c "Statifier.Telemetry" docs/observability.md
+- [x] `mix quality` passes (full gate).
+- [x] `mix quality --profile loop` is the command to use while iterating.
+- [x] `mix format` has been run (Format runs in check mode).
+- [x] `grep -c "Statifier.Telemetry" docs/observability.md
       docs/opentelemetry.md` returns at least 1 for each.
-- [ ] `grep -c "statifier.driver" docs/opentelemetry.md` returns at least 1.
-- [ ] `mix docs` builds without a broken-reference warning for either page.
+- [x] `grep -c "statifier.driver" docs/opentelemetry.md` returns at least 1.
+- [x] `mix docs` builds without a broken-reference warning for either page.
 
 #### Manual Verification:
 - [ ] Both pages read as documents that always described a driver-agnostic
@@ -946,5 +946,32 @@ next phase. In looped (`--loop`) execution, this phase's Automated
 Verification gates advancement automatically (via `/wurk:commit --auto`), and
 Manual Verification items are deferred and surfaced once at the end instead
 of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Both pages read as documents that always described a driver-agnostic
+      contract, not as a page with an amendment bolted on.
+- [ ] Neither page copies the event table - ADR-0040's consequence that
+      `docs/observability.md` "carries no second copy of the table" still
+      holds, now pointing at `Statifier.Telemetry`.
+- [ ] The durable path is described only in terms this repo owns; storage
+      phases (load, decode, persist, lock) stay named as
+      `statifier_persistence`'s own vocabulary per ADR-0067 decision 6.
+- [ ] No employer or product terminology appears; the motivating embedder,
+      if mentioned at all, is "a production CQRS/Oban host".
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
+
+No changelog fragment: documentation only, and Phase 2's fragment already
+covers the user-visible change.
 
 ---
