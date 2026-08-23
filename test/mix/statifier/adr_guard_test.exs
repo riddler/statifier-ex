@@ -141,6 +141,18 @@ defmodule Mix.Statifier.AdrGuardTest do
              ]) == []
     end
 
+    # ADR-0067's exemption: the :telemetry.execute/3 call sites moved to
+    # lib/statifier/telemetry.ex, the caller-agnostic emitter every stepping
+    # driver emits through. session/telemetry.ex stays as a driver: :session
+    # facade and keeps its own entry (above).
+    # sabotage: drop "lib/statifier/telemetry.ex" from
+    #           @effect_interpreter_paths -> red
+    test "a :telemetry call in telemetry.ex is exempt" do
+      assert analyze("lib/statifier/telemetry.ex", [
+               "    :telemetry.execute([:statifier, :session, :effect], measurements, metadata)"
+             ]) == []
+    end
+
     # The general inline-citation escape hatch also clears a :telemetry
     # finding in a non-exempt path, same as any other @effect_call_pattern hit.
     # sabotage: drop the entry.previous clause from cited?/1 -> red

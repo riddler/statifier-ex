@@ -13,6 +13,34 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-23 - st-737e
+
+Approved-by: pending operator confirmation (ADR-0067, st-737e, accepted
+2026-08-23, which argues this exemption in full)
+
+- lib/mix/statifier/adr_guard.ex: adds `lib/statifier/telemetry.ex` to
+  `@effect_interpreter_paths`, the fourth entry - the module `:telemetry`
+  call sites moved to when ADR-0067 generalized the emitter out of the
+  session boundary
+
+Reason: ADR-0067 moves the ADR-0040 emission half out of
+`lib/statifier/session/telemetry.ex` into a new caller-agnostic
+`lib/statifier/telemetry.ex`, so every stepping driver - not only
+`Statifier.Session` - can emit the `[:statifier, :session, ...]` contract.
+`lib/statifier/session/telemetry.ex` stays on the list too, now as a thin
+`driver: :session` facade over the new module, so 2.0.0 consumers keep
+working. The exemption is argued in full in ADR-0067's decision 2, which
+this entry cites rather than restates, per ADR-0027's "argued, not
+defaulted" bar: the exempt surface did not grow a second effect
+interpreter, it is the one emission half moving to a path whose name no
+longer claims the session owns it, plus the facade left behind. `mix
+gate.check` does not guard `lib/mix/statifier/adr_guard.ex`
+(`gate_guard.ex:36`), so the gate would go green without this entry - the
+block is policy, per ADR-0027, and this record is what keeps the guard's
+own comment true rather than routed around. The check does not loosen: the
+new path is exempt, and every other path under `lib/statifier/` keeps its
+`:telemetry` finding.
+
 ## 2026-08-22 - st-ueav
 
 Approved-by: JohnnyT (release go-ahead for the statifier 2.0.0 Hex publish,

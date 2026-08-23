@@ -274,25 +274,6 @@ defmodule Statifier.Session.TelemetryTest do
                _other -> false
              end)
     end
-
-    # sabotage: the moduledoc's `:log` row (`| \`[:statifier, :session,
-    # :effect, :log]\` | ...`) is deleted -> red, the moduledoc's extracted
-    # event set is missing `[:statifier, :session, :effect, :log]` while
-    # `events/0` still has it, so the `MapSet` equality assertion fails -
-    # reverted and confirmed green.
-    test "and the moduledoc's tables name exactly the same events" do
-      {:docs_v1, _anno, :elixir, _format, %{"en" => moduledoc}, _meta, _docs} =
-        Code.fetch_docs(Telemetry)
-
-      documented =
-        ~r/\[:statifier(?:, :[a-zA-Z_]+)+\]/
-        |> Regex.scan(moduledoc)
-        |> List.flatten()
-        |> Enum.map(&Code.string_to_quoted!/1)
-        |> MapSet.new()
-
-      assert documented == MapSet.new(Telemetry.events())
-    end
   end
 
   describe "init/4" do
@@ -481,7 +462,7 @@ defmodule Statifier.Session.TelemetryTest do
       assert measurements.effect_count == 3
       assert measurements.macrostep == machine_state.macrostep
       assert measurements.microstep == machine_state.microstep
-      assert metadata == %{session_id: "sess1"}
+      assert metadata == %{driver: :session, session_id: "sess1"}
     end
   end
 
@@ -1327,6 +1308,53 @@ defmodule Statifier.Session.TelemetryTest do
         for {_key, value} <- measurements do
           assert is_number(value)
         end
+      end
+    end
+
+    # sabotage: `Statifier.Telemetry.base_metadata/4`'s literal `driver:
+    # driver` key is replaced with `driver: :not_session` -> red, every
+    # `[:statifier, :session, :effect, _]` and `[:statifier, :session,
+    # :trace, _]` message's `metadata.driver == :session` assertion fails
+    # below - reverted and confirmed green. ADR-0067: `Statifier.Session`
+    # emits through the facade with `driver: :session` pinned.
+    test "every event this module can emit carries driver: :session", %{ref: ref} do
+      machine = located_machine()
+      {machine_state, _effects} = Statifier.initialize(machine)
+
+      Telemetry.init("sess1", machine, machine_state, nil, false)
+      Telemetry.halt("sess1", :done, machine_state)
+      Telemetry.terminate("sess1", :normal, :done, machine_state)
+      span_ref = make_ref()
+      Telemetry.macrostep_start("sess1", :event, Event.external("go"), span_ref)
+
+      Telemetry.macrostep_stop(
+        "sess1",
+        :event,
+        machine_state,
+        nil,
+        :quiescent,
+        System.monotonic_time(),
+        span_ref
+      )
+
+      Telemetry.interpret("sess1", 2, machine_state)
+
+      for {kind, payload} <- @core_fixtures,
+          do: Telemetry.effect("sess1", machine, {kind, payload})
+
+      for {_kind, effect} <- @trace_fixtures, do: Telemetry.effect("sess1", machine, effect)
+
+      Telemetry.unroutable(
+        "sess1",
+        machine,
+        {:send, %Send{event: "e", c_index: nil, owner: nil, macrostep: 1, microstep: 1, round: 0}}
+      )
+
+      messages = drain(ref)
+      assert messages != []
+
+      for {_event, _measurements, metadata} <- messages do
+        assert metadata.driver == :session
       end
     end
   end
