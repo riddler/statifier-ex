@@ -224,4 +224,102 @@ defmodule Statifier.Session.SendCancelTest do
       refute_receive {:statifier, ^session_id, {:effect, {:send, %Effect.Send{}}}}
     end
   end
+
+  # -- halting discards this session's own pending timers -------------------
+
+  describe "a session that halts discards its own pending delayed sends" do
+    # Spec 6.2: "If the SCXML session terminates before the delay interval
+    # has elapsed, the SCXML Processor MUST discard the message without
+    # attempting to deliver it." Both documents here schedule a delayed
+    # cross-session send and then halt before the delay elapses; the
+    # listener staying put is the discard, observed from the receiving end.
+    # A cross-session target is the route that matters: a late `#_parent`
+    # delivery is already swallowed by the parent's own 6.4.3 live-table
+    # check (`handle_continue/2`'s `Invocations.live?/2` drain guard), which
+    # is how test187 passes even without sender-side discard - a
+    # `{:session, sid}` target has no receiving-side guard, so only the
+    # sender's own discard (`discard_pending_timers/2`) protects it.
+    #
+    # The listener is started with an explicit `:session_id` so the sender's
+    # document can name it in a literal `target` attribute; both ids are
+    # made unique per run, keeping the module `async: true` against the
+    # shared `Statifier.Registry` the sessions register in.
+    defp listener_machine do
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <transition event="boom" target="hit"/>
+          </state>
+          <state id="hit"/>
+      </scxml>
+      """)
+    end
+
+    defp delayed_boom_sender(listener_id, rest) do
+      compile!("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <onentry>
+                  <send event="boom" target="#_scxml_#{listener_id}" delay="40ms"/>
+              </onentry>
+              #{rest}
+          </state>
+          <final id="end"/>
+      </scxml>
+      """)
+    end
+
+    # sabotage: the discard is two redundant halves, so the mutation is a
+    # pair - `discard_pending_timers/2`'s non-budget clause returns `state`
+    # unchanged AND `handle_info/2`'s halted clause has its guard changed to
+    # `state.halted in []` (never matches) -> the 40ms timer outlives the
+    # `:done` halt, fires, and delivers "boom" through the registry, so the
+    # listener's configuration below reads ["hit"] and the assertion
+    # reddens. Each half sabotaged alone stays green - the other half
+    # catches the timer - which is the redundancy working, not a vacuous
+    # test. Both reverted and confirmed green.
+    test "reaching the top-level final cancels a pending cross-session delayed send" do
+      unique = System.unique_integer([:positive])
+      listener_id = "halt-discard-done-listener-#{unique}"
+      {:ok, listener} = Session.start_link(listener_machine(), session_id: listener_id)
+
+      # The sender enters `a`, arms the 40ms timer from its own onentry, and
+      # takes the eventless transition straight to its top-level final -
+      # test187's invoked child's shape, minus the invoke wrapper.
+      sender_machine = delayed_boom_sender(listener_id, ~s(<transition target="end"/>))
+      {:ok, sender} = Session.start_link(sender_machine, subscribers: [self()])
+      sender_id = Session.session_id(sender)
+
+      assert_receive {:statifier, ^sender_id, {:halted, :done}}
+
+      # Three times the delay: were the timer still armed, it would have
+      # fired well within this window and moved the listener to "hit".
+      Process.sleep(120)
+      assert Session.status(listener).configuration == MapSet.new(["a"])
+    end
+
+    # sabotage: the same pair mutation as above -> `cancel/1`'s `:cancelled`
+    # halt leaves the timer armed, "boom" delivers, and the listener
+    # assertion reddens. Both reverted and confirmed green.
+    test "cancel/1 cancels a pending cross-session delayed send" do
+      unique = System.unique_integer([:positive])
+      listener_id = "halt-discard-cancel-listener-#{unique}"
+      {:ok, listener} = Session.start_link(listener_machine(), session_id: listener_id)
+
+      # No eventless transition this time: the sender sits in `a` with the
+      # timer armed until the caller cancels it.
+      sender_machine = delayed_boom_sender(listener_id, "")
+      {:ok, sender} = Session.start_link(sender_machine, subscribers: [self()])
+      sender_id = Session.session_id(sender)
+
+      assert_receive {:statifier, ^sender_id,
+                      {:effect, {:send_delayed, %Effect.SendDelayed{event: "boom"}}}}
+
+      :ok = Session.cancel(sender)
+      assert_receive {:statifier, ^sender_id, {:halted, :cancelled}}
+
+      Process.sleep(120)
+      assert Session.status(listener).configuration == MapSet.new(["a"])
+    end
+  end
 end
