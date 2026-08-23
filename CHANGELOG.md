@@ -10,18 +10,399 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
-## [Unreleased]
+## [2.0.0] 2026-08-22
 
-Statifier is a ground-up rewrite of the SCXML engine (see `docs/`). It is not
-released and not published: `mix.exs` stays at `2.0.0-dev` for the duration, and
-there are no alpha, beta, or release-candidate versions along the way. This
-section accumulates until the engine is complete, then becomes `[2.0.0]`.
+Statifier 2.0.0 is a ground-up rewrite of the engine. The interpreter is a
+literal port of the W3C SCXML Appendix D algorithm over a pure functional core
+that returns effects; sessions, timers, and invocations are layered on top of
+that core rather than woven through it; predicator remains the datamodel - safe,
+non-evaluative expressions, no ECMAScript. To a 1.x user the whole engine is
+new, so this entry is written as a migration document rather than a transcript
+of the rewrite: the entries below are where 2.0 **differs** from 1.x in public
+API and observable behavior. Re-implemented 1.x behavior is not listed.
 
-Because 2.0.0 replaces the whole engine, its entry is written as a **migration
-document** for 1.x users - what changed, what was removed, what is newly
-supported - rather than as a transcript of the rewrite. Rewrite progress is
-tracked in beads and in the regression ratchet (`test/passing_tests.json`), not
-by version numbers.
+The core public surface is four functions: `Statifier.compile/2`,
+`Statifier.initialize/2`, `Statifier.send_event/2`, and
+`Statifier.active_leaf_states/1`. Everything else - sessions, persistence,
+recording and replay, invoke handlers, telemetry - is built on the effect
+stream those functions return. `docs/architecture.md` is the map.
+
+### Added
+
+- `Statifier.compile/1` compiles SCXML source straight to a `Statifier.Machine`,
+  running the parse, lowering, validation, and compile stages in order and
+  stopping at the first stage that fails. Failures from every stage are
+  reported the same way: `{:error, [error]}`.
+- `Statifier.initialize/2` runs a compiled `Statifier.Machine`'s
+  initialization macrostep to quiescence, `Statifier.send_event/2` sends one
+  event to a `Statifier.MachineState` and runs a macrostep to quiescence
+  (accepting either a `Statifier.Event` or a plain name string), and
+  `Statifier.active_leaf_states/1` reads the active leaf configuration back
+  as a `MapSet` of string ids.
+- `Statifier.Compiler.compile/1` compiles a validated `Statifier.Document` into
+  a `Statifier.Machine`: states interned to a flat, document-order tuple with
+  parent pointers and descendant ranges, transitions and executable content
+  given dense document-order indexes, and every `cond`/`expr`/`<content>`
+  compiled once into `Statifier.Machine.expr()`.
+- `Statifier.compile/2` accepts an options list (`compile/1`'s existing
+  behavior is `compile/2` with no options). The one recognized option,
+  `invoke_content_markup: true`, is for compiling an `<invoke><content>`
+  markup slice standalone; it is not a general validation off-switch.
+- `Statifier.compile/2` stamps a content-hash chart identity onto every
+  `Statifier.Machine.t()` it produces (`Statifier.Machine.identity/1`).
+- `Statifier.Machine.warnings` carries the validator's non-fatal findings on
+  a successfully compiled machine.
+- `Statifier.Machine.State` and `Statifier.Machine.Transition` each carry an
+  `attribute_locations` field, the source node's written-attribute value
+  spans carried through compilation verbatim - the same treatment
+  `Statifier.Machine.Invoke` already had. An entry exists only for an
+  attribute the author actually wrote, so `Map.has_key?/2` on the map answers
+  "was this written or defaulted" for a transition's `type` or a history's
+  `type`, which the compiled field's value alone cannot. The root state
+  (index 0) carries the `<scxml>` element's own attribute spans; the
+  interpreter-synthesized initial transition carries `%{}`.
+- `Statifier.Parser.Location.resolve_span/4` maps a predicator expression
+  span onto an absolute document location, entity and character references
+  in the raw attribute text included.
+- `<datamodel>` / `<data>` are now supported, with both `binding="early"` and
+  `binding="late"` respected: a `<data>`'s `expr` or child content is compiled
+  and, under early binding, evaluated at document-initialization time; under
+  late binding, evaluation is deferred until the owning state is entered.
+- `<assign>` is now supported: `expr` or child content writes a value at a
+  deep `location` path (`user.profile.name`, `items[0].sku`), auto-vivifying
+  intermediate maps and lists along the way.
+- `<script>` is now supported: a body is a predicator statement program,
+  compiled at load and run against the session datamodel wherever executable
+  content or a top-level child of `<scxml>` may appear. `<script src>` is
+  rejected at load; a body outside predicator's statement grammar (`var`,
+  compound assignment, object literals, `typeof`, function definitions) is
+  deferred to runtime and raises `error.execution` when reached.
+- A transition's `cond` attribute is evaluated against the datamodel and
+  gates whether the transition is selected: `true` enables it, `false` does
+  not. A `cond` that fails to evaluate to `true` or `false` (an unbound
+  variable, or any other non-boolean result) raises `error.execution` on the
+  internal event queue instead of silently not enabling the transition,
+  catchable in the same macrostep by a `<transition
+  event="error.execution">` on the currently active state.
+- `Statifier.EventData.coerce/1`: one normalization function that turns raw
+  `<content>` text, a `<param>` list, or an already-evaluated expression
+  value into `_event.data`, per spec B.2.8.1.
+- `Statifier.Session` is a new GenServer that runs a state chart to
+  completion: `start_link/2` starts one, `send_event/2` delivers events
+  asynchronously, `interpret/2` hands it externally-produced effects,
+  `cancel/1` stops it as `<cancel>` would, `snapshot/1` and `status/1` read
+  its current position, and `subscribe/2`/`unsubscribe/2` manage the
+  subscriber pids that receive its effect stream.
+- `Statifier.Supervisor`, the optional session runtime an embedder places
+  in their own supervision tree, holding the library's session registry
+  and the dynamic supervisor sessions start on. The library ships no
+  application callback, so a host that never places it starts no
+  processes.
+- `Statifier.start_session/2`, which starts a session on that runtime and
+  registers it, making it reachable by `#_scxml_<sessionid>` from another
+  session. A bare `Statifier.Session.start_link/2` session stays legal and
+  unregistered, and is not reachable that way.
+- `<send>` targets beyond the sending session: `#_internal`/`_internal`
+  route to the internal queue, `#_scxml_<sessionid>` delivers to the named
+  registered session (the sending session's own id delivers to its own
+  inbox with no registry), `#_parent` (or `_parent`) reaches the invoking
+  parent, and `#_<invokeid>` delivers to that live invoked child's external
+  queue. A target naming a session, parent, or invocation that is not
+  reachable raises `error.communication` on the sending session, per the
+  SCXML Event I/O Processor (C.1). Delivered events carry `origin`,
+  `origintype`, and `sendid` per spec 5.10.1/C.1.
+- `<send delay>`/`delayexpr` accepts a native predicator duration value
+  (e.g. a computed `2s + backoff`) as well as a string, and recognizes the
+  full `{y,mo,w,d,h,m,s,ms}` unit set rather than the SCXML schema's
+  `{ms,s,m,h,d}` subset.
+- `<invoke>` is now lowered, validated, and compiled, including `<param>`,
+  `<content>`, and `<finalize>`. The interpreter runs the Appendix D
+  invoke and cancel-invoke passes and emits `{:invoke, _}`,
+  `{:cancel_invoke, _}`, and `{:autoforward, _}` effects; `<finalize>` runs
+  in the core before transition selection.
+- `<invoke type="scxml">` starts a real child session, under an
+  embedder-placed `Statifier.Supervisor`. The child's datamodel is seeded
+  from `<param>`/namelist values whose names match one of its own top-level
+  `<data>` ids; the parent monitors the child and the child monitors the
+  parent. `<send target="#_parent">` reaches the parent, running the
+  invoking state's `<finalize>` first; a child that reaches a top-level
+  final delivers `done.invoke.<invokeid>` to the parent carrying its
+  `<donedata>`; every external event the parent processes is forwarded
+  verbatim to each `autoforward="true"` invocation; and exiting the
+  invoking state stops the child (running its `<onexit>` handlers) and
+  discards any of its events still queued at the parent.
+- `<invoke><content><scxml>...</scxml></content></invoke>` compiles, and
+  starts the inline child document as a session. `<content>`'s element
+  children are preserved as the verbatim source they were written as, and
+  compiled when the invocation runs; a `<content>` that specifies both an
+  `expr` and inline markup is rejected as the same 5.6.2 violation as
+  `expr` alongside inline text. A child `<scxml>` that declares no `xmlns`
+  at all is placed in the SCXML namespace per spec Appendix G.6; a child
+  that declares a namespace other than SCXML's raises `error.communication`
+  when the invocation runs, and markup whose root uses a namespace prefix
+  declared on an ancestor outside `<content>` is not supported (the
+  declaration is lost with the slice).
+- A new `invoke_source` option on `Statifier.start_session/2` and
+  `Statifier.Session.start_link/2`: a function `src -> {:ok, Machine.t()} |
+  {:error, term()}` an embedder supplies to resolve `<invoke src="...">`.
+  The library never fetches a `src` itself - with no `invoke_source`
+  configured, a `src`-based `<invoke>` raises `error.communication` on the
+  parent, the same as any other failure to start the invoked child.
+- Hosts can register their own `<invoke>` handlers for types beyond the
+  built-in `scxml` (and its long-URI spelling): a new
+  `Statifier.Invoke.Handler` behaviour and a per-session
+  `invoke_handlers: %{type_string => module}` option on
+  `Statifier.Session.start_link/2`. A handler implements three pure planning
+  callbacks (`start/2`, `cancel/2`, `forward/3`) and one optional impure
+  `perform/2`; the built-in `scxml` handling runs behind this same
+  interface. `perform/2` may be called more than once for the same
+  `invoke_id` after a crash and retry, so handlers must be idempotent on it -
+  the library performs no deduplication of its own. An `<invoke>` whose type
+  names no registered handler raises `error.execution`.
+- A new `Statifier.Session.done_invocation/3` reports a non-`scxml`
+  invocation's completion back to its owning session, constructing
+  `done.invoke.<invoke_id>` from the caller-supplied donedata - the door a
+  process-less or externally-run service uses in place of a child session's
+  own `done` transition.
+- `Statifier.Session.invocations/1` lists a session's live invocations as
+  `%{invoke_id, session_id, pid}`, sorted by `invoke_id`.
+- `Statifier.Session.start_link/2`'s `:inherit_observers` option (default
+  `false`) starts every child a session starts for an `<invoke>` with that
+  session's `:trace` setting and subscriber pids, plus
+  `inherit_observers: true` of its own, so one opt-in at the root traces the
+  whole invoke tree transitively.
+- `Statifier.Chart.to_binary/1` and `from_binary/1` give a compiled chart a
+  versioned binary contract that carries its SCXML source and recompiles on
+  load, never a compiled term. `Statifier.Machine.source/1` and
+  `compile_opts/1` expose the source and persisted compile options a
+  `Machine` was built from.
+- `Statifier.Position.to_binary/1` and `from_binary/2` give a `MachineState`
+  a versioned binary contract that refuses to load against a chart whose
+  identity does not match. `Statifier.Position.export/1` and `import/2` let
+  a host migrate a position across chart revisions using string state ids.
+- `Statifier.Session.start_link/2` gains a `:resume` option that boots a
+  session at a persisted `Statifier.Position` instead of running
+  `Statifier.Interpreter.initialize/2`. In-flight delayed-send timers, live
+  invoked children, and the external inbox are not restored; see
+  `docs/persistence.md` for why and for the host's remaining obligations.
+- `Statifier.Session.start_link/2` accepts `record: true` to capture every
+  delivered event, timer firing, cancel marker, and `interpret/2` batch a
+  session handles, in input order. `Statifier.Session.recording/1` returns
+  the captured `Statifier.Session.Recording.t()`, or
+  `{:error, :not_recording}` if the session was not started with
+  `record: true`.
+- `Statifier.Replay.run/1` replays a `Statifier.Session.Recording.t()` through
+  the pure core with no process and no timer, reproducing the original run's
+  effect stream and terminal `%Statifier.MachineState{}`.
+- `Statifier.Session.Recording.to_binary/1` and `from_binary/1` give a
+  recording a versioned binary contract that nests the chart's own blob and
+  recompiles it on load, never a compiled term.
+- `Statifier.Session.subscribe/3` with `catch_up: true` returns the session's
+  recording alongside the subscription, so a pid that attached after
+  `start_link/2` can rebuild the effects it missed with
+  `Statifier.Replay.run/1`. Requires `record: true`; otherwise returns
+  `{:error, :not_recorded}` and does not subscribe.
+- `Statifier.MachineState.new/2` accepts `:max_macrostep_rounds` (a positive
+  integer, default `10_000`, or `:infinity`), bounding one macrostep's fold.
+- A trace of a macrostep that never reaches quiescence can be ordered and
+  counted: `%Statifier.MachineState{}` carries a `round` counter, and the
+  `Statifier.Effect.Trace.*` payloads, `%Statifier.Event.Cause{}`, and
+  `%Statifier.Effect.BudgetExhausted{}` are stamped with it.
+- `Statifier.Session` emits `:telemetry` events for its effect and trace
+  stream - lifecycle, macrostep spans, and per-effect events, all prefixed
+  `[:statifier, :session, ...]`. `Statifier.Session.Telemetry.events/0`
+  enumerates every event name a session can emit, and its moduledoc is the
+  full measurement/metadata reference.
+- `Statifier.Effect.DatamodelInit` joins the core effect vocabulary as
+  `{:datamodel_init, %Statifier.Effect.DatamodelInit{}}`, carrying the
+  datamodel's starting map, and `Statifier.Effect.DatamodelChange` joins it
+  as `{:datamodel_change, %Statifier.Effect.DatamodelChange{}}`; both have
+  matching `[:statifier, :session, :effect, ...]` telemetry events. Every
+  `<data>` binding - early or late - emits a `:datamodel_change` naming a
+  `d_index` field, the `<data>` element's own compiler-assigned identity
+  (mutually exclusive with the existing `c_index`); a failed or
+  environment-overridden binding emits nothing, matching the write-side
+  rule, and `metadata.location` for a binding resolves through
+  `Statifier.Machine.data/2`.
+- The starting datamodel is fully reconstructable from the effect stream
+  alone, with no `Session.snapshot/1` call and no `%Machine{}` handle: a
+  subscriber folds the one `:datamodel_init` baseline and every
+  `:datamodel_change` after it and reproduces every datamodel key exactly,
+  except `"_event"` (spec 5.10's current-event-under-evaluation, not
+  authored or assigned content). This holds under both `binding="early"` and
+  `binding="late"`, for an environment-supplied `:datamodel` option
+  (including one that shadows a top-level `<data>`), and with `trace: false`
+  - both effects are core.
+- `Statifier.Effect.Trace.EntrySet` and `Statifier.Effect.Trace.ExitSet`
+  gain a `configuration` field: the full configuration (ancestors included)
+  as it stands after the entry set or exit set the payload names has been
+  applied, so a subscriber can render the active configuration after every
+  microstep without folding `indexes` deltas itself. At
+  `Statifier.Interpreter.exit_interpreter/1`'s termination sweep,
+  `ExitSet.configuration` is the empty set; `Trace.Done.configuration`
+  still carries the configuration as it stood at exit.
+- `Statifier.Effect.SendDelayed` and `Statifier.Effect.Cancel` gain an
+  `ordinal` field: a per-execution sequence number minted from
+  `Statifier.MachineState`'s session-global `timer_counter`, which starts at
+  `0` and never resets. It is what disambiguates two `<foreach>` iterations
+  that execute the same `<send delay>` or `<cancel>` content node, in the
+  same microstep, under the same author-written id - a durable host's
+  at-least-once dedup key reads `{session scope, send_id, macrostep,
+  microstep, round, c_index, owner, ordinal}`. `[:statifier, :session,
+  :effect, :send_delayed]` and `[..., :cancel]` both carry `ordinal` in
+  their telemetry measurements.
+- `Statifier.Event`, `Statifier.Effect.SendDelayed`, and
+  `Statifier.Effect.Cancel` gain an opaque `caller_context :: term()` field
+  (default `nil`, ADR-0063). A host attaches a correlation value - an OTel
+  span context, a request id - via `Statifier.Event.external(name,
+  caller_context: ctx)`; the library copies it onto the durable-timer
+  effects and onto the events a scheduled timer later delivers, and never
+  reads it. Four telemetry events carry a `caller_context` metadata key:
+  `[:statifier, :session, :macrostep, :start]` and `[..., :stop]` (the
+  triggering external event's slot, `nil` for the other triggers), and
+  `[:statifier, :session, :effect, :send_delayed]` and `[..., :cancel]`
+  (the effect's own slot).
+- `Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector` are
+  public API. A downstream application can write declarative chart tests -
+  an expected initial configuration, then `{event, expected_configuration}`
+  steps - with `use Statifier.Testing.Case`, without copying files out of this
+  repository. Documents using an unsupported SCXML feature flunk naming the
+  feature rather than skipping. `test_scxml/4` accepts optional
+  `:settle_window_ms` and `:configuration_deadline_ms` for charts whose
+  load-bearing delays exceed the defaults. See `docs/testing-charts.md`.
+- `Statifier.Testing.HandlerCase`: a reusable conformance case any
+  `Statifier.Invoke.Handler` implementation runs against itself - planning
+  purity and determinism, `perform/2` idempotency on `invoke_id`, cancel
+  semantics for unknown invocations, `error.execution` surfacing for a
+  failing `start/2`, and exception propagation.
+
+### Changed
+
+- Expression syntax follows predicator 9.0, and the `predicator` dependency
+  floor is `~> 9.0` (v1 shipped against predicator 2.x). `if`, `else`,
+  `while`, `undefined`, and `null` are reserved words: using one as a bare
+  identifier, as a property name after `.`, or as an unquoted object key is
+  a compile error; quote an object key (`{"null": 1}`) to keep it. A bare
+  `undefined` is the undefined literal and a bare `null` the null literal
+  rather than variable loads. A declared datamodel entry with no value
+  reads as `undefined`, not `null`, so `x === undefined` keeps its answer.
+  `Math.pow` and `Math.sqrt` return an integer, not a float, when both the
+  base/radicand and the result are integer-exact (`Math.pow(2, 3)` is `8`,
+  not `8.0`); a float argument or a non-integer result is unaffected.
+- `Statifier.Event`'s `data` default moves from `nil` to `:undefined`, and an
+  environment-supplied `:datamodel` value of `nil` now means predicator's
+  null rather than "declared, no value yet" - pass `:undefined` for that.
+- `Statifier.Validator.validate/2` returns a third element, a list of
+  non-fatal warnings, on both its `{:ok, ...}` and `{:error, ...}` arms.
+- Rejects an SCXML document whose root is missing `xmlns` or `version`, or
+  whose `version` is not `"1.0"`. v1 silently inserted both into the source
+  and accepted any version.
+- Source locations always refer to the binary you passed in, whether or not
+  it has an `xmlns`, a `version`, or an XML declaration. v1's relaxed mode
+  rewrote the source and shifted reported positions; v2 never rewrites, so a
+  span slices back out of your own string.
+- `<log expr>` is evaluated against the datamodel; a failed evaluation
+  raises `error.execution` instead of logging `nil`.
+- `<donedata><content>` evaluates: an `expr` attribute is evaluated against
+  the datamodel and its value coerced through `Statifier.EventData.coerce/1`;
+  a text body is likewise coerced (so `<content>21</content>` yields the
+  integer `21`, not the string `"21"`). A failed `expr` raises
+  `error.execution` and the `done.state.*` / terminal `Effect.Done` event
+  carries no data, matching spec 5.10.1's "leave the field blank" rather
+  than 5.6's empty-string rule for `<content>` in other contexts.
+- `<param>` under `<donedata>` compiles and evaluates: each `<param>`'s
+  `expr` or `location` attribute compiles through the same value-expression
+  path, and at done time the params fold in document order into a
+  string-keyed map via `Statifier.EventData.coerce({:params, _})` - a
+  duplicate name takes the last value, and a `<donedata>` with no surviving
+  params carries `nil` data, not `%{}`. A param whose expression fails to
+  evaluate raises its own `error.execution` and is dropped from the result
+  rather than aborting the remaining params (spec 5.7's "MUST ignore the
+  name and value"). The `done.state.*` event and the terminal `Effect.Done`
+  both carry the same folded map, and each such `error.execution` carries a
+  `{:donedata_param, state_index, param_index}` cause origin naming the
+  individual `<param>` that failed. A `<donedata>` must not specify both a
+  `<content>` child and one or more `<param>` children (spec 5.5), and each
+  `<param>` must specify exactly one of `expr` or `location` (spec 5.7).
+- The core `{:done, %Statifier.Effect.Done{}}` effect carries
+  `configuration`, the full configuration as it stood at exit, so a consumer
+  can observe the terminal position without switching tracing on.
+- `Statifier.Session` is `restart: :temporary` (v1's supervisor-friendly
+  restart posture does not carry over). A supervisor restart would mint a
+  fresh `sess_` id and lose the crashed session's state, so restarting was
+  never recoverable.
+- With tracing on, an empty executable-content block (an `<onentry/>` or
+  `<onexit/>` with no children) emits a `Trace.ContentExecuted` effect
+  with `c_indexes: []`, so a trace consumer can tell it ran with no content
+  apart from a block that never ran at all. Untraced runs are unaffected.
+- A `<send>` or `<invoke>` whose `namelist` attribute contains a
+  syntactically ill-formed location expression now loads successfully
+  through `Statifier.compile/1` instead of failing the whole document.
+  The malformed entry is caught when the element runs: a `<send>` discards
+  the message and an `<invoke>` aborts, each raising `error.execution`, per
+  ADR-0036 and ADR-0031.
+- `Statifier.Session.Recording` blobs are format version 2, carrying an
+  optional anchor position for recordings started by a resumed session;
+  version 1 blobs still decode.
+- Hand-built `%Statifier.Effect.SendDelayed{}` and
+  `%Statifier.Effect.Cancel{}` structs - test fixtures and durable-scheduler
+  harnesses, mostly - must pass `ordinal`; it is enforced on both structs.
+  Pattern matching on either struct is unaffected. Where a hand-built effect
+  only needs to be distinct from its neighbours, any positive integer will
+  do; where it stands in for one the engine produced, use the `ordinal` the
+  engine stamped.
+
+### Removed
+
+- `Statifier.Parser.parse/1` takes no options. v1's `parse/2` had `:relaxed`
+  (default true) and `:xml_declaration` (default false); v2 behaves as v1 did
+  with `relaxed: true, xml_declaration: false` always, so callers relying on
+  either option just drop it. A missing SCXML namespace or version is
+  reported by validation.
+- Drops the `uxid` dependency. Session ids keep the same `sess_`-prefixed,
+  hyphen-free, time-sortable format, so nothing that reads `_sessionid` needs
+  to change.
+
+### Fixed
+
+- Character data is folded per XML 1.0 2.11: a literal CRLF pair or a lone
+  literal CR in a `<script>`, `<content>`, `<data>`, or `<assign>` text body
+  becomes a single `\n`, while a `\r` decoded from a character reference such
+  as `&#13;` keeps its character. `Script.text`, `Content.text`, `Data.text`,
+  and `Assign.text` now match what a conforming XML processor hands the
+  engine on a CRLF checkout.
+- Attribute values are normalized per XML 1.0 3.3.3: a literal tab, newline, or
+  carriage return inside an attribute value becomes a space, while a character
+  reference such as `&#10;` keeps its character. A `cond` or `expr` wrapped
+  across source lines now compiles from a single-line string.
+- A `<send>` whose `type` is unsupported, or whose `target` names none of
+  the special targets C.1 defines, is rejected while the element is
+  evaluated rather than after its block has run. The rest of the enclosing
+  `<onentry>`/`<onexit>`/transition block no longer executes, per spec 4.9,
+  and the raised `error.execution` carries the failing send's `sendid`.
+- A `<send>` whose target names a session, parent, or invocation that is
+  not reachable raises `error.communication` at the `<send>`'s own
+  position, carrying its `sendid`, and the rest of the enclosing block does
+  not run (spec 4.9, C.1). A target that becomes unreachable after the block
+  has run still raises the error afterwards.
+- `<scxml initial="...">` naming a state nested under a wrapper state no
+  longer fails validation. The document enters that state together with
+  every ancestor between it and the root, per spec 3.11.
+- A macrostep that cannot reach quiescence returns a
+  `{:budget_exhausted, %Statifier.Effect.BudgetExhausted{}}` effect with a
+  resumable position instead of hanging the calling process.
+- `Statifier.Position.to_binary/1` no longer writes `routes` or
+  `invoke_types` into the blob, and `Statifier.Position.from_binary/2` now
+  blanks both fields to `nil` on decode regardless of what the blob carries.
+  A resumed position previously came back with the stale per-drive snapshot
+  from whenever it was saved; a host must re-stamp both before the first
+  drive, as `Statifier.Interpreter`'s moduledoc instructs.
+- A session reaching its top-level final (or being cancelled) discards its
+  own pending delayed sends at the halt, per spec 6.2, instead of leaving
+  the timers armed on the idled process - previously a delayed `<send>`
+  scheduled before termination still fired and delivered to a live
+  cross-session target. `:budget_exhausted` keeps its timers armed until a
+  later `cancel/1`, since the interpreter has not exited there.
 
 ## [1.9.0] 2025-09-09
 

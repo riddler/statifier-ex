@@ -37,31 +37,15 @@ Do **not** write a fragment for:
 If you are unsure, ask whether someone who only ever calls the public API could
 tell the difference. If not, skip it.
 
-### While v2 is unreleased
+### Historical note: the v2 rewrite rules
 
-Version 2.0.0 replaces the entire engine, so its changelog entry is a **migration
-document** for 1.x users, not a transcript of the rewrite. Someone upgrading does
-not benefit from a line per interpreter function that landed - to them the whole
-engine is new.
-
-So during the rewrite the rule is narrower: **write a fragment when v2 differs
-from v1.** A removed feature, a changed public API, different behavior for the
-same input, or a capability v1 never had. Re-implementing something v1 already
-did is invisible to a user and gets no fragment.
-
-Rewrite progress is tracked by beads phases and by the regression ratchet
-(`test/passing_tests.json`), which are better signals than a changelog anyway.
-
-The rule widens by one clause under the SHA-pinning contract (ADR-0061
-decision 3): a change that breaks code or persisted data written against an
-earlier `main` SHA gets a fragment touch too, even when it re-touches a
-v2-only feature that already has one. Make that touch by editing the issue's
-existing fragment in place, not by appending a new one - the `git diff`
-between two pins already carries the between-pins signal, so the fragment
-itself can stay a clean v1-to-v2 migration statement for release assembly
-rather than a transcript of intermediate churn. Consumers rely on the diff
-between pins being complete (decision 2), so a change that reshapes v2-only
-public surface with no fragment touch to show for it is a review finding.
+While 2.0.0 was unreleased, two narrower rules applied: a fragment was
+warranted only where v2 **differed** from v1 (the fragments assembled into
+the `[2.0.0]` migration document, not a transcript of the rewrite), and
+under the SHA-pinning contract a change that broke code or persisted data
+written against an earlier `main` SHA edited its issue's fragment in place
+(ADR-0061 decision 3). Both retired with the 2.0.0 release (ADR-0066); the
+general rule above is the whole rule again.
 
 ## Format
 

@@ -27,30 +27,22 @@ conformance failures. v2 is:
 
 ## Installation
 
-Statifier v2 is not on Hex yet, and will not be before 2.0.0 - no alpha,
-beta, or release-candidate versions along the way. Until then, depend on a
-commit reachable from `main`:
+Add `statifier` to your dependencies:
 
 ```elixir
-{:statifier, github: "riddler/statifier-ex", ref: "<sha>"}
+def deps do
+  [
+    {:statifier, "~> 2.0"}
+  ]
+end
 ```
 
-What a pin gives you (the full contract is
-[ADR-0061](docs/adr/0061-sha-pinning-contract-until-2-0-0.md)):
-
-- **Pin only commits reachable from `main`.** Every one of them has passed
-  the full quality gate - the same gate CI runs on the default branch. A
-  branch tip is covered by nothing.
-- **Between two pins, any public API and any observable behavior may
-  change** without deprecation, notice period, or compatibility shim.
-  `2.0.0-dev` is one moving version. There are no tags before 2.0.0; the pin
-  is the SHA.
-- **What will never break silently:** persisted position and recording blobs
-  refuse with a typed error on a format-version or chart-identity mismatch
-  rather than misreading; API shape changes fail your compile.
-- **How to see what changed:**
-  `git diff <old-sha>..<new-sha> -- changelog.d/ CHANGELOG.md` lists every
-  user-visible difference between two pins.
+Releases follow [SemVer](https://semver.org); [CHANGELOG.md](CHANGELOG.md)
+is the upgrade briefing, and its `[2.0.0]` section is written as a migration
+document for 1.x users. (The pre-release SHA-pinning contract ended with
+2.0.0 - [ADR-0066](docs/adr/0066-publishes-2-0-0-ending-the-sha-pinning-contract.md).)
+Persisted position and recording blobs refuse with a typed error on a
+format-version or chart-identity mismatch rather than misreading.
 
 ## Development
 

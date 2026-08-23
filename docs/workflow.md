@@ -297,36 +297,25 @@ and no squash or cleanup pass is required before opening a PR.
 
 ## Versioning and the changelog
 
-`mix.exs` holds `2.0.0-dev` for the whole rewrite. Nothing is published until
-2.0.0 is complete - no alpha, beta, or release-candidate versions along the
-way. The old justification does not survive: satellite packages and production
-embedders take the dependency today, so an absent audience is no longer the
-reason. The reason instead is that every one of those consumers
-is git-capable, that a Hex pre-release is a permanent public artifact plus a
-recurring human publish ceremony this pre-alpha project does not want yet, and
-that pre-release sections would fracture the single 2.0.0 migration document
-the `changelog.d/` design exists to produce (ADR-0061 decision 1). Progress is
-tracked by beads phases and by the regression ratchet, which are better
-signals than a version number.
-
-Until 2.0.0, a consumer depends on a commit reachable from `main` as a git
-dependency, under the pinning contract ADR-0061 documents (decision 2):
-every pinned commit has passed the full gate, but any public API or
-observable behavior may change between two pins with no deprecation or
-notice. `package/0` metadata already lives in `mix.exs`, so publishing to Hex
-is a decision rather than a project (decision 4). The no-publish rule itself
-is not permanent - it stands until a named trigger fires: a satellite package
-needing to publish to Hex itself, or an embedder whose dependency policy
-forbids git dependencies (decision 5). Completion of 2.0.0 ends the contract
-on its own, when SemVer and `CHANGELOG.md` take over.
-
-`CHANGELOG.md` carries v1's `0.1.0`-`1.9.0` history (same package continuing to
-2.0.0, so upgraders keep one continuous record) under a single `[Unreleased]`
-section that accumulates until release. Entries are never written into it
+From 2.0.0 on, releases follow SemVer and `CHANGELOG.md` is the upgrade
+contract (ADR-0066; the pre-release SHA-pinning contract of ADR-0061 ended
+with the 2.0.0 release). Entries are never written into `CHANGELOG.md`
 directly during development: each issue drops a fragment in `changelog.d/`,
-which keeps concurrent worktrees from conflicting on the same block of the same
-file, and release assembles them.
+which keeps concurrent worktrees from conflicting on the same block of the
+same file, and a release assembles them into that version's section, deletes
+them in the same commit, and tags it (`vX.Y.Z` on the release commit) -
+`changelog.d/README.md` is the protocol. A fragment is warranted for any
+user-visible change: a public API addition, change, or removal; a change in
+observable behavior; an SCXML feature becoming supported; a bug fix a user
+could have noticed; anything breaking.
 
-Because 2.0.0 replaces the entire engine, its eventual entry is written as a
-migration document for 1.x users, not as a transcript of the rewrite. During the
-rewrite a fragment is warranted only where v2 **differs** from v1.
+`CHANGELOG.md` carries v1's `0.1.0`-`1.9.0` history (same Hex package
+continuing through 2.0.0, so upgraders keep one continuous record). The
+`[2.0.0]` section is written as a migration document for 1.x users rather
+than a transcript of the rewrite; later sections are ordinary release notes.
+
+Publishing to Hex (`mix hex.publish`) is a human action - the operator holds
+the package credentials. A release branch carries the version bump, the
+assembled changelog section, the fragment deletions, and the tag-worthy
+release commit; the tag itself lands on `main` after the merge.
+
