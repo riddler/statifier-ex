@@ -1,11 +1,13 @@
 # OpenTelemetry
 
 How the `[:statifier, :session, ...]` telemetry contract (ADR-0040,
-`Statifier.Session.Telemetry`) maps onto OpenTelemetry, and where the code
-that does the mapping lives. This is the st-cmq.2 design note; the packaging
-half is decided by ADR-0062 (a separate package, `opentelemetry_statifier`),
-and this page holds the span topology, context propagation, and
-sampling/cardinality decisions the bridge implements.
+emitted by `Statifier.Telemetry` and amended by ADR-0067 to cover every
+stepping driver, not only `Statifier.Session.Telemetry`) maps onto
+OpenTelemetry, and where the code that does the mapping lives. This is the
+st-cmq.2 design note; the packaging half is decided by ADR-0062 (a separate
+package, `opentelemetry_statifier`), and this page holds the span topology,
+context propagation, and sampling/cardinality decisions the bridge
+implements.
 
 Read alongside `docs/observability.md` (the constraints that shaped the
 telemetry surface) and ADR-0040 (the event contract itself). OpenTracing is
@@ -117,6 +119,21 @@ previous one closed; a child session outlives the invoking macrostep). The
 alternative - one trace per session - was rejected with the
 session-lifetime span and for the same reason: unbounded traces.
 
+**A durable timeline stitches the same way (ADR-0067 decision 5).** A
+macrostep span's two halves must be emitted within one driver invocation,
+never opened before a persist and closed after a later load: `span_ref` is
+a `make_ref/0` reference, node- and VM-local, and cannot cross a persist
+boundary. That constraint is what keeps a durable driver's spans following
+the rule above rather than needing a rule of their own - a macrostep
+stepped without a `Statifier.Session` process is stitched exactly as a
+session's is, per-macrostep traces linked through the bridge's
+last-span-context table, and to the scheduling trace through
+`caller_context` (ADR-0063) when the step was driven by a durable timer or
+an external send. A durable macrostep span nests inside whatever step or
+job span the persistence and Oban layers opened around it, by ordinary OTel
+ambient context, since both run in the same process during the call - not
+through this bridge's own parent-child or link machinery.
+
 **The session-process caveat, and how `caller_context` closes it.**
 `:telemetry.execute/3` is synchronous, so the bridge's handlers run in the
 session's own GenServer process. OTel context is process-local, which means
@@ -161,6 +178,11 @@ applied uniformly rather than per-event:
 - The raw `effect` struct in every event's metadata is *not* serialized
   into attributes. It is there for in-VM consumers; a wire format is
   exactly where "the struct rides verbatim" stops being cheap.
+- `driver` (ADR-0067 decision 4) becomes the `statifier.driver` attribute
+  on every span and span event, uniform across drivers - `:session` for a
+  `Statifier.Session` process, an external driver's own frozen atom
+  otherwise. A consumer that ignores it sees exactly the pre-amendment
+  contract.
 
 ## Sampling and cardinality
 
@@ -191,7 +213,13 @@ them:
   cleaned on `:terminate`, and because `:terminate` does not fire on a
   brutal kill, the bridge sweeps entries whose sessions no longer exist
   rather than trusting the event alone. An unmatched open span is ended
-  with an error status at sweep time, not silently dropped.
+  with an error status at sweep time, not silently dropped. `:terminate`
+  is Session-only (ADR-0067 decision 3): it names a GenServer callback and
+  has no durable analog. That is not a gap in this cleanup story - for a
+  process-less driver both span halves arrive inside one synchronous
+  driver call (decision 5), so there is no open-span entry for a mid-span
+  crash to leave behind, and the existing liveness sweep still covers the
+  last-span-context entry either way.
 - The `:initialize` span's `:start` fires after `Interpreter.initialize/2`
   already ran, so its wall-clock start is late even though `duration` on
   the stop is honest. The bridge sets the span start from the event's
@@ -218,6 +246,7 @@ shape.
 | The bridge itself: handlers, ETS span table, setup API | `opentelemetry_statifier` (own repo) |
 | Caller/delayed-send context field | future statifier-ex bead (ADR-0040 amendment), mirrored into `statifier_oban`'s tracker |
 | Sibling-package telemetry surfaces and their bridge halves | each sibling repo's own ADR, bridged in `opentelemetry_statifier` |
+| Durable-driver emit sites: calling `Statifier.Telemetry` at the stepper seam, with its own `driver` atom | `statifier_persistence` (own repo, own ADR, per ADR-0067 decision 3) |
 
 Nothing in this note adds code to this repository. The one obligation it
 leaves here is the contract freeze ADR-0040 already states: once
