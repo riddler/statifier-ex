@@ -12,7 +12,12 @@ is superseded) - amended in part by ADR-0059 (2026-08-19, st-q6b6:
 the `:send_delayed` and `:cancel` events' measurements) - amended in part by
 ADR-0063 (2026-08-20, st-yoi0: an opaque `caller_context` joins the
 `:macrostep, :start`/`:stop`, `:send_delayed`, and `:cancel` events'
-metadata, carried from external events and the durable-timer effects)
+metadata, carried from external events and the durable-timer effects) -
+amended in part by ADR-0067 (2026-08-23, st-737e: the
+`[:statifier, :session, ...]` prefix names the logical session rather than
+the `Statifier.Session` process; the emission helpers generalize into
+`Statifier.Telemetry` with a leading `driver` argument; a `driver` key
+joins every event's metadata)
 
 ## Context
 
