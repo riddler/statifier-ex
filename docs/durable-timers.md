@@ -319,11 +319,17 @@ that durability exists to survive takes the hook down with it. The guarantee
 can only be enforced at delivery time.
 
 "Live" is stricter than "not terminated." Reaching `:done` sets
-`state.halted` but does not stop the session process and does not cancel its
-timers (`lib/statifier/session.ex:45-57`, `:1546-1553`); `handle_continue(:drain, ...)`
-then declines to drain onto a halted session (`:970-973`), so an event fed to
-a halted session just sits queued rather than being discarded. Checking only
-"is the process alive" misses this case entirely.
+`state.halted` but does not stop the session process (`lib/statifier/session.ex`
+"`:done` idles the session"); the library discards its own in-process timers
+at the halt (`discard_pending_timers/2`) precisely because an idled
+process may never reach `terminate/2` - but that discard never reaches a
+durable store, and `handle_continue(:drain, ...)` declines to drain onto a
+halted session, so an event fed to a halted session just sits queued rather
+than being discarded. Checking only "is the process alive" misses this case
+entirely. (One further wrinkle mirrored from the library: `:budget_exhausted`
+halts the session while the core is still `running` and cancellable, and the
+library keeps its own timers armed there - a durable host that wants parity
+treats budget-halted as live for delivery until a cancel lands.)
 
 The check is **two steps, in order**, because `Statifier.Session.status/1` is
 a `GenServer.call` (`lib/statifier/session.ex:644-645`) that **exits** the

@@ -47,14 +47,21 @@ defmodule Statifier.Session do
   The process stays alive with the terminal `%MachineState{}` and the
   retained `%Effect.Done{}` in hand, so `snapshot/1` and `status/1` still
   answer after termination. Stopping is the caller's move (`stop/2`), or the
-  supervisor's. Further events are queued but never drained. The same is
+  supervisor's. Idle means inspectable, not still acting: further events are
+  queued but never drained, and every pending delayed-send timer is
+  cancelled at the halt itself (spec 6.2's discard-on-termination -
+  `discard_pending_timers/2` - not deferred to `terminate/2`, which an
+  idled process may never reach). The same is
   true, with a narrower meaning, for `:cancelled` (`cancel/1` reached the
   same `exit_interpreter/1` path) and for `:budget_exhausted` (ADR-0019):
   the session neither retries with a larger budget nor stops itself, and
   `cancel/1` still works from a budget-halted session, since the
   underlying `%MachineState{}` is still `running` and the inbox's cancel
   entry is checked before any drive of the core - a queued ordinary event
-  is not.
+  is not. One asymmetry: because the interpreter has *not* exited under
+  `:budget_exhausted`, its already-scheduled delayed sends stay armed and
+  still deliver; they are discarded only when the eventual `cancel/1`
+  halts it `:cancelled`.
 
   ## One subscriber stream
 
@@ -1344,18 +1351,37 @@ defmodule Statifier.Session do
     {:noreply, perform(state, effects), {:continue, :drain}}
   end
 
-  # The fired-timer path (spec 6.2): forget the reference regardless of
-  # whether this session is halted - a fired timer is gone either way - then
-  # deliver by `route`, resolved now rather than at schedule time (6.2.3:
-  # the route was decided when the `<send>` was *evaluated*, but a
-  # cross-session target can only be *reached* once the timer actually
-  # fires) - `deliver_fired/4` below. A `:self` route enqueues onto the
-  # ordinary inbox exactly as `send_event/2` would, so a caller's send, a
-  # self-targeted send re-enqueued from an effect, and a fired timer all
-  # reach the core through the one recordable input path
+  # `discard_pending_timers/2`'s in-flight half: a timer whose message was
+  # already in the mailbox when the halt ran is past
+  # `Process.cancel_timer/1`'s reach, so it lands here instead - discarded
+  # per the same 6.2 sentence, unrecorded (a discarded message is not an
+  # input; a halted recording's live suffix stays empty) and undelivered.
+  # `:budget_exhausted` deliberately falls through to the ordinary clause
+  # below: the interpreter has not exited (`discard_pending_timers/2`'s own
+  # comment), so its fired timers still deliver.
+  #
+  # The ordinary clause below is the fired-timer path (spec 6.2): forget the
+  # reference - a fired timer is gone whether or not this session is
+  # budget-halted - then deliver by `route`, resolved now rather than at
+  # schedule time (6.2.3: the route was decided when the `<send>` was
+  # *evaluated*, but a cross-session target can only be *reached* once the
+  # timer actually fires) - `deliver_fired/4` below. A `:self` route
+  # enqueues onto the ordinary inbox exactly as `send_event/2` would, so a
+  # caller's send, a self-targeted send re-enqueued from an effect, and a
+  # fired timer all reach the core through the one recordable input path
   # (`docs/observability.md` constraint 6). `handle_continue/2`'s own halted
   # check decides whether it is drained now or stays queued.
   @impl GenServer
+  def handle_info({:statifier_delayed_send, ref, _send_id, _route, _event, _effect}, state)
+      when state.halted in [:done, :cancelled] do
+    {:noreply,
+     %{
+       state
+       | timers: Timers.forget(state.timers, ref),
+         timer_refs: Map.delete(state.timer_refs, ref)
+     }}
+  end
+
   def handle_info({:statifier_delayed_send, ref, send_id, route, event, effect}, state) do
     state = stamp(state)
     state = record(state, &Recording.put_timer(&1, send_id, event, state.machine_state.routes))
@@ -1804,11 +1830,43 @@ defmodule Statifier.Session do
 
   defp perform_instruction({:halt, reason}, state, override) do
     reason = override || reason
-    state = %{state | halted: reason}
+    state = %{state | halted: reason} |> discard_pending_timers(reason)
     return_done_event(reason, state)
     notify(state, {:halted, reason})
     Telemetry.halt(state.session_id, reason, state.machine_state)
     state
+  end
+
+  # Spec 6.2: "If the SCXML session terminates before the delay interval has
+  # elapsed, the SCXML Processor MUST discard the message without attempting
+  # to deliver it." Termination in 6.2's sense is the *interpreter* exiting,
+  # not the process: `:done` idles this process on purpose (moduledoc), so
+  # cancelling only in `terminate/2` left every timer of an idled session
+  # armed, and a delayed `<send>` still fired and delivered after its
+  # session had reached its own top-level final (test187's invoked child was
+  # the observed case). Both `:done` and `:cancelled` mean
+  # `exit_interpreter/1` ran, so both discard here. `:budget_exhausted` does
+  # not: the core is still `running` and only a later `cancel/1` terminates
+  # it (ADR-0019) - a send already evaluated and scheduled stays armed until
+  # that cancel's own `{:halt, :cancelled}` lands back in this clause.
+  # Discarding stays consistent with "stay inspectable": `snapshot/1` and
+  # `status/1` keep answering, the session just stops generating new
+  # observable effects. The in-flight race - a timer message already in the
+  # mailbox when this runs, past `Process.cancel_timer/1`'s reach - is
+  # covered by `handle_info/2`'s own halted clause.
+  @spec discard_pending_timers(
+          state :: State.t(),
+          reason :: :done | :cancelled | :budget_exhausted
+        ) :: State.t()
+  defp discard_pending_timers(state, :budget_exhausted), do: state
+
+  defp discard_pending_timers(state, _done_or_cancelled) do
+    timer_refs =
+      state.timers
+      |> Timers.refs()
+      |> Enum.reduce(state.timer_refs, &cancel_ref/2)
+
+    %{state | timers: Timers.new(), timer_refs: timer_refs}
   end
 
   # `exitInterpreter`'s own `returnDoneEvent` (Appendix D declares it
