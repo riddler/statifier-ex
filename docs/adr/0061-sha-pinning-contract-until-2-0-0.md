@@ -6,6 +6,10 @@ grounds; a SHA-pinning contract is documented for consumers; `package/0`
 metadata lands now; publishing before 2.0.0 is deferred with a named
 trigger
 
+(2026-08-22: the named trigger of decision 5 fired - the satellite
+packages publish to Hex - and the contract ended with the 2.0.0 release,
+as decision 5 provided. ADR-0066 is the re-decision.)
+
 ## Context
 
 `mix.exs` holds `2.0.0-dev` for the whole rewrite, and the documented rule

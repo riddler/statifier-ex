@@ -13,6 +13,21 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-08-22 - st-ueav
+
+Approved-by: JohnnyT (release go-ahead for the statifier 2.0.0 Hex publish,
+given in session 2026-08-22)
+
+- mix.exs: bumps `@version` from `"2.0.0-dev"` to `"2.0.0"` and adds the
+  `docs/0` hexdocs configuration (`docs: docs()` in `project/0`)
+
+Reason: the 2.0.0 release (ADR-0066). Neither edit touches a gate stage:
+the version string moves because the release ships, and `docs/0` only
+configures what `mix docs` builds for hexdocs - ADR-0061's consequences
+already anticipated exactly this pair of edits tripping the guard on the
+file rather than on anything gate-relevant in it. No stage is removed, no
+threshold moves, no test is skipped, and no scope narrows.
+
 ## 2026-08-22 - st-k7pm
 
 Approved-by: JohnnyT (operator ruling on sui-b5y, confirmed 2026-08-22,

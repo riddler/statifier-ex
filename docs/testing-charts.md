@@ -18,15 +18,9 @@ repository.
 
 ## Add the dependency
 
-Statifier v2 is not on Hex yet, and will not be before 2.0.0. Until then,
-depend on a SHA-pinned commit reachable from `main` - the pin contract is
-[ADR-0061](adr/0061-sha-pinning-contract-until-2-0-0.md):
-
 ```elixir
-{:statifier, github: "riddler/statifier-ex", ref: "<sha>"}
+{:statifier, "~> 2.0"}
 ```
-
-Once 2.0.0 ships on Hex, this becomes `{:statifier, "~> 2.0"}`.
 
 No `only: :test` companion dependency is needed. `Statifier.Testing.Case` and
 `Statifier.Testing.FeatureDetector` ship in `lib/`, the same shape as

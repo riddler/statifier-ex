@@ -1,7 +1,7 @@
 defmodule Statifier.MixProject do
   use Mix.Project
 
-  @version "2.0.0-dev"
+  @version "2.0.0"
   @source_url "https://github.com/riddler/statifier-ex"
 
   def project do
@@ -15,6 +15,7 @@ defmodule Statifier.MixProject do
       name: "Statifier",
       description: "A W3C SCXML-conformant statecharts engine for Elixir",
       source_url: @source_url,
+      docs: docs(),
       package: package(),
       test_coverage: [tool: ExCoveralls],
       # The regression ratchet ships as mix tasks, so Mix itself has to be in
@@ -37,8 +38,43 @@ defmodule Statifier.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  # Hex package metadata. Nothing is published before 2.0.0 (ADR-0061); this
-  # exists so that publishing is a decision rather than a project.
+  # Hexdocs configuration. These paths are read off the publisher's disk at
+  # `mix docs` time and need no entry in package()'s files: list - the docs
+  # tarball hexdocs hosts is built separately from the package tarball
+  # `mix deps.get` fetches. The ADR set rides along because the user-facing
+  # guides cite individual records by relative link.
+  defp docs do
+    [
+      name: "Statifier",
+      source_ref: "v#{@version}",
+      canonical: "https://hexdocs.pm/statifier",
+      source_url: @source_url,
+      main: "readme",
+      extras:
+        [
+          "README.md",
+          "CHANGELOG.md",
+          "docs/architecture.md",
+          "docs/datamodel.md",
+          "docs/extending.md",
+          "docs/persistence.md",
+          "docs/durable-timers.md",
+          "docs/observability.md",
+          "docs/opentelemetry.md",
+          "docs/testing-charts.md",
+          "docs/chart-patterns.md",
+          "docs/family-reference.md",
+          {"docs/adr/README.md", [title: "Architecture Decision Records", filename: "adr-index"]}
+        ] ++ Enum.sort(Path.wildcard("docs/adr/0*.md")),
+      groups_for_extras: [
+        Guides: ~r{docs/(?!adr)},
+        "Architecture Decision Records": ~r{docs/adr}
+      ]
+    ]
+  end
+
+  # Hex package metadata, in place since ADR-0061 so that publishing is a
+  # decision rather than a project; 2.0.0 is that decision (ADR-0066).
   defp package do
     [
       name: "statifier",

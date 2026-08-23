@@ -199,7 +199,8 @@ of this file for the rules the gate expects you to follow.
   trailers.
 - Changelog: user-facing changes get a fragment at `changelog.d/<issue-id>.md`;
   never edit `CHANGELOG.md` outside a release. Most changes need no fragment -
-  see `changelog.d/README.md`. `mix.exs` stays `2.0.0-dev`; no alpha/beta/rc.
+  see `changelog.d/README.md`. Releases follow SemVer from 2.0.0 on
+  (ADR-0066); a release assembles the fragments, deletes them, and tags.
 
 <!-- usage-rules-start -->
 ## ExQuality (`mix quality`)

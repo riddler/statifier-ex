@@ -57,9 +57,10 @@ over the `statifier_*` family convention - it should be findable next to
 `statifier_persistence` and `statifier_oban` grow telemetry surfaces of
 their own, their bridges land in the same package as optional per-library
 setup calls, which is the one thing an in-library module could never do.
-See ADR-0062 for the full argument, including why the package stays
-unpublished (pinning `main` SHAs per ADR-0061) until `statifier` itself is
-on Hex.
+See ADR-0062 for the full argument. (Its original why-unpublished clause -
+pinning `main` SHAs per ADR-0061 until `statifier` itself is on Hex - is
+resolved: statifier 2.0.0 is published, ADR-0066, and the bridge package
+publishes on its own schedule.)
 
 ## Span topology
 
