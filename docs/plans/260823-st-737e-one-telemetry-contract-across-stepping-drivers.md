@@ -593,20 +593,20 @@ line each, present tense, no nested bullets:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` passes (full gate) - format check, `warnings_as_errors`
+- [x] `mix quality` passes (full gate) - format check, `warnings_as_errors`
       compile, Credo strict, Dialyzer, Doctor at 100% on all five axes,
       coverage at or above 90%, and the ADR guard clean.
-- [ ] `mix quality --profile loop` is the command to use while iterating.
-- [ ] `mix format` has been run (Format runs in check mode).
-- [ ] `mix test test/statifier/telemetry_test.exs
+- [x] `mix quality --profile loop` is the command to use while iterating.
+- [x] `mix format` has been run (Format runs in check mode).
+- [x] `mix test test/statifier/telemetry_test.exs
       test/statifier/session/telemetry_test.exs
       test/statifier/session_test.exs test/mix/statifier/adr_guard_test.exs`
       passes - the four suites this phase can move.
-- [ ] `mix adr.check` reports no `adr-0003-effects` finding for
+- [x] `mix adr.check` reports no `adr-0003-effects` finding for
       `lib/statifier/telemetry.ex`.
-- [ ] `git diff --stat lib/statifier/session.ex` is empty - the session's
+- [x] `git diff --stat lib/statifier/session.ex` is empty - the session's
       call sites did not move.
-- [ ] Every one of the 27 events carries `driver`, decided by test rather
+- [x] Every one of the 27 events carries `driver`, decided by test rather
       than by inspection: `test/statifier/telemetry_test.exs` enumerates
       `Statifier.Telemetry.events/0`, drives each name's emitter with
       `:test_driver`, drains the mailbox, and asserts
@@ -614,20 +614,20 @@ line each, present tense, no nested bullets:
       `messages != []`) - the same enumeration shape the existing suite's
       "measurements are numbers, for every event this module can emit"
       describe already uses.
-- [ ] `Statifier.Session.Telemetry.events() |> length()` is 27 and equals
+- [x] `Statifier.Session.Telemetry.events() |> length()` is 27 and equals
       `Statifier.Telemetry.events() |> length()`, asserted by tests in both
       files.
-- [ ] Every sabotage note required by CLAUDE.md is present: each new test in
+- [x] Every sabotage note required by CLAUDE.md is present: each new test in
       `test/statifier/telemetry_test.exs`,
       `test/statifier/session/telemetry_test.exs` and
       `test/mix/statifier/adr_guard_test.exs` carries a one-line
       `# sabotage: ... -> red` note above it, and each mutation was actually
       run and reverted.
-- [ ] `changelog.d/st-737e.md` exists and uses only standard Keep a
+- [x] `changelog.d/st-737e.md` exists and uses only standard Keep a
       Changelog headings.
-- [ ] `docs/quality-gate-changes.md` has a `## 2026-08-23 - st-737e` entry
+- [x] `docs/quality-gate-changes.md` has a `## 2026-08-23 - st-737e` entry
       naming `lib/mix/statifier/adr_guard.ex`.
-- [ ] That entry's `Approved-by:` line names no individual:
+- [x] That entry's `Approved-by:` line names no individual:
       `sed -n '/## 2026-08-23 - st-737e/,/^## /p' docs/quality-gate-changes.md
       | grep '^Approved-by:'` matches `pending operator confirmation` and
       contains no personal name (Open Questions item 1).
@@ -906,5 +906,45 @@ of blocking here.
 
 No changelog fragment: `changelog.d/README.md` excludes documentation and
 ADRs.
+
+---
+
+### Phase 2
+
+- [ ] **Spec conformance**: this phase touches `lib/statifier/`, so the
+      touched functions are read against the W3C Appendix D pseudocode -
+      here the check is that *nothing* in the interpreter path changed. No
+      Appendix D function is touched, no core behavior moves, and the ADR-0002
+      rule has nothing to bite on: the change is emission-side only. Confirm
+      by reading the diff for any edit outside `telemetry.ex`,
+      `session/telemetry.ex`, the guard, and the tests.
+- [ ] The moved body is a move, not a rewrite: read
+      `git diff -M --find-copies-harder` (or diff the two files side by
+      side) and confirm every private helper's clause ordering survived
+      intact, especially `location/2`'s `d_index`-before-`c_index` rule and
+      its comment.
+- [ ] Attach a handler to `Statifier.Telemetry.events/0` in `iex -S mix`,
+      run a small chart through `Statifier.Session` with `trace: true`, and
+      confirm every event carries `driver: :session` and is otherwise
+      identical to what 2.0.0 emitted.
+- [ ] Call a lifecycle emitter directly with a driver atom of your own from
+      `iex` - no `Statifier.Session` process anywhere - and confirm the
+      event fires with that atom.
+- [ ] The facade's `@moduledoc` reads as a pointer, carries no copy of the
+      event tables, and states the doc-level supersession without promising
+      a removal date other than "3.0".
+- [ ] The guard-ledger entry's reason argues the exemption rather than
+      asserting it, and cites ADR-0067.
+- [ ] No employer or product terminology appears in the module docs, the
+      guard comment, the ledger entry, the tests, or the changelog fragment.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use the project's loop gate between edits while
+iterating; run the full gate as the phase gate. In interactive execution,
+pause here for the human to confirm the manual testing before moving to the
+next phase. In looped (`--loop`) execution, this phase's Automated
+Verification gates advancement automatically (via `/wurk:commit --auto`), and
+Manual Verification items are deferred and surfaced once at the end instead
+of blocking here.
 
 ---

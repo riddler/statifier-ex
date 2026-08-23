@@ -120,10 +120,23 @@ defmodule Mix.Statifier.AdrGuard do
   # answered here rather than by an ADR-0003 escape comment on every
   # :telemetry.execute/3 call site, which would be the same exemption spelled
   # ~10 times with no record.
+  #
+  # ADR-0067 moves that emission half to `lib/statifier/telemetry.ex`, a
+  # caller-agnostic module every stepping driver emits through, and leaves
+  # `session/telemetry.ex` as a `driver: :session` facade. Both paths stay
+  # on this list. This is precisely the reopening trigger ADR-0040's
+  # Consequences named - "a second module outside session.ex and
+  # session/telemetry.ex needing an exemption for telemetry-shaped
+  # reasons" - and ADR-0067 fires it deliberately and argues it, rather
+  # than riding the existing entry: the exempt surface did not grow a
+  # second effect interpreter, it is the one emission half moving to a
+  # name that no longer claims the session owns it, plus the facade left
+  # behind for 2.0.0 consumers.
   @effect_interpreter_paths [
     "lib/statifier/session.ex",
     "lib/statifier/supervisor.ex",
-    "lib/statifier/session/telemetry.ex"
+    "lib/statifier/session/telemetry.ex",
+    "lib/statifier/telemetry.ex"
   ]
 
   @interpreter_pattern ~r{^lib/statifier/interpreter}
