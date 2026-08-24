@@ -10,6 +10,21 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.1.0] 2026-08-24
+
+### Added
+
+- `Statifier.Telemetry` emits the `[:statifier, :session, ...]` events for any
+  stepping driver, taking the driver as a leading atom, so a host stepping the
+  pure interpreter without a `Statifier.Session` process can emit the same
+  contract (ADR-0067).
+
+### Changed
+
+- Every `[:statifier, :session, ...]` event's metadata carries `driver`;
+  `Statifier.Session` emits `driver: :session`. `Statifier.Session.Telemetry`
+  keeps its functions and arities as a facade over `Statifier.Telemetry`.
+
 ## [2.0.0] 2026-08-22
 
 Statifier 2.0.0 is a ground-up rewrite of the engine. The interpreter is a
