@@ -41,8 +41,8 @@ defmodule Statifier.MixProject do
   # Hexdocs configuration. These paths are read off the publisher's disk at
   # `mix docs` time and need no entry in package()'s files: list - the docs
   # tarball hexdocs hosts is built separately from the package tarball
-  # `mix deps.get` fetches. The ADR set rides along because the user-facing
-  # guides cite individual records by relative link.
+  # `mix deps.get` fetches. ADRs are deliberately unpublished: the guides
+  # cite individual records by absolute GitHub URL instead.
   defp docs do
     [
       name: "Statifier",
@@ -50,26 +50,24 @@ defmodule Statifier.MixProject do
       canonical: "https://hexdocs.pm/statifier",
       source_url: @source_url,
       main: "readme",
-      extras:
-        [
-          "README.md",
-          "CHANGELOG.md",
-          "docs/architecture.md",
-          "docs/datamodel.md",
-          "docs/extending.md",
-          "docs/persistence.md",
-          "docs/durable-timers.md",
-          "docs/observability.md",
-          "docs/opentelemetry.md",
-          "docs/testing-charts.md",
-          "docs/chart-patterns.md",
-          "docs/family-reference.md",
-          {"docs/adr/README.md", [title: "Architecture Decision Records", filename: "adr-index"]}
-        ] ++ Enum.sort(Path.wildcard("docs/adr/0*.md")),
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "docs/architecture.md",
+        "docs/datamodel.md",
+        "docs/extending.md",
+        "docs/persistence.md",
+        "docs/durable-timers.md",
+        "docs/observability.md",
+        "docs/opentelemetry.md",
+        "docs/testing-charts.md",
+        "docs/chart-patterns.md",
+        "docs/family-reference.md"
+      ],
       groups_for_extras: [
-        Guides: ~r{docs/(?!adr)},
-        "Architecture Decision Records": ~r{docs/adr}
-      ]
+        Guides: ~r{docs/}
+      ],
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]
   end
 
@@ -102,7 +100,7 @@ defmodule Statifier.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:sobelow, "~> 0.14", only: :dev, runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:benchee, "~> 1.3", only: :dev},
       {:doctor, "~> 0.23", only: :dev, runtime: false}
     ]
