@@ -61,7 +61,7 @@ defmodule Statifier.Session.Invocations do
   `invoke_handlers` map that explicitly overrides the literal `"scxml"`
   type is honored on cancel/forward the same way it already is on start.
   The key can still be absent (`optional/1`) on an entry built by older
-  code or by hand in a test; `Statifier.Session.Effects.plan_one/2`'s own
+  code or by hand in a test; `Statifier.Session.Effects.plan_one`'s own
   dispatch treats that the same as an unrecorded type, defaulting to the
   built-in handler. `session_id`, `pid`, and `monitor_ref` are `nil` for a
   handler-backed entry (see the moduledoc's "A handler-backed entry"
@@ -158,7 +158,7 @@ defmodule Statifier.Session.Invocations do
 
   @doc """
   Every live invocation's own `type`, `invoke_id => type` - what
-  `Statifier.Session.Effects.plan_one/2` looks a `cancel_invoke`/
+  `Statifier.Session.Effects.plan_one` looks a `cancel_invoke`/
   `autoforward` effect's handler module up in (ADR-0051 decision 6). Every
   entry `Statifier.Session` writes carries `type` (a built-in `scxml`
   entry's own literal `type` string included, not omitted - so an

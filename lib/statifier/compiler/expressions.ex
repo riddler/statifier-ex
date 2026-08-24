@@ -47,7 +47,7 @@ defmodule Statifier.Compiler.Expressions do
   a namelist entry, `<content>`) - `state_index` is the owning state, and
   `invoke_index` is that invocation's position in the state's own `invoke`
   list, mirroring `{:donedata_param, state_index, param_index}`'s shape
-  (`Statifier.Event.Cause.origin/0`).
+  (`t:Statifier.Event.Cause.origin/0`).
   """
   @type owner_ref ::
           {:transition, non_neg_integer()}

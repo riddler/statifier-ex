@@ -6,7 +6,7 @@ defmodule Statifier.Lowering.Builders do
   "adding an element touches one builder").
 
   Every builder lowers its own children first, through
-  `Statifier.Lowering.walk_children/2`, before building its own struct, so
+  `Statifier.Lowering.walk_children`, before building its own struct, so
   errors accumulate in document order regardless of nesting depth. No
   builder here takes a parent element name as an argument: placement of a
   tagged child result into a parent's slot is each container's own
@@ -347,7 +347,7 @@ defmodule Statifier.Lowering.Builders do
   (ADR-0045) - the struct's own moduledoc defines `text` as exactly that
   concatenation. `<content>` is the one element exempt from the stray-text
   rule (its text *is* its payload), so this builder reads `element.children`
-  directly rather than calling `Statifier.Lowering.walk_children/2`, which
+  directly rather than calling `Statifier.Lowering.walk_children`, which
   would otherwise flag that same text as a stray-text error. An element
   child is no longer misplaced (ADR-0041): `markup`/`markup_location` are
   set from a raw slice of `ctx.source` when `<content>` has at least one
@@ -441,7 +441,7 @@ defmodule Statifier.Lowering.Builders do
   concatenation of `<data>`'s direct text children (verbatim except for the
   parser's XML 1.0 2.11 line-break fold - ADR-0045) - a `<data>`'s text *is*
   its payload (spec 5.3.2), so this builder reads `element.children`
-  directly rather than calling `Statifier.Lowering.walk_children/2`, the
+  directly rather than calling `Statifier.Lowering.walk_children`, the
   same stray-text exemption `<content>`'s own builder takes (ADR-0041). An
   element child is not silently dropped: each one produces
   `{:misplaced_element, name, "data"}` instead of a build attempt of its
@@ -503,7 +503,7 @@ defmodule Statifier.Lowering.Builders do
   value source, an `<assign>`'s children "provide an in-line specification
   of the legal data value" (5.4.2, 5.9.3), so this builder reads
   `element.children` directly rather than calling
-  `Statifier.Lowering.walk_children/2`, the same stray-text exemption
+  `Statifier.Lowering.walk_children`, the same stray-text exemption
   `build_data/2` takes. An element child is not silently dropped: each one
   produces `{:misplaced_element, name, "assign"}` instead of a build
   attempt of its own - `<assign>` does not hold a markup subtree.
@@ -709,7 +709,7 @@ defmodule Statifier.Lowering.Builders do
     # reverses whatever a builder returns before prepending it onto the
     # caller's own error list, so building newest-first here is what makes
     # the two errors land in document order (`array`, then `item`) once
-    # `Statifier.Lowering.lower/1` sorts the whole tree's errors by
+    # `Statifier.Lowering.lower` sorts the whole tree's errors by
     # `location.start_offset`.
     missing_errors =
       for {attribute, value} <- [{"item", item}, {"array", array}], is_nil(value) do
@@ -758,7 +758,7 @@ defmodule Statifier.Lowering.Builders do
   untrimmed concatenation of `<script>`'s direct text children (verbatim
   except for the parser's XML 1.0 2.11 line-break fold - ADR-0045) - the
   predicator program body (5.8.2). This builder reads `element.children`
-  directly rather than calling `Statifier.Lowering.walk_children/2`, the
+  directly rather than calling `Statifier.Lowering.walk_children`, the
   same stray-text exemption `build_data/2`/`build_assign/2` take for their
   own text-only content models. An element child is not silently dropped:
   each one produces `{:misplaced_element, name, "script"}` instead of a

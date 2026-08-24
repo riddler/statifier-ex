@@ -49,7 +49,7 @@ defmodule Statifier.Document do
   absent) - it never resolves prefixes. `namespace` is the URI the root
   element's name actually resolves to after prefix scoping
   (`Statifier.Lowering.Namespace.resolve/2`), stamped on by
-  `Statifier.Lowering.lower/1`. The two differ exactly for a prefix-declared
+  `Statifier.Lowering.lower`. The two differ exactly for a prefix-declared
   root such as `<s:scxml xmlns:s="...">`, where `xmlns` is `nil` but
   `namespace` is the resolved URI; the validator's check 9 reads `namespace`,
   not `xmlns`, so a spec-conformant prefixed document is not misreported as

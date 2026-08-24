@@ -6,8 +6,8 @@ defmodule Statifier.Machine.Invoke do
 
   `index` is this invocation's position within its own state's `invoke`
   list - what `{:invoke, state_index, invoke_index}` and `{:finalize,
-  state_index, invoke_index}` name, `Statifier.Compiler.Expressions.owner_ref/0`'s
-  and `Statifier.Machine.Content.owner/0`'s own new arms.
+  state_index, invoke_index}` name, `t:Statifier.Compiler.Expressions.owner_ref/0`'s
+  and `t:Statifier.Machine.Content.owner/0`'s own new arms.
 
   `type` and `src` each fold their own static/expr attribute pair into a
   single `Machine.expr() | nil`, mirroring `Statifier.Machine.Donedata.expr`:

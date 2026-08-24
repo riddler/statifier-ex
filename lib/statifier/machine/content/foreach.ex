@@ -192,7 +192,7 @@ defmodule Statifier.Machine.Content.Foreach do
     # through `<assign>`'s path machinery, and never onto the normalized
     # `%Predicator.Context{}`. This runs even for an empty collection, so
     # `item`/`index` are bound (to `:undefined`, matching
-    # `Statifier.Interpreter.Datamodel.seed/2`'s own `<data>`-with-no-value
+    # `Statifier.Interpreter.Datamodel.seed`'s own `<data>`-with-no-value
     # shape) whether or not the loop body ever runs. ADR-0028: the block's
     # threaded datamodel context gets the same two names bound into it with
     # `Evaluator.bind/3` rather than a full rebuild - `item`/`index` are

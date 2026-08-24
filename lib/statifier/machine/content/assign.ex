@@ -109,7 +109,7 @@ defmodule Statifier.Machine.Content.Assign do
 
     # Step 1: the value to write. `{:invalid, error}` is Decision 6's
     # deferred compile failure and short-circuits without ever reaching the
-    # evaluator - the same shape `Statifier.Interpreter.Datamodel.bind_value/4`
+    # evaluator - the same shape `Statifier.Interpreter.Datamodel.bind_value`
     # gives `<data expr>`. Anything else is a real `Machine.expr()`,
     # evaluated against the block's context exactly as every other
     # expression-bearing node would.

@@ -21,7 +21,7 @@ defmodule Statifier.Compiler.Error do
 
   @typedoc """
   Closed reason union. `:expression_compile_error` names the owning node
-  (`Statifier.Compiler.Expressions.owner_ref/0` - a transition, a content
+  (`t:Statifier.Compiler.Expressions.owner_ref/0` - a transition, a content
   node, or a final state's donedata), the raw expression `source`, and
   predicator's own `%Predicator.Errors.ParseError{}` verbatim, in
   predicator's own `{line, column}` coordinate space - the translation into

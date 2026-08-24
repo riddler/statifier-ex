@@ -43,7 +43,7 @@ defmodule Statifier.Machine.Content do
   - `{:transition, t_index}` - a transition's own executable content
   - `{:finalize, state_index, invoke_index}` - an `<invoke>`'s own
     `<finalize>` block, `invoke_index` naming its position in the owning
-    state's own `invoke` list (`Statifier.Compiler.Expressions.owner_ref/0`'s
+    state's own `invoke` list (`t:Statifier.Compiler.Expressions.owner_ref/0`'s
     `{:invoke, state_index, invoke_index}` arm names the same invocation for
     its own non-block attributes and children)
 

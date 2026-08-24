@@ -113,7 +113,7 @@ defmodule Statifier.Telemetry do
 
   The `:initialize` span's start event is emitted *after*
   `Interpreter.initialize/2` has already returned, for the `Statifier.Session`
-  driver (`Statifier.Session.init/1` needs the `machine_state` that call
+  driver (`Statifier.Session.init` needs the `machine_state` that call
   produces before it can call `Statifier.Session.Telemetry.init/5`, which
   happens first), so its `system_time` is not the wall-clock instant the span
   actually opened at, even though `duration` on the matching stop is still
@@ -252,7 +252,7 @@ defmodule Statifier.Telemetry do
   @typedoc "One `:telemetry` event name this module can emit."
   @type event_name :: [atom(), ...]
 
-  @typedoc "One of the eleven core effect payload structs (`Statifier.Effect.core/0`, unwrapped)."
+  @typedoc "One of the eleven core effect payload structs (`t:Statifier.Effect.core/0`, unwrapped)."
   @type core_payload ::
           Send.t()
           | SendDelayed.t()
@@ -266,7 +266,7 @@ defmodule Statifier.Telemetry do
           | DatamodelChange.t()
           | DatamodelInit.t()
 
-  @typedoc "One of the nine trace payload structs (`Statifier.Effect.trace/0`, unwrapped)."
+  @typedoc "One of the nine trace payload structs (`t:Statifier.Effect.trace/0`, unwrapped)."
   @type trace_payload ::
           Trace.EventDequeued.t()
           | Trace.TransitionsSelected.t()

@@ -8,7 +8,7 @@ defmodule Statifier.Replay do
   `run/1` reuses every *deciding* component a live `Statifier.Session`
   uses, unchanged: `Statifier.Interpreter.initialize/2`,
   `Statifier.Interpreter.handle_event/2`, `Statifier.Interpreter.cancel/1`,
-  `Statifier.Session.Effects.plan/1`, and `Statifier.Session.Inbox`. This
+  `Statifier.Session.Effects.plan`, and `Statifier.Session.Inbox`. This
   module's `drain/1` mirrors `Statifier.Session`'s
   `handle_continue(:drain, _)` line for line, and its `perform/2` mirrors
   `perform_instruction/3` for four of the seven instruction kinds
@@ -493,7 +493,7 @@ defmodule Statifier.Replay do
   # by the time this replay reaches a `{:invoked_event, invoke_id, _, _}`
   # entry a `done_invocation/3` call produced (`apply_entry/2`'s own clause),
   # and so `:cancel_invoke`/`:autoforward`'s handler dispatch
-  # (`Statifier.Session.Effects.plan_one/2`) sees the same type the live run
+  # (`Statifier.Session.Effects.plan_one`) sees the same type the live run
   # did. `{:start_child, _, _}` below still runs for the built-in `scxml`
   # case and simply re-writes the same `invoke_id => invoke.type` pair -
   # harmless, and kept rather than dropped so the comment there needs no
@@ -566,7 +566,7 @@ defmodule Statifier.Replay do
   # through the parent's own `{:internal, ...}`/`{:invoked_event, ...}`
   # entries, not
   # through re-starting the child. The `{:notify, effect}` instruction
-  # always planned ahead of this one (`Statifier.Session.Effects.plan_one/2`)
+  # always planned ahead of this one (`Statifier.Session.Effects.plan_one`)
   # has already appended the `{:invoke, _}` effect itself to `stream`; this
   # clause starts no process, but it does add `invoke.invoke_id` to
   # `live_invoke_ids` (Decision 6) - the same live-invocation set a real

@@ -4,7 +4,7 @@ defmodule Statifier.Lowering.Error do
 
   Mirrors `Statifier.Parser.ParseError`'s shape (`reason`, `message`,
   `location`) but is a plain struct rather than a `defexception` - lowering
-  never raises, and `Statifier.Lowering.lower/1` returns errors in a list
+  never raises, and `Statifier.Lowering.lower` returns errors in a list
   rather than as a single exception, so a builder that fails on its own
   account can still return a partial result, the walk keeps going, and
   every error found in one pass is reported rather than just the first.

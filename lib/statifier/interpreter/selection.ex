@@ -533,7 +533,7 @@ defmodule Statifier.Interpreter.Selection do
   # The errors-are-events conversion for a failed `cond`, in document order -
   # `raise_platform/4` not `raise_internal/4` because spec 5.10.1 classifies
   # `error.*` as a platform event, exactly as
-  # `Statifier.Interpreter.Content.raise_execution_error/4` does for a failed
+  # `Statifier.Interpreter.Content.raise_execution_error` does for a failed
   # content node; spec 3.12.2 is what puts it on the internal queue at all.
   # The origin names the transition, whose `cond_location` an ADR-0014 item 4
   # diagnostic resolves through `Machine.transition/2`.

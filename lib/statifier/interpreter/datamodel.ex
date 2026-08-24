@@ -78,8 +78,8 @@ defmodule Statifier.Interpreter.Datamodel do
   d_index}, data: reason)` runs: `raise_platform/4`, not `raise_internal/4`,
   because spec 5.10.1 classifies `error.*` as a platform event, matching the
   two existing raise sites
-  (`Statifier.Interpreter.Content.raise_execution_error/4`,
-  `Statifier.Interpreter.Selection.raise_cond_errors/2`).
+  (`Statifier.Interpreter.Content.raise_execution_error`,
+  `Statifier.Interpreter.Selection.raise_cond_errors`).
   """
 
   alias Statifier.{Effect, Evaluator, Machine, MachineState}
@@ -424,7 +424,7 @@ defmodule Statifier.Interpreter.Datamodel do
 
   This function does not itself test "is this the first time `state_index`
   has been entered" - Appendix D's `s.isFirstEntry` (`appendix-d.txt:312`).
-  `Statifier.Interpreter.ExitEntry.arrive/3` is the only caller, and it tests
+  `Statifier.Interpreter.ExitEntry.arrive` is the only caller, and it tests
   membership in `MachineState.entered_states` (the ADR-0002 substitute for
   `s.isFirstEntry`, documented at that field) *before* calling this function,
   so by the time this function runs, "first entry" has already been decided.

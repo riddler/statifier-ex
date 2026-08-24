@@ -7,7 +7,7 @@ defmodule Statifier.Document.Script do
   `compile/3`. Legal both as executable content (`<onentry>`, `<onexit>`, a
   transition, an `<if>` branch, a `<foreach>` body) and, spec 5.8, as a
   direct child of `<scxml>`, evaluated at document load time -
-  `Statifier.Lowering.Builders.place/3` sorts the two by parent.
+  `Statifier.Lowering.Builders.place` sorts the two by parent.
 
   `text` is `Statifier.Parser.DOM.text/1`'s verbatim, untrimmed
   concatenation of `<script>`'s direct text children (verbatim except for

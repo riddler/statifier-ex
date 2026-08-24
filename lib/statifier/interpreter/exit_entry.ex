@@ -426,7 +426,7 @@ defmodule Statifier.Interpreter.ExitEntry do
     pseudocode's `state.initial.transition.target` - because that transition
     is also what carries the default-entry content `run_default_entry/3`
     runs on the way in. **Mechanical deviation**:
-    `Statifier.Compiler.resolve_initial/3` only populates
+    `Statifier.Compiler.resolve_initial` only populates
     `initial_transition` for a written `<initial>` element; a state
     defaulted through the `initial` attribute or the first-child fallback
     carries its resolved default in `State.initial` instead, with no
@@ -1010,7 +1010,7 @@ defmodule Statifier.Interpreter.ExitEntry do
     "no data", the same spelling every other absent-payload writer uses
     (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`).
   - `{:static, text}` - `<content>`'s text body, which can only originate
-    there (`Statifier.Compiler.build_content_expr/2`). Coerced through
+    there (`Statifier.Compiler.build_content_expr`). Coerced through
     `Statifier.EventData.coerce({:text, text})` (Decision 3 of the plan on
     this module) so `<content>21</content>` becomes the integer `21`
     (W3C test529), not the string `"21"`.
@@ -1047,7 +1047,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   top-level final's terminal `{:done, _}` effect) - the same folding rule
   either way. `<donedata>` carries no `c_index`
   (`lib/statifier/machine/content.ex:25-28`), so
-  `Statifier.Interpreter.Content.raise_execution_error/4`'s `{:content,
+  `Statifier.Interpreter.Content.raise_execution_error`'s `{:content,
   c_index, owner}` origin shape does not apply here; the raise below uses
   `{:state, state_index}` instead, the same origin shape
   `raise_parent_completion/3` already stamps on the `done.state.*` event

@@ -21,7 +21,7 @@ defmodule Statifier.Document.Send do
   (5.9.2's space-separated list of location expressions), mirroring
   `Statifier.Document.Invoke.namelist`. `params` and `content` are built the
   same way `Statifier.Document.Invoke`'s own `params`/`content` are - one
-  slot each, filled by `Statifier.Lowering.Builders.place/3`'s `%Send{}`
+  slot each, filled by `Statifier.Lowering.Builders.place`'s `%Send{}`
   clauses as `<param>`/`<content>` children are walked.
 
   Unlike `<invoke>`, `<send>` is executable content: it is tagged

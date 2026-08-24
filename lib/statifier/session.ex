@@ -663,7 +663,7 @@ defmodule Statifier.Session do
   @doc """
   Hands `effects` - any list of `Statifier.Effect.t()` values, from any
   driver of the pure core - to this session's own effect-interpretation
-  path: planned through `Statifier.Session.Effects.plan/1` and performed
+  path: planned through `Statifier.Session.Effects.plan` and performed
   exactly as the effects this session's own drive of the core produces.
   ADR-0003's "Embedders can supply their own effect interpreter", read the
   other way: an embedder that drives the core itself can still lean on this
@@ -1883,7 +1883,7 @@ defmodule Statifier.Session do
   # and `invoked_by: nil` (an ordinary, uninvoked session) has no parent to
   # tell. `state.done_effect` is populated here because `{:notify, {:done,
   # %Done{}}}` always precedes `{:halt, :done}` in
-  # `Statifier.Session.Effects.plan_one/2`'s own output for the `{:done, _}`
+  # `Statifier.Session.Effects.plan_one`'s own output for the `{:done, _}`
   # effect - an existing ordering guarantee this clause leans on, not a new
   # one.
   @spec return_done_event(reason :: :done | :cancelled | :budget_exhausted, state :: State.t()) ::
@@ -2182,7 +2182,7 @@ defmodule Statifier.Session do
   #     landed), so the core's arm made no determination and emitted the
   #     effect exactly as it did before ADR-0048.
   #   - an **`interpret/2`-injected effect** - a caller-supplied effect never
-  #     passed through `Statifier.Machine.Content.Send.execute/2` at all, so
+  #     passed through `Statifier.Machine.Content.Send.execute` at all, so
   #     no core arm ever judged it against any snapshot.
   #   - a **delayed send's route miss at fire time** - ADR-0048 decision 6
   #     exempts every delayed send from the plan-time check outright (6.2.3
@@ -2265,7 +2265,7 @@ defmodule Statifier.Session do
 
   # `Statifier.Effect.Send.owner/0`/`c_index` and
   # `Statifier.Effect.SendDelayed`'s own copies name the block that emitted
-  # this send - the same identity `Statifier.Event.Cause.origin/0`'s
+  # this send - the same identity `t:Statifier.Event.Cause.origin/0`'s
   # `{:content, c_index, owner}` arm already carries for every other
   # content-raised event.
   @spec origin_of(effect :: Effect.t()) :: Cause.origin()

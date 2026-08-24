@@ -19,7 +19,7 @@ defmodule Statifier.Event.Cause do
   `Location` but names nothing about *which* onentry/onexit block or
   transition it lives in. `Statifier.Effect.Trace.ContentExecuted` already
   carries exactly that owning-block identity as its `owner` field
-  (`Statifier.Machine.Content.owner/0`), proven known at emission time; this
+  (`t:Statifier.Machine.Content.owner/0`), proven known at emission time; this
   cause now carries the same identity instead of leaving it unrecorded.
   """
 
@@ -33,7 +33,7 @@ defmodule Statifier.Event.Cause do
 
   - `{:content, c_index, owner}` - a content node (`<raise>`, or any other
     executable-content node once one can fail) raised it; `c_index` resolves
-    through `Statifier.Machine.content/2`, `owner` (`Statifier.Machine.Content.owner/0`)
+    through `Statifier.Machine.content/2`, `owner` (`t:Statifier.Machine.Content.owner/0`)
     names the `<onentry>`/`<onexit>` block or transition the node lives in,
     exactly as `Statifier.Effect.Trace.ContentExecuted` already names it for
     the same block.
@@ -89,7 +89,7 @@ defmodule Statifier.Event.Cause do
     (`Statifier.Machine`'s own "why `global_scripts` is different"
     moduledoc section), so this is the same shape as the `{:data, d_index}`
     arm above, one level down, addressed the same way
-    `Statifier.Compiler.Expressions.owner_ref/0`'s own `{:global_script,
+    `t:Statifier.Compiler.Expressions.owner_ref/0`'s own `{:global_script,
     _}` arm is: `index` is the script's position in `document.scripts` /
     `machine.global_scripts`, in document order, resolved by rereading that
     list rather than through any `Statifier.Machine` accessor - there is no
@@ -123,7 +123,7 @@ defmodule Statifier.Event.Cause do
     events from one applyFinalize call. `state_index`/`invoke_index` resolve
     exactly as the `{:invoke, _, _}` arm's do; a **populated** `<finalize>`'s
     own failures go through the ordinary `{:content, c_index, owner}` arm
-    instead, `owner` being `Statifier.Machine.Content.owner/0`'s own
+    instead, `owner` being `t:Statifier.Machine.Content.owner/0`'s own
     `{:finalize, state_index, invoke_index}` shape - that block runs through
     `Statifier.Interpreter.Content.execute_block/3` like any other block, and
     this arm exists only for the empty case's block-less write.

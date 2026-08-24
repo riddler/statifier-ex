@@ -35,7 +35,7 @@ defmodule Statifier.Effect.SendDelayed do
 
   alias Statifier.Machine.Content
 
-  @typedoc "Which block emitted the send - `Statifier.Machine.Content.owner/0`."
+  @typedoc "Which block emitted the send - `t:Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
   @enforce_keys [:event, :delay_ms, :macrostep, :microstep, :round, :ordinal]
