@@ -46,7 +46,7 @@ defmodule Statifier.Session.Recording do
   regenerate a *different* id and diverge from the run it is meant to
   reproduce. `new/2` therefore takes the id the session actually settled on -
   read back off `machine_state.datamodel["_sessionid"]`, exactly as
-  `Statifier.Session.init/1` does - not whatever the caller passed (or did
+  `Statifier.Session.init` does - not whatever the caller passed (or did
   not pass) as an option.
 
   ## A batch is one entry, not several
@@ -56,7 +56,7 @@ defmodule Statifier.Session.Recording do
   Splitting that list into one entry per effect would lose the fact that they
   arrived together, at one position in the input order, rather than as
   several separate calls that happened to be adjacent - a distinction replay
-  needs, since `Statifier.Session.Effects.plan/1` and any effect-derived
+  needs, since `Statifier.Session.Effects.plan` and any effect-derived
   routing decisions apply to the batch as `interpret/2` presented it. Storing
   the whole batch as `{:interpret, effects, routes}` preserves that boundary
   exactly.

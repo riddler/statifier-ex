@@ -33,7 +33,7 @@ defmodule Statifier.MachineState do
   ## `states_to_invoke` is every state entered since the last invoke pass
 
   `states_to_invoke` mirrors Appendix D's `statesToInvoke` global: a
-  `MapSet` of state indexes, added to by `Statifier.Interpreter.ExitEntry.arrive/3`
+  `MapSet` of state indexes, added to by `Statifier.Interpreter.ExitEntry.arrive`
   (`enterStates`'s per-state entry body) and deleted from by
   `Statifier.Interpreter.ExitEntry.exit_states/2` (`exitStates`'s
   `for s in statesToExit: statesToInvoke.delete(s)`).
@@ -71,7 +71,7 @@ defmodule Statifier.MachineState do
       active_invocations: %{{state_index, invoke_index} => invoke_id}
 
   `state_index` and `invoke_index` together name one compiled `<invoke>`
-  element (`Statifier.Compiler.Expressions.owner_ref/0`'s `{:invoke, _, _}`
+  element (`t:Statifier.Compiler.Expressions.owner_ref/0`'s `{:invoke, _, _}`
   shape); document order for a walk over one state's invocations always
   comes from the compiled `invoke` list itself, never from iterating this
   map. This is the same ADR-0002 mechanical deviation `entered_states`
@@ -132,7 +132,7 @@ defmodule Statifier.MachineState do
   platformid alone - "platformid MUST be unique within the current
   session" - not to the composite. `invoke_counter` is that platformid
   source: one auto-increment for the whole session, read from and written
-  back to this struct by `Statifier.Interpreter.generate_invoke_id/3`
+  back to this struct by `Statifier.Interpreter.generate_invoke_id`
   (`lib/statifier/interpreter.ex`), never per-state or per-`<invoke>`
   element. A per-state counter would let `s0.1` and `s1.1` collide on
   platformid `1` while still satisfying composite uniqueness, which 6.4.1
@@ -354,7 +354,7 @@ defmodule Statifier.MachineState do
 
   ## `==` is not a position-equality test
 
-  `internal_queue` is an `:queue.queue/0`. Two `:queue` values holding the
+  `internal_queue` is an `t::queue.queue/0`. Two `:queue` values holding the
   same events in the same order can differ structurally - the front/rear
   split depends on the push/pop history - so `==` on two `%MachineState{}`
   values is *not* a reliable "same position" test. A comparison that needs
@@ -710,7 +710,7 @@ defmodule Statifier.MachineState do
   `datamodel["_event"] = event` (Appendix D) - the one and only writer of
   the `_event` system variable (spec 5.10.1). Both of `mainEventLoop`'s
   assignments, the external one (`Statifier.Interpreter.handle_event/2`)
-  and the internal one (`Statifier.Interpreter.internal_round/1`), go
+  and the internal one (`Statifier.Interpreter.internal_round`), go
   through here.
   """
   @spec put_event(machine_state :: t(), event :: Event.t()) :: t()
@@ -754,7 +754,7 @@ defmodule Statifier.MachineState do
   Raises a platform event: identical to `raise_internal/4` except it builds
   an `Event.platform/3` event instead of `Event.internal/3` - so `type` is
   stamped `:platform` per spec 5.10.1. This is the function
-  `Statifier.Interpreter.ExitEntry.raise_parent_completion/3` calls for
+  `Statifier.Interpreter.ExitEntry.raise_parent_completion` calls for
   `done.state.*`: `Statifier.Event`'s moduledoc classifies `done.state.*`
   as a platform-raised event, not one raised by executable content, and
   `raise_internal/4` would stamp the wrong `type`.

@@ -352,7 +352,7 @@ defmodule Statifier.Evaluator do
   `_name`, `_ioprocessors`) are always in `before_data` and this
   attempt-time guarantee is complete for them. The list is derived rather
   than fixed, reconciling this repo's `_`-prefix rule
-  (`Statifier.Interpreter.Datamodel.check_system_variable/1`) against
+  (`Statifier.Interpreter.Datamodel.check_system_variable`) against
   predicator's membership-only API - see `protected_roots/1`'s own comment
   for the reasoning.
 
@@ -368,7 +368,7 @@ defmodule Statifier.Evaluator do
   visible to this diff as a changed root. If the diff finds a changed root
   beginning with `_`, this returns `{:error, machine_state,
   {:system_variable, root}, post_context}` - the same reason tuple
-  `Statifier.Interpreter.Datamodel.check_system_variable/1` produces, so
+  `Statifier.Interpreter.Datamodel.check_system_variable` produces, so
   `error.execution`'s `data:` reads identically whichever element attempted
   the write and whichever of the two mechanisms caught it - with every
   non-system changed root from the *same* program still merged into the
@@ -462,7 +462,7 @@ defmodule Statifier.Evaluator do
   end
 
   # Spec 5.10's rule in this repo is a *prefix* test on `_`
-  # (`Statifier.Interpreter.Datamodel.check_system_variable/1`), and
+  # (`Statifier.Interpreter.Datamodel.check_system_variable`), and
   # predicator's `protected_roots:` is a *membership* list of binaries with
   # no prefix mode (`deps/predicator/lib/predicator/evaluator.ex:1567`). So
   # the list is derived per run from the roots the context already carries.

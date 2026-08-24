@@ -52,7 +52,7 @@ defmodule Statifier.Compiler do
   itself, so `build_transitions/3`, `build_contents/2`, `build_donedata_map/1`,
   and `build_data_elements/2` each run once, after `walk_siblings/4` returns.
   The first three's errors accumulate together, sorted by
-  `location.start_offset`, mirroring `Statifier.Lowering.finalize/2`
+  `location.start_offset`, mirroring `Statifier.Lowering.finalize`
   (`lib/statifier/lowering.ex:137-141`) - a document with a bad `cond` on one
   transition and a bad `<log expr=...>` elsewhere reports both.
   `build_data_elements/2` never joins that merge - a `<data expr>` that
@@ -739,7 +739,7 @@ defmodule Statifier.Compiler do
   # every transition's raw target id list becomes resolved indexes and every
   # `cond` is compiled. Errors accumulate rather than short-circuit and are
   # sorted by `location.start_offset` before returning, mirroring
-  # `Statifier.Lowering.finalize/2` (`lib/statifier/lowering.ex:137-141`) -
+  # `Statifier.Lowering.finalize` (`lib/statifier/lowering.ex:137-141`) -
   # a document with two bad `cond`s on two different transitions reports
   # both.
   @spec build_transitions(

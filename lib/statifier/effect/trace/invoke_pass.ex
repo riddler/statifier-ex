@@ -25,7 +25,7 @@ defmodule Statifier.Effect.Trace.InvokePass do
   and an invocation whose resolved `type` is unsupported (6.4.1), which
   still contributes its `Effect.Invoke` - carrying the authored type,
   unchanged - but was never recorded live because no child was ever started
-  for `Statifier.Session.Effects.plan_invoke/2`'s
+  for `Statifier.Session.Effects.plan_invoke`'s
   `error.execution` to describe.
 
   Emitted every time the pass runs, even when both lists are empty - the

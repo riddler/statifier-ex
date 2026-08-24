@@ -31,7 +31,7 @@ defmodule Statifier.Effect.Cancel do
 
   alias Statifier.Machine.Content
 
-  @typedoc "Which block emitted the cancel - `Statifier.Machine.Content.owner/0`."
+  @typedoc "Which block emitted the cancel - `t:Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
   @enforce_keys [:send_id, :macrostep, :microstep, :round, :ordinal]

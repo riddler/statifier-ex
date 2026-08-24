@@ -17,7 +17,7 @@ defmodule Statifier.Effect.Log do
 
   alias Statifier.Machine.Content
 
-  @typedoc "Which block emitted the log - `Statifier.Machine.Content.owner/0`."
+  @typedoc "Which block emitted the log - `t:Statifier.Machine.Content.owner/0`."
   @type owner :: Content.owner()
 
   @enforce_keys [:macrostep, :microstep, :round]

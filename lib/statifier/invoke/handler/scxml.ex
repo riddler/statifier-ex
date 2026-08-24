@@ -1,12 +1,12 @@
 defmodule Statifier.Invoke.Handler.Scxml do
   @moduledoc """
   The built-in `type=scxml` (and long-URI, `http://www.w3.org/TR/scxml/`)
-  `Statifier.Invoke.Handler` - `Statifier.Session.Effects.plan_invoke/3`'s
+  `Statifier.Invoke.Handler` - `Statifier.Session.Effects.plan_invoke`'s
   default entry for the built-in type set, not a name it special-cases
   (ADR-0051 decision 4).
 
   Every instruction below is exactly what `plan_invoke/3` produced directly
-  before this module existed, so `Statifier.Session.perform_instruction/3`'s
+  before this module existed, so `Statifier.Session.perform_instruction`'s
   `{:start_child, ...}` clause, `Statifier.Invoke.Source.resolve/2`, the
   6.4.3 child-datamodel seeding, and both process monitors are unchanged -
   this module only names the seam they already sat behind.

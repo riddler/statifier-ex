@@ -7,7 +7,7 @@ defmodule Statifier.ExecutableContent.Context do
 
   A bare `Statifier.MachineState.t()` cannot carry everything a node needs
   today: `<raise>` stamps its cause with `{:content, c_index, owner}`
-  (`Statifier.Event.Cause.origin/0`), and `owner` - which `<onentry>`/
+  (`t:Statifier.Event.Cause.origin/0`), and `owner` - which `<onentry>`/
   `<onexit>` block or `<transition>` the node lives in - is a property of the
   *block* the runner is executing, not of `machine_state` or of the node
   struct itself. With a two-argument protocol function there is nowhere else

@@ -19,7 +19,7 @@ defmodule Statifier.Evaluator.Error do
   this module invents.
 
   This struct carries no `owner` field: the raise site
-  (`Statifier.Interpreter.Content.raise_execution_error/4`) already stamps
+  (`Statifier.Interpreter.Content.raise_execution_error`) already stamps
   `{:content, c_index, owner}` on the platform event, so the owner would be
   a duplicate of information the caller already has, not something the
   evaluator needs to originate.

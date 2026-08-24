@@ -14,7 +14,7 @@ defmodule Statifier.Invoke.Types do
   `registered?/2` is the single shared classifier ADR-0047 decision 4 and
   ADR-0051 decision 3 require: both `Statifier.Interpreter`'s
   `maybe_record_active_invocation/5` and
-  `Statifier.Session.Effects.plan_invoke/2` answer "is this type registered"
+  `Statifier.Session.Effects.plan_invoke` answer "is this type registered"
   by calling it, so the two sites cannot drift. Built-in membership -
   `nil`, `"scxml"`, and the bare `http://www.w3.org/TR/scxml/` URI - keeps
   delegating to `Statifier.Send.Target.supported_invoke_type?/1` rather than

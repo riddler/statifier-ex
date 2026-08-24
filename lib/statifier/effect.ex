@@ -31,12 +31,12 @@ defmodule Statifier.Effect do
   | `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` | `Statifier.Interpreter.macrostep/1` |
   | `:done` | `Statifier.Effect.Done` | `Statifier.Interpreter.exit_interpreter/1` |
   | `:log` | `Statifier.Effect.Log` | `Statifier.Machine.Content.Log`'s `execute/2` (`<log>`) |
-  | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | `Statifier.Interpreter.Datamodel.write_location/4`'s four call sites - `Statifier.Machine.Content.Assign`'s `execute/2` (`<assign>`), `Statifier.Machine.Content.Send`'s `execute/2` (`<send idlocation>`), `Statifier.Interpreter`'s `write_finalize_target/6` (the empty-`<finalize>` auto-assign), and `Statifier.Interpreter`'s `invoke_one/6` (`<invoke idlocation>`) - plus `Statifier.Interpreter.Datamodel.bind_value/4`, reached from both `initialize/1` and `enter_state/2`, for a `<data>` binding |
+  | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | `Statifier.Interpreter.Datamodel.write_location/4`'s four call sites - `Statifier.Machine.Content.Assign`'s `execute/2` (`<assign>`), `Statifier.Machine.Content.Send`'s `execute/2` (`<send idlocation>`), `Statifier.Interpreter`'s `write_finalize_target/6` (the empty-`<finalize>` auto-assign), and `Statifier.Interpreter`'s `invoke_one/6` (`<invoke idlocation>`) - plus `Statifier.Interpreter.Datamodel.bind_value`, reached from both `initialize/1` and `enter_state/2`, for a `<data>` binding |
   | `:datamodel_init` | `Statifier.Effect.DatamodelInit` | `Statifier.Interpreter.Datamodel.initialize/1` |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
-  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected/3` |
+  | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
-  | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | `execute_block/3` (a content block ran) and `Statifier.Interpreter.run_global_script/3` (a top-level `<script>` ran at load time) |
+  | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | `execute_block/3` (a content block ran) and `Statifier.Interpreter.run_global_script` (a top-level `<script>` ran at load time) |
   | `:trace` | `Statifier.Effect.Trace.EntrySet` | `enter_states/2` (`compute_entry_set` result) |
   | `:trace` | `Statifier.Effect.Trace.MacrostepStable` | `Statifier.Interpreter.macrostep/1` |
   | `:trace` | `Statifier.Effect.Trace.Done` | `Statifier.Interpreter.exit_interpreter/1` |

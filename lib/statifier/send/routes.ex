@@ -3,7 +3,7 @@ defmodule Statifier.Send.Routes do
   A caller-declared, point-in-time claim about which `<send>` routes are
   live (ADR-0048 decision 1) - a plain value in `Statifier.Send.Target`'s
   neutral namespace (ADR-0047 decision 3), carrying exactly what
-  `Statifier.Session.deliver/5` resolves today: the set of session ids
+  `Statifier.Session.deliver` resolves today: the set of session ids
   reachable by `{:session, sid}`, whether a parent exists for `:parent`,
   and the set of live invoke ids reachable by `{:invoke, id}`.
 
@@ -54,7 +54,7 @@ defmodule Statifier.Send.Routes do
   are always reachable; `{:session, sid}`, `:parent`, and `{:invoke, id}`
   are judged against this snapshot's own fields; `{:invalid, _target}` is
   always unreachable - covered here for completeness, though ADR-0047's
-  static check in `Statifier.Machine.Content.Send.execute/2` rejects an
+  static check in `Statifier.Machine.Content.Send.execute` rejects an
   `{:invalid, _}` target before this predicate is ever asked.
   """
   @spec reachable?(routes :: t(), route :: Target.route()) :: boolean()

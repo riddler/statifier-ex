@@ -6,7 +6,7 @@ defmodule Statifier.Machine.Content.Script do
   `program` is `Statifier.Machine.program()` - a compiled predicator
   *statement* program, `Machine.expr()`'s sibling and never one of its
   arms - or `{:invalid, Compiler.Error.t()}` when the body failed to
-  compile (`Statifier.Compiler.build_content_node/2`'s `%Document.Script{}`
+  compile (`Statifier.Compiler.build_content_node`'s `%Document.Script{}`
   clause): compilation
   happens once at load, but a body outside predicator's statement grammar
   (an ECMAScript body this engine cannot parse) defers its failure to

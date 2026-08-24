@@ -10,7 +10,7 @@ defmodule Statifier.Document.Datamodel do
   Spec 3.2.2/3.3.2/3.4.2 allow `<datamodel>` under `<scxml>`, `<state>`, and
   `<parallel>` only - never under `<final>` or `<history>`. Lowering does not
   enforce that placement: `Statifier.Document.State` is one struct for all
-  four state kinds, so `Statifier.Lowering.Builders.place/3` has no way to
+  four state kinds, so `Statifier.Lowering.Builders.place` has no way to
   distinguish them by kind. A `<datamodel>` under a `:final` or `:history`
   state is representable here and left for `Statifier.Validator.Checks.Data`
   to catch.

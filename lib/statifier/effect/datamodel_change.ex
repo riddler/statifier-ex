@@ -36,7 +36,7 @@ defmodule Statifier.Effect.DatamodelChange do
 
   `d_index` and `c_index` are mutually exclusive identities on this payload
   (decision 3): a non-nil `d_index` means the write was a `<data>`
-  binding performed by `Statifier.Interpreter.Datamodel.bind_value/4`, which
+  binding performed by `Statifier.Interpreter.Datamodel.bind_value`, which
   belongs to no content block and therefore always carries `owner: nil`. A
   `<data>` element is not executable content, so `Machine.content/2` could
   never resolve it - `Statifier.Machine.data/2` is its resolver instead, the

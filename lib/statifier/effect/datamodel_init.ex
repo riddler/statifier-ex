@@ -5,7 +5,7 @@ defmodule Statifier.Effect.DatamodelInit do
   first `<data>` value is evaluated (plan decision 1).
 
   `datamodel` is `machine_state.datamodel` as it stands after spec 5.3.3's
-  unconditional `<data>` creation (`Statifier.Interpreter.Datamodel.seed/2`)
+  unconditional `<data>` creation (`Statifier.Interpreter.Datamodel.seed`)
   and before the binding fold that follows it. That ordering is what makes
   this payload carry exactly the three contributions no
   `{:datamodel_change, _}` effect can ever describe: `MachineState.new/2`'s

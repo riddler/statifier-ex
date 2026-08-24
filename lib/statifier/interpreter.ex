@@ -392,7 +392,7 @@ defmodule Statifier.Interpreter do
   # `<onentry>`/`<onexit>`/transition block, and never reaches
   # `Statifier.Interpreter.Content.run_nodes/2` at all (see `Machine`'s own
   # "why `global_scripts` is different" moduledoc section).
-  # `Statifier.Interpreter.Datamodel.bind_value/4`'s `raise_binding_error/3`
+  # `Statifier.Interpreter.Datamodel.bind_value`'s `raise_binding_error/3`
   # is the existing precedent for exactly this shape: a load-time raise,
   # via `MachineState.raise_platform/4`, outside any runner, because
   # `<data>` binding has no runner either.
@@ -748,7 +748,7 @@ defmodule Statifier.Interpreter do
   # (the namelist/`<param location>` auto-assign), anything else runs
   # through the ordinary block runner exactly like an `<onentry>`/`<onexit>`
   # block, owned by `{:finalize, state_index, invoke_index}`
-  # (`Statifier.Machine.Content.owner/0`, ADR-0028's threaded context).
+  # (`t:Statifier.Machine.Content.owner/0`, ADR-0028's threaded context).
   @spec apply_finalize(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),
@@ -1674,7 +1674,7 @@ defmodule Statifier.Interpreter do
   # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
   # the built-in `type` this platform supports out of the box; a
   # `type`/`typeexpr` naming anything else that is not otherwise registered
-  # starts no child - `Statifier.Session.Effects.plan_invoke/2` raises
+  # starts no child - `Statifier.Session.Effects.plan_invoke` raises
   # 3.12.2's `error.execution` for it instead. The `Effect.Invoke` is still
   # emitted (the session needs it to raise against), but the invocation is
   # never live, so it is not recorded: 6.4's "MUST automatically cancel the

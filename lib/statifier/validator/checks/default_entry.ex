@@ -16,7 +16,7 @@ defmodule Statifier.Validator.Checks.DefaultEntry do
   legal sibling of a real default target) both report nothing.
 
   `kind: :state` is load-bearing, and deliberately narrower than
-  `Statifier.Validator.Context.compound?/1`, which counts `:parallel` too.
+  `Statifier.Validator.Context.compound?`, which counts `:parallel` too.
   A `<parallel>` enters *every* one of its regions on entry (spec 3.4), so
   it has no positional default entry for a leading `<history>` to be wrong
   about - and SCION's `history3`, `history4`, `history4b`, and `history5`
