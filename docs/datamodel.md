@@ -1,7 +1,7 @@
 # Datamodel
 
 Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
-`~> 8.0`). This is a commitment, not a stopgap ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)):
+`~> 8.0`). This is a commitment, not a stopgap ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)):
 we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
 a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
 continuity with v1's converted W3C tests).
@@ -25,7 +25,7 @@ continuity with v1's converted W3C tests).
   and `late` both supported. `src` is lowered, validated, and compiled like any
   other attribute, but it is **never fetched, at any binding time** - a decided,
   permanent deviation from spec 5.3.2's fetch MUST
-  ([ADR-0024](adr/0024-data-src-is-never-fetched.md)): a binding-time fetch is
+  ([ADR-0024](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0024-data-src-is-never-fetched.md)): a binding-time fetch is
   I/O inside the pure core (ADR-0003), and dereferencing document-named URIs
   contradicts the security posture above (ADR-0004). A `<data>` with an `src`
   raises `error.execution` and leaves the id as an empty (nil) data element,
@@ -87,7 +87,7 @@ Every evaluation goes through one module with one context type:
   expr>` that will not compile is therefore captured as `{:invalid, error}`
   on the compiled node and raised at binding/execution time. `<script>` gets
   the same treatment for a body outside predicator's statement grammar
-  ([ADR-0026](adr/0026-script-as-predicator-statement-programs.md)). `cond`,
+  ([ADR-0026](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0026-script-as-predicator-statement-programs.md)). `cond`,
   `<log expr>`, `<content expr>`, `<foreach array>`, and a `<param>`
   element's `expr`/`location` still fail `Compiler.compile/1`.
 
@@ -122,7 +122,7 @@ Every evaluation goes through one module with one context type:
 ## Statement sequences and `<script>`
 
 `<script>` is supported
-([ADR-0026](adr/0026-script-as-predicator-statement-programs.md), amending
+([ADR-0026](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0026-script-as-predicator-statement-programs.md), amending
 ADR-0004 in part): the statement layer this section once asked for landed in
 predicator 5.0.0 - `parse_program/2` parses sequences of assignments and
 expression statements over the existing expression language, and
@@ -158,12 +158,12 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    `Predicator.FunctionProvider` (a module supplying named functions),
    `Context.new/2`'s `providers:` and `host:` options, and `Context.put_host/2`
    (an O(1) `%{context | host: host}` refresh). Taken in two steps. First, in
-   the within-block form only ([ADR-0028](adr/0028-executable-content-blocks-thread-one-context.md)):
+   the within-block form only ([ADR-0028](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0028-executable-content-blocks-thread-one-context.md)):
    measurement showed context construction is the majority of one
    macrostep's cost at realistic datamodel scale, and `<assign>` and
    `<foreach>` bind into the context an executable-content block already
    threads rather than rebuilding it per write. Then, taken for `In/1`
-   itself ([ADR-0030](adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md)):
+   itself ([ADR-0030](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0030-in1-becomes-a-provider-context-stays-off-machinestate.md)):
    `In/1` is a `Predicator.FunctionProvider` reading `host` rather than an
    inline `functions:` closure, so the resolved `functions` map holds no
    captured configuration and is identical for every context this library

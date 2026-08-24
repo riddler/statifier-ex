@@ -2,16 +2,16 @@
 
 How to persist and reload a running chart safely, and the hazard that makes
 "safely" a real qualifier rather than a formality. Read alongside
-[ADR-0052](adr/0052-chart-identity-and-position-serialization.md), which is
+[ADR-0052](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md), which is
 the decision record this page explains for a host author who has not read
-[ADR-0005](adr/0005-full-configuration-and-interned-state-indexes.md).
+[ADR-0005](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0005-full-configuration-and-interned-state-indexes.md).
 
 ## The hazard
 
 A `Statifier.MachineState.t()`'s active configuration, `entered_states`,
 `states_to_invoke`, and history values are `MapSet`s of interned integer
 state indexes, not state ids
-([ADR-0005](adr/0005-full-configuration-and-interned-state-indexes.md)).
+([ADR-0005](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0005-full-configuration-and-interned-state-indexes.md)).
 Those indexes are assigned by the compiler when it lays states out in a flat
 array in document order - they are stable *within* one `Statifier.Machine.t()`
 build and mean nothing across two. ADR-0005's own Consequences section says
@@ -156,7 +156,7 @@ needs:
 
 This is the mechanized form of the same "persist the source, recompile"
 advice the three-item list above already follows by hand; see the
-[ADR-0052 amendment (st-i7y7)](adr/0052-chart-identity-and-position-serialization.md)
+[ADR-0052 amendment (st-i7y7)](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md)
 for why it ships as its own module rather than as functions on `Machine`.
 
 Anything that is not this library's own chart envelope - a foreign
@@ -174,7 +174,7 @@ before any version, compile, or identity check runs. The other three arms are
 Everything above answers "how do I persist a position safely." This section
 answers the other half: how a host turns a persisted position back into a
 running `Statifier.Session`, and what it still owns after doing so. See
-[ADR-0060](adr/0060-resuming-a-session-from-a-persisted-position.md) for the
+[ADR-0060](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0060-resuming-a-session-from-a-persisted-position.md) for the
 full decision record; this section is the narrative for a host that has not
 read it.
 
@@ -305,7 +305,7 @@ copy of anything), the recording's normalized session opts, and its
 `%Machine{}` term (`from_binary/1` recompiles one from the nested chart blob
 on load, exactly as the chart section above does), any pid, ref, port, or
 fun, and no clock reading -
-[ADR-0034](adr/0034-replay-re-drives-the-core-not-a-live-session.md)
+[ADR-0034](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0034-replay-re-drives-the-core-not-a-live-session.md)
 decision 2 is why a recording never reads wall-clock time in the first
 place, so there is nothing of the kind for a blob to carry.
 
@@ -320,7 +320,7 @@ Loading one composes the same two-line shape the chart section above models:
 decodes.** `String.to_existing_atom/1` cannot conjure an atom for a module
 nobody has loaded yet, so `to_binary/1` writes each handler module as a
 string rather than an atom
-([ADR-0057 decision 5](adr/0057-recording-identity-and-serialization.md)),
+([ADR-0057 decision 5](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0057-recording-identity-and-serialization.md)),
 and `from_binary/1` resolves every one back, collecting every unresolvable
 name into a single `{:error, {:unknown_handler_modules, names}}` instead of
 failing on the first. The error is the actionable instruction: load the
@@ -333,7 +333,7 @@ is never called during replay. A decoded recording therefore reproduces the
 recorded stream only where the handlers' planning callbacks are equivalent
 to the ones the original run used - an accepted environmental limit, the
 same class as
-[ADR-0034](adr/0034-replay-re-drives-the-core-not-a-live-session.md)'s OTP
+[ADR-0034](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0034-replay-re-drives-the-core-not-a-live-session.md)'s OTP
 `MapSet`-iteration caveat, not a defect to chase down.
 
 **Host-supplied atoms inside recorded payloads remain the host's own
@@ -365,7 +365,7 @@ the same rule positions and charts already live under.
 
 As with a position blob, reading a recording's identity without paying the
 recompile is not answered yet - deferred the same way
-[ADR-0052](adr/0052-chart-identity-and-position-serialization.md) defers it
+[ADR-0052](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md) defers it
 for positions. A host that needs to index many recordings by chart revision
 without recompiling each one on lookup stores
 `Statifier.Machine.Identity.to_binary/1` beside each recording blob at write
@@ -382,9 +382,9 @@ one either), and `Statifier.Chart.to_binary/1` and
 `Statifier.Session.Recording.to_binary/1` refuse the same way for the same
 reason - a recording's blob nests the chart's, so it inherits the refusal
 rather than restating it - see
-[ADR-0052 decision 3](adr/0052-chart-identity-and-position-serialization.md)
+[ADR-0052 decision 3](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md)
 and its
-[st-i7y7 amendment](adr/0052-chart-identity-and-position-serialization.md).
+[st-i7y7 amendment](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md).
 The chart blob's source-carrying shape is exactly why that stays true even
 though the blob now travels as one file: `Statifier.Chart.from_binary/1`
 rebuilds the `Machine` by recompiling the stored source through

@@ -7,7 +7,7 @@ each major decision lives in `docs/adr/`.
 
 ## Design principles
 
-1. **The W3C algorithm is ported literally, not re-derived** ([ADR-0002](adr/0002-literal-w3c-appendix-d-port.md)).
+1. **The W3C algorithm is ported literally, not re-derived** ([ADR-0002](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0002-literal-w3c-appendix-d-port.md)).
    The interpreter implements the SCXML Appendix D pseudocode function-for-function,
    keeping the spec's names: `select_transitions`, `remove_conflicting_transitions`,
    `get_transition_domain`, `compute_exit_set`, `compute_entry_set`,
@@ -16,11 +16,11 @@ each major decision lives in `docs/adr/`.
    move is "diff the function against the pseudocode", never "tune the heuristic".
    Diff against the cached text, not against memory: `appendix-d.txt` and the full
    `scxml-rec.html` sit in `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/`,
-   populated by `mise run spec:fetch` (see [`tools/spec/README.md`](../tools/spec/README.md)).
+   populated by `mise run spec:fetch` (see [`tools/spec/README.md`](https://github.com/riddler/statifier-ex/blob/main/tools/spec/README.md)).
    Internal, external, and targetless transitions share one code path via the
    transition domain.
 
-2. **Pure functional core, effects at the edge** ([ADR-0003](adr/0003-pure-core-with-effects.md)).
+2. **Pure functional core, effects at the edge** ([ADR-0003](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0003-pure-core-with-effects.md)).
    The core engine is a pure function: `(machine_state, event) -> {machine_state, [effect]}`.
    Delayed sends, external sends, invocations, cancellations, and log/trace entries are
    returned as effect data. Interpreters of effects (a GenServer session, a test harness,
@@ -38,7 +38,7 @@ each major decision lives in `docs/adr/`.
    interpreter only accepts a `Machine`, so "validate if not already validated"
    fallback branches do not exist. A finding that gates this boundary is an
    error; a finding that does not is a warning, which rides on the `Machine`
-   instead and never blocks compilation ([ADR-0033](adr/0033-validator-warning-tier.md)).
+   instead and never blocks compilation ([ADR-0033](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0033-validator-warning-tier.md)).
 
 ## Layers
 
@@ -93,7 +93,7 @@ every action struct.)
 above, and `Statifier.Effect` is the `effect`.
 
 - The full active configuration (ancestors included) is stored, as the spec's
-  algorithm assumes ([ADR-0005](adr/0005-full-configuration-and-interned-state-indexes.md)).
+  algorithm assumes ([ADR-0005](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0005-full-configuration-and-interned-state-indexes.md)).
   "Leaf states" is a view derived on demand, not the storage model.
 - A `running` flag with real termination: top-level `<final>` entry stops the
   machine, runs `<donedata>`, and emits the terminal effect.
@@ -134,21 +134,21 @@ subscribers. That ownership of the delayed-send timers is replaceable, not
 load-bearing - a host can take over scheduling itself by consuming the
 `SendDelayed`/`Cancel` effect pair instead, per
 [docs/durable-timers.md](durable-timers.md) and
-[ADR-0054](adr/0054-durable-timers-consume-the-effect-vocabulary.md). The pure
+[ADR-0054](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md). The pure
 core lowers, validates, and compiles `<invoke>`
-([ADR-0031](adr/0031-invoke-argument-failure-aborts-the-invocation.md)),
+([ADR-0031](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0031-invoke-argument-failure-aborts-the-invocation.md)),
 runs Appendix D's `statesToInvoke` and cancel-invoke passes
-([ADR-0032](adr/0032-round-budget-spans-the-invoke-re-entry.md) covers the
+([ADR-0032](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0032-round-budget-spans-the-invoke-re-entry.md) covers the
 round budget across a post-invoke re-entry), runs `<finalize>` before
 transition selection, and emits `{:invoke, _}`, `{:cancel_invoke, _}`, and
 `{:autoforward, _}` effects for the session to act on.
 
 `Statifier.Session` performs all three, under the embedder-placed runtime
-[ADR-0027](adr/0027-embedder-placed-session-runtime.md) decided:
+[ADR-0027](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0027-embedder-placed-session-runtime.md) decided:
 `Statifier.Supervisor` holds a `Statifier.Registry` and a flat
 `Statifier.SessionSupervisor`, `:rest_for_one`. `{:invoke, _}` resolves the
 child's source through `Statifier.Invoke.Source`
-([ADR-0038](adr/0038-invoke-source-resolves-at-the-session-boundary.md) -
+([ADR-0038](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0038-invoke-source-resolves-at-the-session-boundary.md) -
 the library never fetches `src` itself; an embedder-supplied `invoke_source`
 resolver does, or the invocation raises `error.communication`), seeds the
 child's datamodel per 6.4.3's name-matched `<param>`/namelist rule, and
@@ -156,7 +156,7 @@ starts it on `Statifier.SessionSupervisor` with `invoked_by: {parent_pid,
 invoke_id}`, monitored in both directions; `Statifier.Session.start_link/2`'s
 `:inherit_observers` opt-in carries the parent's `:trace` and subscribers down
 onto that same child start
-([ADR-0050](adr/0050-invoked-children-inherit-observation-by-opt-in.md)), and
+([ADR-0050](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md)), and
 `Statifier.Session.invocations/1` names a session's live children for an
 observer attaching after the fact. `#_parent`/`_parent` and a live
 invocation's `done.invoke.<invokeid>` (carrying its donedata) both resolve
@@ -187,16 +187,16 @@ seam v1's handler-registry invoke gestured at: a host registers a
 `Statifier.Invoke.Handler` per session for any `<invoke type="...">` beyond
 the built-in `scxml`/bare-URI set (`Statifier.Invoke.Handler.Scxml`), which
 itself sits behind the same interface rather than being special-cased
-([ADR-0051](adr/0051-invoke-handlers-are-registered-per-session.md)). See
+([ADR-0051](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0051-invoke-handlers-are-registered-per-session.md)). See
 [docs/extending.md](extending.md) for how to write and register one.
 
 Generated identifiers split on the pure core's boundary
-([ADR-0008](adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the
+([ADR-0008](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0008-uxid-for-identifiers.md)). Minted *outside* the core, the
 session id is sortable, prefixed (`sess_`), and stable per session (v1
 regenerated `_sessionid` on every expression evaluation). Minted *inside* it, an
 id is a deterministic value derived from `%MachineState{}` alone - an
 entropy-based id reads the wall clock and a CSPRNG, and the core's contract
-([ADR-0003](adr/0003-pure-core-with-effects.md)) admits neither. The invoke id is
+([ADR-0003](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0003-pure-core-with-effects.md)) admits neither. The invoke id is
 the only one minted inside the core today, and spec 6.4.1 fixes its shape: the
 invoking state's id, a dot, then `inv_` and a session-global counter - or bare
 `inv_<counter>` when the state has no id. A future `<send idlocation>` generator
@@ -205,7 +205,7 @@ sits inside the core too, so the same no-entropy rule governs it.
 ## What is deliberately out of scope
 
 - **ECMAScript datamodel.** The datamodel is predicator
-  ([ADR-0004](adr/0004-predicator-as-the-datamodel.md)). No JS engine, no `eval`,
+  ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)). No JS engine, no `eval`,
   and no raw Elixir code in documents - safety is the point; `<invoke>` is the
   escape hatch for real computation.
 - **v1 API compatibility.** The conformance corpus is the compatibility contract,
