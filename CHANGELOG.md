@@ -10,6 +10,26 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.1.1] 2026-08-24
+
+Documentation-only patch release: the hexdocs package and README were
+overhauled. No code changes.
+
+### Changed
+
+- ADRs are no longer published to hexdocs. They remain in the repository under
+  [docs/adr/](https://github.com/riddler/statifier-ex/blob/main/docs/adr/README.md);
+  hexdocs now carries only the user-facing guides.
+- README rebuilt around a quick start, a documentation index, and the badge
+  row.
+- Guide and README links converted so cross-references resolve both on hexdocs
+  and on GitHub.
+
+### Fixed
+
+- All 69 docstring reference warnings across `lib/` fixed; `mix docs` now
+  builds with zero warnings.
+
 ## [2.1.0] 2026-08-24
 
 ### Added
