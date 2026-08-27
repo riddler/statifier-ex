@@ -244,7 +244,7 @@ shape.
 |---|---|
 | Packaging decision, naming, publish policy | ADR-0062 (this repo) |
 | The bridge itself: handlers, ETS span table, setup API | `opentelemetry_statifier` (own repo) |
-| Caller/delayed-send context field | future statifier-ex bead (ADR-0040 amendment), mirrored into `statifier_oban`'s tracker |
+| Caller/delayed-send context field | shipped in this repo as `caller_context` (ADR-0063, amending ADR-0040); see the session-process caveat under "Span topology" above, mirrored into `statifier_oban`'s tracker |
 | Sibling-package telemetry surfaces and their bridge halves | each sibling repo's own ADR, bridged in `opentelemetry_statifier` |
 | Durable-driver emit sites: calling `Statifier.Telemetry` at the stepper seam, with its own `driver` atom | `statifier_persistence` (own repo, own ADR, per ADR-0067 decision 3) |
 

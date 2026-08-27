@@ -1,7 +1,7 @@
 # Datamodel
 
 Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
-`~> 8.0`). This is a commitment, not a stopgap ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)):
+`~> 9.0`). This is a commitment, not a stopgap ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)):
 we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
 a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
 continuity with v1's converted W3C tests).
@@ -173,7 +173,7 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    and binds each datamodel root with `bind/3`, never calling
    `Predicator.Context.new/2` on this path. This is a per-site cost
    reduction, not a widened interval: the "built once per evaluation site"
-   commitment above (`docs/datamodel.md:54-59`) is unchanged - the site is
+   commitment above (the "Evaluation contract" section) is unchanged - the site is
    still the whole block or selection round, not the individual write, and
    not the whole macrostep - and the seam is still not taken across blocks:
    no context is stored on `MachineState`, and widening the interval that

@@ -21,9 +21,9 @@ conformance failures. v2 is:
   sessions and timers layered on top
 - **predicator as the datamodel** - safe, non-evaluative expressions; no
   ECMAScript, no eval
-- built **corpus-first** - 186+ SCION/W3C conformance tests and a
-  forward-only regression ratchet inherited from v1, with the generator
-  committed this time
+- built **corpus-first** - 281 generated SCION/W3C conformance tests (119
+  SCION + 162 W3C) behind a forward-only regression ratchet inherited from
+  v1, with the generator committed this time
 
 ## Installation
 
@@ -46,21 +46,37 @@ format-version or chart-identity mismatch rather than misreading.
 
 ## Quick start
 
-Compile an SCXML document, initialize it, and send it events. Effects come
-back as data - the engine never performs them for you:
+Compile an SCXML document, initialize it, and send it events. Here is a card
+authorization that checks the amount against a budget before capturing it:
 
 ```elixir
 source = """
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="authorizing">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+       datamodel="predicator" initial="authorizing">
+  <datamodel>
+    <data id="amount" expr="4200"/>
+    <data id="budget_remaining" expr="10000"/>
+  </datamodel>
+
   <state id="authorizing">
-    <transition event="card.approved" target="authorized"/>
+    <transition event="card.approved" cond="amount &lt;= budget_remaining"
+                target="capturing"/>
+    <transition event="card.approved" target="over_budget"/>
     <transition event="card.declined" target="declined"/>
   </state>
-  <state id="authorized">
-    <transition event="capture.succeeded" target="settled"/>
+
+  <state id="capturing">
+    <invoke type="myapp:capture" id="capture">
+      <param name="amount" expr="amount"/>
+    </invoke>
+    <transition event="done.invoke.capture" target="settled"/>
+    <transition event="error.communication" target="needs_attention"/>
   </state>
+
+  <state id="over_budget"/>
   <state id="declined"/>
-  <state id="settled"/>
+  <state id="needs_attention"/>
+  <final id="settled"/>
 </scxml>
 """
 
@@ -70,11 +86,37 @@ source = """
 Statifier.active_leaf_states(machine_state)
 #=> MapSet.new(["authorizing"])
 
-{:ok, machine_state, _effects} = Statifier.send_event(machine_state, "card.approved")
+{:ok, machine_state, effects} = Statifier.send_event(machine_state, "card.approved")
 
 Statifier.active_leaf_states(machine_state)
-#=> MapSet.new(["authorized"])
+#=> MapSet.new(["capturing"])
 ```
+
+The guard is a [predicator](https://github.com/riddler/predicator-ex)
+expression evaluated against the chart's own datamodel - no ECMAScript and no
+`eval`. Because `4200 <= 10000` held, the run took the first arrow.
+
+Effects come back as data; the engine never performs them for you. Entering
+`capturing` did not call your payment service, it described the call:
+
+```elixir
+effects
+#=> [
+#=>   invoke: %Statifier.Effect.Invoke{
+#=>     invoke_id: "capture",
+#=>     type: "myapp:capture",
+#=>     params: %{"amount" => 4200},
+#=>     ...
+#=>   }
+#=> ]
+```
+
+Performing that effect is your host's job, and so is telling the chart how it
+went: `Statifier.Session.done_invocation/3` delivers
+`done.invoke.capture`, and `Statifier.Session.failed_invocation/3` delivers
+`error.communication.invoke.capture` once your retry policy is exhausted -
+which is the arrow that parks this run in `needs_attention` instead of waiting
+in `capturing` forever. See [Extending](docs/extending.md).
 
 That four-function surface (`compile/2`, `initialize/2`, `send_event/2`,
 `active_leaf_states/1`) is the whole entry point; sessions, durable timers,
@@ -88,7 +130,8 @@ Published guides on [hexdocs](https://hexdocs.pm/statifier/):
   decisions behind it
 - [Datamodel](docs/datamodel.md) - predicator expressions, `<data>`,
   `<assign>`, and `<script>`
-- [Extending](docs/extending.md) - registering your own `<invoke>` handlers
+- [Extending](docs/extending.md) - registering your own `<invoke>` handlers,
+  and reporting completion or permanent failure back to the chart
 - [Persistence](docs/persistence.md) - chart identity, persisted positions,
   and resuming sessions
 - [Durable timers](docs/durable-timers.md) - scheduling delayed sends

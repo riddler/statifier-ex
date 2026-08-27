@@ -229,7 +229,8 @@ than an oversight:
   forward verbatim; see the divergence below for what that does and does not
   mean. `invoke_id` itself *is* stable across a persist/reload cycle -
   it is a deterministic counter on `%MachineState{}`, not a freshly generated
-  value (`docs/extending.md:152-160`) - so re-establishing a child is a matter
+  value (`docs/extending.md`, "Async and long-lived invocations") - so
+  re-establishing a child is a matter
   of starting or reattaching a process behind an id the resumed session
   already recognizes, through the invoke handler registry (ADR-0051).
 - **The external inbox.** `Statifier.Session.Inbox` lives outside
