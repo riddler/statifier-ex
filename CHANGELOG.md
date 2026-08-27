@@ -10,6 +10,39 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.1.2] 2026-08-27
+
+Adds the door a host uses to report a permanently failed async invocation, and
+refreshes the README and guides onto the family's canonical example domains.
+
+### Added
+
+- `Statifier.Session.failed_invocation/3`, the failing counterpart to
+  `done_invocation/3`: the door a host uses to report that an async
+  `<invoke>` handler's work has failed permanently, once its own retry
+  policy is exhausted. It delivers `error.communication.invoke.<invokeid>`
+  on the same invocation-tagged entry as `done.invoke.<invokeid>`, under the
+  same spec 6.4.3 drain-time discard, carrying `reason`, `attempts`, and
+  `detail` in the event data. Without it, a chart that models
+  operator-recovery parking never heard about permanent failure and the run
+  waited in its invoking state forever. See ADR-0068 and
+  `docs/extending.md`'s "Reporting permanent failure".
+
+### Changed
+
+- A chart with a `<transition event="error.communication">` (or the broader
+  `event="error"`) now also catches an async invocation's permanent failure,
+  because the new event name is a spec 3.12.1 suffix extension of
+  `error.communication` and the event-descriptor prefix rule matches it.
+  This is the intended reach of ADR-0051's existing classification - "a
+  registered handler fails to reach its service" was already
+  `error.communication` - but a chart relying on that transition firing only
+  for `<send>` failures will now see it fire for invoke exhaustion too.
+- README and the guides now use the family's canonical example invoke types
+  (`myapp:authorize`, `myapp:capture`, `myapp:signup`) throughout, replacing
+  the earlier ad-hoc example names. Documentation only; no code depends on
+  the names.
+
 ## [2.1.1] 2026-08-24
 
 Documentation-only patch release: the hexdocs package and README were
