@@ -2,11 +2,15 @@
 
 This repo is the de-facto reference for the family's agent-facing conventions -
 `CLAUDE.md`, `.claude/wurk/`, and the quality-gate documentation. That status
-was implicit until now, and the copies drift: as of 2026-08-21 the
-`deps/ex_quality/usage-rules.md` pointer existed here and in statifier-ui and
-nowhere else, this repo had 7 `.claude/wurk/` overrides against predicator-ex's
-12, statifier-ui's 3 and none in the three scaffolds, and CI ran the gate here
-and in no other repo.
+was implicit until it was written down here, and the copies drift, so what to
+copy needs stating rather than inferring.
+
+The family is **seven published packages across seven repos**: `statifier`
+(this repo), `predicator`, `statifier_ui`, `statifier_persistence`,
+`statifier_oban`, `opentelemetry_statifier`, and `statifier_blocks`. All seven
+are on Hex as of 2026-08-27, which is the single fact that most changes how
+this document reads - see "Attestation is the one exception" below, whose
+entire premise used to be that they were not.
 
 Beads in the other repos say some version of "copy statifier-ex's, adapted
 down". That instruction is only safe if what to copy - and what **not** to
@@ -38,7 +42,8 @@ machinery it has nothing to protect with.
 | ExQuality (`mix quality`) marker block | `CLAUDE.md` | reference, copy-verbatim |
 | The `deps/ex_quality/usage-rules.md` pointer | `CLAUDE.md`, inside that block | reference, copy-verbatim |
 | The `.claude/wurk/` extension mechanism | `.claude/wurk/*.md` | reference, adapt-per-repo |
-| `mix gate.verify` and the `gate.attest` manifest key | `lib/mix/tasks/gate.verify.ex`, `.claude/wurk.json` | reference, copy-verbatim only for a repo not on statifier as a git dep - see the caveat |
+| The `gate.attest` manifest key | `.claude/wurk.json` | reference, adapt-per-repo - point it at ex_quality's `mix quality.verify`; see the caveat |
+| `mix gate.verify` (this repo's local task) | `lib/mix/tasks/gate.verify.ex` | **not reference** - superseded upstream; see the caveat |
 | The gate guard (`mix gate.check`) and its `guard_ledger` | `lib/mix/`, `.claude/wurk.json`, `docs/quality-gate-changes.md` | **not reference** |
 | The ADR guard and the ADR judge | `lib/mix/` | **not reference** |
 | The regression ratchet | `lib/mix/`, `test/passing_tests.json` | **not reference** |
@@ -49,16 +54,22 @@ machinery it has nothing to protect with.
 This is the worked example of why the distinction matters, and the one section
 where copying verbatim does real damage.
 
-**This repo holds a standing team-maintainer grant.** statifier_persistence,
-statifier_oban and opentelemetry_statifier hold a **consent-scoped** grant:
-authority to commit, push and open requests exists only inside an orchestrated
-campaign carrying the user's explicit consent for that campaign, and nowhere
-else. Copying this repo's section into one of those three would silently widen
-it to standing. Copying one of theirs back into here would silently narrow it.
-Neither change is one an agent may make; widening is the user's call to make
-and record, as the section itself says.
+**This repo holds a standing team-maintainer grant**, as do predicator-ex and
+statifier-ui. statifier_persistence, statifier_oban, opentelemetry_statifier
+and statifier_blocks hold a **consent-scoped** grant: authority to commit, push
+and open requests exists only inside an orchestrated campaign carrying the
+user's explicit consent for that campaign, and nowhere else. Copying this
+repo's section into one of those four would silently widen it to standing.
+Copying one of theirs back into here would silently narrow it. Neither change
+is one an agent may make; widening is the user's call to make and record, as
+the section itself says.
 
-What **is** common across all six repos, and is the actual reference, is the
+The split is three standing to four consent-scoped, and it does not track
+package maturity - statifier_blocks was added consent-scoped at 0.1.0, and
+being on Hex did not promote the other three. Read the grant kind from the
+repo's own `CLAUDE.md`, never from its release state.
+
+What **is** common across all seven repos, and is the actual reference, is the
 structure:
 
 - the per-action table, with a trigger and a "still unauthorized when" column
@@ -125,11 +136,17 @@ and `.claude/wurk/<skill>.md` holds the judgment calls only this project needs,
 ADR-0016 and ADR-0017 and it holds everywhere.
 
 Which override files a repo has is not the reference and should not be levelled
-up to match. Seven here, twelve in predicator-ex, three in statifier-ui and
-none in the scaffolds is a legitimate spread: an override earns its place when
-the repo has a judgment call the generic skill genuinely cannot make, and a
-repo with no such call is correct to have no file. Copying an override across
-imports a judgment about another codebase.
+up to match. The spread as of 2026-08-27 is twelve in predicator-ex, seven
+here, three in statifier-ui, two each in statifier_persistence,
+statifier_oban and opentelemetry_statifier, and none in statifier_blocks - all
+legitimate. An override earns its place when the repo has a judgment call the
+generic skill genuinely cannot make, and a repo with no such call is correct to
+have no file. Copying an override across imports a judgment about another
+codebase.
+
+Treat those numbers as a snapshot illustrating the spread, not a target. They
+are the one thing in this document guaranteed to go stale, and a count drifting
+by one is not by itself a finding.
 
 An adopter must change: everything inside the files. This repo's `mr.md` runs
 `mix quality --profile merge` for an ADR judge no other repo has, and its
@@ -141,7 +158,8 @@ package's release state.
 The gate guard, the ADR guard, the ADR judge, the regression ratchet, and
 `mix gate.check` with its `guard_ledger` are **out of scope for copying**. They
 exist to protect a conformance corpus and an accepted ADR set that the other
-repos do not have. The three scaffold repos' `.quality.exs` files each carry a
+repos do not have. Four repos' `.quality.exs` files - statifier_persistence,
+statifier_oban, opentelemetry_statifier and statifier_blocks - each carry a
 comment saying their gate is deliberately smaller than this one for exactly
 that reason, and **that decision stands**. This document does not reverse it,
 and nothing here is licence to adopt one of those stages by default; adopting
@@ -155,66 +173,79 @@ judge. A repo that copied those patterns would be asserting things it has not
 checked. What does travel is ADR-0017 point 6's rule behind it: adding a
 pattern to either list means writing the reason down on the same branch.
 
-### `mix gate.verify` is the one exception
+### Attestation is the one exception - and it now lives upstream
 
-The user ruled on 2026-08-22 that the five other repos adopt it - beads px-591,
-sui-4py, sp-7cu, sob-ehl and ots-4l6.
+**Do not copy `gate.verify.ex`. Point `gate.attest` at ex_quality's own
+`mix quality.verify` instead.** That is the whole instruction; the rest of this
+section is why, and what the older advice said before it was overtaken.
 
-The line between it and `mix gate.check` is the whole reasoning. `gate.check`
-is the config-change guard: it knows this repo's guarded paths, its ledger, and
-its corpus registry, and it is repo-specific machinery by construction.
-`gate.verify` is a generic reader of ex_quality's *own* report - roughly 150
-lines that check the report for status ok, no profile, scope all, and no stage
-skipped for a run-narrowing reason. It contains no statifier-ex specifics: no
-corpus, no ADRs, no ledger.
+The user ruled on 2026-08-22 that the other repos adopt attestation - beads
+px-591, sui-4py, sp-7cu, sob-ehl and ots-4l6. What they adopt has since
+changed.
 
-It **adds no stage to `.quality.exs`**, so the "deliberately smaller than
-statifier-ex's gate" statement in the scaffolds stays true after adoption. That
+Attestation matters because the wurk pipeline sets `attested: false` when a
+project declares no attestation command, and `/wurk:commit` then refuses to
+proceed. A repo without it has a broken unattended commit path, which is a
+mechanical problem rather than a stylistic one.
+
+The line between attestation and `mix gate.check` is the reasoning that made it
+an exception at all. `gate.check` is the config-change guard: it knows this
+repo's guarded paths, its ledger, and its corpus registry, and it is
+repo-specific machinery by construction. Attestation is a generic reader of
+ex_quality's *own* report - it checks the report for status ok, no profile,
+scope all, and no stage skipped for a run-narrowing reason. It contains no
+statifier-ex specifics: no corpus, no ADRs, no ledger.
+
+It also **adds no stage to `.quality.exs`**, so the "deliberately smaller than
+statifier-ex's gate" statement in those repos stays true after adoption. That
 is what makes it an exception rather than a hole in the paragraph above.
 
-It matters because the wurk pipeline sets `attested: false` when a project
-declares no attestation command, and `/wurk:commit` then refuses to proceed. A
-repo without it has a broken unattended commit path, which is a mechanical
-problem rather than a stylistic one.
+**The current instruction: wire `gate.attest` to `["mix", "quality.verify"]`.**
+ex_quality 0.14 ships `Mix.Tasks.Quality.Verify`, so any repo on that version
+already has the task and needs no local copy of anything.
+statifier_persistence, statifier_oban and opentelemetry_statifier are wired
+this way today. Bead `st-wgr0`, which planned the extraction, is **closed** -
+the "expect this to be temporary" advice that used to sit here has been
+overtaken by its own fix landing.
 
-An adopter must change: nothing in the task body - but read the caveat below
-before deciding whether there is a task body to copy at all.
+Two repos still point `gate.attest` at a local `mix gate.verify`: this one and
+predicator-ex. That is legacy wiring, not a second sanctioned pattern - both
+should move to `quality.verify`. Do not read this repo's `.claude/wurk.json` as
+the example to copy on this key.
 
-**The caveat (st-hcgl, closed 2026-08-22): a git-dep consumer does not take a
-verbatim copy.** Any repo depending on statifier as a git dep - which is every
-sibling in this family today, per ADR-0061's git-dep pin pending Hex - compiles
-this repo's entire `lib/` into its build. `Mix.Tasks.Gate.Verify` (and the
-other custom gate tasks) land on the consumer's code path whether or not that
-repo's `.quality.exs` calls them. A verbatim local copy of `gate.verify` then
-redefines a module that already exists on that path: a "redefining module"
-warning, promoted to a red gate by `warnings_as_errors`. This is exactly the
-collision the four consumer adoptions hit on 2026-08-22/23, and it is not a
-copy that happened to go wrong - it recurs for any git-dep consumer that takes
-this section literally.
+statifier-ui and statifier_blocks declare no `gate.attest` at all, which means
+their unattended commit path is the broken one the paragraph above describes.
+Naming it here is not a licence to fix it in passing: it is a change to those
+repos, and belongs to their own beads.
 
-The Hex package excludes `lib/mix` (the files list in `mix.exs`), so the
-collision is specific to the git-dep form and disappears once statifier
-publishes to Hex - but that is not the state adopters are in today.
+**The historical caveat (st-hcgl, closed 2026-08-22) no longer applies, and
+knowing why matters.** The problem it recorded was that a consumer taking
+statifier as a **git dep** compiles this repo's entire `lib/` into its build,
+so `Mix.Tasks.Gate.Verify` lands on the consumer's code path whether or not its
+`.quality.exs` calls it. A verbatim local copy then redefines a module already
+on that path: a "redefining module" warning, promoted to a red gate by
+`warnings_as_errors`. That is the collision the four consumer adoptions hit on
+2026-08-22/23.
 
-The operator ruling on st-hcgl (2026-08-22) is option (a): **a git-dep
-consumer wires `gate.attest` in `.claude/wurk.json` straight to the
-dep-provided task and takes no local copy at all.** All four consumer repos
-landed that wiring (statifier-ui #26, statifier_persistence #11,
-statifier_oban #11, opentelemetry_statifier #10), each verified green with
-attestation firing from the dependency's own task. So the practical adoption
-instruction for a git-dep consumer is: set `gate.attest` to
-`["mix", "gate.verify"]` and stop there - do not also copy
-`gate.verify.ex`. The verbatim-copy path in the paragraphs above remains live
-only for a repo that does **not** take statifier as a git dep.
+Its premise is now gone twice over. ADR-0066 published 2.0.0 and ended the
+SHA-pinning contract ADR-0061 had set up "pending Hex", and every sibling that
+depends on statifier - statifier-ui, statifier_persistence, statifier_oban,
+opentelemetry_statifier and statifier_blocks - now takes it from Hex as
+`{:statifier, "~> 2.x"}` rather than as a git dep. The Hex
+package's `files:` list excludes `lib/mix`, so a Hex consumer never sees these
+tasks at all. Cite ADR-0066 for the current state; ADR-0061 is the superseded
+record and its git-dep pin is not a live instruction.
 
-Expect this to be temporary either way. `gate.verify` is being extracted
-upstream into ex_quality as a task that package ships (bead `st-wgr0`; design
-at `~/Dev/github/ex_quality/PLAN-quality-verify.md`), after which every
-adopter - git-dep wirer and local-copy taker alike - points `gate.attest` at
-the upstream task and drops whatever it had before. st-wgr0 was deliberately
-deferred rather than accelerated when st-hcgl was decided; it is the eventual
-fix, not the one adopted here. Do not block on it - the wiring above is small
-and the eventual collapse onto ex_quality's task is mechanical.
+One edge survives and is worth stating, because it is the same hazard wearing
+different clothes. Each sibling's `mix.exs` keeps a `STATIFIER_PATH` escape
+hatch that swaps the Hex dep for `path:` with `override: true`. A path dep
+compiles the whole checkout, `lib/mix` included, so the collision condition
+returns for anyone working with that variable set. It is unreachable today only
+because no statifier consumer keeps a local copy of these tasks to collide with
+- which is a consequence of following the instruction at the top of this
+section, not an independent guarantee. (predicator-ex does keep a local
+`gate.verify.ex`, but it does not depend on statifier at all, so it has nothing
+to collide with either.) Take the instruction and the edge stays closed.
 
 ## What is not reference and never was
 
