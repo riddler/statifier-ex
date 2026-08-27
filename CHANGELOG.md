@@ -10,7 +10,7 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
-## [2.1.2] 2026-08-27
+## [2.2.0] 2026-08-27
 
 Adds the door a host uses to report a permanently failed async invocation, and
 refreshes the README and guides onto the family's canonical example domains.
