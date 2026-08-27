@@ -1,6 +1,8 @@
 # ADR-0065: A handler conformance case joins the `Statifier.Testing` surface
 
-Status: accepted (2026-08-22)
+Status: accepted (2026-08-22); illustration amended 2026-08-27 - the example
+invoke type moved onto the family's canonical example domains (illustration
+only, no decision changed)
 
 ## Context
 
@@ -28,7 +30,7 @@ separate test package exists. Neither question is reopened here.
    reference-direction rules unchanged. A host module runs the case as
 
        use ExUnit.Case, async: false
-       use Statifier.Testing.HandlerCase, handler: MyHandler, type: "myapp:enrich"
+       use Statifier.Testing.HandlerCase, handler: MyHandler, type: "myapp:authorize"
 
 2. **It is a `use`-injected test generator alongside the host's own
    `use ExUnit.Case`, not a second `ExUnit.CaseTemplate`.** A CaseTemplate
