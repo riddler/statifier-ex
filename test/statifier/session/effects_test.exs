@@ -666,7 +666,7 @@ defmodule Statifier.Session.EffectsTest do
         {:invoke,
          %Invoke{
            invoke_id: "i1",
-           type: "myapp:enrich",
+           type: "myapp:authorize",
            state_index: 0,
            invoke_index: 0,
            macrostep: 1,
@@ -674,7 +674,7 @@ defmodule Statifier.Session.EffectsTest do
            round: 0
          }}
 
-      context = %{@context | invoke_types: InvokeTypes.new(types: ["myapp:enrich"])}
+      context = %{@context | invoke_types: InvokeTypes.new(types: ["myapp:authorize"])}
 
       instructions = Effects.plan([effect], context)
 

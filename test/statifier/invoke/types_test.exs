@@ -50,9 +50,9 @@ defmodule Statifier.Invoke.TypesTest do
     # `Target.supported_invoke_type?(type)` -> a declared type would no
     # longer be recognized, and this assertion reddens
     test "a declared set adds to the built-ins rather than replacing them" do
-      types = Types.new(types: ["myapp:enrich"])
+      types = Types.new(types: ["myapp:authorize"])
 
-      assert Types.registered?(types, "myapp:enrich")
+      assert Types.registered?(types, "myapp:authorize")
       # built-ins still answer true - declaring does not replace them
       assert Types.registered?(types, nil)
       assert Types.registered?(types, "scxml")

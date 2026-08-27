@@ -42,7 +42,8 @@ continuity with v1's converted W3C tests).
   reconstructs the whole datamodel under both `binding="early"` and
   `binding="late"`, including a state-scoped `<data>` bound arbitrarily far
   into the run.
-- `<assign>` with deep paths (`user.profile.name`, `items[0].sku`), including
+- `<assign>` with deep paths (`account.holder.name`,
+  `transactions[0].amount`), including
   auto-vivification of intermediate maps (ECMAScript-like assignment behavior;
   v1 refused to create intermediates). The root segment of the path must
   already exist in the datamodel - an undeclared root fails with

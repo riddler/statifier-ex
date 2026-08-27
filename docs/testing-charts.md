@@ -31,20 +31,20 @@ with Elixir itself. The two modules compile in every environment, including
 ## Write a test
 
 ```elixir
-defmodule MyApp.CheckoutChartTest do
+defmodule MyApp.AuthorizationChartTest do
   use Statifier.Testing.Case, async: true
 
-  test "the cart advances to payment" do
+  test "an approved authorization advances to capture" do
     test_scxml(
       """
-      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="cart">
-          <state id="cart"><transition event="checkout" target="payment"/></state>
-          <state id="payment"/>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="authorizing">
+          <state id="authorizing"><transition event="card.approved" target="capturing"/></state>
+          <state id="capturing"/>
       </scxml>
       """,
-      "cart advances on checkout",
-      ["cart"],
-      [{%{"name" => "checkout"}, ["payment"]}]
+      "authorizing advances on card.approved",
+      ["authorizing"],
+      [{%{"name" => "card.approved"}, ["capturing"]}]
     )
   end
 end

@@ -7,11 +7,11 @@ defmodule Statifier.Testing.HandlerCase do
   in a test alongside `use ExUnit.Case` and gets the contract checks as
   generated tests against its own handler:
 
-      defmodule MyApp.EnrichHandlerConformanceTest do
+      defmodule MyApp.AuthorizeHandlerConformanceTest do
         use ExUnit.Case, async: false
         use Statifier.Testing.HandlerCase,
-          handler: MyApp.EnrichHandler,
-          type: "myapp:enrich"
+          handler: MyApp.AuthorizeHandler,
+          type: "myapp:authorize"
       end
 
   What the generated tests verify, each a clause of the documented contract:

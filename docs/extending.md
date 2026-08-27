@@ -78,13 +78,15 @@ already receives as its own argument.
 
 ### A complete worked example
 
-Here is a minimal handler for an invented type, `"myapp:enrich"`, that hands
-a payload to a background job system and reports completion later:
+Here is a minimal handler for an invented type, `"myapp:authorize"`, that
+hands a card authorization to a background job system and reports the
+approval or decline later:
 
 ```elixir
-defmodule MyApp.EnrichHandler do
+defmodule MyApp.AuthorizeHandler do
   @moduledoc """
-  Serves `<invoke type="myapp:enrich">` by enqueuing a background job.
+  Serves `<invoke type="myapp:authorize">` by enqueuing a background job
+  that authorizes a card transaction against the account's remaining budget.
   """
 
   @behaviour Statifier.Invoke.Handler
@@ -110,11 +112,11 @@ defmodule MyApp.EnrichHandler do
   @impl Statifier.Invoke.Handler
   def perform({invoke_id, session_id, params}, _ctx) do
     # MUST be idempotent on invoke_id - see "At-least-once" below.
-    MyApp.Jobs.EnrichJob.enqueue_idempotent(invoke_id, session_id, params)
+    MyApp.Jobs.AuthorizeJob.enqueue_idempotent(invoke_id, session_id, params)
   end
 
   def perform({:cancel, invoke_id}, _ctx) do
-    MyApp.Jobs.EnrichJob.cancel(invoke_id)
+    MyApp.Jobs.AuthorizeJob.cancel(invoke_id)
     :ok
   end
 end
@@ -130,13 +132,26 @@ Handlers are registered per session, on `Statifier.Session.start_link/2`:
 
 ```elixir
 Statifier.Session.start_link(machine,
-  invoke_handlers: %{"myapp:enrich" => MyApp.EnrichHandler}
+  invoke_handlers: %{"myapp:authorize" => MyApp.AuthorizeHandler}
 )
 ```
 
 `:invoke_handlers` is a `%{type_string => module}` map. The default is `%{}`,
 which registers no type beyond the built-in `scxml`/bare-URI set - passing
-nothing changes no observable behavior (ADR-0051).
+nothing changes no observable behavior (ADR-0051). A session that drives a
+different chart registers a different palette - a signup wizard running an
+A/B test reaches for variant assignment and conversion recording rather than
+anything to do with cards:
+
+```elixir
+Statifier.Session.start_link(wizard_machine,
+  invoke_handlers: %{
+    "myapp:assign_variant" => MyApp.AssignVariantHandler,
+    "myapp:signup" => MyApp.SignupStepHandler,
+    "myapp:conversion" => MyApp.ConversionHandler
+  }
+)
+```
 
 Registration is **per session, not global**, on purpose: a multi-tenant host
 that runs different chart deployments for different tenants can give each
@@ -217,18 +232,18 @@ Everything this document requires of a handler is also pinned mechanically:
 your implementation from two lines in a test module:
 
 ```elixir
-defmodule MyApp.EnrichHandlerConformanceTest do
+defmodule MyApp.AuthorizeHandlerConformanceTest do
   use ExUnit.Case, async: false
 
   use Statifier.Testing.HandlerCase,
-    handler: MyApp.EnrichHandler,
-    type: "myapp:enrich"
+    handler: MyApp.AuthorizeHandler,
+    type: "myapp:authorize"
 
   # The observation point for the idempotency check: return the observable
   # effects attributable to invoke_id - enqueued jobs, written rows,
   # whatever your perform/2 produces.
   def observed_effects(invoke_id) do
-    MyApp.Jobs.EnrichJob.enqueued_for(invoke_id)
+    MyApp.Jobs.AuthorizeJob.enqueued_for(invoke_id)
   end
 end
 ```

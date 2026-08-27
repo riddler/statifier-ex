@@ -51,13 +51,16 @@ back as data - the engine never performs them for you:
 
 ```elixir
 source = """
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="off">
-  <state id="off">
-    <transition event="toggle" target="on"/>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="authorizing">
+  <state id="authorizing">
+    <transition event="card.approved" target="authorized"/>
+    <transition event="card.declined" target="declined"/>
   </state>
-  <state id="on">
-    <transition event="toggle" target="off"/>
+  <state id="authorized">
+    <transition event="capture.succeeded" target="settled"/>
   </state>
+  <state id="declined"/>
+  <state id="settled"/>
 </scxml>
 """
 
@@ -65,12 +68,12 @@ source = """
 {machine_state, _effects} = Statifier.initialize(machine)
 
 Statifier.active_leaf_states(machine_state)
-#=> MapSet.new(["off"])
+#=> MapSet.new(["authorizing"])
 
-{:ok, machine_state, _effects} = Statifier.send_event(machine_state, "toggle")
+{:ok, machine_state, _effects} = Statifier.send_event(machine_state, "card.approved")
 
 Statifier.active_leaf_states(machine_state)
-#=> MapSet.new(["on"])
+#=> MapSet.new(["authorized"])
 ```
 
 That four-function surface (`compile/2`, `initialize/2`, `send_event/2`,
