@@ -68,30 +68,33 @@ defmodule Statifier.EvaluatorTest do
   describe "evaluate/2 - {:compiled, _, _}" do
     # sabotage: `evaluate/2`'s compiled clause always returns `{:ok, false}`
     # regardless of `Predicator.evaluate/3`'s result -> this assertion
-    # reddens because `score > 80` is true against the bound datamodel.
+    # reddens because `budget_remaining > 80` is true against the bound
+    # datamodel.
     test "evaluates true against a bound datamodel" do
-      ms = new_machine_state(datamodel: %{"score" => 85})
+      ms = new_machine_state(datamodel: %{"budget_remaining" => 85})
       context = Evaluator.context(ms)
 
-      assert Evaluator.evaluate(context, compiled_expr("score > 80")) == {:ok, true}
+      assert Evaluator.evaluate(context, compiled_expr("budget_remaining > 80")) == {:ok, true}
     end
 
     # sabotage: `evaluate/2`'s compiled clause always returns `{:ok, true}`
     # regardless of `Predicator.evaluate/3`'s result -> this assertion
-    # reddens because `score < 80` is false against the bound datamodel.
+    # reddens because `budget_remaining < 80` is false against the bound
+    # datamodel.
     test "evaluates false against a bound datamodel" do
-      ms = new_machine_state(datamodel: %{"score" => 85})
+      ms = new_machine_state(datamodel: %{"budget_remaining" => 85})
       context = Evaluator.context(ms)
 
-      assert Evaluator.evaluate(context, compiled_expr("score < 80")) == {:ok, false}
+      assert Evaluator.evaluate(context, compiled_expr("budget_remaining < 80")) == {:ok, false}
     end
 
     # sabotage: `context/1` builds the context with `on_unbound: :undefined`
-    # instead of `:error` -> `score OR true` no longer fails on the unbound
-    # load; three-valued logic absorbs `score`'s `:undefined` and the whole
-    # expression evaluates to `{:ok, true}` instead of erroring, so the
-    # pattern match below fails to match an `{:error, _}` tuple. (A bare
-    # `score` alone does not distinguish the two policies here - predicator
+    # instead of `:error` -> `budget_remaining OR true` no longer fails on
+    # the unbound load; three-valued logic absorbs `budget_remaining`'s
+    # `:undefined` and the whole expression evaluates to `{:ok, true}`
+    # instead of erroring, so the pattern match below fails to match an
+    # `{:error, _}` tuple. (A bare `budget_remaining` alone does not
+    # distinguish the two policies here - predicator
     # reports the same unbound-variable error either way when the *whole*
     # expression's result is `:undefined` - so this test deliberately uses
     # an expression whose result differs by policy.)
@@ -100,11 +103,11 @@ defmodule Statifier.EvaluatorTest do
 
       assert {:error,
               %Error{
-                source: "score OR true",
-                error: %UndefinedVariableError{variable: "score"},
+                source: "budget_remaining OR true",
+                error: %UndefinedVariableError{variable: "budget_remaining"},
                 span: span
               }} =
-               Evaluator.evaluate(context, compiled_expr("score OR true"))
+               Evaluator.evaluate(context, compiled_expr("budget_remaining OR true"))
 
       refute is_nil(span)
     end
@@ -590,7 +593,7 @@ defmodule Statifier.EvaluatorTest do
     # or `context/1` silently reintroducing one.
     test "context/1 builds a context equivalent to a direct new/2 call, for a representative datamodel" do
       datamodel = %{
-        "score" => 85,
+        "budget_remaining" => 85,
         "tags" => ["a", "b", nil],
         "profile" => %{"name" => "ok", "note" => nil, "nested" => %{"deep" => nil}},
         "root_nil" => nil,
