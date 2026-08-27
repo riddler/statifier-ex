@@ -81,13 +81,16 @@ defmodule Statifier.Session do
       round ahead of an earlier one. Trace effects are ordinary list
       members here too, never a side channel.
 
-      This is a guarantee about **delivery order**, not one a subscriber
-      can re-derive from the structs: `round` is carried only by the
-      `Statifier.Effect.Trace.*` payloads and by
-      `Statifier.Effect.BudgetExhausted` today, so a mixed stream cannot
-      be sorted back into this order after the fact (ADR-0044 decision 4
-      leaves stamping `round` onto the rest as follow-on work). Take the
-      order as it arrives.
+      This is a guarantee about **delivery order**, and it is stronger
+      than what a subscriber can re-derive from the structs - but the
+      structs do carry the key. Every effect in the vocabulary, core and
+      trace alike, is stamped with `macrostep`/`microstep`/`round`
+      (ADR-0046, which settled the follow-on ADR-0044 decision 4 left
+      open), so a mixed stream whose arrival order was lost can still be
+      sorted back into `(macrostep, round)` order after the fact. What
+      that key does not recover is the interleave *within* one round,
+      which is precisely what arrival order gives you here - so take the
+      order as it arrives rather than re-sorting a live stream.
 
       A macrostep may carry more than one `Trace.MacrostepStable` - one
       per core drive that reached quiescence - and there is exactly one
