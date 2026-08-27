@@ -69,6 +69,7 @@
 | [0065](0065-handler-conformance-case-in-statifier-testing.md) | `Statifier.Testing.HandlerCase`: a `use`-injected conformance case any `Statifier.Invoke.Handler` implementation runs against itself - planning purity, `perform/2` idempotency against a declared observation point (fail-not-skip), and the library-half pins via probe handlers | accepted |
 | [0066](0066-publishes-2-0-0-ending-the-sha-pinning-contract.md) | Publishes 2.0.0 to Hex, ending the SHA-pinning contract - ADR-0061's satellite trigger fired; known issues recorded; SemVer and the changelog take over | accepted |
 | [0067](0067-one-telemetry-contract-across-stepping-drivers.md) | One telemetry contract across stepping drivers: `[:statifier, :session, ...]` names the logical session, the emitters generalize into `Statifier.Telemetry`, `Statifier.Session.Telemetry` stays as a `driver: :session` facade, and a `driver` key joins every event's metadata | accepted (amends 0040 in part) |
+| [0068](0068-permanent-invoke-failure-is-a-suffixed-error-communication.md) | Permanent invoke failure is `error.communication.invoke.<invokeid>`, reported by the host through `Statifier.Session.failed_invocation/3` and delivered on the same invocation-tagged entry as `done.invoke` | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision, Consequences),
 drafted or reviewed at the direction level per `docs/workflow.md`. Pick the number
