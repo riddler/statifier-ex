@@ -1,6 +1,6 @@
 # ADR-0068: Permanent invoke failure is a suffixed `error.communication`, delivered through the invocation door
 
-Status: proposed (2026-08-27) - fires ADR-0051 decision 7's implicit gap
+Status: accepted (2026-08-27) - fires ADR-0051 decision 7's implicit gap
 rather than one of its three named triggers, and says so below; extends
 ADR-0051 decision 5's one-door rule to the failing half of the same
 lifecycle
