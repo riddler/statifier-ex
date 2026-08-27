@@ -193,6 +193,60 @@ ordinary invoked event, subject to the same drain-time discard as any other
 invocation-tagged entry: if the invocation was cancelled before the event is
 dequeued, it is dropped rather than delivered, per spec 6.4.3.
 
+## Reporting permanent failure
+
+`done_invocation/3` is the door for work that finished. Work that will never
+finish needs the other door, or the chart waits forever in its invoking state:
+
+```elixir
+@spec failed_invocation(server :: server(), invoke_id :: String.t(), failure :: keyword()) :: :ok
+def failed_invocation(server, invoke_id, failure \\ [])
+```
+
+Call it with the same owning session and `invoke_id`, at the moment **your own
+retry policy is exhausted** and you have decided the invocation is over. It
+constructs `error.communication.invoke.<invoke_id>` and delivers it on exactly
+the same invocation-tagged entry, under exactly the same drain-time discard: a
+cancel that got there first still wins, and the invocation's table entry is
+popped either way, because a permanently failed invocation is over in the same
+sense a completed one is.
+
+`failure` is a keyword list read for three optional keys, none of which the
+library interprets:
+
+| Key | Read from a chart as | Absent |
+|---|---|---|
+| `:reason` | `_event.data.reason` | `"unknown"` |
+| `:attempts` | `_event.data.attempts` | `undefined` |
+| `:detail` | `_event.data.detail` | `undefined` |
+
+**This is the host's call, never a handler callback's.** `start/2`, `cancel/2`,
+and `forward/3` are pure planning callbacks that may not perform IO at all, and
+`perform/2` returning `{:error, term()}` is a *transient* signal - it means this
+attempt failed, which is what a retry policy exists to absorb. Only the layer
+that owns the policy knows when the policy has run out, which is the same
+reason completion is reported rather than inferred.
+
+The event name is deliberately a suffix of `error.communication` rather than a
+new `error.invoke` family. Spec 3.12.1 lets a platform extend a generated
+event's name with a suffix precisely because the descriptor prefix rule keeps
+the shorter name matching, so both of these work, and the first one works in
+charts written before this door existed:
+
+```xml
+<!-- catches any invoke's permanent failure, and any other communication error -->
+<transition event="error.communication" target="failed"/>
+
+<!-- parks one invocation specifically, for operator recovery -->
+<transition event="error.communication.invoke.inv_3" target="needs_attention">
+    <log expr="_event.data.reason"/>
+</transition>
+```
+
+ADR-0068 records the full argument, including why the event rides the external
+queue with the rest of the invocation's traffic rather than being raised
+internally.
+
 ## At-least-once: handlers must be idempotent
 
 `perform/2` **MAY be called more than once for the same `invoke_id`.** A host
@@ -259,6 +313,15 @@ propagate un-rescued. Fixtures are overridable (`conformance_invoke/0`,
 on the module for suites that want them one at a time. See the module's own
 documentation for the full contract of each check.
 
+One part of an async handler's contract the case deliberately does **not**
+generate a check for: reporting permanent failure. `failed_invocation/3` is
+called by the host's retry layer, not by the handler, so a handler-scoped
+conformance case has no view of the thing that would need asserting - whether
+your retry policy actually reaches the door when it gives up. Write that test
+where your retry policy lives. What the case does cover on the failure side is
+the one failure path a handler owns outright: `{:error, _}` from `start/2`
+surfacing as `error.execution`.
+
 ## A naming note
 
 `Statifier.Invoke.Handler` (and its registration) is not
@@ -290,4 +353,8 @@ Two things the library deliberately does not do on a handler's behalf:
   communication was ever attempted. `perform/2`'s return value is not
   interpreted by the library at all: an `{:error, term()}` there is your own
   handler's concern to observe (log it, retry it, raise it), not something
-  the session recovers from or turns into an event on your behalf.
+  the session recovers from or turns into an event on your behalf. That is a
+  statement about the *return value*, not about failure generally: once your
+  retry policy has given up, `Statifier.Session.failed_invocation/3` above is
+  how you say so, and the library still infers nothing - you decide when the
+  invocation is over and tell it.

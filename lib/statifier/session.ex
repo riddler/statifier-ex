@@ -661,6 +661,48 @@ defmodule Statifier.Session do
   end
 
   @doc """
+  `done_invocation/3`'s failing counterpart (ADR-0068): the door a
+  non-`scxml` `<invoke>` handler's host uses when its externally run service
+  has failed *permanently* - the host's retry policy is exhausted and no
+  `done.invoke.<invoke_id>` will ever follow. Constructs
+  `error.communication.invoke.<invoke_id>` and delivers it exactly as
+  `done_invocation/3` delivers its own event: through the same
+  invocation-tagged entry, subject to the same 6.4.3 drain-time discard if
+  `invoke_id` is no longer live when it is dequeued, and popping the
+  invocation's table entry the same deferred way, because a permanently
+  failed invocation is over in exactly the sense a completed one is.
+
+  The name is spec 3.12.1's blessed suffix extension of the
+  `error.communication` ADR-0051 decision 1's table already assigns to "a
+  registered handler fails to reach its service", so a chart transitioning
+  on `error.communication` (or on `error`) catches this by the descriptor
+  prefix rule with no edit, while a chart naming
+  `error.communication.invoke.<invoke_id>` parks that one invocation alone.
+
+  `failure` is read for three optional keys, none of which this library
+  interprets:
+
+    * `:reason` - a host-chosen string naming the failure class, read from a
+      chart as `_event.data.reason`. Defaults to `"unknown"`.
+    * `:attempts` - how many attempts the host made before giving up, read as
+      `_event.data.attempts`. Absent reads `undefined` (ADR-0037), which is
+      distinct from a host that counted zero.
+    * `:detail` - any further host term, read as `_event.data.detail`. Absent
+      reads `undefined`.
+
+  `server` is `invoke_id`'s own *owning* session, on `done_invocation/3`'s
+  own terms. This is the host's call to make, never a handler callback's:
+  `start/2`, `cancel/2`, and `forward/3` are pure, and `perform/2` returning
+  `{:error, term()}` is a transient signal belonging to whatever retry policy
+  wraps it - permanent exhaustion is a judgement only that policy can make.
+  """
+  @spec failed_invocation(server :: server(), invoke_id :: String.t(), failure :: keyword()) ::
+          :ok
+  def failed_invocation(server, invoke_id, failure \\ []) when is_binary(invoke_id) do
+    GenServer.cast(server, {:failed_invocation, invoke_id, failure})
+  end
+
+  @doc """
   Hands `effects` - any list of `Statifier.Effect.t()` values, from any
   driver of the pure core - to this session's own effect-interpretation
   path: planned through `Statifier.Session.Effects.plan` and performed
@@ -1338,6 +1380,21 @@ defmodule Statifier.Session do
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
 
+  # `failed_invocation/3`'s own cast (ADR-0068 decision 4), deliberately the
+  # same three lines as the `{:done_invocation, _, _}` clause above rather
+  # than a parallel path: the deferred pop, the invocation-tagged enqueue and
+  # the `{:continue, :drain}}` all carry the reasoning that clause records,
+  # and sharing them is what makes "the same run-liveness rule as
+  # `done.invoke`" a fact about the code instead of a claim about it. A
+  # permanently failed invocation leaves `state.invocations` for the same
+  # reason a completed one does - it is over - so the pop is unconditional
+  # here too, and idempotent on an id a prior cancel already took.
+  def handle_cast({:failed_invocation, invoke_id, failure}, state) do
+    event = build_failure_event(state.session_id, invoke_id, failure)
+    send(self(), {:pop_invocation, invoke_id})
+    {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
+  end
+
   def handle_cast(:enqueue_cancel, state) do
     state = stamp(state)
     state = record(state, &Recording.put_cancel(&1, state.machine_state.routes))
@@ -1904,6 +1961,40 @@ defmodule Statifier.Session do
   defp build_done_event(session_id, invoke_id, donedata) do
     Event.external("done.invoke." <> invoke_id,
       data: donedata,
+      invokeid: invoke_id,
+      origin: SystemVariables.scxml_location(session_id),
+      origintype: SystemVariables.scxml_event_processor()
+    )
+  end
+
+  # `error.communication.invoke.<invoke_id>`'s one construction site
+  # (ADR-0068 decisions 1 and 2), beside `build_done_event/3` because the two
+  # events are the two halves of one lifecycle and differ only in name and
+  # payload. The name is 3.12.1's suffix extension of the
+  # `error.communication` ADR-0051 decision 1's table already assigns to a
+  # registered handler's service failure, so the prefix rule keeps a chart
+  # written against that table working unedited. `Event.external/2` rather
+  # than `Event.platform/3`: the processor detects nothing here, a host
+  # reports on an external service's behalf, and the queue follows the
+  # arrival rather than the `error.` prefix (decision 5). The payload's keys
+  # are strings for the same reason `Machine.Content.Send`'s
+  # `resolve_params/2` builds `namelist` data with string keys, and an
+  # unsupplied `:attempts`/`:detail` is left `:undefined` rather than `nil`
+  # so ADR-0037's unbound spelling reads through the map nesting.
+  @spec build_failure_event(
+          session_id :: String.t(),
+          invoke_id :: String.t(),
+          failure :: keyword()
+        ) :: Event.t()
+  defp build_failure_event(session_id, invoke_id, failure) do
+    data = %{
+      "reason" => Keyword.get(failure, :reason, "unknown"),
+      "attempts" => Keyword.get(failure, :attempts, :undefined),
+      "detail" => Keyword.get(failure, :detail, :undefined)
+    }
+
+    Event.external("error.communication.invoke." <> invoke_id,
+      data: data,
       invokeid: invoke_id,
       origin: SystemVariables.scxml_location(session_id),
       origintype: SystemVariables.scxml_event_processor()

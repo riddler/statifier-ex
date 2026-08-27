@@ -325,4 +325,173 @@ defmodule Statifier.Session.InvokeHandlerTest do
                false
            end)
   end
+
+  # ADR-0068's own fixture: the same handler-backed invocation as
+  # `lifecycle_doc/0`, with the two transitions decision 1 claims both work.
+  # `parked` is entered by the *specific* name, `late` by the bare
+  # `error.communication` after the invocation is gone - the pair is what
+  # makes the discard test below assert something other than "no transition
+  # was written".
+  defp failure_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
+        <datamodel>
+            <data id="reason"/>
+            <data id="attempts"/>
+        </datamodel>
+        <state id="a">
+            <invoke id="inv1" type="test:lifecycle"/>
+            <transition event="error.communication.invoke.inv1" target="parked">
+                <assign location="reason" expr="_event.data.reason"/>
+                <assign location="attempts" expr="_event.data.attempts"/>
+            </transition>
+            <transition event="go" target="b"/>
+        </state>
+        <state id="parked"/>
+        <state id="b">
+            <transition event="error.communication" target="late"/>
+        </state>
+        <state id="late"/>
+    </scxml>
+    """
+  end
+
+  # A chart written against the bare `error.communication` ADR-0051 decision
+  # 1's table names - the shape an author would have written before this
+  # door existed. Separate from `failure_doc/0` on purpose: there, the
+  # specific transition is document-ordered first and would win the
+  # selection regardless of whether the prefix rule works at all.
+  defp bare_communication_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <invoke id="inv1" type="test:lifecycle"/>
+            <transition event="error.communication" target="parked"/>
+        </state>
+        <state id="parked"/>
+    </scxml>
+    """
+  end
+
+  defp start_failure_session(xml) do
+    Process.register(self(), :invoke_lifecycle_test_listener)
+
+    {:ok, session} =
+      Session.start_link(compile!(xml),
+        trace: true,
+        subscribers: [self()],
+        invoke_handlers: %{"test:lifecycle" => LifecycleHandler}
+      )
+
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["a"]) end)
+    assert_receive {:start, "inv1"}, 1_000
+    session
+  end
+
+  # sabotage: `Statifier.Session`'s `build_failure_event/3` is changed to
+  # name the event `"error.invoke." <> invoke_id` - the candidate shape
+  # ADR-0068 decision 1 rejected -> no transition in `failure_doc/0` matches
+  # it (neither the specific name nor the bare `error.communication` is a
+  # token prefix of `error.invoke.inv1`), the chart sits in "a", and
+  # `wait_for_status/2` below times out. Reverted and confirmed green.
+  test "failed_invocation/3 parks the chart on error.communication.invoke.<id> and its payload is readable" do
+    session = start_failure_session(failure_doc())
+
+    # ADR-0068 decision 3: the host's door, called when *its* retry policy is
+    # exhausted - not anything the handler or the library decided.
+    Session.failed_invocation(session, "inv1", reason: "timeout", attempts: 3)
+
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["parked"]) end)
+
+    snapshot = Session.snapshot(session)
+    assert snapshot.datamodel["reason"] == "timeout"
+    assert snapshot.datamodel["attempts"] == 3
+
+    # Decision 4's terminal pop: a permanently failed invocation leaves the
+    # table exactly as a completed one does.
+    refute Enum.any?(Session.invocations(session), &(&1.invoke_id == "inv1"))
+  end
+
+  # sabotage: `Statifier.Session`'s `build_failure_event/3` is changed to
+  # name the event `"error.invoke." <> invoke_id` -> `error.communication`
+  # is not a token prefix of that, so nothing in `bare_communication_doc/0`
+  # matches, the chart sits in "a", and `wait_for_status/2` below times out.
+  # Reverted and confirmed green. This is deliberately the same mutation the
+  # test above names: what separates the two is the *document*, since
+  # `failure_doc/0`'s specific transition would win selection there whether
+  # or not the prefix rule works at all.
+  test "a chart written against the bare error.communication catches invoke exhaustion unedited" do
+    session = start_failure_session(bare_communication_doc())
+
+    Session.failed_invocation(session, "inv1", reason: "timeout")
+
+    # Spec 3.12.1's suffix extension plus the descriptor prefix rule: the
+    # shorter descriptor matches the longer name, so ADR-0051 decision 1's
+    # published classification keeps working for a failure spelled more
+    # specifically.
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["parked"]) end)
+  end
+
+  # sabotage: `build_failure_event/3`'s `Keyword.get(failure, :attempts,
+  # :undefined)` default is changed to `nil` - ADR-0037's rejected spelling
+  # -> the delivered `data` carries `"attempts" => nil`, which is the
+  # datamodel's *null*, and the `:undefined` match in the assertion below
+  # reddens. Reverted and confirmed green.
+  test "an omitted reason defaults to \"unknown\" and omitted attempts/detail read as undefined" do
+    session = start_failure_session(failure_doc())
+    session_id = Session.session_id(session)
+
+    Session.failed_invocation(session, "inv1")
+
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["parked"]) end)
+
+    stream = StreamOrder.drain(session_id)
+
+    assert Enum.any?(stream, fn
+             {:effect,
+              {:trace,
+               %Effect.Trace.EventDequeued{
+                 event: %Event{
+                   name: "error.communication.invoke.inv1",
+                   invokeid: "inv1",
+                   data: %{
+                     "reason" => "unknown",
+                     "attempts" => :undefined,
+                     "detail" => :undefined
+                   }
+                 }
+               }}} ->
+               true
+
+             _other_message ->
+               false
+           end)
+  end
+
+  # sabotage: `Statifier.Session`'s `{:failed_invocation, _, _}` clause is
+  # changed to deliver through `enqueue_event/2` (an ordinary `{:event, _}`
+  # entry) instead of `enqueue_invoked/3` -> the entry is no longer
+  # invocation-tagged, 6.4.3's drain-time discard no longer applies to it,
+  # the report for the already-cancelled "inv1" is delivered anyway, and the
+  # chart moves to "late" instead of staying in "b". Reverted and confirmed
+  # green.
+  test "a report for an invocation already cancelled is discarded, not delivered" do
+    session = start_failure_session(failure_doc())
+
+    # "go" exits "a", which cancels "inv1" (6.4.3) and pops its table entry.
+    # A cast's `{:continue, :drain}}` runs to completion before the next
+    # message is taken, so the cancel is fully applied by the time the
+    # report below is cast.
+    Session.send_event(session, "go")
+    assert_receive {:cancel, "inv1"}, 1_000
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+
+    Session.failed_invocation(session, "inv1", reason: "timeout")
+
+    # The chart stays in "b": `late`'s bare `error.communication` transition
+    # would fire if the report were delivered, so this is an assertion about
+    # the discard rather than about no transition existing.
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["b"]) end)
+    assert Session.status(session).configuration == MapSet.new(["b"])
+  end
 end

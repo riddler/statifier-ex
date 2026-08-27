@@ -51,7 +51,8 @@ defmodule Statifier.Session.Inbox do
   @doc """
   Appends `event` as an entry originating from this session's own invocation
   `invoke_id` - the child-to-parent direction only
-  (`<send target="#_parent">` and `done.invoke.<invokeid>`). Everything else,
+  (`<send target="#_parent">`, `done.invoke.<invokeid>`, and its ADR-0068
+  failing counterpart `error.communication.invoke.<invokeid>`). Everything else,
   autoforwarded copies included, goes through `enqueue_event/2`.
   """
   @spec enqueue_invoked_event(inbox :: t(), invoke_id :: String.t(), event :: Event.t()) :: t()

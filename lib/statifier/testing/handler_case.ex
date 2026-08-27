@@ -49,6 +49,28 @@ defmodule Statifier.Testing.HandlerCase do
   wants different fixtures - or only one of the checks - calls them directly
   instead of `use`-ing the whole case.
 
+  ## What this case deliberately does not check: terminal failure
+
+  An async handler's contract has one clause no handler-scoped case can
+  reach. When a host's retry policy for `invoke_id` is permanently
+  exhausted, the host reports it with
+  `Statifier.Session.failed_invocation/3`, which delivers
+  `error.communication.invoke.<invoke_id>` on the same invocation-tagged
+  entry - and under the same 6.4.3 drain-time discard - as
+  `done.invoke.<invoke_id>` (ADR-0068, and `docs/extending.md`'s "Reporting
+  permanent failure"). A chart that never hears it waits in its invoking
+  state forever.
+
+  That door belongs to the host's retry layer, not to the handler: the
+  behaviour has no callback for it, and check 2's `perform/2` `{:error, _}`
+  is a *transient* signal that a retry policy exists to absorb rather than a
+  terminal one. So the thing worth asserting - that your policy actually
+  reaches the door when it gives up - is invisible from here, and a
+  generated check that only proved the door exists would pin this library
+  instead of the implementation under test. Write that test where the retry
+  policy lives. Check 4 above already covers the one failure path a handler
+  owns outright, `{:error, _}` from `start/2`.
+
   ## Options
 
   - `:handler` (required) - the `Statifier.Invoke.Handler` implementation
