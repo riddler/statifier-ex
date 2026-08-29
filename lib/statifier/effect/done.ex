@@ -3,9 +3,10 @@ defmodule Statifier.Effect.Done do
   Payload for `{:done, %__MODULE__{}}` - the terminal effect
   `exit_interpreter` (Appendix D) produces once, after top-level final
   entry, when `Statifier.MachineState.status` becomes `:done`. `donedata`
-  is the top-level final's resolved `<donedata>` content, or `nil` when the
-  final carries none. `configuration` is the full configuration (ADR-0005,
-  ancestors included) as it stood at exit: the full set, so a consumer can
+  is the top-level final's resolved `<donedata>` content, or `:undefined`
+  (the SCXML datamodel's "undefined" value) when the final carries none.
+  `configuration` is the full configuration (ADR-0005, ancestors
+  included) as it stood at exit: the full set, so a consumer can
   observe the terminal position without switching tracing on, since
   `MachineState.configuration` is empty by then and
   `Statifier.active_leaf_states/1` correctly reports nothing active. See
