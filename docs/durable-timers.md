@@ -304,6 +304,67 @@ that pair as a compact key, with the remaining fields kept as row data. The
 full compound form stays the documented default because a self-describing
 row is worth more during an incident than a bare sequence number.
 
+## Lifetime across resume, revision, and restart
+
+A pending delayed send is identified by nothing more than
+`{session scope, send_id}` - the cancellation key the "Keying your store"
+table above already fixes (ADR-0054 decision 3). It lives until it fires, is
+cancelled, or its run is found not live at fire time; that fire-time
+liveness check is ADR-0054 decision 4, taught in full in "Termination"
+below - this section only tells you what happens to the key's two
+components (the scope, and whether the library's own timer table agrees
+with your store) across the three ways a run's identity can change under
+you.
+
+| Transition | Session scope | Your stored rows | Library's own timer table |
+|---|---|---|---|
+| Resume | Unchanged - the position's `_sessionid` is kept by default (ADR-0060 decision 3) | Still meaningful - nothing about the key moved | Empty (ADR-0060 decision 7): no live timer comes back with the process |
+| Chart revision (export/import) | Unchanged - a revision change does not touch `_sessionid` | Still meaningful - send ids carry no state index and chart identity joins no key (ADR-0063 decision 6); the identity gate (ADR-0052, ADR-0060 decision 2) governs whether the *position* may be resumed at all, never the timer key | N/A - governed by whichever of the other two rows applies |
+| Restart (fresh process) | Fresh - `MachineState.new/2` mints a new `sess_` id on `start_link/2` (ADR-0027 decision 4) | Orphaned - the old scope can never match a live run again, so the fire-time liveness check (ADR-0054 decision 4) discards them | Empty - the old process's delayed-send timers die with it |
+
+**Resume: your store, not the library, carries the pending send across the
+gap.** `_sessionid` is the session scope (ADR-0060 decision 3), so every row
+your store already holds under the pre-resume scope keeps meaning after a
+resume - there is no re-keying to do. What does not come back is the
+library's own timer table: `Session.Timers.new()` starts empty on a resumed
+session (ADR-0060 decision 7). This is exactly why a durable host exists -
+re-arming the pending sends your store still holds is your job, not a gap
+the library forgot to close.
+
+The practical consequence a host relies on: a `<cancel sendid="x"/>`
+executed *after* a resume still emits a `%Statifier.Effect.Cancel{send_id:
+"x"}` on the effect stream, even though the resumed session's own timer
+table is empty and never held anything under "x" to cancel. The cancel
+effect comes from the pure core executing the chart's `<onexit>`/`<onentry>`
+content, not from any live timer bookkeeping - the core does not know or
+care whether a timer table happens to be populated. That emitted effect is
+the signal your store cancels the pre-resume row on, and it is pinned by a
+test in `test/statifier/session/resume_test.exs`.
+
+**Chart revision: the key does not move.** Migrating a position across
+chart revisions (the export/import story in `docs/persistence.md`) changes
+nothing about `{session scope, send_id}`: send ids are author-written and
+carry no state index, and chart identity is not one of the key's
+components (ADR-0063 decision 6 makes the same "row data, never a key
+component" argument for `caller_context`, and the reasoning that a key
+holds only what identity-relevant, replay-deterministic components require
+applies here too). What *does* gate a revision change is the identity check
+on the position itself - ADR-0052's identity gate, enforced at resume time
+by ADR-0060 decision 2 - which is a question about whether the position may
+be resumed at all, never a question about the timer key.
+
+**Restart is not a resume, and mints a fresh scope.** A supervisor restart
+re-runs `start_link/2`; `MachineState.new/2` mints a fresh `sess_` UXID, and
+the prior process's delayed-send timers are gone with it (ADR-0027
+decision 4). ADR-0060 decision 3 says this in as many words: "ADR-0027
+decision 4's 'a restart generates a fresh `sess_` id' governs restarts, not
+resumes." The old scope's stored rows can therefore never match a live run
+again - there is no session to re-associate them with - so the fire-time
+liveness check (ADR-0054 decision 4) is what discards them, the same
+check that discards a terminated run's rows. A restart needs no key-level
+handling beyond that check; it is not a case the key itself has to account
+for.
+
 ## Termination: what you owe that the library used to give you
 
 Spec 6.2, quoted verbatim from the local spec cache:

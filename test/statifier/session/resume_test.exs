@@ -484,6 +484,26 @@ defmodule Statifier.Session.ResumeTest do
     end
   end
 
+  # A pending delayed send with a matching cancel on exit: state "a" arms
+  # "x" on entry and cancels it on exit, so a post-resume "go" exercises the
+  # cancel effect against a library timer table that resume left empty
+  # (ADR-0060 decision 7) - the "Lifetime across resume, revision, and
+  # restart" section of docs/durable-timers.md.
+  @cancel_on_exit_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+      <state id="a">
+          <onentry>
+              <send event="fire" delay="60ms" id="x"/>
+          </onentry>
+          <onexit>
+              <cancel sendid="x"/>
+          </onexit>
+          <transition event="go" target="b"/>
+      </state>
+      <state id="b"/>
+  </scxml>
+  """
+
   # -- timers (ADR-0060 decision 7) ----------------------------------------
 
   describe "timers on resume" do
@@ -507,6 +527,30 @@ defmodule Statifier.Session.ResumeTest do
       status = Session.status(session)
       assert status.configuration == MapSet.new(["a"])
       assert status.pending_timers == 0
+    end
+
+    # sabotage: `Statifier.Machine.Content.Cancel`'s `execute/2` is changed
+    # to return `{:ok, %{context | machine_state: machine_state}, []}`
+    # (dropping the `{:cancel, effect}` from the returned effect list)
+    # instead of `[{:cancel, effect}]` -> the "go" transition below still
+    # exits "a" and runs the cancel content, but no
+    # `{:effect, {:cancel, %Cancel{send_id: "x"}}}` reaches the subscriber,
+    # reddening the `assert_receive`. Reverted and confirmed green.
+    test "a post-resume cancel still emits %Cancel{} for the pre-resume send id, though the library's own timer table is empty" do
+      machine = compile!(@cancel_on_exit_document)
+      {machine_state, _effects} = Interpreter.initialize(machine)
+      blob = blob!(machine_state)
+
+      {:ok, session} = Session.start_link(machine, resume: blob, subscribers: [self()])
+      assert Session.status(session).pending_timers == 0
+
+      session_id = Session.session_id(session)
+
+      Session.send_event(session, "go")
+
+      assert_receive {:statifier, ^session_id,
+                      {:effect, {:cancel, %Effect.Cancel{send_id: "x"}}}},
+                     1_000
     end
   end
 
