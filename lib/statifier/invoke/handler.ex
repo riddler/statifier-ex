@@ -26,7 +26,11 @@ defmodule Statifier.Invoke.Handler do
      instruction again - so **a handler implementing `perform/2` MUST be
      idempotent on `invoke_id`**. The library performs no deduplication
      itself and cannot: it has no view of a host's durable store. This is
-     the documented contract, not a suggestion.
+     the documented contract, not a suggestion. The same discipline
+     reaches cancellation from the other direction: `c:cancel/2` MAY be
+     planned for an invocation a host has already reported complete, so a
+     handler MUST tolerate cancelling an `invoke_id` it no longer knows.
+     See `c:cancel/2` for why.
   3. **`invoke_id` is a deterministic `%MachineState{}` counter** (ADR-0008,
      as amended), not a freshly minted value - which is exactly what makes
      it usable as an idempotency key across a crash and retry: replaying the
@@ -122,6 +126,19 @@ defmodule Statifier.Invoke.Handler do
   @doc """
   Plans the instructions that cancel the invocation named `invoke_id` (spec
   6.4.3). Pure, for the same reason `start/2` is.
+
+  **MAY be planned for an invocation that is already over, so a handler
+  MUST be idempotent here too** - including on an `invoke_id` it no longer
+  knows anything about. Reporting a completion through
+  `Statifier.Session.done_invocation/3` pops the *session*'s invocation
+  table only; the pure core's `active_invocations` record is removed in
+  exactly one place, on exit. A state exited after its invocation finished
+  therefore still draws a cancel for it - spec 6.4.3 makes that harmless
+  ("the cancel operation MUST act as if it were the final `<onexit>`
+  handler in the invoking state"), and the built-in `scxml` handler's own
+  `{:stop_child, _}` is a no-op on an entry that is already gone. A
+  handler that keeps its own table is the one that has to say so
+  (ADR-0051).
   """
   @callback cancel(invoke_id :: String.t(), ctx :: ctx()) :: {:ok, [instruction()]}
 
