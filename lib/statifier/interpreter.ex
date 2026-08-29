@@ -1784,14 +1784,17 @@ defmodule Statifier.Interpreter do
      compound, at most one child is active, so at most one top-level final
      is ever in the exit set. Its donedata (`ExitEntry.donedata/2`) becomes
      both `Trace.Done`'s and `Effect.Done`'s `donedata`. A failed
-     `<content expr>` raises `error.execution` onto the *returned*
-     `machine_state`'s internal queue - nothing ever dequeues it, since the
-     event loop has already stopped by the time this function runs, but that
-     is Appendix D's own consequence (5.6/5.7's error rule is unqualified,
-     and `exitInterpreter` runs after the loop) rather than a deviation this
-     port introduces. It
-     is still observable: `MachineState.internal_events/1` on the returned
-     terminal state shows it.
+     `<content expr>` raises `error.execution` (5.6/5.7's error rule is
+     unqualified, and `exitInterpreter` runs after the loop), but nothing
+     ever dequeues it: the event loop has already stopped by the time this
+     function runs. Item 7's discard therefore takes it with the rest of the
+     queue, so the returned terminal state does **not** show it and
+     `Effect.Done`'s `donedata: :undefined` is the only remaining signal
+     that the expression failed. That is the spec's own outcome - an event
+     raised after termination has no reader - but it is a real loss of a
+     diagnostic this port used to leak, and giving the failure an effect of
+     its own would be an effect-vocabulary decision rather than a change
+     this function can make alone.
   6. The terminal effects are appended last, `{:done, %Effect.Done{}}` last
      of all - `returnDoneEvent` becomes a returned effect rather than an I/O
      call (ADR-0003), and moving its emission to the end of the list is a
@@ -1800,6 +1803,17 @@ defmodule Statifier.Interpreter do
      `Trace.Done` and `Effect.Done` are populated from the same
      `configuration_at_exit` and `donedata` locals, so the trace row and the
      core effect always agree on the terminal position.
+
+  7. **The internal queue is discarded**, last of all
+     (`MachineState.discard_internal_queue/1`). Appendix D has no such step
+     because it needs none - see the body's own comment - so this is an
+     ADR-0002 mechanical deviation, made because this port returns the
+     `%MachineState{}` and Appendix D does not. It gives `status: :done` a
+     second invariant alongside the empty `configuration`: a terminated
+     machine_state is quiescent, so `Statifier.Position.export/1` accepts
+     it and a host can persist a finished run as completed. Running it after
+     the walk rather than before means it also takes anything the walk
+     itself raised, which is item 5's case.
 
   `status: :done` is set only here, at the very end - the window
   `MachineState`'s moduledoc describes between `running: false` (from
@@ -1862,7 +1876,23 @@ defmodule Statifier.Interpreter do
          round: machine_state.round
        }}
 
-    machine_state = %{machine_state | status: :done}
+    # ADR-0002 mechanical deviation. Appendix D's `exitInterpreter` never
+    # clears `internalQueue`, because the pseudocode has no reader left for
+    # it: `mainEventLoop`'s `while running` has already broken by the time
+    # this procedure runs, and spec 3.7 is unqualified - "When the state
+    # machine reaches the <final> child of an <scxml> element, it MUST
+    # terminate." Events still queued here are therefore unreachable by
+    # construction, not pending, and the pseudocode can leave them in place
+    # precisely because nothing in its model can observe them again. This
+    # port hands the whole `%MachineState{}` back to callers, where the
+    # difference is visible and costly: `Statifier.Position.export/1`
+    # refuses a non-empty queue, so a session that reached a top-level final
+    # while a sibling `done.state.*` was still queued (the raise consumed
+    # first, the completion event never) terminated `:done` and could never
+    # be persisted as completed. Discarding here makes the struct agree with
+    # the semantics the spec already fixes; it changes no transition, no
+    # configuration, and no effect.
+    machine_state = MachineState.discard_internal_queue(%{machine_state | status: :done})
 
     {machine_state, exit_set_trace ++ exit_effects ++ done_trace ++ [done_effect]}
   end

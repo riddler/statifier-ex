@@ -171,31 +171,32 @@ defmodule Statifier.Interpreter.TerminationTest do
     end
 
     # AC: "a failing top-level <content expr> donedata leaves Effect.Done's
-    # donedata :undefined, plus one error.execution visible on the returned
-    # terminal MachineState" (Decision 8 of
-    # docs/plans/260813-st-af3.7-log-donedata-param-event-data-coercion.md
-    # - the error is enqueued on the internal queue but never dequeued,
-    # since the event loop has already stopped by the time
-    # exit_interpreter/1 runs; that is Appendix D's own consequence, not a
-    # deviation). The failure produced no data, not a null value
+    # donedata :undefined" (Decision 8 of the donedata coercion plan cited
+    # by the <param> test below).
+    # The failure produced no data, not a null value
     # (`docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`, W3C
     # test528).
     #
-    # sabotage: `evaluate_donedata/3`'s `{:error, reason}` clause is
-    # changed to skip the `MachineState.raise_platform/4` call -> the
-    # `error.execution` would never be enqueued, reddening the
-    # `internal_events/1` assertion below while `Effect.Done`'s `donedata`
-    # stays `:undefined` regardless (a false-green risk this sabotage rules
-    # out).
-    test "a failing top-level <content expr> donedata leaves donedata :undefined and enqueues one error.execution" do
+    # The `error.execution` this failure raises used to survive on the
+    # returned state's internal queue, and this test used to assert that.
+    # `exit_interpreter/1`'s item 7 discard now takes it with the rest of
+    # the queue, so `Effect.Done`'s `donedata: :undefined` is the only
+    # remaining signal that the expression failed - the raise itself emits
+    # no effect (`MachineState.raise_platform/4` only enqueues).
+    #
+    # sabotage: `exit_interpreter/1`'s `MachineState.discard_internal_queue/1`
+    # call is dropped (leaving the bare `%{machine_state | status: :done}`)
+    # -> the `error.execution` survives on the returned state and the
+    # "queue is empty" assertion below reddens, while `donedata: :undefined`
+    # stays put regardless (a false-green risk this sabotage rules out).
+    test "a failing top-level <content expr> donedata leaves donedata :undefined and an empty queue" do
       m = machine()
 
       {result, effects} =
         Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled_fail)]))
 
       assert {:done, %Effect.Done{donedata: :undefined}} = List.last(effects)
-      assert [event] = MachineState.internal_events(result)
-      assert event.name == "error.execution"
+      assert MachineState.internal_events(result) == []
     end
 
     # AC: "the same param map reaches Effect.Done / Trace.Done at a
@@ -449,6 +450,66 @@ defmodule Statifier.Interpreter.TerminationTest do
       assert trace_effects(effects) == []
       assert log_labels(effects) == ["start-exit"]
       assert match?({:done, _}, List.last(effects))
+    end
+  end
+
+  # A top-level final reached while a sibling completion event is still
+  # queued. Entering `wrapped` - the <final> child of the compound `root` -
+  # runs its <onentry>, which raises `outcome.done`; spec 3.7 then generates
+  # `done.state.root` "after completion of the <onentry> elements", so the
+  # internal queue holds [outcome.done, done.state.root] in that order.
+  # `outcome.done` is dequeued first and fires root's transition to the
+  # top-level final `finished`, terminating the session with
+  # `done.state.root` still queued and nothing left that could ever dequeue
+  # it.
+  #
+  #  0 scxml (root)
+  #  1   root       -- compound; transition outcome.done -> finished
+  #  2     wrapped  -- <final> child of root; onentry raises outcome.done
+  #  3   finished   -- top-level <final>
+  @queued_sibling_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="root">
+      <state id="root" initial="wrapped">
+          <transition event="outcome.done" target="finished"/>
+          <final id="wrapped">
+              <onentry>
+                  <raise event="outcome.done"/>
+              </onentry>
+          </final>
+      </state>
+      <final id="finished"/>
+  </scxml>
+  """
+
+  describe "initialize/2 - a top-level final reached with a sibling done.state still queued" do
+    # Spec 3.7 <final>: "When the state machine reaches the <final> child of
+    # an <scxml> element, it MUST terminate. See D Algorithm for SCXML
+    # Interpretation for details." Appendix D's `mainEventLoop` has already
+    # broken out of `while running` by the time `exitInterpreter` runs, so
+    # `done.state.root` is unreachable rather than pending - and a
+    # `%MachineState{}` that still carries it is refused by
+    # `Statifier.Position.export/1`, which is how a finished run became
+    # impossible for a durable host to persist as completed.
+    #
+    # sabotage: `exit_interpreter/1`'s
+    # `MachineState.discard_internal_queue/1` call is dropped (leaving the
+    # bare `%{machine_state | status: :done}`) -> `done.state.root` survives
+    # and both the empty-queue and the `export/1` assertions below redden.
+    test "terminates :done with an empty internal queue and an exportable position" do
+      m = compile!(@queued_sibling_document)
+
+      {result, effects} = Interpreter.initialize(m)
+
+      refute result.running
+      assert result.status == :done
+      assert MachineState.internal_events(result) == []
+      assert {:ok, _exported} = Statifier.Position.export(result)
+
+      # The session terminated through `finished`, so the queued
+      # `done.state.root` was discarded rather than acted on: the <scxml>
+      # root (0) and `finished` (3), the full configuration ADR-0005 keeps.
+      assert {:done, %Effect.Done{configuration: configuration}} = List.last(effects)
+      assert configuration == MapSet.new([0, 3])
     end
   end
 

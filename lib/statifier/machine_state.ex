@@ -262,6 +262,18 @@ defmodule Statifier.MachineState do
   is only ever called by `Statifier.Interpreter.initialize/2`, immediately
   before it enters the initial states.
 
+  `exit_interpreter` also empties `internal_queue`
+  (`discard_internal_queue/1`), so `status: :done` carries a second
+  invariant alongside the empty `configuration`: **a `:done` machine_state
+  is quiescent by construction.** Nothing can dequeue an internal event once
+  the loop has stopped, so events still queued at termination are
+  unreachable rather than pending, and holding them would only make a
+  terminated position permanently unexportable
+  (`Statifier.Position.export/1` refuses a non-empty queue). The discard
+  runs at the very end of the exit walk, so it takes events raised *during*
+  exit too - see `Statifier.Interpreter.exit_interpreter/1`'s own `@doc`
+  item 5 for the one case where that loses a signal.
+
   ## The counter contract
 
   - `new/2` sets `macrostep: 0, microstep: 0, round: 0`. Zero means "no
@@ -684,6 +696,21 @@ defmodule Statifier.MachineState do
       {{:value, event}, rest} -> {:ok, event, %{machine_state | internal_queue: rest}}
       {:empty, _rest} -> :empty
     end
+  end
+
+  @doc """
+  Empties the internal queue, discarding every event still on it.
+
+  The one writer of `internal_queue` that removes events without delivering
+  them, and deliberately the narrowest: its only caller is
+  `Statifier.Interpreter.exit_interpreter/1`, at the point where the session
+  has terminated and no reader for those events exists any more. See that
+  function's own `@doc` for why a terminated session's queue is unreachable
+  rather than merely unread.
+  """
+  @spec discard_internal_queue(machine_state :: t()) :: t()
+  def discard_internal_queue(%__MODULE__{} = machine_state) do
+    %{machine_state | internal_queue: :queue.new()}
   end
 
   @doc """
