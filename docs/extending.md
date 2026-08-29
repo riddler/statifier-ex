@@ -193,6 +193,45 @@ ordinary invoked event, subject to the same drain-time discard as any other
 invocation-tagged entry: if the invocation was cancelled before the event is
 dequeued, it is dropped rather than delivered, per spec 6.4.3.
 
+## Reading a child's outcome
+
+A `type="scxml"` child that can finish several ways reports *which* way
+through one channel only: `done.invoke.<invoke_id>`'s data, which is the
+child's top-level `<final>`'s `<donedata>` (ADR-0051 decision 5, spec 3.7 and
+5.5). Nothing else crosses the invoke boundary. The final's `id` does not, and
+the event name never carries it, so there is no `done.invoke.<id>.approved` to
+route on.
+
+The convention that follows - and the one an authoring layer generating these
+charts should emit - is one top-level `<final>` per declared outcome, each
+carrying `<donedata>`, and a parent that routes on `_event.data` with an
+unconditioned `done.invoke.<invoke_id>` transition last:
+
+```xml
+<state id="authorizing">
+    <invoke id="auth" type="scxml">
+        <param name="amount" expr="amount"/>
+        <content><!-- a child whose finals carry <param name="outcome" .../> --></content>
+    </invoke>
+    <transition event="done.invoke.auth" cond="_event.data.outcome == 'approved'" target="captured"/>
+    <transition event="done.invoke.auth" cond="_event.data.outcome == 'declined'" target="rejected"/>
+    <transition event="done.invoke.auth" target="unhandled"/>
+</state>
+```
+
+The unconditioned arm is not decoration. A child final carrying no
+`<donedata>` delivers a done event with no data at all, so `_event.data` -
+and `_event.data.outcome` with it - reads `:undefined` rather than any value a
+cond can match, and every conditioned arm falls through to that last
+transition. One wrinkle worth knowing there: a loose `==` against `:undefined`
+evaluates to `:undefined` rather than to `false`, and a non-boolean cond is
+false *plus* an `error.execution` (spec 5.9.1). The routing is unaffected, but
+a parent that would rather not see that error event spells its conds `===`.
+
+This section decides a convention over the existing channel; it changes no
+engine behavior, and there is nothing here a host has to opt into.
+`test/statifier/session/invoke_child_outcome_test.exs` pins it.
+
 ## Reporting permanent failure
 
 `done_invocation/3` is the door for work that finished. Work that will never
