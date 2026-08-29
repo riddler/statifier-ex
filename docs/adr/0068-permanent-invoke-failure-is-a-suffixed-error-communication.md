@@ -236,7 +236,7 @@ session is idle, so both queues are empty when it lands.
 
 ### Decision note 2026-08-29: a permanently undecodable stored payload reports through this door (st-uumw)
 
-Status: proposed (2026-08-29) - additive; the record's own Status above is
+Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator campaign-015 grant, PR 238) - additive; the record's own Status above is
 unchanged and this note decides nothing that record decided
 
 A host may store an invocation's arguments in an opaque, host-encoded form
