@@ -113,7 +113,10 @@ What it cannot do:
   non-empty internal event queue: those queued events were selected against
   the source chart's own transitions, so a position mid-macrostep is not a
   thing to move across chart revisions. A host drains to quiescence - lets
-  the macrostep finish - before exporting.
+  the macrostep finish - before exporting. A *terminated* position never
+  needs draining: `exit_interpreter/1` empties the internal queue as its
+  last step, so a `status: :done` machine state is quiescent by
+  construction and always passes this check.
 
 `export/1` also refuses outright, rather than silently dropping, any
 referenced state with no author-written id
