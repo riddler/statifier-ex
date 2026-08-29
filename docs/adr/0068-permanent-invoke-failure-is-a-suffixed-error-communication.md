@@ -234,6 +234,53 @@ session is idle, so both queues are empty when it lands.
   asymmetry this record exists to remove, so it is left for the record that
   decides it for both.
 
+### Decision note 2026-08-29: a permanently undecodable stored payload reports through this door (st-uumw)
+
+Status: proposed (2026-08-29) - additive; the record's own Status above is
+unchanged and this note decides nothing that record decided
+
+A host may store an invocation's arguments in an opaque, host-encoded form
+rather than as engine-readable terms - `statifier_oban`'s ADR-0004 makes that
+codec pluggable, and ADR-0005 covers the job shape it rides on. Such a host can
+find, on a later attempt, that a stored payload will never decode again: a
+retired codec version, a rotated key, a corrupt row. st-uumw asked whether that
+permanence is this record's failure family or needs its own treatment.
+
+**It is this family.** When the host's retry layer judges the decode
+permanently failed, it reports the invocation through this record's door,
+`Statifier.Session.failed_invocation/3`, with `"reason"` spelled
+`"undecodable"`. No new event name, no new function, no new error family, and
+no engine change: this note pins a spelling and a call site, both of which
+decision 2 and decision 3 already admit.
+
+The argument is decision 1's own. 3.12.2's distinguishing question is whether
+communication with an external entity was attempted, and here it was: the
+invocation started, a registered handler was driven, and what has become
+impossible is the *continuation* of that communication. Decision 1's rejection
+of `error.invoke.<invoke_id>` applies verbatim to a hypothetical third name for
+this case - it would invent a family no clause of the spec creates, and it
+would give a chart author two names for one observable fact, that the
+invocation is over and will never produce `done.invoke.<invoke_id>`. What made
+completion impossible is a transport detail, and decision 2 is explicit that
+the library interprets none of the three payload keys; `"undecodable"` is an
+ordinary value of that free-form string, not an enum the library gains.
+
+**First caller.** `statifier_oban`'s `StatifierOban.Invoke.Worker` is the
+first caller: it calls the door with `reason: "undecodable"` before cancelling
+the job whose args it could not decode. That change is landing in the satellite
+alongside this note, not here. It is the same seam the Consequences bullet
+naming `sob-nnh` describes, so that bullet stands unamended.
+
+**The worked example lives in `docs/extending.md`**, in its "Reporting
+permanent failure" section beside the keyword-list table a host implementor
+reads at the moment of calling the door: `reason: "undecodable"`, `attempts` as
+the host counted them, `detail` the codec's typed error, uninterpreted.
+
+**Not decided here: the timer half.** Whether an undecodable *delayed-send*
+payload has an analogous report is a separate question - ADR-0054's durable
+timer path has no invocation, no `invoke_id`, and no door of this shape - and
+is filed as st-i7y8. Nothing in this note should be read as deciding it.
+
 ## Related
 
 - ADR-0051 (decision 1's classification table, decision 4's handler

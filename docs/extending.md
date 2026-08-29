@@ -220,6 +220,35 @@ library interprets:
 | `:attempts` | `_event.data.attempts` | `undefined` |
 | `:detail` | `_event.data.detail` | `undefined` |
 
+### A worked example: a payload that will never decode
+
+A host that stores an invocation's arguments in its own opaque encoding can
+find, on a later attempt, that the stored payload will never decode again: a
+retired codec version, a rotated key, a corrupt row. That is a permanent
+failure of an invocation that already started, so it is reported through this
+same door, with `reason: "undecodable"`:
+
+```elixir
+Statifier.Session.failed_invocation(session, "inv_3",
+  reason: "undecodable",
+  attempts: 1,
+  detail: {:decode_error, :codec_version_retired}
+)
+```
+
+| Key | Value here | Why |
+|---|---|---|
+| `:reason` | `"undecodable"` | the spelling to use for a permanently undecodable stored payload, so a `cond` reads the same across hosts |
+| `:attempts` | as the host counted them, typically `1` | one decode was attempted and it will not become decodable by attempting it again |
+| `:detail` | the codec's typed error, verbatim | uninterpreted by the library, exactly like any other `:detail` |
+
+A chart that invokes `myapp:capture` to take a payment parks that invocation on
+`error.communication.invoke.inv_3` and reads `_event.data.reason` to tell an
+undecodable payload apart from an exhausted gateway retry. ADR-0068's decision
+note of 2026-08-29 records why this is the invoke-failure family rather than a
+new one (st-uumw); the timer half - an undecodable *delayed-send* payload - is
+not decided by it.
+
 **This is the host's call, never a handler callback's.** `start/2`, `cancel/2`,
 and `forward/3` are pure planning callbacks that may not perform IO at all, and
 `perform/2` returning `{:error, term()}` is a *transient* signal - it means this
