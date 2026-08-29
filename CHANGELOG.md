@@ -10,6 +10,22 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.2.1] 2026-08-29
+
+### Changed
+
+- A `<donedata>` expression that fails to evaluate at a top-level `<final>`
+  no longer leaves its `error.execution` on the terminated machine state's
+  internal queue; `Statifier.Effect.Done`'s `donedata: :undefined` is the
+  signal that the expression failed.
+
+### Fixed
+
+- A session that reaches a top-level `<final>` now terminates with an empty
+  internal event queue, so `Statifier.Position.export/1` accepts a finished
+  position instead of refusing it with `{:error, :internal_queue_not_empty}`
+  whenever a sibling `done.state.*` event was still queued.
+
 ## [2.2.0] 2026-08-27
 
 Adds the door a host uses to report a permanently failed async invocation, and
