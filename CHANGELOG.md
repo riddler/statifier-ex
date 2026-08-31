@@ -10,6 +10,22 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.3.0] 2026-08-31
+
+Adds the sync-handler shape a host uses to answer an `<invoke>` in process,
+with the adapter and registry helper that turn a list of such handlers into
+the registration a session needs.
+
+### Added
+
+- `Statifier.Invoke.SyncHandler`: a two-callback shape (`invoke_types/0`,
+  `handle/3`) for `<invoke>` handlers that answer a call and report the result.
+- `Statifier.Invoke.SyncHandler.Adapter`: `use` it over a list of sync handlers
+  to get the `Statifier.Invoke.Handler` implementation plus the
+  `:known_invoke_types` list and the `:invoke_handlers` map a host registers.
+- `Statifier.Invoke.Types.from_handlers/1`: builds the registered-type snapshot
+  from an `:invoke_handlers` map's own keys.
+
 ## [2.2.1] 2026-08-29
 
 ### Changed
