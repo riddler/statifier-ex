@@ -63,7 +63,6 @@
 
   "tmux": {
     "session": "statifier-ex",
-    "permission_mode": "skip-permissions",
     "model": "opus"
   },
 
