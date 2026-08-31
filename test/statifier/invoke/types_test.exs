@@ -61,4 +61,33 @@ defmodule Statifier.Invoke.TypesTest do
       refute Types.registered?(types, "myapp:unknown")
     end
   end
+
+  describe "from_handlers/1" do
+    # sabotage: `from_handlers/1`'s `Map.keys(invoke_handlers)` is changed to
+    # `Map.values(invoke_handlers)` - the modules rather than the type
+    # strings -> "myapp:authorize" is no longer registered and the first
+    # assertion below reddens. Reverted and confirmed green.
+    test "derives the registered set from an :invoke_handlers map's own keys" do
+      types =
+        Types.from_handlers(%{
+          "myapp:authorize" => Statifier.Invoke.Handler.Scxml,
+          "myapp:capture" => Statifier.Invoke.Handler.Scxml
+        })
+
+      assert Types.registered?(types, "myapp:authorize")
+      assert Types.registered?(types, "myapp:capture")
+      refute Types.registered?(types, "myapp:refund")
+    end
+
+    # sabotage: `from_handlers/1` is changed to ignore its argument and
+    # answer `new(types: ["myapp:authorize"])` -> an empty map registers a
+    # type nobody handed it, and the `refute` below reddens. Reverted and
+    # confirmed green.
+    test "an empty map is the built-in set only, exactly as no declaration is" do
+      types = Types.from_handlers(%{})
+
+      assert Types.registered?(types, "scxml")
+      refute Types.registered?(types, "myapp:authorize")
+    end
+  end
 end

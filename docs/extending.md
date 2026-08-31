@@ -165,6 +165,75 @@ handler palette starts a different session with a different
 `:invoke_handlers` map; there is no supported way to add or remove a handler
 from a session already running.
 
+## The common case: a sync handler
+
+Most registered types are not lifecycles. They are calls: hand these params
+to some code, take back a `donedata` map or a failure, let the chart move
+on. Written against `Statifier.Invoke.Handler` directly, every host writes
+the same adapter for that - one `{:handler, __MODULE__, payload}`
+instruction out of `start/2`, empty plans out of `cancel/2` and `forward/3`,
+and a `perform/2` that finds the session and calls `done_invocation/3` or
+`failed_invocation/3`. The library writes it once.
+
+`Statifier.Invoke.SyncHandler` is the two-callback shape:
+
+```elixir
+defmodule MyApp.Signup.Handlers do
+  @behaviour Statifier.Invoke.SyncHandler
+
+  @impl Statifier.Invoke.SyncHandler
+  def invoke_types, do: ["myapp:signup", "myapp:provision"]
+
+  @impl Statifier.Invoke.SyncHandler
+  def handle("myapp:signup", params, _ctx), do: {:ok, %{"plan" => params["plan"]}}
+  def handle("myapp:provision", params, _ctx), do: MyApp.Accounts.provision(params)
+end
+```
+
+and `Statifier.Invoke.SyncHandler.Adapter` is the `Statifier.Invoke.Handler`
+over a list of them:
+
+```elixir
+defmodule MyApp.InvokeHandler do
+  use Statifier.Invoke.SyncHandler.Adapter,
+    handlers: [MyApp.CardAuth.Handlers, MyApp.Signup.Handlers]
+end
+```
+
+That one module answers both of the registrations a host owes, and answers
+them from the same list:
+
+```elixir
+{:ok, machine} = Statifier.Compiler.compile(document)
+
+Statifier.Session.start_link(machine,
+  invoke_handlers: MyApp.InvokeHandler.invoke_handlers()
+)
+```
+
+`MyApp.InvokeHandler.invoke_types/0` is the sorted union of every type its
+handler modules claim - the list a host hands its own document compiler as
+the set to lint an `<invoke type>` against - and `invoke_handlers/0` is that
+same union mapped to the adapter. They are derived one from the other rather
+than written beside each other, which is the point: the set a chart is
+allowed to name and the set a session will actually answer cannot come
+apart, and adding a type is one line in one handler module.
+
+`{:error, reason}` from `handle/3` is **permanent**, unlike a `perform/2`
+error under the general behaviour. A sync handler has no retry policy behind
+it - the call was made and it answered - so the adapter reports it straight
+through `failed_invocation/3`, with `reason` reaching the chart as
+`_event.data.reason`. Name your failure classes with strings if a chart is
+meant to branch on them; any other term is `inspect/1`-ed.
+
+Reach for `Statifier.Invoke.Handler` itself instead when the invocation
+outlives the performing turn, has something real to cancel, has an inbox to
+autoforward into, or needs `invoke_id`, `src`, or `content` off the
+`%Statifier.Effect.Invoke{}`. Everything below this section is written for
+that case, and all of it still applies to a sync handler through the
+adapter - the idempotency obligation especially, which the adapter cannot
+discharge on a handler's behalf.
+
 ## Async and long-lived invocations
 
 `invoke_id` stays stable across a persist/reload cycle because it is not a

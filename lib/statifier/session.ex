@@ -1076,12 +1076,16 @@ defmodule Statifier.Session do
       # ADR-0051 decision 3's "one constructor": the `invoke_types` snapshot
       # the core is stamped with is derived from `invoke_handlers`'s own
       # keys, not declared separately, so the registered-type set and the
-      # dispatch map `plan_context/1` builds below cannot diverge.
+      # dispatch map `plan_context/1` builds below cannot diverge. That
+      # derivation is `InvokeTypes.from_handlers/1` and nothing else - both
+      # boot arms call it rather than spelling the same `Map.keys/1` out
+      # twice, which is what keeps "one constructor" a fact about the code
+      # rather than a claim about it.
       # `:invoke_handlers` itself rides along in `machine_opts` too, purely
       # so `Recording.new/3` (called with this same keyword list) can
       # normalize it into the recording (`@normalized_opts`) - `Statifier.
       # MachineState.new/2` reads no such key and ignores it.
-      |> Keyword.put(:invoke_types, InvokeTypes.new(types: Map.keys(invoke_handlers)))
+      |> Keyword.put(:invoke_types, InvokeTypes.from_handlers(invoke_handlers))
       |> Keyword.put(:invoke_handlers, invoke_handlers)
 
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
@@ -1093,7 +1097,7 @@ defmodule Statifier.Session do
       machine_state
       |> stamp_session_id(session_id)
       |> MachineState.put_routes(init_routes(session_id, invoked_by))
-      |> MachineState.put_invoke_types(InvokeTypes.new(types: Map.keys(invoke_handlers)))
+      |> MachineState.put_invoke_types(InvokeTypes.from_handlers(invoke_handlers))
 
     # `resolve_resume/2` already refused a non-quiescent, unidentified, or
     # otherwise unencodable position, so `to_binary/1`'s error arm is
