@@ -39,6 +39,28 @@ defmodule Statifier.Invoke.Types do
   end
 
   @doc """
+  Builds the snapshot ADR-0051 decision 3's "one constructor" describes:
+  the registered set derived from an `:invoke_handlers` map's own keys,
+  rather than declared beside it.
+
+  `Statifier.Session` stamps the core with this at both of its boot arms
+  (fresh and resumed), so the set the pure core classifies against and the
+  dispatch map `Statifier.Session.Effects` routes on cannot diverge - they
+  are one map read two ways. A host assembling that map from
+  `Statifier.Invoke.SyncHandler` modules closes the same loop one step
+  further out: `Statifier.Invoke.SyncHandler.Adapter.invoke_handlers/2`
+  builds the map from the one union its `invoke_types/1` computes.
+
+  This is the only derivation of a registered-type set from a handler map in
+  the library. A second one written inline somewhere else would be the exact
+  drift decision 3 exists to rule out.
+  """
+  @spec from_handlers(invoke_handlers :: %{String.t() => module()}) :: t()
+  def from_handlers(invoke_handlers) when is_map(invoke_handlers) do
+    new(types: Map.keys(invoke_handlers))
+  end
+
+  @doc """
   Whether `type` is registered against `types`.
 
   `types` may be `nil` - "no declaration made", the same meaning `nil`
