@@ -10,7 +10,18 @@ defmodule Statifier.Session.InvokeStartChildTest do
   # runtime placed" branch, so this module is `async: false` the same way
   # that one is.
 
-  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, StreamOrder, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Lowering,
+    Machine,
+    Parser,
+    Session,
+    StreamOrder,
+    Validator
+  }
+
   alias Statifier.Event.Cause
   alias Statifier.Session.Invocations
 
@@ -494,30 +505,33 @@ defmodule Statifier.Session.InvokeStartChildTest do
   # -- an unsupported <invoke type> -------------------------------------------
 
   describe "an <invoke> with an unsupported type" do
-    # This is the end-to-end pin for "the two checks agree": one document,
-    # one run, both halves asserted from the same drained stream -
-    # `Statifier.Session.Effects.plan_invoke/2`
-    # still raises `error.execution` (the session half) while
-    # `Statifier.Interpreter`'s `active_invocations` bookkeeping (the core
-    # half) never records the invocation, so `Trace.InvokePass`
-    # never names it and exiting the state emits no `Effect.CancelInvoke`
-    # for it. A core-only or a session-only regression each reddens a
-    # different assertion below, which is what makes this test genuinely
-    # end-to-end rather than a duplicate of either Phase 1's or
-    # `effects_test.exs`'s unit coverage.
+    # This is the end-to-end pin for the whole rejection: one document, one
+    # run, every consequence asserted from the same drained stream. A
+    # session always declares a registered set - `Statifier.Session` stamps
+    # the core with `Statifier.Invoke.Types.from_handlers/1` over its
+    # `:invoke_handlers` map, empty here - so this type is a
+    # half-registration, and `Statifier.Interpreter` refuses it outright:
+    # `error.execution` is raised, no `Effect.Invoke` reaches the stream at
+    # all, the invocation is never recorded, `Trace.InvokePass` never names
+    # it, and exiting the state emits no `Effect.CancelInvoke` for it.
     #
-    # sabotage: `Statifier.Interpreter`'s `maybe_record_active_invocation/5`
-    # is changed to always call `record_active_invocation/4` (drops the
-    # `Target.supported_invoke_type?(type)` guard) -> the unsupported
-    # invocation is recorded live, so the entry-time `Trace.InvokePass`
-    # gains "bad" in its `invoke_ids` (reddening the `Enum.all?` below -
-    # which is why it is `all?` over every pass and not `any?`: this run
-    # emits a second, empty pass after the transition, and an `any?` would
-    # be satisfied by that one no matter what the first pass carried) and
-    # exiting state "a" emits an
-    # `Effect.CancelInvoke{invoke_id: "bad"}` (reddening the `refute`
-    # below). Reverted and confirmed green.
-    test "raises error.execution, and Effect.Invoke's id never becomes live" do
+    # The raised event is the same one this test always asserted; what
+    # changed is that the core raises it before building an effect, rather
+    # than the session planner raising it against an effect the core had
+    # already emitted. The index pair is therefore read off the machine -
+    # there is no longer an `%Effect.Invoke{}` to read it from.
+    #
+    # sabotage: `Statifier.Interpreter`'s `registered_type/2` declared-set
+    # clause is changed to return `:ok` unconditionally -> the invocation
+    # is emitted and recorded live again, so the `refute` on the invoke
+    # effect reddens, the entry-time `Trace.InvokePass` gains "bad" in its
+    # `invoke_ids` (reddening the `Enum.all?` below - which is why it is
+    # `all?` over every pass and not `any?`: this run emits a second, empty
+    # pass after the transition, and an `any?` would be satisfied by that
+    # one no matter what the first pass carried), and exiting state "a"
+    # emits an `Effect.CancelInvoke{invoke_id: "bad"}` (reddening the last
+    # `refute`). Reverted and confirmed green.
+    test "raises error.execution, and no Effect.Invoke is emitted at all" do
       machine =
         compile!("""
         <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -537,14 +551,10 @@ defmodule Statifier.Session.InvokeStartChildTest do
 
       stream = StreamOrder.drain(session_id)
 
-      assert {:effect,
-              {:invoke,
-               %Effect.Invoke{
-                 invoke_id: "bad",
-                 type: "http://example.com/not-scxml",
-                 state_index: state_index,
-                 invoke_index: invoke_index
-               }}} = Enum.find(stream, &match?({:effect, {:invoke, _invoke}}, &1))
+      {:ok, state_index} = Machine.index(machine, "a")
+      invoke_index = 0
+
+      refute Enum.any?(stream, &match?({:effect, {:invoke, _invoke}}, &1))
 
       assert Enum.any?(stream, fn
                {:effect,
