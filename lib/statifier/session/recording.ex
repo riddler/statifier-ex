@@ -92,8 +92,10 @@ defmodule Statifier.Session.Recording do
   entirely (five elements, not six carrying `nil`); `from_binary/1` reads
   both shapes (see below). A version-2 envelope has all six slots but
   predates `caller_context` on `%Statifier.Event{}` and the two
-  durable-timer effect structs (ADR-0063): its stored inputs decode with
-  `caller_context: nil` defaulted on import, which is safe exactly because
+  durable-timer effect structs (ADR-0063); a version-3 envelope predates
+  the same field on the two invoke-lifecycle effect structs (ADR-0063 as
+  amended 2026-09-01). Both decode with `caller_context: nil`
+  defaulted on import, which is safe exactly because
   no context was ever attached to the inputs an older blob holds. Six
   slots -
 
@@ -191,7 +193,7 @@ defmodule Statifier.Session.Recording do
     :invoke_handlers
   ]
 
-  @format_version 3
+  @format_version 4
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -435,7 +437,9 @@ defmodule Statifier.Session.Recording do
   Consequences). A version-2 envelope (six slots, written before
   `caller_context` existed) is read the same way: its stored events and
   durable-timer effects gain `caller_context: nil` on import (ADR-0063
-  decision 5's blessed default).
+  decision 5's blessed default). A version-3 envelope is read on the same
+  terms, defaulting the field onto its stored invoke-lifecycle effects
+  (ADR-0063's 2026-09-01 amendment).
   """
   @spec from_binary(blob :: binary()) ::
           {:ok, t()}
@@ -504,15 +508,23 @@ defmodule Statifier.Session.Recording do
   end
 
   # ADR-0063 decision 5: version 3 added `caller_context` to
-  # `%Statifier.Event{}` and to the two durable-timer effect structs, so a
+  # `%Statifier.Event{}` and to the two durable-timer effect structs, and
+  # version 4 added it to the two invoke-lifecycle effect structs (the
+  # 2026-09-01 amendment), so a
   # blob written before the field decodes to struct-shaped maps missing the
   # key - reading such a map as the new struct is exactly the silent misread
   # ADR-0057 decision 4's obligation names. Defaulting `caller_context: nil`
   # on import is safe exactly because an older blob predates the field: no
   # context was ever attached to the inputs it holds. `:internal` entries
   # store no struct of either kind, so they pass through untouched.
+  #
+  # One guard covers both bumps rather than one per version, because
+  # `default_caller_context/1` is `Map.put_new/3`: running the version-3
+  # defaults over a version-3 blob whose events already carry the key is a
+  # no-op, so the only thing a per-version split would buy is a second way
+  # to get the version arithmetic wrong.
   @spec upgrade_entries(entries :: [entry()], version :: pos_integer()) :: [entry()]
-  defp upgrade_entries(entries, version) when version < 3,
+  defp upgrade_entries(entries, version) when version < @format_version,
     do: Enum.map(entries, &upgrade_entry/1)
 
   defp upgrade_entries(entries, _version), do: entries
@@ -537,6 +549,12 @@ defmodule Statifier.Session.Recording do
   defp upgrade_effect({:cancel, cancel}),
     do: {:cancel, default_caller_context(cancel)}
 
+  defp upgrade_effect({:invoke, invoke}),
+    do: {:invoke, default_caller_context(invoke)}
+
+  defp upgrade_effect({:cancel_invoke, cancel_invoke}),
+    do: {:cancel_invoke, default_caller_context(cancel_invoke)}
+
   defp upgrade_effect(effect), do: effect
 
   # `Map.put_new/3` on a decoded struct-shaped map: a value that already
@@ -548,6 +566,7 @@ defmodule Statifier.Session.Recording do
 
   @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
   defp check_version(@format_version), do: :ok
+  defp check_version(3), do: :ok
   defp check_version(2), do: :ok
   defp check_version(1), do: :ok
   defp check_version(version), do: {:error, {:unsupported_format_version, version}}

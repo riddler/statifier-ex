@@ -345,14 +345,18 @@ same class as
 itself wrote; an atom a host put into `:datamodel` values or event data is
 neither scanned for nor translated by `to_binary/1` or `from_binary/1`.
 
-**Format version 3, and the `caller_context` slot's inherited obligation.**
+**Format version 4, and the `caller_context` slot's inherited obligation.**
 ADR-0063 added `caller_context :: term()` to `%Statifier.Event{}` and the
 two durable-timer effect structs, which changes the shape of the structs
-inside a blob's `entries`, so `Recording.format_version/0` bumped `2 -> 3`.
+inside a blob's `entries`, so `Recording.format_version/0` bumped `2 -> 3`;
+that record's 2026-09-01 amendment added the same field to the two
+invoke-lifecycle effect structs (`%Effect.Invoke{}`,
+`%Effect.CancelInvoke{}`), bumping `3 -> 4` for the same reason.
 Older blobs are read, not refused: `from_binary/1` defaults
-`caller_context: nil` onto each stored event and durable-timer effect on
-version-1/version-2 import - safe exactly because those blobs predate the
-field, so no context was ever attached to the inputs they hold. The slot
+`caller_context: nil` onto each stored event and each stored durable-timer
+or invoke-lifecycle effect on version-1/2/3 import - safe exactly because
+those blobs predate the field on the structs they hold, so no context was
+ever attached to their inputs. The slot
 itself joins event `data` under the host-term rule above: an OTel span
 context is plain data and round-trips fine, while a host that stows a pid
 or a fun in it loses persistability of that recording the same way it

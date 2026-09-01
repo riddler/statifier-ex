@@ -1520,7 +1520,8 @@ defmodule Statifier.Interpreter do
                invoke_index: invoke_index,
                macrostep: machine_state.macrostep,
                microstep: machine_state.microstep,
-               round: machine_state.round
+               round: machine_state.round,
+               caller_context: machine_state.caller_context
              }}
 
           # The datamodel write, when there is one, precedes the :invoke

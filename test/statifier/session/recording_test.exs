@@ -428,6 +428,38 @@ defmodule Statifier.Session.RecordingTest do
 
       assert [{:event, %Event{caller_context: ^host_context}, nil}] = Recording.entries(decoded)
     end
+
+    # sabotage: `Statifier.Effect.Invoke`'s `caller_context: nil` defstruct
+    # entry is deleted while its `@type` keeps the key -> the build fails
+    # outright (the struct's own typespec no longer resolves), which is
+    # this test's whole coverage going red the coarse way. The recorded
+    # `:interpret` entry is what replay re-drives, so an invoke effect's
+    # slot has to survive the envelope the same way a delayed send's does
+    # (ADR-0063 decision 5, as amended 2026-09-01).
+    test "an invoke effect's caller_context survives a to_binary/from_binary round trip" do
+      host_context = %{trace_id: "abc", span_id: 123}
+
+      invoke = %Effect.Invoke{
+        invoke_id: "inv1",
+        state_index: 0,
+        invoke_index: 0,
+        macrostep: 1,
+        microstep: 1,
+        round: 0,
+        caller_context: host_context
+      }
+
+      recording =
+        compile_identified!()
+        |> Recording.new()
+        |> Recording.put_interpret([{:invoke, invoke}], nil)
+
+      assert {:ok, blob} = Recording.to_binary(recording)
+      assert {:ok, decoded} = Recording.from_binary(blob)
+
+      assert [{:interpret, [{:invoke, %Effect.Invoke{caller_context: ^host_context}}], nil}] =
+               Recording.entries(decoded)
+    end
   end
 
   describe "from_binary/1 on a hand-built version-2 envelope" do
@@ -503,6 +535,85 @@ defmodule Statifier.Session.RecordingTest do
         :erlang.term_to_binary({:statifier_recording, 2, chart_blob, [], [], nil})
 
       assert {:ok, _decoded} = Recording.from_binary(version_2_envelope)
+    end
+  end
+
+  describe "from_binary/1 on a hand-built version-3 envelope" do
+    # A version-3 blob predates `caller_context` on the two
+    # invoke-lifecycle effect structs (ADR-0063's 2026-09-01 amendment),
+    # simulated here by deleting the key off the struct-shaped
+    # maps before encoding. Its *events* already carry the field, which is
+    # what the untouched `%Event{}` below pins: `Map.put_new/3` leaves a
+    # value that already has the key alone, so one upgrade pass covers
+    # both bumps.
+    #
+    # sabotage: `upgrade_effect/1`'s `{:invoke, invoke}` clause is deleted
+    # (falling through to the catch-all) -> the `%Effect.Invoke{}` pattern
+    # below raises `KeyError` on the missing key, reddening the test. Also
+    # verified for the `{:cancel_invoke, _}` clause.
+    test "defaults caller_context: nil onto stored invoke-lifecycle effects" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      host_context = %{trace_id: "abc"}
+
+      old_invoke =
+        Map.delete(
+          %Effect.Invoke{
+            invoke_id: "inv1",
+            state_index: 0,
+            invoke_index: 0,
+            macrostep: 1,
+            microstep: 1,
+            round: 0
+          },
+          :caller_context
+        )
+
+      old_cancel_invoke =
+        Map.delete(
+          %Effect.CancelInvoke{
+            invoke_id: "inv1",
+            state_index: 0,
+            macrostep: 2,
+            microstep: 1,
+            round: 0
+          },
+          :caller_context
+        )
+
+      entries = [
+        {:event, Event.external("go", caller_context: host_context), nil},
+        {:interpret, [{:invoke, old_invoke}, {:cancel_invoke, old_cancel_invoke}], nil}
+      ]
+
+      version_3_envelope =
+        :erlang.term_to_binary({:statifier_recording, 3, chart_blob, [], entries, nil})
+
+      assert {:ok, decoded} = Recording.from_binary(version_3_envelope)
+
+      assert [
+               {:event, %Event{name: "go", caller_context: ^host_context}, nil},
+               {:interpret,
+                [
+                  {:invoke, %Effect.Invoke{caller_context: nil}},
+                  {:cancel_invoke, %Effect.CancelInvoke{caller_context: nil}}
+                ], nil}
+             ] = Recording.entries(decoded)
+    end
+
+    # sabotage: `check_version/1`'s `defp check_version(3), do: :ok` clause
+    # is deleted -> this assertion reddens with
+    # `{:error, {:unsupported_format_version, 3}}`. The same
+    # read-the-old-version courtesy versions 1 and 2 already get.
+    test "a version-3 envelope is read, not refused" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      version_3_envelope =
+        :erlang.term_to_binary({:statifier_recording, 3, chart_blob, [], [], nil})
+
+      assert {:ok, _decoded} = Recording.from_binary(version_3_envelope)
     end
   end
 
@@ -723,12 +834,14 @@ defmodule Statifier.Session.RecordingTest do
   end
 
   describe "format_version/0" do
-    # sabotage: `@format_version` is changed from `3` back to `2` -> this
-    # reddens directly. 3 is ADR-0063's bump: `%Statifier.Event{}` and the
+    # sabotage: `@format_version` is changed from `4` back to `3` -> this
+    # reddens directly. 3 was ADR-0063's bump: `%Statifier.Event{}` and the
     # two durable-timer effect structs gained a defstruct key, changing the
-    # shape of the structs inside a blob's `entries`.
-    test "returns 3" do
-      assert Recording.format_version() == 3
+    # shape of the structs inside a blob's `entries`. 4 is that record's
+    # 2026-09-01 amendment doing the same for the two
+    # invoke-lifecycle effect structs.
+    test "returns 4" do
+      assert Recording.format_version() == 4
     end
 
     # sabotage: `format_version/0` is changed to return `@format_version +

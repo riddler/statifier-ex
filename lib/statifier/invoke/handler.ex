@@ -119,6 +119,17 @@ defmodule Statifier.Invoke.Handler do
   handler for a different type typically returns `{:ok, [{:handler,
   __MODULE__, payload}]}`, where `payload` is whatever `perform/2` needs to
   actually start the invocation.
+
+  `invoke.caller_context` is ADR-0063's opaque host slot, carrying
+  whatever correlation value the macrostep's triggering external event
+  attached (`nil` when none did). A handler that starts work
+  asynchronously - a durable job row, a queue write, an HTTP call whose
+  reply arrives later through `Statifier.Session.send_invoked_event/3` -
+  stores the term beside its own invocation record and puts it back on
+  the result event, which is what lets the result be linked to the trace
+  that started the invocation. Carry it; never read it. The two
+  invoke-lifecycle telemetry events expose the same term for a bridge
+  that would rather read the stream than the effect struct.
   """
   @callback start(invoke :: Effect.Invoke.t(), ctx :: ctx()) ::
               {:ok, [instruction()]} | {:error, term()}
@@ -139,6 +150,15 @@ defmodule Statifier.Invoke.Handler do
   `{:stop_child, _}` is a no-op on an entry that is already gone. A
   handler that keeps its own table is the one that has to say so
   (ADR-0051).
+
+  This callback receives an `invoke_id`, not the `%Effect.CancelInvoke{}`,
+  so the effect's own `caller_context` does not reach it: a handler that
+  wants the cancelling macrostep's context reads it off the
+  `[:statifier, :session, :effect, :cancel_invoke]` telemetry event, and
+  a handler that wants the *starting* context already stored it under
+  `start/2`. Widening this callback to the struct would be a breaking
+  change to every handler in the wild for a value only a bridge reads,
+  which is why ADR-0063's amendment left it alone.
   """
   @callback cancel(invoke_id :: String.t(), ctx :: ctx()) :: {:ok, [instruction()]}
 

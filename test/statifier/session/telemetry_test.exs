@@ -573,6 +573,51 @@ defmodule Statifier.Session.TelemetryTest do
       assert cancel_metadata.caller_context == host_context
     end
 
+    # sabotage: `core_shape/2`'s `Invoke` clause drops `caller_context` from
+    # its metadata map -> red, the `KeyError` fails the first assertion -
+    # reverted and confirmed green. Also verified for the `CancelInvoke`
+    # clause, which reddens the second assertion the same way. ADR-0063's
+    # 2026-09-01 amendment point 3: the invoke seam's two events
+    # read like `:send_delayed`/`:cancel` do.
+    test "puts caller_context in metadata for :invoke and :cancel_invoke", %{ref: ref} do
+      machine = located_machine()
+      host_context = %{trace_id: "abc"}
+      {:ok, a_index} = Machine.index(machine, "a")
+
+      invoke_payload = %Invoke{
+        invoke_id: "i1",
+        state_index: a_index,
+        invoke_index: 0,
+        macrostep: 1,
+        microstep: 1,
+        round: 0,
+        caller_context: host_context
+      }
+
+      Telemetry.effect("sess1", machine, {:invoke, invoke_payload})
+
+      assert_received {[:statifier, :session, :effect, :invoke], ^ref, _measurements,
+                       invoke_metadata}
+
+      assert invoke_metadata.caller_context == host_context
+
+      cancel_invoke_payload = %CancelInvoke{
+        invoke_id: "i1",
+        state_index: a_index,
+        macrostep: 1,
+        microstep: 1,
+        round: 0,
+        caller_context: host_context
+      }
+
+      Telemetry.effect("sess1", machine, {:cancel_invoke, cancel_invoke_payload})
+
+      assert_received {[:statifier, :session, :effect, :cancel_invoke], ^ref, _m2,
+                       cancel_invoke_metadata}
+
+      assert cancel_invoke_metadata.caller_context == host_context
+    end
+
     # sabotage: `core_shape/2`'s `Cancel` clause drops `ordinal` from its
     # measurements map -> red, `measurements.ordinal` no longer exists and
     # the `KeyError` fails the assertion - reverted and confirmed green.

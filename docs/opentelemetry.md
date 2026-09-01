@@ -151,7 +151,14 @@ sent without one) is what attaches a macrostep span to the sender's trace,
 and `caller_context` on `[..., :effect, :send_delayed]` and
 `[..., :effect, :cancel]` is what a durable timer host (`statifier_oban`)
 stores as row data so a delayed send firing hours later can link back to
-the trace that scheduled it. The bridge *uses* the value (to parent or
+the trace that scheduled it. ADR-0063's 2026-09-01 amendment adds the same
+key to `[..., :effect, :invoke]` and `[..., :effect, :cancel_invoke]`,
+which is the invoke seam's half of the same story: an asynchronous invoke
+handler stores the term with its invocation row and restores it on the
+result event, so an invocation's result links back to the trace that
+started it exactly as a timer's firing does. `[..., :effect, :autoforward]`
+needs no key - its effect carries the triggering event whole, slot and all.
+The bridge *uses* the value (to parent or
 link) and never flattens it into span attributes - the same line the
 attribute mapping below draws for `metadata.effect`. A macrostep whose
 trigger attached no context stays detached, and the

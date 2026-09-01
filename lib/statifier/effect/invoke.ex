@@ -41,6 +41,21 @@ defmodule Statifier.Effect.Invoke do
   sentinel that collapses "no content, use src" with "content resolved to
   nil" - so 6.4's "treat identically" becomes two fields the reader of the
   effect payload treats identically, not one field that already has.
+
+  ## `caller_context`
+
+  `caller_context` is the opaque host term the current macrostep's
+  triggering external event carried (ADR-0063, amended 2026-09-01),
+  copied off `Statifier.MachineState`'s transient slot at
+  construction - `nil` when no context was attached. An invocation
+  outlives the macrostep that started it exactly as a delayed send
+  outlives the macrostep that scheduled it, which is the reopening
+  trigger ADR-0063 named for a third durably-stored effect: a handler
+  that starts work asynchronously (a durable job, a queue write) stores
+  this term beside its own invocation row and restores it when the
+  result comes back, so the result event links back to the trace that
+  started the invocation - the parity with a durable timer's firing.
+  The library never reads the value.
   """
 
   @enforce_keys [:invoke_id, :state_index, :invoke_index, :macrostep, :microstep, :round]
@@ -55,7 +70,8 @@ defmodule Statifier.Effect.Invoke do
     :invoke_index,
     :macrostep,
     :microstep,
-    :round
+    :round,
+    caller_context: nil
   ]
 
   @type t :: %__MODULE__{
@@ -69,6 +85,7 @@ defmodule Statifier.Effect.Invoke do
           invoke_index: non_neg_integer(),
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
-          round: non_neg_integer()
+          round: non_neg_integer(),
+          caller_context: term()
         }
 end
