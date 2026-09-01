@@ -244,6 +244,13 @@ defmodule Statifier.Session do
   missed that child's `Trace.EntrySet`, `Trace.ContentExecuted`,
   `Trace.InvokePass`, and `Trace.MacrostepStable`.
 
+  A child is otherwise started with an empty `:invoke_handlers` registry, so a
+  nested chart that itself invokes a registered type cannot resolve a handler
+  the root registered - it plans nothing and parks at that state.
+  `start_link/2`'s `:inherit_invoke_handlers` hands the child this session's
+  own handler map instead, transitively; see that option for why it is an
+  opt-in rather than the default.
+
   ## Cancelling an invocation
 
   `{:cancel_invoke, %Effect.CancelInvoke{}}` - the core's own reaction to a
@@ -365,7 +372,14 @@ defmodule Statifier.Session do
       # opted in starts its own children exactly as before. `true` carries
       # forward into every child this session starts for an `<invoke>`, which
       # is what makes the opt-in transitive down the whole invoke tree.
-      inherit_observers: false
+      inherit_observers: false,
+      # Off by default for the same reason `inherit_observers` is (ADR-0050
+      # decision 2): a default-on inheritance would start running a host's
+      # handlers inside child charts nobody registered them for, on an
+      # upgrade, with no caller having asked. `true` carries the parent's
+      # `:invoke_handlers` map and the flag itself into every child, so one
+      # opt-in at the root serves the whole invoke tree.
+      inherit_invoke_handlers: false
     ]
 
     @type t :: %__MODULE__{
@@ -409,7 +423,15 @@ defmodule Statifier.Session do
             # for an `<invoke>` inherits this session's `:trace` and
             # subscriber pids, and the flag itself, so one opt-in at the root
             # traces the whole invoke tree.
-            inherit_observers: boolean()
+            inherit_observers: boolean(),
+            # Whether a child this session starts for an `<invoke>` is started
+            # with this session's `invoke_handlers` map, and the flag itself,
+            # so one opt-in at the root registers the same handler palette
+            # down the whole invoke tree. ADR-0051 decision 2's per-session
+            # cadence is untouched: the child is still stamped once, at its
+            # own boot, from a map fixed for its lifetime - the map simply
+            # comes from the parent's start options rather than the child's.
+            inherit_invoke_handlers: boolean()
           }
   end
 
@@ -496,6 +518,21 @@ defmodule Statifier.Session do
       a snapshot: `subscribe/2` and `unsubscribe/2` after a child has started
       do not reach that child, and `invocations/1` plus `subscribe/2` on the
       child is how an already-running child is attached to.
+    - `:inherit_invoke_handlers` - when `true`, every child session this
+      session starts for an `<invoke>` is started with this session's
+      `:invoke_handlers` map and `inherit_invoke_handlers: true` of its own,
+      so one opt-in at the root registers the same handler palette down the
+      whole invoke tree. Default `false`, which starts children with an empty
+      registry exactly as before - and is why a nested chart whose own
+      `<invoke type="myapp:authorize">` needs a registered handler raises
+      `error.execution` there unless this is set. Inheritance is a start-time
+      hand-off, not a shared registry: the child's dispatch map and its
+      `%MachineState{}` `invoke_types` stamp are fixed at the child's own boot
+      from the map it was handed, so ADR-0051 decision 2's per-session cadence
+      is unchanged and two roots with different palettes still hand their own
+      subtrees their own. Handlers descend independently of `:invoke_source`,
+      which ADR-0038 leaves to its own option, and independently of
+      `:inherit_observers`, which is an observation knob.
     - `:resume` - boots this session at a persisted position (ADR-0060)
       instead of running `Statifier.Interpreter.initialize/2`. Accepts
       either a `Statifier.Position.to_binary/1` blob (decoded via
@@ -920,7 +957,8 @@ defmodule Statifier.Session do
       invoke_source: Keyword.get(opts, :invoke_source),
       invoke_handlers: invoke_handlers,
       invoked_by: invoked_by,
-      inherit_observers: Keyword.get(opts, :inherit_observers, false)
+      inherit_observers: Keyword.get(opts, :inherit_observers, false),
+      inherit_invoke_handlers: Keyword.get(opts, :inherit_invoke_handlers, false)
     }
 
     # `perform/3` runs from `handle_continue/2` rather than here, and the
@@ -2085,7 +2123,7 @@ defmodule Statifier.Session do
     Statifier.start_session(
       machine,
       [invoked_by: {self(), invoke.invoke_id}, datamodel: datamodel] ++
-        inherited_observer_opts(state)
+        inherited_observer_opts(state) ++ inherited_invoke_handler_opts(state)
     )
   catch
     :exit, reason -> {:error, reason}
@@ -2105,6 +2143,37 @@ defmodule Statifier.Session do
       trace: state.machine_state.trace,
       subscribers: Map.keys(state.subscribers),
       inherit_observers: true
+    ]
+  end
+
+  # `:inherit_invoke_handlers`: off by default, so a session that
+  # never opted in starts its children with an empty registry exactly as
+  # before. When on, the child boots from this session's own
+  # `:invoke_handlers` map plus the flag itself, so the opt-in descends the
+  # whole invoke tree the way ADR-0050 decision 4 makes observation descend
+  # it - a depth-one design would leave a grandchart's `<invoke>` unable to
+  # resolve a handler the root registered, for a caller with no way to know
+  # in advance how deep a document's invocations nest.
+  #
+  # This threads a start option; it does not widen ADR-0051. Decision 2's
+  # cadence is per session and stays per session: the child's dispatch map is
+  # fixed at its own boot and its `%MachineState{}` `invoke_types` stamp is
+  # derived from that same map by `boot/6`'s one constructor, so the stamped
+  # set and the dispatch map still cannot diverge. Nothing here re-registers
+  # a handler mid-session, and nothing here makes the registry global: two
+  # sibling roots with different handler palettes still hand their own
+  # subtrees their own.
+  #
+  # An empty parent map yields `invoke_handlers: %{}` rather than `[]`, which
+  # is the child's default anyway - the flag is what has to descend in that
+  # case, so the clause stays uniform rather than special-casing emptiness.
+  @spec inherited_invoke_handler_opts(state :: State.t()) :: keyword()
+  defp inherited_invoke_handler_opts(%State{inherit_invoke_handlers: false}), do: []
+
+  defp inherited_invoke_handler_opts(%State{} = state) do
+    [
+      invoke_handlers: state.invoke_handlers,
+      inherit_invoke_handlers: true
     ]
   end
 
