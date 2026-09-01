@@ -123,6 +123,32 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
   """
   @type payload :: %{invoke_id: String.t(), type: String.t(), params: map()}
 
+  @typedoc """
+  What `dispatch/4` threads to the handler it routes to: any map.
+
+  A session's own drive supplies `t:Statifier.Invoke.SyncHandler.ctx/0` -
+  the plan context, with `session_id` and the two registrations - and that
+  is still the context `perform/3` requires, because reporting the answer
+  needs `ctx.session_id` to report it to. Routing needs none of it.
+  `dispatch/4` reads no key of the context at all; it resolves the module
+  from `type` and hands the context through untouched.
+
+  So the type is `map()` rather than the plan context, and that is the
+  honest shape rather than a loosening: `dispatch/4` is public *for* the
+  host driving the pure core with no session (see its doc), and such a
+  host has no `session_id` to put in a plan context. Typed narrowly, the
+  only thing the spec achieved was to make the documented use a contract
+  violation - the host re-implemented the routing beside this function
+  instead of delegating to it.
+
+  The agreement about what the map contains is then between that host and
+  its own handler modules, which is where it can be kept: a handler
+  written against `c:Statifier.Invoke.SyncHandler.handle/3`'s declared
+  `ctx` still gets exactly that from a session, and a handler a host also
+  drives itself matches on whichever shape it is handed.
+  """
+  @type dispatch_ctx :: map()
+
   @doc """
   Generates the `Statifier.Invoke.Handler` implementation and the two
   derived registrations over `:handlers`.
@@ -256,12 +282,18 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
   with no `Statifier.Session` process to report to - performs its
   invocations its own way and still wants the routing, without the
   reporting half `perform/3` supplies.
+
+  `ctx` is whatever that caller has to say about the call, handed to the
+  handler untouched: `t:dispatch_ctx/0`, any map, and not the plan context
+  `perform/3` needs. A session's drive passes its plan context; a durable
+  stepper passes what it knows, typically its own run id. Neither is a
+  special case here, because routing reads no key of it.
   """
   @spec dispatch(
           modules :: [module()],
           type :: String.t(),
           params :: map(),
-          ctx :: SyncHandler.ctx()
+          ctx :: dispatch_ctx()
         ) ::
           {:ok, SyncHandler.donedata()} | {:error, term()}
   def dispatch(modules, type, params, ctx)
