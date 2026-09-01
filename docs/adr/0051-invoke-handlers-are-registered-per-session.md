@@ -221,7 +221,7 @@ theirs:**
 
 ### Amendment 2026-09-01: a declared set that omits the type is refused in the core (st-mv7t)
 
-Status: proposed (2026-09-01) - amends decision 1's behaviour clause for the
+Status: accepted (2026-09-01, unqualified direction-agent verdict) - amends decision 1's behaviour clause for the
 half-registration case only; decision 1's error classification, decision 2's
 `nil` semantics, and the record's own Status above are all unchanged
 
