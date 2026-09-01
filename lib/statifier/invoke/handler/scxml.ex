@@ -11,11 +11,20 @@ defmodule Statifier.Invoke.Handler.Scxml do
   6.4.3 child-datamodel seeding, and both process monitors are unchanged -
   this module only names the seam they already sat behind.
 
-  `cancel/2` and `forward/3` return the same `{:stop_child, _}`/`{:forward,
-  _, _}` instructions the planner already emits directly today for
-  `:cancel_invoke`/`:autoforward` effects; the planner does not yet route
-  through them (that routing is a later phase's work), so as written they
-  are correct but not yet reachable from `plan/2`. `perform/2` is not
+  `cancel/2` and `forward/3` return the `{:stop_child, invoke_id}`/
+  `{:forward, invoke_id, event}` instructions the planner once emitted
+  directly for `:cancel_invoke`/`:autoforward` effects, and both effects now
+  reach them through this seam rather than around it (ADR-0051 decision 6):
+  `Statifier.Session.Effects.plan_one/2`'s `:cancel_invoke` and
+  `:autoforward` arms read the invocation's own `type` from the plan
+  context's live `:invocation_types` map, look that type up in
+  `:invoke_handlers`, and land on this module whenever that lookup finds no
+  registered handler - the ordinary case for an invocation started as
+  `type=scxml`, and equally for a `cancel_invoke`/`autoforward` naming an
+  invocation no longer tracked at all. Both callbacks are therefore
+  reachable from `plan/2`, and routing through them changes nothing
+  observable for the built-in type, since they return the instructions the
+  planner used to emit itself. `perform/2` is not
   implemented: every instruction this handler returns already has its own
   executor clause in `Statifier.Session` (and its own no-op clause in
   `Statifier.Replay`), so there is nothing for an impure `perform/2` to do.
