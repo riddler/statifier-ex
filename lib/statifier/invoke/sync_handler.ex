@@ -134,9 +134,10 @@ defmodule Statifier.Invoke.SyncHandler do
   Every `<invoke type>` value this module answers.
 
   Read twice, and that is the point (see the moduledoc): the union across a
-  host's handler modules is both the set its compiler lints documents
-  against and the key set of the `:invoke_handlers` map its sessions are
-  started with. Order does not matter -
+  host's handler modules is both the set the pure core's `:invoke_types`
+  snapshot classifies an `<invoke>` against and the key set of the
+  `:invoke_handlers` map its sessions are started with. Order does not
+  matter -
   `Statifier.Invoke.SyncHandler.Adapter.invoke_types/1` sorts and dedups the
   union - but a module that returns its own list sorted is easier to read
   against the chart that names them.

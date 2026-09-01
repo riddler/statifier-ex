@@ -17,8 +17,22 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
   the list itself, for a host driving the pure core with no session to
   report to.
 
-      Statifier.Compiler.compile(document, known_invoke_types: MyApp.InvokeHandler.invoke_types())
       Statifier.Session.start_link(machine, invoke_handlers: MyApp.InvokeHandler.invoke_handlers())
+
+      # a host driving the pure core, with no session to derive the snapshot
+      Statifier.MachineState.new(machine,
+        invoke_types: Statifier.Invoke.Types.new(types: MyApp.InvokeHandler.invoke_types())
+      )
+
+  A session needs only `invoke_handlers/0`: `Statifier.Session` derives the
+  core's registered-type snapshot from that map itself
+  (`Statifier.Invoke.Types.from_handlers/1`). `invoke_types/0` is the plain
+  list of strings a host driving the pure core builds that snapshot from by
+  hand - `:invoke_types` on `Statifier.MachineState.new/2`, or
+  `Statifier.MachineState.put_invoke_types/2` after a resume, both of which
+  take a `%Statifier.Invoke.Types{}` rather than the list itself. Nothing is
+  declared to `Statifier.Compiler.compile/1`, which takes a document and no
+  options.
 
   ## One adapter, not one per handler module
 
@@ -43,10 +57,11 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
   adapter. Session start closes the same loop from the other end -
   `Statifier.Invoke.Types.from_handlers/1` derives the core's registered-type
   snapshot from the `:invoke_handlers` map's own keys (ADR-0051 decision
-  3's "one constructor"). So the set the compiler lints a document against,
-  the set a session dispatches on, and the set the pure core classifies
-  against are three readings of one list of modules, and registering a new
-  type is one line in one handler module and nothing anywhere else.
+  3's "one constructor"). So the set a host stamps onto a
+  `%Statifier.MachineState{}`, the set a session dispatches on, and the set
+  the pure core classifies an `<invoke>` against are three readings of one
+  list of modules, and registering a new type is one line in one handler
+  module and nothing anywhere else.
 
   ## Routing, and the type claimed twice
 
@@ -182,7 +197,8 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
 
       @doc """
       Every `<invoke type>` this adapter answers, sorted and deduplicated -
-      the list a host hands a compiler as `:known_invoke_types`.
+      the list a host driving the pure core builds its
+      `Statifier.Invoke.Types` snapshot from.
       """
       @spec invoke_types() :: [String.t()]
       def invoke_types, do: unquote(__MODULE__).invoke_types(@sync_handlers)
