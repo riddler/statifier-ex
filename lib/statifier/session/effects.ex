@@ -95,12 +95,17 @@ defmodule Statifier.Session.Effects do
   `Statifier.Session`/`Statifier.Replay` from the live invocation table,
   `Statifier.Session.Invocations.types/1`) answers `invoke_id`'s own `type`,
   looked up in `:invoke_handlers` the same way, defaulting to
-  `Statifier.Invoke.Handler.Scxml` when `invoke_id` names nothing tracked -
-  an invocation the built-in handler started (which never records its own
-  `type`, since its dispatch already defaults to it), or one that is no
-  longer live at all (a `cancel_invoke`/`autoforward` naming a
-  dead/never-started invocation). The built-in handler's `cancel/2` and
-  `forward/3` return exactly the `{:stop_child, invoke_id}`/`{:forward,
+  `Statifier.Invoke.Handler.Scxml` when the map answers nothing for
+  `invoke_id`. Every entry `Statifier.Session` writes records `invoke.type`
+  unconditionally, a built-in `scxml` invocation's own literal `"scxml"`
+  included - that is what lets an `invoke_handlers` map explicitly
+  overriding `"scxml"` be honored on cancel/forward exactly as it already is
+  on start - so the lookup misses only for an invocation that is not live at
+  all (a `cancel_invoke`/`autoforward` naming a dead or never-started
+  invocation), or for an entry carrying no `type` key, which
+  `Statifier.Session.Invocations.types/1` leaves out of its projection
+  entirely rather than mapping to `nil`. The built-in handler's `cancel/2`
+  and `forward/3` return exactly the `{:stop_child, invoke_id}`/`{:forward,
   invoke_id, event}` instructions this module used to emit directly, so
   dispatching through it changes nothing observable for `type=scxml`.
 
