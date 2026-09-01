@@ -652,18 +652,49 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
       assert dequeued_rounds == Enum.to_list(1..20)
     end
 
+    # The guard trace is an ordinary member of the same effect list, in the
+    # position the round evaluated it: ahead of that round's own
+    # `TransitionsSelected`, which reports the selection the guard took part
+    # in. `docs/observability.md` constraint 2's "no side channel", checked
+    # on the live stream rather than assumed from the emission site.
+    #
+    # sabotage: `microstep/1`'s two tails are changed from
+    # `prepend_effects(cond_effects, ...)` to appending
+    # (`{ms, later ++ cond_effects}`) -> this reddens, because every round's
+    # guard trace now arrives after the `TransitionsSelected` it explains.
+    test "each round's guard trace arrives before that round's TransitionsSelected" do
+      m = livelock_machine()
+
+      {_result, effects} = Interpreter.initialize(m, max_macrostep_rounds: 20, trace: true)
+
+      kinds =
+        for {:trace, payload} <- effects,
+            payload.round == 1,
+            do: payload.__struct__
+
+      assert [
+               Effect.Trace.CondsEvaluated,
+               Effect.Trace.TransitionsSelected,
+               Effect.Trace.EventDequeued,
+               Effect.Trace.TransitionsSelected
+             ] = kinds
+    end
+
     # The "diff one round against another" half of the same criterion: this
-    # fixture's own round emits exactly three trace effects (an eventless
-    # `TransitionsSelected`, the internal `EventDequeued`, and the
-    # re-raised `TransitionsSelected` on that event), and every round's
-    # three share one ordinal that differs from the next round's. The
-    # pre-fold `EntrySet` (stamped `round: 0`, per the counter contract) is
-    # excluded first, since it belongs to no round of the fold.
+    # fixture's own round emits exactly four trace effects - the eventless
+    # selection's `CondsEvaluated` (this fixture livelocks *on* an erroring
+    # eventless `cond`, so every round evaluates one), that selection's
+    # `TransitionsSelected`, the internal `EventDequeued` for the
+    # `error.execution` it raised, and the re-raised `TransitionsSelected`
+    # on that event - and every round's four share one ordinal that differs
+    # from the next round's. The pre-fold `EntrySet` (stamped `round: 0`,
+    # per the counter contract) is excluded first, since it belongs to no
+    # round of the fold.
     #
     # sabotage: `MachineState.begin_round/1` returns `machine_state`
     # unchanged -> every round is stamped `round: 0`, so all twenty rounds'
-    # effects collapse into a single sixty-effect-wide group instead of
-    # twenty three-wide groups with distinct ordinals, reddening the
+    # effects collapse into a single eighty-effect-wide group instead of
+    # twenty four-wide groups with distinct ordinals, reddening the
     # assertion.
     test "one round's effects share one ordinal, distinct from the next round's" do
       m = livelock_machine()
@@ -677,8 +708,8 @@ defmodule Statifier.Interpreter.InterpreterAcceptanceTest do
 
       [first_group, second_group | _rest] = grouped
 
-      assert length(first_group) == 3
-      assert length(second_group) == 3
+      assert length(first_group) == 4
+      assert length(second_group) == 4
       assert hd(first_group) == 1
       assert hd(second_group) == 2
       refute hd(first_group) == hd(second_group)

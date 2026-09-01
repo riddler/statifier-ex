@@ -1,7 +1,7 @@
 defmodule Statifier.Effect.TraceTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.Effect.Trace.{ContentExecuted, Done, EntrySet}
+  alias Statifier.Effect.Trace.{CondsEvaluated, ContentExecuted, Done, EntrySet}
   alias Statifier.Effect.Trace.{EventDequeued, ExitSet, FinalizeAutoforward}
   alias Statifier.Effect.Trace.{InvokePass, MacrostepStable, TransitionsSelected}
   alias Statifier.{Event, MachineState}
@@ -123,6 +123,27 @@ defmodule Statifier.Effect.TraceTest do
                round: 11
              } =
                payload
+    end
+  end
+
+  describe "CondsEvaluated.new/2" do
+    # sabotage: `CondsEvaluated.new/2` hardcodes `macrostep: 0, microstep: 0,
+    # round: 0` instead of reading them off `machine_state` -> this
+    # assertion reddens.
+    test "stamps counters from machine_state and sets its own fields" do
+      evaluations = [
+        %{t_index: 4, outcome: :enabled, reason: nil},
+        %{t_index: 7, outcome: :error, reason: {:non_boolean_cond, 3}}
+      ]
+
+      payload = CondsEvaluated.new(ms(6, 3, 12), evaluations: evaluations)
+
+      assert %CondsEvaluated{
+               evaluations: ^evaluations,
+               macrostep: 6,
+               microstep: 3,
+               round: 12
+             } = payload
     end
   end
 

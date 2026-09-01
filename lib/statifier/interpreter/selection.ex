@@ -29,15 +29,27 @@ defmodule Statifier.Interpreter.Selection do
   `select_transitions/2` and `select_eventless_transitions/1` are the two
   functions in this module that thread `machine_state` through their
   *return* value as well as their first argument: both return
-  `{MachineState.t(), [Transition.t()]}` rather than a bare list, so that a
-  failed `cond` discovered mid-walk has a machine_state to enqueue
-  `error.execution` onto. The machine_state comes back **unchanged** when no
-  `cond` fails during that round, and carries one `error.execution` event per
-  failed `cond` - in walk order - when one or more do. This is the
-  deliberate, signature-preserving edit the paragraph above used to
-  anticipate; it has landed. Every other query in this module, including
-  `remove_conflicting_transitions/2` itself, still returns a plain value with
-  no machine_state, because none of them can raise.
+  `{MachineState.t(), [Transition.t()], [Effect.t()]}` rather than a bare
+  list, so that a failed `cond` discovered mid-walk has a machine_state to
+  enqueue `error.execution` onto. The machine_state comes back **unchanged**
+  when no `cond` fails during that round, and carries one `error.execution`
+  event per failed `cond` - in walk order - when one or more do. Every other
+  query in this module, including `remove_conflicting_transitions/2` itself,
+  still returns a plain value with no machine_state, because none of them can
+  raise.
+
+  The third element is the round's guard trace: a one-element list
+  holding `{:trace, %Effect.Trace.CondsEvaluated{}}` when the round evaluated
+  at least one *written* `cond` under `trace: true`, and `[]` otherwise -
+  including under `trace: false`, where the guard outcomes are never
+  accumulated in the first place (`docs/observability.md` constraint 2's
+  "the untraced hot path allocates nothing for trace"). This module still
+  emits nothing and performs nothing: the effect rides out on the caller's
+  effect list exactly like every other trace effect, and
+  `Statifier.Interpreter` prepends it ahead of that round's
+  `Trace.TransitionsSelected`. Predicator is telemetry-silent by its own
+  ADR-0016, so this is the family's only view of a guard evaluation - see
+  `Statifier.Effect.Trace.CondsEvaluated` and ADR-0040.
 
   The two walks and the conflict filter are Appendix D's two nested loops
   with labelled breaks, decomposed into named private helpers to stay under
@@ -52,12 +64,22 @@ defmodule Statifier.Interpreter.Selection do
   alias Statifier.Interpreter.NameMatch
   alias Statifier.Machine.Transition
 
-  # A failed `cond`, paired with the transition it belongs to - the
+  require Statifier.Effect, as: Effect
+
+  # One evaluated `cond`, paired with the transition it belongs to - the
   # accumulator D2 threads through the private walk instead of writing
   # machine_state mid-walk. Strictly smaller than a machine_state, and every
   # helper below stays standalone-callable per docs/observability.md
   # constraint 5.
-  @typep cond_error :: {Transition.t(), term()}
+  #
+  # This widened the element from D2's `{transition, reason}` failure pair
+  # to carry the outcome too, rather than threading a second accumulator
+  # beside it: `raise_cond_errors/2` filters this list down to the `:error`
+  # entries it always had, and the guard trace maps the whole of it. Under
+  # `trace: false` only `:error` entries are ever prepended (`cond_enabled/4`),
+  # so the untraced hot path allocates exactly what D2 allocated.
+  @typep cond_outcome ::
+           {Transition.t(), :enabled | :disabled | {:error, term()}}
 
   @doc """
   `findLCCA` (Appendix D) - see `Statifier.Machine.lcca/2` for the body.
@@ -317,18 +339,19 @@ defmodule Statifier.Interpreter.Selection do
   and threaded down to every atomic state's search - a hoist out of the
   per-transition matcher - rather than re-split per transition.
 
-  Returns `{machine_state, transitions}`: the machine_state comes back
-  unchanged when no `cond` fails during this round, and carries one
-  `error.execution` per failed `cond` (in walk order) when one does - see the
-  moduledoc.
+  Returns `{machine_state, transitions, effects}`: the machine_state comes
+  back unchanged when no `cond` fails during this round, and carries one
+  `error.execution` per failed `cond` (in walk order) when one does;
+  `effects` is the round's guard trace, `[]` unless a written `cond` was
+  evaluated under `trace: true` - see the moduledoc.
   """
   @spec select_transitions(machine_state :: MachineState.t(), event :: Event.t()) ::
-          {MachineState.t(), [Transition.t()]}
+          {MachineState.t(), [Transition.t()], [Effect.t()]}
   def select_transitions(%MachineState{} = machine_state, %Event{name: name}) do
     event_tokens = NameMatch.tokenize(name)
     context = Evaluator.context(machine_state)
 
-    {enabled, cond_errors} =
+    {enabled, cond_outcomes} =
       machine_state
       |> atomic_states_in_document_order()
       |> Enum.flat_map_reduce(
@@ -336,13 +359,7 @@ defmodule Statifier.Interpreter.Selection do
         &selected_for_atomic_state(machine_state, context, &1, event_tokens, &2)
       )
 
-    # `cond_errors` accumulated prepended through `cond_enabled/3` below;
-    # reverse once here to restore walk order before raising (see that
-    # function's comment).
-    machine_state = raise_cond_errors(machine_state, Enum.reverse(cond_errors))
-    enabled = Enum.uniq_by(enabled, & &1.t_index)
-
-    {machine_state, remove_conflicting_transitions(machine_state, enabled)}
+    finish_round(machine_state, enabled, cond_outcomes)
   end
 
   @doc """
@@ -354,16 +371,17 @@ defmodule Statifier.Interpreter.Selection do
   (`Credo.Check.Design.DuplicatedCode` is disabled in `.credo.exs` for
   exactly this reason).
 
-  Returns `{machine_state, transitions}`, matching `select_transitions/2`:
-  unchanged when no `cond` fails, carrying one `error.execution` per failed
-  `cond` (in walk order) when one does.
+  Returns `{machine_state, transitions, effects}`, matching
+  `select_transitions/2`: unchanged when no `cond` fails, carrying one
+  `error.execution` per failed `cond` (in walk order) when one does, and the
+  same round guard trace in the third element.
   """
   @spec select_eventless_transitions(machine_state :: MachineState.t()) ::
-          {MachineState.t(), [Transition.t()]}
+          {MachineState.t(), [Transition.t()], [Effect.t()]}
   def select_eventless_transitions(%MachineState{} = machine_state) do
     context = Evaluator.context(machine_state)
 
-    {enabled, cond_errors} =
+    {enabled, cond_outcomes} =
       machine_state
       |> atomic_states_in_document_order()
       |> Enum.flat_map_reduce(
@@ -371,14 +389,56 @@ defmodule Statifier.Interpreter.Selection do
         &selected_for_atomic_state(machine_state, context, &1, nil, &2)
       )
 
-    # `cond_errors` accumulated prepended through `cond_enabled/3` below;
-    # reverse once here to restore walk order before raising (see that
-    # function's comment).
-    machine_state = raise_cond_errors(machine_state, Enum.reverse(cond_errors))
+    finish_round(machine_state, enabled, cond_outcomes)
+  end
+
+  # The tail both selection functions share: restore walk order, raise the
+  # failed `cond`s as `error.execution`, dedupe by `t_index`, filter
+  # conflicts, and stamp the round's guard trace. Factored so the two ports
+  # above stay a walk and a call to this, per ADR-0002's rule that a shared
+  # tail is decomposition and not a third pseudocode function.
+  @spec finish_round(
+          machine_state :: MachineState.t(),
+          enabled :: [Transition.t()],
+          cond_outcomes :: [cond_outcome()]
+        ) :: {MachineState.t(), [Transition.t()], [Effect.t()]}
+  defp finish_round(machine_state, enabled, cond_outcomes) do
+    # `cond_outcomes` accumulated prepended through `cond_enabled/4` below;
+    # reverse once here to restore walk order before raising and before
+    # stamping the trace (see that function's comment).
+    cond_outcomes = Enum.reverse(cond_outcomes)
+    machine_state = raise_cond_errors(machine_state, cond_outcomes)
     enabled = Enum.uniq_by(enabled, & &1.t_index)
 
-    {machine_state, remove_conflicting_transitions(machine_state, enabled)}
+    {machine_state, remove_conflicting_transitions(machine_state, enabled),
+     conds_evaluated_trace(machine_state, cond_outcomes)}
   end
+
+  # The guard seam's emission point. `[]` for a round that
+  # evaluated no written `cond` at all - the effect reports evaluations, and
+  # a round that performed none has nothing to report, unlike
+  # `Trace.TransitionsSelected`, whose empty set is itself a result. Under
+  # `trace: false` this is reached with at most the round's `:error` entries
+  # and `Effect.trace/3` discards them without building anything.
+  @spec conds_evaluated_trace(
+          machine_state :: MachineState.t(),
+          cond_outcomes :: [cond_outcome()]
+        ) :: [Effect.t()]
+  defp conds_evaluated_trace(_machine_state, []), do: []
+
+  defp conds_evaluated_trace(machine_state, cond_outcomes) do
+    Effect.trace(machine_state, Effect.Trace.CondsEvaluated,
+      evaluations: Enum.map(cond_outcomes, &evaluation/1)
+    )
+  end
+
+  @spec evaluation(outcome :: cond_outcome()) ::
+          Effect.Trace.CondsEvaluated.evaluation()
+  defp evaluation({%Transition{t_index: t_index}, {:error, reason}}),
+    do: %{t_index: t_index, outcome: :error, reason: reason}
+
+  defp evaluation({%Transition{t_index: t_index}, outcome}),
+    do: %{t_index: t_index, outcome: outcome, reason: nil}
 
   # The atomic-state outer loop of both `selectTransitions` and
   # `selectEventlessTransitions`: every active leaf, in document order.
@@ -406,20 +466,20 @@ defmodule Statifier.Interpreter.Selection do
           context :: Predicator.Context.t(),
           state_index :: non_neg_integer(),
           event_tokens :: [String.t()] | nil,
-          cond_errors :: [cond_error()]
-        ) :: {[Transition.t()], [cond_error()]}
+          cond_outcomes :: [cond_outcome()]
+        ) :: {[Transition.t()], [cond_outcome()]}
   defp selected_for_atomic_state(
-         %MachineState{machine: machine},
+         %MachineState{machine: machine, trace: trace},
          context,
          state_index,
          event_tokens,
-         cond_errors
+         cond_outcomes
        ) do
     [state_index | Machine.proper_ancestors(machine, state_index)]
-    |> Enum.reduce_while({[], cond_errors}, fn s, {[], errors} ->
-      case first_matching_transition(context, machine, s, event_tokens, errors) do
-        {nil, errors} -> {:cont, {[], errors}}
-        {transition, errors} -> {:halt, {[transition], errors}}
+    |> Enum.reduce_while({[], cond_outcomes}, fn s, {[], outcomes} ->
+      case first_matching_transition(context, machine, s, event_tokens, trace, outcomes) do
+        {nil, outcomes} -> {:cont, {[], outcomes}}
+        {transition, outcomes} -> {:halt, {[transition], outcomes}}
       end
     end)
   end
@@ -433,23 +493,25 @@ defmodule Statifier.Interpreter.Selection do
           machine :: Machine.t(),
           state_index :: non_neg_integer(),
           event_tokens :: [String.t()] | nil,
-          cond_errors :: [cond_error()]
-        ) :: {Transition.t() | nil, [cond_error()]}
+          trace :: boolean(),
+          cond_outcomes :: [cond_outcome()]
+        ) :: {Transition.t() | nil, [cond_outcome()]}
   defp first_matching_transition(
          context,
          machine,
          state_index,
          event_tokens,
-         cond_errors
+         trace,
+         cond_outcomes
        ) do
     machine
     |> Machine.at(state_index)
     |> Map.fetch!(:transitions)
     |> Enum.map(&Machine.transition(machine, &1))
-    |> Enum.reduce_while({nil, cond_errors}, fn transition, {nil, errors} ->
-      case transition_enabled(context, transition, event_tokens, errors) do
-        {true, errors} -> {:halt, {transition, errors}}
-        {false, errors} -> {:cont, {nil, errors}}
+    |> Enum.reduce_while({nil, cond_outcomes}, fn transition, {nil, outcomes} ->
+      case transition_enabled(context, transition, event_tokens, trace, outcomes) do
+        {true, outcomes} -> {:halt, {transition, outcomes}}
+        {false, outcomes} -> {:cont, {nil, outcomes}}
       end
     end)
   end
@@ -464,40 +526,44 @@ defmodule Statifier.Interpreter.Selection do
           context :: Predicator.Context.t(),
           transition :: Transition.t(),
           event_tokens :: [String.t()] | nil,
-          cond_errors :: [cond_error()]
-        ) :: {boolean(), [cond_error()]}
+          trace :: boolean(),
+          cond_outcomes :: [cond_outcome()]
+        ) :: {boolean(), [cond_outcome()]}
   defp transition_enabled(
          context,
          %Transition{events: []} = transition,
          nil,
-         cond_errors
+         trace,
+         cond_outcomes
        ) do
-    cond_enabled(context, transition, cond_errors)
+    cond_enabled(context, transition, trace, cond_outcomes)
   end
 
   defp transition_enabled(
          _context,
          %Transition{events: []},
          _event_tokens,
-         cond_errors
+         _trace,
+         cond_outcomes
        ) do
-    {false, cond_errors}
+    {false, cond_outcomes}
   end
 
-  defp transition_enabled(_context, %Transition{}, nil, cond_errors) do
-    {false, cond_errors}
+  defp transition_enabled(_context, %Transition{}, nil, _trace, cond_outcomes) do
+    {false, cond_outcomes}
   end
 
   defp transition_enabled(
          context,
          %Transition{} = transition,
          event_tokens,
-         cond_errors
+         trace,
+         cond_outcomes
        ) do
     if NameMatch.name_match?(transition.events, event_tokens) do
-      cond_enabled(context, transition, cond_errors)
+      cond_enabled(context, transition, trace, cond_outcomes)
     else
-      {false, cond_errors}
+      {false, cond_outcomes}
     end
   end
 
@@ -506,29 +572,54 @@ defmodule Statifier.Interpreter.Selection do
   # recording: docs/architecture.md principle 3 - the error becomes an
   # event, it is never swallowed into a bare `false`.
   #
-  # Prepends (`[{transition, reason} | cond_errors]`) instead of appending
-  # (`cond_errors ++ [...]`). `cond_errors` is threaded, unreordered, through
-  # every fold between here and `select_transitions/2` /
-  # `select_eventless_transitions/2` (`selected_for_atomic_state/5`'s and
-  # `first_matching_transition/5`'s own `Enum.reduce_while/3` calls above),
+  # Prepends (`[{transition, outcome} | cond_outcomes]`) instead of appending
+  # (`cond_outcomes ++ [...]`). `cond_outcomes` is threaded, unreordered,
+  # through every fold between here and `select_transitions/2` /
+  # `select_eventless_transitions/1` (`selected_for_atomic_state/5`'s and
+  # `first_matching_transition/6`'s own `Enum.reduce_while/3` calls above),
   # so this is the one accumulation site for the whole configuration scan;
-  # appending here was O(n) per failed `cond`. Appendix D's List datatype
+  # appending here was O(n) per recorded outcome. Appendix D's List datatype
   # names only `append(l)` (`spec-cache/appendix-d.txt:21`) with no
-  # complexity contract - the two call sites reverse once, right before
-  # `raise_cond_errors/2`, to restore the "in walk order" both callers'
-  # `@doc`s promise.
+  # complexity contract - `finish_round/3` reverses once, before
+  # `raise_cond_errors/2` and before stamping the guard trace, to restore the
+  # "in walk order" both callers' `@doc`s promise.
+  #
+  # an `:error` is recorded unconditionally, because
+  # `raise_cond_errors/2` needs it whatever `trace` says. `:enabled` and
+  # `:disabled` are recorded only under `trace: true`, and only for a
+  # *written* `cond` - a `nil` `cond` short-circuits inside
+  # `evaluate_cond/2` without reaching `Statifier.Evaluator` at all, so it is
+  # not an evaluation and gets no entry. That keeps `docs/observability.md`
+  # constraint 2's "the untraced hot path allocates nothing for trace"
+  # literally true: under `trace: false` this function allocates exactly what
+  # D2's failure-only accumulator allocated.
   @spec cond_enabled(
           context :: Predicator.Context.t(),
           transition :: Transition.t(),
-          cond_errors :: [cond_error()]
-        ) :: {boolean(), [cond_error()]}
-  defp cond_enabled(context, transition, cond_errors) do
+          trace :: boolean(),
+          cond_outcomes :: [cond_outcome()]
+        ) :: {boolean(), [cond_outcome()]}
+  defp cond_enabled(context, transition, trace, cond_outcomes) do
     case evaluate_cond(context, transition) do
-      {:ok, true} -> {true, cond_errors}
-      {:ok, false} -> {false, cond_errors}
-      {:error, reason} -> {false, [{transition, reason} | cond_errors]}
+      {:ok, true} -> {true, record_outcome(transition, :enabled, trace, cond_outcomes)}
+      {:ok, false} -> {false, record_outcome(transition, :disabled, trace, cond_outcomes)}
+      {:error, reason} -> {false, [{transition, {:error, reason}} | cond_outcomes]}
     end
   end
+
+  @spec record_outcome(
+          transition :: Transition.t(),
+          outcome :: :enabled | :disabled,
+          trace :: boolean(),
+          cond_outcomes :: [cond_outcome()]
+        ) :: [cond_outcome()]
+  defp record_outcome(%Transition{cond: nil}, _outcome, _trace, cond_outcomes),
+    do: cond_outcomes
+
+  defp record_outcome(_transition, _outcome, false, cond_outcomes), do: cond_outcomes
+
+  defp record_outcome(transition, outcome, true, cond_outcomes),
+    do: [{transition, outcome} | cond_outcomes]
 
   # The errors-are-events conversion for a failed `cond`, in document order -
   # `raise_platform/4` not `raise_internal/4` because spec 5.10.1 classifies
@@ -537,13 +628,22 @@ defmodule Statifier.Interpreter.Selection do
   # content node; spec 3.12.2 is what puts it on the internal queue at all.
   # The origin names the transition, whose `cond_location` an ADR-0014 item 4
   # diagnostic resolves through `Machine.transition/2`.
-  @spec raise_cond_errors(machine_state :: MachineState.t(), cond_errors :: [cond_error()]) ::
+  #
+  # the accumulator now carries every recorded outcome, not only the
+  # failures, so this filters to the `{:error, reason}` entries. Walk order
+  # is preserved by the filter, which is what keeps "in walk order" true of
+  # the raised events and of the guard trace alike.
+  @spec raise_cond_errors(machine_state :: MachineState.t(), cond_outcomes :: [cond_outcome()]) ::
           MachineState.t()
-  defp raise_cond_errors(machine_state, cond_errors) do
-    Enum.reduce(cond_errors, machine_state, fn {transition, reason}, ms ->
-      MachineState.raise_platform(ms, "error.execution", {:transition, transition.t_index},
-        data: reason
-      )
+  defp raise_cond_errors(machine_state, cond_outcomes) do
+    Enum.reduce(cond_outcomes, machine_state, fn
+      {transition, {:error, reason}}, ms ->
+        MachineState.raise_platform(ms, "error.execution", {:transition, transition.t_index},
+          data: reason
+        )
+
+      {_transition, _outcome}, ms ->
+        ms
     end)
   end
 

@@ -206,7 +206,7 @@ defmodule Statifier.Telemetry do
   | `[:statifier, :session, :effect, :datamodel_change]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `location_path`, `location_source`, `new_value`, `prior_value`, `d_index`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :datamodel_init]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `datamodel` |
 
-  ## Trace effect events (9), emitted only under `trace: true`
+  ## Trace effect events (10), emitted only under `trace: true`
 
   The trace family vanishes **in the core**, not at this bridge:
   `Statifier.Effect.trace/3` expands to no effect at all when
@@ -216,6 +216,7 @@ defmodule Statifier.Telemetry do
   | Event | Measurements | Metadata |
   |---|---|---|
   | `[:statifier, :session, :trace, :event_dequeued]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect` |
+  | `[:statifier, :session, :trace, :conds_evaluated]` | `macrostep`, `microstep`, `round`, `size` | `driver`, `session_id`, `effect` |
   | `[:statifier, :session, :trace, :transitions_selected]` | `macrostep`, `microstep`, `round`, `size` | `driver`, `session_id`, `effect` |
   | `[:statifier, :session, :trace, :exit_set]` | `macrostep`, `microstep`, `round`, `size` | `driver`, `session_id`, `effect` |
   | `[:statifier, :session, :trace, :content_executed]` | `macrostep`, `microstep`, `round`, `size` | `driver`, `session_id`, `effect` |
@@ -266,9 +267,10 @@ defmodule Statifier.Telemetry do
           | DatamodelChange.t()
           | DatamodelInit.t()
 
-  @typedoc "One of the nine trace payload structs (`t:Statifier.Effect.trace/0`, unwrapped)."
+  @typedoc "One of the ten trace payload structs (`t:Statifier.Effect.trace/0`, unwrapped)."
   @type trace_payload ::
           Trace.EventDequeued.t()
+          | Trace.CondsEvaluated.t()
           | Trace.TransitionsSelected.t()
           | Trace.ExitSet.t()
           | Trace.ContentExecuted.t()
@@ -311,6 +313,7 @@ defmodule Statifier.Telemetry do
 
   @trace_kinds [
     :event_dequeued,
+    :conds_evaluated,
     :transitions_selected,
     :exit_set,
     :content_executed,
@@ -323,7 +326,7 @@ defmodule Statifier.Telemetry do
 
   @doc """
   Every event name this module can ever emit - the 7 lifecycle/span names,
-  the 11 `[:statifier, :session, :effect, kind]` names, and the 9
+  the 11 `[:statifier, :session, :effect, kind]` names, and the 10
   `[:statifier, :session, :trace, kind]` names, built from
   `@lifecycle_events`/`@effect_kinds`/`@trace_kinds`, the module's single
   definition site for the vocabulary.
@@ -721,6 +724,10 @@ defmodule Statifier.Telemetry do
     {counters(payload), %{}}
   end
 
+  defp trace_shape(_machine, %Trace.CondsEvaluated{evaluations: evaluations} = payload) do
+    {Map.put(counters(payload), :size, length(evaluations)), %{}}
+  end
+
   defp trace_shape(_machine, %Trace.TransitionsSelected{t_indexes: t_indexes} = payload) do
     {Map.put(counters(payload), :size, length(t_indexes)), %{}}
   end
@@ -762,6 +769,7 @@ defmodule Statifier.Telemetry do
 
   @spec trace_kind(payload :: trace_payload()) :: atom()
   defp trace_kind(%Trace.EventDequeued{}), do: :event_dequeued
+  defp trace_kind(%Trace.CondsEvaluated{}), do: :conds_evaluated
   defp trace_kind(%Trace.TransitionsSelected{}), do: :transitions_selected
   defp trace_kind(%Trace.ExitSet{}), do: :exit_set
   defp trace_kind(%Trace.ContentExecuted{}), do: :content_executed

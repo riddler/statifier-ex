@@ -320,20 +320,26 @@ defmodule Statifier.Interpreter.MicrostepTest do
     # either call's rebind is dropped, this test - not silent behavior -
     # catches it.
     #
-    # sabotage: `{machine_state, eventless_transitions} =
+    # The guard trace made both destructures three-wide and pushed them onto
+    # their own line under the formatter, so the patterns below name the
+    # bound head rather than a whole statement: it is the `machine_state`
+    # rebind this test is about, not the line layout around it.
+    #
+    # sabotage: `{machine_state, eventless_transitions, cond_effects} =
     # Selection.select_eventless_transitions(machine_state)` is changed to
-    # `{_ms, eventless_transitions} = Selection.select_eventless_transitions(machine_state)`,
-    # discarding the returned position and reusing the outer binding instead
-    # -> the source no longer contains the rebind pattern, reddening the
-    # `=~` assertion.
+    # `{_ms, eventless_transitions, cond_effects} = ...`, discarding the
+    # returned position and reusing the outer binding instead -> the source
+    # no longer contains the rebind pattern, reddening the `=~` assertion.
     test "the machine_state Selection returns is threaded, not discarded" do
       source = File.read!(Path.join(File.cwd!(), "lib/statifier/interpreter.ex"))
 
       assert source =~
-               "{machine_state, eventless_transitions} = Selection.select_eventless_transitions(machine_state)"
+               "{machine_state, eventless_transitions, cond_effects} =\n" <>
+                 "      Selection.select_eventless_transitions(machine_state)"
 
       assert source =~
-               "{machine_state, transitions} = Selection.select_transitions(machine_state, event)"
+               "{machine_state, transitions, cond_effects} =\n" <>
+                 "      Selection.select_transitions(machine_state, event)"
     end
   end
 end

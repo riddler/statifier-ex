@@ -250,5 +250,10 @@ shape.
 
 Nothing in this note adds code to this repository. The one obligation it
 leaves here is the contract freeze ADR-0040 already states: once
-`opentelemetry_statifier` ships against the 27 event names and their
+`opentelemetry_statifier` ships against the 28 event names and their
 shapes, changing one is a breaking change to a real consumer.
+
+(The count was 27 until `[:statifier, :session, :trace, :conds_evaluated]`
+joined the trace family - the guard seam, recorded as an amendment to
+ADR-0040. It is a `trace: true`-only event and rides the existing trace
+family's shape, so the bridge needs no change for it beyond the name.)

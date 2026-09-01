@@ -1,6 +1,6 @@
 defmodule Statifier.Effect do
   @moduledoc """
-  The effect vocabulary (ADR-0003) plus the nine trace effects
+  The effect vocabulary (ADR-0003) plus the ten trace effects
   (`docs/observability.md` constraint 2) - one `@type t()` union, in this
   one module, that every interpreter function emits from and every
   consumer pattern-matches against, including `Statifier.Session`, which
@@ -34,6 +34,7 @@ defmodule Statifier.Effect do
   | `:datamodel_change` | `Statifier.Effect.DatamodelChange` | `Statifier.Interpreter.Datamodel.write_location/4`'s four call sites - `Statifier.Machine.Content.Assign`'s `execute/2` (`<assign>`), `Statifier.Machine.Content.Send`'s `execute/2` (`<send idlocation>`), `Statifier.Interpreter`'s `write_finalize_target/6` (the empty-`<finalize>` auto-assign), and `Statifier.Interpreter`'s `invoke_one/6` (`<invoke idlocation>`) - plus `Statifier.Interpreter.Datamodel.bind_value`, reached from both `initialize/1` and `enter_state/2`, for a `<data>` binding |
   | `:datamodel_init` | `Statifier.Effect.DatamodelInit` | `Statifier.Interpreter.Datamodel.initialize/1` |
   | `:trace` | `Statifier.Effect.Trace.EventDequeued` | `Statifier.Interpreter.handle_event/2` and `internal_round/1` |
+  | `:trace` | `Statifier.Effect.Trace.CondsEvaluated` | `Statifier.Interpreter.Selection.select_transitions/2` and `select_eventless_transitions/1`, when the round evaluated at least one written `cond` |
   | `:trace` | `Statifier.Effect.Trace.TransitionsSelected` | `Statifier.Interpreter.run_selected` |
   | `:trace` | `Statifier.Effect.Trace.ExitSet` | `exit_states/2` (`compute_exit_set` result) |
   | `:trace` | `Statifier.Effect.Trace.ContentExecuted` | `execute_block/3` (a content block ran) and `Statifier.Interpreter.run_global_script` (a top-level `<script>` ran at load time) |
@@ -46,7 +47,7 @@ defmodule Statifier.Effect do
   Every tag in this vocabulary is produced today: `:log`, `:done`,
   `:budget_exhausted`, `:invoke`, `:cancel_invoke`, `:autoforward`,
   `:datamodel_change`, `:datamodel_init`, `:send`, `:send_delayed`,
-  `:cancel`, and all nine trace effects.
+  `:cancel`, and all ten trace effects.
 
   ## Trace effects carry indexes and counters, never structs
 
@@ -131,9 +132,10 @@ defmodule Statifier.Effect do
           | {:datamodel_change, DatamodelChange.t()}
           | {:datamodel_init, DatamodelInit.t()}
 
-  @typedoc "The nine trace effects - the seven `docs/observability.md` constraint-2 rows plus `InvokePass`/`FinalizeAutoforward` for the two Appendix-D-named phase boundaries `<invoke>` (this bead) added."
+  @typedoc "The ten trace effects - the seven `docs/observability.md` constraint-2 rows, plus `InvokePass`/`FinalizeAutoforward` for the two Appendix-D-named phase boundaries `<invoke>` added, plus `CondsEvaluated` for the `conditionMatch` guard seam."
   @type trace ::
           {:trace, Trace.EventDequeued.t()}
+          | {:trace, Trace.CondsEvaluated.t()}
           | {:trace, Trace.TransitionsSelected.t()}
           | {:trace, Trace.ExitSet.t()}
           | {:trace, Trace.ContentExecuted.t()}

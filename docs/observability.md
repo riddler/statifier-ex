@@ -68,6 +68,7 @@ commitment):
 | done | top-level final entry / `exit_interpreter` |
 | invoke pass | `run_invoke_pass` finished: the states walked and the invocations it started (`<invoke>`, spec 6.4) |
 | finalize/autoforward pass | `apply_invoke_passes` finished for one external event: which invocation(s) it ran `<finalize>` for and which it autoforwarded the event to (spec 6.4/6.5) |
+| conds evaluated | either selection function returned having evaluated at least one *written* `cond` through `Statifier.Evaluator`: which transitions were guarded, what each guard answered, and why a failing one failed (`conditionMatch`, spec 5.9.1) |
 
 The last two rows postdate the table above them - they arrived with
 `<invoke>` support and are two more phase boundaries Appendix D itself
@@ -76,6 +77,27 @@ boundary. The "Minimum trace vocabulary... the set is the commitment" line
 above is about the shapes being settled at implementation, not about the
 table being closed to boundaries Appendix D had not yet been ported far
 enough to need.
+
+The last row is a third such boundary, and it is the one the family had no
+other way to see. `conditionMatch` is an Appendix-D-named function, and
+predicator - the datamodel the guard is evaluated in - is deliberately
+telemetry-silent by its own ADR-0016, so before this row a guard that
+failed, or one that quietly disabled a transition an author expected to
+fire, produced no observable trace anywhere in the family except the
+`error.execution` a *failing* guard raises. `Statifier.Effect.Trace.CondsEvaluated`
+is the engine-side answer, contracted in ADR-0040's amendment. Two shape
+notes distinguish it from "transitions selected" directly above it:
+
+- **One effect per round, not per guard**, carrying the round's evaluations
+  as a list - the same list-carrying shape `exit set`, `entry set`, and
+  `transitions selected` already use, with `size` as its measurement.
+- **No effect at all when the round evaluated nothing.** "Transitions
+  selected" includes the empty set because a round always *selects*; a round
+  with no written `cond` on any candidate performed no evaluation, so there
+  is nothing to report. A `nil` `cond` short-circuits ahead of the evaluator
+  and is likewise not an evaluation. The commitment is one entry per
+  Predicator call, and no effect when the round made none - which is also
+  what keeps this row free for a chart that uses no guards at all.
 
 Rules:
 

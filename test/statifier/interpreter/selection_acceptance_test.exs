@@ -213,7 +213,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:full_name)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("error.execution"))
+    {_ms, transitions, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("error.execution"))
 
     assert [%Transition{events: [["error", "execution"]]}] = transitions
   end
@@ -227,7 +228,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:boundary_prefix)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("error.execution"))
+    {_ms, transitions, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("error.execution"))
 
     assert [%Transition{events: [["error"]]}] = transitions
   end
@@ -241,7 +243,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:non_boundary)])
 
-    assert {_ms, []} = Selection.select_transitions(ms, Event.external("errors.execution"))
+    assert {_ms, [], _cond_effects} =
+             Selection.select_transitions(ms, Event.external("errors.execution"))
   end
 
   # sabotage: `normalize/1` only strips a trailing `"*"` when it is the
@@ -253,8 +256,10 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:trailing_star)])
 
-    {_ms, matches_bare} = Selection.select_transitions(ms, Event.external("foo"))
-    {_ms, matches_longer} = Selection.select_transitions(ms, Event.external("foo.bar"))
+    {_ms, matches_bare, _cond_effects} = Selection.select_transitions(ms, Event.external("foo"))
+
+    {_ms, matches_longer, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("foo.bar"))
 
     assert [%Transition{}] = matches_bare
     assert [%Transition{}] = matches_longer
@@ -267,7 +272,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:trailing_dot)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("foo"))
+    {_ms, transitions, _cond_effects} = Selection.select_transitions(ms, Event.external("foo"))
 
     assert [%Transition{}] = transitions
   end
@@ -280,7 +285,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:bare_star)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("totally.unrelated"))
+    {_ms, transitions, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("totally.unrelated"))
 
     assert [%Transition{}] = transitions
   end
@@ -293,7 +299,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:multi_descriptor)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("bar"))
+    {_ms, transitions, _cond_effects} = Selection.select_transitions(ms, Event.external("bar"))
 
     assert [%Transition{}] = transitions
   end
@@ -309,7 +315,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:descendant)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("shared"))
+    {_ms, transitions, _cond_effects} = Selection.select_transitions(ms, Event.external("shared"))
 
     assert [%Transition{source: source}] = transitions
     assert source == idx(:descendant)
@@ -324,7 +330,8 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:multi)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("multi-evt"))
+    {_ms, transitions, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("multi-evt"))
 
     assert [%Transition{targets: [target]}] = transitions
     assert target == idx(:tgt_a)
@@ -341,7 +348,7 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     m = machine()
     ms = machine_state(m, [idx(:preg1a), idx(:preg2a)])
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+    {_ms, transitions, _cond_effects} = Selection.select_transitions(ms, Event.external("go"))
 
     sources = transitions |> Enum.map(& &1.source) |> Enum.sort()
     assert sources == Enum.sort([idx(:preg1a), idx(:preg2a)])
@@ -359,7 +366,9 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     ms = machine_state(m, [idx(:targetless_holder)])
     transition = transition_named(m, "tless-evt")
 
-    {_ms, transitions} = Selection.select_transitions(ms, Event.external("tless-evt"))
+    {_ms, transitions, _cond_effects} =
+      Selection.select_transitions(ms, Event.external("tless-evt"))
+
     assert [%Transition{targets: []}] = transitions
 
     assert Selection.compute_exit_set(ms, [transition]) == MapSet.new()
@@ -431,10 +440,10 @@ defmodule Statifier.Interpreter.SelectionAcceptanceTest do
     assert Selection.compute_exit_set(ms, [dom_transition]) == MapSet.new([idx(:domain_child)])
     assert Selection.condition_match(ms, nocond_transition) == {:ok, true}
 
-    {_ms, selected} = Selection.select_transitions(ms, Event.external("nc-evt"))
+    {_ms, selected, _cond_effects} = Selection.select_transitions(ms, Event.external("nc-evt"))
     assert [%Transition{events: [["nc-evt"]]}] = selected
 
-    {_ms, eventless_selected} = Selection.select_eventless_transitions(ms)
+    {_ms, eventless_selected, _cond_effects} = Selection.select_eventless_transitions(ms)
     assert eventless_selected == []
 
     assert Selection.remove_conflicting_transitions(ms, [nocond_transition]) == [
