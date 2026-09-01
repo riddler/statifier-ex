@@ -37,11 +37,14 @@ already did is invisible to a user calling the public API - most Phase 0 work
 needs no fragment at all, and that is the expected outcome, not a step you
 skipped.
 
-## Version bump: none
+## Version bump: release-prep commits only
 
-There is no version-bump ritual in this repo. `mix.exs` holds `2.0.0-dev`
-until release; there are no alpha/beta/rc versions along the way. Never edit
-the version field as part of a commit.
+Releases follow SemVer from 2.0.0 on (ADR-0066) and ship to Hex. The
+`mix.exs` version field moves only in a release-prep commit - the version
+bump plus the changelog promotion, landing alone in its own PR, under a
+consent that names it - and the tag and publish that follow are always the
+user's. Never edit the version field as part of any other commit; a diff
+that touches it alongside other work is a bug in the diff.
 
 ## Gate-guard ledger: ADR-0011
 
