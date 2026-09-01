@@ -284,6 +284,48 @@ exists to assert it against.
 `test/statifier/session/invoke_handler_test.exs`, added after decision 1
 listed its five, moves for the same reason.
 
+## Note (2026-09-01): a `nil` `invoke_types` stays permissive, and that is the contract
+
+A dated note rather than an amendment. It decides nothing new: it closes the
+one question the amendment above deliberately left open, in the direction the
+amendment already behaves, so no decision changes, no accepted text is edited,
+and the record's Status is untouched. The first Note section in this repo's
+`docs/adr/`; the shape follows the family convention (a dated `## Note`
+heading, no Status line of its own).
+
+The amendment closes with:
+
+> Whether `nil` should instead refuse every type outside the built-in set is a
+> different question about decision 2, and this amendment does not reach it.
+
+That question is now answered, and the answer is no. **A `nil`
+`invoke_types` snapshot is permissive, and permissive is the contract, not a
+gap awaiting a stricter rule.** `nil` means "no declaration was made", and a
+caller that declared nothing has made no claim this engine can find a gap in
+- there is no half-registration to refuse. Its `<invoke>` still emits its
+`Effect.Invoke`, still records in `active_invocations` only for 6.4.1's
+built-in set, and is not refused in the core.
+
+The reason it is a contract rather than an accident is that a real consumer
+depends on it: the effects-out shape `README.md`'s quick start documents,
+where a host reads `Effect.Invoke` off the pure core and answers it itself,
+registering nothing. `Statifier.Interpreter` is usable with no session, no
+handler map, and no declared type set, and tightening `nil` would break that
+use with no half-registration defect to point at. The two paths stay
+distinct on exactly that line: a declared set that omits the type is a
+contradiction the amendment refuses; an absent set is a caller who never
+spoke.
+
+Decision 7's reopen triggers are unchanged and none of them is fired by this
+note. What would reopen the `nil` question specifically: a caller that
+declares a set for some invocations and relies on `nil` for others in the
+same deployment, which would mean the two paths are being used as one knob
+rather than as two.
+
+Recorded for `st-3sz8` under the campaign-024 wrap ruling 3 (the ruling that
+adopted the permissive reading), which also filed this bead. The
+half-registration half of that walk is the amendment above (`st-mv7t`, B2).
+
 ## Related
 
 - ADR-0047 (decision 4's anti-drift property, decision 5's reopen trigger,

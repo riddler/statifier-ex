@@ -29,13 +29,14 @@ this project's policy on that report is a real refusal condition:
   condition, that file states the protocol. See `docs/testing.md` for the
   rationale behind sabotaging at all.
 
-## Step 1.6: changelog narrowing while v2 is unreleased
+## Step 1.6: the changelog test is the generic one
 
-On top of the generic needs/no-entry test: while v2 is unreleased, write a
-fragment only when **v2 differs from v1**. Re-implementing something v1
-already did is invisible to a user calling the public API - most Phase 0 work
-needs no fragment at all, and that is the expected outcome, not a step you
-skipped.
+There is no project narrowing on top of the generic needs/no-entry test. The
+v2-rewrite rules - a fragment only where v2 **differed** from v1, and the
+ADR-0061 SHA-pinning rule that edited a fragment in place - both retired with
+the 2.0.0 release (ADR-0066), and `changelog.d/README.md` records them as
+history. Apply that file's general rule: could someone who only ever calls
+the public API tell the difference? If not, no fragment.
 
 ## Version bump: release-prep commits only
 

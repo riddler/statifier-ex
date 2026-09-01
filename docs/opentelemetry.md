@@ -74,7 +74,7 @@ so the bridge opens a span on `:start` and closes it on the `:stop` whose
 the module doc explains is unusable (ADR-0039 re-entry nests spans, and
 `macrostep` is only authoritative on the stop half). Span name:
 `statifier.macrostep`, with `trigger` (`initialize | event | cancel |
-internal`) and `event_name` as attributes rather than in the name -
+internal | resume`) and `event_name` as attributes rather than in the name -
 event names are chart vocabulary and would explode the span-name
 cardinality backends key on.
 

@@ -35,8 +35,8 @@ fine as they stand and need no cleanup pass before the request opens.
 
 ## Changelog question at request time
 
-Same v2/v1 narrowing as `.claude/wurk/commit.md`: while v2 is unreleased, an
-entry is warranted only where v2 differs from v1. If step 5 finds one is
+Same test as `.claude/wurk/commit.md` step 1.6, which is `changelog.d/README.md`'s
+general rule with no narrowing on top of it. If step 5 finds an entry is
 needed and the fragment is absent, **ask the user** what it should say - a
 changelog entry is a promise to users about observable behavior, and inventing
 one describes behavior the code may not actually have.
