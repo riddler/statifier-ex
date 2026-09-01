@@ -1,6 +1,10 @@
 # ADR-0063: An opaque caller context rides external events and the durable-timer effects
 
-Status: accepted (2026-08-20) - decides the field ADR-0062 decision 4
+Status: accepted (2026-08-20) - amended 2026-09-01 (st-u9l6: the invoke
+seam joins the carriers - `%Effect.Invoke{}` and `%Effect.CancelInvoke{}`
+gain `caller_context`, the `:invoke`/`:cancel_invoke` telemetry events
+gain the metadata key, and the recording format bumps `3 -> 4`; see
+"Amendment 2026-09-01" below) - decides the field ADR-0062 decision 4
 names ("caller trace context on external events and on `%SendDelayed{}`")
 and discharges the "future work" caveat in `docs/opentelemetry.md`'s
 session-process paragraph; amends 0040 in part (four events' metadata
@@ -265,6 +269,93 @@ deferring costs nothing and commits nothing.
   decision 7 firing; or the library ever needing to *read* the value,
   which would contradict decision 1 and ADR-0062's opacity constraint
   rather than extend them.
+
+### Amendment 2026-09-01: the invoke seam joins the carriers (st-u9l6)
+
+Status: accepted (2026-09-01) - amends decision 2's carrier list,
+decision 3's stamp sites, decision 4's telemetry keys, and decision 5's
+format version. Decision 1's opacity rule, decision 6's keys, and
+decision 7's deferral are unchanged.
+
+Decision 2 fixed three carriers and said so plainly:
+
+> Three carriers: `%Statifier.Event{}`, `%SendDelayed{}`, and
+> `%Cancel{}`. No other struct gains the field.
+
+Its ground was that "the two durable-timer effects outlive the macrostep
+that emitted them, and no other effect does". That last clause was
+wrong about `<invoke>`, and the record's own Consequences named the
+trigger that would show it: "a third effect becoming durably stored (it
+claims the same stamp, as it claims `ordinal`)". A `statifier_oban`
+worker finding during campaign 025 is that trigger firing. An
+asynchronous invoke handler (ADR-0051's dispatch) starts work that
+finishes minutes or hours later, in another process, and reports back
+through `Statifier.Session.send_invoked_event/3`. With the invoke seam
+carrying nothing, the handler had no scheduling-side term to store, so
+the result event could not be link-stitched the way a durable timer's
+firing already is - the exact asymmetry decision 3's firing-time copy
+removed for `%SendDelayed{}`.
+
+**1. Two more carriers: `%Effect.Invoke{}` and
+`%Effect.CancelInvoke{}`.** Both, not just the start, by decision 2's
+own both-or-neither argument: one handler and one durable store process
+the pair, and the cancellation act wants the attribution the start has.
+Both are stamped at their existing construction sites from
+`%MachineState{}`'s transient slot - `Statifier.Interpreter`'s
+`invoke_one/6` and `Statifier.Interpreter.ExitEntry`'s
+`cancel_one_invocation/4` - so decision 3's "the stamp is the core's"
+and its replay soundness carry over unchanged.
+
+**2. `%Effect.Autoforward{}` deliberately gains nothing.** It carries
+the triggering `%Statifier.Event{}` whole, and decision 3 already
+settled that case: "the forwarded event is the same `%Event{}` value, so
+its slot travels to the invoked child untouched." A field on the effect
+would be a second copy of a term the effect already contains.
+
+**3. Decision 4's list grows to six events.**
+`[:statifier, :session, :effect, :invoke]` and
+`[..., :effect, :cancel_invoke]` gain a `caller_context` metadata key on
+the terms decision 4 set: identity rather than a number, so metadata
+everywhere and a measurement nowhere; the value also rides in
+`metadata.effect` verbatim, and the explicit key keeps a bridge's read
+uniform. No event is added or renamed, and this is ADR-0040's additive
+direction, so the amendment to 0040 is the same non-breaking one 0063
+already made.
+
+**4. `Statifier.Invoke.Handler`'s callbacks are untouched.** `start/2`
+already receives the `%Effect.Invoke{}`, so the handler that needs the
+term to store it has it with no signature change. `cancel/2` receives an
+`invoke_id` rather than the effect, and widening it to the struct would
+break every handler in the wild for a term only a bridge reads - the
+`:cancel_invoke` telemetry event is that bridge's read point. Left
+alone deliberately; the trigger to revisit is a handler needing the
+cancelling macrostep's context inside a *pure planning* callback, which
+no consumer has asked for.
+
+**5. `Statifier.Session.Recording`'s `@format_version` bumps `3 -> 4`,**
+for exactly the reason decision 5 gave for `2 -> 3`: a version-3 blob's
+stored `:interpret` entries hold invoke-effect structs written before
+the field, and reading such a map as the new struct is the silent
+misread ADR-0057 decision 4's obligation names. The same blessed default
+applies - `caller_context: nil` on import - and is safe for the same
+reason: a version-3 blob predates the field on these structs, so no
+context was ever attached to what it holds. Version 3 joins versions 1
+and 2 as readable. `Statifier.Position` and `Statifier.Chart` stay
+untouched, unchanged from decision 5's argument.
+
+**6. Decision 6 is untouched.** `caller_context` still joins no key. A
+durable invoke store carries it as row data beside its own invocation
+key, exactly as a durable timer store carries it beside the dedup key.
+
+### Amendment 2026-09-01's own consequences
+
+- The firing-side half remains statifier_oban's: storing the term with
+  the invocation row and putting it back on the result event is that
+  repo's work, and this record does not schedule it.
+- What would reopen the amendment: a *fourth* effect becoming durably
+  stored; a consumer needing the context inside `cancel/2`'s planning
+  callback (point 4's named trigger); or `%Effect.Autoforward{}` ever
+  ceasing to carry the whole event, which is what makes point 2 true.
 
 ## Related
 

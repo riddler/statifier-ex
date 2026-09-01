@@ -178,17 +178,25 @@ defmodule Statifier.Telemetry do
   the consumer.
 
   `caller_context` (on both macrostep halves here, and on the
-  `:send_delayed`/`:cancel` effect events below) is ADR-0063's opaque host
+  `:send_delayed`/`:cancel`/`:invoke`/`:cancel_invoke` effect events
+  below) is ADR-0063's opaque host
   slot: the triggering external event's `caller_context`, `nil` for the
   `:initialize`/`:cancel`/`:internal`/`:resume` triggers and for an event
   sent without one. Identity, never a number, so it is metadata everywhere
   and a measurement nowhere (ADR-0040's split). Both halves carry it for
   the same reason both carry `trigger` and `event_name`: a consumer
-  attaching to only one half still attributes. On the two effect events
+  attaching to only one half still attributes. On the four effect events
   the value also rides in `metadata.effect` verbatim; the explicit key
   keeps a bridge's read uniform with the macrostep events. A consumer
   treats the term as opaque - something to parent or link with, never to
   flatten into exported attributes.
+
+  The `:invoke`/`:cancel_invoke` pair gained the key on 2026-09-01
+  (ADR-0063's own named reopening trigger: an invocation
+  outlives the macrostep that started it, so an asynchronous handler
+  needs the term to link a later result back). `:autoforward` carries no
+  such key: its effect carries the triggering `%Statifier.Event{}` whole,
+  whose own slot a consumer already reads.
 
   ## Core effect events (11), emitted regardless of `trace`
 
@@ -197,8 +205,8 @@ defmodule Statifier.Telemetry do
   | `[:statifier, :session, :effect, :send]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner` |
   | `[:statifier, :session, :effect, :send_delayed]` | `macrostep`, `microstep`, `round`, `delay_ms`, `ordinal` | `driver`, `session_id`, `effect`, `location`, `send_id`, `target`, `c_index`, `owner`, `caller_context` |
   | `[:statifier, :session, :effect, :cancel]` | `macrostep`, `microstep`, `round`, `ordinal` | `driver`, `session_id`, `effect`, `location`, `send_id`, `c_index`, `owner`, `caller_context` |
-  | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index` |
-  | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
+  | `[:statifier, :session, :effect, :invoke]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `invoke_index`, `caller_context` |
+  | `[:statifier, :session, :effect, :cancel_invoke]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `invoke_id`, `state_index`, `caller_context` |
   | `[:statifier, :session, :effect, :autoforward]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `invoke_id`, `state_index` |
   | `[:statifier, :session, :effect, :budget_exhausted]` | `macrostep`, `microstep`, `round`, `budget` | `driver`, `session_id`, `effect`, `location` |
   | `[:statifier, :session, :effect, :done]` | `macrostep`, `microstep`, `round` | `driver`, `session_id`, `effect`, `location`, `configuration` |
@@ -640,7 +648,8 @@ defmodule Statifier.Telemetry do
        location: location(machine, invoke),
        invoke_id: invoke.invoke_id,
        state_index: invoke.state_index,
-       invoke_index: invoke.invoke_index
+       invoke_index: invoke.invoke_index,
+       caller_context: invoke.caller_context
      }}
   end
 
@@ -653,7 +662,8 @@ defmodule Statifier.Telemetry do
      %{
        location: location(machine, cancel_invoke),
        invoke_id: cancel_invoke.invoke_id,
-       state_index: cancel_invoke.state_index
+       state_index: cancel_invoke.state_index,
+       caller_context: cancel_invoke.caller_context
      }}
   end
 

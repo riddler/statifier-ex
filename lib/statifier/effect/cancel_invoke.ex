@@ -24,16 +24,32 @@ defmodule Statifier.Effect.CancelInvoke do
   one-per-action (`Effect.Invoke` is one-per-`<invoke>`, `Effect.Log` is
   one-per-`<log>`). A state with two live invocations therefore emits two
   `CancelInvoke` effects, never one carrying a list.
+
+  ## `caller_context`
+
+  `caller_context` is the opaque host term the current macrostep's
+  triggering external event carried (ADR-0063, amended 2026-09-01),
+  copied off `Statifier.MachineState`'s transient slot at
+  construction - `nil` when no context was attached. Both invoke
+  lifecycle effects carry it, not just the start, for the same
+  both-or-neither reason ADR-0063 decision 2 gave `%Cancel{}` the slot
+  beside `%SendDelayed{}`: the same handler and the same durable store
+  process both, and the cancellation act wants the same attribution as
+  the start. `Statifier.Effect.Autoforward` deliberately gains nothing -
+  it carries the triggering `%Statifier.Event{}` whole, and that event's
+  own slot already travels with it (ADR-0063 decision 3). The library
+  never reads the value.
   """
 
   @enforce_keys [:invoke_id, :state_index, :macrostep, :microstep, :round]
-  defstruct [:invoke_id, :state_index, :macrostep, :microstep, :round]
+  defstruct [:invoke_id, :state_index, :macrostep, :microstep, :round, caller_context: nil]
 
   @type t :: %__MODULE__{
           invoke_id: String.t(),
           state_index: non_neg_integer(),
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
-          round: non_neg_integer()
+          round: non_neg_integer(),
+          caller_context: term()
         }
 end

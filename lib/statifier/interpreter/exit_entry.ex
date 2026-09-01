@@ -334,7 +334,8 @@ defmodule Statifier.Interpreter.ExitEntry do
              state_index: state_index,
              macrostep: machine_state.macrostep,
              microstep: machine_state.microstep,
-             round: machine_state.round
+             round: machine_state.round,
+             caller_context: machine_state.caller_context
            }}
 
         machine_state = %{
