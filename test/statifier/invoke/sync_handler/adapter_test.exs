@@ -57,6 +57,21 @@ defmodule Statifier.Invoke.SyncHandler.AdapterTest.Handler do
     ]
 end
 
+# A sync handler that answers with the context it was handed, for the
+# host-driven routing arm: `dispatch/4` is public for a host driving the
+# pure core with no session, and what such a host has to say about a call is
+# its own context, not the plan context a session threads.
+defmodule Statifier.Invoke.SyncHandler.AdapterTest.Echo do
+  @moduledoc false
+  @behaviour Statifier.Invoke.SyncHandler
+
+  @impl Statifier.Invoke.SyncHandler
+  def invoke_types, do: ["test:echo"]
+
+  @impl Statifier.Invoke.SyncHandler
+  def handle(_type, _params, ctx), do: {:ok, %{"ctx" => ctx}}
+end
+
 # A module that is not a sync handler at all, for the ArgumentError arm.
 defmodule Statifier.Invoke.SyncHandler.AdapterTest.NotAHandler do
   @moduledoc false
@@ -81,7 +96,7 @@ defmodule Statifier.Invoke.SyncHandler.AdapterTest do
   alias Statifier.{Compiler, Event, Lowering, Parser, Session, Validator}
   alias Statifier.Effect.Invoke
   alias Statifier.Invoke.SyncHandler.Adapter
-  alias Statifier.Invoke.SyncHandler.AdapterTest.{Alpha, Beta, Handler, NotAHandler}
+  alias Statifier.Invoke.SyncHandler.AdapterTest.{Alpha, Beta, Echo, Handler, NotAHandler}
   alias Statifier.Invoke.Types, as: InvokeTypes
 
   # The conformance case's observation point: what `Alpha.handle/3` recorded
@@ -249,6 +264,48 @@ defmodule Statifier.Invoke.SyncHandler.AdapterTest do
 
       assert {:error, {:unknown_invoke_type, "test:nobody"}} =
                Adapter.dispatch([Alpha, Beta], "test:nobody", %{}, ctx)
+    end
+
+    # sabotage: `dispatch/4`'s `module.handle(type, params, ctx)` is changed
+    # to pass `%{}` -> the host's own context never reaches the handler and
+    # the match below reddens on an empty map (with four session-path tests
+    # reddening alongside it, since `Alpha` matches on `session_id`).
+    # Reverted and confirmed green.
+    test "a host's own context is routed through untouched, not just a plan context" do
+      assert {:ok, %{"ctx" => %{run_id: "run_7"}}} =
+               Adapter.dispatch([Echo], "test:echo", %{}, %{run_id: "run_7"})
+
+      assert {:ok, %{"ctx" => %{}}} = Adapter.dispatch([Echo], "test:echo", %{}, %{})
+    end
+
+    # The spec is the deliverable here, not a description of one: a host
+    # driving the pure core routes through `dispatch/4` only if dialyzer
+    # lets it hand its own context, so the widened contract is asserted
+    # against the compiled beam rather than left to the next reader of the
+    # source.
+    #
+    # sabotage: `dispatch/4`'s fourth argument is typed back to
+    # `SyncHandler.ctx()` -> the stored argument is a `:remote_type` naming
+    # `Statifier.Invoke.SyncHandler.ctx`, and the `:user_type` match below
+    # reddens. Reverted and confirmed green.
+    test "dispatch/4's context is the widened map, not the session's plan context" do
+      assert {:ok, types} = Code.Typespec.fetch_types(Adapter)
+
+      assert Enum.any?(types, fn
+               {:type, {:dispatch_ctx, {:type, _line, :map, :any}, []}} -> true
+               _other -> false
+             end),
+             "dispatch_ctx/0 is no longer the unconstrained map a host context needs"
+
+      assert {:ok, specs} = Code.Typespec.fetch_specs(Adapter)
+      {_signature, [spec]} = Enum.find(specs, &match?({{:dispatch, 4}, _spec}, &1))
+      {:type, _line, :fun, [{:type, _product_line, :product, arguments}, _return]} = spec
+
+      assert [_modules, _type, _params, ctx] = arguments
+
+      assert {:ann_type, _ctx_line,
+              [{:var, _var_line, :ctx}, {:user_type, _use_line, :dispatch_ctx, []}]} =
+               ctx
     end
   end
 
