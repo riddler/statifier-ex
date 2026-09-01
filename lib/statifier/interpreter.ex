@@ -175,8 +175,10 @@ defmodule Statifier.Interpreter do
     Each invocation's arguments are resolved against one threaded
     `Evaluator.context/1`; any evaluation failure raises `error.execution`
     and yields no `Effect.Invoke` for that invocation, siblings unaffected
-    (ADR-0031), and otherwise the invocation is recorded in
-    `machine_state.active_invocations` and emits one `{:invoke, _}` effect.
+    (ADR-0031), as does a resolved `type` absent from a registered set the
+    caller did declare for this session, and otherwise the invocation is
+    recorded in `machine_state.active_invocations` and emits one
+    `{:invoke, _}` effect.
     `states_to_invoke` is cleared once the pass finishes, and one
     `Trace.InvokePass` is emitted last, carrying the states walked and the
     invoke ids started - a phase boundary Appendix D itself names
@@ -1435,12 +1437,21 @@ defmodule Statifier.Interpreter do
   # "." <> "inv_" <> counter`, or bare `inv_<counter>` when the state has
   # no `id` (ADR-0008 as amended 2026-08-15). `idlocation`, when set, is written through
   # `Datamodel.write_location/4` - a write failure is a step-4-shaped
-  # failure, same abort, no effect. Otherwise one `{:invoke, %Effect.Invoke{}}`
-  # is always emitted, but the invocation is only recorded in
-  # `active_invocations` when the resolved `type` is one
-  # `Statifier.Invoke.Types.registered?/2` accepts (6.4.1) - the built-in
-  # set plus whatever the caller declared for this session (ADR-0051
-  # decision 2) - the effect is unconditional, the liveness record is not.
+  # failure, same abort, no effect.
+  #
+  # The resolved `type` is judged ahead of every other argument, the order
+  # 6.2.5 gives `<send>`'s own unsupported-`type` check, and the answer
+  # splits on whether this session made a declaration at all
+  # (`registered_type/2`). A session that declared a registered set and
+  # omitted this type is a *half-registration*: it is rejected outright -
+  # `error.execution`, no `Effect.Invoke`, no `active_invocations` entry -
+  # so that no consumer is handed an invocation this engine will never
+  # treat as live (`reject_unregistered_type/3`). A session that declared
+  # nothing keeps ADR-0051 decision 2's `nil` meaning untouched: one
+  # `{:invoke, %Effect.Invoke{}}` is emitted, and the invocation is
+  # recorded in `active_invocations` only for the built-in set 6.4.1 names
+  # - the effect unconditional, the liveness record not
+  # (`maybe_record_active_invocation/5`).
   @spec invoke_one(
           machine_state :: MachineState.t(),
           context :: Predicator.Context.t(),
@@ -1451,6 +1462,7 @@ defmodule Statifier.Interpreter do
         ) :: {MachineState.t(), Predicator.Context.t(), [Effect.t()]}
   defp invoke_one(machine_state, context, state, state_index, invoke, invoke_index) do
     with {:ok, type} <- resolve_expr(context, invoke.type),
+         :ok <- registered_type(machine_state, type),
          {:ok, src} <- resolve_expr(context, invoke.src),
          {:ok, raw_params} <- resolve_params(context, invoke.namelist ++ invoke.params),
          {:ok, content} <- resolve_content(context, invoke.content) do
@@ -1502,6 +1514,9 @@ defmodule Statifier.Interpreter do
           {abort_invocation(machine_state, state_index, invoke_index, reason), context, []}
       end
     else
+      {:unregistered_type, _type} ->
+        {reject_unregistered_type(machine_state, state_index, invoke_index), context, []}
+
       {:error, reason} ->
         {abort_invocation(machine_state, state_index, invoke_index, reason), context, []}
     end
@@ -1671,25 +1686,88 @@ defmodule Statifier.Interpreter do
     ]
   end
 
-  # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
-  # the built-in `type` this platform supports out of the box; a
-  # `type`/`typeexpr` naming anything else that is not otherwise registered
-  # starts no child - `Statifier.Session.Effects.plan_invoke` raises
-  # 3.12.2's `error.execution` for it instead. The `Effect.Invoke` is still
-  # emitted (the session needs it to raise against), but the invocation is
-  # never live, so it is not recorded: 6.4's "MUST automatically cancel the
-  # invoked component" has no invoked component to reach, and a trace
-  # consumer must not see an invocation start that never did. Same channel
-  # ADR-0031's failed-argument case already uses - absent from
-  # `active_invocations` - reached for a different reason. Consulting
+  # Whether this invocation may proceed at all, split on whether the caller
+  # declared a registered set for this session.
+  #
+  # `nil` is ADR-0051 decision 2's "no declaration made", and it stays what
+  # it has always been here: proceed. A caller driving the pure core and
+  # reading `Effect.Invoke` off it - the "effects out" shape `README.md`'s
+  # quick start documents - registers nothing with the engine and must keep
+  # getting its effect. Deciding that `nil` should instead reject every
+  # type outside 6.4.1's built-in set would redefine decision 2, which is a
+  # separate contract question this arm deliberately does not answer.
+  #
+  # A non-`nil` snapshot has made a claim, and a type absent from it is a
+  # *half-registration*: the caller told this session which types it
+  # implements and this is not one of them. That is the case
+  # `reject_unregistered_type/3` refuses. Consulting
   # `Statifier.Invoke.Types.registered?/2` from the core is ADR-0047
   # decisions 3 and 5, re-argued by ADR-0051 decision 3: the classifier
   # lives in a neutral module, and the registered set is a caller-declared
-  # value read off `machine_state.invoke_types` rather than always-static -
-  # `nil` (no declaration) still answers exactly what
-  # `Statifier.Send.Target.supported_invoke_type?/1` answered before this
-  # bead. Unlike `<send>`, this is not a rejection - nothing about the
-  # emitted effect or the raised error changes.
+  # value read off `machine_state.invoke_types` rather than always-static.
+  #
+  # `{:unregistered_type, type}` is deliberately not an `{:error, _}`: the
+  # two failures reach different arms of `invoke_one/6`'s `else`, because
+  # they raise different shapes.
+  @spec registered_type(machine_state :: MachineState.t(), type :: term()) ::
+          :ok | {:unregistered_type, term()}
+  defp registered_type(%MachineState{invoke_types: nil}, _type), do: :ok
+
+  defp registered_type(%MachineState{invoke_types: types}, type) do
+    if InvokeTypes.registered?(types, type) do
+      :ok
+    else
+      {:unregistered_type, type}
+    end
+  end
+
+  # A half-registration is rejected the way `Machine.Content.Send` already
+  # rejects an unsupported `<send type>`: 3.12.2's `error.execution` on the
+  # internal queue with origin `{:invoke, state_index, invoke_index}`, no
+  # `Effect.Invoke`, and no `active_invocations` entry. The raised event
+  # carries no data, which is byte-for-byte the shape
+  # `Statifier.Session.Effects.plan_invoke/3` has always planned for this
+  # case - so the observable error is unchanged and only its origin moves,
+  # from the session planner into the core, where every caller reaches it.
+  #
+  # It is not ADR-0031's abort: that one carries the failing argument's
+  # `reason` as event data, and nothing here failed to evaluate.
+  #
+  # Emitting the effect anyway - the previous behavior - left a caller that
+  # drives the core directly without ever running
+  # `Statifier.Session.Effects.plan/2`, such as a durable stepper, holding
+  # an `Effect.Invoke` for an invocation absent from `active_invocations`:
+  # every answer it fed back was discarded by 6.4.3's liveness read, and the
+  # run parked with nothing surfaced. The session layer was already loud
+  # here; this makes the core loud on the paths that never reach it.
+  @spec reject_unregistered_type(
+          machine_state :: MachineState.t(),
+          state_index :: non_neg_integer(),
+          invoke_index :: non_neg_integer()
+        ) :: MachineState.t()
+  defp reject_unregistered_type(machine_state, state_index, invoke_index) do
+    MachineState.raise_platform(
+      machine_state,
+      "error.execution",
+      {:invoke, state_index, invoke_index}
+    )
+  end
+
+  # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
+  # the built-in `type` this platform supports out of the box; a
+  # `type`/`typeexpr` naming anything else starts no child, so the
+  # invocation is never live and is not recorded: 6.4's "MUST automatically
+  # cancel the invoked component" has no invoked component to reach, and a
+  # trace consumer must not see an invocation start that never did. Same
+  # channel ADR-0031's failed-argument case already uses - absent from
+  # `active_invocations` - reached for a different reason.
+  #
+  # Only the undeclared (`invoke_types == nil`) path can still decline
+  # here: with a declaration, `registered_type/2` has already rejected
+  # every type this would refuse, so the guard is unconditionally true.
+  # It is kept as the guard rather than folded away because it is what
+  # holds emission and liveness to one answer for the `nil` path, where
+  # the effect is emitted whatever this returns.
   @spec maybe_record_active_invocation(
           machine_state :: MachineState.t(),
           state_index :: non_neg_integer(),

@@ -629,4 +629,97 @@ defmodule Statifier.Interpreter.InvokePassTest do
     assert Map.get(result.active_invocations, {s0, bad_invoke.invoke_index}) == nil
     assert Map.get(result.active_invocations, {s0, ok_invoke.invoke_index}) == "ok"
   end
+
+  #  0 scxml (root)
+  #  1   working  (invoke id="unlisted" type="myapp:authorize"; done.invoke.unlisted -> finished; error.execution -> failed)
+  #  2   finished
+  #  3   failed
+  @half_registration_document """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="working">
+      <state id="working">
+          <invoke id="unlisted" type="myapp:authorize"/>
+          <transition event="done.invoke.unlisted" target="finished"/>
+          <transition event="error.execution" target="failed"/>
+      </state>
+      <state id="finished"/>
+      <state id="failed"/>
+  </scxml>
+  """
+
+  # The reported failure, end to end: a caller declares the types it
+  # implements, the chart invokes one it left out, and the caller drives
+  # this core directly without ever running
+  # `Statifier.Session.Effects.plan/2` - the shape a durable stepper has.
+  # Before the rejection, the `Effect.Invoke` was emitted while
+  # `active_invocations` stayed empty, so a conforming answer-feeder's
+  # 6.4.3 liveness read discarded every answer for it and the run sat in
+  # "working" forever with nothing surfaced. The chart below can tell the
+  # two apart on its own: reaching "failed" means the refusal was loud,
+  # staying in "working" is the park.
+  #
+  # sabotage: `registered_type/2`'s non-`nil` clause is changed to return
+  # `:ok` unconditionally -> the invocation is emitted and recorded again,
+  # no `error.execution` is raised, the run stays in "working", and every
+  # assertion below reddens - which is the parked run this test exists to
+  # forbid. Confirmed red and reverted.
+  test "a declared snapshot that omits the invoked type raises error.execution rather than parking the run" do
+    m = compile!(@half_registration_document)
+    invoke_types = InvokeTypes.new(types: ["myapp:capture"])
+
+    {result, effects} = Interpreter.initialize(m, trace: true, invoke_types: invoke_types)
+
+    assert invoke_effects(effects) == []
+
+    # Every pass, not the first: taking the `error.execution` transition
+    # runs a second, empty one, and an `any?` would be satisfied by that
+    # one whatever the entry pass carried.
+    traces = invoke_pass_traces(effects)
+    assert traces != []
+    assert Enum.all?(traces, &(&1.invoke_ids == []))
+
+    working = idx(m, "working")
+
+    assert Enum.any?(effects, fn
+             {:trace,
+              %Effect.Trace.EventDequeued{
+                from: :internal,
+                event: %Event{name: "error.execution", cause: %{origin: {:invoke, ^working, 0}}}
+              }} ->
+               true
+
+             _other ->
+               false
+           end)
+
+    assert result.active_invocations == %{}
+    assert result.configuration == MapSet.new([0, idx(m, "failed")])
+    assert result.running
+  end
+
+  # The other half of the same decision, pinned so it cannot be widened by
+  # accident: a caller that declared nothing at all
+  # (`invoke_types == nil`, ADR-0051 decision 2's "no declaration made") is
+  # not making a half-registration claim, so its `<invoke>` is not
+  # refused. `README.md`'s quick start is exactly this caller - it reads
+  # the `Effect.Invoke` for a host type off the pure core, having
+  # registered nothing - and the rejection above must not reach it.
+  #
+  # sabotage: `registered_type/2`'s `%MachineState{invoke_types: nil}`
+  # clause is deleted, so the `nil` snapshot falls through to the
+  # declared-set clause -> "myapp:authorize" is refused, no effect is
+  # emitted, and the run reaches "failed", reddening every assertion below.
+  # Confirmed red and reverted.
+  test "a caller that declared no invoke_types at all is not treated as a half-registration" do
+    m = compile!(@half_registration_document)
+
+    {result, effects} = Interpreter.initialize(m, trace: true)
+
+    assert [invoke] = invoke_effects(effects)
+    assert invoke.invoke_id == "unlisted"
+    assert invoke.type == "myapp:authorize"
+
+    assert result.active_invocations == %{}
+    assert result.configuration == MapSet.new([0, idx(m, "working")])
+    assert result.running
+  end
 end

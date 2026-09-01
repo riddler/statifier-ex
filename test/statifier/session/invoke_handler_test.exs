@@ -5,7 +5,18 @@ defmodule Statifier.Session.InvokeHandlerTest do
   # own idiom - both suites drive a real `Statifier.Session` process to
   # quiescence and drain its subscriber mailbox.
 
-  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, StreamOrder, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Lowering,
+    Machine,
+    Parser,
+    Session,
+    StreamOrder,
+    Validator
+  }
+
   alias Statifier.Effect.Invoke
   alias Statifier.Event.Cause
 
@@ -138,10 +149,17 @@ defmodule Statifier.Session.InvokeHandlerTest do
   # sabotage: `Statifier.Invoke.Types.registered?/2`'s declared-set clause
   # is changed to return `true` unconditionally, ignoring `MapSet.member?/2`
   # entirely -> "test:missing" is (wrongly) judged registered even though
-  # only "test:echo" was declared, so `plan_invoke/3` dispatches it to the
-  # built-in scxml handler instead of raising `error.execution` - the
-  # `Enum.any?/2` assertion below (which looks for the raised event) reddens.
-  # Reverted and confirmed green.
+  # only "test:echo" was declared, so `Statifier.Interpreter`'s
+  # `registered_type/2` lets it through to the built-in scxml handler
+  # instead of rejecting it - the `Enum.any?/2` assertion below (which
+  # looks for the raised event) reddens. Reverted and confirmed green.
+  #
+  # The index pair is read off the machine rather than off an
+  # `%Effect.Invoke{}`, because a half-registration produces no effect to
+  # read it from: the core rejects the invocation before building one. The
+  # raised `error.execution` this asserts is unchanged - only its origin
+  # moved, from `Statifier.Session.Effects.plan_invoke/3` into the core, so
+  # that a caller who never runs the session planner gets it too.
   test "an unregistered \"test:missing\" type still raises error.execution with the real index pair" do
     machine = compile!(parent_doc("test:missing"))
 
@@ -156,14 +174,10 @@ defmodule Statifier.Session.InvokeHandlerTest do
 
     stream = StreamOrder.drain(session_id)
 
-    assert {:effect,
-            {:invoke,
-             %Effect.Invoke{
-               invoke_id: "inv1",
-               type: "test:missing",
-               state_index: state_index,
-               invoke_index: invoke_index
-             }}} = Enum.find(stream, &match?({:effect, {:invoke, _invoke}}, &1))
+    {:ok, state_index} = Machine.index(machine, "a")
+    invoke_index = 0
+
+    refute Enum.any?(stream, &match?({:effect, {:invoke, _invoke}}, &1))
 
     assert Enum.any?(stream, fn
              {:effect,

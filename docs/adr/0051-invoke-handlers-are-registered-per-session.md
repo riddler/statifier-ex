@@ -219,6 +219,71 @@ theirs:**
   promise has always pointed at but never had.
 - What would reopen this record: any of decision 7's three named triggers.
 
+### Amendment 2026-09-01: a declared set that omits the type is refused in the core (st-mv7t)
+
+Status: proposed (2026-09-01) - amends decision 1's behaviour clause for the
+half-registration case only; decision 1's error classification, decision 2's
+`nil` semantics, and the record's own Status above are all unchanged
+
+Decision 1 closes with a claim about mechanism rather than about
+classification:
+
+> This is today's behavior, unchanged.
+
+What "today's behavior" meant there was that `Statifier.Interpreter` emitted
+the `Effect.Invoke` for an unregistered type regardless, recorded nothing in
+`active_invocations`, and left `Statifier.Session.Effects.plan_invoke/3` to
+raise `error.execution` against the effect it had been handed. That
+division is what this amendment supersedes, for one case: a session that
+declared a registered set and left the invoked type out of it.
+
+**The core refuses that invocation itself.** `invoke_one/6` judges the
+resolved `type` ahead of every other argument - the order 6.2.5 gives
+`<send>`'s own unsupported-`type` check - and when
+`machine_state.invoke_types` is a snapshot that does not contain it, raises
+`error.execution` with origin `{:invoke, state_index, invoke_index}` and
+produces no `Effect.Invoke` and no `active_invocations` entry.
+
+Decision 1's table is untouched: the event, its class, and its ground are
+exactly what that table already assigns. Only the site moves, and it moves
+because the old site was not on every path. The session planner is the one
+place that raised, and a caller may drive the pure core without ever running
+`Statifier.Session.Effects.plan/2` - a durable stepper calling
+`Statifier.Interpreter.initialize/2` and `handle_event/2` with its own
+executor loop is exactly that caller. Such a caller was handed an
+`Effect.Invoke` for an invocation that `active_invocations` said was not
+live, so a conforming answer-feeder's 6.4.3 liveness read discarded every
+answer for it and the run parked with nothing surfaced. Emission and liveness
+were two answers to one question; they are now one.
+
+**Decision 2's `nil` is deliberately untouched.** `nil` means "no declaration
+made", and a caller that declared nothing has made no claim this engine can
+find a gap in. Its `<invoke>` still emits its effect, still records only for
+6.4.1's built-in set, and is not refused - which is what keeps the
+effects-out shape `README.md`'s quick start documents working for a host that
+reads `Effect.Invoke` off the pure core without registering anything. Whether
+`nil` should instead refuse every type outside the built-in set is a
+different question about decision 2, and this amendment does not reach it.
+
+The half-registration reading is the one the operator adopted; see the
+campaign-024 B2 ruling.
+
+Of the five layers decision 1 names as pinning it, four stay green
+unamended - `test/statifier/send/target_test.exs`,
+`test/statifier/interpreter/invoke_pass_test.exs`,
+`test/statifier/interpreter/cancel_invoke_test.exs`, and
+`test/statifier/session/effects_test.exs`. The `<invoke>` fixtures in the
+two interpreter suites, including the pair asserting an unsupported type's
+"`Effect.Invoke` survives", declare no `invoke_types` at all, so they
+exercise the `nil` path this amendment leaves alone. The fifth,
+`test/statifier/session/invoke_start_child_test.exs`, does move, because a
+session always declares a set (`Statifier.Invoke.Types.from_handlers/1`,
+decision 3's one constructor) and is therefore always the half-registration
+case: it now asserts the same `error.execution`, raised before any effect
+exists to assert it against.
+`test/statifier/session/invoke_handler_test.exs`, added after decision 1
+listed its five, moves for the same reason.
+
 ## Related
 
 - ADR-0047 (decision 4's anti-drift property, decision 5's reopen trigger,
