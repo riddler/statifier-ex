@@ -464,3 +464,42 @@ fields and the resolver dispatches on field name in clause order.
   argument applies to a field a subscriber was reading off `effect` as to a
   metadata key this record does name directly. None of this is expected from
   this bead's own scope.
+
+## Note (2026-09-01): the `trigger` vocabulary is five values, not four
+
+A dated note rather than an amendment. It records a value that joined the
+`trigger` metadata key after this record was accepted, changes no decision
+here, edits no accepted text, and leaves the record's Status untouched. It is
+recorded because the accepted prose still enumerates the pre-`:resume` set,
+and a reader deriving the vocabulary from this record alone would come up one
+value short.
+
+The prose in question, in the ADR-0029 interaction section, names four:
+
+> each opens and closes a macrostep span with a `trigger` in
+> `[:initialize, :event, :cancel, :internal]` distinguishing them.
+
+The set is now **five**: `:initialize | :event | :cancel | :internal |
+:resume`. `:resume` arrived with ADR-0060's `Session.start_link/2` `:resume`
+option - a session booted at a persisted position is not initializing, so it
+brackets its boot macrostep under a trigger of its own rather than borrowing
+`:initialize`. The metadata table above is unaffected: `trigger` is the same
+key on the same two events, carrying one more value.
+
+Where the five are authoritative in code: the `@spec`s on
+`Statifier.Telemetry.macrostep_start/5` and `macrostep_stop/8`, mirrored on
+`Statifier.Session.Telemetry.macrostep_start/4` and `macrostep_stop/7`; the
+emission site is `Statifier.Session`'s `init/1`, which passes the trigger
+`boot/6` resolved (`:initialize` for a fresh boot, `:resume` for a resumed
+one).
+
+ADR-0067 already reasons about this value rather than being surprised by it:
+its decision-3 table records that `:resume` "stays Session-only, since a
+rehydration is not an advance", so a durable driver emits no macrostep span
+under it. That record is unchanged by this note.
+
+Landed with `st-3sz8` under campaign-025 ruling R25-1, which pairs this note
+with the same correction to `docs/opentelemetry.md`, where the bridge design's
+span-attribute prose carried the same stale four-value enum. The bridge itself
+treats `trigger` as a pass-through string, so no `opentelemetry_statifier`
+code changes for it.

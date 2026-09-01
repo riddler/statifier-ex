@@ -165,6 +165,45 @@ handler palette starts a different session with a different
 `:invoke_handlers` map; there is no supported way to add or remove a handler
 from a session already running.
 
+### Nested charts: `:inherit_invoke_handlers`
+
+Per-session registration stops at the session boundary, and a chart that
+`<invoke type="scxml">`s another chart crosses one. A child session is started
+with an **empty** registry by default, so a nested chart whose own
+`<invoke type="myapp:authorize">` needs a registered handler raises
+`error.execution` there even though the root registered it - the child plans
+nothing and parks at that state.
+
+`start_link/2`'s `:inherit_invoke_handlers` is the opt-in that closes that
+gap:
+
+```elixir
+Statifier.Session.start_link(root_machine,
+  invoke_handlers: MyApp.InvokeHandler.invoke_handlers(),
+  inherit_invoke_handlers: true
+)
+```
+
+`true` hands every child this session starts for an `<invoke>` both this
+session's `:invoke_handlers` map **and** `inherit_invoke_handlers: true` of
+its own, so one opt-in at the root registers the same handler palette down
+the whole invoke tree. The default is `false`, which starts children exactly
+as before.
+
+It is opt-in rather than the default for the reason `:inherit_observers` is
+(ADR-0050 decision 2): a default-on inheritance would start running a host's
+handlers inside child charts nobody registered them for, on an upgrade, with
+no caller having asked for it.
+
+Inheritance is a **start-time hand-off, not a shared registry**. The child's
+dispatch map and its `%MachineState{}` `invoke_types` stamp are fixed at the
+child's own boot from the map it was handed, so ADR-0051 decision 2's
+per-session cadence above is unchanged, and two roots with different palettes
+still hand their own subtrees their own. Handlers descend independently of
+`:invoke_source`, which ADR-0038 leaves to its own option, and independently
+of `:inherit_observers`, which is an observation knob rather than a
+registration one.
+
 ## The common case: a sync handler
 
 Most registered types are not lifecycles. They are calls: hand these params
