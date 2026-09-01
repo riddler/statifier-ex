@@ -10,6 +10,47 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.4.0] 2026-09-01
+
+Lets a nested subchart resolve the invoke handlers its root registered, widens
+the sync-handler adapter's dispatch context for a host driving the pure core,
+and makes a half-registered `<invoke>` type fail loudly instead of parking the
+run.
+
+### Added
+
+- `Statifier.Session.start_link/2`'s `:inherit_invoke_handlers` option: when
+  `true`, every child session started for an `<invoke>` boots with this
+  session's `:invoke_handlers` map and the flag itself, so a nested chart can
+  resolve the handlers the root registered. Defaults to `false`, which starts
+  children with an empty registry as before.
+
+### Changed
+
+- `Statifier.Invoke.SyncHandler.Adapter.dispatch/4` now types its `ctx`
+  argument as the new `t:Statifier.Invoke.SyncHandler.Adapter.dispatch_ctx/0`
+  (any map) instead of `t:Statifier.Invoke.SyncHandler.ctx/0`. `dispatch/4` is
+  public for a host driving the pure core with no session to report to, and
+  such a host has no `session_id` to put in a plan context; the narrower spec
+  made that documented use a dialyzer contract violation. Routing reads no key
+  of the context and hands it to the handler untouched. `perform/3` still
+  requires the plan context, since reporting an answer needs `ctx.session_id`,
+  and every existing caller keeps type-checking unchanged.
+
+### Fixed
+
+- An `<invoke>` whose type is absent from a registered set the caller *did*
+  declare is now refused by `Statifier.Interpreter` itself: it raises
+  `error.execution` and emits no `Statifier.Effect.Invoke`, instead of
+  emitting one that `active_invocations` never recorded. A host driving the
+  pure core without `Statifier.Session` - a durable stepper, say - previously
+  received that effect, had every answer it fed back discarded by the spec's
+  6.4.3 liveness read, and parked the run with no error surfaced. The event
+  raised is the one `Statifier.Session` already raised for this case, so a
+  session-driven chart sees no change beyond the effect no longer appearing
+  ahead of it. A caller that declared no `:invoke_types` at all is unaffected:
+  its `<invoke>` still emits its effect exactly as before (ADR-0051, amended).
+
 ## [2.3.0] 2026-08-31
 
 Adds the sync-handler shape a host uses to answer an `<invoke>` in process,
