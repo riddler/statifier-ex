@@ -92,6 +92,13 @@ defmodule Statifier.EffectTest do
          microstep: 1,
          round: 0
        }},
+      {:trace,
+       %Trace.CondsEvaluated{
+         evaluations: [%{t_index: 0, outcome: :error, reason: :boom}],
+         macrostep: 1,
+         microstep: 1,
+         round: 0
+       }},
       {:trace, %Trace.TransitionsSelected{t_indexes: [], macrostep: 1, microstep: 1, round: 0}},
       {:trace,
        %Trace.ExitSet{
@@ -164,8 +171,8 @@ defmodule Statifier.EffectTest do
 
     # sabotage: n/a - this test only checks that the fixture tables above
     # are complete, not any lib/ behavior.
-    test "the table covers all twenty effects" do
-      assert length(@core_effects) + length(@trace_effects) == 20
+    test "the table covers all twenty-one effects" do
+      assert length(@core_effects) + length(@trace_effects) == 21
     end
   end
 

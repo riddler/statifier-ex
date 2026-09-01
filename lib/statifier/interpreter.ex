@@ -510,11 +510,14 @@ defmodule Statifier.Interpreter do
     # after `_event` is assigned, before `selectTransitions`.
     {machine_state, invoke_pass_effects} = apply_invoke_passes(machine_state, event)
 
-    {machine_state, transitions} = Selection.select_transitions(machine_state, event)
+    {machine_state, transitions, cond_effects} =
+      Selection.select_transitions(machine_state, event)
+
     {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
-    {:ok, machine_state, dequeued ++ invoke_pass_effects ++ selected_effects ++ loop_effects}
+    {:ok, machine_state,
+     dequeued ++ invoke_pass_effects ++ cond_effects ++ selected_effects ++ loop_effects}
   end
 
   @doc """
@@ -1027,13 +1030,35 @@ defmodule Statifier.Interpreter do
 
   def microstep(%MachineState{} = machine_state) do
     machine_state = MachineState.begin_round(machine_state)
-    {machine_state, eventless_transitions} = Selection.select_eventless_transitions(machine_state)
+
+    {machine_state, eventless_transitions, cond_effects} =
+      Selection.select_eventless_transitions(machine_state)
 
     case eventless_transitions do
-      [] -> internal_round(machine_state)
-      _enabled -> run_selected(machine_state, eventless_transitions, nil)
+      [] ->
+        prepend_effects(cond_effects, internal_round(machine_state))
+
+      _enabled ->
+        prepend_effects(cond_effects, run_selected(machine_state, eventless_transitions, nil))
     end
   end
+
+  # The eventless selection's own guard trace belongs ahead of
+  # everything the round it opened goes on to emit - including that round's
+  # `Trace.TransitionsSelected`, which `run_selected/3` stamps after the
+  # selection it reports. Both of `microstep/1`'s tails are reachable, and
+  # `internal_round/1` can answer `:quiescent`, so the prepend matches on the
+  # shape rather than assuming the two-element one.
+  @spec prepend_effects(
+          effects :: [Effect.t()],
+          result ::
+            {MachineState.t(), [Effect.t()]} | {:quiescent, MachineState.t(), [Effect.t()]}
+        ) :: {MachineState.t(), [Effect.t()]} | {:quiescent, MachineState.t(), [Effect.t()]}
+  defp prepend_effects([], result), do: result
+  defp prepend_effects(effects, {machine_state, later}), do: {machine_state, effects ++ later}
+
+  defp prepend_effects(effects, {:quiescent, machine_state, later}),
+    do: {:quiescent, machine_state, effects ++ later}
 
   @doc """
   `mainEventLoop`'s inner `while running and not macrostepDone` loop,
@@ -1204,10 +1229,13 @@ defmodule Statifier.Interpreter do
         # datamodel["_event"] = internalEvent (Appendix D)
         machine_state = MachineState.put_event(machine_state, event)
 
-        {machine_state, transitions} = Selection.select_transitions(machine_state, event)
+        {machine_state, transitions, cond_effects} =
+          Selection.select_transitions(machine_state, event)
+
         {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
 
-        {machine_state, eventless_probe_effects ++ dequeued_trace ++ selected_effects}
+        {machine_state,
+         eventless_probe_effects ++ dequeued_trace ++ cond_effects ++ selected_effects}
     end
   end
 

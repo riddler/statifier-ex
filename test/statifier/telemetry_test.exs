@@ -126,6 +126,14 @@ defmodule Statifier.TelemetryTest do
   ]
 
   @trace_fixtures [
+    {:conds_evaluated,
+     {:trace,
+      %Trace.CondsEvaluated{
+        evaluations: [%{t_index: 0, outcome: :enabled, reason: nil}],
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }}},
     {:event_dequeued,
      {:trace,
       %Trace.EventDequeued{
@@ -186,12 +194,12 @@ defmodule Statifier.TelemetryTest do
   ]
 
   describe "events/0" do
-    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 27`
+    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 28`
     # fails (26 names) - reverted and confirmed green.
-    test "returns exactly 27 names, all `[:statifier, :session | _]`" do
+    test "returns exactly 28 names, all `[:statifier, :session | _]`" do
       events = Telemetry.events()
 
-      assert length(events) == 27
+      assert length(events) == 28
       assert Enum.uniq(events) == events
 
       assert Enum.all?(events, fn
@@ -227,7 +235,7 @@ defmodule Statifier.TelemetryTest do
     # of the given `driver` -> red, `metadata.driver == :test_driver` fails
     # for `[:statifier, :session, :init]` - reverted and confirmed green.
     #
-    # Drives every one of the 27 events `Telemetry.events/0` names with the
+    # Drives every one of the 28 events `Telemetry.events/0` names with the
     # non-`:session` atom `:test_driver` - the seven lifecycle calls, then
     # every core/trace fixture through `effect/4`, then `unroutable/4` -
     # drains the mailbox, and asserts every drained message carries
@@ -235,7 +243,7 @@ defmodule Statifier.TelemetryTest do
     # test/statifier/session/telemetry_test.exs's own "measurements are
     # numbers, for every event this module can emit" describe, which drives
     # every emitter once the same way.
-    test "every one of the 27 events carries the given driver in metadata", %{ref: ref} do
+    test "every one of the 28 events carries the given driver in metadata", %{ref: ref} do
       machine = located_machine()
       {machine_state, _effects} = Statifier.initialize(machine)
       driver = :test_driver
@@ -386,8 +394,8 @@ defmodule Statifier.TelemetryTest do
     # sabotage: `SessionTelemetry.events/0`'s `defdelegate` target is changed
     # to a hand-copied literal list missing one name -> red, `length ==
     # length(Telemetry.events())` fails - reverted and confirmed green.
-    test "both return 27 names and are the same list" do
-      assert length(SessionTelemetry.events()) == 27
+    test "both return 28 names and are the same list" do
+      assert length(SessionTelemetry.events()) == 28
       assert length(SessionTelemetry.events()) == length(Telemetry.events())
       assert SessionTelemetry.events() == Telemetry.events()
     end

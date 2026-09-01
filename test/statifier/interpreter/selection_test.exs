@@ -3,6 +3,7 @@ defmodule Statifier.Interpreter.SelectionTest do
 
   alias Predicator.Errors.UndefinedVariableError
   alias Statifier.{Compiler, Evaluator, Event, Lowering, Machine, MachineState, Parser, Validator}
+  alias Statifier.Effect.Trace
   alias Statifier.Interpreter.Selection
 
   defp compile!(xml) do
@@ -176,6 +177,13 @@ defmodule Statifier.Interpreter.SelectionTest do
 
   defp machine_state(machine, configuration) do
     %{MachineState.new(machine) | configuration: MapSet.new(configuration)}
+  end
+
+  # The guard-trace tests below need `trace: true`; every other test in this
+  # file deliberately runs with the default (`false`), which is what keeps
+  # them asserting selection and not emission.
+  defp traced_machine_state(machine, configuration) do
+    %{MachineState.new(machine, trace: true) | configuration: MapSet.new(configuration)}
   end
 
   # Mirrors `selection_domain_test.exs`'s `transition_named/2`: finds the
@@ -391,7 +399,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:event_state)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("matched"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("matched"))
 
       assert [%{events: [["matched"]]}] = transitions
     end
@@ -404,7 +413,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:event_state)])
 
-      assert {_ms, []} = Selection.select_transitions(ms, Event.external("nonexistent"))
+      assert {_ms, [], _cond_effects} =
+               Selection.select_transitions(ms, Event.external("nonexistent"))
     end
 
     # sabotage: `selected_for_atomic_state/5` walks
@@ -416,7 +426,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:descendant)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("shared"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("shared"))
 
       assert [%{source: source}] = transitions
       assert source == idx(:descendant)
@@ -430,7 +441,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:multi)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("multi-evt"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("multi-evt"))
 
       assert [%{targets: [target]}] = transitions
       assert target == idx(:tgt_a)
@@ -443,7 +455,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:condfail)])
 
-      assert {_ms, []} = Selection.select_transitions(ms, Event.external("cond-evt"))
+      assert {_ms, [], _cond_effects} =
+               Selection.select_transitions(ms, Event.external("cond-evt"))
     end
 
     # sabotage: `evaluate_cond/2`'s `{:ok, true} -> {:ok, true}` clause is
@@ -453,7 +466,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:condtrue)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("cond-evt-true"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("cond-evt-true"))
 
       assert [%{events: [["cond-evt-true"]]}] = transitions
     end
@@ -468,7 +482,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:condpass)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("cond-evt2"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("cond-evt2"))
 
       assert [%{events: [["cond-evt2"]]}] = transitions
     end
@@ -483,7 +498,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:eventless_state)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("has-event"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("has-event"))
 
       assert [%{events: [["has-event"]]}] = transitions
     end
@@ -496,7 +512,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:event_state)])
 
-      {returned_ms, _transitions} = Selection.select_transitions(ms, Event.external("matched"))
+      {returned_ms, _transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("matched"))
 
       assert returned_ms == ms
     end
@@ -510,7 +527,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:dedup1a), idx(:dedup2a)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("dedup-evt"))
+      {_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("dedup-evt"))
 
       assert [%{events: [["dedup-evt"]]}] = transitions
     end
@@ -535,7 +553,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       ms =
         machine_state(m, [idx(:preg1a), idx(:preg2a), idx(:unrelated_go_child)])
 
-      {_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {_ms, transitions, _cond_effects} = Selection.select_transitions(ms, Event.external("go"))
 
       sources = transitions |> Enum.map(& &1.source) |> Enum.sort()
       assert sources == Enum.sort([idx(:preg1a), idx(:preg2a), idx(:unrelated_go)])
@@ -551,7 +569,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       ms = machine_state(m, [cond_error_idx(m, "one_off")])
       transition = cond_error_transition_named(m, "go")
 
-      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {result_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("go"))
 
       assert transitions == []
       assert [error_event] = MachineState.internal_events(result_ms)
@@ -570,7 +589,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = cond_error_machine()
       ms = machine_state(m, [cond_error_idx(m, "nonbool_fail")])
 
-      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {result_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("go"))
 
       assert transitions == []
       assert [error_event] = MachineState.internal_events(result_ms)
@@ -591,7 +611,8 @@ defmodule Statifier.Interpreter.SelectionTest do
         |> Map.put(:macrostep, 3)
         |> Map.put(:microstep, 2)
 
-      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {result_ms, _transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("go"))
 
       assert [error_event] = MachineState.internal_events(result_ms)
       assert error_event.cause.macrostep == 3
@@ -608,7 +629,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       p1_transition = cond_error_transition_named(m, "pgo")
       ms = machine_state(m, [cond_error_idx(m, "p1"), cond_error_idx(m, "p2")])
 
-      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("pgo"))
+      {result_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("pgo"))
 
       assert transitions == []
       assert [first_error, second_error] = MachineState.internal_events(result_ms)
@@ -626,7 +648,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = cond_error_machine()
       ms = machine_state(m, [cond_error_idx(m, "skip_reach")])
 
-      {result_ms, transitions} = Selection.select_transitions(ms, Event.external("skipgo"))
+      {result_ms, transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("skipgo"))
 
       assert [%{cond: nil}] = transitions
       assert MachineState.internal_events(result_ms) == []
@@ -643,7 +666,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       ms = machine_state(m, [cond_error_idx(m, "one_off")])
       expected_transition = cond_error_transition_named(m, "go")
 
-      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {result_ms, _transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("go"))
 
       assert [error_event] = MachineState.internal_events(result_ms)
       assert {:transition, t_index} = error_event.cause.origin
@@ -660,7 +684,8 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = cond_error_machine()
       ms = machine_state(m, [cond_error_idx(m, "one_off")])
 
-      {result_ms, _transitions} = Selection.select_transitions(ms, Event.external("go"))
+      {result_ms, _transitions, _cond_effects} =
+        Selection.select_transitions(ms, Event.external("go"))
 
       refute result_ms == ms
       assert length(MachineState.internal_events(result_ms)) == 1
@@ -676,7 +701,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:eventless_state)])
 
-      {_ms, transitions} = Selection.select_eventless_transitions(ms)
+      {_ms, transitions, _cond_effects} = Selection.select_eventless_transitions(ms)
 
       assert [%{events: []}] = transitions
     end
@@ -689,7 +714,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = machine()
       ms = machine_state(m, [idx(:eventless_state)])
 
-      {returned_ms, _transitions} = Selection.select_eventless_transitions(ms)
+      {returned_ms, _transitions, _cond_effects} = Selection.select_eventless_transitions(ms)
 
       assert returned_ms == ms
     end
@@ -704,7 +729,7 @@ defmodule Statifier.Interpreter.SelectionTest do
       ms = machine_state(m, [cond_error_idx(m, "eventless_fail")])
       transition = cond_error_eventless_transition(m, "eventless_fail")
 
-      {result_ms, transitions} = Selection.select_eventless_transitions(ms)
+      {result_ms, transitions, _cond_effects} = Selection.select_eventless_transitions(ms)
 
       assert transitions == []
       assert [error_event] = MachineState.internal_events(result_ms)
@@ -723,10 +748,131 @@ defmodule Statifier.Interpreter.SelectionTest do
       m = cond_error_machine()
       ms = machine_state(m, [cond_error_idx(m, "eventless_fail")])
 
-      {result_ms, _transitions} = Selection.select_eventless_transitions(ms)
+      {result_ms, _transitions, _cond_effects} = Selection.select_eventless_transitions(ms)
 
       refute result_ms == ms
       assert length(MachineState.internal_events(result_ms)) == 1
+    end
+  end
+
+  describe "the guard trace (Trace.CondsEvaluated)" do
+    # sabotage: `cond_enabled/4`'s `{:ok, false}` arm is changed to return
+    # `{false, cond_outcomes}` (dropping the `record_outcome/4` call) -> this
+    # reddens, because a disabled guard leaves no entry in the round's trace.
+    test "a cond that evaluates false is reported as :disabled" do
+      m = machine()
+      ms = traced_machine_state(m, [idx(:condfail)])
+      transition = transition_named(m, "cond-evt")
+
+      {_ms, [], effects} = Selection.select_transitions(ms, Event.external("cond-evt"))
+
+      assert [{:trace, %Trace.CondsEvaluated{evaluations: evaluations}}] = effects
+
+      assert evaluations == [
+               %{t_index: transition.t_index, outcome: :disabled, reason: nil}
+             ]
+    end
+
+    # sabotage: `cond_enabled/4`'s `{:ok, true}` arm is changed to record
+    # `:disabled` instead of `:enabled` -> this reddens on the outcome.
+    test "a cond that evaluates true is reported as :enabled" do
+      m = machine()
+      ms = traced_machine_state(m, [idx(:condtrue)])
+      transition = transition_named(m, "cond-evt-true")
+
+      {_ms, [_selected], effects} =
+        Selection.select_transitions(ms, Event.external("cond-evt-true"))
+
+      assert [{:trace, %Trace.CondsEvaluated{evaluations: evaluations}}] = effects
+
+      assert evaluations == [
+               %{t_index: transition.t_index, outcome: :enabled, reason: nil}
+             ]
+    end
+
+    # The failure shape, and the join to the round's own `error.execution`:
+    # the `reason` on the trace entry is the same term the raised event
+    # carries as its `data`, so a consumer holding both never has to
+    # re-derive either.
+    #
+    # sabotage: `evaluation/1`'s `{:error, reason}` clause is changed to
+    # `%{t_index: t_index, outcome: :error, reason: nil}` -> this reddens on
+    # the `reason` equality with the raised event's `data`.
+    test "a cond that fails is reported as :error, carrying the raised event's own data" do
+      m = cond_error_machine()
+      ms = traced_machine_state(m, [cond_error_idx(m, "eventless_fail")])
+      transition = cond_error_eventless_transition(m, "eventless_fail")
+
+      {result_ms, [], effects} = Selection.select_eventless_transitions(ms)
+
+      assert [{:trace, %Trace.CondsEvaluated{evaluations: [evaluation]}}] = effects
+      assert [error_event] = MachineState.internal_events(result_ms)
+
+      assert evaluation.t_index == transition.t_index
+      assert evaluation.outcome == :error
+      assert evaluation.reason == error_event.data
+
+      assert %Evaluator.Error{source: "nope", error: %UndefinedVariableError{}} =
+               evaluation.reason
+    end
+
+    # A `nil` `cond` short-circuits ahead of `Statifier.Evaluator`, so it is
+    # not an evaluation - and a round that evaluated nothing emits no effect
+    # at all, unlike `Trace.TransitionsSelected`, whose empty set is a result.
+    #
+    # sabotage: `record_outcome/4`'s `%Transition{cond: nil}` clause is
+    # deleted -> this reddens, because the unconditional transition now
+    # produces a `CondsEvaluated` naming an evaluation that never happened.
+    test "a transition with no cond produces no guard trace at all" do
+      m = machine()
+      ms = traced_machine_state(m, [idx(:condpass)])
+
+      assert {_ms, [_selected], []} =
+               Selection.select_transitions(ms, Event.external("cond-evt2"))
+    end
+
+    # `docs/observability.md` constraint 2: the untraced hot path allocates
+    # nothing for trace. The `error.execution` still has to be raised, which
+    # is what makes this more than a restatement of the `Effect.trace/3`
+    # gate - the failure is recorded either way, and only the effect is not.
+    #
+    # sabotage: `conds_evaluated_trace/2`'s body is changed to build the
+    # payload directly (`[{:trace, Trace.CondsEvaluated.new(machine_state,
+    # evaluations: ...)}]`) instead of going through `Effect.trace/3` -> this
+    # reddens, because an untraced round now emits a guard trace.
+    test "trace: false emits no guard trace, and still raises the error.execution" do
+      m = cond_error_machine()
+      ms = machine_state(m, [cond_error_idx(m, "eventless_fail")])
+
+      assert {result_ms, [], []} = Selection.select_eventless_transitions(ms)
+      assert length(MachineState.internal_events(result_ms)) == 1
+    end
+
+    # Walk order, across two parallel regions: `p1`'s failing cond and
+    # `p2`'s non-boolean one are evaluated in document order, and the trace
+    # lists them in that order - the same order `raise_cond_errors/2` uses.
+    #
+    # sabotage: `finish_round/3`'s `Enum.reverse(cond_outcomes)` is removed
+    # -> this reddens, because the trace lists `p2` before `p1`.
+    test "evaluations are listed in walk order" do
+      m = cond_error_machine()
+
+      ms =
+        traced_machine_state(m, [
+          cond_error_idx(m, "par"),
+          cond_error_idx(m, "p1"),
+          cond_error_idx(m, "p2")
+        ])
+
+      p1 = cond_error_transition_named(m, "pgo")
+
+      {_ms, [], effects} = Selection.select_transitions(ms, Event.external("pgo"))
+
+      assert [{:trace, %Trace.CondsEvaluated{evaluations: [first, second]}}] = effects
+      assert first.t_index == p1.t_index
+      assert first.t_index < second.t_index
+      assert first.outcome == :error
+      assert second.outcome == :error
     end
   end
 

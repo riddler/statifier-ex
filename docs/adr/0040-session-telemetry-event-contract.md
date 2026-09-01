@@ -17,7 +17,9 @@ amended in part by ADR-0067 (2026-08-23, st-737e: the
 `[:statifier, :session, ...]` prefix names the logical session rather than
 the `Statifier.Session` process; the emission helpers generalize into
 `Statifier.Telemetry` with a leading `driver` argument; a `driver` key
-joins every event's metadata)
+joins every event's metadata) - amended 2026-09-01 (st-1g1n:
+`[:statifier, :session, :trace, :conds_evaluated]` joins the trace family
+as the guard seam, taking the contract to 28 events)
 
 ## Context
 
@@ -426,6 +428,68 @@ fields and the resolver dispatches on field name in clause order.
   above); plus `configuration` for `:done`, mirroring the core `:done`
   effect's own resolution (both are built from the same
   `configuration_at_exit` binding).
+
+**Amendment (st-1g1n):** `[:statifier, :session, :trace, :conds_evaluated]`
+joins the trace family above, at `Statifier.Effect.Trace.CondsEvaluated`,
+taking the contract from 27 event names to 28 and the trace family from nine
+to ten. It is the guard seam. `conditionMatch` is an Appendix-D-named
+boundary this record's trace family had no row for, and predicator - the
+datamodel the guard evaluates in - stays telemetry-silent by its own
+ADR-0016, so a guard evaluation was invisible in family telemetry from both
+sides. A *failing* guard was partially visible through the
+`error.execution` it raises; a guard that quietly answered `false` was not
+visible at all.
+
+It is a list-carrying member: measurements are the counter triple plus
+`size` (the number of evaluations), exactly as `:transitions_selected`,
+`:exit_set`, `:content_executed`, `:entry_set`, and `:invoke_pass` already
+carry it; metadata is `driver`, `session_id`, `effect`, with **no**
+`location` key, per the st-ii9v amendment's rule for the whole trace family
+rather than a carve-out from it. The payload's `evaluations` list holds one
+map per evaluation - `t_index`, `outcome` (`:enabled | :disabled | :error`),
+and `reason` (the failure term for `:error`, `nil` otherwise) - which keeps
+constraint 3 satisfied: an identity, never a `%Statifier.Machine.Transition{}`.
+`reason` is the same term the round's `error.execution` carries as its
+`data`, so a consumer holding both joins them rather than re-deriving
+either.
+
+Two shape decisions are load-bearing and are recorded here rather than left
+to the implementation:
+
+1. **One effect per round, not one per guard.** A per-guard event would give
+   a metrics consumer a countable evaluation without folding, but selection
+   walks every active leaf and its ancestors on every round, so the per-guard
+   shape scales with the chart's transition count rather than its round
+   count. The list-carrying shape is the one this record's own trace family
+   already uses for exactly this reason, and `size` recovers the count.
+2. **No effect at all when the round evaluated nothing.** This is a
+   deliberate departure from `:transitions_selected`'s "includes the empty
+   set" rule, and the two are not in tension: a selection round always
+   *selects*, so its empty set is a result, while a round in which no
+   candidate transition carried a written `cond` performed no evaluation and
+   has no result to report. A `nil` `cond` short-circuits ahead of
+   `Statifier.Evaluator` and is not an evaluation either, so it contributes
+   no entry. The commitment is one entry per Predicator call and no event
+   when the round made none - without which every round of every guardless
+   chart would emit an empty guard event.
+
+The emission boundary is unchanged, and this amendment does not reopen the
+"session boundary is the one emitter" decision above. The core does not call
+`:telemetry`: `Statifier.Interpreter.Selection` returns the payload as an
+ordinary trace effect on its round's effect list, gated by
+`Statifier.Effect.trace/3` like every other, and `Statifier.Telemetry`
+forwards it at the boundary. Making that possible widened
+`select_transitions/2` and `select_eventless_transitions/1` from
+`{machine_state, transitions}` to `{machine_state, transitions, effects}` -
+an interpreter-internal signature change, not a change to this contract, and
+the alternative (a side channel, or an emitter inside the pure core) is
+precisely what ADR-0003 and this record forbid.
+
+The consequence clause below applies to this name in full: it is a public
+commitment from the moment it ships, and `opentelemetry_statifier` consumes
+28 names rather than 27 (`docs/opentelemetry.md`'s contract-freeze note is
+updated to match). The bridge needs no code change for it - it is a
+`trace: true`-only event in a family the bridge already handles by shape.
 
 ## Consequences
 

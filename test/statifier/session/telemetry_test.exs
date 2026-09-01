@@ -201,6 +201,14 @@ defmodule Statifier.Session.TelemetryTest do
   ]
 
   @trace_fixtures [
+    {:conds_evaluated,
+     {:trace,
+      %Trace.CondsEvaluated{
+        evaluations: [%{t_index: 0, outcome: :enabled, reason: nil}],
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }}},
     {:event_dequeued,
      {:trace,
       %Trace.EventDequeued{
@@ -261,12 +269,12 @@ defmodule Statifier.Session.TelemetryTest do
   ]
 
   describe "events/0" do
-    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 27`
+    # sabotage: `@effect_kinds` drops `:log` -> red, `length(events) == 28`
     # fails (26 names) - reverted and confirmed green.
-    test "returns exactly 27 names, all `[:statifier, :session | _]`" do
+    test "returns exactly 28 names, all `[:statifier, :session | _]`" do
       events = Telemetry.events()
 
-      assert length(events) == 27
+      assert length(events) == 28
       assert Enum.uniq(events) == events
 
       assert Enum.all?(events, fn
@@ -1136,6 +1144,51 @@ defmodule Statifier.Session.TelemetryTest do
 
       assert many_measurements.size == 2
       refute Map.has_key?(many_metadata, :location)
+    end
+
+    # sabotage: `trace_shape/2`'s `Trace.CondsEvaluated` clause is changed to
+    # omit the `:size` measurement (`{counters(payload), %{}}`) -> red, the
+    # `size` assertions below fail - reverted and confirmed green.
+    test "Trace.CondsEvaluated names the guard event, sizes its evaluations, and carries no location",
+         %{ref: ref} do
+      machine = located_machine()
+
+      one =
+        {:trace,
+         %Trace.CondsEvaluated{
+           evaluations: [%{t_index: 0, outcome: :error, reason: :boom}],
+           macrostep: 1,
+           microstep: 1,
+           round: 0
+         }}
+
+      Telemetry.effect("sess1", machine, one)
+
+      assert_received {[:statifier, :session, :trace, :conds_evaluated], ^ref, one_measurements,
+                       one_metadata}
+
+      assert one_measurements == %{macrostep: 1, microstep: 1, round: 0, size: 1}
+      refute Map.has_key?(one_metadata, :location)
+      assert {:trace, one_metadata.effect} == one
+
+      many =
+        {:trace,
+         %Trace.CondsEvaluated{
+           evaluations: [
+             %{t_index: 0, outcome: :enabled, reason: nil},
+             %{t_index: 1, outcome: :disabled, reason: nil}
+           ],
+           macrostep: 2,
+           microstep: 3,
+           round: 4
+         }}
+
+      Telemetry.effect("sess1", machine, many)
+
+      assert_received {[:statifier, :session, :trace, :conds_evaluated], ^ref, many_measurements,
+                       _many_metadata}
+
+      assert many_measurements == %{macrostep: 2, microstep: 3, round: 4, size: 2}
     end
 
     # sabotage: `trace_shape/2`'s `Trace.InvokePass` clause is changed to
