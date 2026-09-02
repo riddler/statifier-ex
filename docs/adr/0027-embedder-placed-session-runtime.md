@@ -275,9 +275,10 @@ drained.
 The discard itself is unchanged - same predicate, same drain-time position,
 same 6.4.3 clause behind it. What changed is that an invocation which
 finished before the parent moved no longer counts as cancelled. A
-handler-backed invocation (ADR-0051 decision 6) sends no such announcement
-and is unaffected, and a process-less host's own liveness rule
-(`Statifier.Invoke.Answer`, ADR-0068) is untouched.
+handler-backed invocation (ADR-0051 decision 5, and the pid-less table
+entry in its Consequences) sends no such announcement and is unaffected,
+and a process-less host's own liveness rule (`Statifier.Invoke.Answer`,
+ADR-0068) is untouched.
 
 ### Reopening trigger
 
