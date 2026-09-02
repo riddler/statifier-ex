@@ -393,8 +393,8 @@ and each way is one event the chart is waiting for:
 
 | The invocation | The event | Built by |
 |---|---|---|
-| finished, with or without a result | `done.invoke.<invoke_id>` | `Statifier.Invoke.Answer.done/3` |
-| failed permanently, retries exhausted | `error.communication.invoke.<invoke_id>` | `Statifier.Invoke.Answer.failed/3` |
+| finished, with or without a result | `done.invoke.<invoke_id>` | `Statifier.Invoke.Answer.done/4` |
+| failed permanently, retries exhausted | `error.communication.invoke.<invoke_id>` | `Statifier.Invoke.Answer.failed/4` |
 
 A live session builds both through
 [`Statifier.Session.done_invocation/3`](https://github.com/riddler/statifier-ex/blob/main/lib/statifier/session.ex)
@@ -430,6 +430,44 @@ before feeding the event in, and drop the record afterwards either way. This
 is the invoke half of the check Route B already describes for a timer that
 fires after its cancel. Feeding a stale answer in is not an error the
 library reports - it is an event the chart may act on.
+
+**Carrying the caller context across.** Both builders take an optional
+`caller_context:` - ADR-0063's opaque host slot - and copy it onto the
+answer event unread. The value to pass is the *invoking* event's, not the
+reporting call's: the term that rode the external event whose macrostep
+executed the `<invoke>`, which is what a host stamped when it armed the
+work and what it wants the chart's continuation linked back to. A live
+session takes it off its own invocation table entry, which it copied from
+the `%Statifier.Effect.Invoke{}` the core stamped. A process-less host has
+no such table, so storing the term beside its invocation row is its half
+of the same job - the invoke analogue of storing a `%SendDelayed{}` row's
+context in `docs/durable-timers.md`'s Route B:
+
+```elixir
+# Armed earlier, when the `%Statifier.Effect.Invoke{}` came out of the drive:
+#   store_invocation(run_id, invoke.invoke_id, invoke.caller_context)
+
+{invoke_id, caller_context} = load_invocation(run_id, "inv_3")
+
+event =
+  Statifier.Invoke.Answer.failed(run_id, invoke_id, [reason: "exhausted", attempts: 5],
+    caller_context: caller_context
+  )
+
+{:ok, machine_state, effects} =
+  Statifier.Interpreter.handle_event(machine_state, event)
+```
+
+Omitting the option, or storing nothing because the arming event carried
+nothing, gives `nil` - ADR-0063's "no context attached", never an error.
+The library reads the term at no point; the macrostep the answer opens
+reports it on the `caller_context` telemetry metadata key and nothing else
+touches it. A **resumed** session is the one case where the live path
+cannot help: its invocation table is rebuilt empty, so an answer delivered
+through `done_invocation/3` after a resume inherits `nil`, and a host that
+needs the correlation across a restart keeps the term itself and answers
+the process-less way shown above. ADR-0063's 2026-09-02 decision note
+records all of this.
 
 The payload rules are the same on both paths, and are not restated here:
 `done`'s `donedata` is spec 6.4's own shape, `failed`'s three keys are

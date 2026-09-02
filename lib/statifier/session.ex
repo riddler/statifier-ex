@@ -693,6 +693,14 @@ defmodule Statifier.Session do
   this for an invocation this session already popped (a prior cancel, or a
   second `done_invocation/3` call for the same id) is a harmless no-op both
   times - the discard drops the event, and the pop finds nothing.
+
+  The delivered event inherits `invoke_id`'s own `caller_context` - ADR-0063's
+  opaque slot as the invoking event carried it into the `<invoke>`, kept on
+  this session's invocation-table entry and copied onto the answer unread
+  (ADR-0063's 2026-09-02 decision note). There is nothing to pass: the caller
+  supplies no context and cannot override the invocation's. An invocation
+  started with no context, or answered on a resumed session whose table was
+  rebuilt, yields `nil`.
   """
   @spec done_invocation(server :: server(), invoke_id :: String.t(), donedata :: term()) :: :ok
   def done_invocation(server, invoke_id, donedata \\ nil) when is_binary(invoke_id) do
@@ -734,6 +742,11 @@ defmodule Statifier.Session do
   `start/2`, `cancel/2`, and `forward/3` are pure, and `perform/2` returning
   `{:error, term()}` is a transient signal belonging to whatever retry policy
   wraps it - permanent exhaustion is a judgement only that policy can make.
+
+  The delivered event inherits `invoke_id`'s `caller_context` exactly as
+  `done_invocation/3`'s does, and for the same reason: the two answers are
+  one vocabulary, and a host that could correlate a completion but not a
+  failure would have ADR-0068's asymmetry back one layer out.
   """
   @spec failed_invocation(server :: server(), invoke_id :: String.t(), failure :: keyword()) ::
           :ok
@@ -1407,6 +1420,16 @@ defmodule Statifier.Session do
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
 
+  # ADR-0063's 2026-09-02 decision note: the answer inherits the invoking
+  # event's `caller_context`, read off this invocation's own table entry -
+  # which `perform_instruction/3` copied off the `%Effect.Invoke{}` the core
+  # stamped, so the term is the invoking event's and not this cast's caller's.
+  # The lookup runs *before* the deferred `{:pop_invocation, _}` below takes
+  # effect (that message is queued behind the drain, see the paragraph after
+  # next), so the entry is still there to read; a miss - a resumed session's
+  # rebuilt table, an id already popped - reads `nil`, which is ADR-0063's
+  # "no context attached" rather than an error.
+  #
   # `done_invocation/3`'s own cast: `Statifier.Invoke.Answer.done/3` is the
   # one `done.invoke.<invoke_id>` construction site `return_done_event/2`
   # also calls through (`done_invocation/3`'s own doc), and public so a
@@ -1421,7 +1444,11 @@ defmodule Statifier.Session do
   # discarding the event this call exists to deliver. See
   # `handle_info/2`'s `{:pop_invocation, _}` clause for the other half.
   def handle_cast({:done_invocation, invoke_id, donedata}, state) do
-    event = Answer.done(state.session_id, invoke_id, donedata)
+    event =
+      Answer.done(state.session_id, invoke_id, donedata,
+        caller_context: Invocations.caller_context(state.invocations, invoke_id)
+      )
+
     send(self(), {:pop_invocation, invoke_id})
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
@@ -1436,7 +1463,11 @@ defmodule Statifier.Session do
   # reason a completed one does - it is over - so the pop is unconditional
   # here too, and idempotent on an id a prior cancel already took.
   def handle_cast({:failed_invocation, invoke_id, failure}, state) do
-    event = Answer.failed(state.session_id, invoke_id, failure)
+    event =
+      Answer.failed(state.session_id, invoke_id, failure,
+        caller_context: Invocations.caller_context(state.invocations, invoke_id)
+      )
+
     send(self(), {:pop_invocation, invoke_id})
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
@@ -1774,6 +1805,7 @@ defmodule Statifier.Session do
     if InvokeTypes.registered?(state.machine_state.invoke_types, invoke.type) do
       entry = %{
         type: invoke.type,
+        caller_context: invoke.caller_context,
         session_id: nil,
         pid: nil,
         monitor_ref: nil,
@@ -2039,6 +2071,7 @@ defmodule Statifier.Session do
       {:ok, pid} ->
         entry = %{
           type: invoke.type,
+          caller_context: invoke.caller_context,
           session_id: session_id(pid),
           pid: pid,
           monitor_ref: Process.monitor(pid),

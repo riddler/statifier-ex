@@ -65,10 +65,18 @@ defmodule Statifier.Session.Invocations do
   dispatch treats that the same as an unrecorded type, defaulting to the
   built-in handler. `session_id`, `pid`, and `monitor_ref` are `nil` for a
   handler-backed entry (see the moduledoc's "A handler-backed entry"
-  section) - there is no child process behind it.
+  section) - there is no child process behind it. `caller_context` is
+  ADR-0063's opaque host slot as the `%Statifier.Effect.Invoke{}` that
+  started this invocation carried it - the invoking event's own term,
+  copied off the effect at record time and handed back, unread, on the
+  answer events `Statifier.Invoke.Answer` builds (ADR-0063's 2026-09-02
+  decision note). Like `:type`, the key can be absent on an entry built by
+  older code or by hand in a test, which `caller_context/2` reads the same
+  as an attached `nil`.
   """
   @type entry :: %{
           optional(:type) => String.t() | nil,
+          optional(:caller_context) => term(),
           session_id: String.t() | nil,
           pid: pid() | nil,
           monitor_ref: reference() | nil,
@@ -155,6 +163,24 @@ defmodule Statifier.Session.Invocations do
   @doc "The whole `invoke_id => entry` map."
   @spec entries(invocations :: t()) :: %{String.t() => entry()}
   def entries(%__MODULE__{entries: entries}), do: entries
+
+  @doc """
+  `invoke_id`'s inherited caller context, `nil` when the id names nothing
+  live or when its entry predates the key (ADR-0063's 2026-09-02 decision
+  note). Both misses read the same because both mean the same thing to a
+  caller: no context is attached, which ADR-0063 decision 1 makes an
+  ordinary value rather than an error. A resumed session's table is rebuilt
+  empty (ADR-0060), so an answer delivered after a resume reads `nil` here
+  too, and a host that wants the term across a resume threads it itself,
+  the process-less way `docs/persistence.md` describes.
+  """
+  @spec caller_context(invocations :: t(), invoke_id :: String.t()) :: term()
+  def caller_context(%__MODULE__{entries: entries}, invoke_id) do
+    case Map.fetch(entries, invoke_id) do
+      {:ok, entry} -> Map.get(entry, :caller_context)
+      :error -> nil
+    end
+  end
 
   @doc """
   Every live invocation's own `type`, `invoke_id => type` - what

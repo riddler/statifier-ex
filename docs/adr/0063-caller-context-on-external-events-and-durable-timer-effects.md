@@ -357,6 +357,100 @@ key, exactly as a durable timer store carries it beside the dedup key.
   callback (point 4's named trigger); or `%Effect.Autoforward{}` ever
   ceasing to carry the whole event, which is what makes point 2 true.
 
+### Decision note 2026-09-02: a driver-built answer event inherits the invoking event's caller context (st-mvor)
+
+Accepted (2026-09-02) - additive; the record's own Status above is
+unchanged, decision 2's carrier list is unchanged, and no struct gains a
+field. It answers the one question ADR-0068's own 2026-09-02 decision note
+declined to answer ("Not decided here: whether a driver-built answer event
+inherits the invoking event's `caller_context`"), and it is recorded *here*
+rather than there because the question is about this record's slot and not
+about those events: ADR-0068 fixes the two answers' names, payloads, queue
+and delivery, all of which stand untouched, while what travels in the
+opaque slot and where it is copied is decision 3's subject. This note
+extends decision 3's copy chain by one link, on the trigger the 2026-09-01
+amendment named and left unscheduled: "putting it back on the result event
+is that repo's work, and this record does not schedule it" turned out to
+need a library-side answer first, because the *engine* builds the result
+event on both paths.
+
+**1. Both answer events inherit, from the invoking event.** The two events
+`Statifier.Invoke.Answer` builds - `done.invoke.<invoke_id>` and
+`error.communication.invoke.<invoke_id>` - carry the `caller_context` of the
+event that opened the macrostep whose `<invoke>` started the invocation.
+Not the context of whatever call reports the answer: an answer arrives
+minutes or hours later, from a retry layer or an Oban worker whose own
+ambient context is a different trace, and stamping *that* would attribute
+the chart's continuation to the reporter rather than to the arming trace -
+the exact link the se-opg capstone found missing. Both, not one, by the
+both-or-neither rule ADR-0068 is built on and decision 2 used for
+`%Cancel{}`: a host that can correlate a completion but not a permanent
+failure has the asymmetry back in a different place.
+
+**2. The term is read from the invocation, never minted.** The chain is
+already three-quarters built. `%Effect.Invoke{}` carries the slot (the
+2026-09-01 amendment, point 1), stamped by the core from
+`%MachineState{}`'s transient field, so replay re-mints it byte-identically.
+`Statifier.Session` copies it off that effect onto the invocation's own
+table entry (`Statifier.Session.Invocations`, an `optional(:caller_context)`
+key beside `optional(:type)`) at the two sites that record an entry, and
+reads it back when it builds an answer. A process-less host has no such
+table, so it passes the term it stored beside its own invocation row. Both
+builders therefore take it as an argument rather than reading anything
+ambient - `Statifier.Invoke.Answer.done/4` and `failed/4` gain a trailing
+`opts` keyword read for `:caller_context` alone, which is the additive shape
+decision 7 already named for this class of addition ("an opts keyword on the
+public function"). `Statifier.Session.done_invocation/3` and
+`failed_invocation/3` keep their arities: a caller cannot pass a context and
+cannot override the invocation's, because the invocation's is the only
+correct one.
+
+**3. Per variant.** Two events by two paths, and the difference between the
+paths is only *where the term is kept*, never what it is or whether it
+travels:
+
+| Answer event | Session path | Process-less path |
+|---|---|---|
+| `done.invoke.<invoke_id>` | `done_invocation/3` reads the entry `Invocations` holds for `invoke_id` and passes it to `Answer.done/4`. A child `scxml` session's own completion arrives through this same door (`return_done_event/2` calls `done_invocation/3` on its parent), so it inherits identically with no separate rule | the host calls `Answer.done/4` with the term it stored beside its invocation row, then feeds the returned event to its next `Interpreter.handle_event/2` drive |
+| `error.communication.invoke.<invoke_id>` | `failed_invocation/3` reads the same entry and passes it to `Answer.failed/4`, in the same three lines the done cast uses | the host calls `Answer.failed/4` the same way, with the same stored term |
+
+The two paths still build byte-identical events for the same arguments,
+which is what `test/statifier/invoke/answer_test.exs` pins; this note adds
+the slot to what "the same arguments" covers.
+
+**4. `nil` is a value, not a failure.** Three distinct situations read
+`nil`, and none of them is an error: an invocation started by a macrostep
+whose triggering event carried no context (decision 1's "no context
+attached"); an entry written before this key existed or by hand in a test,
+which reads exactly as an attached `nil` on ADR-0051's nil-permissive terms,
+unchanged here; and an answer delivered on a **resumed** session, whose
+`Invocations` table is rebuilt empty (ADR-0060) so the invoking event's term
+is no longer in reach. The third is a real gap and is named rather than
+papered over: a host that wants correlation across a resume stores the term
+itself and drives the process-less way, which is what
+`docs/persistence.md`'s "Answering an invocation with no session process"
+now documents. Widening `%MachineState{}` or a position to carry it would
+make transient per-macrostep state durable, which decision 5 refused for
+this slot and decision 3's "transient" is the reason.
+
+**5. Nothing serialized changes.** No struct gains a field, so
+`Statifier.Session.Recording`'s `@format_version` does not move (it stays at
+the amendment's 4), and `Statifier.Position` and `Statifier.Chart` are
+untouched for decision 5's own reason. The invocation table is session
+state, never persisted; the answer events already travel as
+`%Statifier.Event{}` values whose `caller_context` key has existed since
+this record's implementation. The telemetry contract is unchanged too: the
+answer re-enters through `handle_event/2`, so the macrostep it opens
+attributes through decision 4's existing `caller_context` metadata key with
+no new event and no new key.
+
+**What would reopen this note.** A consumer wanting the *reporter's* context
+alongside the invoking one (two terms on one event, which decision 1's
+single opaque slot cannot hold); `Statifier.Session` gaining a way to
+restore its invocation table across a resume, which would close point 4's
+third case; or `Statifier.Invoke.Answer` gaining a third answer event, which
+would need its own row in point 3's table.
+
 ## Related
 
 - ADR-0062 (decision 4 names this field; the bridge consumes only
