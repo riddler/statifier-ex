@@ -121,3 +121,109 @@ apply at all.
   decide the failure value for that context explicitly. If they conclude
   those contexts should also yield no data, that is an amendment to this
   record's scope limit, not a silent extension of it.
+
+## Note (2026-09-02): the failure gets an observable channel on `Effect.Done`
+
+A dated note rather than an amendment. The decision above is untouched: a
+failed `<donedata>` expression still yields no data, `_event.data` is still
+`nil`/`:undefined`, and test528 still passes for the reason recorded. What
+this note settles is a *residue* the decision left behind, in a place that
+did not exist when it was written, so no accepted text is edited and the
+record's Status is unchanged. The shape follows the family convention (a
+dated `## Note` heading, no Status line of its own).
+
+### The residue
+
+The decision fixed the value. It did not fix the **observability** of the
+failure, because at the time the raised `error.execution` survived on the
+returned state's internal queue and was diagnosis enough.
+
+`Statifier.Interpreter.exit_interpreter/1` then grew item 7, an ADR-0002
+mechanical deviation that discards the internal queue last of all so a
+`status: :done` machine state is quiescent by construction and
+`Statifier.Position.export/1` will accept it. That discard runs *after* the
+exit walk, so it takes the donedata raise with it. The consequence is stated
+in that function's own doc item 5: the returned terminal state does not show
+the event, and nothing else in the run does either, because the event loop
+has already stopped and no reader is left to dequeue it.
+
+That leaves `Effect.Done`'s `donedata: :undefined` as the only remaining
+signal, and it is not a signal at all - it is the *same* value a bare
+`<final>` with no `<donedata>` produces. A host reading the effect stream
+cannot tell "this chart declared donedata and its expression failed" from
+"this chart declared none", which are very different facts about a run.
+Giving the failure an effect of its own was explicitly out of reach for
+`exit_interpreter/1` alone: it is an effect-vocabulary change.
+
+### The decision
+
+**`Statifier.Effect.Done` gains `donedata_error`, and
+`Statifier.Effect.Trace.Done` mirrors it.** The field is `nil` when the
+donedata resolved cleanly and `nil` for a bare final that declared none;
+otherwise it carries the `data` of the `error.execution` the resolution
+raised - in practice the `%Statifier.Evaluator.Error{}` that
+`Statifier.Interpreter.ExitEntry.donedata/2` passes to
+`MachineState.raise_platform/4`. The two `:undefined`s are now distinct, and
+the discard costs no diagnostic.
+
+Four properties are part of the decision rather than of the implementation:
+
+1. **Additive only.** No existing field changes meaning, `donedata` keeps
+   the value this record's Decision fixed, and no raise site moves. A
+   consumer that ignores the new field sees exactly what it saw before.
+2. **An observation, not a new path.** `exit_interpreter/1` reads the
+   internal queue either side of its `donedata/2` call and attributes only
+   what that call appended. `donedata/2` does not grow a second return
+   value, and `raise_platform/4` remains the single way a donedata failure
+   is signalled. The alternative - threading an error out of every arm of
+   `donedata/2` - would have put the same fact in two places and invited
+   them to disagree.
+3. **The window is a diff, not a scan.** An `error.execution` from an
+   earlier `<onexit>` block, or a `done.state.*` the stopped loop never
+   dequeued, is routinely still queued when the exit walk begins.
+   Attributing one of those to the final's donedata would be worse than the
+   gap this note closes: a bare final would report someone else's failure as
+   its own.
+4. **Several failures carry the first, in document order.** A `<donedata>`
+   whose `<param>`s each fail raises one `error.execution` per failure
+   (spec 5.7's "MUST ignore the name and value" keeps the fold going rather
+   than aborting it). The field is singular and carries the first; the rest
+   go with the queue exactly as they did before. A list was rejected as a
+   shape that would make the common single-failure case pay for the rare
+   one, and that would be a wider contract than the observability gap
+   justifies.
+
+### The format consequence
+
+`%Statifier.Effect.Done{}` and `%Statifier.Effect.Trace.Done{}` gaining a
+defstruct key changes the shape of structs a recording blob can hold. Both
+are performable effects a host may hand to `Statifier.Session.interpret/2`
+(`Statifier.Session.Effects.plan_one/2` has clauses for `{:done, _}` and
+`{:trace, _}`), and `Statifier.Session.Recording.put_interpret/3` stores an
+`interpret/2` batch verbatim - so a blob written before this note can hold
+copies of either without the key, and reading such a map as the new struct
+is the silent misread ADR-0057 decision 4's obligation names.
+
+`Statifier.Session.Recording`'s `@format_version` therefore bumps `4 -> 5`,
+and this note blesses the same default ADR-0063 decision 5 blessed for its
+own two bumps: the decoder reads version-4 blobs and defaults
+`donedata_error: nil` onto each stored done effect on import, which is safe
+exactly because a version-4 blob predates the field - no run it holds could
+have reported one. Versions 1 through 4 stay readable.
+
+`Statifier.Position` and `Statifier.Chart` are untouched: a position is
+written at quiescence and holds no effects, and the chart did not change
+shape.
+
+### Consequences
+
+- A host distinguishing a failed donedata from an absent one reads
+  `donedata_error`, not `donedata`.
+- Downstream, `statifier_persistence`'s donedata-failure handling asserts
+  `donedata: :undefined` and keeps passing unchanged; the new field is
+  available to it but not required. `statifier_blocks` pins `:undefined` for
+  a bare final and is unaffected.
+- What would reopen this note: a caller that genuinely needs every error
+  from a multi-`<param>` failure rather than the first, which would be an
+  argument about property 4's shape and would have to say what it does with
+  the set that the first does not give it.

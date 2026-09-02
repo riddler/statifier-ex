@@ -617,6 +617,93 @@ defmodule Statifier.Session.RecordingTest do
     end
   end
 
+  describe "from_binary/1 on a hand-built version-4 envelope" do
+    # A version-4 blob predates `donedata_error` on the two done-effect
+    # structs (ADR-0021's 2026-09-02 note), simulated here the same way the
+    # version-3 case simulates its own field: by deleting the key off the
+    # struct-shaped maps before encoding. `Statifier.Effect.Done` and
+    # `Statifier.Effect.Trace.Done` are both reachable through
+    # `Statifier.Session.interpret/2`, so `put_interpret/3` stores them
+    # verbatim and a pre-field blob can hold either.
+    #
+    # The `%Effect.Log{}` alongside them is the control: it never grew the
+    # field, so it must come back through the `{:trace, _}` and catch-all
+    # clauses untouched rather than gaining a `donedata_error` key.
+    #
+    # sabotage: `upgrade_effect/1`'s `{:done, done}` clause is deleted
+    # (falling through to the catch-all) -> the `%Effect.Done{}` pattern
+    # below raises `KeyError` on the missing key, reddening the test. Also
+    # verified for the `{:trace, %Effect.Trace.Done{}}` clause.
+    test "defaults donedata_error: nil onto stored done effects" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      old_done =
+        Map.delete(
+          %Effect.Done{
+            donedata: :undefined,
+            configuration: MapSet.new([1]),
+            macrostep: 1,
+            microstep: 1,
+            round: 0
+          },
+          :donedata_error
+        )
+
+      old_trace_done =
+        Map.delete(
+          %Effect.Trace.Done{
+            donedata: :undefined,
+            configuration: MapSet.new([1]),
+            macrostep: 1,
+            microstep: 1,
+            round: 0
+          },
+          :donedata_error
+        )
+
+      entries = [
+        {:interpret,
+         [
+           {:trace, old_trace_done},
+           {:log,
+            %Effect.Log{label: "control", value: nil, macrostep: 1, microstep: 1, round: 0}},
+           {:done, old_done}
+         ], nil}
+      ]
+
+      version_4_envelope =
+        :erlang.term_to_binary({:statifier_recording, 4, chart_blob, [], entries, nil})
+
+      assert {:ok, decoded} = Recording.from_binary(version_4_envelope)
+
+      assert [
+               {:interpret,
+                [
+                  {:trace, %Effect.Trace.Done{donedata_error: nil}},
+                  {:log, log},
+                  {:done, %Effect.Done{donedata_error: nil}}
+                ], nil}
+             ] = Recording.entries(decoded)
+
+      refute Map.has_key?(log, :donedata_error)
+    end
+
+    # sabotage: `check_version/1`'s `defp check_version(4), do: :ok` clause
+    # is deleted -> this assertion reddens with
+    # `{:error, {:unsupported_format_version, 4}}`. The same
+    # read-the-old-version courtesy versions 1, 2 and 3 already get.
+    test "a version-4 envelope is read, not refused" do
+      machine = compile_identified!()
+      assert {:ok, chart_blob} = Statifier.Chart.to_binary(machine)
+
+      version_4_envelope =
+        :erlang.term_to_binary({:statifier_recording, 4, chart_blob, [], [], nil})
+
+      assert {:ok, _decoded} = Recording.from_binary(version_4_envelope)
+    end
+  end
+
   describe "from_binary/1 on a hand-built version-1 envelope" do
     # sabotage: `from_binary/1`'s five-element clause is changed to call
     # `decode_envelope(version, chart_blob, opts, entries, :stray)` instead of
@@ -834,14 +921,15 @@ defmodule Statifier.Session.RecordingTest do
   end
 
   describe "format_version/0" do
-    # sabotage: `@format_version` is changed from `4` back to `3` -> this
+    # sabotage: `@format_version` is changed from `5` back to `4` -> this
     # reddens directly. 3 was ADR-0063's bump: `%Statifier.Event{}` and the
     # two durable-timer effect structs gained a defstruct key, changing the
     # shape of the structs inside a blob's `entries`. 4 is that record's
     # 2026-09-01 amendment doing the same for the two
-    # invoke-lifecycle effect structs.
-    test "returns 4" do
-      assert Recording.format_version() == 4
+    # invoke-lifecycle effect structs. 5 is ADR-0021's 2026-09-02 note doing
+    # the same for the two done-effect structs.
+    test "returns 5" do
+      assert Recording.format_version() == 5
     end
 
     # sabotage: `format_version/0` is changed to return `@format_version +
