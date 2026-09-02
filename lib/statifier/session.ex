@@ -340,9 +340,8 @@ defmodule Statifier.Session do
 
   alias Statifier.{Effect, Event, Interpreter, Machine, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
-  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
-  alias Statifier.Invoke.Source
+  alias Statifier.Invoke.{Answer, Source}
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.Identity
   alias Statifier.Send.{Routes, Target}
@@ -1408,9 +1407,11 @@ defmodule Statifier.Session do
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
 
-  # `done_invocation/3`'s own cast: `build_done_event/3` is the one
-  # `done.invoke.<invoke_id>` construction site `return_done_event/2` also
-  # calls through (`done_invocation/3`'s own doc). The entry pop is
+  # `done_invocation/3`'s own cast: `Statifier.Invoke.Answer.done/3` is the
+  # one `done.invoke.<invoke_id>` construction site `return_done_event/2`
+  # also calls through (`done_invocation/3`'s own doc), and public so a
+  # process-less host builds the byte-identical event with no session to cast
+  # to (ADR-0068's 2026-09-02 decision note). The entry pop is
   # deliberately *not* here - `send(self(), {:pop_invocation, invoke_id})`
   # queues it behind the `{:continue, :drain}}` this cast returns, which
   # fully drains (including the entry just enqueued below) before the
@@ -1420,7 +1421,7 @@ defmodule Statifier.Session do
   # discarding the event this call exists to deliver. See
   # `handle_info/2`'s `{:pop_invocation, _}` clause for the other half.
   def handle_cast({:done_invocation, invoke_id, donedata}, state) do
-    event = build_done_event(state.session_id, invoke_id, donedata)
+    event = Answer.done(state.session_id, invoke_id, donedata)
     send(self(), {:pop_invocation, invoke_id})
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
@@ -1435,7 +1436,7 @@ defmodule Statifier.Session do
   # reason a completed one does - it is over - so the pop is unconditional
   # here too, and idempotent on an id a prior cancel already took.
   def handle_cast({:failed_invocation, invoke_id, failure}, state) do
-    event = build_failure_event(state.session_id, invoke_id, failure)
+    event = Answer.failed(state.session_id, invoke_id, failure)
     send(self(), {:pop_invocation, invoke_id})
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
@@ -1995,56 +1996,6 @@ defmodule Statifier.Session do
   end
 
   defp return_done_event(_reason, _state), do: :ok
-
-  # `done.invoke.<invoke_id>`'s one construction site (ADR-0051 decision 5):
-  # both `handle_cast/2`'s `{:done_invocation, _, _}` clause and, through
-  # `done_invocation/3`, `return_done_event/2`'s own `:done` clause build the
-  # event here rather than each inlining `Event.external/2` - the shape
-  # `docs/extending.md` documents for a process-less host to match.
-  @spec build_done_event(session_id :: String.t(), invoke_id :: String.t(), donedata :: term()) ::
-          Event.t()
-  defp build_done_event(session_id, invoke_id, donedata) do
-    Event.external("done.invoke." <> invoke_id,
-      data: donedata,
-      invokeid: invoke_id,
-      origin: SystemVariables.scxml_location(session_id),
-      origintype: SystemVariables.scxml_event_processor()
-    )
-  end
-
-  # `error.communication.invoke.<invoke_id>`'s one construction site
-  # (ADR-0068 decisions 1 and 2), beside `build_done_event/3` because the two
-  # events are the two halves of one lifecycle and differ only in name and
-  # payload. The name is 3.12.1's suffix extension of the
-  # `error.communication` ADR-0051 decision 1's table already assigns to a
-  # registered handler's service failure, so the prefix rule keeps a chart
-  # written against that table working unedited. `Event.external/2` rather
-  # than `Event.platform/3`: the processor detects nothing here, a host
-  # reports on an external service's behalf, and the queue follows the
-  # arrival rather than the `error.` prefix (decision 5). The payload's keys
-  # are strings for the same reason `Machine.Content.Send`'s
-  # `resolve_params/2` builds `namelist` data with string keys, and an
-  # unsupplied `:attempts`/`:detail` is left `:undefined` rather than `nil`
-  # so ADR-0037's unbound spelling reads through the map nesting.
-  @spec build_failure_event(
-          session_id :: String.t(),
-          invoke_id :: String.t(),
-          failure :: keyword()
-        ) :: Event.t()
-  defp build_failure_event(session_id, invoke_id, failure) do
-    data = %{
-      "reason" => Keyword.get(failure, :reason, "unknown"),
-      "attempts" => Keyword.get(failure, :attempts, :undefined),
-      "detail" => Keyword.get(failure, :detail, :undefined)
-    }
-
-    Event.external("error.communication.invoke." <> invoke_id,
-      data: data,
-      invokeid: invoke_id,
-      origin: SystemVariables.scxml_location(session_id),
-      origintype: SystemVariables.scxml_event_processor()
-    )
-  end
 
   # `{:enqueue_invoked_event, _, _}`'s own body, factored out so
   # `handle_cast/2`'s `{:done_invocation, _, _}` clause can enqueue its own

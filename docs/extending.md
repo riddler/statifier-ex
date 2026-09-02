@@ -423,6 +423,28 @@ ADR-0068 records the full argument, including why the event rides the external
 queue with the rest of the invocation's traffic rather than being raised
 internally.
 
+### No session process? Build the event yourself
+
+Both doors take a live `Statifier.Session`. A host driving
+`Statifier.Interpreter` directly, with no session process at all, has none to
+hand them - so it calls `Statifier.Invoke.Answer.done/3` or
+`Statifier.Invoke.Answer.failed/3`, which are the construction sites the two
+doors themselves call through, and feeds the returned event to its next
+drive:
+
+```elixir
+event = Statifier.Invoke.Answer.failed(run_id, "inv_3", reason: "exhausted", attempts: 5)
+{:ok, machine_state, effects} = Statifier.Interpreter.handle_event(machine_state, event)
+```
+
+Same events, same payload rules, same names - one implementation, so a
+process-less host and a live session cannot drift apart. What the host takes
+on instead is the liveness check a session's drain does for itself: an answer
+for an invocation the chart already cancelled must be dropped by the host,
+against the host's own record of which invocations are live.
+[docs/persistence.md](persistence.md)'s "Answering an invocation with no
+session process" is the full recipe.
+
 ## At-least-once: handlers must be idempotent
 
 `perform/2` **MAY be called more than once for the same `invoke_id`.** A host
