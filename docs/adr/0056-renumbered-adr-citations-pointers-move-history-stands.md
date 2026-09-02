@@ -4,6 +4,8 @@ Status: accepted (2026-08-19) - the standing rule for citations left
 behind by an ADR renumbering, and the qualification rule for citing
 another repository's ADRs; refines the st-0y0 ledger convention
 (dated prose is correct as written) rather than amending any record
+; amended 2026-09-02 (st-xj7o: decision 5 gains a canonical
+compact form, `<prefix>-ADR-NNNN`, and its no-sweep rule)
 
 ## Context
 
@@ -186,3 +188,93 @@ as a broken link to the wrong record.
 - New cross-repo citations that omit the repo are defects from this
   record forward, even when the number happens not to collide with a
   local record.
+
+### Amendment 2026-09-02: the canonical compact cross-repo citation form (st-xj7o)
+
+Status: accepted (2026-09-02) - extends decision 5 with a canonical
+compact form and a no-sweep rule. Decisions 1 through 4 are unchanged,
+and every form decision 5 already accepts stays acceptable; nothing in
+this record is withdrawn.
+
+Decision 5 fixed the *obligation* - a cross-repo ADR citation must carry
+the repository's identity in the citation itself - and listed three
+shapes that discharge it: a full URL, a path that names the repo, and
+prose qualification. What it deliberately did not do is pick one, so
+every citing site picks for itself and the family's prose now carries
+all three shapes for the same kind of reference. That is fine for
+resolvability, which is what decision 5 was about, and poor for
+scanning: a reader cannot tell at a glance whether "ADR-0002" in a
+paragraph is this repo's Appendix-D port or another repo's record,
+because the qualifying words may be a sentence away.
+
+A cross-repo convention adopted 2026-08-20 across the sibling
+repositories settles the choice. This amendment records it here because
+decision 5 is where this repository's citation rule lives, and a
+convention nobody can find in the record it refines is not a rule.
+
+**1. `<prefix>-ADR-NNNN` is the canonical compact form.** `st-ADR-0061`,
+`ots-ADR-0002`, `px-ADR-0014`. It is the form to reach for when a
+citation appears inline in prose, where a URL or a full path would break
+the sentence. It is not a replacement for decision 5's other forms: a
+References list still wants the full URL or path, because a reader
+following a link there needs the link.
+
+**2. The prefix is the repository's beads prefix**, not an abbreviation
+invented per sentence. The prefixes, one per repository, are fixed:
+
+| Prefix | Repository |
+|---|---|
+| `st` | statifier (this repository) |
+| `sui` | statifier-ui |
+| `sp` | statifier_persistence |
+| `sob` | statifier_oban |
+| `sb` | statifier_blocks |
+| `ots` | opentelemetry_statifier |
+| `px` | predicator-ex |
+| `se` | statifier_examples |
+
+Using the beads prefix rather than a package name is what makes the form
+mechanical: the same token already identifies the repository in every
+bead id a citation sits beside, so there is one table to know rather
+than two, and a citation and the bead that produced it read alike.
+
+**3. A bare `ADR-NNNN` remains local-only.** This is decision 5's last
+sentence carried onto the number form: a bare `docs/adr/NNNN-...md`
+always means this repository's record, and so does a bare `ADR-NNNN`. A
+cross-repo citation written bare is the defect this record's final
+consequence already names, and the compact form is now the cheapest way
+to not commit it - which is the point of adding it, since decision 5's
+three existing forms all cost more keystrokes than the bare one they
+were competing with.
+
+**4. No sweep.** Existing prose in any of decision 5's forms stays valid
+and is not rewritten; the compact form is adopted in new text and in
+text being edited for other reasons. This is the same st-0y0 rule
+decision 3 applies to historical statements and decision 5 applies to
+the four cross-repo names the link check flags, and it applies here for
+the same reason: those citations resolve, a reader following them
+arrives at the right record, and a sweep would churn dated documents to
+no reader's benefit. A file already carrying a decision-5 form does not
+become editable *because* of this amendment.
+
+### Amendment 2026-09-02's own consequences
+
+- The pointer sweep decision 4 obliges a renumbering branch to perform
+  is unchanged in scope. It is bounded to this repository's tree, so it
+  never touches a `<prefix>-ADR-NNNN` citation in a sibling repository,
+  and the compact form does not extend the obligation across repos.
+- A mechanical link check gains a form it can recognize rather than one
+  it must parse prose around. The third consequence above requires such
+  a check to treat repo-qualified citations as out of scope; the compact
+  form makes that classification a regex over a fixed prefix list rather
+  than a judgment about surrounding words. Nothing here schedules that
+  check - it is still st-9vco's other half.
+- The prefix table is the amendment's only maintenance burden: a new
+  family repository owes a row here when it gains a beads prefix. A
+  citation using an unlisted prefix is not a new form, it is an
+  unresolvable one, and the fix is the row rather than the citation.
+- What would reopen this amendment: two family repositories ever needing
+  to share a beads prefix (point 2's mechanical property fails), or a
+  consumer wanting the compact form to resolve automatically to a URL,
+  which would need a prefix-to-URL mapping this record deliberately does
+  not define.
