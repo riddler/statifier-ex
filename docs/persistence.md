@@ -380,6 +380,62 @@ without recompiling each one on lookup stores
 time, the same pattern item 2 of "What a host must persist" above already
 gives positions.
 
+## Answering an invocation with no session process
+
+Everything above is about a position: writing it, reading it back, resuming
+it. This section is about the other thing a host driving
+`Statifier.Interpreter` directly - with no `Statifier.Session` process at
+all - eventually needs, and which has no door of its own because a door
+needs a process to knock on.
+
+An `<invoke>` served by a `Statifier.Invoke.Handler` ends exactly two ways,
+and each way is one event the chart is waiting for:
+
+| The invocation | The event | Built by |
+|---|---|---|
+| finished, with or without a result | `done.invoke.<invoke_id>` | `Statifier.Invoke.Answer.done/3` |
+| failed permanently, retries exhausted | `error.communication.invoke.<invoke_id>` | `Statifier.Invoke.Answer.failed/3` |
+
+A live session builds both through
+[`Statifier.Session.done_invocation/3`](https://github.com/riddler/statifier-ex/blob/main/lib/statifier/session.ex)
+and `failed_invocation/3`, which cast to the session and deliver the event
+on an invocation-tagged inbox entry. A process-less host calls the two
+builders itself and feeds the returned event to its **next drive**, the same
+way `docs/durable-timers.md`'s Route B feeds a fired timer's event: there is
+no running process to call into, so the event is an input, not a message.
+
+```elixir
+# The host's retry layer has just decided this invocation is over.
+event = Statifier.Invoke.Answer.failed(run_id, "inv_3", reason: "exhausted", attempts: 5)
+
+{:ok, machine_state, effects} =
+  Statifier.Interpreter.handle_event(machine_state, event)
+```
+
+`run_id` is the host's own `_sessionid` (spec 5.10) for the run - the same
+value it stamped onto the `%MachineState{}` it is driving. It reaches the
+chart only as the event's `origin`, per C.1. Both builders are pure: same
+arguments, same event, no clock, no id minting, so a host that re-drives the
+same recovered step rebuilds a byte-identical event, and
+`Statifier.Invoke.Answer` is the *one* construction site both paths share -
+a live session's own events are the same bytes, which
+`test/statifier/invoke/answer_test.exs` pins directly.
+
+**Liveness is the host's own check.** A live session discards a done or
+failure event that arrives for an invocation the chart already cancelled
+(spec 6.4.3's drain-time discard) and pops that invocation's table entry.
+A process-less host has neither a drain nor a table, so it owes itself the
+same two things: check the invocation is still live against its own record
+before feeding the event in, and drop the record afterwards either way. This
+is the invoke half of the check Route B already describes for a timer that
+fires after its cancel. Feeding a stale answer in is not an error the
+library reports - it is an event the chart may act on.
+
+The payload rules are the same on both paths, and are not restated here:
+`done`'s `donedata` is spec 6.4's own shape, `failed`'s three keys are
+`ADR-0068` decision 2's, and `docs/extending.md`'s "Reporting permanent
+failure" is where a host implementor reads them at the moment of the call.
+
 ## Explicitly not the *compiled* chart
 
 What is still never persisted, in any of the three shapes above, is the

@@ -122,7 +122,7 @@ defmodule Statifier.Session.InvokeChildOutcomeTest do
   end
 
   describe "a child final carrying no <donedata>" do
-    # sabotage: `Statifier.Session`'s `build_done_event/3` stamps
+    # sabotage: `Statifier.Invoke.Answer.done/3` stamps
     # `data: %{"outcome" => "approved"}` instead of the `donedata` it is
     # handed -> a final with no `<donedata>` now arrives carrying data, the
     # first conditioned arm matches, and the parent lands in "captured"
@@ -141,8 +141,8 @@ defmodule Statifier.Session.InvokeChildOutcomeTest do
       assert datamodel["saw_undefined"] == true
     end
 
-    # sabotage: the same `build_done_event/3` mutation as above - a
-    # payload-less final now arrives carrying data, so the first conditioned
+    # sabotage: the same `Statifier.Invoke.Answer.done/3` mutation as above
+    # - a payload-less final now arrives carrying data, so the first conditioned
     # arm matches and evaluates cleanly, no `error.execution` is ever raised,
     # and the wait for "unhandled" never comes true. Reverted and confirmed
     # green.

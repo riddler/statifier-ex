@@ -281,6 +281,59 @@ payload has an analogous report is a separate question - ADR-0054's durable
 timer path has no invocation, no `invoke_id`, and no door of this shape - and
 is filed as st-i7y8. Nothing in this note should be read as deciding it.
 
+### Decision note 2026-09-02: both answer events get a process-less builder (st-q6k2)
+
+Status: accepted (2026-09-02) - additive; the record's own Status above is
+unchanged, and this note decides nothing that record decided. It closes the
+gap the Consequences bullet below names ("a host that needs to report failure
+for an invocation it drives through the pure interpreter with no
+`Statifier.Session` process at all"), on that bullet's own terms: for both
+events at once, never one alone.
+
+**What it decides: nothing about the events, only about who may build them.**
+The name, the payload, the queue, and the delivery contract are decisions 1-5
+above and are untouched. What changes is that
+`done.invoke.<invoke_id>` and `error.communication.invoke.<invoke_id>` are now
+built by a public, pure module, `Statifier.Invoke.Answer`
+(`done/3` and `failed/3`), rather than by two private functions on
+`Statifier.Session`. The Consequences bullet below describing "one private
+construction site (`build_failure_event/3`) beside `build_done_event/3`" is
+accurate as of this record's own date and is superseded by this paragraph:
+the two construction sites are the same two, moved and made public, and
+`Statifier.Session.done_invocation/3` and `failed_invocation/3` now call
+through them. Session behaviour does not change, which
+`test/statifier/invoke/answer_test.exs` pins by asserting the event a live
+session actually dequeues is equal to the builder's own output for both
+halves.
+
+**Why the reopening trigger fires now, and why for both.** A host driving
+`Statifier.Interpreter` directly against a persisted `%MachineState{}` is a
+supported path (`docs/persistence.md`), and its next drive takes an event, not
+a cast - so it needs the event as a value. Deciding this for failure alone
+would recreate the asymmetry this record exists to remove, and deciding it for
+completion alone would create the mirror image of it: a process-less host that
+can say "finished" but not "gave up" parks nothing and waits forever, which is
+the Context section's own failure mode reappearing one layer out. The bullet
+below anticipated exactly this and left the decision to "the record that
+decides it for both". This is that decision.
+
+**What the library still does not do for a process-less host.** Two things a
+live session does around these events are the host's own, because they need
+state the library is not holding: 6.4.3's drain-time discard of an answer for
+an already-cancelled invocation, and the invocation table entry's pop. A
+process-less host has neither a drain nor a table, so it checks liveness
+against its own record before feeding the event to its next drive and drops
+the record afterwards either way - the same shape `docs/durable-timers.md`'s
+Route B already gives a timer that fires after its cancel.
+`docs/persistence.md`'s "Answering an invocation with no session process"
+states this as the recipe's own step rather than a caveat.
+
+**Not decided here: whether a driver-built answer event inherits the invoking
+event's `caller_context`.** ADR-0063's opaque slot is left `nil` by both
+builders. Whether a process-less host should be able to thread its correlation
+term onto an answer, and from where, is filed as st-mvor; nothing in this note
+should be read as deciding it.
+
 ## Related
 
 - ADR-0051 (decision 1's classification table, decision 4's handler

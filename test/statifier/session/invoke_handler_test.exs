@@ -292,7 +292,7 @@ defmodule Statifier.Session.InvokeHandlerTest do
     refute Enum.any?(Session.invocations(session), &(&1.invoke_id == "inv1"))
   end
 
-  # sabotage: `Statifier.Session`'s `build_done_event/3` is changed to drop
+  # sabotage: `Statifier.Invoke.Answer.done/3` is changed to drop
   # `invokeid: invoke_id` from the constructed event -> `apply_invoke_passes_
   # for_invocation/5`'s `invoke_id == event.invokeid` guard no longer
   # matches ("inv1" vs `nil`), so the empty `<finalize/>` never runs and
@@ -402,7 +402,7 @@ defmodule Statifier.Session.InvokeHandlerTest do
     session
   end
 
-  # sabotage: `Statifier.Session`'s `build_failure_event/3` is changed to
+  # sabotage: `Statifier.Invoke.Answer.failed/3` is changed to
   # name the event `"error.invoke." <> invoke_id` - the candidate shape
   # ADR-0068 decision 1 rejected -> no transition in `failure_doc/0` matches
   # it (neither the specific name nor the bare `error.communication` is a
@@ -426,7 +426,7 @@ defmodule Statifier.Session.InvokeHandlerTest do
     refute Enum.any?(Session.invocations(session), &(&1.invoke_id == "inv1"))
   end
 
-  # sabotage: `Statifier.Session`'s `build_failure_event/3` is changed to
+  # sabotage: `Statifier.Invoke.Answer.failed/3` is changed to
   # name the event `"error.invoke." <> invoke_id` -> `error.communication`
   # is not a token prefix of that, so nothing in `bare_communication_doc/0`
   # matches, the chart sits in "a", and `wait_for_status/2` below times out.
@@ -446,8 +446,8 @@ defmodule Statifier.Session.InvokeHandlerTest do
     wait_for_status(session, fn s -> s.configuration == MapSet.new(["parked"]) end)
   end
 
-  # sabotage: `build_failure_event/3`'s `Keyword.get(failure, :attempts,
-  # :undefined)` default is changed to `nil` - ADR-0037's rejected spelling
+  # sabotage: `Statifier.Invoke.Answer.failed/3`'s
+  # `Keyword.get(failure, :attempts, :undefined)` default is changed to `nil` - ADR-0037's rejected spelling
   # -> the delivered `data` carries `"attempts" => nil`, which is the
   # datamodel's *null*, and the `:undefined` match in the assertion below
   # reddens. Reverted and confirmed green.
