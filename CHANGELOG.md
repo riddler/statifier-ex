@@ -10,6 +10,102 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.5.0] 2026-09-02
+
+Answers an invocation without a session process, carries a host's
+correlation term across the invoke seam, traces guard evaluation, and
+distinguishes a failed `<donedata>` from an absent one. Fixes `<assign>`
+with markup children and the dropped `done.invoke` an invoked child's own
+farewell event used to cause.
+
+### Added
+
+- Adds `Statifier.Effect.Trace.CondsEvaluated` and the
+  `[:statifier, :session, :trace, :conds_evaluated]` telemetry event, emitted
+  once per selection round that evaluated a written `cond`, reporting each
+  guard's `t_index`, outcome (`:enabled`/`:disabled`/`:error`) and failure
+  reason.
+- `Statifier.Invoke.Answer.done/4` and `failed/4` take a `caller_context:`
+  option, so a host driving the interpreter with no session process can carry
+  its correlation term onto an invocation's answer event.
+- `Statifier.Effect.Done` and `Statifier.Effect.Trace.Done` carry
+  `donedata_error`, so a top-level `<final>` whose `<donedata>` expression
+  failed is distinguishable from one that declared no `<donedata>` at all -
+  both leave `donedata: :undefined`, and the `error.execution` the failure
+  raises is discarded with the internal queue at exit (ADR-0021's 2026-09-02
+  note). It is `nil` on success and on a bare final, and carries the first
+  failure in document order when several `<param>`s fail.
+- `Statifier.Invoke.Answer`, a public, pure module with `done/3` and
+  `failed/3`: the two events that end a handler-backed invocation -
+  `done.invoke.<invoke_id>` (ADR-0051 decision 5) and
+  `error.communication.invoke.<invoke_id>` (ADR-0068) - built as plain
+  `Statifier.Event.t()` values, for a host driving `Statifier.Interpreter`
+  directly with no `Statifier.Session` process to hand
+  `done_invocation/3` or `failed_invocation/3`. The two session doors call
+  through this same module, so a live session's events and a process-less
+  host's are byte-identical for the same arguments. The 6.4.3 discard of an
+  answer for an already-cancelled invocation stays the process-less host's
+  own check, against its own record of which invocations are live.
+- `docs/persistence.md` gains "Answering an invocation with no session
+  process" - the recipe, the liveness obligation, and where the payload
+  rules live; `docs/extending.md`'s "Reporting permanent failure" points at
+  it. Recorded as a dated decision note on ADR-0068, which had named this
+  gap as its own reopening trigger for both events at once.
+- `Statifier.Effect.Invoke` and `Statifier.Effect.CancelInvoke` gain
+  `caller_context :: term()` (default `nil`), stamped by the core from the
+  current macrostep's triggering external event - ADR-0063's carrier list
+  widened to the invoke seam. An asynchronous invoke handler stores the
+  term with its own invocation record and puts it back on the result event,
+  which is what lets a result arriving minutes later be linked to the trace
+  that started the invocation. The library never reads the value.
+- `[:statifier, :session, :effect, :invoke]` and
+  `[:statifier, :session, :effect, :cancel_invoke]` gain a `caller_context`
+  metadata key, matching the `:send_delayed` and `:cancel` events.
+
+### Changed
+
+- `Statifier.Interpreter.Selection.select_transitions/2` and
+  `select_eventless_transitions/1` return `{machine_state, transitions,
+  effects}` instead of `{machine_state, transitions}`; the third element is
+  the round's guard trace. Call them for their transitions and match the
+  three-element tuple.
+- An `<assign>` that carries both an `expr` attribute and markup children is
+  rejected as `:assign_expr_and_text`, the same 5.4.2 violation text children
+  already produced. A document relying on the previous lowering error for that
+  shape now sees the validator error instead.
+- `Statifier.Session.done_invocation/3` and `failed_invocation/3` now stamp
+  the answer event with the `caller_context` of the event that armed the
+  `<invoke>`, instead of leaving it `nil`.
+- `Statifier.Session.Recording`'s binary format version is 5. Version-4 blobs
+  still decode, defaulting `donedata_error: nil` onto their stored done
+  effects. Hosts reading `Effect.Done` off a recording gain the field; hosts
+  that ignore it are unaffected. `statifier_persistence`'s donedata-failure
+  handling, which asserts `donedata: :undefined`, keeps passing unchanged.
+- `Statifier.Session.Recording.format_version/0` bumps `3 -> 4`, because a
+  recording's stored invoke-lifecycle effects change shape.
+  `from_binary/1` still reads version 1, 2, and 3 blobs, defaulting
+  `caller_context: nil` onto the stored structs that predate the field.
+
+### Fixed
+
+- An `<assign>` with an element child compiles instead of failing with
+  `element "..." is not allowed inside "assign"`. Spec 5.4.2's in-line value
+  specification may be markup, so `<assign>`'s children now lower to the same
+  verbatim source slice `<content>`'s do under ADR-0041, and the compiled
+  `<assign>` writes that markup to its location as a string. Assigning an
+  `<scxml>` document to a variable and later passing it as
+  `<content expr="Var1">` works end to end (W3C `test530`).
+- An invoked child that reaches a top-level final now gets both of the
+  events it returns delivered to its parent, in order: whatever its exiting
+  states' `<onexit>` handlers sent to `#_parent`, and then its own
+  `done.invoke.<invokeid>`. Previously, when the first of those drove the
+  parent out of the invoking state, the parent cancelled the invocation and
+  dropped the `done.invoke` the child had already returned - so a chart
+  waiting on the child's completion stalled. Spec 6.4.3 conditions that
+  cancel on the parent exiting the invoking state *before* it receives the
+  done event, which a parent moved by the child's own farewell has not
+  done. W3C conformance test236 passes and joins the regression registry.
+
 ## [2.4.0] 2026-09-01
 
 Lets a nested subchart resolve the invoke handlers its root registered, widens
