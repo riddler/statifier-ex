@@ -2,9 +2,12 @@ defmodule Statifier.Validator.Checks.Assign do
   @moduledoc """
   Spec 5.4.2: "A conformant SCXML document MUST specify either 'expr' or
   children of `<assign>`, but not both." Reports `{:assign_expr_and_text,
-  expr}` at the `<assign>`'s own element span.
+  expr}` at the `<assign>`'s own element span, whether those children are
+  text or markup (ADR-0041's 2026-09-02 Note) - same reason, same shape,
+  regardless of which form the content takes, exactly as `Checks.Content`
+  treats the two forms under `<content>`.
 
-  `lib/statifier/document/assign.ex` makes both `expr` and `text`
+  `lib/statifier/document/assign.ex` makes `expr`, `text` and `markup` all
   representable at once precisely so this check can report the shape rather
   than lowering refusing to build it - the same division of labour
   `Checks.Content` has with `<content>` and `Checks.Data` has with `<data>`.
@@ -15,6 +18,9 @@ defmodule Statifier.Validator.Checks.Assign do
   `"\\n  "`. That is source formatting, not a payload, and firing on it
   would reject documents the spec allows - the same rule
   `Checks.Content.blank?/1` and `Checks.Data.blank?/1` already follow.
+  `markup`, when present, is never blank - it is `nil` unless `<assign>` has
+  at least one element child - so no equivalent whitespace carve-out applies
+  to it.
 
   This check walks every state's own `onentry`/`onexit` blocks, every
   state's own transitions (both plain and a `:history` state's default -
@@ -36,8 +42,8 @@ defmodule Statifier.Validator.Checks.Assign do
   Walks every `<assign>` reachable through a state's `onentry`/`onexit`
   blocks or its own (and its `<initial>` element's) transitions, and returns
   an `:assign_expr_and_text` error for each one that carries both an `expr`
-  attribute and non-blank child text. Returns `[]` when no `<assign>` in the
-  document mixes the two forms.
+  attribute and non-blank child content - markup, or text. Returns `[]` when
+  no `<assign>` in the document mixes the two forms.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
   def check(%Document{states: states}, %Context{}) do
@@ -105,8 +111,13 @@ defmodule Statifier.Validator.Checks.Assign do
 
   defp check_assign(%DAssign{expr: nil}), do: []
 
-  defp check_assign(%DAssign{expr: expr, text: text, node_location: node_location}) do
-    if blank?(text) do
+  defp check_assign(%DAssign{
+         expr: expr,
+         text: text,
+         markup: markup,
+         node_location: node_location
+       }) do
+    if is_nil(markup) and blank?(text) do
       []
     else
       [Error.assign_expr_and_text(expr, node_location)]

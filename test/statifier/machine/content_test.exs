@@ -290,6 +290,34 @@ defmodule Statifier.Machine.ContentTest do
 
       assert %Assign{value: {:static, "hello"}} = assign_content
     end
+
+    @child_markup_document """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <onentry>
+                <assign location="x"><scxml version="1.0"><final /></scxml></assign>
+            </onentry>
+        </state>
+    </scxml>
+    """
+
+    # sabotage: `Statifier.Compiler.assign_text_value/1`'s `markup` clause is
+    # dropped, so a markup-bearing `<assign>` falls through to the `text`
+    # rung -> `text` here is the empty string between the tags, which is
+    # blank, so `value` folds to `{:static, nil}` and this pattern match
+    # reddens. (`markup` outranking `text` is the whole point of the rung -
+    # ADR-0041's 2026-09-02 Note.)
+    test ~s(<assign location="x"><scxml.../></assign> compiles to {:static, markup}) do
+      m = compile!(@child_markup_document)
+      a = state_of(m, "a")
+
+      [onentry_block] = a.onentry
+      [assign_c_index] = onentry_block.content
+      assign_content = Machine.content(m, assign_c_index)
+
+      assert %Assign{value: {:static, ~s(<scxml version="1.0"><final /></scxml>)}} =
+               assign_content
+    end
   end
 
   describe "compile/1 - donedata" do

@@ -1223,14 +1223,29 @@ defmodule Statifier.Compiler do
     Map.get(attribute_locations, :expr, location)
   end
 
-  # The no-`expr` value: non-blank child text folded through
-  # `Expressions.inline_value/1`, `{:static, nil}` for a `nil` or
-  # whitespace-only `text` - mirrors `build_data_value/2`'s own text rung.
-  # `%DAssign{}.text` is only ever `nil` for a hand-built struct that never
-  # passed through lowering; `build_assign/2` always sets it to
-  # `Statifier.Parser.DOM.text/1`'s result (possibly `""`) for anything
-  # actually parsed.
+  # The no-`expr` value ladder: `markup` first, then non-blank child text
+  # folded through `Expressions.inline_value/1`, `{:static, nil}` for a
+  # `nil` or whitespace-only `text` - the text rung mirrors
+  # `build_data_value/2`'s own. `%DAssign{}.text` is only ever `nil` for a
+  # hand-built struct that never passed through lowering; `build_assign/2`
+  # always sets it to `Statifier.Parser.DOM.text/1`'s result (possibly `""`)
+  # for anything actually parsed.
+  #
+  # `markup` outranks `text` because the two are not alternatives: when
+  # `<assign>` has an element child, `text` is whatever whitespace sat
+  # between the tags and `markup` is the payload (ADR-0041's 2026-09-02
+  # Note, mirroring `build_content_expr/2`'s own `expr > markup > text`
+  # ladder). It folds to `{:static, markup}` - the verbatim source bytes as
+  # a string value, not an expression - because 5.4.2/5.9.3 give `<assign>`
+  # children *value* semantics, which is precisely what `test530` needs: the
+  # markup lands in the variable, and the later `<content expr="Var1">`
+  # compiles it at invoke time through `Statifier.Invoke.Source.resolve/2`'s
+  # markup-in-a-binary clause (ADR-0038).
   @spec assign_text_value(assign :: DAssign.t()) :: Machine.expr()
+  defp assign_text_value(%DAssign{markup: markup}) when is_binary(markup) do
+    Expressions.static(markup)
+  end
+
   defp assign_text_value(%DAssign{text: nil}), do: Expressions.static(nil)
 
   defp assign_text_value(%DAssign{text: text}) do

@@ -205,20 +205,82 @@ defmodule Statifier.Lowering.ContentTest do
 
       assert [%Block{content: [%Assign{location: "x", text: "hello"}]}] = state.onentry
     end
+  end
 
-    # sabotage: `build_assign/2`'s `misplaced_errors` binding is replaced
-    # with a hardcoded `[]` instead of walking `DOM.elements(element)` ->
-    # the element child would be silently dropped rather than reported,
-    # reddening this test's `{:error, [...]}` match (`lower!/1` would return
-    # `{:ok, _}` instead).
-    test "an element child inside <assign> is a misplaced_element error" do
+  describe "lower/2 - <assign> markup" do
+    # sabotage: `build_assign/2`'s `%Assign{}` literal drops
+    # `markup: markup` (leaving the struct default `markup: nil`) -> the
+    # exact-bytes assertion below reddens, since `markup` would be `nil`.
+    test "an element child inside <assign> lowers with no errors, markup holding the exact bytes" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <assign location="Var1"><scxml version="1.0"><final /></scxml></assign>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, document} = xml |> parse!() |> Lowering.lower(xml)
+
+      assert [%Block{content: [%Assign{location: "Var1", markup: markup}]}] =
+               only_state(document).onentry
+
+      assert markup == ~s(<scxml version="1.0"><final /></scxml>)
+    end
+
+    # sabotage: `build_assign/2` keeps its old `misplaced_errors` walk over
+    # `DOM.elements(element)` alongside the slice -> the element child is
+    # reported as `{:misplaced_element, "log", "assign"}` again and this
+    # `{:ok, _}` match reddens (the exact behaviour ADR-0041's 2026-09-02
+    # Note replaces).
+    test "an element child is no longer a misplaced_element error" do
       xml =
         ~s(<scxml><state id="s"><onentry><assign location="x"><log label="hi"/></assign></onentry></state></scxml>)
 
-      assert {:error, [%Error{reason: {:misplaced_element, "log", "assign"}} = error]} =
-               xml |> parse!() |> Lowering.lower(xml)
+      assert {:ok, _document} = xml |> parse!() |> Lowering.lower(xml)
+    end
 
-      assert error.location != nil
+    # sabotage: `slice_markup/2`'s `markup_location` is built with
+    # `end_offset: last.location.end_offset + 1` (off-by-one) -> the
+    # independently-computed offset assertions below redden.
+    test "markup_location bounds exactly the sliced bytes" do
+      xml = """
+      <scxml>
+          <state id="s">
+              <onentry>
+                  <assign location="x">before <a/> after</assign>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      # Computed independently of `Location.slice/2` (which the function
+      # under test uses to derive `markup`), so this does not just re-derive
+      # `markup` from `markup_location` and compare it to itself.
+      {start_index, _length} = :binary.match(xml, "before <a/> after")
+      expected_end = start_index + byte_size("before <a/> after")
+
+      assert [%Block{content: [%Assign{markup: markup, markup_location: markup_location}]}] =
+               lower!(xml) |> only_state() |> Map.fetch!(:onentry)
+
+      assert markup == "before <a/> after"
+      assert markup_location.start_offset == start_index
+      assert markup_location.end_offset == expected_end
+    end
+
+    # sabotage: `build_assign/2` calls `slice_markup/2` unconditionally on
+    # `element.children` without the element-child guard inside it (say by
+    # slicing the first-through-last significant child regardless of kind)
+    # -> a text-only `<assign>` would carry a non-nil `markup`, reddening
+    # the `markup: nil` assertion below.
+    test "a text-only <assign> carries no markup" do
+      xml =
+        ~s(<scxml><state id="s"><onentry><assign location="x">hello</assign></onentry></state></scxml>)
+
+      assert [%Block{content: [%Assign{text: "hello", markup: nil, markup_location: nil}]}] =
+               lower!(xml) |> only_state() |> Map.fetch!(:onentry)
     end
   end
 
