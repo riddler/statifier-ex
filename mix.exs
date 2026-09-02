@@ -57,6 +57,7 @@ defmodule Statifier.MixProject do
         "docs/datamodel.md",
         "docs/extending.md",
         "docs/persistence.md",
+        "docs/hosting-without-session.md",
         "docs/durable-timers.md",
         "docs/observability.md",
         "docs/opentelemetry.md",
