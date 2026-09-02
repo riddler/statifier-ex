@@ -61,9 +61,11 @@ should do the work, stop before the irreversible step, and report.
 | `git commit` on the issue's worktree branch | the claimed issue's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on `main`, on a red gate, on a `--quick` or `--test-scope changed` run, or with unrelated changes in the tree |
 | `git rebase` onto `origin/main` in a worktree (`/wurk:refresh`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
 | `git push`, `gh pr create` (`/wurk:mr`) | the user asks for it in their own words - a human invoking `/wurk:mr` satisfies this, so the skill does not stop to ask again; a conductor, an orchestrator or a parent session invoking it on the user's behalf does not, and needs the campaign's consent | inferred from "the work is done"; finishing an issue is not a request to publish it |
-| `git merge`, merging a PR | never | always - merging is the user's, in this profile, in the conservative one, and inside every campaign |
+| merging a campaign PR | a campaign consent the operator adopted verbatim that names automatic merges, with every named condition met (full gate green, CI green, firewall scan clean with a positive control, any named review gate passed) | outside such a consent; any named condition unmet; any PR the consent's carve-outs hold for the operator |
 | `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed; and always for a bead whose description carries a `mirrors:` line, campaign consent included |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
+| a version bump on a release bead's branch | an operator-authorized release bead, inside a campaign carrying the operator's explicit consent | on any other bead, on main, or when the operator has not named this repo's release bead |
+| a release (tag, `mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
 
 The organizing principle is that the human gate belongs where an action stops
@@ -93,6 +95,17 @@ or equivalent instruction from the user wins outright, whatever a row's trigger
 otherwise says. And authority belongs to the session that owns the work, not to
 a subagent it delegates to, on the terms the paragraph above sets out: a
 subagent that believes a trigger has fired reports that, it does not act on it.
+A version bump is the recorded exception: on a release bead the operator has
+named (in the campaign plan or their own words), the bump commit is release
+prep, not a release. (Recorded 2026-08-27 by the operator, campaign 008.)
+
+Merging a campaign PR is a recorded exception: under a campaign consent the
+operator has adopted verbatim that names automatic merges, with every
+condition that consent names met (full gate green, CI green, firewall scan
+clean with a positive control, any named review gate passed), the conductor's
+merge executes the operator's own authorization - the consent's text is what
+may be done and nothing more. (Recorded 2026-09-01 by the operator, campaign
+025 post-wrap queue walk.)
 
 Widening this section is a decision for the user to make and record here. An
 agent may draft the change; it does not adopt it.
