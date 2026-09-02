@@ -1077,7 +1077,7 @@ defmodule Statifier.Interpreter.ExitEntry do
 
   # The `{:compiled, ...}` arm of `donedata/2`: evaluate against a fresh
   # context, coerce a success through the `{:value, _}` identity rung, or
-  # raise `error.execution` and return `nil` on failure (ADR-0021).
+  # raise `error.execution` and return `:undefined` on failure (ADR-0021).
   #
   # ADR-0014 item 4's four committed fields are all present across the two
   # arguments, none of them duplicated into a new struct: the owning node's
