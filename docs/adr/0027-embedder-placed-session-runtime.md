@@ -215,3 +215,74 @@ does not write it.**
   can still `<send>` to its own id. Decision 2's "an unregistered session is
   an inaccessible one" is about reachability *by other sessions*; the sending
   session is by construction neither nonexistent nor inaccessible to itself.
+
+## Note (2026-09-02): a completed invocation is not a cancelled one
+
+A dated note rather than an amendment. Decision 3 is untouched in what it
+requires: the parent still holds the invocation table, still sequences the
+cancel itself rather than delegating it to a supervisor, and still drops -
+at drain time, by invokeid - every queued entry originating from a
+**cancelled** invocation, per 6.4.3's "MUST ignore any events it receives
+from that session". No accepted text is edited and the record's Status is
+unchanged. What this note settles is which invocations that discard is
+about, in a case the decision did not distinguish because nothing had yet
+exercised it.
+
+### The residue
+
+Decision 3 treats "the parent interpreted a cancel-invoke effect for this
+invokeid" as the whole of the discard predicate, and the implementation
+followed it literally: `{:stop_child, invoke_id}` popped the table entry
+before cancelling, so anything still to arrive under that id was un-keyed
+and dropped.
+
+That reading assumes the cancel and the child's completion are mutually
+exclusive. 6.4.3 does not assume that, and W3C conformance test236 is built
+out of the case where they are not. Appendix D's `exitInterpreter` runs a
+state's `<onexit>` content **before** `returnDoneEvent`, so a child whose
+top-level `<final>` sends to `#_parent` on exit returns two things in that
+order: the `<onexit>` event, then `done.invoke.<invokeid>`. The first of
+those can be the very event that drives the parent out of the invoking
+state. The parent then cancelled an invocation whose child had already
+finished, and discarded the done event that child had already, correctly,
+returned - leaving a chart that waits on the child's completion stalled
+with no diagnostic.
+
+The spec conditions the cancel on ordering, and this parent is on the other
+side of it: "if the invoking state machine exits the state containing the
+invocation **before it receives the done.invoke.id event**, it cancels the
+invoked session". It also forecloses the symmetric worry - that a genuinely
+cancelled child might race a done event through - at the source: "when it
+is cancelled, the invoked session MUST exit at the end of the next
+microstep ... but it MUST NOT generate the done.invoke.id event." A
+cancelled child halts `:cancelled` and never calls `return_done_event/2`,
+so a `done.invoke` that arrives is proof the invocation completed of its own
+accord.
+
+### The decision
+
+**An invocation the child has reported complete is retained across a
+cancel.** The child announces its own normal termination to its parent
+ahead of every effect in the batch that terminates it - before the
+`#_parent` sends its exit walk produces, and before the `done.invoke` its
+halt returns. The parent marks the table entry completed
+(`Statifier.Session.Invocations.complete/2`), and `{:stop_child, _}` leaves
+a completed entry alone: there is no child left to cancel, and popping it
+is what destroyed the answer. The entry is retired instead by the deferred
+`{:pop_invocation, _}` its own answer already carries, once that answer has
+drained.
+
+The discard itself is unchanged - same predicate, same drain-time position,
+same 6.4.3 clause behind it. What changed is that an invocation which
+finished before the parent moved no longer counts as cancelled. A
+handler-backed invocation (ADR-0051 decision 6) sends no such announcement
+and is unaffected, and a process-less host's own liveness rule
+(`Statifier.Invoke.Answer`, ADR-0068) is untouched.
+
+### Reopening trigger
+
+A conformance document or an embedder that needs a parent to *suppress* the
+done event of a child that completed before the parent left the invoking
+state. Nothing in the corpus asks for that today, and 6.4's "the Processor
+MUST place the event done.invoke.id on the external event queue of the
+invoking machine" reads against it.

@@ -234,4 +234,48 @@ defmodule Statifier.Session.InvokeParentRoutingTest do
       assert datamodel["b_ran"] == false
     end
   end
+
+  # -- a completed child's done.invoke survives the invoking state's exit --
+
+  describe "a child that sends to #_parent from its final state's <onexit>" do
+    # Appendix D's `exitInterpreter` runs a state's `onexit` content before
+    # `returnDoneEvent`, so the child's own `childToParent` reaches the
+    # parent ahead of `done.invoke.<invokeid>` (W3C test236). That first
+    # event drives the parent out of the invoking state, which cancels the
+    # invocation - and 6.4.3 conditions that cancel on the parent exiting
+    # "before it receives the done.invoke.id event", which this parent did
+    # not. Both events must therefore land.
+    #
+    # sabotage: `Statifier.Session`'s `perform_instruction({:stop_child,
+    # invoke_id}, state, _override)` clause drops its
+    # `Invocations.completed?/2` guard and calls `stop_child/2`
+    # unconditionally -> the entry is popped while the child's
+    # `done.invoke` is still one cast away, the drain discards it as
+    # originating from a cancelled invocation, and the parent stalls in
+    # "s1" instead of reaching "s2". Reverted and confirmed green.
+    test "delivers both that event and the child's own done.invoke, in that order" do
+      child =
+        ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="subFinal" version="1.0"><final id="subFinal"><onexit><send target="#_parent" event="childToParent"/></onexit></final></scxml>)
+
+      parent_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s0">
+          <state id="s0">
+              <invoke type="scxml">#{content_body(child)}</invoke>
+              <transition event="childToParent" target="s1"/>
+              <transition event="done.invoke" target="tooSoon"/>
+          </state>
+          <state id="s1">
+              <transition event="done.invoke" target="s2"/>
+          </state>
+          <state id="s2"/>
+          <state id="tooSoon"/>
+      </scxml>
+      """
+
+      {:ok, parent} = Session.start_link(compile!(parent_xml))
+
+      status = wait_for_status(parent, fn s -> s.configuration == MapSet.new(["s2"]) end)
+      assert status.configuration == MapSet.new(["s2"])
+    end
+  end
 end
