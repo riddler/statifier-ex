@@ -283,7 +283,7 @@ is filed as st-i7y8. Nothing in this note should be read as deciding it.
 
 ### Decision note 2026-09-02: both answer events get a process-less builder (st-q6k2)
 
-Status: accepted (2026-09-02) - additive; the record's own Status above is
+Accepted (2026-09-02) - additive; the record's own Status above is
 unchanged, and this note decides nothing that record decided. It closes the
 gap the Consequences bullet below names ("a host that needs to report failure
 for an invocation it drives through the pure interpreter with no
