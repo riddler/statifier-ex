@@ -20,6 +20,20 @@ defmodule Statifier.Session.Invocations do
   `pop_by_pid/2` needs no change at all - a pid-less entry was never
   reachable through it.
 
+  ## A completed entry (`complete/2`)
+
+  An entry carries `completed: true` once the child session has told its
+  parent it reached a top-level final on its own. It is still a *live*
+  entry - its `done.invoke.<invoke_id>` has not drained yet - but it is no
+  longer a cancellable one: 6.4.3 conditions the cancel on the invoking
+  machine exiting the invoking state "before it receives the
+  done.invoke.id event", and this child has already returned that event.
+  `Statifier.Session`'s `{:stop_child, _}` performer reads the flag and
+  leaves such an entry in place; without it, a parent that leaves the
+  invoking state on an event the child itself sent from its final state's
+  `<onexit>` would pop the entry and then discard the child's own
+  `done.invoke` at drain time (W3C test236).
+
   ## Not `Statifier.MachineState.active_invocations`
 
   `MachineState.active_invocations` (`lib/statifier/machine_state.ex:60-87`)
@@ -77,6 +91,7 @@ defmodule Statifier.Session.Invocations do
   @type entry :: %{
           optional(:type) => String.t() | nil,
           optional(:caller_context) => term(),
+          optional(:completed) => boolean(),
           session_id: String.t() | nil,
           pid: pid() | nil,
           monitor_ref: reference() | nil,
@@ -149,6 +164,51 @@ defmodule Statifier.Session.Invocations do
       {invoke_id, rest_by_pid} ->
         {entry, rest_entries} = Map.pop(invocations.entries, invoke_id)
         {{invoke_id, entry}, %__MODULE__{entries: rest_entries, by_pid: rest_by_pid}}
+    end
+  end
+
+  @doc """
+  Marks `invoke_id`'s entry as *completed*: the invoked session reached a
+  top-level final on its own and its `done.invoke.<invoke_id>` is already on
+  its way, so 6.4.3's cancel clause ("if the invoking state machine exits
+  the state containing the invocation **before it receives the
+  done.invoke.id event**, it cancels the invoked session") no longer
+  applies to it. A completed entry stays live - `live?/2` keeps answering
+  `true` - until its own answer has drained and the deferred
+  `{:pop_invocation, _}` retires it; what changes is that
+  `Statifier.Session`'s `{:stop_child, _}` performer leaves it alone
+  instead of popping it out from under the answer.
+
+  A no-op on an `invoke_id` that names nothing (a handler-backed
+  invocation never sends this notice, and an entry a `:DOWN` already popped
+  has nothing left to mark).
+  """
+  @spec complete(invocations :: t(), invoke_id :: String.t()) :: t()
+  def complete(%__MODULE__{entries: entries} = invocations, invoke_id)
+      when is_binary(invoke_id) do
+    case Map.fetch(entries, invoke_id) do
+      {:ok, entry} ->
+        %__MODULE__{
+          invocations
+          | entries: Map.put(entries, invoke_id, Map.put(entry, :completed, true))
+        }
+
+      :error ->
+        invocations
+    end
+  end
+
+  @doc """
+  Whether `invoke_id` names an invocation `complete/2` has marked. `false`
+  for a live-but-running invocation and for one that names nothing at all -
+  the two cases the caller treats identically, since neither is an
+  invocation whose answer is already in flight.
+  """
+  @spec completed?(invocations :: t(), invoke_id :: String.t()) :: boolean()
+  def completed?(%__MODULE__{entries: entries}, invoke_id) do
+    case Map.fetch(entries, invoke_id) do
+      {:ok, entry} -> Map.get(entry, :completed, false) == true
+      :error -> false
     end
   end
 

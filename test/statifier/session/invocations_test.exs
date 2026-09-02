@@ -290,4 +290,39 @@ defmodule Statifier.Session.InvocationsTest do
       assert Invocations.seed_datamodel(nil, machine) == %{}
     end
   end
+
+  describe "complete/2 and completed?/2" do
+    # sabotage: `complete/2`'s `Map.put(entry, :completed, true)` is changed
+    # to `Map.put(entry, :completed, false)` -> the entry is still rewritten
+    # but `completed?/2` answers `false`, reddening the first assertion.
+    test "marks a live entry completed while leaving it live" do
+      invocations = Invocations.put(Invocations.new(), "i1", entry(self()))
+
+      refute Invocations.completed?(invocations, "i1")
+
+      completed = Invocations.complete(invocations, "i1")
+
+      assert Invocations.completed?(completed, "i1")
+      assert Invocations.live?(completed, "i1")
+    end
+
+    # sabotage: `complete/2`'s `:error` clause is removed, falling through
+    # to the `{:ok, entry}` clause with no entry -> raises instead of
+    # returning the table unchanged, reddening this test.
+    test "is a no-op on an id the table does not hold" do
+      invocations = Invocations.new()
+
+      assert Invocations.complete(invocations, "nope") == invocations
+      refute Invocations.completed?(invocations, "nope")
+    end
+
+    # sabotage: `completed?/2`'s `Map.get(entry, :completed, false)` default
+    # is changed to `true` -> an entry that was never completed answers
+    # `true`, reddening this refute.
+    test "answers false for an entry that carries no :completed key" do
+      invocations = Invocations.put(Invocations.new(), "i1", entry(self()))
+
+      refute Invocations.completed?(invocations, "i1")
+    end
+  end
 end

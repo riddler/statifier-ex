@@ -180,6 +180,7 @@
     "test/scxml_tests/mandatory/invoke/test233_test.exs",
     "test/scxml_tests/mandatory/invoke/test234_test.exs",
     "test/scxml_tests/mandatory/invoke/test235_test.exs",
+    "test/scxml_tests/mandatory/invoke/test236_test.exs",
     "test/scxml_tests/mandatory/invoke/test237_test.exs",
     "test/scxml_tests/mandatory/invoke/test240_test.exs",
     "test/scxml_tests/mandatory/invoke/test241_test.exs",

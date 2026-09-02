@@ -1420,6 +1420,18 @@ defmodule Statifier.Session do
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
   end
 
+  # `announce_completion/3`'s other half. Deliberately ahead of
+  # the child's own parent-bound sends in the cast stream, and deliberately
+  # not a drain trigger: it enqueues nothing and drives no core step, it
+  # only records that this invocation finished on its own, so a
+  # `{:stop_child, _}` landing between here and the child's
+  # `done.invoke.<invoke_id>` leaves the entry - and therefore that answer -
+  # alone. An id the table does not hold is a no-op in
+  # `Invocations.complete/2`.
+  def handle_cast({:invocation_completed, invoke_id}, state) do
+    {:noreply, %{state | invocations: Invocations.complete(state.invocations, invoke_id)}}
+  end
+
   # ADR-0063's 2026-09-02 decision note: the answer inherits the invoking
   # event's `caller_context`, read off this invocation's own table entry -
   # which `perform_instruction/3` copied off the `%Effect.Invoke{}` the core
@@ -1713,10 +1725,61 @@ defmodule Statifier.Session do
   # nests.
   @spec perform(state :: State.t(), effects :: [Effect.t()], opts :: keyword()) :: State.t()
   defp perform(state, effects, opts \\ []) do
+    halt_override = Keyword.get(opts, :halt_override)
+
+    announce_completion(state, effects, halt_override)
+
     state
-    |> perform_batch(effects, Keyword.get(opts, :halt_override))
+    |> perform_batch(effects, halt_override)
     |> drain_deferred()
   end
+
+  # W3C test236. An invoked child that reaches a top-level final
+  # returns two things to its parent, in this order: whatever its exiting
+  # states' `<onexit>` handlers sent to `#_parent` (Appendix D's
+  # `exitInterpreter` runs `onexit` before `returnDoneEvent`, and
+  # `Interpreter.exit_interpreter/1` keeps that order in the effect list),
+  # then `done.invoke.<invoke_id>` itself. Both are casts from this child to
+  # the same parent, so they arrive in that order - but the *first* of them
+  # can make the parent leave the invoking state, and the parent's
+  # `{:stop_child, _}` performer used to pop the invocation entry there,
+  # which made the `done.invoke` arriving one message later fail
+  # `Invocations.live?/2` and be discarded at drain time. The parent then
+  # never saw the done event its child had already, correctly, returned.
+  #
+  # 6.4.3 conditions the cancel on ordering - "if the invoking state machine
+  # exits the state containing the invocation *before it receives the
+  # done.invoke.id event*, it cancels the invoked session" - and this parent
+  # did not: the child had finished before the parent moved. So the child
+  # says so first, ahead of every effect in the batch that terminates it,
+  # and the parent marks the entry completed (`Invocations.complete/2`)
+  # rather than treating a later cancel as a reason to drop the answer.
+  # ADR-0027 decision 3's drain-time discard is unchanged in what it drops -
+  # events from a *cancelled* invocation - and this only narrows what counts
+  # as one (see that ADR's 2026-09-02 Note).
+  #
+  # Gated three ways, all of them the same question asked of the data
+  # already in hand: this batch is the terminating one (it carries the
+  # `{:done, _}` effect `exit_interpreter/1` appends), the halt is not being
+  # overridden to `:cancelled` (a cancelled child MUST NOT generate
+  # `done.invoke.id` at all, per 6.4.3 - `return_done_event/2`'s own guard),
+  # and this session is somebody's invocation (`invoked_by`). A
+  # handler-backed invocation never travels this path and its host's
+  # liveness rule is untouched.
+  @spec announce_completion(
+          state :: State.t(),
+          effects :: [Effect.t()],
+          halt_override :: :cancelled | nil
+        ) :: :ok
+  defp announce_completion(%State{invoked_by: {parent_pid, invoke_id}}, effects, nil) do
+    if Enum.any?(effects, &match?({:done, _done}, &1)) do
+      GenServer.cast(parent_pid, {:invocation_completed, invoke_id})
+    end
+
+    :ok
+  end
+
+  defp announce_completion(_state, _effects, _halt_override), do: :ok
 
   @spec perform_batch(
           state :: State.t(),
@@ -1928,17 +1991,10 @@ defmodule Statifier.Session do
   # there is no child process to demonitor or cancel, only the table entry
   # itself to drop.
   defp perform_instruction({:stop_child, invoke_id}, state, _override) do
-    case Invocations.pop(state.invocations, invoke_id) do
-      {nil, invocations} ->
-        %{state | invocations: invocations}
-
-      {%{pid: nil}, invocations} ->
-        %{state | invocations: invocations}
-
-      {%{pid: pid, monitor_ref: ref}, invocations} ->
-        Process.demonitor(ref, [:flush])
-        cancel(pid)
-        %{state | invocations: invocations}
+    if Invocations.completed?(state.invocations, invoke_id) do
+      state
+    else
+      stop_child(state, invoke_id)
     end
   end
 
@@ -1970,6 +2026,29 @@ defmodule Statifier.Session do
     notify(state, {:halted, reason})
     Telemetry.halt(state.session_id, reason, state.machine_state)
     state
+  end
+
+  # `{:stop_child, _}`'s own body for an invocation that is still running.
+  # A *completed* one is left untouched by the clause above: there is
+  # nothing to cancel (the child already halted `:done` of its own accord)
+  # and popping it here is exactly the defect W3C test236 catches - see
+  # `announce_completion/3`. Its entry is retired instead by the deferred
+  # `{:pop_invocation, _}` that its own `done.invoke.<invoke_id>` carries,
+  # after that answer has drained.
+  @spec stop_child(state :: State.t(), invoke_id :: String.t()) :: State.t()
+  defp stop_child(state, invoke_id) do
+    case Invocations.pop(state.invocations, invoke_id) do
+      {nil, invocations} ->
+        %{state | invocations: invocations}
+
+      {%{pid: nil}, invocations} ->
+        %{state | invocations: invocations}
+
+      {%{pid: pid, monitor_ref: ref}, invocations} ->
+        Process.demonitor(ref, [:flush])
+        cancel(pid)
+        %{state | invocations: invocations}
+    end
   end
 
   # Spec 6.2: "If the SCXML session terminates before the delay interval has
