@@ -293,10 +293,10 @@ defmodule Statifier.Interpreter.Selection do
   path's `error.execution` enqueue lives in the two entry points below, not
   here.
 
-  Unreachable from the corpus today: `FeatureDetector` marks
-  `conditional_transitions` `:unsupported`, so no compiled document can carry
-  a `cond`-bearing transition through selection yet. Reachable, and tested,
-  from a machine_state and transition built by hand.
+  Reached from compiled documents: `FeatureDetector`'s registry marks
+  `conditional_transitions` `:supported`, and a compiled `cond`-bearing
+  transition driven through a live `Statifier.Session` lands here. Also
+  reachable, and tested, from a machine_state and transition built by hand.
   """
   @spec condition_match(machine_state :: MachineState.t(), transition :: Transition.t()) ::
           {:ok, boolean()} | {:error, term()}
