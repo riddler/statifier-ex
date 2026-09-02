@@ -62,7 +62,7 @@ should do the work, stop before the irreversible step, and report.
 | `git rebase` onto `origin/main` in a worktree (`/wurk:refresh`) | a branch landed on `origin/main` | a conflict appears - abort and report, do not resolve unasked |
 | `git push`, `gh pr create` (`/wurk:mr`) | the user asks for it in their own words - a human invoking `/wurk:mr` satisfies this, so the skill does not stop to ask again; a conductor, an orchestrator or a parent session invoking it on the user's behalf does not, and needs the campaign's consent | inferred from "the work is done"; finishing an issue is not a request to publish it |
 | merging a campaign PR | a campaign consent the operator adopted verbatim that names automatic merges, with every named condition met (full gate green, CI green, firewall scan clean with a positive control, any named review gate passed) | outside such a consent; any named condition unmet; any PR the consent's carve-outs hold for the operator |
-| `bd close <id>` | the issue's branch is merged into `origin/main`, verified against the remote | at commit time, at PR-open time, or on a local merge that has not been pushed; and always for a bead whose description carries a `mirrors:` line, campaign consent included |
+| `bd close <id>` | never for a mirrored bead whose other half is not merged to its own repo's `origin/main`; a mirrored bead whose other half has ALSO landed may be closed by the campaign conductor under a consent naming this exception, both halves together, each verified against its remote; otherwise the issue's branch is merged into `origin/main`, verified against the remote | for a bead whose description carries a `mirrors:` line while its other half is unlanded, campaign consent included; at commit time, at PR-open time, or on a local merge that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 | a version bump on a release bead's branch | an operator-authorized release bead, inside a campaign carrying the operator's explicit consent | on any other bead, on main, or when the operator has not named this repo's release bead |
 | a release (tag, `mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
@@ -70,8 +70,9 @@ should do the work, stop before the irreversible step, and report.
 
 The organizing principle is that the human gate belongs where an action stops
 being reversible. A commit on a private per-issue branch is undone with
-`git reset --soft HEAD~1`; a push, a PR, a merge, and a closed bead are all
-visible to other people and other machines, so those keep their gate.
+`git reset --soft HEAD~1`; a push, a PR, a merge outside a consented campaign,
+and a closed bead are all visible to other people and other machines, so those
+keep their gate.
 
 In `/wurk:implement --loop` mode, each phase's own green automated gate counts
 as "the claimed issue's work is complete" for that increment's commit - the
