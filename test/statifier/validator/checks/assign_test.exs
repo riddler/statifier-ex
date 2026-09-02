@@ -37,6 +37,51 @@ defmodule Statifier.Validator.Checks.AssignTest do
       assert error.message =~ "expr"
     end
 
+    # sabotage: check_assign/1's guard drops its `is_nil(markup) and`
+    # conjunct, leaving `if blank?(text)` alone -> this <assign>'s markup
+    # child sits alongside a blank `text` (the whitespace between the tags),
+    # so the pair violation goes unreported and this `{:error, [...]}` match
+    # reddens. The markup half of the 5.4.2 rule is what ADR-0041's
+    # 2026-09-02 Note adds.
+    test "an <assign> with both expr and markup children is reported" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <assign location="x" expr="1">
+                      <scxml version="1.0"><final /></scxml>
+                  </assign>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:assign_expr_and_text, "1"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 4
+    end
+
+    # sabotage: check_assign/1's `%DAssign{expr: nil}` head is dropped ->
+    # this markup-only <assign> reaches the general clause, which calls
+    # `Error.assign_expr_and_text(nil, _)` and raises on its `is_binary`
+    # guard rather than returning `{:ok, _}`.
+    test "an <assign> with markup children and no expr reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="s">
+              <onentry>
+                  <assign location="x">
+                      <scxml version="1.0"><final /></scxml>
+                  </assign>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(xml)
+    end
+
     # sabotage: same branch swap as the test above - check_assign/1's
     # `if blank?(text) do [] else [...] end` branches are swapped -> this
     # expr-only <assign> (blank text) would now report unconditionally,

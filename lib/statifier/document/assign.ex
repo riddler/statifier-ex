@@ -30,19 +30,50 @@ defmodule Statifier.Document.Assign do
   `Statifier.Validator.Checks.Assign` can report the pair rather than
   lowering refusing to build one (the same division of labour
   `Statifier.Document.Content`'s moduledoc states).
+
+  ## Markup children
+
+  Spec 5.4.2's "children of `<assign>`" are not restricted to text: an
+  in-line value specification may be markup, and the corpus writes exactly
+  that (`test/scxml_tests/mandatory/invoke/test530_test.exs` assigns an
+  `<scxml>` document to a variable and later passes it as
+  `<content expr="Var1">`). `markup` holds a verbatim source slice spanning
+  those children, and `markup_location` is that slice's own
+  `Statifier.Parser.Location` span in the parent source - the same two
+  fields, filled by the same `Statifier.Lowering.Builders` slicing helper,
+  that `Statifier.Document.Content` carries under ADR-0041 (extended to
+  `<assign>` by that record's 2026-09-02 Note). No DOM subtree enters this
+  struct, exactly as for `<content>`.
+
+  `markup` is `nil` unless `<assign>` has at least one element child. Unlike
+  `text` it is **not** line-break folded: it is opaque source bytes, CR
+  included, at this layer (ADR-0045 decision item 5). `expr`, `text`, and
+  `markup` are all representable at once for the same reason `expr` and
+  `text` are - reporting the 5.4.2 mutual-exclusion violation is
+  `Statifier.Validator.Checks.Assign`'s job, not lowering's.
   """
 
   alias Statifier.Document
   alias Statifier.Parser.Location
 
   @enforce_keys [:location, :node_location]
-  defstruct [:location, :node_location, expr: nil, text: nil, attribute_locations: %{}]
+  defstruct [
+    :location,
+    :node_location,
+    expr: nil,
+    text: nil,
+    markup: nil,
+    markup_location: nil,
+    attribute_locations: %{}
+  ]
 
   @type t :: %__MODULE__{
           location: String.t(),
           node_location: Location.t(),
           expr: String.t() | nil,
           text: String.t() | nil,
+          markup: String.t() | nil,
+          markup_location: Location.t() | nil,
           attribute_locations: Document.attribute_locations()
         }
 end

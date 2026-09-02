@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-08-19",
+  "last_updated": "2026-09-02",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -189,6 +189,7 @@
     "test/scxml_tests/mandatory/invoke/test247_test.exs",
     "test/scxml_tests/mandatory/invoke/test252_test.exs",
     "test/scxml_tests/mandatory/invoke/test253_test.exs",
+    "test/scxml_tests/mandatory/invoke/test530_test.exs",
     "test/scxml_tests/mandatory/invoke/test554_test.exs",
     "test/scxml_tests/mandatory/on_entry/test375_test.exs",
     "test/scxml_tests/mandatory/on_entry/test376_test.exs",

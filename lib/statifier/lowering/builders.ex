@@ -380,6 +380,11 @@ defmodule Statifier.Lowering.Builders do
   # `Text` runs alike), so a 5.6.2 "mixture" slices whole (ADR-0041). This
   # slice does not fold line breaks - it is CR-included source bytes, never
   # the parser's XML 1.0 2.11 fold (ADR-0045 decision item 5).
+  #
+  # Shared by `build_content/2` and `build_assign/2`: ADR-0041's 2026-09-02
+  # Note extends the same treatment to `<assign>`'s in-line value (5.4.2),
+  # and the slicing rule is identical for both - the difference is only what
+  # the compiler folds the resulting binary into.
   @spec slice_markup(element :: Element.t(), source :: binary()) ::
           {String.t() | nil, Location.t() | nil}
   defp slice_markup(%Element{children: children}, source) do
@@ -504,26 +509,27 @@ defmodule Statifier.Lowering.Builders do
   of the legal data value" (5.4.2, 5.9.3), so this builder reads
   `element.children` directly rather than calling
   `Statifier.Lowering.walk_children`, the same stray-text exemption
-  `build_data/2` takes. An element child is not silently dropped: each one
-  produces `{:misplaced_element, name, "assign"}` instead of a build
-  attempt of its own - `<assign>` does not hold a markup subtree.
+  `build_data/2` takes. An element child is no longer misplaced either:
+  `markup`/`markup_location` are set from a raw slice of `ctx.source` when
+  `<assign>` has at least one element child, through the same
+  `slice_markup/2` helper `build_content/2` uses - ADR-0041's treatment,
+  extended to `<assign>` by that record's 2026-09-02 Note, because spec
+  5.4.2's in-line value specification is markup in the corpus
+  (`test530_test.exs`). Like `<content>`'s, this slice does **not** fold
+  line breaks (ADR-0045 decision item 5), and the child is never dispatched
+  or walked, so no `foreign_element` or `misplaced_element` error is
+  possible here.
   """
   @spec build_assign(element :: Element.t(), ctx :: map()) ::
           {{:content_node, Assign.t()} | nil, [Error.t()]}
-  def build_assign(%Element{} = element, _ctx) do
-    misplaced_errors =
-      element
-      |> DOM.elements()
-      |> Enum.map(fn %Element{name: name, location: location} ->
-        Error.misplaced(name, "assign", location)
-      end)
-
+  def build_assign(%Element{} = element, ctx) do
     case Attributes.value(element, "location") do
       nil ->
-        {nil,
-         misplaced_errors ++ [Error.missing_attribute("assign", "location", element.location)]}
+        {nil, [Error.missing_attribute("assign", "location", element.location)]}
 
       location ->
+        {markup, markup_location} = slice_markup(element, Map.fetch!(ctx, :source))
+
         attribute_locations =
           %{}
           |> Attributes.put_location(:location, element, "location")
@@ -534,10 +540,12 @@ defmodule Statifier.Lowering.Builders do
           location: location,
           expr: Attributes.value(element, "expr"),
           text: DOM.text(element),
+          markup: markup,
+          markup_location: markup_location,
           attribute_locations: attribute_locations
         }
 
-        {{:content_node, assign_node}, misplaced_errors}
+        {{:content_node, assign_node}, []}
     end
   end
 

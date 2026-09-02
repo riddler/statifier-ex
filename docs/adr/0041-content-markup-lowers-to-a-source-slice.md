@@ -199,3 +199,111 @@ ADR-0014 fixed for expression spans.
   full DOM re-serialization - the exact cost this record declines to pay
   before anything needs it. That follow-up amends this record; it does not
   reopen options 1 or 2.
+
+## Note (2026-09-02): the same slice treatment extends to `<assign>`
+
+A dated note rather than an amendment. Every decision above is untouched:
+`<content>`'s element children still lower to a verbatim source slice, still
+compile at invoke time through `Statifier.Invoke.Source.resolve/2`, and the
+three rejected options stay rejected for the reasons given. What this note
+settles is a *symmetric* case the record named but did not reach, so no
+accepted text is edited and the Status line is unchanged. The shape follows
+the family convention (a dated `## Note` heading, no Status line of its own).
+
+### The gap
+
+The Context above enumerates the three corpus files that do not write the
+`<invoke><content><scxml>` shape, and the third is `test530`, "which assigns
+markup to a variable with `<assign><scxml>` and then passes it as
+`<content expr="Var1">`". The Decision then states its rule on `<content>`
+alone. `Statifier.Lowering.Builders.build_assign/2` therefore kept the
+generic rejection it always had - every element child produced
+`{:misplaced_element, name, "assign"}`, and `Statifier.Lowering.finalize/2`
+makes that fatal - so `test530` still failed to compile after this record
+landed, with `element "scxml" is not allowed inside "assign"`. st-ykn6
+recorded the residue and left the call open: "ADR-0041 decided `<content>`,
+not `<assign>`; whether the same slice treatment belongs on `<assign>`'s
+inline value is a separate call." This note makes it.
+
+Nothing here was decided against. The record limited its scope to the
+element whose grammar clause it was reading (5.6.2), which is why its
+Consequences could observe that `<send><content>` and `<donedata><content>`
+inherit the rule for free: the rule is stated at `<content>`. `<assign>` is
+a different element with a different clause, so it inherits nothing, and
+extending to it is an additive decision rather than a reversal.
+
+### The spec half
+
+5.4.2 gives `<assign>` the same two value sources 5.6.2 gives `<content>`:
+
+> A conformant SCXML document MUST specify either the 'expr' attribute or
+> child content, but not both.
+
+and 5.9.3 says of the children that they "provide an in-line specification
+of the legal data value". Neither clause restricts that in-line
+specification to text - the same silence 5.6.2 fills explicitly for
+`<content>` ("text, XML from any namespace, or a mixture of both"), and
+`test530` is the corpus writing markup there on purpose. Reading 5.4.2's
+"child content" as text-only is the narrower reading, and it is the one that
+refuses a document the test suite requires to run.
+
+### The decision
+
+**`<assign>`'s element children lower to a verbatim source slice, by the
+same mechanism and the same helper.** Concretely:
+
+- **`Statifier.Document.Assign` gains `markup` and `markup_location`**, the
+  same two nilable fields with the same meanings `Document.Content` carries:
+  the sliced binary, and the slice's own span in the parent source. No DOM
+  subtree enters the struct, so the layer boundary this record is organized
+  around holds exactly as before. `text` keeps its exact meaning.
+- **`build_assign/2` calls the *same* `slice_markup/2`** `build_content/2`
+  uses, rather than a parallel implementation. The slicing rule - first
+  through last non-whitespace child, elements and `Text` runs alike, no
+  line-break fold (ADR-0045 decision item 5) - is therefore identical by
+  construction, and the two builders cannot drift. Its
+  `{:misplaced_element, _, "assign"}` walk is removed, and the children are
+  never dispatched or walked, so `foreign_element` is not reachable there
+  either.
+- **The compiler folds `markup` ahead of `text`**, as `{:static, markup}` -
+  the verbatim bytes as a string *value*, matching `build_content_expr/2`'s
+  own `expr > markup > text` ladder. `markup` outranks `text` because they
+  are not alternatives: when an element child is present, `text` is whatever
+  whitespace sat between the tags. The static fold rather than a compiled
+  expression is 5.4.2/5.9.3's value semantics, which is what `test530`
+  needs - the markup lands in the variable, and the later
+  `<content expr="Var1">` compiles it at invoke time through ADR-0038's
+  existing markup-in-a-binary clause, unchanged.
+- **`Statifier.Validator.Checks.Assign` extends its 5.4.2 mutual
+  exclusion**: `expr` alongside `markup` is the same violation as `expr`
+  alongside text, reported as the same `{:assign_expr_and_text, expr}` at
+  the same span. This mirrors `Checks.Content` exactly. It is the one
+  behavioral change a document could notice that is not a strict
+  relaxation - the shape was previously refused by lowering and is now
+  refused by the validator - and refusing it in the validator is where this
+  record already put the equivalent `<content>` rule.
+
+### What does not change
+
+- **No new error channel, no new plumbing.** Lowering already receives the
+  source binary through `ctx` for `<content>`'s sake; `build_assign/2` reads
+  the same key. Nothing changes on `Machine.Content.Assign`, `Effect`,
+  `Invoke.Source`, or `Session`.
+- **The namespace limitation is inherited verbatim.** A slice drops
+  ancestor declarations here for the same reason it does under `<content>`,
+  and an assigned fragment that is later invoked as content meets
+  `Validator.Checks.Boilerplate` as a standalone root through the same
+  invoke-time path - so ADR-0042's relaxed namespace rule is what carries
+  `test530`'s undeclared child, exactly as it carries the twenty-four.
+- **The open question above stands unchanged** and now covers both elements:
+  a document needing ancestor-declared prefixes inside sliced markup still
+  needs the follow-up that record names, and still amends this record rather
+  than reopening options 1 or 2.
+
+### Evidence
+
+`test/scxml_tests/mandatory/invoke/test530_test.exs` compiles **and passes**
+after this change - not merely compiles - and joins the regression ratchet
+in `test/passing_tests.json`. st-ykn6's remaining half is unaffected:
+`test554`'s malformed-namelist compile-vs-runtime timing question is
+untouched by anything here.
