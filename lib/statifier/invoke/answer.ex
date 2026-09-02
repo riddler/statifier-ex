@@ -46,10 +46,19 @@ defmodule Statifier.Invoke.Answer do
   the next drive only if the invocation is still live by the host's own
   reckoning.
 
-  `caller_context` (ADR-0063) is deliberately absent here: whether a
-  driver-built answer event inherits the invoking event's correlation term is
-  a separate open question, tracked on ADR-0068's 2026-09-02 decision note,
-  and is not decided by this module.
+  ## `caller_context` is inherited, never minted
+
+  Both builders take an optional `caller_context:` (ADR-0063's opaque host
+  slot) and copy it onto the event they return, unread. It is the *invoking*
+  event's context - whatever opened the macrostep that executed the
+  `<invoke>` - not the answering call's own, which is why neither builder
+  reads an ambient value: the term travels from the invocation, and only a
+  caller holding the invocation can supply it. The Session path supplies it
+  from its own invocation table; a process-less host supplies what it stored
+  beside its invocation row (`docs/persistence.md`'s "Answering an
+  invocation with no session process"). Omitted, it is `nil` - ADR-0063's
+  own "no context attached", and the only value a run that never attached
+  one can produce (ADR-0063's 2026-09-02 decision note).
   """
 
   alias Statifier.Evaluator.SystemVariables
@@ -71,18 +80,32 @@ defmodule Statifier.Invoke.Answer do
   builds them - the two paths call this same function, so their events are
   byte-identical for the same arguments.
 
+  `opts` is read for one key, `:caller_context` - the invoking event's
+  ADR-0063 slot, copied onto the answer unread and defaulting to `nil` (see
+  the moduledoc's "`caller_context` is inherited, never minted").
+
       iex> event = Statifier.Invoke.Answer.done("sess_1", "inv_3", %{"outcome" => "approved"})
       iex> {event.name, event.type, event.data, event.invokeid}
       {"done.invoke.inv_3", :external, %{"outcome" => "approved"}, "inv_3"}
+
+      iex> event = Statifier.Invoke.Answer.done("s1", "inv_3", nil, caller_context: {:trace, 7})
+      iex> event.caller_context
+      {:trace, 7}
   """
-  @spec done(session_id :: String.t(), invoke_id :: String.t(), donedata :: term()) :: Event.t()
-  def done(session_id, invoke_id, donedata \\ nil)
-      when is_binary(session_id) and is_binary(invoke_id) do
+  @spec done(
+          session_id :: String.t(),
+          invoke_id :: String.t(),
+          donedata :: term(),
+          opts :: keyword()
+        ) :: Event.t()
+  def done(session_id, invoke_id, donedata \\ nil, opts \\ [])
+      when is_binary(session_id) and is_binary(invoke_id) and is_list(opts) do
     Event.external("done.invoke." <> invoke_id,
       data: donedata,
       invokeid: invoke_id,
       origin: SystemVariables.scxml_location(session_id),
-      origintype: SystemVariables.scxml_event_processor()
+      origintype: SystemVariables.scxml_event_processor(),
+      caller_context: Keyword.get(opts, :caller_context)
     )
   end
 
@@ -114,15 +137,29 @@ defmodule Statifier.Invoke.Answer do
   service's behalf, and the queue follows the arrival rather than the
   `error.` prefix.
 
+  `opts` is separate from `failure` on purpose: `failure`'s three keys become
+  the chart-visible payload, and `:caller_context` is host plumbing the
+  datamodel never sees (ADR-0063 decision 2's last bullet). It is read for
+  that one key - the invoking event's slot, copied onto the answer unread and
+  defaulting to `nil`.
+
       iex> event = Statifier.Invoke.Answer.failed("sess_1", "inv_3", reason: "exhausted", attempts: 5)
       iex> {event.name, event.data}
       {"error.communication.invoke.inv_3",
        %{"reason" => "exhausted", "attempts" => 5, "detail" => :undefined}}
+
+      iex> event = Statifier.Invoke.Answer.failed("s1", "inv_3", [], caller_context: {:trace, 7})
+      iex> event.caller_context
+      {:trace, 7}
   """
-  @spec failed(session_id :: String.t(), invoke_id :: String.t(), failure :: keyword()) ::
-          Event.t()
-  def failed(session_id, invoke_id, failure \\ [])
-      when is_binary(session_id) and is_binary(invoke_id) and is_list(failure) do
+  @spec failed(
+          session_id :: String.t(),
+          invoke_id :: String.t(),
+          failure :: keyword(),
+          opts :: keyword()
+        ) :: Event.t()
+  def failed(session_id, invoke_id, failure \\ [], opts \\ [])
+      when is_binary(session_id) and is_binary(invoke_id) and is_list(failure) and is_list(opts) do
     data = %{
       "reason" => Keyword.get(failure, :reason, "unknown"),
       "attempts" => Keyword.get(failure, :attempts, :undefined),
@@ -133,7 +170,8 @@ defmodule Statifier.Invoke.Answer do
       data: data,
       invokeid: invoke_id,
       origin: SystemVariables.scxml_location(session_id),
-      origintype: SystemVariables.scxml_event_processor()
+      origintype: SystemVariables.scxml_event_processor(),
+      caller_context: Keyword.get(opts, :caller_context)
     )
   end
 end

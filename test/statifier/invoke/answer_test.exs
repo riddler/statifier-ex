@@ -157,6 +157,104 @@ defmodule Statifier.Invoke.AnswerTest do
     end
   end
 
+  describe "caller_context inheritance (ADR-0063's 2026-09-02 decision note)" do
+    # sabotage: `done/4` drops `caller_context: Keyword.get(opts,
+    # :caller_context)` from its `Event.external/2` call -> the option is
+    # accepted and silently discarded, this assertion reddens on `nil`, and
+    # so does the Session-path test below it. Reverted and confirmed green.
+    test "done/4 copies the invoking event's caller_context onto the answer" do
+      event = Answer.done("sess_abc", "inv_3", %{"ok" => true}, caller_context: {:trace, "t1"})
+
+      assert %Event{name: "done.invoke.inv_3", caller_context: {:trace, "t1"}} = event
+    end
+
+    # sabotage: `failed/4` reads `:caller_context` out of `failure` instead of
+    # `opts` -> the term is looked up in the wrong keyword list, this test
+    # reddens on `nil`, and the Session-path failure test below reddens with
+    # it. Reverted and confirmed green.
+    test "failed/4 copies it too - both answers or neither" do
+      event =
+        Answer.failed("sess_abc", "inv_3", [reason: "exhausted"], caller_context: {:trace, "t1"})
+
+      assert %Event{
+               name: "error.communication.invoke.inv_3",
+               caller_context: {:trace, "t1"}
+             } = event
+    end
+
+    # sabotage: `Keyword.get(opts, :caller_context)` becomes
+    # `Keyword.get(opts, :caller_context, :undefined)` in both builders ->
+    # an unattached context reads the datamodel's *unbound* spelling rather
+    # than ADR-0063 decision 1's `nil`, and both matches below redden.
+    # Reverted and confirmed green.
+    test "an omitted context is nil on both answers, not :undefined" do
+      assert %Event{caller_context: nil} = Answer.done("sess_abc", "inv_3", %{})
+      assert %Event{caller_context: nil} = Answer.failed("sess_abc", "inv_3")
+    end
+
+    # sabotage: `Statifier.Session`'s `{:done_invocation, _, _}` cast passes
+    # no `caller_context:` option -> the delivered event's slot is `nil`
+    # while the arming event's was not, and both assertions below redden.
+    # Reverted and confirmed green.
+    test "done_invocation/3 inherits the context of the event that armed the invoke" do
+      session = start_armed_session({:trace, "arming"})
+      session_id = Session.session_id(session)
+
+      Session.done_invocation(session, "inv1", %{"result" => 42})
+      wait_for_status(session, fn s -> s.configuration == MapSet.new(["finished"]) end)
+
+      delivered = dequeued_event(session_id, "done.invoke.inv1")
+
+      assert delivered.caller_context == {:trace, "arming"}
+
+      assert delivered ==
+               Answer.done(session_id, "inv1", %{"result" => 42},
+                 caller_context: {:trace, "arming"}
+               )
+    end
+
+    # sabotage: `Statifier.Session`'s `{:failed_invocation, _, _}` cast keeps
+    # the lookup but passes `state.machine_state.caller_context` instead of
+    # the invocation's -> the answer attributes to whatever macrostep is
+    # current when the host reports failure (here none: the field is `nil` at
+    # quiescence) rather than to the arming trace, and this reddens.
+    # Reverted and confirmed green.
+    test "failed_invocation/3 inherits it the same way" do
+      session = start_armed_session({:trace, "arming"})
+      session_id = Session.session_id(session)
+
+      Session.failed_invocation(session, "inv1", reason: "exhausted", attempts: 5)
+      wait_for_status(session, fn s -> s.configuration == MapSet.new(["parked"]) end)
+
+      delivered = dequeued_event(session_id, "error.communication.invoke.inv1")
+
+      assert delivered.caller_context == {:trace, "arming"}
+
+      assert delivered ==
+               Answer.failed(session_id, "inv1", [reason: "exhausted", attempts: 5],
+                 caller_context: {:trace, "arming"}
+               )
+    end
+
+    # sabotage: `Invocations.caller_context/2` returns `:undefined` on a miss
+    # instead of `nil` -> an invocation armed with no context (this session's
+    # `<invoke>` is entered by `initialize/2`, whose macrostep has no caller)
+    # delivers an answer carrying a value where ADR-0063 decision 1 says
+    # there is none, and this reddens. Reverted and confirmed green.
+    test "an invoke armed with no context yields nil, and the two paths still agree" do
+      session = start_lifecycle_session()
+      session_id = Session.session_id(session)
+
+      Session.done_invocation(session, "inv1", nil)
+      wait_for_status(session, fn s -> s.configuration == MapSet.new(["finished"]) end)
+
+      delivered = dequeued_event(session_id, "done.invoke.inv1")
+
+      assert delivered.caller_context == nil
+      assert delivered == Answer.done(session_id, "inv1", nil)
+    end
+  end
+
   # A minimal `Statifier.Invoke.Handler` for `"test:answer"`: the invocation
   # exists so the session has a live table entry to answer, and nothing about
   # the handler itself is under test here.
@@ -194,6 +292,45 @@ defmodule Statifier.Invoke.AnswerTest do
         <state id="parked"/>
     </scxml>
     """
+  end
+
+  # The lifecycle chart's `<invoke>` is entered by `initialize/2`, whose
+  # macrostep has no caller at all (ADR-0063 decision 3). This one parks in
+  # `idle` until an external `arm` event moves it, so the macrostep that
+  # executes the `<invoke>` is opened by an event a host built - the only
+  # shape in which there is a context to inherit.
+  defp armed_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" datamodel="predicator">
+        <state id="idle">
+            <transition event="arm" target="a"/>
+        </state>
+        <state id="a">
+            <invoke id="inv1" type="test:answer"/>
+            <transition event="done.invoke.inv1" target="finished"/>
+            <transition event="error.communication.invoke.inv1" target="parked"/>
+        </state>
+        <state id="finished"/>
+        <state id="parked"/>
+    </scxml>
+    """
+  end
+
+  defp start_armed_session(caller_context) do
+    Process.register(self(), :invoke_answer_test_listener)
+
+    {:ok, session} =
+      Session.start_link(compile!(armed_doc()),
+        trace: true,
+        subscribers: [self()],
+        invoke_handlers: %{"test:answer" => AnswerHandler}
+      )
+
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["idle"]) end)
+    Session.send_event(session, Event.external("arm", caller_context: caller_context))
+    wait_for_status(session, fn s -> s.configuration == MapSet.new(["a"]) end)
+    assert_receive {:start, "inv1"}, 1_000
+    session
   end
 
   defp start_lifecycle_session do
