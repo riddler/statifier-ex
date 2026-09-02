@@ -1895,21 +1895,29 @@ defmodule Statifier.Interpreter do
      unqualified, and `exitInterpreter` runs after the loop), but nothing
      ever dequeues it: the event loop has already stopped by the time this
      function runs. Item 7's discard therefore takes it with the rest of the
-     queue, so the returned terminal state does **not** show it and
-     `Effect.Done`'s `donedata: :undefined` is the only remaining signal
-     that the expression failed. That is the spec's own outcome - an event
-     raised after termination has no reader - but it is a real loss of a
-     diagnostic this port used to leak, and giving the failure an effect of
-     its own would be an effect-vocabulary decision rather than a change
-     this function can make alone.
+     queue, so the returned terminal state does **not** show it.
+
+     The diagnostic survives on the effect instead. This function reads the
+     internal queue either side of the `ExitEntry.donedata/2` call, and the
+     `data` of the first `error.execution` the call appended becomes
+     `donedata_error` on both `Trace.Done` and `Effect.Done` (ADR-0021's
+     2026-09-02 note). Before that field, `donedata: :undefined` was the
+     only remaining signal and was indistinguishable from a bare final's;
+     now the two are distinct, and the discard costs no diagnostic. The
+     queue diff is what makes the field a pure observation of
+     `MachineState.raise_platform/4`'s own path: no raise site changes, and
+     no arm of `donedata/2` grows a second return value. A `<donedata>`
+     whose `<param>`s fail can append more than one such event; the first in
+     document order is carried and the rest go with the queue, which is the
+     shape ADR-0021's note settles.
   6. The terminal effects are appended last, `{:done, %Effect.Done{}}` last
      of all - `returnDoneEvent` becomes a returned effect rather than an I/O
      call (ADR-0003), and moving its emission to the end of the list is a
      mechanical reordering: effects are a returned list, not an I/O call,
      so nothing the pseudocode's own terms observe changes order. Both
      `Trace.Done` and `Effect.Done` are populated from the same
-     `configuration_at_exit` and `donedata` locals, so the trace row and the
-     core effect always agree on the terminal position.
+     `configuration_at_exit`, `donedata` and `donedata_error` locals, so the
+     trace row and the core effect always agree on the terminal position.
 
   7. **The internal queue is discarded**, last of all
      (`MachineState.discard_internal_queue/1`). Appendix D has no such step
@@ -1939,9 +1947,10 @@ defmodule Statifier.Interpreter do
     # position is unchanged: the list is concatenated at the end either way.
     pre_exit_state = machine_state
 
-    {machine_state, donedata, exit_effects} =
-      Enum.reduce(states_to_exit, {machine_state, nil, []}, fn state_index,
-                                                               {ms, donedata, effects} ->
+    {machine_state, donedata, donedata_error, exit_effects} =
+      Enum.reduce(states_to_exit, {machine_state, nil, nil, []}, fn state_index,
+                                                                    {ms, donedata, donedata_error,
+                                                                     effects} ->
         {ms, onexit_effects} = ExitEntry.run_onexit_blocks(ms, state_index)
 
         # `for inv in s.invoke: cancelInvoke(inv)` (Appendix D) - the same
@@ -1951,14 +1960,14 @@ defmodule Statifier.Interpreter do
 
         ms = %{ms | configuration: MapSet.delete(ms.configuration, state_index)}
 
-        {ms, donedata} =
+        {ms, donedata, donedata_error} =
           if Machine.final?(machine, state_index) and Machine.at(machine, state_index).parent == 0 do
-            ExitEntry.donedata(ms, state_index)
+            collect_donedata(ms, state_index)
           else
-            {ms, donedata}
+            {ms, donedata, donedata_error}
           end
 
-        {ms, donedata, effects ++ onexit_effects ++ cancel_effects}
+        {ms, donedata, donedata_error, effects ++ onexit_effects ++ cancel_effects}
       end)
 
     exit_set_trace =
@@ -1970,13 +1979,15 @@ defmodule Statifier.Interpreter do
     done_trace =
       Effect.trace(machine_state, Effect.Trace.Done,
         configuration: configuration_at_exit,
-        donedata: donedata
+        donedata: donedata,
+        donedata_error: donedata_error
       )
 
     done_effect =
       {:done,
        %Effect.Done{
          donedata: donedata,
+         donedata_error: donedata_error,
          configuration: configuration_at_exit,
          macrostep: machine_state.macrostep,
          microstep: machine_state.microstep,
@@ -2002,5 +2013,43 @@ defmodule Statifier.Interpreter do
     machine_state = MachineState.discard_internal_queue(%{machine_state | status: :done})
 
     {machine_state, exit_set_trace ++ exit_effects ++ done_trace ++ [done_effect]}
+  end
+
+  # `exit_interpreter/1` doc item 5's failure channel. `ExitEntry.donedata/2`
+  # signals a failed `<content expr>` or a failed `<param>` the way every
+  # other failure in this engine is signalled - by raising `error.execution`
+  # through `MachineState.raise_platform/4` - and returns `:undefined` either
+  # way. Reading the internal queue either side of the call recovers which of
+  # the two `:undefined`s this is, without giving `donedata/2` a second return
+  # value or changing any raise site: the field is an observation of the
+  # existing path, not a new one.
+  #
+  # `Enum.drop/2` over the before-length is what makes it a diff rather than a
+  # scan: anything already queued when this walk began - a `done.state.*` the
+  # loop never got to, an `error.execution` from an earlier `onexit` block -
+  # was not raised by this donedata and must not be attributed to it.
+  #
+  # ADR-0021's 2026-09-02 note fixes the multi-error rule at the first in
+  # document order. `donedata/2`'s param fold evaluates in document order and
+  # appends per failure, so queue order is document order here.
+  @spec collect_donedata(machine_state :: MachineState.t(), state_index :: non_neg_integer()) ::
+          {MachineState.t(), term(), term() | nil}
+  defp collect_donedata(machine_state, state_index) do
+    before_events = MachineState.internal_events(machine_state)
+    {machine_state, donedata} = ExitEntry.donedata(machine_state, state_index)
+
+    raised =
+      machine_state
+      |> MachineState.internal_events()
+      |> Enum.drop(length(before_events))
+      |> Enum.find(&(&1.name == "error.execution"))
+
+    donedata_error =
+      case raised do
+        %Event{data: data} -> data
+        nil -> nil
+      end
+
+    {machine_state, donedata, donedata_error}
   end
 end

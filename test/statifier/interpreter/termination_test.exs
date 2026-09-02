@@ -1,7 +1,16 @@
 defmodule Statifier.Interpreter.TerminationTest do
   use ExUnit.Case, async: true
 
-  alias Statifier.{Compiler, Effect, Interpreter, Lowering, MachineState, Parser, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Evaluator,
+    Interpreter,
+    Lowering,
+    MachineState,
+    Parser,
+    Validator
+  }
 
   defp compile!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -24,6 +33,7 @@ defmodule Statifier.Interpreter.TerminationTest do
   #  8   done_compiled   -- top-level <final>; donedata expr="1 + 1", evaluates to 2
   #  9   done_compiled_fail -- top-level <final>; donedata expr fails to evaluate
   # 10   done_param      -- top-level <final>; donedata <param name="Var" expr="1 + 1"/>
+  # 11   done_param_fail -- top-level <final>; two <param>s that both fail to evaluate
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="start">
       <state id="start">
@@ -67,6 +77,12 @@ defmodule Statifier.Interpreter.TerminationTest do
               <param name="Var" expr="1 + 1"/>
           </donedata>
       </final>
+      <final id="done_param_fail">
+          <donedata>
+              <param name="First" expr="undeclared_one"/>
+              <param name="Second" expr="undeclared_two"/>
+          </donedata>
+      </final>
   </scxml>
   """
 
@@ -80,7 +96,8 @@ defmodule Statifier.Interpreter.TerminationTest do
     done_nil: 7,
     done_compiled: 8,
     done_compiled_fail: 9,
-    done_param: 10
+    done_param: 10,
+    done_param_fail: 11
   }
 
   defp machine, do: compile!(@document)
@@ -180,9 +197,12 @@ defmodule Statifier.Interpreter.TerminationTest do
     # The `error.execution` this failure raises used to survive on the
     # returned state's internal queue, and this test used to assert that.
     # `exit_interpreter/1`'s item 7 discard now takes it with the rest of
-    # the queue, so `Effect.Done`'s `donedata: :undefined` is the only
-    # remaining signal that the expression failed - the raise itself emits
-    # no effect (`MachineState.raise_platform/4` only enqueues).
+    # the queue - the raise itself emits no effect
+    # (`MachineState.raise_platform/4` only enqueues). `donedata_error`
+    # (ADR-0021's 2026-09-02 note) is where the diagnostic survives instead:
+    # `donedata: :undefined` alone cannot tell this case from `done_nil`'s
+    # bare final, and the pair of assertions below is what pins the two
+    # apart.
     #
     # sabotage: `exit_interpreter/1`'s `MachineState.discard_internal_queue/1`
     # call is dropped (leaving the bare `%{machine_state | status: :done}`)
@@ -197,6 +217,125 @@ defmodule Statifier.Interpreter.TerminationTest do
 
       assert {:done, %Effect.Done{donedata: :undefined}} = List.last(effects)
       assert MachineState.internal_events(result) == []
+    end
+
+    # AC: the failure has an observable channel that survives item
+    # 7's discard, and it is the thing that distinguishes a failed
+    # `<content expr>` from a bare final - the exact indistinguishability
+    # the bead's ruling was filed against. Both halves are asserted in one
+    # test on purpose: the claim is a *contrast*, and asserting only the
+    # error case would stay green under an implementation that stamped every
+    # `Effect.Done` with a non-nil value.
+    #
+    # sabotage: `collect_donedata/2`'s `donedata_error` is hardcoded to the
+    # `ExitEntry.donedata/2` return's second element -> the three `nil`
+    # assertions redden. (Relaxing the `Enum.find/2` name test to
+    # `List.first/1` does NOT redden this test, because nothing but an
+    # `error.execution` is ever appended inside the diff window today; the
+    # window itself is what the next test pins.)
+    test "donedata_error carries the evaluation error, and is nil on success and on a bare final" do
+      m = machine()
+
+      {_result, fail_effects} =
+        Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled_fail)]))
+
+      assert {:done, %Effect.Done{donedata_error: %Evaluator.Error{} = error}} =
+               List.last(fail_effects)
+
+      assert error.source == "undeclared_var"
+
+      {_result, absent_effects} = Interpreter.exit_interpreter(machine_state(m, [idx(:done_nil)]))
+
+      assert {:done, %Effect.Done{donedata: :undefined, donedata_error: nil}} =
+               List.last(absent_effects)
+
+      {_result, static_effects} = Interpreter.exit_interpreter(machine_state(m, [idx(:done)]))
+      assert {:done, %Effect.Done{donedata: 42, donedata_error: nil}} = List.last(static_effects)
+
+      {_result, compiled_effects} =
+        Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled)]))
+
+      assert {:done, %Effect.Done{donedata: 2, donedata_error: nil}} = List.last(compiled_effects)
+    end
+
+    # AC: `donedata_error` reports what THIS donedata raised, not
+    # whatever was already on the internal queue when the exit walk began.
+    # That is the realistic shape - an `error.execution` from an earlier
+    # `onexit` block, or a `done.state.*` the stopped loop never dequeued,
+    # is routinely still queued when `exit_interpreter/1` runs - and it is
+    # what makes `collect_donedata/2` a diff (`Enum.drop/2` over the
+    # before-length) rather than a scan of the whole queue. Misattributing
+    # here would be worse than the gap the field closes: a bare final would
+    # report someone else's failure as its own donedata's.
+    #
+    # sabotage: `collect_donedata/2`'s `Enum.drop(length(before_events))` is
+    # deleted -> the pre-seeded `error.execution` is attributed to
+    # `done_nil`'s absent donedata and the `nil` assertion below reddens.
+    # Confirmed red and reverted.
+    test "donedata_error ignores an error.execution already queued before the walk" do
+      m = machine()
+
+      pre_raised =
+        MachineState.raise_platform(
+          machine_state(m, [idx(:done_nil)]),
+          "error.execution",
+          {:state, idx(:done_nil)},
+          data: :raised_before_the_exit_walk
+        )
+
+      {result, effects} = Interpreter.exit_interpreter(pre_raised)
+
+      assert {:done, %Effect.Done{donedata: :undefined, donedata_error: nil}} =
+               List.last(effects)
+
+      # Item 7's discard still takes the pre-existing event with the rest.
+      assert MachineState.internal_events(result) == []
+    end
+
+    # AC: `Trace.Done` mirrors `Effect.Done`'s shape, so it mirrors
+    # the new field too, from the same local - the same agreement property
+    # the `<param>` test above already asserts for `donedata`.
+    #
+    # sabotage: `exit_interpreter/1`'s `Effect.trace(...)` call drops its
+    # `donedata_error:` key -> `Trace.Done.donedata_error` comes back `nil`
+    # while `Effect.Done`'s still carries the error, reddening the agreement
+    # assertion.
+    test "donedata_error reaches Effect.Done and Trace.Done identically" do
+      m = machine()
+
+      {_result, effects} =
+        Interpreter.exit_interpreter(machine_state(m, [idx(:done_compiled_fail)]))
+
+      assert {:done, %Effect.Done{donedata_error: effect_error}} = List.last(effects)
+
+      assert [%Effect.Trace.Done{donedata_error: trace_error}] =
+               for({:trace, %Effect.Trace.Done{} = payload} <- effects, do: payload)
+
+      assert %Evaluator.Error{} = effect_error
+      assert trace_error == effect_error
+    end
+
+    # AC: ADR-0021's 2026-09-02 note fixes the multi-error rule at
+    # the FIRST error in document order, because the ruled type is singular
+    # (`term() | nil`). `done_param_fail` raises two `error.execution`s, one
+    # per failing `<param>`, and `donedata/2`'s fold evaluates in document
+    # order - so "first raised" and "first in the document" are the same
+    # event, and this test is what stops the two drifting apart.
+    #
+    # sabotage: `collect_donedata/3`'s `Enum.find/2` becomes `Enum.reverse/1
+    # |> Enum.find/2` -> the assertion below comes back with
+    # `"undeclared_two"` and reddens, which the single-failure tests above
+    # cannot catch.
+    test "several failing <param>s carry the first error in document order" do
+      m = machine()
+
+      {_result, effects} =
+        Interpreter.exit_interpreter(machine_state(m, [idx(:done_param_fail)]))
+
+      assert {:done, %Effect.Done{donedata_error: %Evaluator.Error{source: source}}} =
+               List.last(effects)
+
+      assert source == "undeclared_one"
     end
 
     # AC: "the same param map reaches Effect.Done / Trace.Done at a

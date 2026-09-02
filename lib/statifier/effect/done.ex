@@ -5,6 +5,16 @@ defmodule Statifier.Effect.Done do
   entry, when `Statifier.MachineState.status` becomes `:done`. `donedata`
   is the top-level final's resolved `<donedata>` content, or `:undefined`
   (the SCXML datamodel's "undefined" value) when the final carries none.
+  `donedata_error` is that resolution's failure channel (ADR-0021's
+  2026-09-02 note): `nil` when the donedata resolved cleanly and `nil`
+  for a bare final that declared none, and otherwise the `data` of the
+  `error.execution` the resolution raised. Without it, `donedata:
+  :undefined` is the same value for a failed `<content expr>` and for a
+  final carrying no `<donedata>` at all, because
+  `exit_interpreter/1` discards the internal queue the raise landed in
+  before returning. A `<donedata>` whose `<param>`s fail can raise more
+  than one; this field carries the **first** in document order, and the
+  rest are still lost with the queue.
   `configuration` is the full configuration (ADR-0005, ancestors
   included) as it stood at exit: the full set, so a consumer can
   observe the terminal position without switching tracing on, since
@@ -20,10 +30,11 @@ defmodule Statifier.Effect.Done do
   """
 
   @enforce_keys [:configuration, :macrostep, :microstep, :round]
-  defstruct [:donedata, :configuration, :macrostep, :microstep, :round]
+  defstruct [:donedata, :donedata_error, :configuration, :macrostep, :microstep, :round]
 
   @type t :: %__MODULE__{
           donedata: term() | nil,
+          donedata_error: term() | nil,
           configuration: MapSet.t(non_neg_integer()),
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),

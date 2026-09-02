@@ -96,7 +96,10 @@ defmodule Statifier.Session.Recording do
   the same field on the two invoke-lifecycle effect structs (ADR-0063 as
   amended 2026-09-01). Both decode with `caller_context: nil`
   defaulted on import, which is safe exactly because
-  no context was ever attached to the inputs an older blob holds. Six
+  no context was ever attached to the inputs an older blob holds. A
+  version-4 envelope predates `donedata_error` on the two done-effect
+  structs (ADR-0021's 2026-09-02 note) and decodes with that field
+  defaulted `nil`, on the same terms. Six
   slots -
 
     - `format_version` - this module's own version tag, checked before the
@@ -193,7 +196,7 @@ defmodule Statifier.Session.Recording do
     :invoke_handlers
   ]
 
-  @format_version 4
+  @format_version 5
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -439,7 +442,10 @@ defmodule Statifier.Session.Recording do
   durable-timer effects gain `caller_context: nil` on import (ADR-0063
   decision 5's blessed default). A version-3 envelope is read on the same
   terms, defaulting the field onto its stored invoke-lifecycle effects
-  (ADR-0063's 2026-09-01 amendment).
+  (ADR-0063's 2026-09-01 amendment). A version-4 envelope is read on the
+  same terms again, defaulting `donedata_error: nil` onto its stored
+  `Statifier.Effect.Done` and `Statifier.Effect.Trace.Done` payloads
+  (ADR-0021's 2026-09-02 note).
   """
   @spec from_binary(blob :: binary()) ::
           {:ok, t()}
@@ -518,8 +524,17 @@ defmodule Statifier.Session.Recording do
   # context was ever attached to the inputs it holds. `:internal` entries
   # store no struct of either kind, so they pass through untouched.
   #
-  # One guard covers both bumps rather than one per version, because
-  # `default_caller_context/1` is `Map.put_new/3`: running the version-3
+  # Version 5 is the same obligation a third time, for a different field:
+  # ADR-0021's 2026-09-02 note added `donedata_error` to
+  # `%Statifier.Effect.Done{}` and `%Statifier.Effect.Trace.Done{}`, both of
+  # which a host may hand to `Statifier.Session.interpret/2` and which
+  # `put_interpret/3` therefore stores verbatim. A version-4 blob's copies
+  # predate the field, so they default `donedata_error: nil` on import -
+  # safe for the same reason the caller-context defaults are: a blob written
+  # before the field holds no run that could have reported one.
+  #
+  # One guard covers all three bumps rather than one per version, because
+  # every default is `Map.put_new/3`: running the version-3
   # defaults over a version-3 blob whose events already carry the key is a
   # no-op, so the only thing a per-version split would buy is a second way
   # to get the version arithmetic wrong.
@@ -555,6 +570,13 @@ defmodule Statifier.Session.Recording do
   defp upgrade_effect({:cancel_invoke, cancel_invoke}),
     do: {:cancel_invoke, default_caller_context(cancel_invoke)}
 
+  defp upgrade_effect({:done, done}), do: {:done, default_donedata_error(done)}
+
+  # Only the `Done` trace payload grew the field; every other `{:trace, _}`
+  # payload falls through to the catch-all below unchanged.
+  defp upgrade_effect({:trace, %Effect.Trace.Done{} = done}),
+    do: {:trace, default_donedata_error(done)}
+
   defp upgrade_effect(effect), do: effect
 
   # `Map.put_new/3` on a decoded struct-shaped map: a value that already
@@ -564,8 +586,13 @@ defmodule Statifier.Session.Recording do
   defp default_caller_context(%{__struct__: _module} = struct_map),
     do: Map.put_new(struct_map, :caller_context, nil)
 
+  # The version-5 counterpart, on exactly the same `Map.put_new/3` terms.
+  defp default_donedata_error(%{__struct__: _module} = struct_map),
+    do: Map.put_new(struct_map, :donedata_error, nil)
+
   @spec check_version(version :: term()) :: :ok | {:error, {:unsupported_format_version, term()}}
   defp check_version(@format_version), do: :ok
+  defp check_version(4), do: :ok
   defp check_version(3), do: :ok
   defp check_version(2), do: :ok
   defp check_version(1), do: :ok
