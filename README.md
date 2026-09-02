@@ -134,6 +134,9 @@ Published guides on [hexdocs](https://hexdocs.pm/statifier/):
   and reporting completion or permanent failure back to the chart
 - [Persistence](docs/persistence.md) - chart identity, persisted positions,
   and resuming sessions
+- [Hosting without a session](docs/hosting-without-session.md) - driving
+  the pure core yourself: the per-effect driver contract, timers, invoke
+  handlers, quiescence, and naming your driver in telemetry
 - [Durable timers](docs/durable-timers.md) - scheduling delayed sends
   outside the session process
 - [Observability](docs/observability.md) - trace effects and what to do
