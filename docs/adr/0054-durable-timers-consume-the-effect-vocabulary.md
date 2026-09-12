@@ -277,3 +277,33 @@ instead.
   (ADR-0046's territory), or `st-m5c3` landing a serialization contract that
   makes decision 3's `session scope` derivable from the stored state itself
   rather than supplied by the host.
+
+## Note (2026-09-12): "the run" in decision 4 is what a durable host now calls an execution
+
+A dated note. It decides nothing: decisions 1-4, their amendments, and the
+Status line stand exactly as accepted, and no line above is edited. It
+records a vocabulary pointer only.
+
+statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
+unit an **execution** and its identifier an `execution_id`. Three phrases
+in this record - decision 3's "the host's own durable run id for a
+process-less host", decision 4's "establish that the run is still live",
+and the "cancel-on-run-end" hook named in the same discussion (all read at
+`17cc9ed`) - describe that execution. They are accepted text and are not
+reworded here.
+
+`docs/durable-timers.md`, which teaches this record, was reworded in the
+same change (read at `17cc9ed`): its scoping paragraph now says "your own
+durable execution id", its lifetime table and Termination section say "a
+live execution" and "a terminated execution's rows", and the hook is
+written "cancel-on-execution-end". Where the guide and this record differ
+in wording they do not differ in meaning; the record is the decision and
+the guide is how it is taught.
+
+Nothing in `lib/` moves for this note - as this record's Consequences
+already say of itself, "Nothing in `lib/` changes." The library's own
+noun is still the session (`_sessionid`, spec 5.10); "execution" is the
+host's noun for its durable record of one.
+
+Premise surface: `docs/durable-timers.md` as of `17cc9ed` and
+statifier_persistence `sp-ADR-0011` at proposed.

@@ -406,13 +406,14 @@ no running process to call into, so the event is an input, not a message.
 
 ```elixir
 # The host's retry layer has just decided this invocation is over.
-event = Statifier.Invoke.Answer.failed(run_id, "inv_3", reason: "exhausted", attempts: 5)
+event = Statifier.Invoke.Answer.failed(execution_id, "inv_3", reason: "exhausted", attempts: 5)
 
 {:ok, machine_state, effects} =
   Statifier.Interpreter.handle_event(machine_state, event)
 ```
 
-`run_id` is the host's own `_sessionid` (spec 5.10) for the run - the same
+`execution_id` is the host's own `_sessionid` (spec 5.10) for the execution -
+the same
 value it stamped onto the `%MachineState{}` it is driving. It reaches the
 chart only as the event's `origin`, per C.1. Both builders are pure: same
 arguments, same event, no clock, no id minting, so a host that re-drives the
@@ -445,12 +446,12 @@ context in `docs/durable-timers.md`'s Route B:
 
 ```elixir
 # Armed earlier, when the `%Statifier.Effect.Invoke{}` came out of the drive:
-#   store_invocation(run_id, invoke.invoke_id, invoke.caller_context)
+#   store_invocation(execution_id, invoke.invoke_id, invoke.caller_context)
 
-{invoke_id, caller_context} = load_invocation(run_id, "inv_3")
+{invoke_id, caller_context} = load_invocation(execution_id, "inv_3")
 
 event =
-  Statifier.Invoke.Answer.failed(run_id, invoke_id, [reason: "exhausted", attempts: 5],
+  Statifier.Invoke.Answer.failed(execution_id, invoke_id, [reason: "exhausted", attempts: 5],
     caller_context: caller_context
   )
 
