@@ -356,17 +356,18 @@ concept in `lib/`, which continues to speak sessions and `_sessionid`
 
 Two consequences for readers of this record, both documentation-only:
 
-- `docs/persistence.md`'s process-less invoke-answer example (read at
-  `17cc9ed`; the `Statifier.Invoke.Answer.failed/4` and
+- `docs/persistence.md`'s process-less invoke-answer example - the
+  `Statifier.Invoke.Answer.failed/4` and
   `store_invocation`/`load_invocation` snippets under "Answering an
-  invocation with no session process") now names its host-side variable
-  `execution_id` rather than `run_id`, and says the value is the host's
-  own `_sessionid` for the execution. Only the example's local variable
+  invocation with no session process", which read `run_id` at `17cc9ed` -
+  names its host-side variable `execution_id` as of this note's own
+  change, and says the value is the host's own `_sessionid` for the
+  execution. Only the example's local variable
   moved; `Statifier.Invoke.Answer`'s arity and argument order are
   untouched, and no `lib/` name changed.
 - This record's own prose keeps "the run parked with nothing surfaced"
-  (the Consequences paragraph read at `17cc9ed`) as written. Accepted text
-  is not reworded by a note; read it as the same thing
+  (the `### Amendment 2026-09-01` section, read at `17cc9ed`) as written.
+  Accepted text is not reworded by a note; read it as the same thing
   statifier_persistence now calls an execution.
 
 Premise surface: `docs/persistence.md` and `lib/statifier/invoke/answer.ex`

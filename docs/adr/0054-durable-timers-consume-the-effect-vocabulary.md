@@ -292,8 +292,9 @@ and the "cancel-on-run-end" hook named in the same discussion (all read at
 `17cc9ed`) - describe that execution. They are accepted text and are not
 reworded here.
 
-`docs/durable-timers.md`, which teaches this record, was reworded in the
-same change (read at `17cc9ed`): its scoping paragraph now says "your own
+`docs/durable-timers.md`, which teaches this record, is reworded in the
+same change that adds this note; the pre-rename text quoted below was read
+at `17cc9ed`. Its scoping paragraph now says "your own
 durable execution id", its lifetime table and Termination section say "a
 live execution" and "a terminated execution's rows", and the hook is
 written "cancel-on-execution-end". Where the guide and this record differ
