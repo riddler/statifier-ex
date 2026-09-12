@@ -338,3 +338,38 @@ half-registration half of that walk is the amendment above (`st-mv7t`, B2).
   must not make the library fetch a URI on its behalf), ADR-0027 (the
   session-id registry `Statifier.Invoke.Types` is carefully not named after),
   ADR-0029 and ADR-0034 (replay's pure fold and its four-input tuple)
+
+## Note (2026-09-12): the durable host's own id for a session is an "execution"
+
+A dated note. It decides nothing in this record: no decision, consequence
+or Related entry changes, the Status line is untouched, and no accepted
+text above is edited. It records where the family's vocabulary for the
+*host's* side of a session now lives, so a reader who arrives here from a
+durable host is not left guessing.
+
+statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
+unit an **execution**: the host's own record of one chart session across
+process death, keyed by an `execution_id`. That is the host's noun for the
+thing this record's per-session registration is scoped to; it is not a new
+concept in `lib/`, which continues to speak sessions and `_sessionid`
+(spec 5.10) and is unchanged by this note.
+
+Two consequences for readers of this record, both documentation-only:
+
+- `docs/persistence.md`'s process-less invoke-answer example (read at
+  `17cc9ed`; the `Statifier.Invoke.Answer.failed/4` and
+  `store_invocation`/`load_invocation` snippets under "Answering an
+  invocation with no session process") now names its host-side variable
+  `execution_id` rather than `run_id`, and says the value is the host's
+  own `_sessionid` for the execution. Only the example's local variable
+  moved; `Statifier.Invoke.Answer`'s arity and argument order are
+  untouched, and no `lib/` name changed.
+- This record's own prose keeps "the run parked with nothing surfaced"
+  (the Consequences paragraph read at `17cc9ed`) as written. Accepted text
+  is not reworded by a note; read it as the same thing
+  statifier_persistence now calls an execution.
+
+Premise surface: `docs/persistence.md` and `lib/statifier/invoke/answer.ex`
+as of `17cc9ed`, plus statifier_persistence `sp-ADR-0011` at proposed. If
+`sp-ADR-0011` is not accepted in the form cited, this note is the only
+thing that has to change here.
