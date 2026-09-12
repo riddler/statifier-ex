@@ -412,12 +412,11 @@ event = Statifier.Invoke.Answer.failed(execution_id, "inv_3", reason: "exhausted
   Statifier.Interpreter.handle_event(machine_state, event)
 ```
 
-`execution_id` is the host's own `_sessionid` (spec 5.10) for the execution -
-the same
-value it stamped onto the `%MachineState{}` it is driving. It reaches the
-chart only as the event's `origin`, per C.1. Both builders are pure: same
-arguments, same event, no clock, no id minting, so a host that re-drives the
-same recovered step rebuilds a byte-identical event, and
+`execution_id` is the host's own `_sessionid` (spec 5.10) for the execution
+- the same value it stamped onto the `%MachineState{}` it is driving. It
+reaches the chart only as the event's `origin`, per C.1. Both builders are
+pure: same arguments, same event, no clock, no id minting, so a host that
+re-drives the same recovered step rebuilds a byte-identical event, and
 `Statifier.Invoke.Answer` is the *one* construction site both paths share -
 a live session's own events are the same bytes, which
 `test/statifier/invoke/answer_test.exs` pins directly.

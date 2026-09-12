@@ -269,8 +269,9 @@ untouched.
 
 statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
 unit an **execution**, with an `execution_id` the host owns, and the
-family's durable documentation moved to that noun in SF041
-(`docs/persistence.md` and `docs/durable-timers.md`, read at `17cc9ed`).
+family's durable documentation moves to that noun in SF041
+(`docs/persistence.md` and `docs/durable-timers.md`, in the same change
+that adds this note; both read at `17cc9ed` before it).
 
 This record is deliberately outside that move. Every "run" in it is
 replay's own - `Statifier.Replay.run/1` (a public function name, which
@@ -278,8 +279,9 @@ does not move), "the live run's" plan context, "the recorded run's"
 planning callbacks, and the round-trip test's "record a live run" - all
 read at `17cc9ed`. A recording is not a durable execution and is not keyed
 by an `execution_id`: it is the four recorded inputs of ADR-0029 re-driven
-by a pure fold (ADR-0034). A future reader sweeping durable vocabulary
-should leave this record and `Statifier.Replay.run/1` alone.
+by a pure fold (ADR-0034). This record and `Statifier.Replay.run/1` are
+therefore outside the scope of any durable-vocabulary sweep.
 
-Premise surface: this record and `docs/persistence.md`'s replay sections
-as of `17cc9ed`, plus statifier_persistence `sp-ADR-0011` at proposed.
+Premise surface: this record and `docs/persistence.md`'s replay prose
+under `## Resuming a session`, as of `17cc9ed`, plus statifier_persistence
+`sp-ADR-0011` at proposed.

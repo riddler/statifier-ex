@@ -263,15 +263,14 @@ play, not one.
 | Deduplication (at-least-once) | `{session scope, send_id, macrostep, microstep, round, c_index, owner, ordinal}` | Read off the stored `%SendDelayed{}` itself. The counters/positions are stamped as of scheduling, not firing (`Statifier.Effect.SendDelayed`'s moduledoc, ADR-0046), `ordinal` is a per-execution sequence off `machine_state.timer_counter` (ADR-0059), and every component is deterministic - no clock, no CSPRNG, no pid. Re-executing the same drive after a crash produces a byte-identical key, so your store's dedup check is sound. |
 
 `session scope` is `ctx.session_id` (spec 5.10's `_sessionid`) for a live
-session, or your own durable execution id for a process-less host. Scoping is
-mandatory, not advisory: `send_counter` restarts at 0 for every
+session, or your own durable execution id for a process-less host. Scoping
+is mandatory, not advisory: `send_counter` restarts at 0 for every
 `%MachineState{}` (`Statifier.MachineState`'s "`send_counter` is the
 session-global `send_` id sequence" moduledoc section, ADR-0035), so
 `send_1` from one execution collides with `send_1` from a completely
-unrelated execution
-unless your store keeps them apart. The library cannot supply this scope
-itself - it has no view of your store - which is why it is your first
-design decision, not the library's.
+unrelated execution unless your store keeps them apart. The library cannot
+supply this scope itself - it has no view of your store - which is why it is
+your first design decision, not the library's.
 
 `c_index` and `owner` (fields on `Statifier.Effect.SendDelayed`) are
 mandatory parts of the dedup key, not decoration. They name the `<send>`
@@ -307,15 +306,14 @@ row is worth more during an incident than a bare sequence number.
 
 ## Lifetime across resume, revision, and restart
 
-A pending delayed send is identified by nothing more than
-`{session scope, send_id}` - the cancellation key the "Keying your store"
-table above already fixes (ADR-0054 decision 3). It lives until it fires, is
-cancelled, or its execution is found not live at fire time; that fire-time
-liveness check is ADR-0054 decision 4, taught in full in "Termination"
-below - this section only tells you what happens to the key's two
-components (the scope, and whether the library's own timer table agrees
-with your store) across the three ways an execution's identity can change under
-you.
+A pending delayed send is identified by nothing more than `{session scope,
+send_id}` - the cancellation key the "Keying your store" table above already
+fixes (ADR-0054 decision 3). It lives until it fires, is cancelled, or its
+execution is found not live at fire time; that fire-time liveness check is
+ADR-0054 decision 4, taught in full in "Termination" below - this section
+only tells you what happens to the key's two components (the scope, and
+whether the library's own timer table agrees with your store) across the
+three ways an execution's identity can change under you.
 
 | Transition | Session scope | Your stored rows | Library's own timer table |
 |---|---|---|---|
@@ -356,13 +354,13 @@ be resumed at all, never a question about the timer key.
 
 **Restart is not a resume, and mints a fresh scope.** A supervisor restart
 re-runs `start_link/2`; `MachineState.new/2` mints a fresh `sess_` UXID, and
-the prior process's delayed-send timers are gone with it (ADR-0027
-decision 4). ADR-0060 decision 3 says this in as many words: "ADR-0027
-decision 4's 'a restart generates a fresh `sess_` id' governs restarts, not
-resumes." The old scope's stored rows can therefore never match a live
-execution again - there is no session to re-associate them with - so the fire-time
-liveness check (ADR-0054 decision 4) is what discards them, the same
-check that discards a terminated execution's rows. A restart needs no key-level
+the prior process's delayed-send timers are gone with it (ADR-0027 decision
+4). ADR-0060 decision 3 says this in as many words: "ADR-0027 decision 4's
+'a restart generates a fresh `sess_` id' governs restarts, not resumes." The
+old scope's stored rows can therefore never match a live execution again -
+there is no session to re-associate them with - so the fire-time liveness
+check (ADR-0054 decision 4) is what discards them, the same check that
+discards a terminated execution's rows. A restart needs no key-level
 handling beyond that check; it is not a case the key itself has to account
 for.
 
@@ -373,18 +371,17 @@ Spec 6.2, quoted verbatim from the local spec cache:
 > If the SCXML session terminates before the delay interval has elapsed, the
 > SCXML Processor MUST discard the message without attempting to deliver it.
 
-Inside the library, `Statifier.Session`'s `terminate/2`
-satisfies this unconditionally: every live timer ref is cancelled before the
-process exits. A durable scheduler inverts the whole premise by design - it
-deliberately survives process death, which is the entire point of using one
-- so nothing plays the role `terminate/2` played. ADR-0054 decision 4 states
-what replaces it: **before feeding a fired event back, the host MUST
-establish that the execution is still live, and discard the message without
-delivering it otherwise.** A cancel-on-execution-end hook is worth running to
-keep
-your store tidy, but it is never load-bearing by itself - the node death
-that durability exists to survive takes the hook down with it. The guarantee
-can only be enforced at delivery time.
+Inside the library, `Statifier.Session`'s `terminate/2` satisfies this
+unconditionally: every live timer ref is cancelled before the process exits.
+A durable scheduler inverts the whole premise by design - it deliberately
+survives process death, which is the entire point of using one - so nothing
+plays the role `terminate/2` played. ADR-0054 decision 4 states what
+replaces it: **before feeding a fired event back, the host MUST establish
+that the execution is still live, and discard the message without delivering
+it otherwise.** A cancel-on-execution-end hook is worth running to keep your
+store tidy, but it is never load-bearing by itself - the node death that
+durability exists to survive takes the hook down with it. The guarantee can
+only be enforced at delivery time.
 
 "Live" is stricter than "not terminated." Reaching `:done` sets
 `state.halted` but does not stop the session process (`lib/statifier/session.ex`
@@ -455,16 +452,14 @@ end
 A process-less host has no process to ask, so it checks the same two
 conditions against its own persisted position instead - whatever it stores
 as the execution's terminated/halted state - before feeding the fired event
-into
-its next drive.
+into its next drive.
 
 ## Correlating a fired job back to its position
 
 When your scheduler fires a job, it needs to know which macrostep,
 microstep, round, `c_index`, and `owner` the send was scheduled from, so the
 re-entered event can be attributed back to the right point in the execution.
-Read
-those off the `%SendDelayed{}` you stored when the send was scheduled -
+Read those off the `%SendDelayed{}` you stored when the send was scheduled -
 **never** off anything computed at delivery time. ADR-0046 stamps
 `macrostep`, `microstep`, and `round` "as they stood when the send was
 scheduled, not when the timer fires" (`Statifier.Effect.SendDelayed`'s
@@ -490,14 +485,13 @@ decision 2) - see "Route A" above for the full statement; no cleanup effects
 arrive after a halt.
 
 What the ordering guarantee promises is about the **stream your subscriber
-sees**, not about wall time: it tells you the order your `SendDelayed`/`Cancel`
-effects arrive relative to each other and to everything else in the execution,
-not
-when your durable scheduler will actually fire a job relative to any other
-job. Two timers scheduled ten milliseconds apart in `(macrostep, round)`
-order carry no promise about firing ten milliseconds apart, or in that order
-at all, once they leave the effect stream and enter your own scheduler's
-clock.
+sees**, not about wall time: it tells you the order your
+`SendDelayed`/`Cancel` effects arrive relative to each other and to
+everything else in the execution, not when your durable scheduler will
+actually fire a job relative to any other job. Two timers scheduled ten
+milliseconds apart in `(macrostep, round)` order carry no promise about
+firing ten milliseconds apart, or in that order at all, once they leave the
+effect stream and enter your own scheduler's clock.
 
 ## Where this is going
 
