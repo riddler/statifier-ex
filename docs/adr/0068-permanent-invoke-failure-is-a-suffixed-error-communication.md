@@ -347,3 +347,43 @@ should be read as deciding it.
 - ADR-0034 (replay's four-input fold, which the invoked-event entry already
   satisfies), ADR-0039 (`deliver_internal/5`, the door decision 5 declines to
   use), ADR-0065 (the conformance case whose guidance this record extends)
+
+## Note (2026-09-13): "run-liveness" in decision 4 is liveness of what a durable host calls an execution
+
+statifier_persistence `sp-ADR-0011` (accepted 2026-09-13, sp-5nv, PR #101;
+merged at proposed 2026-09-12) names the durable unit an **execution**, with
+an `execution_id` the host owns, and the family's durable documentation moved
+to that noun in SF041 - the same move ADR-0051's, ADR-0054's and ADR-0057's
+notes record for their own records.
+
+Decision 4 of this record is inside that move in substance and outside it in
+text. Its heading - "Delivery is the invocation-tagged entry, byte-for-byte
+the `done_invocation/3` path, so the run-liveness rule is the same rule and
+not a parallel one", read at `469f7a9` - is accepted text and is not reworded
+here. The rule it names is a rule about one live session and the invocations
+it is still holding: whether the drain that decides to discard an event sees
+the invocation as already gone. A durable host that keeps a record of that
+session calls the record an execution; "run-liveness" in decision 4 and
+execution liveness under `sp-ADR-0011` are the same rule, read at two
+different layers, and neither is a second rule the other has to be reconciled
+with.
+
+Nothing in `lib/` moves for this note except the wording of one comment. The
+comment above `handle_cast({:failed_invocation, invoke_id, failure}, state)`
+in `lib/statifier/session.ex`, which paraphrases this decision's heading in
+order to say that sharing the three lines is what makes the claim a fact
+about the code, read "the same run-liveness rule as `done.invoke`" at
+`469f7a9` and says "the same execution-liveness rule as `done.invoke`" as of
+this note's own change. Decision 4's accepted text, read at the same commit,
+keeps "run-liveness rule" and keeps it here. The comment is a paraphrase, not
+a citation; the record's own words are the ones above. No `lib/` name, arity,
+or behaviour changed with it.
+
+The library's own noun is still the session (`_sessionid`, spec 5.10);
+"execution" is the durable host's noun for its record of one.
+
+Premise surface: this record's decision 4 and the
+`{:failed_invocation, _, _}` clause's comment in `lib/statifier/session.ex`,
+both as of `469f7a9`, plus statifier_persistence `sp-ADR-0011` as accepted on
+2026-09-13, read on that repo's `main`. If that record is later amended away
+from the noun cited here, this note is the only thing that has to change.
