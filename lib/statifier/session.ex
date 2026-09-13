@@ -1469,7 +1469,7 @@ defmodule Statifier.Session do
   # same three lines as the `{:done_invocation, _, _}` clause above rather
   # than a parallel path: the deferred pop, the invocation-tagged enqueue and
   # the `{:continue, :drain}}` all carry the reasoning that clause records,
-  # and sharing them is what makes "the same run-liveness rule as
+  # and sharing them is what makes "the same execution-liveness rule as
   # `done.invoke`" a fact about the code instead of a claim about it. A
   # permanently failed invocation leaves `state.invocations` for the same
   # reason a completed one does - it is over - so the pop is unconditional
