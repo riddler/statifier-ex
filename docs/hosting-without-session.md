@@ -4,7 +4,7 @@ How to drive a chart with no session process anywhere: what your driver owes
 the interpreter for each effect it returns, how timers and `<invoke>`
 handlers work when there is nothing to call into, when a position is safe to
 write down, and how to make your driver visible to the same telemetry a
-session-hosted run produces.
+session-hosted execution produces.
 
 `Statifier.Session` is one driver of a chart, not the definition of one
 ([ADR-0067](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0067-one-telemetry-contract-across-stepping-drivers.md)
@@ -40,11 +40,11 @@ six, and the rest of this guide is one section per job that is not obvious.
 | `<invoke>` lifecycle | an in-memory invocation table and two answer doors | your own invocation rows and `Statifier.Invoke.Answer` |
 | Telemetry | emitting through `Statifier.Telemetry` with `driver: :session` | emitting through the same module with your own driver atom |
 
-What you get in exchange is the reason to do it: a run that survives node
-death, a step that is a database transaction, and a chart whose progress is
-a row rather than a process. `statifier_persistence` is exactly this driver,
-built once so most hosts do not have to - see "What you do not have to
-build" at the end.
+What you get in exchange is the reason to do it: an execution that survives
+node death, a step that is a database transaction, and a chart whose
+progress is a row rather than a process. `statifier_persistence` is exactly
+this driver, built once so most hosts do not have to - see "What you do not
+have to build" at the end.
 
 ## The loop
 
@@ -73,7 +73,7 @@ outside that struct:
 
 | Entry | Use it for | Defined at |
 |---|---|---|
-| `Statifier.Interpreter.initialize/2` | the run's very first drive, once ever | `lib/statifier/interpreter.ex:261-263` |
+| `Statifier.Interpreter.initialize/2` | the execution's very first drive, once ever | `lib/statifier/interpreter.ex:261-263` |
 | `Statifier.Interpreter.handle_event/2` | an external event: a fired timer, an invoke answer, a host command | `lib/statifier/interpreter.ex:485-489` |
 | `Statifier.Interpreter.deliver_internal/5` | an event routed to `#_internal` | `lib/statifier/interpreter.ex:547-557` |
 | `Statifier.Interpreter.cancel/1` | Appendix D's `cancel` - stop the chart | `lib/statifier/interpreter.ex:929-933` |
@@ -239,14 +239,14 @@ is wrong, or an author-visible obligation is unmet, if you skip it.
 
 | Effect | Payload | What a driver owes it |
 |---|---|---|
-| `:send` | `Statifier.Effect.Send` (`lib/statifier/effect/send.ex:49-74`) | Deliver the event to the resolved target. A `<send>` with no `target` is a self-send and comes back in as this run's own next external event; `#_internal` goes through `deliver_internal/5`; a session/parent/invoke target is your routing problem. Unsupported type or unparseable target is `error.execution` on the sender's own internal queue |
+| `:send` | `Statifier.Effect.Send` (`lib/statifier/effect/send.ex:49-74`) | Deliver the event to the resolved target. A `<send>` with no `target` is a self-send and comes back in as this execution's own next external event; `#_internal` goes through `deliver_internal/5`; a session/parent/invoke target is your routing problem. Unsupported type or unparseable target is `error.execution` on the sender's own internal queue |
 | `:send_delayed` | `Statifier.Effect.SendDelayed` (`lib/statifier/effect/send_delayed.ex:42-57`) | Store a durable timer row and arm your scheduler. See "Timers" below |
 | `:cancel` | `Statifier.Effect.Cancel` (`lib/statifier/effect/cancel.ex:38-48`) | Cancel every stored row under that `send_id`, in your store. A cancel matching nothing is a no-op, not an error |
 | `:invoke` | `Statifier.Effect.Invoke` (`lib/statifier/effect/invoke.ex:62-76`) | Start the invocation through its registered handler, and record an invocation row of your own (id, type, and the `caller_context` the core stamped) |
 | `:cancel_invoke` | `Statifier.Effect.CancelInvoke` (`lib/statifier/effect/cancel_invoke.ex:45`) | Stop that invocation through its handler and drop your row. An unknown id is a silent no-op |
 | `:autoforward` | `Statifier.Effect.Autoforward` (`lib/statifier/effect/autoforward.ex:36`) | Forward the carried event to that invocation **unmodified** (spec 6.4.2). A miss is a silent no-op |
-| `:done` | `Statifier.Effect.Done` (`lib/statifier/effect/done.ex:33-42`) | Mark the run terminated. Emitted by `exit_interpreter/1`; nothing further will advance. Record `donedata`, and `donedata_error` alongside it - a failed `<donedata>` resolution and a bare final both leave `donedata: :undefined`, and only that second field tells them apart (ADR-0021's 2026-09-02 note) |
-| `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` (`lib/statifier/effect/budget_exhausted.ex:38`) | Mark the run halted on the macrostep-round budget. The core is still `running` and still cancellable - do not treat it as `:done` |
+| `:done` | `Statifier.Effect.Done` (`lib/statifier/effect/done.ex:33-42`) | Mark the execution terminated. Emitted by `exit_interpreter/1`; nothing further will advance. Record `donedata`, and `donedata_error` alongside it - a failed `<donedata>` resolution and a bare final both leave `donedata: :undefined`, and only that second field tells them apart (ADR-0021's 2026-09-02 note) |
+| `:budget_exhausted` | `Statifier.Effect.BudgetExhausted` (`lib/statifier/effect/budget_exhausted.ex:38`) | Mark the execution halted on the macrostep-round budget. The core is still `running` and still cancellable - do not treat it as `:done` |
 | `:log` | `Statifier.Effect.Log` (`lib/statifier/effect/log.ex:24`) | Write it wherever your host writes `<log>`. Nothing in the chart depends on it |
 | `:datamodel_change` | `Statifier.Effect.DatamodelChange` (`lib/statifier/effect/datamodel_change.ex:60-72`) | Nothing is owed - the write already happened in the `%MachineState{}` you were handed. It is an observation seam |
 | `:datamodel_init` | `Statifier.Effect.DatamodelInit` (`lib/statifier/effect/datamodel_init.ex:38`) | Nothing is owed, same reason: the starting baseline, for observers |
@@ -291,9 +291,9 @@ process-less host:
 | Instruction | Perform it by |
 |---|---|
 | `{:notify, effect}` | one per effect, in the core's own order - hand it to your observers, your telemetry, or nothing |
-| `{:enqueue_event, event}` | feed it to this run's next drive (a self-send) |
+| `{:enqueue_event, event}` | feed it to this execution's next drive (a self-send) |
 | `{:deliver, route, event, effect}` | route it: `:internal` goes through `deliver_internal/5`, everything else is your addressing scheme |
-| `{:raise, kind, name, origin, opts}` | raise that platform event on this run's own internal queue, through `deliver_internal/5` |
+| `{:raise, kind, name, origin, opts}` | raise that platform event on this execution's own internal queue, through `deliver_internal/5` |
 | `{:schedule, send_id, delay_ms, route, event, effect}` | write the durable timer row and arm your scheduler |
 | `{:cancel_timers, send_id}` | delete every row under that `send_id` |
 | `{:start_child, invoke, effect}` | start the child chart for a `type="scxml"` invocation |
@@ -301,7 +301,7 @@ process-less host:
 | `{:stop_child, invoke_id}` | stop that invocation; unknown id is a no-op |
 | `{:handler, module, term}` | your handler's own instruction, opaque to the library - perform it yourself |
 | `{:unroutable, effect}` | you could not route it; report it (see "Telemetry" below) |
-| `{:halt, reason}` | `:done` or `:budget_exhausted` - mark the run terminated or halted |
+| `{:halt, reason}` | `:done` or `:budget_exhausted` - mark the execution terminated or halted |
 
 Calling `plan/2` rather than re-implementing the table is the same argument
 ADR-0067 decision 2 makes for telemetry: one implementation is what keeps
@@ -330,8 +330,8 @@ things it fixes, so you do not have to decide them:
    `{session scope, send_id}` and may match several rows; deduplication is
    keyed off the stored `%SendDelayed{}`'s own counters plus `ordinal`.
 2. **Scope is mandatory.** `send_counter` restarts at 0 for every
-   `%MachineState{}`, so `send_1` from two runs collides unless your store
-   keeps them apart. Use the run's `_sessionid`.
+   `%MachineState{}`, so `send_1` from two executions collides unless your
+   store keeps them apart. Use the execution's `_sessionid`.
 3. **Attribution comes off the stored row**, never off anything computed at
    fire time - the counters were stamped when the send was scheduled.
 4. **Liveness is checked at delivery.** Spec 6.2 requires a message be
@@ -382,7 +382,7 @@ An unregistered type raises `error.execution` and starts nothing
 This is beat 1 of the loop again: `invoke_types` is one of the two fields a
 position blob deliberately returns as `nil`
 ([ADR-0064](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0064-position-blob-drops-the-per-drive-snapshot-fields.md)),
-so re-stamp it on **every** load, not once at run creation.
+so re-stamp it on **every** load, not once at execution creation.
 
 ### Answering an invocation
 
@@ -463,13 +463,13 @@ not. If you step, fold before you write.
 
 One case used to be the exception and no longer is. A chart reaching a
 top-level `<final>` can leave sibling `done.state.*` events queued, which
-made a terminated run permanently unpersistable; `exit_interpreter/1` now
-discards the remaining internal queue at the end of the exit walk, so
+made a terminated execution permanently unpersistable; `exit_interpreter/1`
+now discards the remaining internal queue at the end of the exit walk, so
 **a `:done` machine_state is quiescent by construction**
 (`lib/statifier/machine_state.ex:263-275`). Nothing can dequeue an internal
 event once the loop has stopped, so events still queued at termination are
-unreachable rather than pending. That rule is what makes "persist the run
-as completed" a thing a driver can always do.
+unreachable rather than pending. That rule is what makes "persist the
+execution as completed" a thing a driver can always do.
 
 Two related refusals worth knowing before you design around them, both
 listed in full in [Persistence](persistence.md)'s "Refusals" table:
@@ -520,9 +520,9 @@ Not every driver emits every event, and that is by design
 - `:interpret` is the ADR-0029 effect-injection seam. Emit it only if your
   driver exposes an equivalent seam; if it does not, emit nothing rather
   than minting a name.
-- `:init` marks initialization, not loading. Emit it once per logical run,
-  at `initialize/2` - **never** per load, or a run stepped a thousand
-  times reports a thousand initializations.
+- `:init` marks initialization, not loading. Emit it once per logical
+  execution, at `initialize/2` - **never** per load, or an execution
+  stepped a thousand times reports a thousand initializations.
 - Everything else - `:halt`, the macrostep span, the effect and trace
   events, `:unroutable` - is driver-uniform.
 
@@ -550,16 +550,16 @@ Everything above is a real amount of work, and most of it has been done
 once already:
 
 - **`statifier_persistence`** is this loop as a package: the storage-adapter
-  behaviour with the identity guard, the run lifecycle, the stepper, and
-  the Ecto adapter. It emits family one with `driver: :persistence` and its
-  own family two.
+  behaviour with the identity guard, the execution lifecycle, the stepper,
+  and the Ecto adapter. It emits family one with `driver: :persistence` and
+  its own family two.
 - **`statifier_oban`** drives that loop from Oban jobs: durable delayed
   sends and asynchronous invoke execution, with the keying and liveness
   rules from [Durable timers](durable-timers.md) already implemented.
 - **`opentelemetry_statifier`** turns the telemetry above into spans, and
-  because the driver atom is metadata rather than a name, a durable run and
-  a session-hosted run land in the same span vocabulary with one attribute
-  telling them apart.
+  because the driver atom is metadata rather than a name, a durable
+  execution and a session-hosted execution land in the same span vocabulary
+  with one attribute telling them apart.
 
 Write your own driver when your host's transaction, locking, or scheduling
 story is genuinely not theirs. Otherwise, reach for those three and spend
