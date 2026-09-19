@@ -267,9 +267,12 @@ effect is keyed by a durable store.
 introduced.** It advances once for each registered-type `%Effect.Send{}`
 the core constructs, incremented immediately before the read (decision
 2's increment-before-read idiom), and the value after the increment is
-that effect's `ordinal`. The construction site is the one every immediate
-send already has, the immediate clause of `build_effect/6` in
-`Statifier.Machine.Content.Send` (read at `abf713c`). Decision 2's text
+that effect's `ordinal`. Both sites are the ones the delayed send uses
+today in `Statifier.Machine.Content.Send` (read at `abf713c`): the
+increment is `advance_timer_counter/2`, which runs after the send passes
+its rejection checks and before the effect is built, and which today
+advances only for a delayed send; the stamp is `build_effect/6`, whose
+immediate clause builds every `%Effect.Send{}`. Decision 2's text
 stands for the two effects it names; this amendment adds a third
 construction that advances the same sequence, so the shared sequence
 orders the emissions of all three. A built-in immediate send reads no
@@ -295,12 +298,19 @@ registered-type send advances it as the two durable-timer effects do. The
 cancellation key `{session scope, send_id}` is untouched.
 
 **Telemetry.** Decision 6 is untouched: this amendment adds `ordinal` to
-no telemetry event's measurements.
+no telemetry event's measurements, and no row of the telemetry contract
+table changes. The `[:statifier, :session, :effect, :send]` event carries
+the whole `%Effect.Send{}` in its `effect` metadata (the contract table
+in `Statifier.Telemetry`, read at `abf713c`), so once the field ships
+`ordinal` rides there as a struct field - an integer on a registered-type
+send, `nil` on a built-in one - by the same mechanism decision 6
+describes for the two durable-timer structs.
 
 **What moves when this is implemented.** This amendment changes no code.
 The implementing change adds the field and its `@type` line to
-`Statifier.Effect.Send`, the increment and the stamp at the immediate
-construction for a registered type, and a mention of the third effect in
+`Statifier.Effect.Send`, the increment in `advance_timer_counter/2` and
+the stamp in `build_effect/6`'s immediate clause for a registered type,
+and a mention of the third effect in
 `Statifier.MachineState`'s `timer_counter` documentation. Once the field
 ships, every `%Effect.Send{}` has the key; on a built-in send its value
 is `nil`.
