@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assertions>
+<assert id="1">
+<test id="144" conformance="mandatory" manual="false">
+<start uri="144/test144.txml"/>
+</test>
+</assert>
+</assertions>
