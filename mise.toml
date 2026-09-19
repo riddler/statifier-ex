@@ -35,6 +35,9 @@ CORPUS_SAXON_DIR = "{{config_root}}/tools/corpus/scratch/saxon"
 CORPUS_W3_CASES = "{{config_root}}/tools/corpus/scratch/scxml_w3/cases"
 CORPUS_SCION_CASES = "{{config_root}}/tools/corpus/scratch/scion/cases"
 
+# The committed conformance corpus the generators read (ADR-0070).
+CORPUS_CONFORMANCE = "{{config_root}}/conformance"
+
 # Generator output, committed: regeneration lands as a reviewable diff.
 CORPUS_W3_OUT = "{{config_root}}/test/scxml_tests"
 CORPUS_SCION_OUT = "{{config_root}}/test/scion_tests"
@@ -58,8 +61,12 @@ SPEC_DIR = "{{config_root}}/tools/spec"
 # somewhere git ignores, since the extracted text is not redistributable.
 
 [tasks.corpus]
-description = "Regenerate the SCION + W3C conformance corpus (fetch, transform, emit)"
-depends = ["corpus:fetch", "corpus:transform", "corpus:emit"]
+description = "Regenerate the SCION + W3C conformance corpus (fetch, transform, write conformance/, emit)"
+depends = ["corpus:fetch", "corpus:transform"]
+dir = "{{config_root}}"
+# In order: `mix statifier.corpus` writes conformance/ from the upstream tree,
+# then corpus:emit writes the test modules from conformance/.
+run = ["mix statifier.corpus", "mise run corpus:emit"]
 
 [tasks."corpus:fetch"]
 description = "Download the W3C manifest + TXML, Saxon-HE, and the SCION framework"
@@ -146,8 +153,7 @@ echo "transformed $count file(s)"
 '''
 
 [tasks."corpus:emit"]
-description = "Write the generated test modules into test/{scion,scxml}_tests/"
-depends = ["corpus:transform", "corpus:fetch:scion"]
+description = "Write the generated test modules into test/{scion,scxml}_tests/ from conformance/corpus/"
 dir = "{{config_root}}"
 shell = "bash -c"
 run = '''
@@ -155,13 +161,11 @@ set -euo pipefail
 rm -rf "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
 mkdir -p "$CORPUS_W3_OUT" "$CORPUS_SCION_OUT"
 
-# Plain `elixir`, not `mix run`: cases.exs needs xmerl, which Mix prunes from
-# the code path (see scxml_w3/cases.exs, scxml_w3/manifest.exs).
-find "$CORPUS_W3_CASES" -type f -iname '*.scxml' -print0 | sort -z | xargs -0 \
-  elixir "$CORPUS_DIR/scxml_w3/cases.exs" "$CORPUS_W3_OUT" "$CORPUS_W3_CASES"
-
-find "$CORPUS_SCION_CASES" -type f -iname '*.json' -print0 | sort -z | xargs -0 \
-  mix run "$CORPUS_DIR/scion/cases.exs" "$CORPUS_SCION_OUT" "$CORPUS_SCION_CASES"
+# The committed corpus is the source (ADR-0070): no fetch, no transform and no
+# upstream tree. Plain `elixir`, not `mix run`: the generators need nothing
+# from the project compiled.
+elixir "$CORPUS_DIR/scxml_w3/cases.exs" "$CORPUS_W3_OUT" "$CORPUS_CONFORMANCE"
+elixir "$CORPUS_DIR/scion/cases.exs" "$CORPUS_SCION_OUT" "$CORPUS_CONFORMANCE"
 '''
 
 [tasks."corpus:check"]

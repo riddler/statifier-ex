@@ -1,3 +1,11 @@
+# Generated from conformance/corpus/scion.json, case
+# scion/assign/assign_invalid, by tools/corpus/scion/cases.exs. Regenerate
+# with `mise run corpus:emit`; never edit by hand.
+#
+# The document in this test is test/assign/assign_invalid.scxml from the SCION
+# scxml-test-framework (https://github.com/jbeard4/scxml-test-framework),
+# licensed under Apache-2.0; the licence text is
+# conformance/LICENSES/Apache-2.0.txt.
 defmodule SCIONTest.Assign.AssignInvalidTest do
   use Statifier.Case, async: true
 

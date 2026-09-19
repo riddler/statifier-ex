@@ -1,3 +1,11 @@
+# Generated from conformance/corpus/scion.json, case scion/actionSend/send7b,
+# by tools/corpus/scion/cases.exs. Regenerate with `mise run corpus:emit`;
+# never edit by hand.
+#
+# The document in this test is test/actionSend/send7b.scxml from the SCION
+# scxml-test-framework (https://github.com/jbeard4/scxml-test-framework),
+# licensed under Apache-2.0; the licence text is
+# conformance/LICENSES/Apache-2.0.txt.
 defmodule SCIONTest.ActionSend.Send7bTest do
   use Statifier.Case, async: true
 

@@ -1,3 +1,11 @@
+# Generated from conformance/corpus/scion.json, case
+# scion/multiple-events-per-transition/test1, by tools/corpus/scion/cases.exs.
+# Regenerate with `mise run corpus:emit`; never edit by hand.
+#
+# The document in this test is test/multiple-events-per-transition/test1.scxml
+# from the SCION scxml-test-framework
+# (https://github.com/jbeard4/scxml-test-framework), licensed under
+# Apache-2.0; the licence text is conformance/LICENSES/Apache-2.0.txt.
 defmodule SCIONTest.MultipleEventsPerTransition.Test1Test do
   use Statifier.Case, async: true
 
