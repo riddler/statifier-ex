@@ -1,3 +1,15 @@
+# Generated from conformance/corpus/w3c.json, case w3c/test355, by
+# tools/corpus/scxml_w3/cases.exs. Regenerate with `mise run corpus:emit`;
+# never edit by hand.
+#
+# The document in this test is transformed for the predicator datamodel from
+# 355/test355.txml of the W3C SCXML Implementation Report Plan test suite
+# (https://www.w3.org/Voice/2013/scxml-irp/).
+#
+# Copyright © 2015 W3C® (MIT, ERCIM, Keio, Beihang), All Rights Reserved.
+#
+# Redistributed under BSD-3-Clause-W3C, the W3C 3-clause BSD License; its
+# conditions and disclaimer are in conformance/LICENSES/BSD-3-Clause-W3C.txt.
 defmodule SCXMLTest.Scxml.Test355 do
   use Statifier.Case, async: true
 

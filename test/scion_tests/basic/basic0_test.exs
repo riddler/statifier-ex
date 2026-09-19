@@ -1,3 +1,11 @@
+# Generated from conformance/corpus/scion.json, case scion/basic/basic0, by
+# tools/corpus/scion/cases.exs. Regenerate with `mise run corpus:emit`; never
+# edit by hand.
+#
+# The document in this test is test/basic/basic0.scxml from the SCION
+# scxml-test-framework (https://github.com/jbeard4/scxml-test-framework),
+# licensed under Apache-2.0; the licence text is
+# conformance/LICENSES/Apache-2.0.txt.
 defmodule SCIONTest.Basic.Basic0Test do
   use Statifier.Case, async: true
 

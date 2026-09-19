@@ -1,238 +1,174 @@
-# Emits one Statifier.Case test module per W3C IRP case, in the v2 shape:
+# Emits one Statifier.Case test module per W3C IRP case in the committed
+# conformance corpus, in the v2 shape:
 #
-#   elixir tools/corpus/scxml_w3/cases.exs <out_root> <in_root> <case.scxml>...
+#   elixir tools/corpus/scxml_w3/cases.exs <out_root> <corpus_root>
 #
-# Plain `elixir`, not `mix run`: this script needs xmerl, which Mix prunes
-# from the code path (see manifest.exs).
+# corpus_root - the committed conformance/ directory: corpus/w3c.json holds
+#               the cases (written by `mix statifier.corpus`, ADR-0070) and
+#               manifest.json names the upstream suite and its licence.
+# out_root    - test/scxml_tests, one module per case as
+#               <conformance>/<spec>/<name>_test.exs (SCXMLTest.<Spec>.<Name>).
 #
-# in_root  - the scratch dir corpus:transform populated, laid out as
-#            <in_root>/<conformance>/<spec>/<name>.{scxml,description}.
-# out_root - test/scxml_tests, mirroring that as <conformance>/<spec>/<name>_test.exs,
-#            one module per file (SCXMLTest.<Spec>.<Name>).
+# The corpus is the source: this reads no upstream tree, and applies no filter
+# of its own. The datamodel filter, the exclusions (exclusions.exs, ADR-0004)
+# and the manifest sub-documents (sub_documents.exs) are applied when the
+# corpus is written, so every case in corpus/w3c.json gets a module. A corpus
+# file with no cases is refused rather than emitting nothing.
 #
-# Three filters apply before a case is emitted:
+# Each module opens with a header comment naming its corpus case and the
+# upstream test it was transformed from, retaining the W3C copyright notice
+# (read from the licence file) and pointing at the licence's conditions and
+# disclaimer under conformance/LICENSES/. The document itself goes into the
+# heredoc exactly as the corpus holds it - already transformed for the
+# predicator datamodel and formatted - and `required_features` is the case's
+# own field.
 #
-#   - datamodel: only inputs conf_predicator.xsl transformed to
-#     datamodel="predicator" are emitted. The datamodel-specific optional
-#     suites (ecma-profile, ...) test literal ECMAScript/XPath behavior the
-#     XSL leaves untouched, so they carry their original datamodel and are
-#     out of scope for this datamodel commitment (docs/datamodel.md). These
-#     do not count toward the "excluded" tally below - that count is
-#     manifest-driven only, matching the SCION emitter's behavior.
-#   - exclusions.exs: tests with no predicator equivalent (ADR-0004), skipped
-#     with the reason recorded there.
-#   - sub_documents.exs: manifest <dep> documents an <invoke> loads at
-#     runtime, not standalone conformance tests. Emitting one would assert
-#     its parent's expected configuration against a document that never
-#     reaches it on its own (st-rbp).
-#
-# required_features tags come from Statifier.FeatureDetector, loaded directly
-# since this runs outside Mix and test/support is not compiled in.
+# Plain `elixir`, not `mix run`: nothing here needs the project compiled.
 
-Code.require_file(Path.join([__DIR__, "..", "..", "..", "test/support/feature_detector.ex"]))
 Code.require_file(Path.join([__DIR__, "..", "normalize.exs"]))
-Code.require_file(Path.join([__DIR__, "sub_documents.exs"]))
-
-defmodule Cases.XmlFormat do
-  @moduledoc """
-  Re-serializes a transformed .scxml with 4-space indentation and no comments,
-  matching the corpus's committed test shape (docs/testing.md).
-  """
-
-  import Record
-
-  extract_all(from_lib: "xmerl/include/xmerl.hrl")
-  |> Enum.each(fn {name, kvs} -> defrecord(name, kvs) end)
-
-  @indent "    "
-  @dropped_attrs [:"xmlns:conf"]
-
-  @spec format(String.t()) :: {String.t(), String.t() | nil}
-  def format(xml) do
-    {doc, _rest} = :xmerl_scan.string(String.to_charlist(xml), comments: false)
-    formatted = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" <> render(doc, 0) <> "\n"
-    {formatted, datamodel(doc)}
-  end
-
-  defp datamodel(xmlElement(attributes: attrs)) do
-    Enum.find_value(attrs, fn attr ->
-      if xmlAttribute(attr, :name) == :datamodel, do: to_string(xmlAttribute(attr, :value))
-    end)
-  end
-
-  defp render(xmlElement(name: name, attributes: attrs, content: content), depth) do
-    indent = String.duplicate(@indent, depth)
-    tag = to_string(name)
-    attr_str = render_attrs(attrs)
-    {texts, elements} = content |> significant() |> Enum.split_with(&match?(xmlText(), &1))
-
-    cond do
-      texts == [] and elements == [] ->
-        "#{indent}<#{tag}#{attr_str} />"
-
-      elements == [] ->
-        text = texts |> Enum.map_join("", &text_value/1) |> String.trim() |> escape_text()
-        "#{indent}<#{tag}#{attr_str}>#{text}</#{tag}>"
-
-      true ->
-        inner = elements |> Enum.map_join("\n", &render(&1, depth + 1))
-        "#{indent}<#{tag}#{attr_str}>\n#{inner}\n#{indent}</#{tag}>"
-    end
-  end
-
-  defp text_value(xmlText(value: value)), do: to_string(value)
-
-  defp render_attrs(attrs) do
-    attrs
-    |> Enum.reject(&(xmlAttribute(&1, :name) in @dropped_attrs))
-    |> Enum.map_join("", fn attr ->
-      " #{xmlAttribute(attr, :name)}=\"#{escape_attr(xmlAttribute(attr, :value))}\""
-    end)
-  end
-
-  defp significant(content) do
-    Enum.filter(content, fn
-      xmlElement() -> true
-      xmlText(value: value) -> String.trim(to_string(value)) != ""
-      _other -> false
-    end)
-  end
-
-  defp escape_attr(value) do
-    value
-    |> to_string()
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-    |> String.replace("\"", "&quot;")
-  end
-
-  defp escape_text(value) do
-    value
-    |> to_string()
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-  end
-end
 
 defmodule Cases.Emit do
-  @spec emit_case(String.t(), String.t(), String.t(), String.t(), String.t(), String.t()) ::
-          :emitted | :skipped
-  def emit_case(out_root, input, conformance, spec, normalized_spec, normalized_name) do
-    name = Path.basename(input, ".scxml")
-    {formatted_xml, datamodel} = input |> File.read!() |> Cases.XmlFormat.format()
+  @suite "w3c"
 
-    if datamodel == "predicator" do
-      description =
-        input
-        |> Path.rootname()
-        |> Kernel.<>(".description")
-        |> File.read!()
-        |> String.split()
-        |> Enum.join(" ")
+  def read!(corpus_root) do
+    path = Path.join([corpus_root, "corpus", @suite <> ".json"])
 
-      features =
-        formatted_xml
-        |> Statifier.FeatureDetector.detect_features()
-        |> Enum.sort()
-        |> Enum.map_join(", ", &inspect/1)
-
-      xml_body =
-        formatted_xml
-        |> String.replace("\\", "\\\\")
-        |> String.replace("\#{", "\\\#{")
-
-      module =
-        Module.concat([
-          "SCXMLTest",
-          Macro.camelize(normalized_spec),
-          Macro.camelize(normalized_name)
-        ])
-
-      source = """
-      defmodule #{inspect(module)} do
-        use Statifier.Case, async: true
-
-        @moduletag :scxml_w3
-        @tag required_features: [#{features}]
-        @tag conformance: #{inspect(conformance)}, spec: #{inspect(spec)}
-        test #{inspect(name)} do
-          xml = \"\"\"
-      #{xml_body}\"\"\"
-
-          description = #{inspect(description)}
-
-          test_scxml(xml, description, ["pass"], [])
-        end
+    cases =
+      case path |> File.read!() |> JSON.decode!() do
+        %{"suite" => @suite, "cases" => [_first | _rest] = cases} -> cases
+        %{"suite" => @suite, "cases" => []} -> halt("#{path} has no cases; refusing to emit none")
+        _other -> halt("#{path} is not a #{@suite} corpus file")
       end
-      """
 
-      out = Path.join([out_root, conformance, normalized_spec, normalized_name <> "_test.exs"])
-      out |> Path.dirname() |> File.mkdir_p!()
-      File.write!(out, Code.format_string!(source) |> IO.iodata_to_binary() |> Kernel.<>("\n"))
-      :emitted
-    else
-      :skipped
-    end
+    upstream =
+      Path.join(corpus_root, "manifest.json")
+      |> File.read!()
+      |> JSON.decode!()
+      |> Map.fetch!("upstreams")
+      |> Enum.find(&(&1["suite"] == @suite)) ||
+        halt("#{corpus_root}/manifest.json names no #{@suite} upstream")
+
+    {cases, upstream}
   end
-end
 
-exclusions_path = Path.join(__DIR__, "exclusions.exs")
-{exclusions, _bindings} = Code.eval_file(exclusions_path)
+  # The copyright notice the licence requires every redistribution to retain,
+  # read from the committed licence file rather than restated here.
+  def copyright!(corpus_root, notice) do
+    path = Path.join(corpus_root, notice)
 
-[out_root, in_root | inputs] = System.argv()
+    path
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.find(&String.starts_with?(&1, "Copyright")) ||
+      halt("#{path} carries no copyright line")
+  end
 
-manifest_path = Path.join(in_root, "manifest.xml")
+  def emit_case(out_root, corpus_case, upstream, copyright) do
+    %{
+      "id" => id,
+      "spec" => spec,
+      "conformance" => conformance,
+      "description" => description,
+      "required_features" => features,
+      "source" => formatted_xml,
+      "initial_configuration" => conf,
+      "steps" => steps
+    } = corpus_case
 
-if !File.exists?(manifest_path) do
-  IO.puts(:stderr, "missing #{manifest_path}; run `mise run corpus:fetch:w3` first")
-  System.halt(1)
-end
-
-sub_documents = Cases.SubDocuments.ids(manifest_path)
-
-{matched, emitted, excluded, sub_document} =
-  Enum.reduce(inputs, {MapSet.new(), 0, 0, 0}, fn input,
-                                                  {matched, emitted, excluded, sub_document} ->
-    rel = Path.relative_to(input, in_root)
-    [conformance, spec | _rest] = Path.split(rel)
-    name = Path.basename(rel, ".scxml")
-
+    name = Path.basename(id)
     normalized_spec = Cases.Normalize.identifier(spec)
     normalized_name = Cases.Normalize.identifier(name)
 
-    cond do
-      Map.has_key?(exclusions, name) ->
-        {MapSet.put(matched, name), emitted, excluded + 1, sub_document}
+    events =
+      Enum.map(steps, fn %{"event" => e, "configuration" => next_conf} -> {e, next_conf} end)
 
-      MapSet.member?(sub_documents, name) ->
-        {matched, emitted, excluded, sub_document + 1}
+    features = Enum.map_join(features, ", ", &inspect(String.to_atom(&1)))
 
-      true ->
-        case Cases.Emit.emit_case(
-               out_root,
-               input,
-               conformance,
-               spec,
-               normalized_spec,
-               normalized_name
-             ) do
-          :emitted -> {matched, emitted + 1, excluded, sub_document}
-          :skipped -> {matched, emitted, excluded, sub_document}
-        end
+    xml_body =
+      formatted_xml
+      |> String.replace("\\", "\\\\")
+      |> String.replace("\#{", "\\\#{")
+
+    module =
+      Module.concat([
+        "SCXMLTest",
+        Macro.camelize(normalized_spec),
+        Macro.camelize(normalized_name)
+      ])
+
+    source = """
+    #{header(corpus_case, upstream, copyright)}
+    defmodule #{inspect(module)} do
+      use Statifier.Case, async: true
+
+      @moduletag :scxml_w3
+      @tag required_features: [#{features}]
+      @tag conformance: #{inspect(conformance)}, spec: #{inspect(spec)}
+      test #{inspect(name)} do
+        xml = \"\"\"
+    #{xml_body}\"\"\"
+
+        description = #{inspect(description)}
+
+        test_scxml(xml, description, #{inspect(conf)}, #{inspect(events)})
+      end
     end
-  end)
+    """
 
-stale = Map.keys(exclusions) -- MapSet.to_list(matched)
+    out = Path.join([out_root, conformance, normalized_spec, normalized_name <> "_test.exs"])
+    out |> Path.dirname() |> File.mkdir_p!()
+    File.write!(out, Code.format_string!(source) |> IO.iodata_to_binary() |> Kernel.<>("\n"))
+  end
 
-if stale != [] do
-  IO.puts(
-    :stderr,
-    "stale scxml_w3 exclusions.exs entries (matched nothing): #{Enum.join(stale, ", ")}"
-  )
+  defp header(%{"id" => id, "upstream" => case_upstream}, upstream, copyright) do
+    %{"document" => document, "license" => license, "notice" => notice} = case_upstream
 
-  System.halt(1)
+    [
+      "Generated from conformance/corpus/#{@suite}.json, case #{id}, by " <>
+        "tools/corpus/scxml_w3/cases.exs. Regenerate with `mise run corpus:emit`; " <>
+        "never edit by hand.",
+      "",
+      "The document in this test is transformed for the predicator datamodel from " <>
+        "#{document} of the #{upstream["name"]} (#{upstream["url"]}).",
+      "",
+      copyright,
+      "",
+      "Redistributed under #{license}, the W3C 3-clause BSD License; its conditions " <>
+        "and disclaimer are in conformance/#{notice}."
+    ]
+    |> Enum.map_join("\n", &comment/1)
+  end
+
+  # One paragraph as `#` comment lines wrapped at 78 columns; "" is a bare `#`.
+  defp comment(""), do: "#"
+
+  defp comment(paragraph) do
+    paragraph
+    |> String.split(" ")
+    |> Enum.reduce([], fn
+      word, [] ->
+        [word]
+
+      word, [line | rest] when byte_size(line) + 1 + byte_size(word) <= 76 ->
+        [line <> " " <> word | rest]
+
+      word, lines ->
+        [word | lines]
+    end)
+    |> Enum.reverse()
+    |> Enum.map_join("\n", &("# " <> &1))
+  end
+
+  defp halt(message) do
+    IO.puts(:stderr, message)
+    System.halt(1)
+  end
 end
 
-IO.puts(
-  "emitted #{emitted} W3C case(s), excluded #{excluded}, skipped #{sub_document} sub-document(s)"
-)
+[out_root, corpus_root] = System.argv()
+
+{cases, upstream} = Cases.Emit.read!(corpus_root)
+copyright = Cases.Emit.copyright!(corpus_root, upstream["notice"])
+Enum.each(cases, &Cases.Emit.emit_case(out_root, &1, upstream, copyright))
+
+IO.puts("emitted #{length(cases)} W3C case(s) from #{corpus_root}/corpus/w3c.json")

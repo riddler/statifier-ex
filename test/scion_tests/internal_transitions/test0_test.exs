@@ -1,3 +1,15 @@
+# Generated from conformance/corpus/scion.json, case
+# scion/internal-transitions/test0, by tools/corpus/scion/cases.exs.
+# Regenerate with `mise run corpus:emit`; never edit by hand.
+#
+# The document in this test is test/internal-transitions/test0.scxml from the
+# SCION scxml-test-framework
+# (https://github.com/jbeard4/scxml-test-framework), licensed under
+# Apache-2.0; the licence text is conformance/LICENSES/Apache-2.0.txt.
+#
+# Changed for statifier-ex: lines 25-28 of the upstream document are deleted
+# when it is fetched (`mise run corpus:fetch:scion`, whose comment reads "The
+# root transition is not supported.").
 defmodule SCIONTest.InternalTransitions.Test0Test do
   use Statifier.Case, async: true
 

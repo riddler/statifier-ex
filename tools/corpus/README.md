@@ -13,13 +13,15 @@ One command, from anywhere in the repo:
 mise run corpus
 ```
 
-That runs three stages, each also available on its own (`mise tasks` lists them):
+That runs fetch, transform, `mix statifier.corpus` (which writes `conformance/`
+from the upstream tree) and emit, in that order; the tasks are each also
+available on their own (`mise tasks` lists them):
 
 | Task | What it does |
 | --- | --- |
 | `mise run corpus:fetch` | Downloads the W3C IRP manifest and its `.txml` sources, Saxon-HE, and clones the SCION `scxml-test-framework` into `scratch/` |
 | `mise run corpus:transform` | Runs Saxon over each `.txml` with `scxml_w3/conf_predicator.xsl` to produce `.scxml` for the predicator datamodel |
-| `mise run corpus:emit` | Writes the generated test modules into `test/scion_tests/` and `test/scxml_tests/` |
+| `mise run corpus:emit` | Writes the generated test modules into `test/scion_tests/` and `test/scxml_tests/` from the committed `conformance/corpus/`, with no upstream tree, each opening with a header naming its case, its upstream document and its licence notice |
 | `mise run corpus:check` | Asserts every transformed mandatory W3C expression compiles under predicator, skipping `exclusions.exs` entries and allowing the values the W3C tests deliberately require to be invalid |
 | `mise run corpus:clean` | Discards every upstream download; the next run refetches |
 
@@ -83,8 +85,8 @@ Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 `corpus:fetch:scion` and filtered at emit time - see
 `tools/corpus/scion/exclusions.exs`). The **W3C emitter** produces
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
-`@tag required_features: [...]` derived via `Statifier.FeatureDetector`,
-inline XML heredoc (4-space base indent, pretty-printed from the transformed
+`@tag required_features: [...]` read from the corpus case,
+inline XML heredoc (4-space base indent, the corpus case's source: pretty-printed from the transformed
 `.scxml`, comments stripped), and a single `test_scxml/4` call. `use
 Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
 `test/support` compatibility shims over `Statifier.Testing.Case` and
@@ -99,8 +101,8 @@ runtime rather than conformance cases, leaving 193 cases; 162 of those emit
 
 The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
-derived via `Statifier.FeatureDetector`, inline XML heredoc (4-space base
-indent, raw source as fetched - no xmerl re-serialization; `corpus:fetch:scion`
+read from the corpus case, inline XML heredoc (4-space base
+indent, the corpus case's source: raw source as fetched - no xmerl re-serialization; `corpus:fetch:scion`
 edits one document, `internal-transitions/test0.scxml`), and a single
 `test_scxml/4` call. 119 of the 127 native SCION cases emit; the rest are
 excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
@@ -133,7 +135,9 @@ Remaining work, tracked in beads:
 
 1. **st-00p.10** - wire the regression ratchet into `mix quality`.
 
-Three filters apply before a W3C case is emitted, all in `scxml_w3/cases.exs`:
+Three filters apply before a W3C case is emitted, all applied by
+`mix statifier.corpus` when it writes `conformance/corpus/w3c.json`, which
+`scxml_w3/cases.exs` reads:
 
 - **datamodel**: only inputs `conf_predicator.xsl` transformed to
   `datamodel="predicator"` are emitted. The datamodel-specific optional suites
@@ -150,7 +154,9 @@ Three filters apply before a W3C case is emitted, all in `scxml_w3/cases.exs`:
   support existed; a sub-document is never a standalone test at all, so it is
   filtered by manifest role rather than recorded as an exclusion (st-rbp).
 
-One filter applies before a SCION case is emitted, in `scion/cases.exs`:
+One filter applies before a SCION case is emitted, applied by
+`mix statifier.corpus` when it writes `conformance/corpus/scion.json`, which
+`scion/cases.exs` reads:
 
 - **exclusions.exs**: cases with no predicator equivalent (`<script src>`),
   and the `w3c-ecma` tree - SCION's own untransformed duplicate of the W3C
