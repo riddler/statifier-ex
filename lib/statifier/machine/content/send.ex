@@ -48,7 +48,7 @@ defmodule Statifier.Machine.Content.Send do
   alias Statifier.Machine.Content.Send
   alias Statifier.Machine.Param
   alias Statifier.Parser.Location
-  alias Statifier.Send.{Routes, Target}
+  alias Statifier.Send.{Routes, Target, Types}
 
   @enforce_keys [:c_index, :location]
   defstruct [
@@ -179,7 +179,7 @@ defmodule Statifier.Machine.Content.Send do
          ) do
       %{owner: owner, machine_state: machine_state} = new_context
 
-      case reject_reason(fields.target, fields.type, delay_ms, machine_state.routes) do
+      case reject_reason(fields.target, fields.type, delay_ms, machine_state) do
         nil ->
           machine_state = advance_timer_counter(machine_state, delay_ms)
           new_context = %{new_context | machine_state: machine_state}
@@ -233,19 +233,34 @@ defmodule Statifier.Machine.Content.Send do
     # (ADR-0048 decision 5). A delayed send is exempt: 6.2.3 governs *argument*
     # evaluation at element-evaluation time and reachability is not an argument,
     # so the route is resolved when the timer fires (ADR-0048 decision 6).
+    #
+    # ADR-0069 decisions 1-3: the type is classified once, by
+    # `Statifier.Send.Types.classify/2` against the session's stamped
+    # `send_types` - the one classifier. An unsupported type is 6.2.5's
+    # `:execution` rejection, as before; with `send_types: nil` every
+    # non-built-in type is unsupported, which is the closed set this check
+    # applied before ADR-0069. A registered type dispatches with its target
+    # unread: neither `Target.parse/1` nor the route snapshot is consulted,
+    # because the target is the processor's opaque route string.
     @spec reject_reason(
             target :: term(),
             type :: term(),
             delay_ms :: non_neg_integer() | nil,
-            routes :: Routes.t() | nil
+            machine_state :: MachineState.t()
           ) ::
             {:execution, {:unsupported_type, term()} | {:invalid_target, term()}}
             | {:communication, {:unreachable_target, term()}}
             | nil
-    defp reject_reason(target, type, delay_ms, routes) do
+    defp reject_reason(target, type, delay_ms, %MachineState{} = machine_state) do
+      %MachineState{routes: routes, send_types: send_types} = machine_state
+      class = Types.classify(send_types, type)
+
       cond do
-        not Target.supported_type?(type) ->
+        class == :unsupported ->
           {:execution, {:unsupported_type, type}}
+
+        class == :registered ->
+          nil
 
         match?({:invalid, _reason}, Target.parse(target)) ->
           {:execution, {:invalid_target, target}}

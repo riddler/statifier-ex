@@ -345,6 +345,7 @@ defmodule Statifier.Session do
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.Identity
   alias Statifier.Send.{Routes, Target}
+  alias Statifier.Send.Types, as: SendTypes
   alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
 
   defmodule State do
@@ -360,6 +361,7 @@ defmodule Statifier.Session do
       :invoke_source,
       :invoked_by,
       invoke_handlers: %{},
+      send_types: %{},
       timer_refs: %{},
       subscribers: %{},
       halted: nil,
@@ -378,7 +380,10 @@ defmodule Statifier.Session do
       # upgrade, with no caller having asked. `true` carries the parent's
       # `:invoke_handlers` map and the flag itself into every child, so one
       # opt-in at the root serves the whole invoke tree.
-      inherit_invoke_handlers: false
+      inherit_invoke_handlers: false,
+      # ADR-0069 decision 2: off by default, exactly as
+      # `inherit_invoke_handlers` is, and for the same reason.
+      inherit_send_types: false
     ]
 
     @type t :: %__MODULE__{
@@ -401,6 +406,12 @@ defmodule Statifier.Session do
             # constructor, so the stamped set and this dispatch map cannot
             # diverge (decision 3's anti-drift property).
             invoke_handlers: %{String.t() => module()},
+            # ADR-0069 decision 2: the per-session `<send type> => module`
+            # map `start_link/2`'s `:send_types` option supplied, default
+            # `%{}`. `init/1` derives the `%MachineState{}` `send_types` stamp
+            # from this same map's keys through
+            # `Statifier.Send.Types.from_send_types/1`, the one constructor.
+            send_types: %{String.t() => module()},
             # The monotonic timestamp (`System.monotonic_time/0`) of the
             # currently open macrostep span - telemetry only, never recorded
             # (ADR-0040, ADR-0034). `nil` outside `drain_event/2`,
@@ -430,7 +441,11 @@ defmodule Statifier.Session do
             # cadence is untouched: the child is still stamped once, at its
             # own boot, from a map fixed for its lifetime - the map simply
             # comes from the parent's start options rather than the child's.
-            inherit_invoke_handlers: boolean()
+            inherit_invoke_handlers: boolean(),
+            # The `<send>` counterpart of `inherit_invoke_handlers`: whether a
+            # child this session starts for an `<invoke>` is started with this
+            # session's `send_types` map, and the flag itself.
+            inherit_send_types: boolean()
           }
   end
 
@@ -532,6 +547,24 @@ defmodule Statifier.Session do
       subtrees their own. Handlers descend independently of `:invoke_source`,
       which ADR-0038 leaves to its own option, and independently of
       `:inherit_observers`, which is an observation knob.
+    - `:send_types` - a `%{type_string => module}` map of the Event I/O
+      Processor types this session registers for `<send type="...">`
+      (ADR-0069 decision 2). Default `%{}`, which registers nothing: only
+      the built-in types (the attribute absent, `"scxml"`, and the SCXML
+      Event I/O Processor URI) are supported, exactly as before. The
+      `%MachineState{}` `send_types` snapshot this session's core is stamped
+      with, at both a fresh start and a resume, is derived from this same
+      map's keys by `Statifier.Send.Types.from_send_types/1`. The core then
+      accepts a `<send>` of a registered type without reading its `target`,
+      and refuses any other non-built-in type with `error.execution`, as
+      before. A map naming a built-in spelling is refused before the session
+      boots, with `{:error, {:send_types, {:built_in_types, types}}}`, so a
+      built-in send can never be redirected to a host processor.
+    - `:inherit_send_types` - when `true`, every child session this session
+      starts for an `<invoke>` is started with this session's `:send_types`
+      map and `inherit_send_types: true` of its own. Default `false`, which
+      starts children registering no send type. The `<send>` counterpart of
+      `:inherit_invoke_handlers`, on the same start-time terms.
     - `:resume` - boots this session at a persisted position (ADR-0060)
       instead of running `Statifier.Interpreter.initialize/2`. Accepts
       either a `Statifier.Position.to_binary/1` blob (decoded via
@@ -917,8 +950,22 @@ defmodule Statifier.Session do
   @impl GenServer
   def init({%Machine{} = machine, opts}) do
     case resolve_resume(opts, machine) do
-      {:ok, resume} -> init_boot(machine, opts, resume)
+      {:ok, resume} -> init_registered(machine, opts, resume)
       {:error, reason} -> {:stop, {:resume, reason}}
+    end
+  end
+
+  # ADR-0069 decision 1: a `:send_types` map naming a built-in spelling is
+  # refused before the session boots, so a built-in send can never be
+  # redirected to a host processor. The refusal is
+  # `Statifier.Send.Types.check_registration/1`'s, never a membership test
+  # written here.
+  @spec init_registered(machine :: Machine.t(), opts :: keyword(), resume :: resume()) ::
+          {:ok, State.t(), {:continue, tuple()}} | {:stop, {:send_types, term()}}
+  defp init_registered(machine, opts, resume) do
+    case SendTypes.check_registration(Keyword.get(opts, :send_types, %{})) do
+      :ok -> init_boot(machine, opts, resume)
+      {:error, reason} -> {:stop, {:send_types, reason}}
     end
   end
 
@@ -936,12 +983,13 @@ defmodule Statifier.Session do
 
     invoked_by = Keyword.get(opts, :invoked_by)
     invoke_handlers = Keyword.get(opts, :invoke_handlers, %{})
+    send_types = Keyword.get(opts, :send_types, %{})
 
     start_time = System.monotonic_time()
     span_ref = make_ref()
 
     {machine_state, effects, machine_opts, trigger, anchor} =
-      boot(resume, machine, opts, session_id, invoked_by, invoke_handlers)
+      boot(resume, machine, opts, session_id, invoked_by, invoke_handlers, send_types)
 
     subscribers =
       opts
@@ -955,7 +1003,11 @@ defmodule Statifier.Session do
 
     recording =
       if Keyword.get(opts, :record, false) do
-        Recording.new(machine, machine_opts, anchor)
+        # The recording keeps the `:send_types` map itself, not the derived
+        # snapshot `machine_opts` carries for `MachineState.new/2` - the map
+        # is what `Statifier.Session.Recording` normalizes (ADR-0069), and
+        # `Statifier.Replay` re-derives the snapshot from it.
+        Recording.new(machine, Keyword.put(machine_opts, :send_types, send_types), anchor)
       end
 
     state = %State{
@@ -968,9 +1020,11 @@ defmodule Statifier.Session do
       invocations: Invocations.new(),
       invoke_source: Keyword.get(opts, :invoke_source),
       invoke_handlers: invoke_handlers,
+      send_types: send_types,
       invoked_by: invoked_by,
       inherit_observers: Keyword.get(opts, :inherit_observers, false),
-      inherit_invoke_handlers: Keyword.get(opts, :inherit_invoke_handlers, false)
+      inherit_invoke_handlers: Keyword.get(opts, :inherit_invoke_handlers, false),
+      inherit_send_types: Keyword.get(opts, :inherit_send_types, false)
     }
 
     # `perform/3` runs from `handle_continue/2` rather than here, and the
@@ -1105,7 +1159,7 @@ defmodule Statifier.Session do
 
   # The one branch point ADR-0060's "Key Discoveries" names: a fresh start
   # calls `Interpreter.initialize/2` exactly as before; a resume stamps
-  # `routes`/`invoke_types` onto the persisted position and performs no
+  # `routes`/`invoke_types`/`send_types` onto the persisted position and performs no
   # entry at all (`effects: []` - the non-restoration ADR-0060 decisions 1
   # and 4 describe, expressed in code). Both arms return the same five-tuple
   # so `init_boot/3` above has one tail regardless of which ran.
@@ -1115,9 +1169,10 @@ defmodule Statifier.Session do
           opts :: keyword(),
           session_id :: String.t(),
           invoked_by :: {pid(), String.t()} | nil,
-          invoke_handlers :: %{String.t() => module()}
+          invoke_handlers :: %{String.t() => module()},
+          send_types :: %{String.t() => module()}
         ) :: {MachineState.t(), [Effect.t()], keyword(), :initialize | :resume, binary() | nil}
-  defp boot(:fresh, machine, opts, session_id, invoked_by, invoke_handlers) do
+  defp boot(:fresh, machine, opts, session_id, invoked_by, invoke_handlers, send_types) do
     machine_opts =
       opts
       |> Keyword.take([:trace, :datamodel, :max_macrostep_rounds])
@@ -1137,17 +1192,30 @@ defmodule Statifier.Session do
       # MachineState.new/2` reads no such key and ignores it.
       |> Keyword.put(:invoke_types, InvokeTypes.from_handlers(invoke_handlers))
       |> Keyword.put(:invoke_handlers, invoke_handlers)
+      # ADR-0069 decision 2: the `<send>` counterpart, through its own one
+      # constructor - `nil` when the map is empty, which is the snapshot a
+      # session registering no send type has always carried.
+      |> Keyword.put(:send_types, SendTypes.from_send_types(send_types))
 
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
     {machine_state, effects, machine_opts, :initialize, nil}
   end
 
-  defp boot({:resumed, machine_state}, _machine, _opts, session_id, invoked_by, invoke_handlers) do
+  defp boot(
+         {:resumed, machine_state},
+         _machine,
+         _opts,
+         session_id,
+         invoked_by,
+         invoke_handlers,
+         send_types
+       ) do
     machine_state =
       machine_state
       |> stamp_session_id(session_id)
       |> MachineState.put_routes(init_routes(session_id, invoked_by))
       |> MachineState.put_invoke_types(InvokeTypes.from_handlers(invoke_handlers))
+      |> MachineState.put_send_types(SendTypes.from_send_types(send_types))
 
     # `resolve_resume/2` already refused a non-quiescent, unidentified, or
     # otherwise unencodable position, so `to_binary/1`'s error arm is
@@ -1162,7 +1230,8 @@ defmodule Statifier.Session do
       max_macrostep_rounds: machine_state.max_macrostep_rounds,
       routes: machine_state.routes,
       invoke_types: machine_state.invoke_types,
-      invoke_handlers: invoke_handlers
+      invoke_handlers: invoke_handlers,
+      send_types: machine_state.send_types
     ]
 
     {machine_state, [], machine_opts, :resume, anchor}
@@ -2186,7 +2255,8 @@ defmodule Statifier.Session do
     Statifier.start_session(
       machine,
       [invoked_by: {self(), invoke.invoke_id}, datamodel: datamodel] ++
-        inherited_observer_opts(state) ++ inherited_invoke_handler_opts(state)
+        inherited_observer_opts(state) ++
+        inherited_invoke_handler_opts(state) ++ inherited_send_type_opts(state)
     )
   catch
     :exit, reason -> {:error, reason}
@@ -2237,6 +2307,20 @@ defmodule Statifier.Session do
     [
       invoke_handlers: state.invoke_handlers,
       inherit_invoke_handlers: true
+    ]
+  end
+
+  # `:inherit_send_types` (ADR-0069 decision 2): the `<send>` counterpart of
+  # `inherited_invoke_handler_opts/1` above, on the same terms - off by
+  # default, a start-time hand-off of the map plus the flag, and the child's
+  # own `send_types` stamp derived from the map at its own boot.
+  @spec inherited_send_type_opts(state :: State.t()) :: keyword()
+  defp inherited_send_type_opts(%State{inherit_send_types: false}), do: []
+
+  defp inherited_send_type_opts(%State{} = state) do
+    [
+      send_types: state.send_types,
+      inherit_send_types: true
     ]
   end
 

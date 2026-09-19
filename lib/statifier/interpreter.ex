@@ -52,10 +52,10 @@ defmodule Statifier.Interpreter do
   wrong chart revision would silently rebuild a `%MachineState{}` that walks
   a document it was never measured against.
 
-  `from_binary/2` restores every durable field of the position, but two
+  `from_binary/2` restores every durable field of the position, but three
   fields are deliberately per-driver snapshots rather than durable position
   state (`Statifier.Position.import/2`'s own docs give the same reason) and
-  come back `nil`: re-stamp both before the first drive.
+  come back `nil`: re-stamp all three before the first drive.
 
       {:ok, machine_state} = Statifier.Position.from_binary(blob, machine)
 
@@ -63,6 +63,7 @@ defmodule Statifier.Interpreter do
         machine_state
         |> Statifier.MachineState.put_routes(routes)
         |> Statifier.MachineState.put_invoke_types(invoke_types)
+        |> Statifier.MachineState.put_send_types(send_types)
 
       {:ok, machine_state, effects} = Interpreter.handle_event(machine_state, event)
 

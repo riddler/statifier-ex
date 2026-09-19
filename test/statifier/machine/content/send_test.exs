@@ -832,8 +832,8 @@ defmodule Statifier.Machine.Content.SendTest do
           {"valid_session", "#_scxml_x"},
           {"valid_invoke", "#_someinvoke"}
         ] do
-      # sabotage: `reject_reason/4`'s `not Target.supported_type?(type) ->`
-      # clause changed to always fire (`true ->`) -> every one of these
+      # sabotage: `reject_reason/4`'s `class == :unsupported ->` clause
+      # changed to always fire (`true ->`) -> every one of these
       # routes rejects instead of dispatching, reddening every case of this
       # test -> red. Confirmed red and reverted.
       test "a valid target #{inspect(target)} still dispatches" do
@@ -974,7 +974,7 @@ defmodule Statifier.Machine.Content.SendTest do
     # ADR-0047's arms keep priority over ADR-0048's reachability arm.
     #
     # sabotage: `reject_reason/4`'s `cond` clauses are reordered so the
-    # `unreachable?/3` arm is checked before `Target.supported_type?/1` ->
+    # `unreachable?/3` arm is checked before the `class == :unsupported` arm ->
     # this document's simultaneous unsupported type and unreachable target
     # would reject as `{:communication, {:unreachable_target, _}}` instead
     # of `{:execution, {:unsupported_type, _}}`, reddening this test's
