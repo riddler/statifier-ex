@@ -100,7 +100,8 @@ runtime rather than conformance cases, leaving 193 cases; 162 of those emit
 The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
 derived via `Statifier.FeatureDetector`, inline XML heredoc (4-space base
-indent, raw source unmodified - no xmerl re-serialization), and a single
+indent, raw source as fetched - no xmerl re-serialization; `corpus:fetch:scion`
+edits one document, `internal-transitions/test0.scxml`), and a single
 `test_scxml/4` call. 119 of the 127 native SCION cases emit; the rest are
 excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
 is populated.

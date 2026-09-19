@@ -9,7 +9,7 @@ claim against the same cases
 |---|---|---|
 | `schema/` | JSON Schemas (draft 2020-12) for every file below: `case.json` (one case), `corpus.json` (one corpus file), `manifest.json`, `registry.json`, `exclusions.json` | hand, reviewed like code |
 | `corpus/` | one file per suite, holding that suite's cases | the emitter |
-| `manifest.json` | the corpus hash, the statifier-ex version, the corpus files and the upstream suites | the emitter |
+| `manifest.json` | the corpus hash, the corpus files and the upstream suites (a claim pins a corpus by its hash and the statifier-ex tag it was vendored from, not by a version in the file) | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
 | `exclusions.json` | the upstream documents left out of the corpus, each with its reason | the emitter |
 | `LICENSES/` | the licence texts the upstream cases are redistributed under: the W3C 3-clause BSD License with the W3C test suite's copyright notice, and the Apache License 2.0 SCION ships | copied from the upstream licences, reviewed like code |

@@ -6,7 +6,7 @@ defmodule Corpus.CorpusFilesTest do
 
   import Statifier.TmpDir, only: [setup_tmp_dir: 1]
 
-  alias Mix.Statifier.Corpus.Emitter
+  alias Mix.Statifier.Corpus.{Emitter, Upstream}
   alias Mix.Statifier.RegressionRegistry
   alias Statifier.CorpusSchemaChecker, as: Checker
 
@@ -119,6 +119,20 @@ defmodule Corpus.CorpusFilesTest do
 
         assert {upstream["license"], upstream["notice"]} == expected, corpus_case["id"]
       end
+    end
+  end
+
+  describe "the modified-document notice" do
+    # sabotage: Upstream's @modified notice text changed without a re-emit -> red
+    test "exactly the SCION cases whose document the fetch changes carry upstream.modified" do
+      carrying =
+        for %{"id" => id, "upstream" => %{"modified" => notice}} <- all_cases(),
+            do: {id, notice}
+
+      expected = Enum.map(Upstream.modified(), fn {key, notice} -> {"scion/" <> key, notice} end)
+
+      assert carrying != [], "no case carries a modified notice, so nothing is checked"
+      assert Enum.sort(carrying) == Enum.sort(expected)
     end
   end
 

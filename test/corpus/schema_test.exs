@@ -149,6 +149,20 @@ defmodule Corpus.SchemaTest do
              )
     end
 
+    # sabotage: upstream's modified property deleted from case.json -> red on
+    # the accepting half; its "minLength": 1 deleted -> red on the empty notice
+    test "an upstream may carry a non-empty notice that the document was changed" do
+      scion = fixture("case-scion.json")
+
+      assert errors("case.json", put_in(scion, ["upstream", "modified"], "lines 1-2 deleted")) ==
+               []
+
+      assert "/upstream/modified" in pointers(
+               "case.json",
+               put_in(scion, ["upstream", "modified"], "")
+             )
+    end
+
     # sabotage: the w3c branch's id pattern "^w3c/" deleted -> red
     test "a case id begins with its suite" do
       assert "/id" in pointers("case.json", %{fixture("case-w3c.json") | "id" => "scion/test286"})
@@ -232,6 +246,16 @@ defmodule Corpus.SchemaTest do
                manifest
                | "suites" => [%{scion | "case_count" => 0} | rest]
              })
+    end
+  end
+
+  describe "manifest.json carries no version" do
+    # sabotage: a statifier_version property added back to manifest.json -> red
+    test "refuses a statifier_version, because a claim is pinned by hash and tag" do
+      assert "/statifier_version" in pointers(
+               "manifest.json",
+               Map.put(fixture("manifest.json"), "statifier_version", "2.5.0")
+             )
     end
   end
 

@@ -188,3 +188,54 @@ Open questions, recorded rather than resolved here:
 3. Whether `Statifier.StreamOrder` ever joins the public surface for
    subscriber-stream assertions. Out of scope here; it would be its own
    decision record.
+
+### Amendment 2026-09-19: the reference-direction rule binds the engine, not unpackaged Mix tooling
+
+Status: proposed (2026-09-19) - amends decision 3's reference-direction
+sentence only; decision 3's withdrawal of the placement half, decisions 1,
+2, 4, 5 and 6, and the record's own Status above are unchanged
+
+Decision 3 states the kept half of the rule over all of `lib/`:
+
+> **no module in `lib/` outside `Statifier.Testing.*` may reference
+> anything inside it.**
+
+and gives its purpose in the next sentence: "The engine still never gates
+behavior on detected features". The Context states the same purpose: "the
+engine must never consult feature detection to decide behavior".
+
+[ADR-0070](0070-statifier-emits-a-language-neutral-conformance-corpus.md)
+decision 2 has the corpus emitter run every case through statifier "in the
+same process before it writes it", and says a case "carries what
+`Statifier.Testing.Case.test_scxml/4` asserts". The emitter is Mix tooling
+under `lib/mix/`, and running a case the way the harness asserts it means
+calling the harness: `Mix.Statifier.Corpus.Runner.run_case/1` calls
+`Statifier.Testing.Case.test_scxml/4`, and
+`Mix.Statifier.Corpus.Upstream.required_features/1` calls
+`Statifier.Testing.FeatureDetector` (both read at `6cf0feb`). Read as
+written, decision 3 forbids both calls, although neither module is engine.
+
+**The amendment.** The reference-direction rule binds every module under
+`lib/statifier` and `lib/statifier.ex` outside `Statifier.Testing.*`: none
+of them may reference anything inside `Statifier.Testing`. Mix tooling
+under `lib/mix/` that is not in the Hex package may reference
+`Statifier.Testing`.
+
+- **What the rule still forbids.** The engine gating behaviour on feature
+  detection, or consulting the harness in any other way: no module under
+  `lib/statifier` or `lib/statifier.ex` outside `Statifier.Testing.*`
+  references `Statifier.Testing`, exactly as before.
+- **Why the carve-out cannot reach the engine.** The package ships
+  `files: ~w(lib/statifier lib/statifier.ex mix.exs README.md LICENSE
+  CHANGELOG.md)` (`mix.exs`, `package/0`, read at `65ead91`): nothing under
+  `lib/mix/` is in the Hex package, so no engine a downstream application
+  runs contains a module this carve-out admits, and the engine's own
+  modules stay under the rule unchanged.
+- **What would reopen it.** A module under `lib/mix/` entering the package's
+  `files:` list; engine code under `lib/statifier` needing to reference
+  `Statifier.Testing`; or a module the carve-out admits being called from
+  the engine.
+
+This amendment decides nothing else. The `docs/testing.md` paragraph and the
+`Statifier.Testing.Case` moduledoc that restate decision 3's sentence, and
+the matching amendment marker in ADR-0006, are not edited here.

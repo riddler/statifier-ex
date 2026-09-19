@@ -15,9 +15,11 @@ defmodule Mix.Statifier.Corpus.Emitter do
     * `conformance/corpus/<suite>.json` - one file per suite that has cases,
       the cases sorted by id, one case per line. A suite with no cases gets
       no file and no manifest entry, so no empty corpus file is ever written.
-    * `conformance/manifest.json` - the `corpus_hash`, the `statifier_version`
-      (the version in `mix.exs` that emitted it), one entry per corpus file
-      with its case count, and the upstream suites with their licences.
+    * `conformance/manifest.json` - the `corpus_hash`, one entry per corpus
+      file with its case count, and the upstream suites with their licences.
+      It carries no statifier-ex version: a claim is pinned by the
+      `corpus_hash` and the statifier-ex tag the corpus was vendored from
+      (ADR-0070 decision 4), so a version bump changes nothing it holds.
     * `conformance/exclusions.json` - the exclusion lists, each entry with its
       reason atom, its prose and, where the prose cites a decision record,
       that record's number as `adr`. A SCION directory key stays one entry
@@ -151,7 +153,6 @@ defmodule Mix.Statifier.Corpus.Emitter do
 
     manifest = %{
       "corpus_hash" => corpus_hash(Enum.map(corpus, &elem(&1, 2))),
-      "statifier_version" => Mix.Project.config()[:version],
       "suites" =>
         Enum.map(corpus, fn {suite, file, _content, count} ->
           %{"suite" => suite, "file" => file, "case_count" => count}
