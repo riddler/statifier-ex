@@ -191,7 +191,7 @@ Open questions, recorded rather than resolved here:
 
 ### Amendment 2026-09-19: the reference-direction rule binds the engine, not unpackaged Mix tooling
 
-Status: proposed (2026-09-19) - amends decision 3's reference-direction
+Status: accepted (2026-09-19) - amends decision 3's reference-direction
 sentence only; decision 3's withdrawal of the placement half, decisions 1,
 2, 4, 5 and 6, and the record's own Status above are unchanged
 
@@ -243,3 +243,26 @@ under `lib/mix/` that is not in the Hex package may reference
 This amendment decides nothing else. The `docs/testing.md` paragraph and the
 `Statifier.Testing.Case` moduledoc that restate decision 3's sentence, and
 the matching amendment marker in ADR-0006, are not edited here.
+
+## Note (2026-09-19): the 2026-09-19 Amendment is accepted
+
+The operator accepted the `### Amendment 2026-09-19` above on 2026-09-19.
+The acceptance is that amendment's own: this record's Status line,
+decision 3's withdrawal of the placement half, and decisions 1, 2, 4, 5
+and 6 stand exactly as written, and this note decides nothing.
+
+Each of the amendment's premises was re-read on `main` at `f976629`
+before the flip. `package/0` in `mix.exs` lists `lib/statifier`,
+`lib/statifier.ex`, `mix.exs`, `README.md`, `LICENSE` and `CHANGELOG.md`,
+so nothing under `lib/mix/` ships in the Hex package. Outside
+`lib/statifier/testing/`, the modules under `lib/` that reference
+`Statifier.Testing` are the three the amendment's carve-out admits, all
+under `lib/mix/statifier/corpus/`: `Mix.Statifier.Corpus.Runner`,
+`Mix.Statifier.Corpus.Upstream` and `Mix.Statifier.Corpus.HostCase`. No
+module under `lib/statifier` or `lib/statifier.ex` calls into them, so the
+engine still cannot gate behavior on detected features.
+
+As the amendment says, the `docs/testing.md` paragraph and the
+`Statifier.Testing.Case` moduledoc that restate decision 3's sentence over
+all of `lib/` are not edited here; aligning them with the accepted rule is
+its own change.

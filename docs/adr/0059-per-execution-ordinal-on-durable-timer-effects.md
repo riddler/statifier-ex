@@ -219,7 +219,7 @@ this same reopening.
 
 ### Amendment 2026-09-19: a registered-type immediate send carries an ordinal
 
-Status: proposed (2026-09-19) - amends decision 5 for one effect, an
+Status: accepted (2026-09-19) - amends decision 5 for one effect, an
 immediate `%Effect.Send{}` whose type the session has registered under
 [ADR-0069](0069-host-registered-send-types.md); decisions 1 through 4,
 decision 6, decision 5 for every other effect, and the record's own
@@ -323,3 +323,25 @@ premise this amendment rests on; or a consumer that needs a
 registered-type send's `ordinal` as a telemetry measurement, which
 decision 6 does not give it. The record's own reopen triggers in its
 Consequences stand as written.
+
+## Note (2026-09-19): the 2026-09-19 Amendment is accepted, and its rule has landed
+
+The operator accepted the `### Amendment 2026-09-19` above on 2026-09-19.
+The acceptance is that amendment's own: this record's Status line,
+decisions 1 through 4, decision 6 and decision 5 for every other effect
+stand exactly as written, and this note decides nothing.
+
+The amendment's "What moves when this is implemented" list has since
+landed, and every claim it makes was re-read on `main` at `f976629`
+before the flip. `%Statifier.Effect.Send{}` carries `ordinal ::
+pos_integer() | nil`. `Statifier.Machine.Content.Send`'s
+`advance_timer_counter/2` keeps its arity, and its second argument is
+whether this send stamps an ordinal - a delay or a registered type - so a
+built-in immediate send advances nothing. `build_effect/6`'s immediate
+clause is where the value is stamped onto the effect. The dedup key and
+the telemetry sentence are as the amendment wrote them: the
+`[:statifier, :session, :effect, :send]` event's measurements and its row
+of the contract table in `Statifier.Telemetry` are unchanged, and the
+field rides in that event's `effect` metadata as a struct field.
+`Statifier.MachineState`'s `timer_counter` documentation names the third
+effect that reads the sequence.

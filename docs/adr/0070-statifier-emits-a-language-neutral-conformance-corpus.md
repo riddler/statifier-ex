@@ -1,6 +1,6 @@
 # ADR-0070: statifier-ex emits a language-neutral conformance corpus under `conformance/`
 
-Status: proposed (2026-09-19) - extends ADR-0006 without amending it:
+Status: accepted (2026-09-19) - extends ADR-0006 without amending it:
 `test/passing_tests.json` stays the ratchet file and `mix test.baseline`
 its only grower; the corpus and its registry are derived from the tooling
 ADR-0006 committed
@@ -236,3 +236,50 @@ from them.
 - [ADR-0038](0038-invoke-source-resolves-at-the-session-boundary.md) (the library never dereferences `<invoke src>`)
 - [ADR-0069](0069-host-registered-send-types.md) (host-registered send types; the reserved `host` object and its reopen trigger)
 - predicator-ex `conformance/README.md` and `conformance/RATCHET.md` (the model: an in-repository corpus, a manifest hash as the pin, a redundant field on each registry entry)
+
+## Note (2026-09-19): one fetched SCION document is changed, and `--check` is not what holds the generated modules
+
+This note decides nothing. It states two facts about the implementation
+that two sentences of this record read past, so a reader is not left to
+discover them from the files. No decision, consequence or Related entry
+changes, and the Status line's extends clause stands as written. Every
+anchor below was read on `main` at `f976629`.
+
+**One SCION document is not carried unmodified.** The Context says the
+SCION-derived modules hold their upstream document's source unmodified.
+One document is an exception: the `corpus:fetch:scion` task in `mise.toml`
+deletes four lines of `internal-transitions/test0.scxml` after the clone,
+under its own comment "The root transition is not supported." The Apache
+License 2.0's section 4(b) asks a changed file to say it changed, and the
+corpus says it: `conformance/schema/case.json` defines `upstream.modified`
+as the field a case carries when this repository changed the upstream
+document before carrying it, and the case built from that document is the
+only one that carries it. Decision 1's requirement that a SCION document's
+own notice is never dropped is unaffected: the notice travels as it does
+for every other SCION case.
+
+**The generated test modules are held byte for byte by a test, not by
+`--check`.** Decision 6 says `--check` fails when a committed generated
+file differs from what the emitter would write.
+`Mix.Statifier.Corpus.Emitter.check/1` compares the files under
+`conformance/` - the corpus files, the manifest, the exclusions and the
+registry - and the generated Elixir test modules are not among them. Those
+modules are compared instead by
+`Corpus.CorpusFilesTest`'s "every generated module is byte for byte what
+its generator writes from the committed corpus", which re-runs each
+generator over the committed corpus into a temporary directory and fails
+on any committed module that differs, and which fails when there is
+nothing to compare. Decision 6's own green-on-absence rule therefore holds
+across both surfaces; only the mechanism differs from what its sentence
+suggests.
+
+## Note (2026-09-19): accepted
+
+The operator accepted this record on 2026-09-19. The acceptance is the
+record's: no decision, consequence or Related entry changes here, and the
+Status line's extends clause stands as written. It rests on the note
+above, which records the two sentences whose implementation is narrower
+than the sentence reads; every other claim in this record was verified
+against `main` at `f976629` before the flip, the statements this record
+pins to `abf713c` included, which are read as of that commit and not as of
+today's tree.
