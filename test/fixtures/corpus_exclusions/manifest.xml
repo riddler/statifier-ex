@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assertions>
+<assert id="1">
+<test id="239" conformance="mandatory" manual="false">
+<start uri="239/test239.txml"/>
+<dep uri="239/test239sub1.txml"/>
+</test>
+<test id="144" conformance="mandatory" manual="false">
+<start uri="144/test144.txml"/>
+</test>
+<test id="216" conformance="mandatory" manual="false">
+<start uri="216/test216.txml"/>
+<dep uri="216/test216sub1.txml"/>
+</test>
+<test id="446" conformance="mandatory" manual="false">
+<start uri="446/test446.txml"/>
+<dep uri="446/test446.txt"/>
+</test>
+</assert>
+</assertions>
