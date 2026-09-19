@@ -216,3 +216,100 @@ this same reopening.
   document-order meaning (ADR-0020's and ADR-0012's territory), or
   `Position` learning cross-revision migration semantics that make
   carrying `timer_counter` verbatim wrong.
+
+### Amendment 2026-09-19: a registered-type immediate send carries an ordinal
+
+Status: proposed (2026-09-19) - amends decision 5 for one effect, an
+immediate `%Effect.Send{}` whose type the session has registered under
+[ADR-0069](0069-host-registered-send-types.md); decisions 1 through 4,
+decision 6, decision 5 for every other effect, and the record's own
+Status above are unchanged
+
+Decision 5 kept `ordinal` off every effect but the two durable-timer
+effects, and its reason for the immediate send was one clause:
+
+> immediate `%Send{}` is delivered inside the drive that produced it and
+> is never stored.
+
+ADR-0069 decision 4 changes that premise for one class of send. When a
+send's type is registered, the effect and the event built from it are
+handed to the host processor registered for that type, and "A processor
+MUST be idempotent on the ADR-0054 decision 3 dedup key's components read
+off the effect", because "after a crash and retry, a host may perform the
+same effect more than once." Idempotence across a crash and a retry means
+the processor keys what it has performed in something that outlives the
+drive, so a registered-type immediate send is keyed by a durable store.
+Decision 5's own rule - "`ordinal` exists only where a durable store keys
+rows" - reaches it, and this record's Consequences named the case as a
+reopen trigger: "a third effect becoming durably stored (it would claim
+the same stamp, and decision 5's rule extends rather than breaks)."
+
+The collision the stamp closes is the one decision 3 closed for delayed
+sends. ADR-0069 records it as an open question: an immediate
+registered-type send with an author-written `id` inside a `<foreach>`
+yields the same key on every iteration. Its decision 4 says why: "An
+`%Effect.Send{}` carries every component except two: the session scope,
+which is the host's to supply, and ADR-0059's `ordinal`."
+
+**The rule.** `%Effect.Send{}` gains an `ordinal` field. When the send's
+resolved type is in the session's registered set (ADR-0069 decision 2),
+the effect carries `ordinal :: pos_integer()`. When the type is a
+built-in one - the attribute absent, `"scxml"`, or the SCXML processor
+URI - `ordinal` is `nil`: a built-in send carries no ordinal and advances
+no counter. A send whose type is neither built-in nor registered produces
+no effect (ADR-0069 decision 3) and so stamps nothing. No other effect
+gains the field. The one-line rule after decision 5 reads, from this
+amendment on: the two durable-timer effects and an immediate send of a
+registered type carry `ordinal`; no other effect does, because no other
+effect is keyed by a durable store.
+
+**The counter is decision 2's `timer_counter`; no second counter is
+introduced.** It advances once for each registered-type `%Effect.Send{}`
+the core constructs, incremented immediately before the read (decision
+2's increment-before-read idiom), and the value after the increment is
+that effect's `ordinal`. The construction site is the one every immediate
+send already has, the immediate clause of `build_effect/6` in
+`Statifier.Machine.Content.Send` (read at `abf713c`). Decision 2's text
+stands for the two effects it names; this amendment adds a third
+construction that advances the same sequence, so the shared sequence
+orders the emissions of all three. A built-in immediate send reads no
+counter and moves none, so in a session that registers no send type every
+`ordinal` on every `%SendDelayed{}` and `%Cancel{}` is the value it is
+today. A delayed send of either kind keeps decision 1's stamp, unchanged.
+Determinism is decision 2's argument unchanged: whether a send advances
+the counter depends on the registered set stamped on `%MachineState{}`
+(ADR-0069 decision 2), which the fold reads as input, so a re-drive with
+the same set mints byte-identical ordinals. Decision 4 is untouched: the
+counter already serializes with the position, and this amendment adds
+nothing to the position and bumps no format version.
+
+**The dedup key.** For a registered-type immediate send, ADR-0069
+decision 4 reads the ADR-0054 decision 3 dedup key's components off the
+effect. With this amendment the effect carries `ordinal`, so the key is
+decision 3's eight-component form, `{session scope, send_id, macrostep,
+microstep, round, c_index, owner, ordinal}`, and the session scope is the
+one component the host supplies. Decision 3's compact form
+`{session scope, ordinal}` is conformant here on the ground decision 3
+gives for it: `timer_counter` is session-global and monotone, and a
+registered-type send advances it as the two durable-timer effects do. The
+cancellation key `{session scope, send_id}` is untouched.
+
+**Telemetry.** Decision 6 is untouched: this amendment adds `ordinal` to
+no telemetry event's measurements.
+
+**What moves when this is implemented.** This amendment changes no code.
+The implementing change adds the field and its `@type` line to
+`Statifier.Effect.Send`, the increment and the stamp at the immediate
+construction for a registered type, and a mention of the third effect in
+`Statifier.MachineState`'s `timer_counter` documentation. Once the field
+ships, every `%Effect.Send{}` has the key; on a built-in send its value
+is `nil`.
+
+**What would reopen this amendment:** a built-in send becoming keyed by a
+durable store (it would claim the same stamp under the same rule); a
+change to ADR-0069 decision 4's idempotency rule, or a registered-type
+send ceasing to be handed to a host processor, since either removes the
+premise this amendment rests on; or a consumer that needs a
+registered-type send's `ordinal` as a telemetry measurement, which
+decision 6 does not give it. The record's own reopen triggers in its
+Consequences stand as written.

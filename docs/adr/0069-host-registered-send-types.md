@@ -375,6 +375,7 @@ stand unchanged.
 - [ADR-0063](0063-caller-context-on-external-events-and-durable-timer-effects.md) (`caller_context`)
 - [ADR-0064](0064-position-blob-drops-the-per-drive-snapshot-fields.md) (the dropped position fields)
 - [ADR-0068](0068-permanent-invoke-failure-is-a-suffixed-error-communication.md) (the `failed_invocation/3` door shape `failed_send/3` follows)
+- [ADR-0059](0059-per-execution-ordinal-on-durable-timer-effects.md) (the `ordinal` and `timer_counter`; its decision 5 amendment of 2026-09-19 answers this record's open question)
 
 ## Note (2026-09-19): accepted ahead of its implementation
 
@@ -458,3 +459,22 @@ Premise surface: `lib/` and `test/` at `9c3cbf1`, where `send_types` has
 no occurrence; this record's own Context cites re-read at the same commit;
 and ADR-0047, ADR-0048, ADR-0051, ADR-0054, ADR-0055, ADR-0059 and
 ADR-0068 as they stand on `main` at that commit.
+
+## Note (2026-09-19): the open question is answered in ADR-0059
+
+The open question in this record's Consequences ("Open question, recorded
+rather than decided") is answered by
+[ADR-0059](0059-per-execution-ordinal-on-durable-timer-effects.md)'s
+`### Amendment 2026-09-19: a registered-type immediate send carries an
+ordinal`, at proposed. It takes the first branch: `%Effect.Send{}` carries
+`ordinal` for a registered type only, off ADR-0059's `timer_counter`, and
+a built-in send carries none. That amendment is where the decision lives,
+and its acceptance is the operator's. This note decides nothing: no
+decision or consequence of this record changes, and the amends and
+answers clauses in the Status line stand as written.
+
+ADR-0059 joins this record's Related list in the same change, the one
+entry added to it. The earlier note's sentence that "ADR-0059 is not in
+the Related list" describes the record as it stood when that note was
+written, and its statement that the open question "is still open" stands
+as of that note; both stand as written.
