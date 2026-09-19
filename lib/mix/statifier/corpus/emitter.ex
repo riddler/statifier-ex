@@ -8,9 +8,10 @@ defmodule Mix.Statifier.Corpus.Emitter do
 
   `emit/1` reads the fetched and transformed upstream suites
   (`Mix.Statifier.Corpus.Upstream`) with this repository's exclusion lists
-  and the W3C sub-document set (`Mix.Statifier.Corpus.Exclusions`), RUNS
-  every case through statifier (`Mix.Statifier.Corpus.Runner`), and only
-  then writes:
+  and the W3C sub-document set (`Mix.Statifier.Corpus.Exclusions`), and the
+  `statifier` cases this repository authors under `conformance/cases/`
+  (`Mix.Statifier.Corpus.Authored`), RUNS every case through statifier
+  (`Mix.Statifier.Corpus.Runner`), and only then writes:
 
     * `conformance/corpus/<suite>.json` - one file per suite that has cases,
       the cases sorted by id, one case per line. A suite with no cases gets
@@ -36,7 +37,10 @@ defmodule Mix.Statifier.Corpus.Emitter do
   it when run: one that disagrees stops the emit and nothing is written. A
   case outside the ratchet is written with the upstream expectation whatever
   its run found; its absence from the ratchet is what says statifier-ex does
-  not claim it, and the emit reports each such case with its outcome.
+  not claim it, and the emit reports each such case with its outcome. An
+  authored `statifier` case has no upstream expectation to defer to: its
+  expectation is what this repository wrote, so one that disagrees when run
+  stops the emit as a ratcheted case does.
 
   `corpus_hash` is `"sha256:"` followed by the lowercase hex SHA-256 of the
   corpus files' bytes concatenated in suite order - `scion`, `w3c`,
@@ -52,19 +56,21 @@ defmodule Mix.Statifier.Corpus.Emitter do
   `check/1` writes nothing and needs neither the network nor the upstream
   tree. From the committed files alone it re-runs every committed case from
   its committed source, recomputes every file derivable from committed
-  inputs - each corpus file's canonical form, each case's
+  inputs - each corpus file's canonical form, `corpus/statifier.json` from
+  the authored cases under `conformance/cases/`, each case's
   `required_features`, the manifest with its `corpus_hash`,
   `exclusions.json`, and the registry derived from `test/passing_tests.json` -
-  and fails on any difference, on a registry with no entries or with an entry
-  naming a case the corpus lacks or holds under another suite, and on any
-  ratcheted case whose run disagrees. When the upstream tree is present it
+  and fails on any difference, on a committed corpus file the inputs no
+  longer derive, on a registry with no entries or with an entry naming a
+  case the corpus lacks or holds under another suite, and on any ratcheted
+  or authored case whose run disagrees. When the upstream tree is present it
   also rebuilds the corpus from it and fails on any case that differs; when
   it is absent it says that comparison was skipped. A check that finds a
   corpus file missing or empty, or that visited no case, fails: a green
   result on nothing is a defect.
   """
 
-  alias Mix.Statifier.Corpus.{Exclusions, Files, Json, Registry, Runner, Upstream}
+  alias Mix.Statifier.Corpus.{Authored, Exclusions, Files, Json, Registry, Runner, Upstream}
   alias Mix.Statifier.RegressionRegistry
 
   @suites ~w(scion w3c statifier)
@@ -110,7 +116,9 @@ defmodule Mix.Statifier.Corpus.Emitter do
          {:ok, exclusions} <- Exclusions.read(config.root),
          {:ok, sub_documents} <-
            Exclusions.sub_documents(w3c_manifest(config.scratch), config.root),
-         {:ok, cases} <- Upstream.read(config.scratch, exclusions, sub_documents),
+         {:ok, upstream} <- Upstream.read(config.scratch, exclusions, sub_documents),
+         {:ok, authored} <- Authored.read(config.root),
+         cases = upstream ++ authored,
          :ok <- notices_present(config.root, cases),
          {:ok, ratchet} <- ratchet(config.root) do
       results = Runner.run(cases)
@@ -130,7 +138,9 @@ defmodule Mix.Statifier.Corpus.Emitter do
   @spec check(config :: config()) :: {:ok, report()} | {:error, String.t()}
   def check(config) do
     with {:ok, committed} <- read_committed(config.root),
-         {:ok, cases} <- committed_cases(committed),
+         {:ok, upstream_cases} <- committed_cases(committed),
+         {:ok, authored} <- Authored.read(config.root),
+         cases = upstream_cases ++ authored,
          {:ok, exclusions} <- Exclusions.read(config.root),
          :ok <- notices_present(config.root, cases),
          {:ok, ratchet} <- ratchet(config.root),
@@ -246,7 +256,7 @@ defmodule Mix.Statifier.Corpus.Emitter do
 
       problems ->
         {:error,
-         "a ratcheted case disagrees with the upstream expectation, so nothing was written:\n" <>
+         "a ratcheted or authored case disagrees with its expectation, so nothing was written:\n" <>
            Enum.join(problems, "\n")}
     end
   end
@@ -290,8 +300,11 @@ defmodule Mix.Statifier.Corpus.Emitter do
     end)
   end
 
+  # The upstream suites' committed cases. The `statifier` suite's are not
+  # read from its corpus file: they are derived from the authored cases, and
+  # the file is compared with what they render.
   defp committed_cases(committed) do
-    @suites
+    @upstream_suites
     |> Enum.filter(&Map.has_key?(committed, corpus_file(&1)))
     |> Enum.reduce_while({:ok, []}, fn suite, {:ok, acc} ->
       case suite_cases(suite, committed[corpus_file(suite)]) do
@@ -383,15 +396,23 @@ defmodule Mix.Statifier.Corpus.Emitter do
   end
 
   defp drifted_files(committed, expected) do
-    expected
-    |> Enum.sort()
-    |> Enum.flat_map(fn {file, content} ->
-      if Map.get(committed, file) == content,
-        do: [],
-        else: [
-          "conformance/#{file}: differs from what the emitter writes from the committed inputs"
-        ]
-    end)
+    differing =
+      expected
+      |> Enum.sort()
+      |> Enum.flat_map(fn {file, content} ->
+        if Map.get(committed, file) == content,
+          do: [],
+          else: [
+            "conformance/#{file}: differs from what the emitter writes from the committed inputs"
+          ]
+      end)
+
+    underived =
+      for file <- committed |> Map.keys() |> Enum.sort(), not Map.has_key?(expected, file) do
+        "conformance/#{file}: committed, but the emitter writes no such file from the committed inputs"
+      end
+
+    differing ++ underived
   end
 
   defp feature_drift(cases) do
@@ -483,8 +504,8 @@ defmodule Mix.Statifier.Corpus.Emitter do
 
   defp disagreements(cases, results, ratchet, root) do
     for {corpus_case, {id, {:disagree, message}}} <- Enum.zip(cases, results),
-        ratcheted?(corpus_case, ratchet, root) do
-      "#{id} (#{generated_path(corpus_case, root)}): #{message}"
+        corpus_case["suite"] == "statifier" or ratcheted?(corpus_case, ratchet, root) do
+      "#{id} (#{generated_path(corpus_case, root) || "authored"}): #{message}"
     end
   end
 

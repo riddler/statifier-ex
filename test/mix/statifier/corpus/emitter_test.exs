@@ -608,6 +608,130 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
     end
   end
 
+  # One authored `statifier` case under the fixture root's conformance/cases/,
+  # copied from the repository's own, so the emitter reads it beside the
+  # fixture upstream suites.
+  defp author!(root, name \\ "registered_immediate") do
+    dir = Path.join(root, "conformance/cases/send")
+    File.mkdir_p!(dir)
+
+    for ext <- ~w(.json .scxml),
+        do: File.cp!("conformance/cases/send/#{name}#{ext}", Path.join(dir, name <> ext))
+
+    Path.join(dir, name <> ".json")
+  end
+
+  describe "authored statifier cases" do
+    @tag :isolated_tmp_dir
+    # sabotage: emit/1 dropping `authored` from its cases (cases = upstream)
+    # -> red, no statifier.json is written; render/2 sorting the manifest's
+    # suites by name -> red on the suite order
+    test "emit runs them and writes corpus/statifier.json, after the upstream suites in the hash",
+         %{config: config, root: root} do
+      author!(root)
+      report = emit!(config)
+
+      assert "corpus/statifier.json" in report.written
+      assert {"statifier", 1, 1} in report.counts
+
+      assert [%{"id" => "statifier/send/registered_immediate", "host" => host}] =
+               cases(root, "statifier")
+
+      assert host["send_types"] == ["myapp:sink"]
+
+      contents = Enum.map(~w(scion w3c statifier), &read(root, "corpus/#{&1}.json"))
+      manifest = decoded(root, "manifest.json")
+      assert manifest["corpus_hash"] == Emitter.corpus_hash(contents)
+
+      # The manifest lists the files in the hash's suite order, not sorted by
+      # name, which would put statifier before w3c.
+      assert Enum.map(manifest["suites"], & &1["suite"]) == ~w(scion w3c statifier)
+
+      assert Checker.errors(
+               Checker.load(@schema_dir, "corpus.json"),
+               decoded(root, "corpus/statifier.json"),
+               @schema_dir
+             ) == []
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: disagreements/4 filtering on ratcheted?/3 alone (the
+    # statifier arm dropped) -> red, the disagreeing authored case is written
+    test "emit stops when an authored case disagrees when run, writing nothing", %{
+      config: config,
+      root: root
+    } do
+      json = author!(root)
+      File.write!(json, String.replace(File.read!(json), ~s|"imp-1"|, ~s|"imp-2"|))
+
+      assert {:error, message} = Emitter.emit(config)
+      assert message =~ "nothing was written"
+
+      assert message =~
+               "statifier/send/registered_immediate (authored): Expected the sends handed"
+
+      refute File.exists?(Path.join(root, "conformance/manifest.json"))
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: check/1 reading the statifier suite's cases from its committed
+    # file (committed_cases/1 over @suites) -> red, the hand edit renders
+    # back unchanged
+    test "check fails when corpus/statifier.json was edited by hand", %{
+      config: config,
+      root: root
+    } do
+      author!(root)
+      emit!(config)
+      edit(root, "corpus/statifier.json", &String.replace(&1, "joined_records", "other_records"))
+
+      assert {:error, message} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+
+      assert message =~ "conformance/corpus/statifier.json: differs from what the emitter writes"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: drifted_files/2 dropping its underived arm -> red, a corpus
+    # file no input derives passes the check
+    test "check fails on a committed corpus/statifier.json with no authored case behind it", %{
+      config: config,
+      root: root
+    } do
+      author!(root)
+      emit!(config)
+      File.rm_rf!(Path.join(root, "conformance/cases"))
+
+      assert {:error, message} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+
+      assert message =~
+               "conformance/corpus/statifier.json: committed, but the emitter writes no such file"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: check/1 dropping `authored` from its cases -> red, the
+    # authored case is never run and its disagreement passes
+    test "check re-runs the authored cases and fails on one that disagrees", %{
+      config: config,
+      root: root
+    } do
+      author!(root)
+      emit!(config)
+
+      File.write!(Path.join(root, "conformance/cases/send/registered_immediate.scxml"), """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="awaiting_click">
+          <state id="awaiting_click"/>
+      </scxml>
+      """)
+
+      assert {:error, message} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+
+      assert message =~ "statifier/send/registered_immediate (authored): Expected active states"
+    end
+  end
+
   describe "Upstream.modified/0" do
     @tag :isolated_tmp_dir
     # sabotage: Upstream's @modified keyed on a document the fetch does not

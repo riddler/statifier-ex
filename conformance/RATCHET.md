@@ -169,11 +169,20 @@ types the case registers in
 [ADR-0069](../docs/adr/0069-host-registered-send-types.md)'s sense, and
 `expect_sends`, the sends the case expects handed to the host. Every W3C and
 SCION case omits it, because upstream cases run with no registration, and
-`schema/case.json` refuses a `scion` or `w3c` case that carries it. The
-detailed shape of `expect_sends` is written by the change that authors the
-first case using it, which tightens the schema. A runner that cannot honour
-a case's `host` object treats it as any unsupported feature: the case fails
-with the feature named and is never skipped (ADR-0006).
+`schema/case.json` refuses a `scion` or `w3c` case that carries it.
+
+A runner honours the object by registering each of `send_types` with an
+Event I/O Processor of its own, which records every send it is handed and
+delivers none; a delayed send handed to it is its timer, and it never fires
+one. Each `expect_sends` item is one send handed to it, in the order handed
+over the whole run: its `type`, its `target` as the document gives it, its
+`event` with a `name` and, when the send carries a payload, its `data`,
+`delay_ms` for a delayed send, and `send_id` only when the document names
+the send (`schema/case.json` states the shape). A case with a `host` object
+agrees when its configurations agree and the sends handed are exactly its
+`expect_sends`. A runner that cannot honour a case's `host` object treats it
+as any unsupported feature: the case fails with the feature named and is
+never skipped (ADR-0006).
 
 ## The check
 
@@ -182,7 +191,8 @@ statifier-ex's check is `mix statifier.corpus --check`
 network and no upstream tree. It re-runs every committed case, recomputes
 every file derivable from the committed inputs, including the registry from
 `test/passing_tests.json`, and fails on any difference, on rule 1, on rule 3,
-and on any ratcheted case whose run disagrees with the corpus.
+and on any ratcheted or authored (`statifier`) case whose run disagrees with
+the corpus.
 
 A sibling's check, written against its vendored copy and its own registry,
 fails when:

@@ -181,9 +181,15 @@ defmodule Statifier.Machine.Content.Send do
 
       case reject_reason(fields.target, fields.type, delay_ms, machine_state) do
         nil ->
-          machine_state = advance_timer_counter(machine_state, delay_ms)
+          registered? = Types.classify(machine_state.send_types, fields.type) == :registered
+          machine_state = advance_timer_counter(machine_state, delay_ms != nil or registered?)
           new_context = %{new_context | machine_state: machine_state}
-          fields = Map.put(fields, :data, data(node, raw_params, content))
+
+          fields =
+            fields
+            |> Map.put(:data, data(node, raw_params, content))
+            |> Map.put(:ordinal, if(registered?, do: machine_state.timer_counter))
+
           effect = build_effect(node, fields, send_id, delay_ms, owner, machine_state)
 
           # The datamodel write, when there is one, precedes the
@@ -407,17 +413,18 @@ defmodule Statifier.Machine.Content.Send do
 
     # ADR-0059: `timer_counter` advances on every `%Effect.SendDelayed{}`
     # construction, author-written id or not - unlike `generate_send_id/2`
-    # above, which only a generated id consumes. `nil` delay means an
-    # immediate `<send>`, which never builds a `%SendDelayed{}` and must
-    # leave the counter untouched (decision 5). Increment-before-read,
-    # exactly as `generate_send_id/2` does.
-    @spec advance_timer_counter(machine_state :: MachineState.t(), delay_ms :: term()) ::
+    # above, which only a generated id consumes - and, under decision 5's
+    # 2026-09-19 Amendment, on every immediate `%Effect.Send{}` of a
+    # registered type (ADR-0069). The caller answers whether this send
+    # stamps an ordinal: a delay, or a registered type. An immediate send of
+    # a built-in type stamps none and leaves the counter untouched.
+    # Increment-before-read, exactly as `generate_send_id/2` does.
+    @spec advance_timer_counter(machine_state :: MachineState.t(), stamps_ordinal? :: boolean()) ::
             MachineState.t()
-    defp advance_timer_counter(%MachineState{timer_counter: n} = machine_state, delay_ms)
-         when is_integer(delay_ms),
-         do: %{machine_state | timer_counter: n + 1}
+    defp advance_timer_counter(%MachineState{timer_counter: n} = machine_state, true),
+      do: %{machine_state | timer_counter: n + 1}
 
-    defp advance_timer_counter(%MachineState{} = machine_state, nil), do: machine_state
+    defp advance_timer_counter(%MachineState{} = machine_state, false), do: machine_state
 
     # `idlocation`'s write (6.2.1) - a no-op tuple shaped like
     # `Interpreter.Datamodel.write_location/4`'s own success return when the
@@ -479,15 +486,18 @@ defmodule Statifier.Machine.Content.Send do
     # `owner` (which block emitted the send), and the step counters as they
     # stand at the moment of the send. `fields` bundles `event`/`target`/
     # `type`/`data` - the four resolved values both effect shapes share
-    # verbatim - purely to keep this function's own arity under Credo's
-    # limit; it carries no meaning of its own beyond that grouping.
+    # verbatim - plus the immediate send's `ordinal` (`nil` unless its type
+    # is registered, ADR-0059 decision 5 as amended), purely to keep this
+    # function's own arity under Credo's limit; it carries no meaning of its
+    # own beyond that grouping.
     @spec build_effect(
             node :: Send.t(),
             fields :: %{
               event: String.t() | nil,
               target: String.t() | nil,
               type: String.t() | nil,
-              data: term()
+              data: term(),
+              ordinal: pos_integer() | nil
             },
             send_id :: String.t(),
             delay_ms :: non_neg_integer() | nil,
@@ -507,6 +517,7 @@ defmodule Statifier.Machine.Content.Send do
          macrostep: ms.macrostep,
          microstep: ms.microstep,
          round: ms.round,
+         ordinal: fields.ordinal,
          id_from_author?: id_from_author?(node)
        }}
     end

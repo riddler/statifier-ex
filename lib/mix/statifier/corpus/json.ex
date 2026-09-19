@@ -16,11 +16,13 @@ defmodule Mix.Statifier.Corpus.Json do
   # is id, suite, spec, conformance, description, required_features, source,
   # initial_configuration, steps, upstream, host; a registry is
   # implementation, corpus_hash, claims, entries, and an entry case_id,
-  # suite; each other object's keys appear here in its schema's order too.
+  # suite; each other object's keys appear here in its schema's order too -
+  # an `expect_sends` item is type, target, event, delay_ms, send_id.
   @key_order ~w(implementation id case_id corpus_hash claims entries suite file
                 case_count name url revision key reason detail adr spec conformance description
-                required_features source initial_configuration steps event data
-                configuration upstream document license notice modified host send_types
+                required_features source initial_configuration steps type target
+                event data delay_ms send_id configuration upstream document license notice
+                modified host send_types
                 expect_sends cases suites upstreams exclusions)
 
   @rank @key_order |> Enum.with_index() |> Map.new()

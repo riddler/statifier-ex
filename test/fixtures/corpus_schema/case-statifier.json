@@ -35,7 +35,9 @@
       {
         "type": "myapp:sink",
         "target": "joined_records",
-        "event": "impression.joined"
+        "event": {
+          "name": "impression.joined"
+        }
       }
     ]
   }

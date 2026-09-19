@@ -103,17 +103,57 @@
     },
     "host": {
       "type": "object",
-      "description": "RESERVED, optional, and carried by no scion or w3c case: what a statifier case needs from its host. Its detailed shape is written by the change that authors the first case using it, which tightens this schema.",
+      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing.",
       "properties": {
         "send_types": {
           "type": "array",
-          "description": "The send types the case registers, in ADR-0069's sense.",
-          "items": { "type": "string", "minLength": 1 },
+          "description": "The send type strings the case registers, in ADR-0069's sense: a send whose type is one of them is handed to the host's processor, and its target is that processor's own route string, which the SCXML processor never parses. None is a built-in spelling: not scxml, and not the SCXML Event I/O Processor URI.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": { "enum": ["scxml", "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"] }
+          },
           "uniqueItems": true
         },
         "expect_sends": {
           "type": "array",
-          "description": "The sends the case expects handed to the host. The item shape is deliberately open: it is owned by the change that authors the first case using it."
+          "description": "Every send handed to the host's processors while the case runs, through initialization and every step, in the order handed; empty when the case expects none. A case agrees only when the sends handed are exactly these.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "The send's type, one of send_types.",
+                "minLength": 1
+              },
+              "target": {
+                "type": "string",
+                "description": "The send's target as the document gives it: the processor's route string."
+              },
+              "event": {
+                "type": "object",
+                "description": "The event the send delivers.",
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "data": { "description": "The event payload, present only when the send carries one: its params by name, or its content." }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              },
+              "delay_ms": {
+                "type": "integer",
+                "description": "Present only for a delayed send: its delay in milliseconds. The host owns the delay; the SCXML processor schedules nothing for it.",
+                "minimum": 0
+              },
+              "send_id": {
+                "type": "string",
+                "description": "Present only when the document names the send with an id or idlocation attribute: the sendid the delivered event carries. A generated id is never stated, because it is the implementation's own.",
+                "minLength": 1
+              }
+            },
+            "required": ["type", "target", "event"],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

@@ -13,8 +13,14 @@ defmodule Mix.Statifier.Corpus.Runner do
   concurrently, as the generated modules do (`async: true`); a case needing
   a session (`<send>`, `<invoke>`, timers) needs the `:statifier`
   application started, which `mix statifier.corpus` does before it runs any.
+
+  A case carrying a `host` object runs through
+  `Mix.Statifier.Corpus.HostCase` instead, which registers the case's send
+  types with the session it starts and compares the sends handed to them
+  with the case's `expect_sends` (ADR-0070 decision 5).
   """
 
+  alias Mix.Statifier.Corpus.HostCase
   alias Statifier.Testing.Case
 
   # Well above the harness's own 4s configuration deadline per step, so a
@@ -46,9 +52,18 @@ defmodule Mix.Statifier.Corpus.Runner do
   end
 
   @doc """
-  Runs one case through `Statifier.Testing.Case.test_scxml/4`.
+  Runs one case through `Statifier.Testing.Case.test_scxml/4`, or through
+  `Mix.Statifier.Corpus.HostCase.run/1` when it carries a `host` object.
   """
   @spec run_case(corpus_case :: map()) :: outcome()
+  def run_case(%{"host" => _host} = corpus_case) do
+    HostCase.run(corpus_case)
+  rescue
+    error -> {:disagree, error |> Exception.message() |> String.trim()}
+  catch
+    :exit, reason -> {:disagree, "exited: #{inspect(reason)}"}
+  end
+
   def run_case(corpus_case) do
     steps = Enum.map(corpus_case["steps"], &{&1["event"], &1["configuration"]})
 

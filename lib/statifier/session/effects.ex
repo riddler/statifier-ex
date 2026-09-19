@@ -22,9 +22,11 @@ defmodule Statifier.Session.Effects do
   invalid target or unsupported type in `Statifier.Machine.Content.Send`
   before any `{:send, _}`/`{:send_delayed, _}` effect was built.
 
-  1. An unsupported `type` (`Statifier.Send.Target.supported_type?/1`) ->
+  1. An unsupported `type` (`Statifier.Send.Types.classify/2` answers
+     `:unsupported` against the plan context's `:send_types`) ->
      `{:raise, :platform, "error.execution", ...}` on the sender's own
-     internal queue. No delivery, no timer.
+     internal queue. No delivery, no timer. A registered type leaves this
+     list here - see "Registered send types" below.
   2. An unparseable `target` (`Statifier.Send.Target.parse/1` returns
      `{:invalid, _}`) -> the same `error.execution` (6.2.4's "not supported
      or invalid").
@@ -44,6 +46,28 @@ defmodule Statifier.Session.Effects do
   time (6.2.3: arguments are evaluated when `<send>` is evaluated, not when
   the message is dispatched), but the route itself is only resolved when the
   timer fires.
+
+  ## Registered send types
+
+  A `<send>` whose type `Statifier.Send.Types.classify/2` answers
+  `:registered` for (ADR-0069) is handed to the module the plan context's
+  `:send_processors` map names for that type, a `Statifier.Send.Processor`:
+  its pure `deliver/3` is called with the effect and the event
+  `Statifier.Send.Event.build/3` makes from it, and its returned
+  instructions are spliced into the plan in place of any delivery. The
+  target is never parsed. A delayed send of a registered type is planned
+  the same way, with no `{:schedule, ...}`: the processor owns the timer.
+
+  A `<cancel>` always plans `{:cancel_timers, send_id}` for the library's
+  own timers, as before. When the plan context's `:held_sends` map, or a
+  registered-type delayed send planned earlier in the same effect list,
+  says a processor holds a delayed send under that id, that processor's
+  `cancel/2` instructions follow, in type order, and the id is released: a
+  later `<cancel>` of the same id reaches no processor until another
+  delayed send is handed over under it. `Statifier.Session` and
+  `Statifier.Replay` keep `:held_sends` across drives through
+  `register_held_send/3` and `release_held_send/2`, the one rule this
+  module's own fold applies too.
 
   ## `<invoke>` routing
 
@@ -70,7 +94,15 @@ defmodule Statifier.Session.Effects do
   `plan/2`'s second argument is a plain map, not a bare session id:
   `%{session_id: String.t(), invoke_types: Statifier.Invoke.Types.t() |
   nil, invoke_handlers: %{String.t() => module()}, invocation_types:
-  %{String.t() => String.t()}}` (ADR-0051 decisions 2, 4, and 6).
+  %{String.t() => String.t()}}` (ADR-0051 decisions 2, 4, and 6), plus three
+  optional keys for registered send types (ADR-0069): `send_types`, the
+  registered set read off `%MachineState{}` exactly as `invoke_types` is;
+  `send_processors`, the session's `:send_types` map from type to
+  `Statifier.Send.Processor` module; and `held_sends`, the live
+  `send_id => [type]` map of delayed sends a processor holds. A context
+  without them plans exactly as a session with no registered send type
+  does.
+
   `session_id` is what every `plan_send/3` / `plan_send_delayed/3` call used
   to receive directly; `invoke_types` is the caller-declared registered set
   `plan_invoke/3` judges against, read off the same `%MachineState{}` the
@@ -132,11 +164,11 @@ defmodule Statifier.Session.Effects do
 
   alias Statifier.{Effect, Event}
   alias Statifier.Effect.{Autoforward, Cancel, CancelInvoke, Invoke, Send, SendDelayed}
-  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Handler.Scxml, as: ScxmlHandler
   alias Statifier.Invoke.Types, as: InvokeTypes
-  alias Statifier.Send.Target
+  alias Statifier.Send.Event, as: SendEvent
+  alias Statifier.Send.{Target, Types}
 
   @typedoc "Which internal-queue writer `{:raise, ...}` should use - `Statifier.Interpreter.deliver_internal/5`'s own `kind`."
   @type raise_kind :: :internal | :platform
@@ -156,11 +188,21 @@ defmodule Statifier.Session.Effects do
   `invoke_handlers` dispatch.
   """
   @type context :: %{
-          session_id: String.t(),
-          invoke_types: InvokeTypes.t() | nil,
-          invoke_handlers: %{String.t() => module()},
-          invocation_types: %{String.t() => String.t()}
+          required(:session_id) => String.t(),
+          required(:invoke_types) => InvokeTypes.t() | nil,
+          required(:invoke_handlers) => %{String.t() => module()},
+          required(:invocation_types) => %{String.t() => String.t()},
+          optional(:send_types) => Types.t() | nil,
+          optional(:send_processors) => %{String.t() => module()},
+          optional(:held_sends) => held_sends()
         }
+
+  @typedoc """
+  Which registered types hold a delayed send under each send id (ADR-0069
+  decision 4's cancel routing): `send_id => [type]`, the types sorted and
+  unique.
+  """
+  @type held_sends :: %{String.t() => [String.t()]}
 
   @typedoc "One instruction for `Statifier.Session` to perform."
   @type instruction ::
@@ -196,8 +238,73 @@ defmodule Statifier.Session.Effects do
   @spec plan(effects :: [Effect.t()], context :: context()) :: [instruction()]
   def plan(effects, %{session_id: session_id} = context)
       when is_list(effects) and is_binary(session_id) do
-    Enum.flat_map(effects, &plan_one(&1, context))
+    {instructions, _context} =
+      Enum.flat_map_reduce(effects, context, fn effect, context ->
+        {plan_one(effect, context), hold(effect, context)}
+      end)
+
+    instructions
   end
+
+  @doc """
+  Records that the processor for `type` holds a delayed send under
+  `send_id` - the one rule `plan/2`'s fold, `Statifier.Session` and
+  `Statifier.Replay` apply to `t:held_sends/0` for a registered-type
+  `%Statifier.Effect.SendDelayed{}`.
+
+  ## Examples
+
+      iex> Statifier.Session.Effects.register_held_send(%{}, "reminder", "myapp:sink")
+      %{"reminder" => ["myapp:sink"]}
+
+  """
+  @spec register_held_send(held_sends :: held_sends(), send_id :: String.t(), type :: String.t()) ::
+          held_sends()
+  def register_held_send(held_sends, send_id, type) when is_map(held_sends) do
+    Map.update(held_sends, send_id, [type], &Enum.sort(Enum.uniq([type | &1])))
+  end
+
+  @doc """
+  Releases every hold under `send_id` - the rule for a
+  `%Statifier.Effect.Cancel{}`, which reaches every processor holding the
+  id once (spec 6.3's cancel-them-all).
+
+  ## Examples
+
+      iex> Statifier.Session.Effects.release_held_send(%{"reminder" => ["myapp:sink"]}, "reminder")
+      %{}
+
+  """
+  @spec release_held_send(held_sends :: held_sends(), send_id :: String.t() | nil) ::
+          held_sends()
+  def release_held_send(held_sends, send_id) when is_map(held_sends),
+    do: Map.delete(held_sends, send_id)
+
+  # The fold's own copy of the session's `held_sends`, advanced effect by
+  # effect, so a `<cancel>` planned after a registered-type delayed send in
+  # the same effect list reaches its processor.
+  @spec hold(effect :: Effect.t(), context :: context()) :: context()
+  defp hold({:send_delayed, %SendDelayed{} = send}, context) do
+    if classify(send, context) == :registered do
+      Map.put(context, :held_sends, register_held_send(held(context), send.send_id, send.type))
+    else
+      context
+    end
+  end
+
+  defp hold({:cancel, %Cancel{send_id: send_id}}, context),
+    do: Map.put(context, :held_sends, release_held_send(held(context), send_id))
+
+  defp hold(_effect, context), do: context
+
+  @spec held(context :: context()) :: held_sends()
+  defp held(context), do: Map.get(context, :held_sends, %{})
+
+  # The one classifier (ADR-0069 decision 2), against the plan context's
+  # registered set - absent or `nil` when the context declares none, which
+  # is the built-in set only.
+  @spec classify(send :: Send.t() | SendDelayed.t(), context :: context()) :: Types.class()
+  defp classify(send, context), do: Types.classify(Map.get(context, :send_types), send.type)
 
   @spec plan_one(effect :: Effect.t(), context :: context()) :: [instruction()]
   defp plan_one({:send, %Send{} = send} = effect, context) do
@@ -208,8 +315,14 @@ defmodule Statifier.Session.Effects do
     [{:notify, effect} | plan_send_delayed(send, effect, context)]
   end
 
-  defp plan_one({:cancel, %Cancel{send_id: send_id}} = effect, _context) do
-    [{:notify, effect}, {:cancel_timers, send_id}]
+  defp plan_one({:cancel, %Cancel{send_id: send_id} = cancel} = effect, context) do
+    processors =
+      Enum.flat_map(Map.get(held(context), send_id, []), fn type ->
+        {:ok, instructions} = processor_for(type, context).cancel(cancel, context)
+        instructions
+      end)
+
+    [{:notify, effect}, {:cancel_timers, send_id} | processors]
   end
 
   defp plan_one({:invoke, %Invoke{} = invoke} = effect, context) do
@@ -245,23 +358,28 @@ defmodule Statifier.Session.Effects do
   @spec plan_send(send :: Send.t(), effect :: Effect.t(), context :: context()) :: [
           instruction()
         ]
-  defp plan_send(send, effect, %{session_id: session_id}) do
-    if Target.supported_type?(send.type) do
-      case Target.parse(send.target) do
-        {:invalid, _target} ->
-          [execution_error(send)]
+  defp plan_send(send, effect, %{session_id: session_id} = context) do
+    case classify(send, context) do
+      :built_in ->
+        case Target.parse(send.target) do
+          {:invalid, _target} ->
+            [execution_error(send)]
 
-        :self ->
-          [{:enqueue_event, delivered_event(send, session_id)}]
+          :self ->
+            [{:enqueue_event, delivered_event(send, session_id)}]
 
-        :internal ->
-          [{:deliver, :internal, internal_event(send), effect}]
+          :internal ->
+            [{:deliver, :internal, internal_event(send), effect}]
 
-        route ->
-          [{:deliver, route, delivered_event(send, session_id), effect}]
-      end
-    else
-      [execution_error(send)]
+          route ->
+            [{:deliver, route, delivered_event(send, session_id), effect}]
+        end
+
+      :registered ->
+        hand_off(send, context)
+
+      :unsupported ->
+        [execution_error(send)]
     end
   end
 
@@ -272,25 +390,49 @@ defmodule Statifier.Session.Effects do
   # fires.
   @spec plan_send_delayed(send :: SendDelayed.t(), effect :: Effect.t(), context :: context()) ::
           [instruction()]
-  defp plan_send_delayed(send, effect, %{session_id: session_id}) do
-    if Target.supported_type?(send.type) do
-      case Target.parse(send.target) do
-        {:invalid, _target} ->
-          [execution_error(send)]
+  defp plan_send_delayed(send, effect, %{session_id: session_id} = context) do
+    case classify(send, context) do
+      :built_in ->
+        case Target.parse(send.target) do
+          {:invalid, _target} ->
+            [execution_error(send)]
 
-        :internal ->
-          [{:schedule, send.send_id, send.delay_ms, :internal, internal_event(send), effect}]
+          :internal ->
+            [{:schedule, send.send_id, send.delay_ms, :internal, internal_event(send), effect}]
 
-        route ->
-          [
-            {:schedule, send.send_id, send.delay_ms, route, delivered_event(send, session_id),
-             effect}
-          ]
-      end
-    else
-      [execution_error(send)]
+          route ->
+            [
+              {:schedule, send.send_id, send.delay_ms, route, delivered_event(send, session_id),
+               effect}
+            ]
+        end
+
+      :registered ->
+        hand_off(send, context)
+
+      :unsupported ->
+        [execution_error(send)]
     end
   end
+
+  # ADR-0069 decision 4: a registered type's send goes to its processor's
+  # pure `deliver/3` with the event already built, and nothing else is
+  # planned for it - no delivery, no `{:schedule, ...}`, no target parse.
+  @spec hand_off(send :: Send.t() | SendDelayed.t(), context :: context()) :: [instruction()]
+  defp hand_off(send, %{session_id: session_id} = context) do
+    {:ok, instructions} =
+      processor_for(send.type, context).deliver(send, delivered_event(send, session_id), context)
+
+    instructions
+  end
+
+  # The processor module registered for `type`. `Statifier.Session` and
+  # `Statifier.Replay` derive `:send_types` and `:send_processors` from one
+  # map, so a registered type always has a module; a context that declares a
+  # set without the map is the caller's error and raises here.
+  @spec processor_for(type :: String.t(), context :: context()) :: module()
+  defp processor_for(type, context),
+    do: context |> Map.get(:send_processors, %{}) |> Map.fetch!(type)
 
   # An `<invoke>`'s own routing (see moduledoc's "`<invoke>` routing"
   # section). Unlike `plan_send/3`, there is no target to check - `<invoke>`
@@ -368,41 +510,15 @@ defmodule Statifier.Session.Effects do
      sendid: send.send_id}
   end
 
-  # C.1's four mappings for a `<send>` with no target, delivered to the
-  # sending session's own external queue - and, per decision 10/step 5 above,
-  # for every other reachable route too, since `origin`/`origintype`/`sendid`
-  # are the *sending* session's own address regardless of where the event
-  # ends up: `origin` is this session's own `_ioprocessors` location,
-  # `origintype` is the processor's type **URI** rather than the short alias
-  # `"scxml"` - see below - and `sendid` is blank unless the author actually
-  # named this `<send>` (`id`/`idlocation`), per `id_from_author?`.
-  #
-  # `origintype` deliberately contradicts C.1's prose, which says the field
-  # "MUST have the value \"scxml\"". The W3C's own conformance suite requires
-  # the URI instead: test198 sends with *no* `type` attribute at all - the
-  # default case - and asserts `_event.origintype ==
-  # 'http://www.w3.org/TR/scxml/#SCXMLEventProcessor'`, which only the URI
-  # satisfies; test352 asserts the same for an explicitly-typed send; test253
-  # accepts either spelling. No test in the corpus requires `"scxml"`. Plan
-  # decision 11 picks the URI on that evidence.
-  #
-  # Known residual, untested either way: this hardcodes the URI regardless of
-  # what the author wrote, so `<send type="scxml">` still reports the URI,
-  # where 5.10.1's "equivalent to the 'type' field on the `<send>` element"
-  # would echo `"scxml"` back. test253 accepts both, and nothing else covers
-  # it. Echoing the written value would satisfy every test above too, so this
-  # is a free choice until a test constrains it.
+  # C.1's mappings for a delivered `<send>` event, made by the one public
+  # builder, `Statifier.Send.Event.build/3` (ADR-0069 decision 4): this is
+  # a caller of it, never a second construction site. `origin` and
+  # `origintype` take the builder's defaults - the sending session's own
+  # `#_scxml_<sessionid>` location and the processor URI; the builder's
+  # moduledoc records why the URI rather than `"scxml"`.
   @spec delivered_event(send :: Send.t() | SendDelayed.t(), session_id :: String.t()) ::
           Event.t()
-  defp delivered_event(send, session_id) do
-    Event.external(send.event,
-      data: send.data,
-      origin: SystemVariables.scxml_location(session_id),
-      origintype: SystemVariables.scxml_event_processor(),
-      sendid: if(send.id_from_author?, do: send.send_id),
-      caller_context: caller_context_of(send)
-    )
-  end
+  defp delivered_event(send, session_id), do: SendEvent.build(send, session_id)
 
   # `<send target="#_internal">`'s own delivered event (5.10.1: "For
   # internal and platform events, the Processor MUST leave [origin and
