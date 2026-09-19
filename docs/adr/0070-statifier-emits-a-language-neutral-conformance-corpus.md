@@ -77,7 +77,12 @@ terms decide the artifact. They were read from the licence texts on
   and no `NOTICE` file.
 
 The generated test modules committed today already carry transformed W3C
-text and SCION text, and carry neither notice.
+text and SCION text. The W3C-derived modules carry no notice. The
+SCION-derived modules hold their upstream document's source unmodified,
+so a module whose upstream document carries an Apache License 2.0
+header comment keeps it inline in its SCXML, with the copyright line
+when the header has one; a module whose upstream document has no header
+carries none, and no module carries the licence text itself.
 
 ## Decision
 
@@ -87,7 +92,10 @@ Test Suite License does not grant and the 3-clause BSD License does, so
 this repository elects the BSD arm for every W3C-derived document it
 commits. Retaining the notice, the conditions and the disclaimer is
 therefore a condition of the redistribution, not a courtesy. SCION text
-is redistributed under the Apache License 2.0. Concretely:
+is redistributed under the Apache License 2.0, whose section 4(c)
+requires a redistribution to "retain, in the Source form of any
+Derivative Works that You distribute, all copyright, patent, trademark,
+and attribution notices from the Source form of the Work". Concretely:
 
 - `conformance/LICENSES/` holds the full text of the W3C 3-clause BSD
   License with the IRP page's copyright notice, and the Apache
@@ -97,6 +105,11 @@ is redistributed under the Apache License 2.0. Concretely:
   under in `conformance/LICENSES/`.
 - The generated Elixir test modules carry the same notice for the
   upstream text they hold.
+- A SCION document's own notice is never dropped: the emitter keeps each
+  SCION document's copyright and licence notice with its case, either
+  in the case's source or reachable from its `upstream` field, and the
+  generated test module keeps it too. Where the notice travels in the
+  case is the corpus schema's to decide.
 
 **2. The corpus is the source.** An emitter writes the corpus as JSON
 under `conformance/corpus/`, one file per suite, from the transformed
@@ -160,8 +173,8 @@ document naming a non-built-in send type". An upstream document that
 names such a type is judged with no registration, which ADR-0069 says is
 byte-identical to today's behaviour; a document that names a
 host-registered type enters only as a `statifier` case whose `host`
-object declares the registration it depends on. This record adds no such
-document, so it does not itself meet that trigger. One observation for
+object declares the registration it depends on. This record authors no
+`statifier` case naming a host-registered type. One observation for
 the record's reader: ADR-0069 gives "the corpus names no type outside
 the built-in set" as the reason no conformance result moves, but at
 `abf713c` two generated W3C modules name a type outside it in a literal
