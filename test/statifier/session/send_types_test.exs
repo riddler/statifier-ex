@@ -82,13 +82,32 @@ defmodule Statifier.Session.SendTypesTest do
                Session.start_link(compile!(@chart),
                  send_types: Map.put(@send_types, "scxml", SinkProcessor)
                )
+    end
 
+    # sabotage: `built_in_send_types/1`'s filter is changed to
+    # `&(SendTypes.classify(nil, &1) == :registered)` (never true against no
+    # declaration) -> every built-in spelling is let through, the session
+    # boots, and this `{:error, _}` match reddens. Confirmed red and reverted.
+    test "every built-in spelling is named, sorted, in one refusal" do
       uri = "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
 
-      assert {:error, {:send_types, {:built_in_types, [nil, ^uri]}}} =
-               Session.start_link(compile!(@chart),
-                 send_types: %{nil => SinkProcessor, uri => SinkProcessor}
-               )
+      send_types = %{
+        "scxml" => SinkProcessor,
+        nil => SinkProcessor,
+        uri => SinkProcessor,
+        "myapp:sink" => SinkProcessor
+      }
+
+      assert {:error, {:send_types, {:built_in_types, [nil, ^uri, "scxml"]}}} =
+               Session.start_link(compile!(@chart), send_types: send_types)
+    end
+
+    # sabotage: `init_registered/3`'s `[] -> init_boot(machine, opts,
+    # resume)` arm is changed to `[] -> {:stop, {:send_types,
+    # {:built_in_types, []}}}` -> a map naming only host types is refused,
+    # and this `{:ok, _}` match reddens. Confirmed red and reverted.
+    test "a map naming only host types boots" do
+      assert {:ok, _session} = Session.start_link(compile!(@chart), send_types: @send_types)
     end
   end
 

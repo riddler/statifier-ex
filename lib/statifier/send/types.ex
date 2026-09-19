@@ -11,19 +11,16 @@ defmodule Statifier.Send.Types do
   session's lifetime, and carries no obligation to track anything between
   writes.
 
-  The module holds the three things ADR-0069 asks to exist exactly once:
+  The module holds the two things ADR-0069 asks to exist exactly once:
 
     - `from_send_types/1`, the one constructor, deriving the registered set
       from a `:send_types` map's own keys;
     - `classify/2`, the one classifier. `Statifier.Machine.Content.Send`'s
-      static check answers through it, and so do
-      `check_registration/1` and `unsupported_sends/2` below. Built-in
-      membership keeps delegating to
+      static check answers through it, and so do `unsupported_sends/2`
+      below and `Statifier.Session.start_link/2`'s refusal of a map that
+      names a built-in spelling. Built-in membership keeps delegating to
       `Statifier.Send.Target.supported_type?/1`, so 6.2.5's short-form and
-      URI reasoning stays in one place;
-    - `check_registration/1`, the refusal of a map that names a built-in
-      spelling, which `Statifier.Session.start_link/2` runs before a session
-      boots.
+      URI reasoning stays in one place.
 
   `unsupported_sends/2` is the pure pre-start check of ADR-0069 decision 3.
   It lives here rather than in `Statifier.Validator`, because
@@ -67,9 +64,9 @@ defmodule Statifier.Send.Types do
   sees nothing change.
 
   This is the only derivation of a registered send-type set in the library.
-  It does not refuse a built-in spelling; `check_registration/1` does, at
-  session start, and `classify/2` answers `:built_in` for a built-in
-  spelling whatever the set holds.
+  It does not refuse a built-in spelling; `Statifier.Session.start_link/2`
+  does, and `classify/2` answers `:built_in` for a built-in spelling
+  whatever the set holds.
   """
   @spec from_send_types(send_types :: %{optional(String.t()) => module()}) :: t() | nil
   def from_send_types(send_types) when is_map(send_types) and map_size(send_types) == 0,
@@ -77,22 +74,6 @@ defmodule Statifier.Send.Types do
 
   def from_send_types(send_types) when is_map(send_types),
     do: %__MODULE__{types: send_types |> Map.keys() |> MapSet.new()}
-
-  @doc """
-  Refuses a `:send_types` map that names a built-in spelling - `nil`,
-  `"scxml"`, or the SCXML Event I/O Processor URI (ADR-0069 decision 1), so
-  a built-in send can never be redirected to a host processor.
-
-  Returns `{:error, {:built_in_types, types}}` with every offending key,
-  sorted, so a host learns the whole set in one round trip.
-  """
-  @spec check_registration(send_types :: map()) :: :ok | {:error, {:built_in_types, [term()]}}
-  def check_registration(send_types) when is_map(send_types) do
-    case send_types |> Map.keys() |> Enum.filter(&(classify(nil, &1) == :built_in)) do
-      [] -> :ok
-      built_ins -> {:error, {:built_in_types, Enum.sort(built_ins)}}
-    end
-  end
 
   @doc """
   Classifies a resolved `<send type>` against `types` (see `t:class/0`).
