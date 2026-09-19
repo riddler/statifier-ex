@@ -1,10 +1,12 @@
-# Extending Statifier: `<invoke>` handlers
+# Extending Statifier: `<invoke>` handlers and `<send>` types
 
 This is a guide for a host application author who wants to reach real
 computation - a database call, a background job, an LLM agent loop, an
 external API - from an SCXML document's `<invoke>` element. It does not
 re-explain the interpreter's architecture; see `docs/architecture.md` for
-that. It shows you how to write and register a handler.
+that. It shows you how to write and register a handler. The last section,
+"The `<send>` half", covers registering a host Event I/O Processor type for
+`<send type="...">`.
 
 ## What the seam is for
 
@@ -556,3 +558,185 @@ Two things the library deliberately does not do on a handler's behalf:
   retry policy has given up, `Statifier.Session.failed_invocation/3` above is
   how you say so, and the library still infers nothing - you decide when the
   invocation is over and tell it.
+
+## The `<send>` half: host-registered send types
+
+`<invoke>` is one of the two seams `docs/datamodel.md` names; external
+`<send>` is the other. Spec 6.2.5 says a `<send>`'s `type` "specifies the
+method that the SCXML processor MUST use to deliver the message to its
+target" - the type names an Event I/O Processor, and the `target` is read by
+that processor. The library's built-in processor answers three spellings:
+the attribute omitted, `"scxml"`, and the processor URI
+`http://www.w3.org/TR/scxml/#SCXMLEventProcessor`.
+[ADR-0069](adr/0069-host-registered-send-types.md) lets a host register more,
+per session, in the same shape `:invoke_handlers` has.
+
+This section says plainly which half of that record is in the library
+today and which half is decided and not yet built. What is built: the
+registration, the core's classification of every `<send>` against it, and a
+pre-start check. What is not: the hand-off of a registered type's send to
+your module in a live session, and everything that follows from it. Read
+"What ADR-0069 decides and the library does not do yet" below before
+building a processor.
+
+### Spelling a send to a host processor
+
+The host's delivery mechanism goes in `type`, and the processor's own
+address goes in `target`:
+
+```xml
+<send type="myapp:sink" target="joined_records" event="impression.joined">
+    <param name="impression_id" expr="impression_id"/>
+    <param name="click_id" expr="click_id"/>
+</send>
+```
+
+A registered type is any string outside the three built-in spellings; a
+`<host>:<name>` short form such as `myapp:sink` is one, and 6.2.5 permits
+the short form. For a registered type the core never parses `target`: it is
+an opaque string for the processor, so neither
+`Statifier.Send.Target.parse/1` nor the ADR-0048 route snapshot is consulted
+for it. `joined_records` above would be an invalid target for the built-in
+processor, and it is carried through verbatim here.
+
+### Registering the types
+
+Send types are registered per session, on `Statifier.Session.start_link/2`:
+
+```elixir
+Statifier.Session.start_link(machine,
+  send_types: %{"myapp:sink" => MyApp.SinkProcessor}
+)
+```
+
+`:send_types` is a `%{type_string => module}` map. The default is `%{}`,
+which registers nothing: only the built-in spellings are supported, and with
+no `:send_types` passed nothing observable changes. The session derives the
+registered set from the map's own keys through
+`Statifier.Send.Types.from_send_types/1`, the one constructor, and stamps it
+on `%Statifier.MachineState{}` as `send_types`, at a fresh start and at a
+resume alike. Like `:invoke_handlers`, the set is fixed for the session's
+whole lifetime.
+
+A map that names a built-in spelling is refused before the session boots,
+with `{:error, {:send_types, {:built_in_types, types}}}`, every offending
+key named and sorted. A built-in send can never be redirected to a host
+processor.
+
+The module in each entry is not called by anything yet. The session keeps
+the map, hands it down under `:inherit_send_types`, and records it, but the
+planner does not dispatch to it; see the next two sections.
+
+`:inherit_send_types` is the `<send>` counterpart of
+`:inherit_invoke_handlers`, on the same start-time terms: `true` starts every
+child this session starts for an `<invoke>` with this session's
+`:send_types` map and `inherit_send_types: true` of its own. The default is
+`false`, which starts children registering no send type.
+
+### What the core does with each type
+
+`Statifier.Send.Types.classify/2` is the one classifier, and the core's
+check in `Statifier.Machine.Content.Send` answers through it:
+
+| `type` resolves to | What the core does |
+|---|---|
+| built-in: absent, `"scxml"`, or the processor URI | as before ADR-0069: C.1's target vocabulary, the ADR-0048 route snapshot, the library's own timer for a delayed send |
+| a type in the session's registered set | builds the ordinary `%Statifier.Effect.Send{}` or `%Statifier.Effect.SendDelayed{}`, with `target` unread |
+| any other type | raises `error.execution` carrying the `sendid`, aborts the executable-content block, and produces no effect |
+
+The last row is 6.2.5's MUST. The send id is minted and `idlocation`
+written before the refusal, as for every rejected send (ADR-0047). With no
+registration the stamped set is `nil`, and `nil` refuses every non-built-in
+type - unlike `<invoke>`'s permissive `nil` (ADR-0069 decision 2 gives the
+reason). A `typeexpr` is resolved when the `<send>` is evaluated and judged
+here, in the core, and nowhere earlier.
+
+### What a live session does with a registered type today
+
+The planner's hand-off is not built. `Statifier.Session.Effects.plan/2`
+still judges a send effect's type with
+`Statifier.Send.Target.supported_type?/1`, which knows only the built-in
+spellings, so a registered type's effect reaching it is planned as
+`error.execution` on the sender's internal queue: nothing is delivered and
+no timer is scheduled. In a `Statifier.Session`, a chart cannot yet deliver
+through a registered type.
+
+A host driving `Statifier.Interpreter` directly reads the effect off the
+core's return and may act on it itself; `Statifier.Session.Effects.plan/2`
+plans it as the same `error.execution` for that host too. Such a host
+re-stamps `send_types` on every load, beside `routes` and `invoke_types`
+(see [Hosting without a session](hosting-without-session.md)).
+
+### What ADR-0069 decides and the library does not do yet
+
+Each item below is decided in ADR-0069 and has no code on `main` yet. Treat
+it as the contract a processor will be written against, not as behaviour
+you can call.
+
+- **The hand-off.** ADR-0069 decision 4 decides that the session planner
+  hands a registered type's effect, and the event the library would
+  deliver, to the registered module - a behaviour whose planning half is
+  pure and whose performing half the host runs, the same split
+  `Statifier.Invoke.Handler` has.
+- **The event carrier.** Decision 4 decides a public, pure builder that
+  takes a send effect and the sender's session id and returns the
+  `%Statifier.Event{}` the library delivers, with an `origin` and
+  `origintype` a processor may override with its own reply address.
+- **The delayed send is the host's timer.** Decision 4 decides that the
+  session schedules nothing for a registered type's delayed send and hands
+  the `%Statifier.Effect.SendDelayed{}` to the processor, which owns the
+  delay. [Durable timers](durable-timers.md) stays the guide for the
+  built-in types only.
+- **The cancel.** Decision 4 decides that a `<cancel>` naming such a send is
+  handed to the processor that holds it, under ADR-0054 decision 3's
+  cancellation key.
+- **Idempotency.** Decision 4 decides that a processor MUST be idempotent on
+  the components of ADR-0054 decision 3's dedup key read off the effect,
+  for the reason `perform/2` must be above: after a crash and retry, a host
+  may perform the same effect more than once. A `%Statifier.Effect.Send{}`
+  on `main` carries every component but two: the session scope, which is
+  yours to supply, and an `ordinal`. ADR-0059's amendment of 2026-09-19, at
+  proposed, decides that a registered type's immediate send carries that
+  `ordinal`.
+- **The miss door and the dead letter.** Decision 5 decides a session door,
+  `Statifier.Session.failed_send/3`, in `failed_invocation/3`'s shape: a
+  host that cannot deliver while the sender still exists reports the miss,
+  and the sender gets `error.communication` carrying the send's `sendid`. A
+  process-less host writes the same error through
+  `Statifier.Interpreter.deliver_internal/5`. When the sender has reached a
+  final state or no longer exists, the host records the miss as a dead
+  letter keyed by the send's dedup key, with its reason, and never drops it
+  silently.
+- **`_ioprocessors`.** ADR-0069's Consequences put a registered type in the
+  session's `_ioprocessors`, with a value the processor supplies; the
+  implementing change decides how.
+
+### The pre-start check
+
+The core's refusal happens when the `<send>` runs. A host that would rather
+refuse a chart before starting it calls
+`Statifier.Send.Types.unsupported_sends/2` with the compiled chart and the
+set it will start the chart with:
+
+```elixir
+send_types = %{"myapp:sink" => MyApp.SinkProcessor}
+{:ok, machine} = Statifier.compile(source)
+
+types = Statifier.Send.Types.from_send_types(send_types)
+
+case Statifier.Send.Types.unsupported_sends(machine, types) do
+  [] -> Statifier.Session.start_link(machine, send_types: send_types)
+  unsupported -> {:error, {:unregistered_send_types, unsupported}}
+end
+```
+
+It returns every `<send>` whose literal `type` attribute the set does not
+contain, as `%{type: type, location: location}` with the `<send>` element's
+location, in the compiled chart's content order (`c_index`), nested
+content included. It is pure and total.
+It cannot see a `typeexpr`, so the core's refusal stays the backstop.
+
+It is not a `Statifier.Validator` check, deliberately: ADR-0069 decision 3
+places it outside, because `Statifier.Validator.validate/3` judges a
+document against the spec and takes no deployment state. A chart is not
+invalid for naming a processor this deployment has not registered.
