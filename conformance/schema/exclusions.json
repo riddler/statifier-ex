@@ -26,6 +26,11 @@
             "type": "string",
             "description": "The reason in prose.",
             "minLength": 1
+          },
+          "adr": {
+            "type": "integer",
+            "description": "The number of the decision record the prose cites (ADR-0026 is 26); present only when the prose cites one.",
+            "minimum": 1
           }
         },
         "required": ["suite", "key", "reason", "detail"],

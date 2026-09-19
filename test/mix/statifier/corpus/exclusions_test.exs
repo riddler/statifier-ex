@@ -1,6 +1,8 @@
 defmodule Mix.Statifier.Corpus.ExclusionsTest do
   use ExUnit.Case, async: true
 
+  import Statifier.TmpDir, only: [setup_tmp_dir: 1]
+
   Code.require_file(
     Path.join([__DIR__, "..", "..", "..", "..", "tools/corpus/scxml_w3/sub_documents.exs"])
   )
@@ -19,6 +21,9 @@ defmodule Mix.Statifier.Corpus.ExclusionsTest do
   @schema_dir "conformance/schema"
   @fixtures "test/fixtures/corpus_exclusions"
   @key_line ~r/^\s*"([^"]+)"\s*=>/m
+  @script "tools/corpus/scxml_w3/sub_documents.exs"
+
+  setup :setup_tmp_dir
 
   # A fresh count of each file's keys, read from its text rather than through
   # the reader under test: one `"key" =>` per entry line.
@@ -61,6 +66,19 @@ defmodule Mix.Statifier.Corpus.ExclusionsTest do
 
       assert Checker.errors(schema, document, @schema_dir) == []
       assert length(document["exclusions"]) == length(read!())
+    end
+
+    # sabotage: to_document/1 dropping the adr member (always `document`) -> red
+    test "the document carries each cited record's number as adr, and omits it otherwise" do
+      entries = read!()
+      documents = Exclusions.to_document(entries)["exclusions"]
+
+      assert Enum.any?(entries, & &1.adr),
+             "no committed entry cites a record, so nothing is checked"
+
+      for {entry, document} <- Enum.zip(entries, documents) do
+        assert Map.get(document, "adr") == entry.adr, entry.key
+      end
     end
 
     # sabotage: adr/3 always returning {:ok, nil} -> red
@@ -175,6 +193,33 @@ defmodule Mix.Statifier.Corpus.ExclusionsTest do
 
       assert {:error, message} = Exclusions.sub_documents(manifest)
       assert message =~ "names no sub-document; an empty sub-document list is refused"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: resolve/2 returning the path unchanged -> red
+    test "resolves a relative manifest path against root, as the script's path is", %{
+      tmp_dir: root
+    } do
+      File.mkdir_p!(Path.join(root, Path.dirname(@script)))
+      File.cp!(@script, Path.join(root, @script))
+      File.cp!(Path.join(@fixtures, "manifest.xml"), Path.join(root, "manifest.xml"))
+
+      assert {:ok, ["test216sub1", "test239sub1"]} =
+               Exclusions.sub_documents("manifest.xml", root)
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: deleting sub_documents/2's absent-script clause -> red (the
+    # loaded module answers instead of the refusal)
+    test "refuses an absent sub_documents.exs with a sentence rather than raising", %{
+      tmp_dir: root
+    } do
+      manifest = Path.expand(Path.join(@fixtures, "manifest.xml"))
+
+      assert {:error, message} = Exclusions.sub_documents(manifest, root)
+
+      assert message ==
+               "#{Path.join(root, @script)} is absent; the sub-document list is read through it"
     end
 
     # sabotage: n/a - asserts a path constant; changing @manifest_path -> red

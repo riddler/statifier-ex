@@ -1,0 +1,11 @@
+{
+  "description": "Fixture ratchet for the corpus emitter tests.",
+  "internal_tests": [],
+  "last_updated": "2026-09-19",
+  "scion_tests": [
+    "test/scion_tests/ads/impression_test.exs"
+  ],
+  "w3c_tests": [
+    "test/scxml_tests/mandatory/impressions/test9001_test.exs"
+  ]
+}

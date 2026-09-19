@@ -19,8 +19,8 @@ defmodule Mix.Statifier.Corpus.Exclusions do
   decision record (`ADR-NNNN`), the entry carries that record's number in
   `:adr`. `to_document/1` renders the entries as the
   `conformance/exclusions.json` document, in the shape
-  `conformance/schema/exclusions.json` fixes; that schema has no field for the
-  record number, so the document does not carry it.
+  `conformance/schema/exclusions.json` fixes, carrying that number as the
+  optional `adr` member on each entry that has one.
 
   The files are parsed, never evaluated: each must be one map literal whose
   keys are strings and whose values are `{atom, string}` tuples, and anything
@@ -32,9 +32,11 @@ defmodule Mix.Statifier.Corpus.Exclusions do
   `Cases.SubDocuments` from `tools/corpus/scxml_w3/sub_documents.exs` over the
   manifest. They are a separate list, not exclusions.
 
-  Nothing here returns an empty list: an exclusion file with no entries, an
-  absent manifest and a manifest that names no sub-document are each refused
-  with a sentence, so the emitter never writes an empty list in their place.
+  Neither `read/1` nor `sub_documents/2` returns an empty list: an exclusion
+  file with no entries, an absent manifest, an absent
+  `sub_documents.exs` and a manifest that names no sub-document are each
+  refused with a sentence, so the emitter never writes an empty list in their
+  place.
   """
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
@@ -131,9 +133,13 @@ defmodule Mix.Statifier.Corpus.Exclusions do
   ## Examples
 
       iex> Mix.Statifier.Corpus.Exclusions.to_document([
-      ...>   %{suite: "w3c", key: "test509", reason: :needs_basichttp, detail: "POST", adr: nil}
+      ...>   %{suite: "w3c", key: "test509", reason: :needs_basichttp, detail: "POST", adr: nil},
+      ...>   %{suite: "scion", key: "error", reason: :lcca, detail: "see ADR-0022", adr: 22}
       ...> ])
-      %{"exclusions" => [%{"suite" => "w3c", "key" => "test509", "reason" => "needs_basichttp", "detail" => "POST"}]}
+      %{"exclusions" => [
+        %{"suite" => "w3c", "key" => "test509", "reason" => "needs_basichttp", "detail" => "POST"},
+        %{"suite" => "scion", "key" => "error", "reason" => "lcca", "detail" => "see ADR-0022", "adr" => 22}
+      ]}
 
   """
   @spec to_document(entries :: [entry()]) :: %{String.t() => [map()]}
@@ -141,12 +147,14 @@ defmodule Mix.Statifier.Corpus.Exclusions do
     %{
       "exclusions" =>
         Enum.map(entries, fn entry ->
-          %{
+          document = %{
             "suite" => entry.suite,
             "key" => entry.key,
             "reason" => Atom.to_string(entry.reason),
             "detail" => entry.detail
           }
+
+          if entry.adr, do: Map.put(document, "adr", entry.adr), else: document
         end)
     }
   end
@@ -154,32 +162,51 @@ defmodule Mix.Statifier.Corpus.Exclusions do
   @doc """
   Returns the W3C sub-document ids, sorted, by running `Cases.SubDocuments`
   from `root`'s `tools/corpus/scxml_w3/sub_documents.exs` over
-  `manifest_path`.
+  `manifest_path`. A relative `manifest_path` is resolved against `root`, as
+  the script's path is.
 
-  Refuses an absent manifest, and a manifest that names no sub-document,
-  rather than returning an empty list.
+  Refuses an absent manifest, an absent script, and a manifest that names no
+  sub-document, rather than returning an empty list or raising.
   """
   @spec sub_documents(manifest_path :: Path.t(), root :: Path.t()) ::
           {:ok, [String.t()]} | {:error, String.t()}
   def sub_documents(manifest_path, root \\ ".") do
-    if File.regular?(manifest_path) do
-      Code.require_file(Path.join(root, @sub_documents_file))
+    manifest = resolve(manifest_path, root)
+    script = Path.join(root, @sub_documents_file)
 
-      # Resolved at runtime: the module is defined by the required script, not
-      # compiled with the project.
-      ids = Module.safe_concat(["Cases", "SubDocuments"]).ids(manifest_path)
+    cond do
+      not File.regular?(manifest) ->
+        {:error,
+         "the W3C manifest is absent at #{manifest}; run `mise run corpus:fetch` " <>
+           "to fetch it - the sub-document list is never emitted without it"}
 
-      if Enum.empty?(ids),
-        do:
-          {:error,
-           "the W3C manifest at #{manifest_path} names no sub-document; " <>
-             "an empty sub-document list is refused"},
-        else: {:ok, Enum.sort(ids)}
-    else
-      {:error,
-       "the W3C manifest is absent at #{manifest_path}; run `mise run corpus:fetch` " <>
-         "to fetch it - the sub-document list is never emitted without it"}
+      not File.regular?(script) ->
+        {:error, "#{script} is absent; the sub-document list is read through it"}
+
+      true ->
+        manifest |> sub_document_ids(script) |> non_empty_ids(manifest)
     end
+  end
+
+  defp resolve(path, root) do
+    if Path.type(path) == :absolute or root == ".", do: path, else: Path.join(root, path)
+  end
+
+  # Resolved at runtime: the module is defined by the script, not compiled
+  # with the project. Loaded once - a second root's copy of the same script
+  # would only redefine it.
+  defp sub_document_ids(manifest, script) do
+    if !Code.ensure_loaded?(Cases.SubDocuments), do: Code.require_file(script)
+    Module.safe_concat(["Cases", "SubDocuments"]).ids(manifest)
+  end
+
+  defp non_empty_ids(ids, manifest) do
+    if Enum.empty?(ids),
+      do:
+        {:error,
+         "the W3C manifest at #{manifest} names no sub-document; " <>
+           "an empty sub-document list is refused"},
+      else: {:ok, Enum.sort(ids)}
   end
 
   # Mix task support, run under `mix` on a developer's machine against the
