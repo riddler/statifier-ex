@@ -221,16 +221,20 @@ of them may reference anything inside `Statifier.Testing`. Mix tooling
 under `lib/mix/` that is not in the Hex package may reference
 `Statifier.Testing`.
 
-- **What the rule still forbids.** The engine gating behaviour on feature
+- **What the rule still forbids.** The engine gating behavior on feature
   detection, or consulting the harness in any other way: no module under
   `lib/statifier` or `lib/statifier.ex` outside `Statifier.Testing.*`
   references `Statifier.Testing`, exactly as before.
 - **Why the carve-out cannot reach the engine.** The package ships
   `files: ~w(lib/statifier lib/statifier.ex mix.exs README.md LICENSE
   CHANGELOG.md)` (`mix.exs`, `package/0`, read at `65ead91`): nothing under
-  `lib/mix/` is in the Hex package, so no engine a downstream application
-  runs contains a module this carve-out admits, and the engine's own
-  modules stay under the rule unchanged.
+  `lib/mix/` is in the Hex package, so an application that takes statifier
+  from Hex contains no module this carve-out admits. An application that
+  takes it as a git or path dependency compiles `lib/mix/` too, because
+  `elixirc_paths/1` gives `["lib"]` outside the test env (`mix.exs`, read at
+  `f618cd5`), but no engine module calls into those modules, so the engine
+  still cannot gate behavior on detected features. The engine's own modules
+  stay under the rule unchanged.
 - **What would reopen it.** A module under `lib/mix/` entering the package's
   `files:` list; engine code under `lib/statifier` needing to reference
   `Statifier.Testing`; or a module the carve-out admits being called from
