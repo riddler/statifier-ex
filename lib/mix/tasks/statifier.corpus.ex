@@ -9,8 +9,8 @@ defmodule Mix.Tasks.Statifier.Corpus do
 
   ## Usage
 
-      # Run every upstream case and write conformance/corpus/, manifest.json
-      # and exclusions.json
+      # Run every upstream case and write conformance/corpus/, manifest.json,
+      # exclusions.json and registry.json
       mix statifier.corpus
 
       # Write nothing; fail if a committed file differs from what the emitter
@@ -90,6 +90,10 @@ defmodule Mix.Tasks.Statifier.Corpus do
 
     for {id, outcome} <- report.outside_ratchet do
       Mix.shell().info("  #{id}: #{describe(outcome)}")
+    end
+
+    for {claim, count} <- Map.get(report, :claims, []) do
+      Mix.shell().info("registry claim #{claim}: #{count} case(s)")
     end
 
     for file <- Map.get(report, :written, []), do: Mix.shell().info("wrote conformance/#{file}")

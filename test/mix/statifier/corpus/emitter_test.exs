@@ -65,6 +65,23 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
   defp absent_scratch(root), do: Path.join(root, "no-upstream")
 
+  defp rewrite_ratchet(root, fun) do
+    path = Path.join(root, "test/passing_tests.json")
+
+    path
+    |> File.read!()
+    |> JSON.decode!()
+    |> fun.()
+    |> JSON.encode!()
+    |> then(&File.write!(path, &1))
+  end
+
+  defp touch(root, relative) do
+    path = Path.join(root, relative)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "")
+  end
+
   describe "emit/1" do
     @tag :isolated_tmp_dir
     # sabotage: render/2 keeping a suite with no cases (dropping the
@@ -75,7 +92,9 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
     } do
       report = emit!(config)
 
-      assert report.written == ~w(corpus/scion.json corpus/w3c.json exclusions.json manifest.json)
+      assert report.written ==
+               ~w(corpus/scion.json corpus/w3c.json exclusions.json manifest.json registry.json)
+
       refute File.exists?(Path.join(root, "conformance/corpus/statifier.json"))
 
       assert Enum.map(cases(root, "scion"), & &1["id"]) == [
@@ -163,7 +182,8 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
             {"corpus/scion.json", "corpus.json"},
             {"corpus/w3c.json", "corpus.json"},
             {"manifest.json", "manifest.json"},
-            {"exclusions.json", "exclusions.json"}
+            {"exclusions.json", "exclusions.json"},
+            {"registry.json", "registry.json"}
           ] do
         assert Checker.errors(Checker.load(@schema_dir, schema), decoded(root, file), @schema_dir) ==
                  [],
@@ -181,7 +201,7 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
     # "emitted_at" => System.monotonic_time() -> red
     test "a second emit of the same tree is byte-identical", %{config: config, root: root} do
       emit!(config)
-      files = ~w(corpus/scion.json corpus/w3c.json manifest.json exclusions.json)
+      files = ~w(corpus/scion.json corpus/w3c.json manifest.json exclusions.json registry.json)
       first = Map.new(files, &{&1, read(root, &1)})
 
       emit!(config)
@@ -246,6 +266,73 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
                  "detail" => "posts the click to a tracking endpoint"
                }
              ]
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: registry/4 passing every case's path as the ratchet -> red,
+    # the unclaimed cases appear
+    test "writes the registry from the ratchet, pinned by the manifest's corpus hash", %{
+      config: config,
+      root: root
+    } do
+      report = emit!(config)
+
+      assert decoded(root, "registry.json") == %{
+               "implementation" => "statifier-ex",
+               "corpus_hash" => decoded(root, "manifest.json")["corpus_hash"],
+               "claims" => ["scion", "w3c-mandatory"],
+               "entries" => [
+                 %{"case_id" => "scion/ads/impression", "suite" => "scion"},
+                 %{"case_id" => "w3c/test9001", "suite" => "w3c"}
+               ]
+             }
+
+      assert report.claims == [{"scion", 1}, {"w3c-mandatory", 1}]
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: ratchet/1 reading every category, internal included -> red,
+    # scion/ads/unclaimed is claimed (and disagrees)
+    test "no entry derives from an internal_tests glob", %{config: config, root: root} do
+      rewrite_ratchet(root, fn ratchet ->
+        Map.put(ratchet, "internal_tests", ["test/scion_tests/**/*_test.exs"])
+      end)
+
+      for name <- ~w(impression unclaimed),
+          do: touch(root, "test/scion_tests/ads/#{name}_test.exs")
+
+      emit!(config)
+
+      assert Enum.map(decoded(root, "registry.json")["entries"], & &1["case_id"]) ==
+               ["scion/ads/impression", "w3c/test9001"]
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: emit/1 writing the files when registry/4 refuses (dropping it
+    # from the with) -> red, files exist
+    test "stops when a ratchet path names no corpus case, naming it, and writes nothing", %{
+      config: config,
+      root: root
+    } do
+      rewrite_ratchet(root, fn ratchet ->
+        Map.update!(ratchet, "scion_tests", &["test/scion_tests/ads/retired_test.exs" | &1])
+      end)
+
+      assert {:error, message} = Emitter.emit(config)
+      assert message =~ "test/scion_tests/ads/retired_test.exs: names no corpus case"
+      refute File.exists?(Path.join(root, "conformance/manifest.json"))
+      refute File.exists?(Path.join(root, "conformance/registry.json"))
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: Registry.derive/4 accepting an empty ratchet ({:ok, []}) -> red
+    test "stops when the ratchet names no corpus case at all", %{config: config, root: root} do
+      rewrite_ratchet(root, &Map.merge(&1, %{"scion_tests" => [], "w3c_tests" => []}))
+
+      assert Emitter.emit(config) ==
+               {:error, "the ratchet names no corpus case; an empty registry is refused"}
+
+      refute File.exists?(Path.join(root, "conformance/registry.json"))
     end
 
     @tag :isolated_tmp_dir
@@ -430,6 +517,55 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
       assert message =~
                "scion/ads/impression: required_features is not what the feature detector finds"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: check/1 comparing the registry against the committed file
+    # instead of re-deriving it (expected = rendered) -> red
+    test "fails when the registry drifts from the ratchet file", %{config: config, root: root} do
+      emit!(config)
+      rewrite_ratchet(root, &Map.put(&1, "w3c_tests", []))
+
+      assert {:error, message} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+
+      assert message =~ "conformance/registry.json: differs from what the emitter writes"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: check/1 dropping Registry.stale/2 from the problems -> red
+    test "fails on a registry with zero entries, and on one naming a case the corpus lacks", %{
+      config: config,
+      root: root
+    } do
+      emit!(config)
+      check = fn -> Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root))) end
+
+      edit(root, "registry.json", fn content ->
+        String.replace(content, ~r/"entries": \[.*\]/s, ~s|"entries": []|)
+      end)
+
+      assert {:error, empty} = check.()
+      assert empty =~ "conformance/registry.json has no entries; an empty registry is refused"
+
+      emit!(config)
+      edit(root, "registry.json", &String.replace(&1, "w3c/test9001", "w3c/test9099"))
+
+      assert {:error, stale} = check.()
+      assert stale =~ "w3c/test9099: in the registry but not in the corpus"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: read_committed/1 leaving registry.json out of the files -> red
+    test "fails when the registry is missing", %{config: config, root: root} do
+      emit!(config)
+      File.rm!(Path.join(root, "conformance/registry.json"))
+
+      assert {:error, message} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+
+      assert message =~ "the committed corpus is incomplete"
+      assert message =~ "registry.json"
     end
 
     @tag :isolated_tmp_dir

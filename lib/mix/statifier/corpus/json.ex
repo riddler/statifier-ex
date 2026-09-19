@@ -14,10 +14,11 @@ defmodule Mix.Statifier.Corpus.Json do
 
   # Every key of every object the corpus files hold, in writing order. A case
   # is id, suite, spec, conformance, description, required_features, source,
-  # initial_configuration, steps, upstream, host; each other object's keys
-  # appear here in its schema's order too.
-  @key_order ~w(id corpus_hash suite file case_count name url
-                revision key reason detail adr spec conformance description
+  # initial_configuration, steps, upstream, host; a registry is
+  # implementation, corpus_hash, claims, entries, and an entry case_id,
+  # suite; each other object's keys appear here in its schema's order too.
+  @key_order ~w(implementation id case_id corpus_hash claims entries suite file
+                case_count name url revision key reason detail adr spec conformance description
                 required_features source initial_configuration steps event data
                 configuration upstream document license notice modified host send_types
                 expect_sends cases suites upstreams exclusions)

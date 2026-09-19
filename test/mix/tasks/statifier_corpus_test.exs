@@ -53,6 +53,7 @@ defmodule Mix.Tasks.Statifier.CorpusTest do
                ~s|  w3c/test9003: disagrees - Expected active states ["pass"], but got ["fail"]|
 
       assert emitted =~ "wrote conformance/manifest.json"
+      assert emitted =~ "wrote conformance/registry.json"
 
       absent = Path.join(root, "no-upstream")
 
@@ -64,6 +65,25 @@ defmodule Mix.Tasks.Statifier.CorpusTest do
       assert checked =~ "w3c: checked 2 case(s), 1 agree with their expectation"
       assert checked =~ "upstream comparison skipped: no upstream tree at #{absent}"
       refute checked =~ "wrote "
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: print/2 skipping the report's claims -> red
+    test "prints each registry claim with its entry count, emitting and checking", %{
+      root: root
+    } do
+      emitted = capture_io(fn -> Corpus.execute(["--scratch", @scratch], root: root) end)
+
+      checked =
+        capture_io(fn ->
+          assert :ok =
+                   Corpus.execute(["--check", "--scratch", Path.join(root, "none")], root: root)
+        end)
+
+      for output <- [emitted, checked] do
+        assert output =~ "registry claim scion: 1 case(s)"
+        assert output =~ "registry claim w3c-mandatory: 1 case(s)"
+      end
     end
 
     @tag :isolated_tmp_dir
