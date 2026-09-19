@@ -61,7 +61,8 @@ defmodule Corpus.CorpusFilesTest do
             {"corpus/scion.json", "corpus.json"},
             {"corpus/w3c.json", "corpus.json"},
             {"manifest.json", "manifest.json"},
-            {"exclusions.json", "exclusions.json"}
+            {"exclusions.json", "exclusions.json"},
+            {"registry.json", "registry.json"}
           ] do
         instance = "conformance/#{file}" |> File.read!() |> JSON.decode!()
 
@@ -119,6 +120,47 @@ defmodule Corpus.CorpusFilesTest do
 
         assert {upstream["license"], upstream["notice"]} == expected, corpus_case["id"]
       end
+    end
+  end
+
+  describe "the registry" do
+    # sabotage: n/a - asserts the committed generated file against the
+    # committed ratchet, no lib/ behavior; deleting one entry line from
+    # conformance/registry.json -> red
+    test "has one entry per SCION and W3C ratchet path, read from both files" do
+      registry = "conformance/registry.json" |> File.read!() |> JSON.decode!()
+      {:ok, ratchet} = RegressionRegistry.load()
+
+      ratcheted = length(ratchet["scion_tests"]) + length(ratchet["w3c_tests"])
+
+      assert ratcheted > 0, "the ratchet names no conformance test, so nothing is checked"
+      assert length(registry["entries"]) == ratcheted
+    end
+
+    # sabotage: n/a - asserts the committed generated file, no lib/ behavior;
+    # changing one entry's suite in conformance/registry.json -> red
+    test "every entry is a corpus case with the same suite, none from an internal glob" do
+      suites = Map.new(all_cases(), &{&1["id"], &1["suite"]})
+      registry = "conformance/registry.json" |> File.read!() |> JSON.decode!()
+      {:ok, ratchet} = RegressionRegistry.load()
+
+      internal =
+        ratchet
+        |> RegressionRegistry.expand(:internal)
+        |> elem(0)
+        |> MapSet.new()
+
+      assert registry["entries"] != []
+
+      for %{"case_id" => id, "suite" => suite} <- registry["entries"] do
+        assert Map.fetch(suites, id) == {:ok, suite}, id
+
+        corpus_case = Enum.find(all_cases(), &(&1["id"] == id))
+        refute MapSet.member?(internal, Emitter.generated_path(corpus_case, ".")), id
+      end
+
+      manifest = "conformance/manifest.json" |> File.read!() |> JSON.decode!()
+      assert registry["corpus_hash"] == manifest["corpus_hash"]
     end
   end
 

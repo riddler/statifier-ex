@@ -25,6 +25,11 @@ defmodule Mix.Statifier.Corpus.Emitter do
       that record's number as `adr`. A SCION directory key stays one entry
       naming the directory: it is not expanded into the upstream cases under
       it, so the file does not depend on the fetched tree.
+    * `conformance/registry.json` - statifier-ex's claim against the corpus,
+      derived from the ratchet's SCION and W3C lists by
+      `Mix.Statifier.Corpus.Registry` and pinned by the `corpus_hash`. A
+      ratchet path that names no corpus case, or a ratchet that names none,
+      stops the emit and nothing is written.
 
   A case's configurations are the upstream's expectation, and a case that
   the regression ratchet (`test/passing_tests.json`) lists must agree with
@@ -48,16 +53,18 @@ defmodule Mix.Statifier.Corpus.Emitter do
   tree. From the committed files alone it re-runs every committed case from
   its committed source, recomputes every file derivable from committed
   inputs - each corpus file's canonical form, each case's
-  `required_features`, the manifest with its `corpus_hash`, and
-  `exclusions.json` - and fails on any difference, and on any ratcheted case
-  whose run disagrees. When the upstream tree is present it also rebuilds the
-  corpus from it and fails on any case that differs; when it is absent it
-  says that comparison was skipped. A check that finds a corpus file missing
-  or empty, or that visited no case, fails: a green result on nothing is a
-  defect.
+  `required_features`, the manifest with its `corpus_hash`,
+  `exclusions.json`, and the registry derived from `test/passing_tests.json` -
+  and fails on any difference, on a registry with no entries or with an entry
+  naming a case the corpus lacks or holds under another suite, and on any
+  ratcheted case whose run disagrees. When the upstream tree is present it
+  also rebuilds the corpus from it and fails on any case that differs; when
+  it is absent it says that comparison was skipped. A check that finds a
+  corpus file missing or empty, or that visited no case, fails: a green
+  result on nothing is a defect.
   """
 
-  alias Mix.Statifier.Corpus.{Exclusions, Files, Json, Runner, Upstream}
+  alias Mix.Statifier.Corpus.{Exclusions, Files, Json, Registry, Runner, Upstream}
   alias Mix.Statifier.RegressionRegistry
 
   @suites ~w(scion w3c statifier)
@@ -71,6 +78,7 @@ defmodule Mix.Statifier.Corpus.Emitter do
   @type report :: %{
           required(:counts) => [{String.t(), non_neg_integer(), non_neg_integer()}],
           required(:outside_ratchet) => [{String.t(), Runner.outcome()}],
+          optional(:claims) => [{String.t(), pos_integer()}],
           optional(:written) => [Path.t()],
           optional(:upstream) => :compared | {:skipped, Path.t()}
         }
@@ -93,8 +101,8 @@ defmodule Mix.Statifier.Corpus.Emitter do
 
   @doc """
   Reads the upstream tree, runs every case, and writes the corpus, the
-  manifest and the exclusions under `conformance/`. Writes nothing when any
-  step refuses.
+  manifest, the exclusions and the registry under `conformance/`. Writes
+  nothing when any step refuses.
   """
   @spec emit(config :: config()) :: {:ok, report()} | {:error, String.t()}
   def emit(config) do
@@ -107,16 +115,17 @@ defmodule Mix.Statifier.Corpus.Emitter do
          {:ok, ratchet} <- ratchet(config.root) do
       results = Runner.run(cases)
 
-      with :ok <- ratcheted_agree(cases, results, ratchet, config.root) do
-        files = render(cases, exclusions)
-        write(config.root, files, report(cases, results, ratchet, config.root))
+      with :ok <- ratcheted_agree(cases, results, ratchet, config.root),
+           {:ok, {files, claims}} <-
+             registry(render(cases, exclusions), cases, ratchet, config.root) do
+        write(config.root, files, Map.merge(report(cases, results, ratchet, config.root), claims))
       end
     end
   end
 
   @doc """
-  Checks the committed corpus, manifest and exclusions without writing
-  anything, as the moduledoc describes.
+  Checks the committed corpus, manifest, exclusions and registry without
+  writing anything, as the moduledoc describes.
   """
   @spec check(config :: config()) :: {:ok, report()} | {:error, String.t()}
   def check(config) do
@@ -127,13 +136,24 @@ defmodule Mix.Statifier.Corpus.Emitter do
          {:ok, ratchet} <- ratchet(config.root),
          {:ok, upstream} <- upstream_drift(config, cases) do
       results = Runner.run(cases)
+      rendered = render(cases, exclusions)
+
+      {expected, registry_report, registry_problems} =
+        case registry(rendered, cases, ratchet, config.root) do
+          {:ok, {files, claims}} -> {files, claims, []}
+          {:error, reason} -> {rendered, %{}, [reason]}
+        end
 
       problems =
-        drifted_files(committed, render(cases, exclusions)) ++
+        drifted_files(committed, expected) ++
+          registry_problems ++
+          Registry.stale(committed["registry.json"], cases) ++
           feature_drift(cases) ++
           disagreements(cases, results, ratchet, config.root) ++ elem(upstream, 1)
 
-      finish_check(problems, cases, results, ratchet, config.root, elem(upstream, 0))
+      problems
+      |> finish_check(cases, results, ratchet, config.root, elem(upstream, 0))
+      |> with_claims(registry_report)
     end
   end
 
@@ -259,7 +279,8 @@ defmodule Mix.Statifier.Corpus.Emitter do
         &(&1 in @upstream_suites or File.exists?(Path.join(dir, corpus_file(&1))))
       )
 
-    files = Enum.map(present, &corpus_file/1) ++ ["manifest.json", "exclusions.json"]
+    files =
+      Enum.map(present, &corpus_file/1) ++ ["manifest.json", "exclusions.json", "registry.json"]
 
     Enum.reduce_while(files, {:ok, %{}}, fn file, {:ok, acc} ->
       case Files.read(Path.join(dir, file)) do
@@ -380,6 +401,9 @@ defmodule Mix.Statifier.Corpus.Emitter do
     end
   end
 
+  defp with_claims({:ok, report}, registry_report), do: {:ok, Map.merge(report, registry_report)}
+  defp with_claims(error, _registry_report), do: error
+
   defp finish_check(problems, cases, results, ratchet, root, upstream) do
     if problems == [],
       do: {:ok, Map.put(report(cases, results, ratchet, root), :upstream, upstream)},
@@ -389,6 +413,25 @@ defmodule Mix.Statifier.Corpus.Emitter do
   # --- shared --------------------------------------------------------------
 
   defp corpus_file(suite), do: "corpus/#{suite}.json"
+
+  # Adds registry.json to the rendered files: derived from the ratchet's
+  # paths against the rendered corpus, pinned by the rendered corpus hash.
+  # Returns the files and the report's per-claim entry counts.
+  defp registry(files, cases, ratchet, root) do
+    hash = @suites |> Enum.flat_map(&List.wrap(files[corpus_file(&1)])) |> corpus_hash()
+
+    with {:ok, registry} <-
+           Registry.derive(cases, ratchet, hash, &generated_path(&1, root)) do
+      by_id = Map.new(cases, &{&1["id"], &1})
+
+      claims =
+        registry["entries"]
+        |> Enum.frequencies_by(&Registry.claim(by_id[&1["case_id"]]))
+        |> Enum.sort()
+
+      {:ok, {Map.put(files, "registry.json", Registry.encode(registry)), %{claims: claims}}}
+    end
+  end
 
   defp notices_present(root, cases) do
     wanted = cases |> Enum.flat_map(&List.wrap(get_in(&1, ["upstream", "notice"]))) |> Enum.uniq()

@@ -237,6 +237,39 @@ defmodule Mix.Tasks.Test.BaselineTest do
     end
 
     @tag :isolated_tmp_dir
+    # sabotage: add_named/3 also writing conformance/registry.json beside the
+    # ratchet file -> red
+    test "--add writes the ratchet file and nothing else, the derived registry included", %{
+      tmp_dir: tmp_dir
+    } do
+      scion = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      path = registry(tmp_dir)
+      derived = Path.join(tmp_dir, "conformance/registry.json")
+      File.mkdir_p!(Path.dirname(derived))
+      File.write!(derived, ~s|{"entries": []}\n|)
+
+      snapshot = fn ->
+        tmp_dir
+        |> Path.join("**")
+        |> Path.wildcard(match_dot: true)
+        |> Enum.filter(&File.regular?/1)
+        |> Map.new(&{&1, File.read!(&1)})
+      end
+
+      before = snapshot.()
+
+      capture_io(fn ->
+        assert :ok = Baseline.execute(["--add", "--registry", path], opts(tmp_dir))
+      end)
+
+      after_add = snapshot.()
+      changed = for {file, content} <- after_add, before[file] != content, do: file
+
+      assert changed == [path]
+      assert reload(path)["scion_tests"] == [scion]
+    end
+
+    @tag :isolated_tmp_dir
     test "a failing file leaves the registry untouched", %{tmp_dir: tmp_dir} do
       good = corpus(tmp_dir, "scion_tests/basic0_test.exs")
       bad = corpus(tmp_dir, "scion_tests/basic1_test.exs")
