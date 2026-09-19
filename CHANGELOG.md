@@ -10,6 +10,67 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.6.0] 2026-09-19
+
+Lets a host register its own `<send>` types and hand each such send to a
+processor module it supplies, which delivers, delays and cancels it; the host
+reports a failed delivery back with `Statifier.Session.failed_send/3`. With no
+`:send_types` passed nothing changes. The conformance corpus under
+`conformance/` is not part of the Hex package: a sibling implementation
+vendors it from the statifier-ex git tag, not from the package.
+
+### Added
+
+- `Statifier.Session.start_link/2` takes `:send_types`, a map of host Event
+  I/O Processor types to modules, and `:inherit_send_types` to hand that map
+  to invoked children (ADR-0069). A map naming a built-in type (`"scxml"`,
+  the SCXML Event I/O Processor URI, or `nil`) is refused with
+  `{:error, {:send_types, {:built_in_types, types}}}`.
+- `Statifier.Send.Types`, the registered `<send type>` set: `from_send_types/1`
+  builds it from that map, `classify/2` answers built-in, registered or
+  unsupported for a type, and `unsupported_sends/2` lists every `<send>` in a
+  compiled chart whose literal `type` a set does not contain, with its
+  location, so a host can refuse a chart before starting it.
+- `Statifier.MachineState` carries the set as `send_types` (the `:send_types`
+  option on `new/2`, and `put_send_types/2`). The core accepts a `<send>` of a
+  registered type without reading its `target` or the route snapshot; any
+  other non-built-in type still raises `error.execution`. With no
+  `:send_types` passed nothing changes.
+- A `<send>` whose type a session registered under `:send_types` is now
+  handed to the module registered for it, which implements the new
+  `Statifier.Send.Processor` behaviour (ADR-0069): its pure `deliver/3`
+  receives the send effect and the event built from it, and its `perform/2`
+  does the delivery. The library never parses such a send's `target`. A
+  delayed send of a registered type is the processor's timer: the session
+  schedules nothing for it. A `<cancel>` naming such a send reaches the same
+  processor's `cancel/2`.
+- `Statifier.Send.Event.build/3` builds the event a `<send>` delivers from
+  its send effect and the sender's session id, with `origin` and
+  `origintype` a processor may override. The session's own delivered
+  events are built by it, so a host that drives the core without a session
+  gets the same event.
+- `%Statifier.Effect.Send{}` has an `ordinal` field: an integer on a send
+  of a registered type, from the same sequence as the delayed-send and
+  cancel ordinals, so a processor can key two sends that share an id inside
+  a `<foreach>`; `nil` on a send of a built-in type, which advances no
+  counter (ADR-0059).
+- `Statifier.Session.failed_send/3` lets a host report that the processor
+  it registered for a `<send>` type could not deliver a send while the
+  sender still exists (ADR-0069). The sender then sees `error.communication`
+  on its internal queue, with `_event.sendid` set to the send's id. A call
+  for a sender that has finished or no longer exists writes nothing, and
+  recording that miss is the host's job. A host with no session process
+  makes the same write through `Statifier.Interpreter.deliver_internal/5`.
+- `_ioprocessors` now has an entry for each send type a session registers
+  under `:send_types`, keyed by the type string. The value is the map the
+  processor returns from the new optional
+  `Statifier.Send.Processor.ioprocessors_entry/1` callback, or an empty map
+  when the processor does not implement it. The SCXML processor's own entry
+  is unchanged. A resumed session keeps the entries it started with.
+  `Statifier.Send.Types` carries each type's value in a new `entries` field,
+  and `Statifier.Evaluator.SystemVariables.initial/3` takes the registered
+  set as an optional third argument.
+
 ## [2.5.0] 2026-09-02
 
 Answers an invocation without a session process, carries a host's
