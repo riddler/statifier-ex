@@ -1,0 +1,7 @@
+{
+    "initialConfiguration" : ["served"],
+    "events" : [
+        {"event" : {"name" : "view"}, "nextConfiguration" : ["viewed"]},
+        {"event" : {"name" : "click"}, "nextConfiguration" : ["clicked"], "after" : 10}
+    ]
+}

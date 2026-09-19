@@ -12,12 +12,29 @@ claim against the same cases
 | `manifest.json` | the corpus hash, the statifier-ex version, the corpus files and the upstream suites | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
 | `exclusions.json` | the upstream documents left out of the corpus, each with its reason | the emitter |
+| `LICENSES/` | the licence texts the upstream cases are redistributed under: the W3C 3-clause BSD License with the W3C test suite's copyright notice, and the Apache License 2.0 SCION ships | copied from the upstream licences, reviewed like code |
 
 The corpus, the manifest, the registry and the exclusions are generated and
 never edited by hand: a change to one is a change to the emitter or to its
 input, regenerated. `test/passing_tests.json` stays the ratchet file
 ([ADR-0006](../docs/adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)).
 
-Only the schemas exist so far; the emitter and the generated files land
-after them. This directory is not part of the Hex package: a sibling
-implementation vendors it from a statifier-ex tag.
+`mix statifier.corpus` is the emitter: it reads the upstream suites that
+`mise run corpus:fetch` and `mise run corpus:transform` put in the gitignored
+`tools/corpus/scratch/`, runs every case through statifier, and writes the
+generated files. `mix statifier.corpus --check` writes nothing and needs no
+upstream tree: it re-runs every committed case and fails when a generated
+file differs from what the emitter would write from the committed inputs, or
+when there is nothing to check. Its module documentation
+(`Mix.Statifier.Corpus.Emitter`) states the rules; three are worth knowing
+before reading the files:
+
+- `corpus_hash` in `manifest.json` is `sha256:` and the hex SHA-256 of the
+  corpus files' bytes concatenated in suite order (`scion`, `w3c`,
+  `statifier`), skipping a suite with no file.
+- A suite with no cases has no corpus file and no manifest entry.
+- An exclusion keyed by a SCION directory stays one entry naming the
+  directory; it is not expanded into the upstream cases under it.
+
+This directory is not part of the Hex package: a sibling implementation
+vendors it from a statifier-ex tag.

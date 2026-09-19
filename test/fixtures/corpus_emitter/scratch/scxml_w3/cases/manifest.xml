@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assertions>
+<assert id="1">
+<test id="9001" conformance="mandatory" manual="false">
+<start uri="9001/test9001.txml"/>
+</test>
+<test id="9002" conformance="mandatory" manual="false">
+<start uri="9002/test9002.txml"/>
+<dep uri="9002/test9002sub1.txml"/>
+</test>
+<test id="9003" conformance="mandatory" manual="false">
+<start uri="9003/test9003.txml"/>
+</test>
+<test id="9004" conformance="optional" manual="false">
+<start uri="9004/test9004.txml"/>
+</test>
+</assert>
+</assertions>

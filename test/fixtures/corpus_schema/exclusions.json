@@ -4,7 +4,8 @@
       "suite": "scion",
       "key": "script-src",
       "reason": "needs_external_fetch",
-      "detail": "<script src=\"*.js\"/> - external fetch never happens (ADR-0026 decision 2)"
+      "detail": "<script src=\"*.js\"/> - external fetch never happens (ADR-0026 decision 2)",
+      "adr": 26
     },
     {
       "suite": "w3c",

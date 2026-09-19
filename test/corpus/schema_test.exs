@@ -272,6 +272,30 @@ defmodule Corpus.SchemaTest do
              })
     end
 
+    # sabotage: the adr property deleted from exclusions.json (additionalProperties
+    # then refuses it) -> red on the accepting half; its "minimum": 1 deleted -> red
+    # on the zero
+    test "an entry may carry the number of the record its prose cites, as a positive integer" do
+      exclusions = fixture("exclusions.json")
+      [scion | rest] = exclusions["exclusions"]
+
+      assert scion["adr"] == 26
+      assert errors("exclusions.json", exclusions) == []
+
+      assert errors("exclusions.json", %{
+               exclusions
+               | "exclusions" => [Map.delete(scion, "adr") | rest]
+             }) ==
+               []
+
+      for bad <- ["ADR-0026", 0, 26.5] do
+        assert "/exclusions/0/adr" in pointers("exclusions.json", %{
+                 exclusions
+                 | "exclusions" => [%{scion | "adr" => bad} | rest]
+               })
+      end
+    end
+
     # sabotage: the key pattern admitting a second slash -> red
     test "a key is a W3C id, a SCION directory, or a SCION directory/name pair" do
       exclusions = fixture("exclusions.json")

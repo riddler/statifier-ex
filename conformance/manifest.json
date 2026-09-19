@@ -1,0 +1,32 @@
+{
+  "corpus_hash": "sha256:55db28e8dde3a3c1149428ead5a891ebfb5b5a551a96704e40e3825328bf95bd",
+  "statifier_version": "2.5.0",
+  "suites": [
+    {
+      "suite": "scion",
+      "file": "corpus/scion.json",
+      "case_count": 119
+    },
+    {
+      "suite": "w3c",
+      "file": "corpus/w3c.json",
+      "case_count": 162
+    }
+  ],
+  "upstreams": [
+    {
+      "suite": "scion",
+      "name": "SCION scxml-test-framework",
+      "url": "https://github.com/jbeard4/scxml-test-framework",
+      "license": "Apache-2.0",
+      "notice": "LICENSES/Apache-2.0.txt"
+    },
+    {
+      "suite": "w3c",
+      "name": "W3C SCXML Implementation Report Plan test suite",
+      "url": "https://www.w3.org/Voice/2013/scxml-irp/",
+      "license": "BSD-3-Clause-W3C",
+      "notice": "LICENSES/BSD-3-Clause-W3C.txt"
+    }
+  ]
+}
