@@ -14,8 +14,6 @@ defmodule Statifier.Session.SendProcessorTest do
   alias Statifier.Send.Types
   alias Statifier.Session.Effects
 
-  doctest Statifier.Session.Effects
-
   defmodule Recorder do
     @moduledoc false
     @behaviour Statifier.Send.Processor

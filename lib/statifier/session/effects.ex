@@ -65,9 +65,8 @@ defmodule Statifier.Session.Effects do
   `cancel/2` instructions follow, in type order, and the id is released: a
   later `<cancel>` of the same id reaches no processor until another
   delayed send is handed over under it. `Statifier.Session` and
-  `Statifier.Replay` keep `:held_sends` across drives through
-  `register_held_send/3` and `release_held_send/2`, the one rule this
-  module's own fold applies too.
+  `Statifier.Replay` keep `:held_sends` across drives by the same internal
+  rule this module's own fold applies.
 
   ## `<invoke>` routing
 
@@ -246,35 +245,23 @@ defmodule Statifier.Session.Effects do
     instructions
   end
 
-  @doc """
-  Records that the processor for `type` holds a delayed send under
-  `send_id` - the one rule `plan/2`'s fold, `Statifier.Session` and
-  `Statifier.Replay` apply to `t:held_sends/0` for a registered-type
-  `%Statifier.Effect.SendDelayed{}`.
-
-  ## Examples
-
-      iex> Statifier.Session.Effects.register_held_send(%{}, "reminder", "myapp:sink")
-      %{"reminder" => ["myapp:sink"]}
-
-  """
+  # Records that the processor for `type` holds a delayed send under
+  # `send_id` - the one rule `plan/2`'s fold, `Statifier.Session` and
+  # `Statifier.Replay` apply to `t:held_sends/0` for a registered-type
+  # `%Statifier.Effect.SendDelayed{}`. Callable across the library's own
+  # modules but not part of its public API (ADR-0069 decision 4 names only
+  # the builder and the processor behaviour), hence `@doc false`.
+  @doc false
   @spec register_held_send(held_sends :: held_sends(), send_id :: String.t(), type :: String.t()) ::
           held_sends()
   def register_held_send(held_sends, send_id, type) when is_map(held_sends) do
     Map.update(held_sends, send_id, [type], &Enum.sort(Enum.uniq([type | &1])))
   end
 
-  @doc """
-  Releases every hold under `send_id` - the rule for a
-  `%Statifier.Effect.Cancel{}`, which reaches every processor holding the
-  id once (spec 6.3's cancel-them-all).
-
-  ## Examples
-
-      iex> Statifier.Session.Effects.release_held_send(%{"reminder" => ["myapp:sink"]}, "reminder")
-      %{}
-
-  """
+  # Releases every hold under `send_id` - the rule for a
+  # `%Statifier.Effect.Cancel{}`, which reaches every processor holding the
+  # id once (spec 6.3's cancel-them-all). Internal, as above.
+  @doc false
   @spec release_held_send(held_sends :: held_sends(), send_id :: String.t() | nil) ::
           held_sends()
   def release_held_send(held_sends, send_id) when is_map(held_sends),
