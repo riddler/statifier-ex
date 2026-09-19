@@ -1,0 +1,39 @@
+{
+  "id": "scion/basic/basic2",
+  "suite": "scion",
+  "spec": "basic",
+  "conformance": null,
+  "description": "",
+  "required_features": [
+    "basic_states",
+    "compound_states",
+    "event_transitions"
+  ],
+  "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!--\n   Copyright 2011-2012 Jacob Beard, INFICON, and other SCION contributors\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.\n-->\n<scxml \n    xmlns=\"http://www.w3.org/2005/07/scxml\"\n    version=\"1.0\">\n\n    <state id=\"a\">\n        <transition target=\"b\" event=\"t\"/>\n    </state>\n\n    <state id=\"b\">\n        <transition target=\"c\" event=\"t2\"/>\n    </state>\n\n    <state id=\"c\"/>\n\n</scxml>\n\n\n\n\n",
+  "initial_configuration": [
+    "a"
+  ],
+  "steps": [
+    {
+      "event": {
+        "name": "t"
+      },
+      "configuration": [
+        "b"
+      ]
+    },
+    {
+      "event": {
+        "name": "t2"
+      },
+      "configuration": [
+        "c"
+      ]
+    }
+  ],
+  "upstream": {
+    "document": "test/basic/basic2.scxml",
+    "license": "Apache-2.0",
+    "notice": "LICENSES/Apache-2.0.txt"
+  }
+}
