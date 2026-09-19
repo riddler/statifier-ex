@@ -1,12 +1,13 @@
 # ADR-0069: Host-registered send types fill the Event I/O Processor slot
 
-Status: proposed - amends ADR-0047 decision 5 for `<send>` (the half
-ADR-0051 left unfired: the 6.2.5 Event I/O Processor set becomes
-per-session deployment state); answers ADR-0055 decision 3's named trigger
-with the three things that decision says the opening record owes; amends
-ADR-0054 decision 2 in part (its host rule for a delayed send with a
-non-nil target is scoped to the built-in types); ADR-0047 decisions 1-4,
-ADR-0051's `<invoke>` set, and ADR-0055 decisions 1 and 2 are unchanged
+Status: accepted (2026-09-19) - amends ADR-0047 decision 5 for `<send>`
+(the half ADR-0051 left unfired: the 6.2.5 Event I/O Processor set
+becomes per-session deployment state); answers ADR-0055 decision 3's
+named trigger with the three things that decision says the opening record
+owes; amends ADR-0054 decision 2 in part (its host rule for a delayed
+send with a non-nil target is scoped to the built-in types); ADR-0047
+decisions 1-4, ADR-0051's `<invoke>` set, and ADR-0055 decisions 1 and 2
+are unchanged
 
 ## Context
 
@@ -374,3 +375,72 @@ stand unchanged.
 - [ADR-0063](0063-caller-context-on-external-events-and-durable-timer-effects.md) (`caller_context`)
 - [ADR-0064](0064-position-blob-drops-the-per-drive-snapshot-fields.md) (the dropped position fields)
 - [ADR-0068](0068-permanent-invoke-failure-is-a-suffixed-error-communication.md) (the `failed_invocation/3` door shape `failed_send/3` follows)
+
+## Note (2026-09-19): accepted ahead of its implementation
+
+The operator accepted this record on 2026-09-19. The acceptance is the
+record's, not an implementation's: no decision, consequence or Related
+entry changes here, and the amends and answers clauses in the Status line
+stand as written. This note decides nothing.
+
+Nothing in `lib/` carries a registered send type today. `send_types` and
+`inherit_send_types` have no occurrence in `lib/` or `test/` at `9c3cbf1`,
+and the engine work the Consequences list under "What moves in `lib/` when
+this is implemented" is scheduled rather than landed. Until that change
+lands, the library behaves exactly as the same bullet's last sentence says
+it does with no `:send_types` passed: byte-identical to today.
+
+The record mixes sentences about code that exists with sentences about
+code that does not, so this note says plainly which is which.
+
+- The **Context** section describes today's code, and its cites hold. They
+  were read at `efb6601`, and each was re-read at `9c3cbf1` before this
+  note: the closed three-value type set and the target vocabulary, the two
+  classifier functions, the planner's boundary arm, the private
+  `delivered_event/2` and its four stamps, and the three sender-identity
+  facts all stand unchanged.
+- **Decisions 1 through 5 speak in the present tense about a registered
+  type, and none of that behaviour exists yet.** Decision 1's two example
+  sends and its refusal to parse a registered type's `target`; decision
+  2's `:send_types` and `:inherit_send_types` options, the one
+  constructor, the `send_types` value on `%MachineState{}` and the shared
+  classifier; decision 3's core arm and its pre-start check; decision 4's
+  public event builder, the planner's hand-off to a registered module, the
+  host-owned delayed-send timer and the cancel routing; and decision 5's
+  `failed_send/3` door and its dead letter are all decided and unbuilt.
+  In decision 4's per-type-class table, only the first row - the built-in
+  types - describes what the library does today; the second row is the
+  decided-and-unbuilt behaviour and the third is today's refusal.
+- The **open question** the Consequences record is still open, and it is
+  narrower than it reads. It offers the implementing change two branches,
+  and both collide with an accepted record this one does not cite:
+  ADR-0059 decision 5 keeps `ordinal` off every effect but the two
+  durable-timer ones ("the two durable-timer effects carry `ordinal`; no
+  other effect does"), and ADR-0059 retired the `<foreach>` author
+  guidance the second branch would revive. Whichever branch the
+  implementing change takes, it amends ADR-0059 decision 5 in that record
+  or in its own, rather than reading either branch as already open.
+
+Three citation notes, none of which changes what the record decides.
+
+- `Statifier.Machine.Content.Send.execute/2` and `reject_reason/4` name a
+  `Statifier.ExecutableContent` protocol implementation and a private
+  function inside it, not public functions of that module; `execute/2`
+  returns a rejection tuple and `Statifier.Interpreter.Content` names the
+  event. ADR-0047 and ADR-0048 use the same shorthand for the same code,
+  and this record inherits it.
+- The `nil` comparison in decision 2 cites ADR-0051's 2026-09-01 Note,
+  which is the `nil`-stays-permissive half of that day. ADR-0051's
+  `### Amendment 2026-09-01` is the other half - a declared set that omits
+  the type is refused in the core - and it is the nearer precedent for
+  decision 3's core refusal.
+- The Context's statement that a durable host's execution id is that
+  host's own `_sessionid` cites ADR-0051's 2026-09-12 Note, which is
+  premised on statifier_persistence `sp-ADR-0011` at *proposed*. That
+  premise has since firmed: ADR-0068's 2026-09-13 Note records
+  `sp-ADR-0011` accepted on 2026-09-13.
+
+Premise surface: `lib/` and `test/` at `9c3cbf1`, where `send_types` has
+no occurrence; this record's own Context cites re-read at the same commit;
+and ADR-0047, ADR-0048, ADR-0051, ADR-0054, ADR-0055, ADR-0059 and
+ADR-0068 as they stand on `main` at that commit.
