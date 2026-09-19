@@ -41,6 +41,40 @@
     },
     {
       "suite": "w3c",
+      "key": "test201",
+      "reason": "needs_basichttp",
+      "detail": "BasicHTTP Event I/O Processor as a <send type>: the event is delivered only by a processor that implements HTTP POST"
+    },
+    {
+      "suite": "w3c",
+      "key": "test226",
+      "reason": "needs_invoke_src",
+      "detail": "<invoke src> with <param>: the child is loaded from src, which is never dereferenced (ADR-0038)",
+      "adr": 38
+    },
+    {
+      "suite": "w3c",
+      "key": "test239",
+      "reason": "needs_invoke_src",
+      "detail": "<invoke src> markup executed as SCXML: the child is loaded from src, which is never dereferenced (ADR-0038)",
+      "adr": 38
+    },
+    {
+      "suite": "w3c",
+      "key": "test242",
+      "reason": "needs_invoke_src",
+      "detail": "<invoke src> and <content> treated identically: the src child is never loaded, as src is never dereferenced (ADR-0038)",
+      "adr": 38
+    },
+    {
+      "suite": "w3c",
+      "key": "test276",
+      "reason": "needs_invoke_src",
+      "detail": "top-level <data> values supplied at instantiation: the child is loaded from src, which is never dereferenced (ADR-0038)",
+      "adr": 38
+    },
+    {
+      "suite": "w3c",
       "key": "test509",
       "reason": "needs_basichttp",
       "detail": "BasicHTTP Event I/O Processor MUST accept POST requests"

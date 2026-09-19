@@ -134,8 +134,8 @@ Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
 files need no regeneration on the promoting branch. Adopting the new names in
 generated output is a future regeneration's call, not something owed here. Of
 the 198 downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
-runtime rather than conformance cases, leaving 193 cases; 162 of those emit
-(159 mandatory + 3 optional), and the rest are filtered out (see below).
+runtime rather than conformance cases, leaving 193 cases; 157 of those emit
+(155 mandatory + 2 optional), and the rest are filtered out (see below).
 `test/scxml_tests/` is populated.
 
 The **SCION generator** produces `SCIONTest.<Spec>.<Name>Test`,
@@ -163,7 +163,7 @@ path-shape invariant directly so that class of drift fails a gate instead of
 waiting for a case-sensitive filesystem to surface it.
 
 `mix test.regression` and `mix test.baseline` report per-corpus coverage
-against these emitted counts (119 SCION, 162 W3C), not the upstream suite
+against these emitted counts (119 SCION, 157 W3C), not the upstream suite
 sizes above - see `docs/testing.md`'s regression ratchet section - so an edit
 to either exclusions file that changes what emits also changes what those
 tasks report as the denominator. `test/corpus/readme_counts_test.exs` pins
@@ -181,7 +181,8 @@ Three filters apply before a W3C case is emitted, all applied by
   the predicator commitment (docs/datamodel.md).
 - **exclusions.exs**: tests with no predicator equivalent (script, list
   concatenation, string prefix, and the BasicHTTP Event I/O Processor tree),
-  recorded with a reason atom per ADR-0004.
+  and tests that pass only when an `<invoke src>` is resolved, which the
+  library never does (ADR-0038), recorded with a reason atom per ADR-0004.
 - **sub_documents.exs**: manifest `<dep>` documents an `<invoke>` loads at
   runtime rather than a `<start>` document run as its own conformance test.
   This is a different category from `exclusions.exs`: an exclusion is a test

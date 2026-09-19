@@ -21,8 +21,8 @@ conformance failures. v2 is:
   sessions and timers layered on top
 - **predicator as the datamodel** - safe, non-evaluative expressions; no
   ECMAScript, no eval
-- built **corpus-first** - 281 generated SCION/W3C conformance tests (119
-  SCION + 162 W3C) behind a forward-only regression ratchet inherited from
+- built **corpus-first** - 276 generated SCION/W3C conformance tests (119
+  SCION + 157 W3C) behind a forward-only regression ratchet inherited from
   v1, with the generator committed this time
 
 ## Installation
