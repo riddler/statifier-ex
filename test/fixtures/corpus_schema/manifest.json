@@ -1,6 +1,5 @@
 {
   "corpus_hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "statifier_version": "2.5.0",
   "suites": [
     {
       "suite": "scion",

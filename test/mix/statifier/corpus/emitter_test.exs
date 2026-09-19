@@ -5,7 +5,7 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
   doctest Mix.Statifier.Corpus.Emitter
 
-  alias Mix.Statifier.Corpus.Emitter
+  alias Mix.Statifier.Corpus.{Emitter, Upstream}
   alias Statifier.CorpusSchemaChecker, as: Checker
 
   # The emitter against a fixture upstream tree (test/fixtures/corpus_emitter/
@@ -177,8 +177,8 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
     end
 
     @tag :isolated_tmp_dir
-    # sabotage: the manifest's statifier_version read from
-    # System.monotonic_time/0 -> red
+    # sabotage: render/2's manifest carrying
+    # "emitted_at" => System.monotonic_time() -> red
     test "a second emit of the same tree is byte-identical", %{config: config, root: root} do
       emit!(config)
       files = ~w(corpus/scion.json corpus/w3c.json manifest.json exclusions.json)
@@ -201,12 +201,26 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
       assert manifest["corpus_hash"] ==
                "sha256:" <> Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
 
-      assert manifest["statifier_version"] == Mix.Project.config()[:version]
-
       assert manifest["suites"] == [
                %{"suite" => "scion", "file" => "corpus/scion.json", "case_count" => 2},
                %{"suite" => "w3c", "file" => "corpus/w3c.json", "case_count" => 2}
              ]
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: render/2's manifest carrying
+    # "statifier_version" => Mix.Project.config()[:version] again -> red
+    test "the manifest carries no version, so a version bump cannot move --check", %{
+      config: config,
+      root: root
+    } do
+      emit!(config)
+      manifest = read(root, "manifest.json")
+
+      assert manifest |> JSON.decode!() |> Map.keys() |> Enum.sort() ==
+               ~w(corpus_hash suites upstreams)
+
+      refute manifest =~ Mix.Project.config()[:version]
     end
 
     @tag :isolated_tmp_dir
@@ -455,6 +469,27 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
       assert message =~
                ~s|conformance/corpus/w3c.json holds 1 case(s) that cannot be run: "w3c/test9001"|
+    end
+  end
+
+  describe "Upstream.modified/0" do
+    @tag :isolated_tmp_dir
+    # sabotage: Upstream's @modified keyed on a document the fetch does not
+    # edit (internal-transitions/test9) -> red
+    test "names exactly the SCION documents corpus:fetch:scion edits after cloning" do
+      [_before, task] =
+        String.split(File.read!("mise.toml"), ~s|[tasks."corpus:fetch:scion"]|, parts: 2)
+
+      [task | _rest] = String.split(task, "\n[tasks.", parts: 2)
+
+      edited =
+        ~r/sed -i[^\n]*"\$CORPUS_SCION_CASES\/([^"]+)\.scxml"/
+        |> Regex.scan(task, capture: :all_but_first)
+        |> List.flatten()
+        |> Enum.sort()
+
+      assert edited != [], "the fetch task edits no document, so nothing is checked"
+      assert edited == Upstream.modified() |> Map.keys() |> Enum.sort()
     end
   end
 

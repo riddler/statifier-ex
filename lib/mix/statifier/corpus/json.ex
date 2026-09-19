@@ -16,10 +16,10 @@ defmodule Mix.Statifier.Corpus.Json do
   # is id, suite, spec, conformance, description, required_features, source,
   # initial_configuration, steps, upstream, host; each other object's keys
   # appear here in its schema's order too.
-  @key_order ~w(id corpus_hash statifier_version suite file case_count name url
+  @key_order ~w(id corpus_hash suite file case_count name url
                 revision key reason detail adr spec conformance description
                 required_features source initial_configuration steps event data
-                configuration upstream document license notice host send_types
+                configuration upstream document license notice modified host send_types
                 expect_sends cases suites upstreams exclusions)
 
   @rank @key_order |> Enum.with_index() |> Map.new()

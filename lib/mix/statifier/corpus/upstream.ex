@@ -22,9 +22,12 @@ defmodule Mix.Statifier.Corpus.Upstream do
   An exclusion key that matches no upstream document is refused, as the
   generators refuse it.
 
-  A SCION case carries its upstream document unmodified (with the upstream's
+  A SCION case carries its upstream document as fetched (with the upstream's
   own licence header comment, where it has one) and the configurations its
-  `.json` file expects. A W3C case carries the transformed document as
+  `.json` file expects. The fetch changes one SCION document, and that
+  case's `upstream` carries a `modified` notice saying so (`modified/0`), as
+  the Apache License 2.0's section 4(b) requires of a modified file. A W3C
+  case carries the transformed document as
   `Mix.Statifier.Corpus.XmlFormat` formats it, and the IRP's own expectation:
   a test passes by reaching the final state `pass` with no event sent.
   """
@@ -52,6 +55,17 @@ defmodule Mix.Statifier.Corpus.Upstream do
     }
   ]
 
+  # The SCION documents `mise run corpus:fetch:scion` changes after cloning,
+  # keyed by `spec/name`, each with the notice its case carries. Pinned
+  # against the fetch task's own edits in mise.toml by a test, so an edit
+  # added there without a notice here fails.
+  @modified %{
+    "internal-transitions/test0" =>
+      "Changed for statifier-ex: lines 25-28 of the upstream document are deleted " <>
+        "when it is fetched (`mise run corpus:fetch:scion`, whose comment reads " <>
+        "\"The root transition is not supported.\")."
+  }
+
   @typedoc "One corpus case, with the string keys of `conformance/schema/case.json`."
   @type corpus_case :: %{String.t() => term()}
 
@@ -62,6 +76,13 @@ defmodule Mix.Statifier.Corpus.Upstream do
   """
   @spec upstreams() :: [map()]
   def upstreams, do: @upstreams
+
+  @doc """
+  The SCION documents the fetch changes, keyed by `spec/name`, each with the
+  notice the case's `upstream.modified` carries.
+  """
+  @spec modified() :: %{String.t() => String.t()}
+  def modified, do: @modified
 
   @doc "The notice files every upstream case points at, relative to `conformance/`."
   @spec notices() :: [String.t()]
@@ -134,12 +155,21 @@ defmodule Mix.Statifier.Corpus.Upstream do
          "source" => source,
          "initial_configuration" => initial,
          "steps" => Enum.map(events, &scion_step/1),
-         "upstream" => %{
-           "document" => "test/#{spec}/#{name}.scxml",
-           "license" => "Apache-2.0",
-           "notice" => @scion_notice
-         }
+         "upstream" => scion_upstream(spec, name)
        }}
+    end
+  end
+
+  defp scion_upstream(spec, name) do
+    upstream = %{
+      "document" => "test/#{spec}/#{name}.scxml",
+      "license" => "Apache-2.0",
+      "notice" => @scion_notice
+    }
+
+    case Map.fetch(@modified, "#{spec}/#{name}") do
+      {:ok, notice} -> Map.put(upstream, "modified", notice)
+      :error -> upstream
     end
   end
 
