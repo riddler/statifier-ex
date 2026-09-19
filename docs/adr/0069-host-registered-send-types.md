@@ -411,15 +411,26 @@ code that does not, so this note says plainly which is which.
   In decision 4's per-type-class table, only the first row - the built-in
   types - describes what the library does today; the second row is the
   decided-and-unbuilt behaviour and the third is today's refusal.
-- The **open question** the Consequences record is still open, and it is
-  narrower than it reads. It offers the implementing change two branches,
-  and both collide with an accepted record this one does not cite:
-  ADR-0059 decision 5 keeps `ordinal` off every effect but the two
-  durable-timer ones ("the two durable-timer effects carry `ordinal`; no
-  other effect does"), and ADR-0059 retired the `<foreach>` author
-  guidance the second branch would revive. Whichever branch the
-  implementing change takes, it amends ADR-0059 decision 5 in that record
-  or in its own, rather than reading either branch as already open.
+- The **open question** the Consequences record is still open, and the
+  two branches it offers stand differently against ADR-0059. Branch
+  one - giving `%Effect.Send{}` an `ordinal` - would amend ADR-0059
+  decision 5, whose closing rule reads "the two durable-timer effects
+  carry `ordinal`; no other effect does, because no other effect is
+  durably stored." Branch two - documenting ADR-0054's original author
+  guidance for this case - leaves `ordinal` off `%Effect.Send{}` and so
+  stands with that rule; what it touches is ADR-0059 decision 3, which
+  withdrew that guidance in a sentence scoped to a delayed send: "The
+  residual-collision paragraph of ADR-0054 decision 3 is withdrawn, and
+  with it the author guidance: a hand-written `id` on a
+  `<send delay="...">` inside a `<foreach>` is fully supported under a
+  durable scheduler once the field ships." The tension between the two
+  records sits in rationale rather than in decisions: ADR-0059
+  decision 5 argues from the effect this record's decision 4 rehomes -
+  "immediate `%Send{}` is delivered inside the drive that produced it
+  and is never stored" - while decision 4 here hands a registered
+  type's immediate send to a host module that may store it, so that
+  premise stops holding for registered types once this record is built.
+  ADR-0069 does not cite ADR-0059.
 
 Three citation notes, none of which changes what the record decides.
 
@@ -427,8 +438,9 @@ Three citation notes, none of which changes what the record decides.
   `Statifier.ExecutableContent` protocol implementation and a private
   function inside it, not public functions of that module; `execute/2`
   returns a rejection tuple and `Statifier.Interpreter.Content` names the
-  event. ADR-0047 and ADR-0048 use the same shorthand for the same code,
-  and this record inherits it.
+  event. ADR-0047 and ADR-0048 use the same shorthand for `execute/2`,
+  and this record inherits it; `reject_reason/4` is cited by this record
+  alone.
 - The `nil` comparison in decision 2 cites ADR-0051's 2026-09-01 Note,
   which is the `nil`-stays-permissive half of that day. ADR-0051's
   `### Amendment 2026-09-01` is the other half - a declared set that omits
