@@ -223,7 +223,8 @@ deliver:
   `%SendDelayed{}` to the processor, which owns the delay. A `<cancel>`
   whose send id names such a send is handed to the same processor under
   ADR-0054 decision 3's cancellation key. Today the planner's cancel arm
-  emits only `{:cancel_timers, send_id}` and `%Effect.Cancel{}` carries no
+  emits `{:notify, effect}` and `{:cancel_timers, send_id}`, the latter
+  its only cancellation instruction, and `%Effect.Cancel{}` carries no
   type, so the session keeps which processor holds each registered-type
   delayed send id and routes the cancel by it; a process-less host already
   consumes `%Effect.Cancel{}` under that key. Spec 6.2's discard at
