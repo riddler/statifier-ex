@@ -47,6 +47,38 @@ defmodule Statifier.Send.Processor do
   send under that id. A processor MUST tolerate a cancel for a send it has
   already fired.
 
+  Those holds are the live session's own state. They are not part of the
+  persisted position (`Statifier.Position`), so a session resumed from a
+  position holds nothing: a `<cancel>` it runs for a delayed send handed
+  over before the position was saved reaches no processor. What a resumed
+  session should do about the delayed sends a processor was handed before
+  the save is not decided yet; until it is, a host whose processor keeps
+  such a send across a resume cancels or fires it by its own record, keyed
+  by the send id and the session scope.
+
+  ## When the host cannot deliver
+
+  A processor that cannot deliver a send while its sender still exists
+  reports the miss through `Statifier.Session.failed_send/3`, called by the
+  host, never by `deliver/3` or `cancel/2`: the sender then sees C.1's
+  `error.communication`, carrying the send id, on its internal queue. When
+  the sender has reached a final state or no longer exists there is no
+  queue to write, and the host records the miss as a dead letter keyed by
+  the send's dedup key, with its reason. `failed_send/3`'s own
+  documentation states both rules.
+
+  ## The `_ioprocessors` entry
+
+  Spec 5.10 binds `_ioprocessors` to one entry for each Event I/O Processor
+  a session supports, and a registered type is one. The session's
+  `_ioprocessors` carries an entry keyed by each registered type string,
+  whose value is the map the optional `c:ioprocessors_entry/1` callback
+  returns for that type, or an empty map when the processor does not
+  implement it. `Statifier.Send.Types.from_send_types/1` reads the value
+  and `Statifier.MachineState.new/2` writes it, once, when the session
+  starts; `Statifier.Send.Types.from_send_types/1` says how it reads after
+  a resume.
+
   ## `ctx`
 
   The plan context `Statifier.Session.Effects.plan/2` threads through its
@@ -93,5 +125,16 @@ defmodule Statifier.Send.Processor do
   """
   @callback perform(payload :: term(), ctx :: ctx()) :: :ok | {:error, term()}
 
-  @optional_callbacks perform: 2
+  @doc """
+  The value of this processor's `_ioprocessors` entry (spec 5.10) for the
+  registered type string `type` - for example a `"location"` a receiver
+  can address this processor by. Pure and deterministic: the library calls
+  it whenever it builds a registered set, which a replay and a resume do
+  again. The map must be string-keyed at every level, as every datamodel
+  value is. Optional: a processor that does not implement it gets an empty
+  map.
+  """
+  @callback ioprocessors_entry(type :: String.t()) :: map()
+
+  @optional_callbacks perform: 2, ioprocessors_entry: 1
 end

@@ -338,9 +338,11 @@ defmodule Statifier.MachineState do
   has exactly one writer:
 
   - `_sessionid`, `_name`, and `_ioprocessors` are written exactly once, by
-    `new/2`, from `SystemVariables.initial/2` merged **over** the
+    `new/2`, from `SystemVariables.initial/3` merged **over** the
     `:datamodel` option's map - an author-supplied datamodel can never
-    shadow a system variable.
+    shadow a system variable. `_ioprocessors` includes one entry per type
+    in the `:send_types` option (ADR-0069); `put_send_types/2` does not
+    rewrite it.
   - `_event` is **seeded** to `nil` by `new/2` from the same
     `SystemVariables.initial/2` map, and thereafter written only by
     `put_event/2`. That is one writer per phase rather than two writers of
@@ -358,7 +360,10 @@ defmodule Statifier.MachineState do
   keys because every other key this codebase ever writes comes from an SCXML
   id, which is a string by construction; the `:datamodel` option is the one
   source whose keys a caller chooses, and `new/2` checks it (`checked_datamodel!/1`
-  below) before it ever reaches the struct. The invariant exists because the
+  below) before it ever reaches the struct. A registered send type's
+  `_ioprocessors` value is the other such source, and
+  `Statifier.Send.Types.from_send_types/1` checks it the same way before it
+  reaches the `:send_types` option. The invariant exists because the
   expression context built over this map (`Statifier.Evaluator.context/1`)
   binds each root by string name - a map that failed the invariant would
   either crash at the first evaluation site or be silently rewritten under a
@@ -532,8 +537,9 @@ defmodule Statifier.MachineState do
   `:invoke_types` (default `nil`, ADR-0051 - see the `t:invoke_types/0`
   typedoc for what `nil` means), and `:send_types` (default `nil`,
   ADR-0069 - see the `t:send_types/0` typedoc). All four system variables
-  (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
-  option's map, so author-supplied data can never shadow a system variable.
+  (`SystemVariables.initial/3`) are merged **over** the `:datamodel`
+  option's map, so author-supplied data can never shadow a system variable;
+  `_ioprocessors` carries an entry for each type `:send_types` registers.
 
   `:datamodel` must be string-keyed at every level: raises `ArgumentError`
   if any key, in the map itself or in a map nested inside it (directly or
@@ -564,7 +570,11 @@ defmodule Statifier.MachineState do
       send_counter: 0,
       timer_counter: 0,
       caller_context: nil,
-      datamodel: Map.merge(author_datamodel, SystemVariables.initial(machine, session_id)),
+      datamodel:
+        Map.merge(
+          author_datamodel,
+          SystemVariables.initial(machine, session_id, Keyword.get(opts, :send_types))
+        ),
       running: true,
       status: :running,
       macrostep: 0,
@@ -894,7 +904,9 @@ defmodule Statifier.MachineState do
   Stamps `send_types` onto `machine_state` - ADR-0069's registered-type
   snapshot, re-supplied by the driver rather than carried as durable position
   state (`Statifier.Position.import/2` and `from_binary/2` set it `nil` for
-  exactly this reason, as they do `invoke_types`).
+  exactly this reason, as they do `invoke_types`). The datamodel's
+  `_ioprocessors` is not rewritten: it keeps the entries `new/2` wrote
+  when the session started (`SystemVariables.initial/3` gives the reason).
   """
   @spec put_send_types(machine_state :: t(), send_types :: send_types()) :: t()
   def put_send_types(%__MODULE__{} = machine_state, send_types),

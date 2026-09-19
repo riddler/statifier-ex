@@ -544,6 +544,14 @@ defmodule Statifier.Interpreter do
   uses, so no third internal-queue writer is introduced - then folds
   `main_event_loop/1` to quiescence, returning exactly `handle_event/2`'s own
   shape.
+
+  It is also the door a host driving this module with no session uses when
+  the processor it registered for a `<send>` type cannot deliver
+  (ADR-0069 decision 5): `error.communication` as `:platform`, with the
+  send's `{:content, c_index, owner}` as `origin` and `sendid:` the send's
+  `send_id` - the same write `Statifier.Session.failed_send/3` makes for a
+  live session, whose documentation has the example and the dead-letter
+  rule for `{:error, :not_running}`.
   """
   @spec deliver_internal(
           machine_state :: MachineState.t(),

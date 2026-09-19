@@ -22,6 +22,12 @@ defmodule Statifier.Send.Types do
       `Statifier.Send.Target.supported_type?/1`, so 6.2.5's short-form and
       URI reasoning stays in one place.
 
+  Beside the set, a registered set carries each type's `_ioprocessors`
+  entry (spec 5.10), the value its processor supplies through the optional
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` callback, so
+  `Statifier.MachineState.new/2` can write the entries from the same
+  stamp it classifies against.
+
   `unsupported_sends/2` is the pure pre-start check of ADR-0069 decision 3.
   It lives here rather than in `Statifier.Validator`, because
   `Statifier.Validator.validate/3` judges a document against the spec and
@@ -34,9 +40,9 @@ defmodule Statifier.Send.Types do
   alias Statifier.Parser.Location
   alias Statifier.Send.Target
 
-  defstruct types: MapSet.new()
+  defstruct types: MapSet.new(), entries: %{}
 
-  @type t :: %__MODULE__{types: MapSet.t(String.t())}
+  @type t :: %__MODULE__{types: MapSet.t(String.t()), entries: %{String.t() => map()}}
 
   @typedoc """
   What `classify/2` answers for one resolved `<send type>`:
@@ -67,13 +73,56 @@ defmodule Statifier.Send.Types do
   It does not refuse a built-in spelling; `Statifier.Session.start_link/2`
   does, and `classify/2` answers `:built_in` for a built-in spelling
   whatever the set holds.
+
+  `entries` holds each type's `_ioprocessors` value: what the type's module
+  returns from `c:Statifier.Send.Processor.ioprocessors_entry/1`, or an
+  empty map when the module does not export it. Raises `ArgumentError`
+  when a returned value is not a map, or holds an atom key other than
+  `true` or `false` at any level, because every datamodel key is a string.
+  `Statifier.Evaluator.SystemVariables.initial/3` says when the entries are
+  written and how they read after a resume.
   """
   @spec from_send_types(send_types :: %{optional(String.t()) => module()}) :: t() | nil
   def from_send_types(send_types) when is_map(send_types) and map_size(send_types) == 0,
     do: nil
 
-  def from_send_types(send_types) when is_map(send_types),
-    do: %__MODULE__{types: send_types |> Map.keys() |> MapSet.new()}
+  def from_send_types(send_types) when is_map(send_types) do
+    %__MODULE__{
+      types: send_types |> Map.keys() |> MapSet.new(),
+      entries: Map.new(send_types, fn {type, module} -> {type, entry!(module, type)} end)
+    }
+  end
+
+  # The processor's own `_ioprocessors` value for `type`, checked at the one
+  # constructor so a value that reaches the datamodel is string-keyed by
+  # construction, as `Statifier.MachineState`'s datamodel invariant needs.
+  @spec entry!(module :: module(), type :: String.t()) :: map()
+  defp entry!(module, type) do
+    entry =
+      if Code.ensure_loaded?(module) and function_exported?(module, :ioprocessors_entry, 1),
+        do: module.ioprocessors_entry(type),
+        else: %{}
+
+    unless is_map(entry) and string_keyed?(entry) do
+      raise ArgumentError,
+            "#{inspect(module)}.ioprocessors_entry(#{inspect(type)}) must return a map " <>
+              "string-keyed at every level, got: #{inspect(entry)}"
+    end
+
+    entry
+  end
+
+  @spec string_keyed?(value :: term()) :: boolean()
+  defp string_keyed?(%_struct{}), do: true
+  defp string_keyed?(list) when is_list(list), do: Enum.all?(list, &string_keyed?/1)
+
+  defp string_keyed?(map) when is_map(map) do
+    Enum.all?(map, fn {key, value} ->
+      not (is_atom(key) and not is_boolean(key)) and string_keyed?(value)
+    end)
+  end
+
+  defp string_keyed?(_scalar), do: true
 
   @doc """
   Classifies a resolved `<send type>` against `types` (see `t:class/0`).

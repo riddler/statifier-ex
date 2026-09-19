@@ -798,6 +798,79 @@ defmodule Statifier.Session do
   end
 
   @doc """
+  The door a host uses when the Event I/O Processor it registered for a
+  `<send>` type (ADR-0069) cannot deliver a send while the sender still
+  exists - `failed_invocation/3`'s shape, for `<send>` (ADR-0069 decision
+  5). `server` is the sending session, `send` is the
+  `%Statifier.Effect.Send{}` or `%Statifier.Effect.SendDelayed{}` the
+  processor was handed (`c:Statifier.Send.Processor.deliver/3`), and
+  `failure` is a keyword list in `failed_invocation/3`'s position. The
+  library does not read `failure`: the event carries no payload, so the
+  process-less write below delivers the same event this door does.
+
+  The session writes C.1's `error.communication` onto its own internal
+  queue through `Statifier.Interpreter.deliver_internal/5`, ADR-0039's
+  single write-back door, with the send's content position as the event's
+  origin, and runs to quiescence. The event's `sendid` is the send's
+  `send_id` whether or not the author named the send: 5.10.1 sets `sendid`
+  on "error events triggered by a failed attempt to send an event" to the
+  send id of the triggering `<send>`, as the library's own
+  `error.execution` for a refused send does. A chart reads the miss as
+
+  ```xml
+  <transition event="error.communication" cond="_event.sendid == 'joined'" target="retry"/>
+  ```
+
+  This is the host's call, never a processor's pure planning half:
+  `deliver/3` and `cancel/2` perform nothing, and `perform/2` returning
+  `{:error, term()}` is a transient signal for whatever retry policy wraps
+  it. Only the layer that owns that policy knows a send has missed for
+  good.
+
+  **The dead-letter rule.** When the sender has reached a final state, was
+  cancelled, or no longer exists, C.1's queue does not exist, and this
+  call writes nothing: a finished session ignores it, and a cast to a
+  process that is gone is dropped. The library absorbs nothing, so the
+  host MUST record the miss itself as a dead letter keyed by the send's
+  dedup key (ADR-0054 decision 3's components read off `send`, with the
+  host's session scope), with its reason, and never drop it silently. A
+  host learns the sender has finished from the `{:halted, reason}` a
+  subscriber receives, or from `status/1`. A processor whose route creates
+  its target on a miss (get-or-create) has no miss to report.
+
+  **No session process.** `Statifier.Interpreter.deliver_internal/5` takes
+  the `%Statifier.MachineState{}` this session holds privately, which is
+  why a live session needs this door. A host driving
+  `Statifier.Interpreter` itself holds its own `%MachineState{}` and makes
+  the same write directly, which is the whole of what this door does:
+
+  ```elixir
+  {:ok, machine_state, effects} =
+    Statifier.Interpreter.deliver_internal(
+      machine_state,
+      :platform,
+      "error.communication",
+      {:content, send.c_index, send.owner},
+      sendid: send.send_id
+    )
+  ```
+
+  `{:error, :not_running}` from that call is the finished-sender case, and
+  the dead-letter rule above is then the host's, the same way.
+  """
+  @spec failed_send(
+          server :: server(),
+          send :: Effect.Send.t() | Effect.SendDelayed.t(),
+          failure :: keyword()
+        ) :: :ok
+  def failed_send(server, send, failure \\ [])
+
+  def failed_send(server, %struct{} = send, failure)
+      when struct in [Effect.Send, Effect.SendDelayed] and is_list(failure) do
+    GenServer.cast(server, {:failed_send, send, failure})
+  end
+
+  @doc """
   Hands `effects` - any list of `Statifier.Effect.t()` values, from any
   driver of the pure core - to this session's own effect-interpretation
   path: planned through `Statifier.Session.Effects.plan` and performed
@@ -1572,6 +1645,38 @@ defmodule Statifier.Session do
 
     send(self(), {:pop_invocation, invoke_id})
     {:noreply, enqueue_invoked(state, invoke_id, event), {:continue, :drain}}
+  end
+
+  # `failed_send/3`'s own cast (ADR-0069 decision 5). A sender that has
+  # halted `:done` or `:cancelled` has no internal queue to write: the
+  # clause returns the state untouched, so nothing is recorded and nothing
+  # is written, and the dead letter is the host's (the door's own doc). A
+  # `:budget_exhausted` sender is still running and takes the ordinary
+  # clause, as a fired timer's delivery does. The ordinary clause writes
+  # through `deliver_internal/6`, the same ADR-0039 door
+  # `communication_error/4` uses, with the send's own content position as
+  # the origin and its `send_id` as `sendid` unconditionally (5.10.1's rule
+  # for an error event triggered by a failed send). Like the fired-timer
+  # clause, it reaches `deliver_internal/6` outside any `perform/3` fold, so
+  # it drains the deferred effects itself.
+  def handle_cast({:failed_send, _send, _failure}, state)
+      when state.halted in [:done, :cancelled] do
+    {:noreply, state}
+  end
+
+  def handle_cast({:failed_send, send, _failure}, state) do
+    state =
+      deliver_internal(
+        :platform,
+        "error.communication",
+        {:content, send.c_index, send.owner},
+        [sendid: send.send_id],
+        state,
+        nil
+      )
+      |> drain_deferred()
+
+    {:noreply, state, {:continue, :drain}}
   end
 
   def handle_cast(:enqueue_cancel, state) do

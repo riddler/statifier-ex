@@ -571,13 +571,13 @@ the attribute omitted, `"scxml"`, and the processor URI
 [ADR-0069](adr/0069-host-registered-send-types.md) lets a host register more,
 per session, in the same shape `:invoke_handlers` has.
 
-This section says plainly which half of that record is in the library
-today and which half is decided and not yet built. What is built: the
-registration, the core's classification of every `<send>` against it, and a
-pre-start check. What is not: the hand-off of a registered type's send to
-your module in a live session, and everything that follows from it. Read
-"What ADR-0069 decides and the library does not do yet" below before
-building a processor.
+This section describes what the library does today. Everything ADR-0069
+decides is built: the registration, the core's classification of every
+`<send>` against it, the pre-start check, the hand-off of a registered
+type's send to your module with its event already built, the host-owned
+timer for a delayed send, the cancel routing, the miss door and the
+`_ioprocessors` entry. One question is still open, and "After a resume"
+below says what it is and what your host does until it is decided.
 
 ### Spelling a send to a host processor
 
@@ -609,23 +609,19 @@ Statifier.Session.start_link(machine,
 )
 ```
 
-`:send_types` is a `%{type_string => module}` map. The default is `%{}`,
-which registers nothing: only the built-in spellings are supported, and with
-no `:send_types` passed nothing observable changes. The session derives the
-registered set from the map's own keys through
-`Statifier.Send.Types.from_send_types/1`, the one constructor, and stamps it
-on `%Statifier.MachineState{}` as `send_types`, at a fresh start and at a
-resume alike. Like `:invoke_handlers`, the set is fixed for the session's
-whole lifetime.
+`:send_types` is a `%{type_string => module}` map, each module a
+`Statifier.Send.Processor`. The default is `%{}`, which registers nothing:
+only the built-in spellings are supported, and with no `:send_types` passed
+nothing observable changes. The session derives the registered set from
+the map's own keys through `Statifier.Send.Types.from_send_types/1`, the one
+constructor, and stamps it on `%Statifier.MachineState{}` as `send_types`,
+at a fresh start and at a resume alike. Like `:invoke_handlers`, the set is
+fixed for the session's whole lifetime.
 
 A map that names a built-in spelling is refused before the session boots,
 with `{:error, {:send_types, {:built_in_types, types}}}`, every offending
 key named and sorted. A built-in send can never be redirected to a host
 processor.
-
-The module in each entry is not called by anything yet. The session keeps
-the map, hands it down under `:inherit_send_types`, and records it, but the
-planner does not dispatch to it; see the next two sections.
 
 `:inherit_send_types` is the `<send>` counterpart of
 `:inherit_invoke_handlers`, on the same start-time terms: `true` starts every
@@ -651,65 +647,157 @@ type - unlike `<invoke>`'s permissive `nil` (ADR-0069 decision 2 gives the
 reason). A `typeexpr` is resolved when the `<send>` is evaluated and judged
 here, in the core, and nowhere earlier.
 
-### What a live session does with a registered type today
+### Writing a `Statifier.Send.Processor`
 
-The planner's hand-off is not built. `Statifier.Session.Effects.plan/2`
-still judges a send effect's type with
-`Statifier.Send.Target.supported_type?/1`, which knows only the built-in
-spellings, so a registered type's effect reaching it is planned as
-`error.execution` on the sender's internal queue: nothing is delivered and
-no timer is scheduled. In a `Statifier.Session`, a chart cannot yet deliver
-through a registered type.
+A registered type's send is handed to its module, and the library delivers
+nothing for it itself. The behaviour has `Statifier.Invoke.Handler`'s split:
+
+| Callback | Purity | Called with |
+|---|---|---|
+| `deliver/3` | pure planning | the send effect the core produced, the event built from it, and the plan context |
+| `cancel/2` | pure planning | the `%Statifier.Effect.Cancel{}` naming a delayed send this processor holds, and the plan context |
+| `perform/2` (optional) | the impure half | one `{:handler, module, payload}` instruction a planning callback returned |
+| `ioprocessors_entry/1` (optional) | pure | the registered type string; returns the processor's `_ioprocessors` value |
+
+The planning callbacks return `{:ok, instructions}` and perform nothing; the
+usual instruction is `{:handler, __MODULE__, payload}`, which the session
+routes back to `perform/2`. The plan context is a plain map carrying
+`session_id` and no pid, so a processor cannot reach into the session
+through it.
+
+**The event is built for you.** `Statifier.Send.Event.build/3` is the one
+construction site: `name`, `data`, `sendid` only when the author wrote `id`
+or `idlocation`, a delayed send's `caller_context`, and `origin` and
+`origintype` defaulting to the sender's `#_scxml_<sessionid>` and the SCXML
+processor URI. `deliver/3` receives it with those defaults. A processor that
+wants replies to reach its own address rather than the sender's session
+builds it again with `:origin` and `:origintype`.
+
+**A delayed send is your timer.** For a registered type's
+`%Statifier.Effect.SendDelayed{}` the session schedules nothing: the
+processor owns the delay, and spec 6.2's discard at termination is its
+fire-time check (ADR-0054 decision 4). [Durable timers](durable-timers.md)
+stays the guide for the built-in types only.
+
+**The cancel reaches the holder.** A `<cancel>` always cancels the
+library's own timers under its send id. When a processor was handed a
+delayed send under that id, the session remembers it, and the same
+`<cancel>` reaches that processor's `cancel/2`, after which the hold is
+released. A processor must tolerate a cancel for a send it has already
+fired.
+
+**Idempotency.** `perform/2` may be called more than once for the same
+send: after a crash and a retry a host may perform the same effect again.
+A processor must be idempotent on the components of ADR-0054 decision 3's
+dedup key read off the effect - the send id, the step counters, `c_index`,
+`owner`, and `ordinal` - with the session scope your host supplies. Every
+registered-type send carries an `ordinal`: an immediate one gets it only
+because its type is registered (ADR-0059's amendment of 2026-09-19, at
+proposed), and a delayed one always has one.
 
 A host driving `Statifier.Interpreter` directly reads the effect off the
-core's return and may act on it itself; `Statifier.Session.Effects.plan/2`
-plans it as the same `error.execution` for that host too. Such a host
-re-stamps `send_types` on every load, beside `routes` and `invoke_types`
-(see [Hosting without a session](hosting-without-session.md)).
+core's return and calls `Statifier.Send.Event.build/3` itself. If it plans
+through `Statifier.Session.Effects.plan/2`, the plan context carries
+`send_types` (the stamped set), `send_processors` (the `:send_types` map)
+and `held_sends`; a context without them plans a registered type's send as
+the `error.execution` an unsupported type gets. Such a host re-stamps
+`send_types` on every load, beside `routes` and `invoke_types` (see
+[Hosting without a session](hosting-without-session.md)).
 
-### What ADR-0069 decides and the library does not do yet
+### Reporting a miss: `failed_send/3`
 
-Each item below is decided in ADR-0069 and has no code on `main` yet. Treat
-it as the contract a processor will be written against, not as behaviour
-you can call.
+A processor that cannot deliver while the sender still exists - no route,
+a sink that refused the event, a retry policy that ran out - reports the
+miss through the session door, in `failed_invocation/3`'s shape:
 
-- **The hand-off.** ADR-0069 decision 4 decides that the session planner
-  hands a registered type's effect, and the event the library would
-  deliver, to the registered module - a behaviour whose planning half is
-  pure and whose performing half the host runs, the same split
-  `Statifier.Invoke.Handler` has.
-- **The event carrier.** Decision 4 decides a public, pure builder that
-  takes a send effect and the sender's session id and returns the
-  `%Statifier.Event{}` the library delivers, with an `origin` and
-  `origintype` a processor may override with its own reply address.
-- **The delayed send is the host's timer.** Decision 4 decides that the
-  session schedules nothing for a registered type's delayed send and hands
-  the `%Statifier.Effect.SendDelayed{}` to the processor, which owns the
-  delay. [Durable timers](durable-timers.md) stays the guide for the
-  built-in types only.
-- **The cancel.** Decision 4 decides that a `<cancel>` naming such a send is
-  handed to the processor that holds it, under ADR-0054 decision 3's
-  cancellation key.
-- **Idempotency.** Decision 4 decides that a processor MUST be idempotent on
-  the components of ADR-0054 decision 3's dedup key read off the effect,
-  for the reason `perform/2` must be above: after a crash and retry, a host
-  may perform the same effect more than once. A `%Statifier.Effect.Send{}`
-  on `main` carries every component but two: the session scope, which is
-  yours to supply, and an `ordinal`. ADR-0059's amendment of 2026-09-19, at
-  proposed, decides that a registered type's immediate send carries that
-  `ordinal`.
-- **The miss door and the dead letter.** Decision 5 decides a session door,
-  `Statifier.Session.failed_send/3`, in `failed_invocation/3`'s shape: a
-  host that cannot deliver while the sender still exists reports the miss,
-  and the sender gets `error.communication` carrying the send's `sendid`. A
-  process-less host writes the same error through
-  `Statifier.Interpreter.deliver_internal/5`. When the sender has reached a
-  final state or no longer exists, the host records the miss as a dead
-  letter keyed by the send's dedup key, with its reason, and never drops it
-  silently.
-- **`_ioprocessors`.** ADR-0069's Consequences put a registered type in the
-  session's `_ioprocessors`, with a value the processor supplies; the
-  implementing change decides how.
+```elixir
+@spec failed_send(server :: server(), send :: Effect.Send.t() | Effect.SendDelayed.t(), failure :: keyword()) :: :ok
+def failed_send(server, send, failure \\ [])
+```
+
+`server` is the sending session and `send` is the effect `deliver/3` was
+handed. The session writes C.1's `error.communication` onto its own
+internal queue through `Statifier.Interpreter.deliver_internal/5`,
+ADR-0039's single write-back door, with the send's content position as the
+origin, and runs to quiescence. `_event.sendid` is the send id whether or
+not the author named the send - 5.10.1's rule for an error event triggered
+by a failed send - so a chart can tell its sends apart:
+
+```xml
+<transition event="error.communication" cond="_event.sendid == 'joined'" target="retry"/>
+```
+
+`failure` sits where `failed_invocation/3` takes its keyword list; the
+library does not read it, and the event carries no payload.
+
+**This is the host's call, never a planning callback's.** `deliver/3` and
+`cancel/2` perform nothing, and `perform/2` returning `{:error, term()}` is
+a transient signal for whatever retry policy wraps it. Only the layer that
+owns that policy knows a send has missed for good.
+
+**The dead letter is the host's.** When the sender has reached a final
+state, was cancelled, or no longer exists, C.1's queue does not exist, and
+`failed_send/3` writes nothing: a finished session ignores it and a cast to
+a process that is gone is dropped. The library absorbs nothing, so your
+host records the miss itself as a dead letter keyed by the send's dedup
+key, with its reason, and never drops it silently (ADR-0069 decision 5). A
+subscriber learns the sender finished from `{:halted, reason}`, and
+`Statifier.Session.status/1` answers it too. A processor whose route
+creates its target on a miss (get-or-create) has no miss to report.
+
+**No session process.** A host driving `Statifier.Interpreter` holds its
+own `%MachineState{}` and makes the same write directly:
+
+```elixir
+{:ok, machine_state, effects} =
+  Statifier.Interpreter.deliver_internal(
+    machine_state,
+    :platform,
+    "error.communication",
+    {:content, send.c_index, send.owner},
+    sendid: send.send_id
+  )
+```
+
+`{:error, :not_running}` is the finished-sender case, and the dead letter
+is then the host's the same way.
+
+### `_ioprocessors`
+
+Spec 5.10 binds `_ioprocessors` to one entry for each Event I/O Processor
+a session supports, and a registered type is one. A session registering
+`myapp:sink` reads
+
+```xml
+<transition cond="_ioprocessors['myapp:sink'] !== undefined" target="can_join"/>
+```
+
+The entry is keyed by the type string, and its value is the map your
+processor's optional `ioprocessors_entry/1` returns for that type - an
+empty map when it does not implement the callback. The value must be
+string-keyed at every level, as every datamodel value is;
+`Statifier.Send.Types.from_send_types/1` raises `ArgumentError` otherwise,
+so a bad value fails the session's start. The SCXML processor's own entry,
+keyed by its URI and holding the session's `location`, is unchanged, and a
+session with no `:send_types` carries that entry alone.
+
+The entries are written once, when the session starts, and persist with
+the datamodel. A resumed session reads the entries it started with: the
+driver's re-stamp of `send_types` on a resume replaces the classifier's set
+and does not rewrite `_ioprocessors`. Re-stamp the set the session started
+with; a different set after a resume would need mid-session registration,
+which ADR-0069 names as a trigger that would reopen it.
+
+### After a resume
+
+Which processor holds which delayed send is the live session's own state,
+not part of the persisted position. A session resumed from a position
+holds nothing, so a `<cancel>` it runs for a delayed send handed over
+before the position was saved reaches no processor, and nothing tells your
+processor to fire or drop such a send. What a resumed session should do
+about those sends is not decided yet. Until it is, a host whose processor
+keeps a delayed send across a resume cancels or fires it by its own
+record, keyed by the send id and the session scope.
 
 ### The pre-start check
 

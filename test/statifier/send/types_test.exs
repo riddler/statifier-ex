@@ -4,6 +4,15 @@ defmodule Statifier.Send.TypesTest do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Send.{Target, Types}
 
+  defmodule EntryProcessor do
+    @moduledoc false
+
+    @spec ioprocessors_entry(type :: String.t()) :: term()
+    def ioprocessors_entry("myapp:sink"), do: %{"location" => "myapp:sink/joined_records"}
+    def ioprocessors_entry("myapp:atom"), do: %{"nested" => %{location: "x"}}
+    def ioprocessors_entry("myapp:list"), do: ["location"]
+  end
+
   defp compile!(xml) do
     {:ok, machine} = Statifier.compile(xml)
     machine
@@ -15,8 +24,36 @@ defmodule Statifier.Send.TypesTest do
     # atom rather than the type string, and this equality assertion
     # reddens. Confirmed red and reverted.
     test "derives the registered set from the map's own keys" do
-      assert Types.from_send_types(%{"myapp:sink" => SinkProcessor, "myapp:execution" => Exec}) ==
-               %Types{types: MapSet.new(["myapp:sink", "myapp:execution"])}
+      assert %Types{types: types} =
+               Types.from_send_types(%{"myapp:sink" => SinkProcessor, "myapp:execution" => Exec})
+
+      assert types == MapSet.new(["myapp:sink", "myapp:execution"])
+    end
+
+    # sabotage: `entry!/2` always returns `%{}` (the callback is never
+    # called) -> the sink's entry reads `%{}`, and this equality reddens.
+    # Confirmed red and reverted.
+    test "reads each type's _ioprocessors entry from its processor" do
+      assert %Types{entries: entries} =
+               Types.from_send_types(%{"myapp:sink" => EntryProcessor, "myapp:execution" => Exec})
+
+      assert entries == %{
+               "myapp:sink" => %{"location" => "myapp:sink/joined_records"},
+               "myapp:execution" => %{}
+             }
+    end
+
+    # sabotage: `entry!/2`'s `unless` check is deleted -> an atom-keyed map
+    # is accepted, nothing raises, and `assert_raise` reddens. Confirmed red
+    # and reverted.
+    test "refuses an entry that is not a string-keyed map" do
+      assert_raise ArgumentError, ~r/must return a map string-keyed at every level/, fn ->
+        Types.from_send_types(%{"myapp:atom" => EntryProcessor})
+      end
+
+      assert_raise ArgumentError, ~r/must return a map string-keyed at every level/, fn ->
+        Types.from_send_types(%{"myapp:list" => EntryProcessor})
+      end
     end
 
     # sabotage: `from_send_types/1`'s empty-map clause is deleted, so an
