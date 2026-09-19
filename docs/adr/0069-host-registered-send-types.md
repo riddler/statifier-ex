@@ -430,7 +430,9 @@ code that does not, so this note says plainly which is which.
   and is never stored" - while decision 4 here hands a registered
   type's immediate send to a host module that may store it, so that
   premise stops holding for registered types once this record is built.
-  ADR-0069 does not cite ADR-0059.
+  This record names ADR-0059 in decision 4 and in the open question, but
+  cites neither its decision 3 nor its decision 5, and ADR-0059 is not in
+  the Related list.
 
 Three citation notes, none of which changes what the record decides.
 
