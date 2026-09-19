@@ -88,6 +88,24 @@
       args: ["test.regression"],
       kind: :reader
     ],
+    # The conformance corpus check (ADR-0070): `mix statifier.corpus --check`
+    # re-runs every case in conformance/corpus/ and fails when a committed
+    # corpus file, the manifest, the exclusions or the registry differs from
+    # what the emitter writes from the committed inputs, or when there is
+    # nothing to check - an absent or empty corpus is a red stage, not a green
+    # one. It needs no network and no upstream tree, so it runs in CI as it
+    # runs here. It writes nothing and reads the build Compile produced, so it
+    # is a reader, and like the regression stage it is off the loop profile's
+    # allow-list. A command stage runs in its own `mix` process, so the
+    # session runtime the task starts ends with that process rather than
+    # outliving the check inside another task's VM.
+    [
+      key: :corpus,
+      name: "Conformance corpus",
+      command: "mix",
+      args: ["statifier.corpus", "--check"],
+      kind: :reader
+    ],
     # The ADR guard reads the same diff for lines that look like violations of
     # the mechanically-checkable ADRs (0002 naming, 0003 effects, 0004 eval,
     # 0008 UXIDs), so architectural drift is a named failure rather than

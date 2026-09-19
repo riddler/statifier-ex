@@ -98,6 +98,41 @@ defmodule Corpus.CorpusFilesTest do
       end
     end
 
+    @tag :isolated_tmp_dir
+    # sabotage: n/a - asserts the committed generated files, no lib/ behavior;
+    # one byte changed in an assertion line of a committed generated module,
+    # outside its document and header -> red
+    test "every generated module is byte for byte what its generator writes from the committed corpus",
+         %{tmp_dir: tmp_dir} do
+      for {suite, script} <- [{"scion", "scion"}, {"w3c", "scxml_w3"}] do
+        out = Path.join(tmp_dir, suite)
+        File.mkdir_p!(out)
+
+        {output, status} =
+          System.cmd(
+            "elixir",
+            [Path.join(["tools/corpus", script, "cases.exs"]), out, Path.expand("conformance")],
+            stderr_to_stdout: true
+          )
+
+        assert status == 0, output
+
+        written =
+          (out <> "/**/*_test.exs") |> Path.wildcard() |> Enum.map(&Path.relative_to(&1, out))
+
+        committed = Enum.map(generated(suite), &Path.relative_to(&1, @suites[suite]))
+
+        assert committed != [], "no generated #{suite} modules to compare"
+        assert Enum.sort(written) == committed
+
+        for path <- committed do
+          assert File.read!(Path.join(@suites[suite], path)) == File.read!(Path.join(out, path)),
+                 "#{Path.join(@suites[suite], path)} differs from what " <>
+                   "tools/corpus/#{script}/cases.exs writes from conformance/corpus/"
+        end
+      end
+    end
+
     # sabotage: n/a - asserts the committed licence texts; truncating
     # LICENSES/BSD-3-Clause-W3C.txt after its conditions -> red
     test "every upstream case names its licence and a notice file that carries it" do
