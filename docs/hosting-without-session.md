@@ -22,7 +22,8 @@ Read this alongside, not instead of:
 - [Durable timers](durable-timers.md) - Route B is the process-less half of
   delayed sends, including the store keying and the delivery-time liveness
   check.
-- [Extending](extending.md) - writing and registering `<invoke>` handlers.
+- [Extending](extending.md) - writing and registering `<invoke>` handlers,
+  and registering `<send>` types.
 - [Observability](observability.md) and [OpenTelemetry](opentelemetry.md) -
   what the trace effects carry and what the bridge does with them.
 
@@ -51,7 +52,7 @@ have to build" at the end.
 Every process-less drive is the same four beats:
 
 1. **Load.** Decode the position against the recompiled chart, and re-stamp
-   the two per-drive snapshot fields.
+   the three per-drive snapshot fields.
 2. **Advance.** Call one `Interpreter` entry with an event (or none).
 3. **Execute.** Plan the returned effects into instructions and perform
    them.
@@ -60,12 +61,17 @@ Every process-less drive is the same four beats:
 Beat 1 is `Statifier.Interpreter`'s own "Rehydrating a position" section
 (`lib/statifier/interpreter.ex:43-92`), which is the reference text for it
 and is not restated here. In short: `Statifier.Position.from_binary/2`
-(`lib/statifier/position.ex:158-164`) checks format version and chart
-identity for you, and returns `routes` and `invoke_types` as `nil` on
-purpose, so re-stamp both with
-`Statifier.MachineState.put_routes/2` (`lib/statifier/machine_state.ex:854-855`)
-and `put_invoke_types/2` (`lib/statifier/machine_state.ex:859-865`) before
-the first advance.
+(`lib/statifier/position.ex:161-167`) checks format version and chart
+identity for you, and returns `routes`, `invoke_types` and `send_types` as
+`nil` on purpose, so re-stamp all three with
+`Statifier.MachineState.put_routes/2` (`lib/statifier/machine_state.ex:872-874`),
+`put_invoke_types/2` (`lib/statifier/machine_state.ex:881-883`) and
+`put_send_types/2` (`lib/statifier/machine_state.ex:891-893`) before the
+first advance. `send_types` is the registered `<send type>` set
+([ADR-0069](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0069-host-registered-send-types.md)),
+built from your `%{type_string => module}` map by
+`Statifier.Send.Types.from_send_types/1`; with no send type registered it
+is `nil`, which is what `from_send_types/1` returns for an empty map.
 
 Beat 2 has six doors, and a driver may use any of them - they all take a
 `%MachineState{}` and trust it structurally, with no state of their own
@@ -379,7 +385,7 @@ library. The core classifies an `<invoke type>` against the snapshot
 An unregistered type raises `error.execution` and starts nothing
 (spec 3.12.2).
 
-This is beat 1 of the loop again: `invoke_types` is one of the two fields a
+This is beat 1 of the loop again: `invoke_types` is one of the three fields a
 position blob deliberately returns as `nil`
 ([ADR-0064](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0064-position-blob-drops-the-per-drive-snapshot-fields.md)),
 so re-stamp it on **every** load, not once at execution creation.
