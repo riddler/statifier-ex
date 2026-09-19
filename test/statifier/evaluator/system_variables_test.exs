@@ -4,6 +4,7 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
   alias Statifier.{Compiler, Evaluator, Event, Lowering, MachineState, Parser, Validator}
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
+  alias Statifier.Send.Types
 
   @document """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s1">
@@ -53,6 +54,53 @@ defmodule Statifier.Evaluator.SystemVariablesTest do
     test "_name is :undefined when <scxml> writes no name attribute" do
       m = machine()
       assert SystemVariables.initial(m, "sess_abc")["_name"] == :undefined
+    end
+  end
+
+  describe "initial/3 with registered send types" do
+    @scxml_uri "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+
+    # sabotage: `registered_entries/1`'s `%Types{}` clause returns `%{}` ->
+    # the registered entry is missing, and this equality reddens. Confirmed
+    # red and reverted.
+    test "_ioprocessors carries one entry per registered type beside the SCXML entry" do
+      types = %Types{
+        types: MapSet.new(["myapp:sink", "myapp:execution"]),
+        entries: %{
+          "myapp:sink" => %{"location" => "myapp:sink/joined_records"},
+          "myapp:execution" => %{}
+        }
+      }
+
+      assert SystemVariables.initial(machine(), "sess_abc", types)["_ioprocessors"] == %{
+               @scxml_uri => %{"location" => "#_scxml_sess_abc"},
+               "myapp:sink" => %{"location" => "myapp:sink/joined_records"},
+               "myapp:execution" => %{}
+             }
+    end
+
+    # sabotage: `initial/3` merges the SCXML entry under the registered
+    # entries (`Map.merge(%{uri => ...}, registered_entries(send_types))`)
+    # -> the set's own value replaces the SCXML entry, and this equality
+    # reddens. Confirmed red and reverted.
+    test "a registered entry never replaces the SCXML entry" do
+      types = %Types{types: MapSet.new([@scxml_uri]), entries: %{@scxml_uri => %{"x" => 1}}}
+
+      assert SystemVariables.initial(machine(), "sess_abc", types)["_ioprocessors"] == %{
+               @scxml_uri => %{"location" => "#_scxml_sess_abc"}
+             }
+    end
+
+    # sabotage: `registered_entries/1`'s `nil` clause returns
+    # `%{"myapp:sink" => %{}}` -> a session registering nothing grows an
+    # entry, and this equality reddens. Confirmed red and reverted.
+    test "with no registration the map is the SCXML entry alone, as initial/2 writes it" do
+      assert SystemVariables.initial(machine(), "sess_abc", nil) ==
+               SystemVariables.initial(machine(), "sess_abc")
+
+      assert SystemVariables.initial(machine(), "sess_abc")["_ioprocessors"] == %{
+               @scxml_uri => %{"location" => "#_scxml_sess_abc"}
+             }
     end
   end
 

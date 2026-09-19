@@ -3,7 +3,7 @@ defmodule Statifier.Evaluator.SystemVariables do
   Spec 5.10's system variables, as the plain maps
   `Statifier.MachineState.datamodel` carries them in. Two functions, so that
   neither `Statifier.MachineState` nor `Statifier.Interpreter` grows spec
-  5.10 knowledge of its own - `MachineState.new/2` calls `initial/2` once,
+  5.10 knowledge of its own - `MachineState.new/2` calls `initial/3` once,
   and `MachineState.put_event/2` calls `event/1` on every write.
 
   Every writer here spells "declared, no value yet" as `:undefined` directly,
@@ -15,6 +15,7 @@ defmodule Statifier.Evaluator.SystemVariables do
   """
 
   alias Statifier.{Event, Machine}
+  alias Statifier.Send.Types
 
   @scxml_event_processor "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
   @scxml_session_target_prefix "#_scxml_"
@@ -37,7 +38,8 @@ defmodule Statifier.Evaluator.SystemVariables do
 
   @doc """
   All four system variables (spec 5.10) as they stand before any event.
-  Called once, by `MachineState.new/2`.
+  Called once, by `MachineState.new/2`, with its `:send_types` option as
+  `send_types`.
 
   `_sessionid`, `_name`, and `_ioprocessors` are session-lifetime and are
   never rewritten afterward - `_sessionid` stays stable for the session's
@@ -52,6 +54,32 @@ defmodule Statifier.Evaluator.SystemVariables do
   `machine.name` runs through `absent/1` the same as an absent `_event`
   field does, and `_name` reads as `:undefined` rather than as a datamodel
   null.
+
+  ## `_ioprocessors` and registered send types
+
+  5.10: "The SCXML Processor MUST bind the variable _ioprocessors to a set
+  of values, one for each Event I/O Processor that it supports." The SCXML
+  Event I/O Processor's entry, keyed by its URI and holding the session's
+  `"location"`, is always there. A session that registers send types
+  (ADR-0069) supports each of them too, so `_ioprocessors` also carries one
+  entry per registered type string, whose value the type's processor
+  supplied (`Statifier.Send.Types.from_send_types/1` read it). With
+  `send_types` `nil`, which is what a session registering nothing carries,
+  the map holds the SCXML entry alone, exactly as before registered types
+  existed. A registered entry never replaces the SCXML entry: a set naming
+  the processor URI still reads the SCXML entry under that key.
+
+  The entries are written here, once, when the session starts, and
+  nowhere else. `_ioprocessors` is part of the datamodel, so a persisted
+  position (`Statifier.Position`) carries the entries as they were written,
+  and a resumed session reads the entries it started with.
+  `MachineState.put_send_types/2`, the driver's re-stamp on a resume
+  (ADR-0064), replaces the classifier's set and does not rewrite
+  `_ioprocessors`. The registration is fixed for the session's lifetime
+  (ADR-0069 decision 2), and a host that re-stamps the set it started with
+  reads the same entries it would have written; a set that changes across a
+  resume is a mid-session registration, which ADR-0069 names as a trigger
+  that would reopen that record.
 
   ## Why `_event` is seeded rather than left absent
 
@@ -71,17 +99,25 @@ defmodule Statifier.Evaluator.SystemVariables do
   throws `ReferenceError` - so the test can only pass if `_event` is
   declared and holds undefined, which is exactly what seeding reproduces.
   """
-  @spec initial(machine :: Machine.t(), session_id :: String.t()) :: map()
-  def initial(%Machine{} = machine, session_id) when is_binary(session_id) do
+  @spec initial(machine :: Machine.t(), session_id :: String.t(), send_types :: Types.t() | nil) ::
+          map()
+  def initial(%Machine{} = machine, session_id, send_types \\ nil) when is_binary(session_id) do
     %{
       "_sessionid" => session_id,
       "_name" => absent(machine.name),
       "_event" => :undefined,
-      "_ioprocessors" => %{
-        @scxml_event_processor => %{"location" => scxml_location(session_id)}
-      }
+      "_ioprocessors" =>
+        Map.put(
+          registered_entries(send_types),
+          @scxml_event_processor,
+          %{"location" => scxml_location(session_id)}
+        )
     }
   end
+
+  @spec registered_entries(send_types :: Types.t() | nil) :: %{String.t() => map()}
+  defp registered_entries(nil), do: %{}
+  defp registered_entries(%Types{entries: entries}), do: entries
 
   @doc """
   `_event`'s value for `event` - spec 5.10.1's fields, read straight off
