@@ -957,16 +957,27 @@ defmodule Statifier.Session do
 
   # ADR-0069 decision 1: a `:send_types` map naming a built-in spelling is
   # refused before the session boots, so a built-in send can never be
-  # redirected to a host processor. The refusal is
-  # `Statifier.Send.Types.check_registration/1`'s, never a membership test
-  # written here.
+  # redirected to a host processor. Every offending key is named, sorted, so
+  # a host learns the whole set in one round trip.
   @spec init_registered(machine :: Machine.t(), opts :: keyword(), resume :: resume()) ::
-          {:ok, State.t(), {:continue, tuple()}} | {:stop, {:send_types, term()}}
+          {:ok, State.t(), {:continue, tuple()}}
+          | {:stop, {:send_types, {:built_in_types, [term()]}}}
   defp init_registered(machine, opts, resume) do
-    case SendTypes.check_registration(Keyword.get(opts, :send_types, %{})) do
-      :ok -> init_boot(machine, opts, resume)
-      {:error, reason} -> {:stop, {:send_types, reason}}
+    case opts |> Keyword.get(:send_types, %{}) |> built_in_send_types() do
+      [] -> init_boot(machine, opts, resume)
+      built_ins -> {:stop, {:send_types, {:built_in_types, built_ins}}}
     end
+  end
+
+  # The keys of a `:send_types` map that name a built-in spelling. Membership
+  # is `Statifier.Send.Types.classify/2`'s answer against no declaration, so
+  # the built-in set is never restated here.
+  @spec built_in_send_types(send_types :: map()) :: [term()]
+  defp built_in_send_types(send_types) when is_map(send_types) do
+    send_types
+    |> Map.keys()
+    |> Enum.filter(&(SendTypes.classify(nil, &1) == :built_in))
+    |> Enum.sort()
   end
 
   # The tail of `init/1`, shared by a fresh start and a resume: `resume` has

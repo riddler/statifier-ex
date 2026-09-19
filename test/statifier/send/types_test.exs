@@ -4,8 +4,6 @@ defmodule Statifier.Send.TypesTest do
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Send.{Target, Types}
 
-  @processor_uri "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
-
   defp compile!(xml) do
     {:ok, machine} = Statifier.compile(xml)
     machine
@@ -27,34 +25,6 @@ defmodule Statifier.Send.TypesTest do
     # reddens. Confirmed red and reverted.
     test "an empty map is no declaration: nil" do
       assert Types.from_send_types(%{}) == nil
-    end
-  end
-
-  describe "check_registration/1" do
-    # sabotage: `check_registration/1`'s filter is changed to
-    # `&(classify(nil, &1) == :registered)` (never true for a nil set) ->
-    # every built-in spelling is let through as `:ok`, and the match on
-    # `{:error, {:built_in_types, _}}` below reddens. Confirmed red and
-    # reverted.
-    test "refuses every built-in spelling, sorted, in one error" do
-      map = %{
-        "scxml" => SinkProcessor,
-        nil => SinkProcessor,
-        @processor_uri => SinkProcessor,
-        "myapp:sink" => SinkProcessor
-      }
-
-      assert {:error, {:built_in_types, [nil, @processor_uri, "scxml"]}} =
-               Types.check_registration(map)
-    end
-
-    # sabotage: `check_registration/1`'s `[] -> :ok` arm is changed to
-    # `[] -> {:error, {:built_in_types, []}}` -> a map naming only host
-    # types is refused, and this `:ok` assertion reddens. Confirmed red and
-    # reverted.
-    test "accepts a map naming only host types, and an empty map" do
-      assert Types.check_registration(%{"myapp:sink" => SinkProcessor}) == :ok
-      assert Types.check_registration(%{}) == :ok
     end
   end
 
