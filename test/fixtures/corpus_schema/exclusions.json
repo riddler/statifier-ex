@@ -1,0 +1,16 @@
+{
+  "exclusions": [
+    {
+      "suite": "scion",
+      "key": "script-src",
+      "reason": "needs_external_fetch",
+      "detail": "<script src=\"*.js\"/> - external fetch never happens (ADR-0026 decision 2)"
+    },
+    {
+      "suite": "w3c",
+      "key": "test509",
+      "reason": "needs_basichttp",
+      "detail": "BasicHTTP Event I/O Processor MUST accept POST requests"
+    }
+  ]
+}

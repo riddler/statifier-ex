@@ -1,0 +1,42 @@
+{
+  "id": "statifier/send/impression_joined",
+  "suite": "statifier",
+  "spec": "send",
+  "conformance": null,
+  "description": "An impression joined to its click is handed to the host's registered sink.",
+  "required_features": [
+    "basic_states",
+    "event_transitions",
+    "final_states",
+    "send_elements"
+  ],
+  "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"predicator\" initial=\"awaiting_click\">\n    <state id=\"awaiting_click\">\n        <transition event=\"click.recorded\" target=\"joined\">\n            <send type=\"myapp:sink\" target=\"joined_records\" event=\"impression.joined\" />\n        </transition>\n    </state>\n    <final id=\"joined\" />\n</scxml>\n",
+  "initial_configuration": [
+    "awaiting_click"
+  ],
+  "steps": [
+    {
+      "event": {
+        "name": "click.recorded",
+        "data": {
+          "click_id": "clk_1"
+        }
+      },
+      "configuration": [
+        "joined"
+      ]
+    }
+  ],
+  "host": {
+    "send_types": [
+      "myapp:sink"
+    ],
+    "expect_sends": [
+      {
+        "type": "myapp:sink",
+        "target": "joined_records",
+        "event": "impression.joined"
+      }
+    ]
+  }
+}

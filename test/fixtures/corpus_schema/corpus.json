@@ -1,0 +1,32 @@
+{
+  "suite": "w3c",
+  "cases": [
+    {
+      "id": "w3c/test286",
+      "suite": "w3c",
+      "spec": "assign",
+      "conformance": "mandatory",
+      "description": "If the location expression of an assign does not denote a valid location in the datamodel the processor MUST place the error error.execution in the internal event queue.",
+      "required_features": [
+        "assign_elements",
+        "basic_states",
+        "event_transitions",
+        "final_states",
+        "log_elements",
+        "onentry_actions",
+        "raise_elements",
+        "wildcard_events"
+      ],
+      "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"predicator\" initial=\"s0\">\n    <state id=\"s0\">\n        <onentry>\n            <assign location=\"foo.bar.baz \" expr=\"1\" />\n            <raise event=\"foo\" />\n        </onentry>\n        <transition event=\"error.execution\" target=\"pass\" />\n        <transition event=\"*\" target=\"fail\" />\n    </state>\n    <final id=\"pass\">\n        <onentry>\n            <log label=\"Outcome\" expr=\"'pass'\" />\n        </onentry>\n    </final>\n    <final id=\"fail\">\n        <onentry>\n            <log label=\"Outcome\" expr=\"'fail'\" />\n        </onentry>\n    </final>\n</scxml>\n",
+      "initial_configuration": [
+        "pass"
+      ],
+      "steps": [],
+      "upstream": {
+        "document": "286/test286.txml",
+        "license": "BSD-3-Clause-W3C",
+        "notice": "LICENSES/BSD-3-Clause-W3C.txt"
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "implementation": "statifier-ex",
+  "corpus_hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "claims": [
+    "scion",
+    "w3c-mandatory"
+  ],
+  "entries": [
+    {
+      "case_id": "scion/basic/basic2",
+      "suite": "scion"
+    },
+    {
+      "case_id": "w3c/test286",
+      "suite": "w3c"
+    }
+  ]
+}
