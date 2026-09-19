@@ -3,9 +3,10 @@
 Status: proposed - amends ADR-0047 decision 5 for `<send>` (the half
 ADR-0051 left unfired: the 6.2.5 Event I/O Processor set becomes
 per-session deployment state); answers ADR-0055 decision 3's named trigger
-with the three things that decision says the opening record owes; ADR-0047
-decisions 1-4, ADR-0051's `<invoke>` set, and ADR-0055 decisions 1 and 2
-are unchanged
+with the three things that decision says the opening record owes; amends
+ADR-0054 decision 2 in part (its host rule for a delayed send with a
+non-nil target is scoped to the built-in types); ADR-0047 decisions 1-4,
+ADR-0051's `<invoke>` set, and ADR-0055 decisions 1 and 2 are unchanged
 
 ## Context
 
@@ -135,11 +136,15 @@ registration naming one is refused when the session starts, so a
 built-in send can never be redirected to a host processor.
 
 This amends ADR-0047 decision 5 for `<send>` the way ADR-0051 amended it
-for `<invoke>`: the 6.2.5 set becomes deployment state, and decision 5's
-own alternative, "into a caller-supplied capability", is the one taken
-(decision 2). ADR-0047 decisions 1-4 stand: the check stays in
-`execute/2`, the static half stays registry-free, and the planner keeps
-its boundary arm.
+for `<invoke>`: the 6.2.5 set becomes deployment state. Decision 5 named
+two destinations for it, "back to the boundary (or into a
+caller-supplied capability)", and this record takes neither as written. A
+capability in this repo is a resolver function (ADR-0047 decision 6's
+shape D, which ADR-0048 decision 1 rejected); decision 2 below takes
+ADR-0048's and ADR-0051's shape instead, a caller-declared value on
+`%MachineState{}` that the core judges against. ADR-0047 decisions 1-4
+stand: the check stays in `execute/2`, the static half stays
+registry-free, and the planner keeps its boundary arm.
 
 **2. Registration is per session, beside `:invoke_handlers`, in the same
 shape.** `Statifier.Session.start_link/2` gains a `:send_types` option, a
@@ -217,15 +222,20 @@ deliver:
   library's.** The session schedules nothing for it and hands the
   `%SendDelayed{}` to the processor, which owns the delay. A `<cancel>`
   whose send id names such a send is handed to the same processor under
-  ADR-0054 decision 3's cancellation key; spec 6.2's discard at
+  ADR-0054 decision 3's cancellation key. Today the planner's cancel arm
+  emits only `{:cancel_timers, send_id}` and `%Effect.Cancel{}` carries no
+  type, so the session keeps which processor holds each registered-type
+  delayed send id and routes the cancel by it; a process-less host already
+  consumes `%Effect.Cancel{}` under that key. Spec 6.2's discard at
   termination is the host's fire-time check (ADR-0054 decision 4).
   ADR-0054 decision 2's host rule, as ADR-0055 decision 3 restates it
   ("for any non-nil target, leave the timer to the library"), reads over
   the built-in types only.
 - **Idempotency.** A processor MUST be idempotent on the ADR-0054
-  decision 3 dedup key's components read off the effect (an
-  `%Effect.Send{}` carries every one but ADR-0059's `ordinal`), for the
-  reason ADR-0051 decision 4 gives for `perform/2`: after a crash and
+  decision 3 dedup key's components read off the effect. An
+  `%Effect.Send{}` carries every component except two: the session scope,
+  which is the host's to supply, and ADR-0059's `ordinal`. The reason is
+  the one ADR-0051 decision 4 gives for `perform/2`: after a crash and
   retry, a host may perform the same effect more than once.
 
 Per type class:
@@ -246,11 +256,20 @@ stand unchanged.
 - **The event carrier** is decision 4's builder.
 - **The miss semantics when the sender is gone: a host-side dead letter.**
   A processor that cannot deliver while the sender still exists reports
-  `error.communication`, carrying the send's `sendid`, onto the sender's
-  internal queue through `Statifier.Interpreter.deliver_internal/5`,
-  ADR-0039's single write-back door, which a process-less host can call as
-  well as a session. When the sender has reached a final state or no
-  longer exists, C.1's queue does not exist. The host then records the
+  the miss, and the sender gets C.1's `error.communication`, carrying the
+  send's `sendid`, on its internal queue. For a `Statifier.Session` sender
+  the report goes through a new public session door in
+  `Statifier.Session.failed_invocation/3`'s shape (ADR-0068 decision 3):
+  `failed_send/3`, taking the owning session, the send effect the
+  processor was handed, and a failure keyword list, and called by the
+  host, never by a processor's pure planning half. The session then writes
+  the error through `Statifier.Interpreter.deliver_internal/5`, ADR-0039's
+  single write-back door, with the effect's content position as the
+  origin. That function takes the `%MachineState{}` the session holds
+  privately, so a host cannot call it for a live session. A process-less
+  host holds its own `%MachineState{}` and calls `deliver_internal/5`
+  directly. When the sender has reached a final state or no longer
+  exists, C.1's queue does not exist. The host then records the
   miss as a dead letter keyed by the send's dedup key, with its reason;
   the library absorbs nothing and the host never drops it silently. A
   silent discard would mirror 6.2's termination rule but would hide a real
@@ -290,6 +309,12 @@ stand unchanged.
   - `plan_send/3` and `plan_send_delayed/3` in `Statifier.Session.Effects`
     plan a registered type to its module;
   - the public event builder, with `delivered_event/2` calling it;
+  - the public send-miss door `Statifier.Session.failed_send/3`
+    (decision 5), writing through `deliver_internal/5`;
+  - the cancel routing of decision 4: the session keeps which processor
+    holds each registered-type delayed send id and hands that
+    processor the `<cancel>`, beside today's `{:cancel_timers, send_id}`
+    arm for the library's own timers;
   - the pre-start check of decision 3;
   - `:send_types` and `:inherit_send_types` on
     `Statifier.Session.start_link/2`, stamped at both boot arms the way
@@ -322,6 +347,12 @@ stand unchanged.
   for this case.
 - No conformance result moves: the corpus names no type outside the
   built-in set.
+- ADR-0055's Consequences also list "an embedder-registrable Event I/O
+  Processor set" as a reopen trigger for that record, one that "would
+  re-pose routing per-processor and could carry its own delivery doors".
+  This record fires that trigger too: routing is re-posed per processor
+  for registered types only, and the delivery doors are decision 4's
+  builder and decision 5's `failed_send/3`.
 - What would reopen this record: a host needing mid-session registration
   (the ADR-0051 decision 7 trigger, for sends); a corpus document naming a
   non-built-in send type; or a consumer that needs a host to deliver a
@@ -336,8 +367,9 @@ stand unchanged.
 - [ADR-0055](0055-non-self-delayed-send-routes-stay-the-librarys.md) (decision 3's trigger and its three owed items)
 - [ADR-0039](0039-session-detected-send-failures-re-enter-the-core.md) (the write-back door)
 - [ADR-0048](0048-send-reachability-judged-against-a-route-snapshot.md) (the route snapshot, not consulted for registered types)
-- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (the dedup and cancellation keys, the fire-time check)
+- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (decision 2's host rule amended in part, scoped to the built-in types; the dedup and cancellation keys, the fire-time check)
 - [ADR-0057](0057-recording-identity-and-serialization.md) (recording normalization)
 - [ADR-0060](0060-resuming-a-session-from-a-persisted-position.md) (the session id across a resume)
 - [ADR-0063](0063-caller-context-on-external-events-and-durable-timer-effects.md) (`caller_context`)
 - [ADR-0064](0064-position-blob-drops-the-per-drive-snapshot-fields.md) (the dropped position fields)
+- [ADR-0068](0068-permanent-invoke-failure-is-a-suffixed-error-communication.md) (the `failed_invocation/3` door shape `failed_send/3` follows)
