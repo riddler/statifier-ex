@@ -12,7 +12,7 @@
     },
     "suites": {
       "type": "array",
-      "description": "One entry per corpus file, sorted by suite.",
+      "description": "One entry per corpus file, in suite order - scion, w3c, statifier, the order corpus_hash concatenates the files in - skipping a suite with no file.",
       "items": {
         "type": "object",
         "properties": {

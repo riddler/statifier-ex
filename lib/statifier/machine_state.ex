@@ -224,6 +224,14 @@ defmodule Statifier.MachineState do
   `<cancel>` construction, since one session-global sequence spans both
   effect kinds (ADR-0059).
 
+  A third effect reads the same sequence: an immediate `%Effect.Send{}`
+  whose type the session registered (ADR-0069) advances it and carries the
+  value as its `ordinal`, at the same `send.ex` site as the delayed send,
+  because a host processor keys that send in a durable store too (ADR-0059
+  decision 5's 2026-09-19 Amendment). An immediate send of a built-in type
+  advances nothing, so a session that registers no send type mints exactly
+  the ordinals it did before.
+
   ## `caller_context` is the current macrostep's caller (ADR-0063)
 
   `caller_context :: term()` is transient per-macrostep fold state naming

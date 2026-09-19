@@ -362,6 +362,7 @@ defmodule Statifier.Session do
       :invoked_by,
       invoke_handlers: %{},
       send_types: %{},
+      held_sends: %{},
       timer_refs: %{},
       subscribers: %{},
       halted: nil,
@@ -412,6 +413,15 @@ defmodule Statifier.Session do
             # from this same map's keys through
             # `Statifier.Send.Types.from_send_types/1`, the one constructor.
             send_types: %{String.t() => module()},
+            # ADR-0069 decision 4's cancel routing: which registered types'
+            # processors hold a delayed send under each send id, so a
+            # `<cancel>` naming it reaches them. Kept by the `{:notify, _}`
+            # arms for `:send_delayed` and `:cancel` through
+            # `Statifier.Session.Effects.register_held_send/3` and
+            # `release_held_send/2`, and handed to the planner in
+            # `plan_context/1`. Session state, not position: a resumed
+            # session starts it empty.
+            held_sends: Statifier.Session.Effects.held_sends(),
             # The monotonic timestamp (`System.monotonic_time/0`) of the
             # currently open macrostep span - telemetry only, never recorded
             # (ADR-0040, ADR-0034). `nil` outside `drain_event/2`,
@@ -1887,7 +1897,12 @@ defmodule Statifier.Session do
       session_id: state.session_id,
       invoke_types: state.machine_state.invoke_types,
       invoke_handlers: state.invoke_handlers,
-      invocation_types: Invocations.types(state.invocations)
+      invocation_types: Invocations.types(state.invocations),
+      # ADR-0069: the registered set the core was stamped with, the map it
+      # was derived from (the one constructor), and the live holds.
+      send_types: state.machine_state.send_types,
+      send_processors: state.send_types,
+      held_sends: state.held_sends
     }
   end
 
@@ -1959,6 +1974,30 @@ defmodule Statifier.Session do
     else
       state
     end
+  end
+
+  # ADR-0069 decision 4's cancel routing. A registered-type delayed send is
+  # the processor's timer, so this session schedules nothing for it and
+  # instead remembers which processor holds its send id; a `<cancel>`
+  # releases every hold under its id, after the planner has routed it to
+  # those processors. Both arms apply the rule `plan/2`'s own fold applies
+  # within one effect list (`Effects.register_held_send/3`,
+  # `Effects.release_held_send/2`), so the two cannot disagree.
+  defp perform_instruction({:notify, {:send_delayed, send} = effect}, state, _override) do
+    notify(state, {:effect, effect})
+    Telemetry.effect(state.session_id, state.machine_state.machine, effect)
+
+    if SendTypes.classify(state.machine_state.send_types, send.type) == :registered do
+      %{state | held_sends: Effects.register_held_send(state.held_sends, send.send_id, send.type)}
+    else
+      state
+    end
+  end
+
+  defp perform_instruction({:notify, {:cancel, cancel} = effect}, state, _override) do
+    notify(state, {:effect, effect})
+    Telemetry.effect(state.session_id, state.machine_state.machine, effect)
+    %{state | held_sends: Effects.release_held_send(state.held_sends, cancel.send_id)}
   end
 
   defp perform_instruction({:notify, effect}, state, _override) do

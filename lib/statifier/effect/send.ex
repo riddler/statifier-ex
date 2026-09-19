@@ -24,6 +24,14 @@ defmodule Statifier.Effect.Send do
   the author never named the send, and `send_id` alone cannot express that
   distinction, since ADR-0035 always mints one either way.
 
+  `ordinal` is set only when the send's type is one the session registered
+  (ADR-0069): the value `Statifier.MachineState`'s `timer_counter` reached
+  when the core built this effect, so a host processor that keys what it
+  has performed can tell apart two sends that share every other key
+  component, such as one author-written `id` inside a `<foreach>`. It is
+  `nil` on a send of a built-in type, which advances no counter (the
+  ADR-0059 decision 5 Amendment of 2026-09-19).
+
   ## `data` may carry `:undefined`, untranslated
 
   `docs/adr/0037-unbound-spelled-undefined-at-the-writer.md`'s open question
@@ -57,6 +65,7 @@ defmodule Statifier.Effect.Send do
     :macrostep,
     :microstep,
     :round,
+    :ordinal,
     id_from_author?: false
   ]
 
@@ -71,6 +80,7 @@ defmodule Statifier.Effect.Send do
           macrostep: non_neg_integer(),
           microstep: non_neg_integer(),
           round: non_neg_integer(),
+          ordinal: pos_integer() | nil,
           id_from_author?: boolean()
         }
 end

@@ -10,6 +10,7 @@ claim against the same cases
 | `README.md` | this file | hand, reviewed like code |
 | `RATCHET.md` | the contract a registry is written against: the claims, the pin, the rules a check enforces, and the vendoring recipe for a sibling implementation | hand, reviewed like code |
 | `schema/` | JSON Schemas (draft 2020-12) for every file below: `case.json` (one case), `corpus.json` (one corpus file), `manifest.json`, `registry.json`, `exclusions.json` | hand, reviewed like code |
+| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object | hand, reviewed like code |
 | `corpus/` | one file per suite that has cases, holding that suite's cases: `scion.json` and `w3c.json` for the upstream suites, and `statifier.json` for the cases this repository authors itself (ADR-0070 decision 5) once it authors one | the emitter |
 | `manifest.json` | the corpus hash, the corpus files and the upstream suites (a claim pins a corpus by its hash and the statifier-ex tag it was vendored from, not by a version in the file) | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
@@ -26,8 +27,9 @@ edited directly. `test/passing_tests.json` stays the ratchet file
 
 `mix statifier.corpus` is the emitter: it reads the upstream suites that
 `mise run corpus:fetch` and `mise run corpus:transform` put in the gitignored
-`tools/corpus/scratch/`, runs every case through statifier, and writes the
-generated files. `mix statifier.corpus --check` writes nothing and needs no
+`tools/corpus/scratch/` and the authored cases under `cases/`, runs every
+case through statifier, and writes the generated files.
+`mix statifier.corpus --check` writes nothing and needs no
 upstream tree: it re-runs every committed case and fails when a generated
 file differs from what the emitter would write from the committed inputs, or
 when there is nothing to check. Its module documentation

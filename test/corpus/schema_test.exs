@@ -120,6 +120,62 @@ defmodule Corpus.SchemaTest do
       assert errors("case.json", Map.put(statifier, "host", %{})) == []
     end
 
+    # sabotage: send_types' items losing their "not" -> red on "scxml"
+    test "host's send_types refuses a built-in spelling" do
+      statifier = fixture("case-statifier.json")
+
+      for built_in <- ["scxml", "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"] do
+        assert "/host/send_types/0" in pointers(
+                 "case.json",
+                 put_in(statifier, ["host", "send_types"], [built_in])
+               )
+      end
+    end
+
+    # sabotage: the expect_sends item's "additionalProperties": false removed
+    # -> red on the extra key; its "required" losing "target" -> red on the
+    # missing target
+    test "an expect_sends item is type, target and event, with optional delay_ms and send_id" do
+      statifier = fixture("case-statifier.json")
+      [item] = statifier["host"]["expect_sends"]
+      with_item = &put_in(statifier, ["host", "expect_sends"], [&1])
+
+      full =
+        Map.merge(item, %{
+          "event" => %{"name" => "reminder", "data" => %{"impression_id" => "imp-1"}},
+          "delay_ms" => 5000,
+          "send_id" => "reminder"
+        })
+
+      assert errors("case.json", with_item.(full)) == []
+      assert errors("case.json", put_in(statifier, ["host", "expect_sends"], [])) == []
+
+      assert "/host/expect_sends/0/event" in pointers(
+               "case.json",
+               with_item.(Map.put(item, "event", "impression.joined"))
+             )
+
+      assert "/host/expect_sends/0" in pointers(
+               "case.json",
+               with_item.(Map.delete(item, "target"))
+             )
+
+      assert "/host/expect_sends/0/ordinal" in pointers(
+               "case.json",
+               with_item.(Map.put(item, "ordinal", 1))
+             )
+
+      assert "/host/expect_sends/0/delay_ms" in pointers(
+               "case.json",
+               with_item.(Map.put(item, "delay_ms", -1))
+             )
+
+      assert "/host/expect_sends/0/event/sendid" in pointers(
+               "case.json",
+               with_item.(put_in(item, ["event", "sendid"], "x"))
+             )
+    end
+
     # sabotage: the w3c branch's conformance enum admitting null -> red
     test "a w3c case names its conformance class and the others carry null" do
       assert "/conformance" in pointers("case.json", %{

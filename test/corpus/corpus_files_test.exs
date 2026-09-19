@@ -53,13 +53,14 @@ defmodule Corpus.CorpusFilesTest do
     test "every case, corpus file, the manifest and the exclusions validate against their schemas" do
       case_schema = Checker.load(@schema_dir, "case.json")
 
-      for corpus_case <- all_cases() do
+      for corpus_case <- all_cases() ++ cases("statifier") do
         assert Checker.errors(case_schema, corpus_case, @schema_dir) == [], corpus_case["id"]
       end
 
       for {file, schema} <- [
             {"corpus/scion.json", "corpus.json"},
             {"corpus/w3c.json", "corpus.json"},
+            {"corpus/statifier.json", "corpus.json"},
             {"manifest.json", "manifest.json"},
             {"exclusions.json", "exclusions.json"},
             {"registry.json", "registry.json"}
@@ -69,8 +70,22 @@ defmodule Corpus.CorpusFilesTest do
         assert Checker.errors(Checker.load(@schema_dir, schema), instance, @schema_dir) == [],
                file
       end
+    end
 
-      refute File.exists?("conformance/corpus/statifier.json")
+    # sabotage: n/a - asserts the committed generated files, no lib/ behavior;
+    # deleting conformance/cases/ and re-emitting -> red on the missing file
+    test "the statifier suite is the authored cases, each carrying a host object" do
+      authored =
+        "conformance/cases/*/*.json"
+        |> Path.wildcard()
+        |> Enum.map(
+          &("statifier/" <> (&1 |> Path.relative_to("conformance/cases") |> Path.rootname()))
+        )
+        |> Enum.sort()
+
+      assert authored != [], "no authored case, so nothing is checked"
+      assert Enum.map(cases("statifier"), & &1["id"]) == authored
+      assert Enum.all?(cases("statifier"), &Map.has_key?(&1, "host"))
     end
 
     # sabotage: Emitter.generated_path/2 dropping the conformance segment -> red
@@ -232,13 +247,24 @@ defmodule Corpus.CorpusFilesTest do
             path not in listed,
             do: path
 
-      outside = Enum.map(report.outside_ratchet, &elem(&1, 0))
+      outside =
+        for {id, _outcome} <- report.outside_ratchet,
+            not String.starts_with?(id, "statifier/"),
+            do: id
+
       by_path = Map.new(all_cases(), &{Emitter.generated_path(&1, "."), &1["id"]})
 
       assert unlisted != [], "every generated module is ratcheted, so nothing is checked here"
       assert Enum.sort(outside) == unlisted |> Enum.map(&by_path[&1]) |> Enum.sort()
 
-      for {suite, run, _agreeing} <- report.counts, do: assert(run == length(generated(suite)))
+      for {suite, run, _agreeing} <- report.counts,
+          suite != "statifier",
+          do: assert(run == length(generated(suite)))
+
+      # An authored case has no generated module and no ratchet entry; every
+      # one ran, and the check refuses one that disagrees.
+      statifier = length(cases("statifier"))
+      assert {"statifier", ^statifier, ^statifier} = List.keyfind(report.counts, "statifier", 0)
     end
   end
 end

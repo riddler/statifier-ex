@@ -141,7 +141,9 @@ defmodule Statifier.Replay do
       pending: %{},
       raced: %{},
       live_invoke_ids: %{},
-      invoke_handlers: %{}
+      invoke_handlers: %{},
+      send_processors: %{},
+      held_sends: %{}
     ]
 
     @type t :: %__MODULE__{
@@ -164,7 +166,13 @@ defmodule Statifier.Replay do
             # moduledoc's "Replay re-supplies the recorded snapshot rather
             # than rebuilding one" section, which this follows for the same
             # reason.
-            invoke_handlers: %{String.t() => module()}
+            invoke_handlers: %{String.t() => module()},
+            # ADR-0069: the recorded `:send_types` map, re-supplied as the
+            # plan context's `send_processors` for the same reason
+            # `invoke_handlers` is, and the live holds `Statifier.Session`
+            # keeps for its cancel routing, kept here by the same rule.
+            send_processors: %{String.t() => module()},
+            held_sends: Effects.held_sends()
           }
   end
 
@@ -221,12 +229,14 @@ defmodule Statifier.Replay do
   def run(recording) do
     with {:ok, machine_state, effects} <- start_state(recording) do
       invoke_handlers = Keyword.get(Recording.opts(recording), :invoke_handlers, %{})
+      send_processors = Keyword.get(Recording.opts(recording), :send_types, %{})
 
       state =
         %State{
           machine_state: machine_state,
           inbox: Inbox.new(),
-          invoke_handlers: invoke_handlers
+          invoke_handlers: invoke_handlers,
+          send_processors: send_processors
         }
         |> perform(effects)
         |> drain()
@@ -488,7 +498,10 @@ defmodule Statifier.Replay do
       session_id: state.machine_state.datamodel["_sessionid"],
       invoke_types: state.machine_state.invoke_types,
       invoke_handlers: state.invoke_handlers,
-      invocation_types: state.live_invoke_ids
+      invocation_types: state.live_invoke_ids,
+      send_types: state.machine_state.send_types,
+      send_processors: state.send_processors,
+      held_sends: state.held_sends
     }
   end
 
@@ -523,6 +536,25 @@ defmodule Statifier.Replay do
     else
       state
     end
+  end
+
+  # Mirrors `Statifier.Session`'s own `:send_delayed`/`:cancel` notify arms
+  # (ADR-0069 decision 4's cancel routing), by the same
+  # `Statifier.Session.Effects` rule, so a later drive's plan routes a
+  # `<cancel>` to the processors the live run routed it to.
+  defp perform_instruction({:notify, {:send_delayed, send} = effect}, state, _override) do
+    state = append(state, {:effect, effect})
+
+    if SendTypes.classify(state.machine_state.send_types, send.type) == :registered do
+      %{state | held_sends: Effects.register_held_send(state.held_sends, send.send_id, send.type)}
+    else
+      state
+    end
+  end
+
+  defp perform_instruction({:notify, {:cancel, cancel} = effect}, state, _override) do
+    state = append(state, {:effect, effect})
+    %{state | held_sends: Effects.release_held_send(state.held_sends, cancel.send_id)}
   end
 
   defp perform_instruction({:notify, effect}, state, _override) do
