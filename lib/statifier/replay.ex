@@ -125,6 +125,7 @@ defmodule Statifier.Replay do
   alias Statifier.{Effect, Event, Interpreter, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
   alias Statifier.Invoke.Types, as: InvokeTypes
+  alias Statifier.Send.Types, as: SendTypes
   alias Statifier.Session.{Effects, Inbox, Recording}
 
   defmodule State do
@@ -254,17 +255,22 @@ defmodule Statifier.Replay do
   # `Recording.anchor/1`'s two branches (moduledoc's "Anchored recordings"
   # cross-reference, ADR-0060 decision 6): `nil` replays from scratch exactly
   # as before this decision existed; a blob decodes the persisted position
-  # instead, re-stamping `:invoke_types` the way
+  # instead, re-stamping `:invoke_types` and `:send_types` the way
   # `Statifier.Interpreter`'s own "Rehydrating a position" moduledoc section
   # documents for a live resume, and performing no effects - a resumed
   # session's own boot performs none either.
+  #
+  # The recording keeps `:send_types` as the session's own map (ADR-0069),
+  # so both branches re-derive the snapshot from it through
+  # `Statifier.Send.Types.from_send_types/1`, the one constructor, exactly as
+  # the live session derived it at boot; an absent key is "no declaration".
   @spec start_state(recording :: Recording.t()) ::
           {:ok, MachineState.t(), [Effect.t()]} | {:error, {:anchor, term()}}
   defp start_state(recording) do
     case Recording.anchor(recording) do
       nil ->
-        {machine_state, effects} =
-          Interpreter.initialize(Recording.machine(recording), Recording.opts(recording))
+        opts = Keyword.put(Recording.opts(recording), :send_types, send_types(recording))
+        {machine_state, effects} = Interpreter.initialize(Recording.machine(recording), opts)
 
         {:ok, machine_state, effects}
 
@@ -272,12 +278,23 @@ defmodule Statifier.Replay do
         case Position.from_binary(blob, Recording.machine(recording)) do
           {:ok, machine_state} ->
             invoke_types = Keyword.get(Recording.opts(recording), :invoke_types)
-            {:ok, MachineState.put_invoke_types(machine_state, invoke_types), []}
+
+            machine_state =
+              machine_state
+              |> MachineState.put_invoke_types(invoke_types)
+              |> MachineState.put_send_types(send_types(recording))
+
+            {:ok, machine_state, []}
 
           {:error, reason} ->
             {:error, {:anchor, reason}}
         end
     end
+  end
+
+  @spec send_types(recording :: Recording.t()) :: SendTypes.t() | nil
+  defp send_types(recording) do
+    recording |> Recording.opts() |> Keyword.get(:send_types, %{}) |> SendTypes.from_send_types()
   end
 
   # -- entries --------------------------------------------------------------

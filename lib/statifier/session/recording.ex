@@ -115,7 +115,7 @@ defmodule Statifier.Session.Recording do
       chart failure surfaces wrapped as `{:error, {:chart, reason}}` rather
       than flattened, so the caller always knows which decoder refused.
     - `opts` - the normalized session options, with `:invoke_handlers`
-      written as module name strings rather than atoms.
+      and `:send_types` written as module name strings rather than atoms.
     - `entries` - written in `entries/1`'s append order, not the struct
       field's internal reversed order; that reversal is a prepend-list
       storage optimization this module alone knows about (decision 1 is what
@@ -126,7 +126,8 @@ defmodule Statifier.Session.Recording do
       envelope; a version-1 envelope's absent sixth slot decodes to the same
       `nil`.
 
-  `:invoke_handlers` cross the boundary as strings, never as atoms, because
+  `:invoke_handlers` and `:send_types` cross the boundary as strings, never
+  as atoms, because
   `:safe` decoding refuses to create atoms a blob names and a module's atom
   exists on a node only once that module is loaded (ADR-0052's Consequences,
   ADR-0057 decision 5). `from_binary/1` resolves every string back with
@@ -193,7 +194,8 @@ defmodule Statifier.Session.Recording do
     :max_macrostep_rounds,
     :routes,
     :invoke_types,
-    :invoke_handlers
+    :invoke_handlers,
+    :send_types
   ]
 
   @format_version 5
@@ -224,6 +226,16 @@ defmodule Statifier.Session.Recording do
   re-classified as unregistered on replay: `Statifier.Replay`'s plan
   context is built from this recorded map, not from an empty one.
 
+  `:send_types` is `Statifier.Session.start_link/2`'s own
+  `%{type_string => module}` map (ADR-0069), kept as the map rather than
+  the snapshot derived from it, so `Statifier.Replay` re-derives the
+  snapshot through `Statifier.Send.Types.from_send_types/1`, the one
+  constructor. It is kept only when non-empty: a session that registers no
+  send type records exactly the options it recorded before ADR-0069, and
+  an absent key replays as "no declaration". `to_binary/1` writes its
+  module values as strings, never atoms or code, under ADR-0057 decision
+  5's rule for `:invoke_handlers`.
+
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
   passed when starting it - see the moduledoc's "`:session_id` is resolved,
@@ -245,9 +257,21 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:routes, nil)
       |> Keyword.put_new(:invoke_types, nil)
       |> Keyword.put_new(:invoke_handlers, %{})
+      |> drop_empty_send_types()
       |> Enum.sort()
 
     %__MODULE__{machine: machine, opts: normalized, entries: [], anchor: anchor}
+  end
+
+  # A `:send_types` of `nil` or `%{}` is "no declaration" and is not kept,
+  # so a recording of a session that registered no send type is the
+  # recording it was before ADR-0069 (see `new/3`'s own doc).
+  @spec drop_empty_send_types(opts :: keyword()) :: keyword()
+  defp drop_empty_send_types(opts) do
+    case Keyword.get(opts, :send_types) do
+      send_types when is_map(send_types) and map_size(send_types) > 0 -> opts
+      _none -> Keyword.delete(opts, :send_types)
+    end
   end
 
   @doc """
@@ -384,7 +408,8 @@ defmodule Statifier.Session.Recording do
   @doc """
   Encodes `recording` as a tagged, versioned binary envelope carrying its
   chart as a nested `Statifier.Chart.to_binary/1` blob, its normalized
-  `opts` (with `:invoke_handlers` written as module name strings), and its
+  `opts` (with `:invoke_handlers` and `:send_types` written as module name
+  strings), and its
   `entries/1` in append order - never a compiled term (see the moduledoc's
   "The binary contract" section).
 
@@ -607,35 +632,47 @@ defmodule Statifier.Session.Recording do
   end
 
   defp encode_opts(opts) do
-    Keyword.replace_lazy(opts, :invoke_handlers, fn handlers ->
-      Map.new(handlers, fn {type, module} -> {type, Atom.to_string(module)} end)
-    end)
+    opts
+    |> Keyword.replace_lazy(:invoke_handlers, &module_names/1)
+    |> Keyword.replace_lazy(:send_types, &module_names/1)
   end
+
+  defp module_names(map),
+    do: Map.new(map, fn {type, module} -> {type, Atom.to_string(module)} end)
 
   @spec decode_opts(opts :: keyword()) ::
           {:ok, keyword()} | {:error, {:unknown_handler_modules, [String.t()]}}
   defp decode_opts(opts) do
-    case Keyword.fetch(opts, :invoke_handlers) do
-      {:ok, handlers} -> resolve_handlers(opts, handlers)
-      :error -> {:ok, opts}
-    end
-  end
+    {opts, unknown} =
+      Enum.reduce([:invoke_handlers, :send_types], {opts, []}, fn key, {opts, unknown} ->
+        case Keyword.fetch(opts, key) do
+          {:ok, modules} ->
+            {resolved, missing} = resolve_modules(modules)
+            {Keyword.put(opts, key, resolved), missing ++ unknown}
 
-  @spec resolve_handlers(opts :: keyword(), handlers :: map()) ::
-          {:ok, keyword()} | {:error, {:unknown_handler_modules, [String.t()]}}
-  defp resolve_handlers(opts, handlers) do
-    {resolved, unknown} =
-      Enum.reduce(handlers, {%{}, []}, fn {type, name}, {resolved, unknown} ->
-        case existing_atom(name) do
-          {:ok, module} -> {Map.put(resolved, type, module), unknown}
-          :error -> {resolved, [handler_name(name) | unknown]}
+          :error ->
+            {opts, unknown}
         end
       end)
 
     case unknown do
-      [] -> {:ok, Keyword.put(opts, :invoke_handlers, resolved)}
+      [] -> {:ok, opts}
       names -> {:error, {:unknown_handler_modules, Enum.sort(names)}}
     end
+  end
+
+  # Resolves one recorded `type => module name` map back to modules,
+  # returning the resolved map and every name that did not resolve. Shared
+  # by `:invoke_handlers` and `:send_types`, whose unresolved names are
+  # reported together in one `{:unknown_handler_modules, names}` error.
+  @spec resolve_modules(modules :: map()) :: {map(), [String.t()]}
+  defp resolve_modules(modules) do
+    Enum.reduce(modules, {%{}, []}, fn {type, name}, {resolved, unknown} ->
+      case existing_atom(name) do
+        {:ok, module} -> {Map.put(resolved, type, module), unknown}
+        :error -> {resolved, [handler_name(name) | unknown]}
+      end
+    end)
   end
 
   # `String.to_existing_atom/1` has no non-raising variant, so the rescue is

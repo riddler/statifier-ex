@@ -40,19 +40,21 @@ defmodule Statifier.Position do
   a check this module performs for it.
 
   The exported map deliberately omits `internal_queue`, `routes`,
-  `invoke_types`, and `machine`: `internal_queue` because `export/1` refuses
-  a non-empty one outright (below), `routes` and `invoke_types` because both
-  are per-drive/per-session snapshots a driver re-stamps before the next
-  drive (ADR-0048, ADR-0051) rather than durable position state, and
+  `invoke_types`, `send_types`, and `machine`: `internal_queue` because
+  `export/1` refuses a non-empty one outright (below), `routes`,
+  `invoke_types` and `send_types` because all three are per-drive or
+  per-session snapshots a driver re-stamps before the next drive (ADR-0048,
+  ADR-0051, ADR-0069) rather than durable position state, and
   `machine` because the whole point of the string-id vocabulary is to let a
   host load the exported map onto a *different* `Machine` than the one that
-  produced it. A host reading the map should not conclude any of the four
+  produced it. A host reading the map should not conclude any of the five
   was forgotten; `import/2` always sets `internal_queue` to a fresh empty
-  queue and `routes`/`invoke_types` to `nil`, leaving both for the driver
-  to re-stamp. `routes` and `invoke_types` are omitted the same way from
-  `to_binary/1`'s payload, and `from_binary/2` blanks both to `nil` on
-  decode regardless of what the blob carries (ADR-0064): the omission is
-  common to both vocabularies, not particular to the export one.
+  queue and `routes`/`invoke_types`/`send_types` to `nil`, leaving all three
+  for the driver to re-stamp. `routes`, `invoke_types` and `send_types` are
+  omitted the same way from `to_binary/1`'s payload, and `from_binary/2`
+  blanks all three to `nil` on decode regardless of what the blob carries
+  (ADR-0064): the omission is common to both vocabularies, not particular
+  to the export one.
   """
 
   alias Statifier.{Machine, MachineState}
@@ -86,7 +88,7 @@ defmodule Statifier.Position do
   future load against, so no blob is produced for it at all.
 
   On success, the payload is `machine_state` as a plain map with `:machine`,
-  `:routes`, and `:invoke_types` deleted - never `%{machine_state | machine:
+  `:routes`, `:invoke_types`, and `:send_types` deleted - never `%{machine_state | machine:
   nil}`. `MachineState`'s `t()` declares `machine: Machine.t()`, not
   `Machine.t() | nil` (`lib/statifier/machine_state.ex:415`), so assigning
   `nil` there is a dialyzer contract violation, and dialyzer is a full-gate
@@ -95,9 +97,9 @@ defmodule Statifier.Position do
   instruction list or span table is ever written to a blob), and is what
   makes the blob far smaller than a naive `term_to_binary(machine_state)` -
   the compiled chart is the overwhelming majority of a small position's
-  bytes. `routes` and `invoke_types` are dropped for the same reason
-  `export/1` drops them (this module's "`export/1` and `import/2`" section
-  above, and ADR-0064): both are per-drive/per-session snapshots a driver
+  bytes. `routes`, `invoke_types` and `send_types` are dropped for the same
+  reason `export/1` drops them (this module's "`export/1` and `import/2`"
+  section above, and ADR-0064): all three are per-drive/per-session snapshots a driver
   re-stamps before the next drive, not durable position state, and
   `Routes.t()` in particular holds live session ids that have no business
   sitting in a durable blob at rest.
@@ -111,7 +113,7 @@ defmodule Statifier.Position do
     payload =
       machine_state
       |> Map.from_struct()
-      |> Map.drop([:machine, :routes, :invoke_types])
+      |> Map.drop([:machine, :routes, :invoke_types, :send_types])
 
     {:ok, :erlang.term_to_binary({:statifier_position, @format_version, identity, payload})}
   end
@@ -132,11 +134,12 @@ defmodule Statifier.Position do
   is rebuilt (ADR-0059 decision 4) - `0` is the only correct value, since no
   ordinal was ever minted against a version-1 position.
 
-  `routes` and `invoke_types` are dropped from the decoded payload before
-  the struct is rebuilt, unconditionally - regardless of blob vintage, and
-  regardless of what a hand-written or old-encoder blob carries for either
-  key. Both come back `nil` (`struct!/2` fills the now-absent keys with
-  their defaults, and both fields default to `nil`), the same contract
+  `routes`, `invoke_types` and `send_types` are dropped from the decoded
+  payload before the struct is rebuilt, unconditionally - regardless of blob
+  vintage, and regardless of what a hand-written or old-encoder blob carries
+  for any of the three keys. All three come back `nil` (`struct!/2` fills
+  the now-absent keys with their defaults, and all three fields default to
+  `nil`), the same contract
   `import/2` already gives them: per-drive/per-session snapshots a driver
   re-stamps before the next drive, never durable position state
   (ADR-0064).
@@ -169,7 +172,7 @@ defmodule Statifier.Position do
           upgraded_payload =
             version
             |> upgrade_payload(payload)
-            |> Map.drop([:routes, :invoke_types])
+            |> Map.drop([:routes, :invoke_types, :send_types])
 
           {:ok, struct!(MachineState, Map.put(upgraded_payload, :machine, machine))}
         end
@@ -400,8 +403,9 @@ defmodule Statifier.Position do
   (`0`) to `configuration` and `entered_states` - the reverse of `export/1`'s
   one documented drop.
 
-  Rebuilds `internal_queue` as `:queue.new()` and `routes`/`invoke_types` as
-  `nil` - the driver re-stamps both before the next drive, exactly as
+  Rebuilds `internal_queue` as `:queue.new()` and
+  `routes`/`invoke_types`/`send_types` as `nil` - the driver re-stamps all
+  three before the next drive, exactly as
   `export/1`'s doc names them as dropped. `machine` is the supplied
   argument.
 
@@ -535,7 +539,8 @@ defmodule Statifier.Position do
       trace: exported.trace,
       max_macrostep_rounds: exported.max_macrostep_rounds,
       routes: nil,
-      invoke_types: nil
+      invoke_types: nil,
+      send_types: nil
     }
 
     {:ok, machine_state}

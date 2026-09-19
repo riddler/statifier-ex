@@ -383,6 +383,7 @@ defmodule Statifier.MachineState do
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Send.Routes
+  alias Statifier.Send.Types, as: SendTypes
 
   # Crockford base32's alphabet in `Base.hex_encode32/2`'s symbol order, so a
   # 32-entry character translation is exact and order-preserving. Crockford
@@ -416,7 +417,8 @@ defmodule Statifier.MachineState do
     trace: false,
     max_macrostep_rounds: 10_000,
     routes: nil,
-    invoke_types: nil
+    invoke_types: nil,
+    send_types: nil
   ]
 
   @typedoc """
@@ -470,6 +472,19 @@ defmodule Statifier.MachineState do
   """
   @type invoke_types :: InvokeTypes.t() | nil
 
+  @typedoc """
+  The caller-declared registered `<send type>` set (ADR-0069), or `nil`.
+  `nil` means "no declaration": the built-in set only, so
+  `Statifier.Send.Types.classify/2` refuses every type outside `nil`,
+  `"scxml"`, and the SCXML Event I/O Processor URI - 6.2.5's closed set as
+  it stood before ADR-0069. Unlike `t:invoke_types/0`'s permissive `nil`
+  (ADR-0051's 2026-09-01 Note), this `nil` refuses, because the core has
+  never emitted an unsupported-type `<send>` for a caller to read. Stamped
+  once per session, like `t:invoke_types/0`, and dropped from a persisted
+  position the same way (ADR-0064).
+  """
+  @type send_types :: SendTypes.t() | nil
+
   @type t :: %__MODULE__{
           machine: Machine.t(),
           configuration: MapSet.t(non_neg_integer()),
@@ -491,7 +506,8 @@ defmodule Statifier.MachineState do
           trace: trace(),
           max_macrostep_rounds: max_macrostep_rounds(),
           routes: routes(),
-          invoke_types: invoke_types()
+          invoke_types: invoke_types(),
+          send_types: send_types()
         }
 
   @doc """
@@ -504,9 +520,10 @@ defmodule Statifier.MachineState do
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
   `:session_id` (default a freshly generated `sess_` id, ADR-0008),
   `:max_macrostep_rounds` (default `10_000`), `:routes` (default `nil`,
-  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means), and
+  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means),
   `:invoke_types` (default `nil`, ADR-0051 - see the `t:invoke_types/0`
-  typedoc for what `nil` means). All four system variables
+  typedoc for what `nil` means), and `:send_types` (default `nil`,
+  ADR-0069 - see the `t:send_types/0` typedoc). All four system variables
   (`SystemVariables.initial/2`) are merged **over** the `:datamodel`
   option's map, so author-supplied data can never shadow a system variable.
 
@@ -548,7 +565,8 @@ defmodule Statifier.MachineState do
       trace: Keyword.get(opts, :trace, false),
       max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000),
       routes: Keyword.get(opts, :routes),
-      invoke_types: Keyword.get(opts, :invoke_types)
+      invoke_types: Keyword.get(opts, :invoke_types),
+      send_types: Keyword.get(opts, :send_types)
     }
   end
 
@@ -863,4 +881,14 @@ defmodule Statifier.MachineState do
   @spec put_invoke_types(machine_state :: t(), invoke_types :: invoke_types()) :: t()
   def put_invoke_types(%__MODULE__{} = machine_state, invoke_types),
     do: %{machine_state | invoke_types: invoke_types}
+
+  @doc """
+  Stamps `send_types` onto `machine_state` - ADR-0069's registered-type
+  snapshot, re-supplied by the driver rather than carried as durable position
+  state (`Statifier.Position.import/2` and `from_binary/2` set it `nil` for
+  exactly this reason, as they do `invoke_types`).
+  """
+  @spec put_send_types(machine_state :: t(), send_types :: send_types()) :: t()
+  def put_send_types(%__MODULE__{} = machine_state, send_types),
+    do: %{machine_state | send_types: send_types}
 end
