@@ -100,6 +100,31 @@ defmodule Mix.Tasks.Statifier.CorpusTest do
     end
 
     @tag :isolated_tmp_dir
+    # sabotage: read_committed/1 reading only the corpus files that exist -> red
+    # (the check then refuses on another sentence, naming no corpus file)
+    test "--check refuses with a sentence when conformance/corpus/ is absent or empty", %{
+      root: root
+    } do
+      capture_io(fn -> assert :ok = Corpus.execute(["--scratch", @scratch], root: root) end)
+      corpus_dir = Path.join(root, "conformance/corpus")
+
+      check = fn ->
+        Corpus.execute(["--check", "--scratch", Path.join(root, "none")], root: root)
+      end
+
+      File.rm_rf!(corpus_dir)
+      assert {:error, absent} = check.()
+
+      File.mkdir_p!(corpus_dir)
+      assert {:error, empty} = check.()
+
+      for message <- [absent, empty] do
+        assert message =~ "the committed corpus is incomplete: could not read "
+        assert message =~ "conformance/corpus/scion.json: no such file or directory"
+      end
+    end
+
+    @tag :isolated_tmp_dir
     # sabotage: Exclusions.parse/3 skipping unique_keys/2 -> red
     test "returns the exclusion reader's refusal as its sentence", %{root: root} do
       path = Path.join(root, "tools/corpus/scion/exclusions.exs")

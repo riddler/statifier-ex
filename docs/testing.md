@@ -361,15 +361,27 @@ saxon, and emitting test files from the JSON case descriptions).
 
 `mise run corpus` is the single entrypoint for regeneration; the stages behind it
 and the scratch layout are documented in `tools/corpus/README.md`. Upstream
-downloads land in the gitignored `tools/corpus/scratch/`, so nothing fetched is
-committed.
-
-Target pipeline:
+downloads land in the gitignored `tools/corpus/scratch/`. What is committed is
+what the pipeline derives from them: the language-neutral corpus under
+`conformance/` (ADR-0070), which holds the upstream documents under the
+licences in `conformance/LICENSES/`, and the generated test modules. The corpus
+is the source the generators read:
 
     upstream corpora (SCION json/scxml, W3C txml)
-      -> tools/corpus (fetch, transform, filter)
-      -> generated .exs test files with @tag required_features
-      -> checked in (generated output is committed; regeneration is a diffable PR)
+      -> tools/corpus fetch + transform (gitignored scratch/)
+      -> mix statifier.corpus (filter, run every case, write conformance/)
+      -> mise run corpus:emit (generated .exs test modules with @tag
+         required_features, read from conformance/corpus/)
+      -> checked in (conformance/ and the generated modules are committed;
+         regeneration is a diffable PR)
+
+The full gate keeps the committed pieces in step without the upstream tree.
+Its `Conformance corpus` stage runs `mix statifier.corpus --check`, which fails
+when a committed corpus file, the manifest, the exclusions or the registry
+differs from what `mix statifier.corpus` writes from the committed inputs, and
+when `conformance/corpus/` is absent or empty. `test/corpus/corpus_files_test.exs`
+fails when a committed generated module differs from what its generator writes
+from the corpus, so a hand edit of either is a red gate.
 
 Unsupported-feature tests **fail, not skip** (v1's FeatureDetector rule, kept): a
 test that depends on an unsupported feature flunks with the feature named, so it can
@@ -396,7 +408,8 @@ is the source of truth; this paragraph does not duplicate its entries.
 - `mix quality --profile loop` - inner loop: format, compile, credo, changed-scope
   tests. Use between edits.
 - `mix quality` - full gate: adds dialyzer, deps audit, full suite with coverage,
-  regression stage. Required green before commit; enforced in CI.
+  regression stage, conformance corpus stage. Required green before commit;
+  enforced in CI.
 - Coverage: the gate fails below **90%** (`coveralls.json`); 95%+ is the target to
   aim at. Raising the floor as the suite grows is a decision for a human, and
   lowering it is not a way to go green.

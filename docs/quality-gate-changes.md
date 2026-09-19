@@ -13,6 +13,31 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-09-19 - st-06sk
+
+Approved-by: JohnnyT (in session, 2026-09-19, for exactly this stage: one
+`.quality.exs` custom stage that runs `mix statifier.corpus --check`)
+
+- .quality.exs: registers the corpus custom stage (`Conformance corpus`),
+  which runs `mix statifier.corpus --check`, with a comment block giving the
+  reason
+
+Reason: ADR-0070 makes `conformance/` the corpus the generated test modules
+are written from, and `mix statifier.corpus --check` is the check that the
+committed corpus, manifest, exclusions and registry are what the emitter
+writes from the committed inputs. The Tests stage already reaches
+`Mix.Statifier.Corpus.Emitter.check/1` through one test in
+`test/corpus/corpus_files_test.exs`; this stage runs the task itself, its
+command line and its exit status, so corpus drift is a named stage failure
+rather than one test among the suite's. The check needs no network
+and no upstream tree, so it runs in CI unchanged: CI's one job runs
+`mix gate.verify`, which runs this stage with the rest. It fails when
+`conformance/corpus/` is absent or empty, so it cannot go green on nothing.
+It runs as its own `mix` process, so the session runtime the task starts
+does not outlive the check. Adds a stage; loosens nothing, skips no existing
+check, and lowers no threshold. It is a reader, absent from the loop
+profile's `stages:` allow-list.
+
 ## 2026-08-23 - st-737e
 
 Approved-by: pending operator confirmation (ADR-0067, st-737e, accepted

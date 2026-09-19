@@ -1,7 +1,9 @@
 # Corpus tooling
 
-Generator for the SCION and W3C conformance test suites (see `docs/testing.md`
-and ADR-0006). Seeded from
+Tooling for the SCION and W3C conformance suites (see `docs/testing.md`,
+ADR-0006 and ADR-0070): it fetches and transforms the upstream documents,
+and generates the test modules from the committed corpus under
+`conformance/`. Seeded from
 [ex_statechart](https://github.com/camshaft/ex_statechart)'s Makefile and
 scripts, retargeted to the v2 layout and driven by mise tasks.
 
@@ -13,19 +15,30 @@ One command, from anywhere in the repo:
 mise run corpus
 ```
 
-That runs fetch, transform, `mix statifier.corpus` (which writes `conformance/`
-from the upstream tree) and emit, in that order; the tasks are each also
-available on their own (`mise tasks` lists them):
+That runs fetch, transform, `mix statifier.corpus` and `corpus:emit`, in this
+order:
+
+1. `corpus:fetch` and `corpus:transform` put the upstream documents in the
+   gitignored `scratch/`.
+2. `mix statifier.corpus` reads them, applies the exclusion and
+   sub-document rules, runs every case through statifier, and writes
+   `conformance/`. From here on the corpus is the source.
+3. `corpus:emit` writes the generated test modules from
+   `conformance/corpus/`, reading no upstream tree.
+
+Each is also available on its own (`mise tasks` lists the mise tasks):
 
 | Task | What it does |
 | --- | --- |
 | `mise run corpus:fetch` | Downloads the W3C IRP manifest and its `.txml` sources, Saxon-HE, and clones the SCION `scxml-test-framework` into `scratch/` |
 | `mise run corpus:transform` | Runs Saxon over each `.txml` with `scxml_w3/conf_predicator.xsl` to produce `.scxml` for the predicator datamodel |
+| `mix statifier.corpus` | Writes `conformance/corpus/`, `manifest.json`, `exclusions.json` and `registry.json` from the upstream tree in `scratch/`, and refuses without it; it never fetches |
+| `mix statifier.corpus --check` | Writes nothing and needs no upstream tree: re-runs every committed case and fails when a committed corpus file, `manifest.json`, `exclusions.json` or `registry.json` differs from what `mix statifier.corpus` writes from the committed inputs, or when there is nothing to check |
 | `mise run corpus:emit` | Writes the generated test modules into `test/scion_tests/` and `test/scxml_tests/` from the committed `conformance/corpus/`, with no upstream tree, each opening with a header naming its case, its upstream document and its licence notice |
 | `mise run corpus:check` | Asserts every transformed mandatory W3C expression compiles under predicator, skipping `exclusions.exs` entries and allowing the values the W3C tests deliberately require to be invalid |
 | `mise run corpus:clean` | Discards every upstream download; the next run refetches |
 
-Every stage is incremental and resumable: fetch skips files already on disk,
+Fetch and transform are incremental and resumable: fetch skips files already on disk,
 transform reruns Saxon only where the `.txml` or the XSL is newer than the
 `.scxml`. `mise install` provisions the toolchain (Erlang, Elixir, and a JRE for
 Saxon); `curl`, `git`, and `unzip` come from the OS.
@@ -50,13 +63,15 @@ would override the one you export.
 
 ```
 tools/corpus/
-  scion/cases.exs           SCION emitter
+  normalize.exs             path and module-name normalization, shared by both generators
+  scion/cases.exs           SCION generator
   scion/exclusions.exs      SCION cases with no predicator equivalent, or that duplicate the W3C corpus, with reasons
   scxml_w3/manifest.exs     W3C manifest parser + TXML fetcher
   scxml_w3/conf_predicator.xsl  TXML -> SCXML for the predicator datamodel
   scxml_w3/exclusions.exs   tests with no predicator equivalent, with reasons
   scxml_w3/sub_documents.exs  manifest <dep> ids: <invoke>-loaded fixtures, not standalone tests
-  scxml_w3/cases.exs        W3C emitter
+  scxml_w3/check_exprs.exs  corpus:check's expression walker
+  scxml_w3/cases.exs        W3C generator
   scratch/                  gitignored; everything fetched from upstream
     saxon/
     scion/cases/<spec>/<name>.{json,scxml}
@@ -66,24 +81,48 @@ tools/corpus/
 The tasks themselves live in `mise.toml` at the repo root, along with the
 `CORPUS_*` paths and upstream URLs they use.
 
-Nothing under `scratch/` is committed. The only generator output that enters git
-is the emitted test modules:
+Nothing under `scratch/` is committed. What the pipeline derives from it is:
 
-- `test/scion_tests/<spec>/<name>_test.exs`
-- `test/scxml_tests/<conformance>/<spec>/<name>_test.exs`
+- `conformance/` - the corpus, the manifest, the exclusions and the
+  registry, written by `mix statifier.corpus`. The corpus holds the
+  upstream documents, redistributed under the licences in
+  `conformance/LICENSES/`; `conformance/README.md` says what each file is.
+- `test/scion_tests/<spec>/<name>_test.exs` and
+  `test/scxml_tests/<conformance>/<spec>/<name>_test.exs` - the generated
+  test modules, written by `corpus:emit` from `conformance/corpus/`.
 
-They are committed deliberately, so a regeneration lands as a reviewable diff.
+Both are committed deliberately, so a regeneration lands as a reviewable diff.
+Neither is edited by hand: a change to one is a change to
+`mix statifier.corpus`, to a generator, or to their input, regenerated.
+
+## Checking
+
+`mix quality` holds the corpus and the generated modules in step with no
+network and no upstream tree, so CI runs the same checks:
+
+- The `Conformance corpus` stage runs `mix statifier.corpus --check`. It
+  fails when a corpus file, `manifest.json`, `exclusions.json` or
+  `registry.json` differs from what `mix statifier.corpus` writes from the
+  committed inputs, when a ratcheted case disagrees with its expectation,
+  and when `conformance/corpus/` is absent or empty.
+- `test/corpus/corpus_files_test.exs` runs both generators into a scratch
+  directory and fails when a committed generated module differs by one byte
+  from what its generator writes from `conformance/corpus/`, so a hand edit
+  of a generated module fails the Tests stage.
 
 ## Status
 
-The pipeline runs end to end: fetch, transform, and both emitters take an
-empty `scratch/` tree to a populated `test/scion_tests/` and
-`test/scxml_tests/`, and the emitted output is committed.
+The pipeline runs end to end: fetch and transform take an empty `scratch/`
+tree to the upstream documents, `mix statifier.corpus` writes
+`conformance/` from them, and both generators write `test/scion_tests/` and
+`test/scxml_tests/` from `conformance/corpus/`. `conformance/` and both
+trees are committed.
 
 Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 189-case `w3c-ecma` duplicate of the W3C IRP suite, kept by
-`corpus:fetch:scion` and filtered at emit time - see
-`tools/corpus/scion/exclusions.exs`). The **W3C emitter** produces
+`corpus:fetch:scion` and left out when `mix statifier.corpus` writes
+`conformance/corpus/scion.json` - see
+`tools/corpus/scion/exclusions.exs`). The **W3C generator** produces
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` read from the corpus case,
 inline XML heredoc (4-space base indent, the corpus case's source: pretty-printed from the transformed
@@ -99,7 +138,7 @@ runtime rather than conformance cases, leaving 193 cases; 162 of those emit
 (159 mandatory + 3 optional), and the rest are filtered out (see below).
 `test/scxml_tests/` is populated.
 
-The **SCION emitter** produces `SCIONTest.<Spec>.<Name>Test`,
+The **SCION generator** produces `SCIONTest.<Spec>.<Name>Test`,
 `use Statifier.Case`, `@moduletag :scion`, `@tag required_features: [...]`
 read from the corpus case, inline XML heredoc (4-space base
 indent, the corpus case's source: raw source as fetched - no xmerl re-serialization; `corpus:fetch:scion`
@@ -109,7 +148,7 @@ excluded per `tools/corpus/scion/exclusions.exs` (below). `test/scion_tests/`
 is populated.
 
 Emit also normalizes every generated path segment and module name
-(`tools/corpus/normalize.exs`, shared by both emitters): upstream
+(`tools/corpus/normalize.exs`, shared by both generators): upstream
 camelCase/acronym/symbol-separated names become snake_case paths and the
 matching PascalCase module segments (`st-yo4`).
 
@@ -130,10 +169,6 @@ to either exclusions file that changes what emits also changes what those
 tasks report as the denominator. `test/corpus/readme_counts_test.exs` pins
 every count in this file against a fresh count of the emitted tree, so that
 drift fails a gate instead of sitting here unnoticed.
-
-Remaining work, tracked in beads:
-
-1. **st-00p.10** - wire the regression ratchet into `mix quality`.
 
 Three filters apply before a W3C case is emitted, all applied by
 `mix statifier.corpus` when it writes `conformance/corpus/w3c.json`, which
