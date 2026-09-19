@@ -1,7 +1,7 @@
 # Testing strategy
 
 The conformance corpus is the contract for this rewrite. v1's most valuable asset is
-its test infrastructure, and it ports almost for free: the 281 SCION/W3C test files
+its test infrastructure, and it ports almost for free: the generated SCION/W3C test files
 touch no library internals - everything goes through one `Statifier.Testing.Case`
 module (generated files still say `Statifier.Case`, a `test/support` shim over it -
 ADR-0053)
