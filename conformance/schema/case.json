@@ -103,7 +103,7 @@
     },
     "host": {
       "type": "object",
-      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing.",
+      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing. declared_events and expect_accepts are present together or not at all: the host checks the chart's declaration of the event names it accepts before it runs the case.",
       "properties": {
         "send_types": {
           "type": "array",
@@ -154,9 +154,45 @@
             "required": ["type", "target", "event"],
             "additionalProperties": false
           }
+        },
+        "declared_events": {
+          "type": "array",
+          "description": "The event names the chart is declared to accept, the declaration the host checks the chart against: names, not descriptors, so a * in one is an ordinary token. Possibly empty, which declares that the chart accepts nothing.",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "expect_accepts": {
+          "type": "object",
+          "description": "What checking declared_events against the chart's event vocabulary answers; a case agrees only when both lists are exactly these, order included. The vocabulary is every event descriptor on a transition whose source state some path enters. A descriptor matches a declared name when its tokens, with a trailing * or empty token dropped, are a prefix of the name's dot-separated tokens.",
+          "properties": {
+            "unreachable": {
+              "type": "array",
+              "description": "Each declared name that no descriptor in the vocabulary matches, in declared_events' order: a name the declaration promises and the chart can never select on.",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            },
+            "undeclared": {
+              "type": "array",
+              "description": "Each descriptor in the vocabulary that matches no declared name, as the document writes it and in document order (a state's own transitions before its children's), each once: a name the chart listens for that the declaration does not state.",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "required": ["unreachable", "undeclared"],
+          "additionalProperties": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "required": ["declared_events"] },
+          "then": { "required": ["expect_accepts"] }
+        },
+        {
+          "if": { "required": ["expect_accepts"] },
+          "then": { "required": ["declared_events"] }
+        }
+      ]
     }
   },
   "required": [

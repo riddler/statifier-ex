@@ -184,6 +184,23 @@ agrees when its configurations agree and the sends handed are exactly its
 as any unsupported feature: the case fails with the feature named and is
 never skipped (ADR-0006).
 
+A `host` object may also carry `declared_events` and `expect_accepts`,
+present together or not at all
+([ADR-0071](../docs/adr/0071-chart-event-vocabulary-and-accepts-check.md)
+decision 7). A runner honours them before it runs the case, by computing
+the chart's event vocabulary - every event descriptor on a transition whose
+source state some path enters (that record's decision 2 states the entry
+rule), as the document writes it, in document order with a state's own
+transitions before its children's, each once - and comparing it with
+`declared_events`. `unreachable` is each declared name that no descriptor
+matches, in the declaration's order; `undeclared` is each descriptor that
+matches no declared name, in the vocabulary's order. A descriptor matches a
+name as transition selection matches an event (spec 3.13), on token
+boundaries; a declared name is never a pattern, so a `*` in one is an
+ordinary token. A case carrying them agrees only when, besides its
+configurations and sends, both lists are exactly `expect_accepts`', order
+included.
+
 ## The check
 
 statifier-ex's check is `mix statifier.corpus --check`

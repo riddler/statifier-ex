@@ -20,6 +20,21 @@ defmodule Mix.Statifier.Corpus.JsonTest do
                  ~s|"upstream":{"document":"d","license":"l","notice":"n"}}|
     end
 
+    # sabotage: `unreachable` and `undeclared` deleted from @key_order ->
+    # red (the two then sort alphabetically, `undeclared` first)
+    test "write a host's accepts keys in the schema's order" do
+      host = %{
+        "expect_accepts" => %{"undeclared" => ["loan.due"], "unreachable" => []},
+        "declared_events" => ["loan.renew"],
+        "expect_sends" => [],
+        "send_types" => ["library:timer"]
+      }
+
+      assert Json.compact(host) ==
+               ~s|{"send_types":["library:timer"],"expect_sends":[],"declared_events":["loan.renew"],| <>
+                 ~s|"expect_accepts":{"unreachable":[],"undeclared":["loan.due"]}}|
+    end
+
     # sabotage: corpus_file/2 joining the cases with "," on one line -> red
     test "a corpus file holds one compact case per line and decodes to its suite and cases" do
       cases = [%{"id" => "w3c/test1", "steps" => []}, %{"id" => "w3c/test2", "steps" => []}]

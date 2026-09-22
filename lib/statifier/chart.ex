@@ -3,7 +3,8 @@ defmodule Statifier.Chart do
   The questions a host asks about a *chart* - a compiled
   `Statifier.Machine.t()` - without running it. Two are answered here: its
   versioned binary contract (`to_binary/1`, `from_binary/1`) and its event
-  vocabulary (`events/1`).
+  vocabulary (`events/1`), with the check of a declaration against that
+  vocabulary (`check_accepts/2`).
 
   ## The binary contract
 
@@ -48,13 +49,24 @@ defmodule Statifier.Chart do
   The function reads only the compiled machine - no source text, no
   `identity` - and runs nothing.
 
-  It lives here, not in `Statifier.Validator`: `validate/3` judges a
+  `check_accepts/2` compares a declaration of the event names a chart
+  accepts with that vocabulary, under the descriptor matching transition
+  selection uses, and answers the names the chart can never select on
+  (`unreachable`) and the descriptors the declaration does not state
+  (`undeclared`). It reports and refuses nothing: which list a host refuses a
+  publish on, if either, is the host's decision. With no declaration (`nil`)
+  the computed vocabulary is the contract, so both lists are empty; asked
+  with a one-name declaration, it is the membership answer for a receiver
+  that declares nothing.
+
+  Both live here, not in `Statifier.Validator`: `validate/3` judges a
   document against the spec and takes no deployment state, and the
   vocabulary is what a host compares a deployment's claims against before
   any execution starts - the same posture as
   `Statifier.Send.Types.unsupported_sends/2` (ADR-0071, after ADR-0069
-  decision 3). It keeps this module's layering: it depends on
-  `Statifier.Machine`, never the reverse.
+  decision 3). They keep this module's layering: they depend on
+  `Statifier.Machine` (and `check_accepts/2` on
+  `Statifier.Interpreter.NameMatch`), never the reverse.
 
   ## No I/O
 
@@ -64,6 +76,7 @@ defmodule Statifier.Chart do
   here, and this module is not listed in `@effect_interpreter_paths`).
   """
 
+  alias Statifier.Interpreter.NameMatch
   alias Statifier.Machine
   alias Statifier.Machine.{Identity, State}
 
@@ -216,6 +229,74 @@ defmodule Statifier.Chart do
     |> Enum.flat_map(&Machine.transition(machine, &1).events)
     |> Enum.map(&Enum.join(&1, "."))
     |> Enum.uniq()
+  end
+
+  @typedoc """
+  What `check_accepts/2` answers: the declared names no descriptor in the
+  vocabulary matches, and the vocabulary's descriptors that match no declared
+  name.
+  """
+  @type accepts_check :: %{unreachable: [String.t()], undeclared: [String.t()]}
+
+  @doc """
+  Compares `declared`, the event names a chart is declared to accept, with
+  the chart's event vocabulary (`events/1`).
+
+  A descriptor *matches* a declared name under the descriptor semantics
+  transition selection uses: `Statifier.Interpreter.NameMatch.name_match?/2`
+  over the descriptor's tokens and the name's `tokenize/1` tokens, on token
+  boundaries. A declared `loan.renew` is matched by the descriptor
+  `loan.renew`, by `loan.*`, by `loan.`, by `loan` and by `*`, and not by
+  `loan.renewal` or `loan.renew.late`. One relation answers both lists:
+
+  - `unreachable` - each declared name that no descriptor in the vocabulary
+    matches, in the declaration's order and without duplicates: a name the
+    declaration promises and the chart can never select on.
+  - `undeclared` - each descriptor in the vocabulary that matches no
+    declared name, in `events/1`'s order: a name the chart listens for that
+    the declaration does not state.
+
+  A declared entry is a name, not a descriptor: a `*` in it is an ordinary
+  token and never a pattern, so a declared `loan.*` is matched by the
+  descriptor `loan` but not by `loan.renew`. An empty list is a declaration
+  that the chart accepts nothing: `unreachable` is `[]` and `undeclared` is
+  the whole vocabulary.
+
+  With `nil` - no declaration - the computed vocabulary is the contract,
+  which cannot disagree with itself, so both lists are empty. A host asking
+  whether one name `n` is in a chart's computed vocabulary calls
+  `check_accepts(machine, [n])` and reads `unreachable`: `[]` means some
+  reachable descriptor matches `n`, and `[n]` means none does.
+
+  The function reports and refuses nothing; which list a host refuses a
+  publish on, if either, is the host's decision. Pure and total over a
+  `%Statifier.Machine{}` and a list of strings or `nil`; like `events/1` it
+  reads no source text and needs no `identity` or `source` on the machine.
+  """
+  @spec check_accepts(machine :: Machine.t(), declared :: [String.t()] | nil) :: accepts_check()
+  def check_accepts(%Machine{}, nil), do: %{unreachable: [], undeclared: []}
+
+  def check_accepts(%Machine{} = machine, declared) when is_list(declared) do
+    descriptors = Enum.map(events(machine), &{&1, NameMatch.tokenize(&1)})
+    names = declared |> Enum.uniq() |> Enum.map(&{&1, NameMatch.tokenize(&1)})
+    descriptor_tokens = Enum.map(descriptors, &elem(&1, 1))
+
+    %{
+      unreachable:
+        for(
+          {name, name_tokens} <- names,
+          not NameMatch.name_match?(descriptor_tokens, name_tokens),
+          do: name
+        ),
+      undeclared:
+        for(
+          {descriptor, tokens} <- descriptors,
+          not Enum.any?(names, fn {_name, name_tokens} ->
+            NameMatch.name_match?([tokens], name_tokens)
+          end),
+          do: descriptor
+        )
+    }
   end
 
   # The least set of state indexes closed under `events/1`'s entry rule, as a

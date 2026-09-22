@@ -10,7 +10,7 @@ claim against the same cases
 | `README.md` | this file | hand, reviewed like code |
 | `RATCHET.md` | the contract a registry is written against: the claims, the pin, the rules a check enforces, and the vendoring recipe for a sibling implementation | hand, reviewed like code |
 | `schema/` | JSON Schemas (draft 2020-12) for every file below: `case.json` (one case), `corpus.json` (one corpus file), `manifest.json`, `registry.json`, `exclusions.json` | hand, reviewed like code |
-| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object. `library/` holds the library-world cases the section below describes; `send/` and `system_variables/` hold the earlier authored fixtures | hand, reviewed like code |
+| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object. `library/` holds the library-world cases the section below describes, and `accepts/` the case that checks a chart's declared events against it; `send/` and `system_variables/` hold the earlier authored fixtures | hand, reviewed like code |
 | `corpus/` | one file per suite that has cases, holding that suite's cases: `scion.json` and `w3c.json` for the upstream suites, and `statifier.json` for the cases this repository authors itself (ADR-0070 decision 5) once it authors one | the emitter |
 | `manifest.json` | the corpus hash, the corpus files and the upstream suites (a claim pins a corpus by its hash and the statifier-ex tag it was vendored from, not by a version in the file) | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
@@ -111,6 +111,20 @@ The events are `loan.renew`,
 `dispute.resolved`, `patron.blocked`, `patron.reinstated`, `fine.assessed`,
 `fine.paid`, `loan.requested`, `hold.placed`, `copy.available`,
 `pickup.expired` and `copy.collected` - sixteen, counted off that list.
+
+The case under `conformance/cases/accepts/` is in this world too, and it
+proves the publish-time refusal of a declaration that promises an event
+name the chart never listens for. Its `host` object carries
+`declared_events` and `expect_accepts` (ADR-0071 decision 7): before the
+case runs, the runner calls `Statifier.Chart.check_accepts/2` with the
+declaration and compares both lists it answers, order included. The loan
+chart declared to accept `loan.renew`, `copy.returned` and `loan.archived`
+answers `loan.archived` as unreachable, because no transition in the chart
+listens for it. The running engine refuses nothing there - an event no
+transition matches changes no configuration - so this answer is what a
+host's publish step refuses on. The case's schema is this directory's
+`schema/case.json`; this suite shares no schema with the router's corpus or
+with a reference host's cases.
 
 The authored cases that came before the library world keep their own
 domain: the three under `cases/send/` and the one under

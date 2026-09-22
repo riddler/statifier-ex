@@ -110,4 +110,71 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
                Runner.run_case(host_case(%{"source" => "<scxml"}))
     end
   end
+
+  describe "run_case/1 with declared_events and expect_accepts" do
+    @loan_source """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
+        <state id="on_loan">
+            <transition event="loan.renew" target="on_loan"/>
+            <transition event="copy.returned" target="returned"/>
+        </state>
+        <final id="returned"/>
+    </scxml>
+    """
+
+    defp accepts_case(host) do
+      %{
+        "id" => "statifier/accepts/loan",
+        "source" => @loan_source,
+        "description" => "",
+        "initial_configuration" => ["on_loan"],
+        "steps" => [],
+        "host" => host
+      }
+    end
+
+    @declared ["loan.renew", "loan.archived"]
+    @expected %{"unreachable" => ["loan.archived"], "undeclared" => ["copy.returned"]}
+
+    # sabotage: `accepts/2`'s comparing clause calling
+    # `Statifier.Chart.check_accepts/2` with `nil` instead of the declared
+    # names -> both lists come back empty -> red
+    test "agrees when check_accepts/2 answers exactly the expected lists" do
+      host = %{"declared_events" => @declared, "expect_accepts" => @expected}
+
+      assert Runner.run_case(accepts_case(host)) == :agree
+    end
+
+    # sabotage: `accepts/2`'s comparing clause returning :ok without
+    # comparing -> red
+    test "disagrees when a list differs, stating both" do
+      expected = %{@expected | "undeclared" => []}
+      host = %{"declared_events" => @declared, "expect_accepts" => expected}
+
+      assert {:disagree, message} = Runner.run_case(accepts_case(host))
+      assert message =~ "Expected the accepts check"
+      assert message =~ ~s|"undeclared":["copy.returned"]|
+    end
+
+    # sabotage: `accepts/2`'s comparing clause comparing the lists as sets
+    # (`Enum.sort/1` on both sides) -> red
+    test "compares each list's order too" do
+      declared = ["loan.archived", "loan.lent"]
+      expected = %{"unreachable" => ["loan.lent", "loan.archived"], "undeclared" => []}
+      host = %{"declared_events" => declared ++ ["loan.renew", "copy.returned"]}
+
+      assert {:disagree, _message} =
+               Runner.run_case(accepts_case(Map.put(host, "expect_accepts", expected)))
+    end
+
+    # sabotage: `accepts/2`'s two half-present clauses deleted, so a half
+    # falls through to `:ok` -> red
+    test "disagrees when only one of the two keys is present" do
+      assert {:disagree, "declared_events is present without expect_accepts"} =
+               Runner.run_case(accepts_case(%{"declared_events" => @declared}))
+
+      assert {:disagree, "expect_accepts is present without declared_events"} =
+               Runner.run_case(accepts_case(%{"expect_accepts" => @expected}))
+    end
+  end
 end
