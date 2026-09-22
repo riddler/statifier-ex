@@ -10,6 +10,15 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.6.1] 2026-09-22
+
+Adds the `library` cases to the conformance corpus under `conformance/`:
+cases authored in this repository over three charts, `loan`, `patron` and
+`hold_queue`, in the corpus's `statifier` suite. `conformance/` is not part
+of the Hex package, so a caller of the public API sees no change. A sibling
+implementation that vendors the corpus re-vendors it at this version's tag,
+following the vendoring recipe in `conformance/RATCHET.md`.
+
 ## [2.6.0] 2026-09-19
 
 Lets a host register its own `<send>` types and hand each such send to a
