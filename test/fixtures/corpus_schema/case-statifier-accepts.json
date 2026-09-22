@@ -1,0 +1,72 @@
+{
+  "id": "statifier/accepts/loan_declares_an_unreachable_event",
+  "suite": "statifier",
+  "spec": "accepts",
+  "conformance": null,
+  "description": "The loan chart declared to accept loan.renew, copy.returned and loan.archived. The host checks the declaration against the chart's event vocabulary before it runs the case: loan.archived is unreachable, because no transition in the chart listens for it, and the descriptors the chart listens for that the declaration omits are undeclared, in document order. The chart then initializes into on_loan and hands the host its two loan timers.",
+  "required_features": [
+    "assign_elements",
+    "basic_states",
+    "cancel_elements",
+    "compound_states",
+    "conditional_transitions",
+    "data_elements",
+    "datamodel",
+    "event_transitions",
+    "eventless_transitions",
+    "final_states",
+    "history_states",
+    "onentry_actions",
+    "send_delay_expressions",
+    "send_elements",
+    "send_param_elements"
+  ],
+  "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"predicator\" initial=\"active\">\n    <datamodel>\n        <data id=\"renewals\" expr=\"0\"/>\n        <data id=\"max_renewals\" expr=\"2\"/>\n        <data id=\"holds_pending\" expr=\"false\"/>\n        <data id=\"patron_standing\" expr=\"'good'\"/>\n        <data id=\"copy_id\" expr=\"'c-1'\"/>\n    </datamodel>\n\n    <state id=\"active\" initial=\"on_loan\">\n        <history id=\"h\" type=\"shallow\">\n            <transition target=\"on_loan\"/>\n        </history>\n\n        <state id=\"on_loan\">\n            <onentry>\n                <send type=\"library:timer\" target=\"loan\" event=\"loan.due\" id=\"due\" delay=\"21d\"/>\n                <send type=\"library:timer\" target=\"loan\" event=\"loan.due_soon\" id=\"due_soon\" delay=\"18d\"/>\n            </onentry>\n            <transition event=\"loan.renew\" target=\"on_loan\" type=\"external\" cond=\"renewals &lt; max_renewals and not holds_pending and patron_standing == 'good'\">\n                <cancel sendid=\"due\"/>\n                <cancel sendid=\"due_soon\"/>\n                <assign location=\"renewals\" expr=\"renewals + 1\"/>\n            </transition>\n            <transition event=\"loan.due_soon\" target=\"due_soon\"/>\n            <transition event=\"loan.due\" target=\"overdue\"/>\n        </state>\n\n        <state id=\"due_soon\">\n            <transition event=\"loan.due\" target=\"overdue\"/>\n        </state>\n\n        <state id=\"overdue\">\n            <onentry>\n                <send type=\"library:timer\" target=\"loan\" event=\"loan.lost\" id=\"lost\" delay=\"28d\"/>\n            </onentry>\n            <transition event=\"loan.lost\" target=\"lost\"/>\n        </state>\n\n        <transition event=\"copy.returned\" target=\"returned\"/>\n        <transition event=\"copy.disputed\" target=\"held_for_review\"/>\n    </state>\n\n    <state id=\"held_for_review\">\n        <transition event=\"dispute.resolved\" target=\"h\"/>\n    </state>\n\n    <final id=\"returned\">\n        <onentry>\n            <send type=\"library:route\" target=\"hold_queue\" event=\"copy.available\">\n                <param name=\"copy_id\" expr=\"copy_id\"/>\n            </send>\n        </onentry>\n    </final>\n\n    <final id=\"lost\"/>\n</scxml>\n",
+  "initial_configuration": [
+    "on_loan"
+  ],
+  "steps": [],
+  "host": {
+    "send_types": [
+      "library:timer",
+      "library:route"
+    ],
+    "expect_sends": [
+      {
+        "type": "library:timer",
+        "target": "loan",
+        "event": {
+          "name": "loan.due"
+        },
+        "delay_ms": 1814400000,
+        "send_id": "due"
+      },
+      {
+        "type": "library:timer",
+        "target": "loan",
+        "event": {
+          "name": "loan.due_soon"
+        },
+        "delay_ms": 1555200000,
+        "send_id": "due_soon"
+      }
+    ],
+    "declared_events": [
+      "loan.renew",
+      "copy.returned",
+      "loan.archived"
+    ],
+    "expect_accepts": {
+      "unreachable": [
+        "loan.archived"
+      ],
+      "undeclared": [
+        "copy.disputed",
+        "loan.due_soon",
+        "loan.due",
+        "loan.lost",
+        "dispute.resolved"
+      ]
+    }
+  }
+}

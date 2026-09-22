@@ -108,7 +108,7 @@ defmodule Corpus.SchemaTest do
     end
 
     # sabotage: host's send_types items losing "type": "string" -> red
-    test "host admits only its two reserved members, send_types as strings" do
+    test "host admits only its reserved members, send_types as strings" do
       statifier = fixture("case-statifier.json")
 
       assert "/host/send_types/0" in pointers(
@@ -173,6 +173,67 @@ defmodule Corpus.SchemaTest do
       assert "/host/expect_sends/0/event/sendid" in pointers(
                "case.json",
                with_item.(put_in(item, ["event", "sendid"], "x"))
+             )
+    end
+
+    # sabotage: host's declared_events property deleted from case.json
+    # (additionalProperties then refuses it) -> red on the accepting half
+    test "a statifier case's host may carry declared_events with expect_accepts" do
+      accepts = fixture("case-statifier-accepts.json")
+
+      assert %{"declared_events" => [_first | _rest], "expect_accepts" => %{}} = accepts["host"]
+      assert errors("case.json", accepts) == []
+      assert errors("case.json", put_in(accepts, ["host", "declared_events"], [])) == []
+    end
+
+    # sabotage: the host's first allOf branch (declared_events requires
+    # expect_accepts) deleted -> red on the first half; the second deleted ->
+    # red on the second
+    test "declared_events and expect_accepts are present together or not at all" do
+      accepts = fixture("case-statifier-accepts.json")
+      {_expected, without_expected} = pop_in(accepts, ["host", "expect_accepts"])
+      {_declared, without_declared} = pop_in(accepts, ["host", "declared_events"])
+
+      assert {"/host", "missing required expect_accepts"} in errors("case.json", without_expected)
+
+      assert {"/host", "missing required declared_events"} in errors(
+               "case.json",
+               without_declared
+             )
+
+      neither =
+        accepts
+        |> update_in(["host"], &Map.drop(&1, ["declared_events", "expect_accepts"]))
+
+      assert errors("case.json", neither) == []
+    end
+
+    # sabotage: expect_accepts' "additionalProperties": false removed -> red
+    # on the extra key; its "required" losing "undeclared" -> red on the
+    # missing list; declared_events' items losing "type": "string" -> red on
+    # the number; declared_events' "uniqueItems" deleted -> red on the
+    # repeated name
+    test "expect_accepts is exactly unreachable and undeclared, and each declared name a string" do
+      accepts = fixture("case-statifier-accepts.json")
+
+      assert "/host/expect_accepts/unexpected" in pointers(
+               "case.json",
+               put_in(accepts, ["host", "expect_accepts", "unexpected"], [])
+             )
+
+      {_undeclared, without_undeclared} =
+        pop_in(accepts, ["host", "expect_accepts", "undeclared"])
+
+      assert "/host/expect_accepts" in pointers("case.json", without_undeclared)
+
+      assert "/host/declared_events/0" in pointers(
+               "case.json",
+               put_in(accepts, ["host", "declared_events"], [1])
+             )
+
+      assert "/host/declared_events" in pointers(
+               "case.json",
+               put_in(accepts, ["host", "declared_events"], ["loan.renew", "loan.renew"])
              )
     end
 
@@ -245,7 +306,8 @@ defmodule Corpus.SchemaTest do
     # sabotage: Statifier.Testing.FeatureDetector.detect_features/1 dropping
     # :final_states -> red on case-w3c.json and case-statifier.json
     test "each fixture's required_features is what the feature detector finds in its source" do
-      for name <- ~w(case-scion.json case-w3c.json case-statifier.json) do
+      for name <-
+            ~w(case-scion.json case-w3c.json case-statifier.json case-statifier-accepts.json) do
         %{"source" => source, "required_features" => features} = fixture(name)
 
         detected =

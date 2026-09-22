@@ -17,7 +17,10 @@ defmodule Mix.Statifier.Corpus.Runner do
   A case carrying a `host` object runs through
   `Mix.Statifier.Corpus.HostCase` instead, which registers the case's send
   types with the session it starts and compares the sends handed to them
-  with the case's `expect_sends` (ADR-0070 decision 5).
+  with the case's `expect_sends` (ADR-0070 decision 5); when the `host`
+  object carries `declared_events`, it also compares
+  `Statifier.Chart.check_accepts/2`'s answer with the case's
+  `expect_accepts` (ADR-0071 decision 7).
   """
 
   alias Mix.Statifier.Corpus.HostCase

@@ -25,6 +25,13 @@ defmodule Mix.Statifier.Corpus.HostCase do
   author named the send, which is when the delivered event carries one.
   A registered delayed send is the host's timer, and this host never fires
   one.
+
+  A host object may also carry `declared_events` and `expect_accepts`,
+  present together or not at all (ADR-0071 decision 7). Before it starts the
+  session, the runner calls `Statifier.Chart.check_accepts/2` on the compiled
+  chart with `declared_events`, and the case agrees only when both lists it
+  answers are exactly `expect_accepts`' `unreachable` and `undeclared`, order
+  included. Either key without the other is a disagreement.
   """
 
   alias Mix.Statifier.Corpus.HostCase.Processor
@@ -39,7 +46,8 @@ defmodule Mix.Statifier.Corpus.HostCase do
   """
   @spec run(corpus_case :: map()) :: :agree | {:disagree, String.t()}
   def run(%{"source" => source, "host" => host} = corpus_case) do
-    with {:ok, machine} <- compile(source) do
+    with {:ok, machine} <- compile(source),
+         :ok <- accepts(machine, host) do
       session_id = MachineState.generate_session_id()
       :yes = :global.register_name({Processor, session_id}, self())
 
@@ -67,6 +75,26 @@ defmodule Mix.Statifier.Corpus.HostCase do
       {:error, errors} -> {:disagree, "the document did not compile: #{inspect(errors)}"}
     end
   end
+
+  defp accepts(machine, %{"declared_events" => declared, "expect_accepts" => expected}) do
+    actual = Statifier.Chart.check_accepts(machine, declared)
+    actual = %{"unreachable" => actual.unreachable, "undeclared" => actual.undeclared}
+
+    if actual == expected,
+      do: :ok,
+      else:
+        {:disagree,
+         "Expected the accepts check #{JSON.encode!(expected)}, " <>
+           "but got #{JSON.encode!(actual)}"}
+  end
+
+  defp accepts(_machine, host) when is_map_key(host, "declared_events"),
+    do: {:disagree, "declared_events is present without expect_accepts"}
+
+  defp accepts(_machine, host) when is_map_key(host, "expect_accepts"),
+    do: {:disagree, "expect_accepts is present without declared_events"}
+
+  defp accepts(_machine, _host), do: :ok
 
   defp drive(session, corpus_case, expect_sends) do
     steps = Enum.map(corpus_case["steps"], &{&1["event"]["name"], &1["configuration"]})
