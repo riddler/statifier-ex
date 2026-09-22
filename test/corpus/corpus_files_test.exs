@@ -73,8 +73,10 @@ defmodule Corpus.CorpusFilesTest do
     end
 
     # sabotage: n/a - asserts the committed generated files, no lib/ behavior;
-    # deleting conformance/cases/ and re-emitting -> red on the missing file
-    test "the statifier suite is the authored cases, each carrying a host object" do
+    # deleting conformance/cases/ and re-emitting -> red on the missing file;
+    # deleting the host object from a case whose document sends and
+    # re-emitting -> red on the last assertion
+    test "the statifier suite is the authored cases, each whose document sends carrying a host object" do
       authored =
         "conformance/cases/*/*.json"
         |> Path.wildcard()
@@ -85,7 +87,12 @@ defmodule Corpus.CorpusFilesTest do
 
       assert authored != [], "no authored case, so nothing is checked"
       assert Enum.map(cases("statifier"), & &1["id"]) == authored
-      assert Enum.all?(cases("statifier"), &Map.has_key?(&1, "host"))
+      assert Enum.any?(cases("statifier"), &Map.has_key?(&1, "host"))
+
+      assert Enum.all?(
+               cases("statifier"),
+               &(Map.has_key?(&1, "host") or not String.contains?(&1["source"], "<send"))
+             )
     end
 
     # sabotage: Emitter.generated_path/2 dropping the conformance segment -> red

@@ -90,14 +90,20 @@ Two send types are registered, and only two:
 - `library:timer` is every timer in the world. It belongs to the host: the
   engine schedules nothing for it and never fires it, the host's processor
   records it and delivers nothing, and the case injects the fired event as
-  a step.
+  a step. Its target is the name of the chart the timer returns to, which
+  is always the chart that sent it: the loan cases write `target="loan"`.
 - `library:route` is a cross-execution send. Its target is the name of the
   receiving chart.
+
+Every library case whose chart sends registers both send types,
+`library:timer` then `library:route`, even a case that sends only one of
+them; a case whose chart sends nothing (the patron chart) carries no `host`
+object and registers nothing.
 
 Three charts divide the world:
 
 - `loan`, one execution per loan
-- `patron`, one execution per patron, with two parallel regions
+- `patron`, one execution per patron, with three parallel regions: `standing`, `fines` and `desk`
 - `hold_queue`, one execution per copy
 
 The events are `loan.renew`,
