@@ -10,6 +10,29 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.7.0] 2026-09-22
+
+Adds two pure functions on `Statifier.Chart` that a host can call on a
+compiled chart before it publishes one: the chart's event vocabulary, and a
+check of a declared set of accepted event names against it. Nothing that
+already runs changes. The conformance corpus under `conformance/`, which is
+not part of the Hex package, gains a case in the `statifier` suite whose
+host object carries `declared_events` and `expect_accepts`; a sibling
+implementation that vendors the corpus re-vendors it at this version's tag.
+
+### Added
+
+- Adds `Statifier.Chart.events/1`, a compiled chart's event vocabulary: every
+  event descriptor on a transition from a state some path can enter, returned
+  as authored, with a pattern such as `loan.*` reported whole and never
+  expanded.
+- Adds `Statifier.Chart.check_accepts/2`, which compares a declaration of the
+  event names a chart accepts with its event vocabulary under the runtime's
+  descriptor matching, and answers the declared names the chart can never
+  select on (`unreachable`) and the descriptors the declaration does not state
+  (`undeclared`). A `nil` declaration makes the computed vocabulary the
+  contract; a one-name declaration answers whether that name is in it.
+
 ## [2.6.1] 2026-09-22
 
 Adds the `library` cases to the conformance corpus under `conformance/`:
