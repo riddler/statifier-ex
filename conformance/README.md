@@ -10,7 +10,7 @@ claim against the same cases
 | `README.md` | this file | hand, reviewed like code |
 | `RATCHET.md` | the contract a registry is written against: the claims, the pin, the rules a check enforces, and the vendoring recipe for a sibling implementation | hand, reviewed like code |
 | `schema/` | JSON Schemas (draft 2020-12) for every file below: `case.json` (one case), `corpus.json` (one corpus file), `manifest.json`, `registry.json`, `exclusions.json` | hand, reviewed like code |
-| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object | hand, reviewed like code |
+| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object. `library/` holds the library-world cases the section below describes; `send/` and `system_variables/` hold the earlier authored fixtures | hand, reviewed like code |
 | `corpus/` | one file per suite that has cases, holding that suite's cases: `scion.json` and `w3c.json` for the upstream suites, and `statifier.json` for the cases this repository authors itself (ADR-0070 decision 5) once it authors one | the emitter |
 | `manifest.json` | the corpus hash, the corpus files and the upstream suites (a claim pins a corpus by its hash and the statifier-ex tag it was vendored from, not by a version in the file) | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
@@ -47,3 +47,65 @@ This directory is not part of the Hex package: a sibling implementation
 vendors it from a statifier-ex tag, byte for byte, with `LICENSES/` and every
 case's `upstream` field, and writes its own registry against it. The recipe
 and the registry contract are [`RATCHET.md`](RATCHET.md).
+
+## The library world
+
+The cases under `conformance/cases/library/` share one small domain, so that
+a reader who has read it once can read any of them. This section is where
+that domain is defined: a sibling implementation, and every other package in
+the family that wants the same vocabulary, takes these values from here
+rather than re-deriving them from a case.
+
+The nouns are patron, copy (of a title), loan, hold and branch.
+
+The ids are strings, and these are all of them:
+
+- patron `p-1`, whose standing is good
+- patron `p-2`, who is blocked
+- copy `c-1`, a copy of title `t-1`
+- branch `b-1`
+
+The durations are written in days and carried in the cases as milliseconds,
+so both forms appear here and a reader can check one against the other:
+
+| What | Days | Milliseconds |
+|---|---|---|
+| the loan period | 21d | 1814400000 |
+| the due-soon reminder, from checkout | 18d | 1555200000 |
+| the lost-item timer, after due | 28d | 2419200000 |
+| the pickup window | 7d | 604800000 |
+
+`max_renewals` is 2.
+
+The day unit is what the library cases write: a document says
+`delay="21d"`, and the case's `delay_ms` carries the same span as a number.
+The engine accepts `d` because `Statifier.Duration` delegates
+`Predicator.Duration.parse/1` whole rather than re-restricting parsing to
+the SCXML schema's five units, so `y`, `mo`, `w`, `d`, `h`, `m`, `s` and
+`ms` all parse (`lib/statifier/duration.ex`, under "The unit set is a
+superset, delegated as-is").
+
+Two send types are registered, and only two:
+
+- `library:timer` is every timer in the world. It belongs to the host: the
+  engine records the send and never fires it, and the case injects the
+  fired event as a step.
+- `library:route` is a cross-execution send. Its target is the name of the
+  receiving chart.
+
+Three charts divide the world:
+
+- `loan`, one execution per loan
+- `patron`, one execution per patron, with two parallel regions
+- `hold_queue`, one execution per copy
+
+The events are `loan.renew`,
+`loan.due_soon`, `loan.due`, `loan.lost`, `copy.returned`, `copy.disputed`,
+`dispute.resolved`, `patron.blocked`, `patron.reinstated`, `fine.assessed`,
+`fine.paid`, `loan.requested`, `hold.placed`, `copy.available`,
+`pickup.expired` and `copy.collected` - sixteen, counted off that list.
+
+The authored cases that came before the library world keep their own
+domain: the three under `cases/send/` and the one under
+`cases/system_variables/` are fixtures for the behaviour they pin, not
+teaching examples, and nothing here rewrites them into this vocabulary.
