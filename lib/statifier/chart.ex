@@ -1,6 +1,13 @@
 defmodule Statifier.Chart do
   @moduledoc """
-  The versioned binary contract for a *chart* - a `Statifier.Machine.t()`
+  The questions a host asks about a *chart* - a compiled
+  `Statifier.Machine.t()` - without running it. Two are answered here: its
+  versioned binary contract (`to_binary/1`, `from_binary/1`) and its event
+  vocabulary (`events/1`).
+
+  ## The binary contract
+
+  The versioned binary contract for a chart is a `Statifier.Machine.t()`
   reduced to the inputs that reproduce it: its SCXML source, the persisted
   subset of the options it was compiled with, and its
   `Statifier.Machine.Identity.t()`. No compiled term is written - `from_binary/1`
@@ -31,14 +38,34 @@ defmodule Statifier.Chart do
   identity: a future format whose identity representation changed should
   report the version mismatch, not a confusing identity one.
 
-  Neither function performs I/O; encoding and decoding a binary in memory,
-  and recompiling source already held in memory, are not effects a caller
-  has to route around (ADR-0003 does not apply here, and this module is not
-  listed in `@effect_interpreter_paths`).
+  ## The event vocabulary
+
+  `events/1` answers which event descriptors the chart listens for: every
+  descriptor on a transition whose source state can be active, each
+  returned as authored, a pattern reported as a pattern and never expanded.
+  "Can be active" is a static rule over the chart's structure, stated on
+  `events/1`; it over-counts and never under-counts, and it reads no `cond`.
+  The function reads only the compiled machine - no source text, no
+  `identity` - and runs nothing.
+
+  It lives here, not in `Statifier.Validator`: `validate/3` judges a
+  document against the spec and takes no deployment state, and the
+  vocabulary is what a host compares a deployment's claims against before
+  any execution starts - the same posture as
+  `Statifier.Send.Types.unsupported_sends/2` (ADR-0071, after ADR-0069
+  decision 3). It keeps this module's layering: it depends on
+  `Statifier.Machine`, never the reverse.
+
+  ## No I/O
+
+  No function here performs I/O; encoding and decoding a binary in memory,
+  recompiling source already held in memory, and walking a compiled machine
+  are not effects a caller has to route around (ADR-0003 does not apply
+  here, and this module is not listed in `@effect_interpreter_paths`).
   """
 
   alias Statifier.Machine
-  alias Statifier.Machine.Identity
+  alias Statifier.Machine.{Identity, State}
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -132,6 +159,171 @@ defmodule Statifier.Chart do
 
       _other ->
         {:error, :not_a_statifier_blob}
+    end
+  end
+
+  @doc """
+  The chart's event vocabulary: every event descriptor on a transition whose
+  source state can be active, computed from the compiled `machine` alone.
+
+  Each descriptor is returned as authored - its dot-split tokens joined back
+  with `.`, so `loan.renew` returns `loan.renew` and `loan.` returns
+  `loan.`. **A pattern is reported as a pattern, never expanded**: `*` and
+  `loan.*` come back as written, and the function never guesses which names
+  a pattern stands for. Platform and internal descriptors (`done.state.`,
+  `error.`, a name the chart raises itself) are descriptors the chart
+  listens for and are included. An eventless transition contributes
+  nothing; a chart with no transition carrying an `event` answers `[]`.
+
+  Descriptors appear in `t_index` order (states in document order, each
+  state's own transitions before its children's), and within one `event`
+  attribute in the order written; a descriptor equal, as a string, to one
+  already returned is dropped. A document given inline to `<invoke>` is its
+  own chart and is not read.
+
+  **"Can be active" is a static rule over the chart's structure: a state
+  some path enters, its ancestors included.** It follows Appendix D's
+  `addDescendantStatesToEnter` and `addAncestorStatesToEnter`. The root is
+  entered by its default. Entering a state by its default enters it and
+  then its `initial` states as targets (a compound state or the root),
+  every child that is not a history by its default (a parallel state), or
+  its `history_default` transition's targets as targets (a history
+  pseudo-state). Entering a state as a target enters it by its default,
+  enters each of its proper ancestors, and, for each parallel ancestor,
+  enters by its default every child region that holds none of the
+  transition's targets. Every transition in an entered state's
+  `transitions` enters its targets as targets. A transition's `cond` and
+  `event` are not read, so a transition whose condition is never true in
+  practice still counts. A state's descriptors join the vocabulary when it
+  is entered and is not a history pseudo-state.
+
+  So a transition on an ancestor of an active state is in the vocabulary, a
+  descriptor on a state no path enters is not, a history's default target
+  counts as entered, and every region of a reachable parallel state is
+  reachable. The rule over-counts and never under-counts: a descriptor
+  missing from the answer is one the chart can never select on.
+
+  Pure and total over a `%Statifier.Machine{}`; it reads no source text and
+  needs no `identity` or `source` on the machine.
+  """
+  @spec events(machine :: Machine.t()) :: [String.t()]
+  def events(%Machine{} = machine) do
+    machine
+    |> entered_states()
+    |> Enum.reject(&(Machine.at(machine, &1).kind == :history))
+    |> Enum.flat_map(&Machine.at(machine, &1).transitions)
+    |> Enum.sort()
+    |> Enum.flat_map(&Machine.transition(machine, &1).events)
+    |> Enum.map(&Enum.join(&1, "."))
+    |> Enum.uniq()
+  end
+
+  # The least set of state indexes closed under `events/1`'s entry rule, as a
+  # worklist: `{:default, index}` enters a state by its default and
+  # `{:targets, indexes}` enters one transition's (or one `initial`'s)
+  # targets as targets. `defaulted` bounds the default expansions and
+  # `entered` bounds the per-state transition walk, so each state's work is
+  # queued once and the walk terminates on any chart, cycles included.
+  @spec entered_states(machine :: Machine.t()) :: [non_neg_integer()]
+  defp entered_states(machine) do
+    machine
+    |> walk_entry([{:default, 0}], MapSet.new(), MapSet.new())
+    |> MapSet.to_list()
+  end
+
+  @spec walk_entry(
+          machine :: Machine.t(),
+          work :: [{:default, non_neg_integer()} | {:targets, [non_neg_integer()]}],
+          entered :: MapSet.t(non_neg_integer()),
+          defaulted :: MapSet.t(non_neg_integer())
+        ) :: MapSet.t(non_neg_integer())
+  defp walk_entry(_machine, [], entered, _defaulted), do: entered
+
+  defp walk_entry(machine, [{:default, index} | rest], entered, defaulted) do
+    if MapSet.member?(defaulted, index) do
+      walk_entry(machine, rest, entered, defaulted)
+    else
+      {own_work, entered} = mark_entered(machine, index, entered)
+      work = default_entry(machine, index) ++ own_work ++ rest
+      walk_entry(machine, work, entered, MapSet.put(defaulted, index))
+    end
+  end
+
+  defp walk_entry(machine, [{:targets, targets} | rest], entered, defaulted) do
+    {ancestor_work, entered} =
+      targets
+      |> Enum.flat_map(&Machine.proper_ancestors(machine, &1))
+      |> Enum.uniq()
+      |> Enum.flat_map_reduce(entered, fn ancestor, acc ->
+        {own_work, acc} = mark_entered(machine, ancestor, acc)
+        {own_work ++ untargeted_regions(machine, ancestor, targets), acc}
+      end)
+
+    work = Enum.map(targets, &{:default, &1}) ++ ancestor_work ++ rest
+    walk_entry(machine, work, entered, defaulted)
+  end
+
+  # What entering `index` by its default enters next, by kind: a parallel
+  # state's non-history children by their defaults, a history's default
+  # transition's targets as targets, and otherwise the compiler-resolved
+  # `initial` (the `initial` attribute, the `<initial>` element, or the first
+  # child) as targets - `[]` on an atomic state.
+  @spec default_entry(machine :: Machine.t(), index :: non_neg_integer()) ::
+          [{:default, non_neg_integer()} | {:targets, [non_neg_integer()]}]
+  defp default_entry(machine, index) do
+    case Machine.at(machine, index) do
+      %State{kind: :parallel} ->
+        Enum.map(Machine.child_states(machine, index), &{:default, &1})
+
+      %State{kind: :history, history_default: nil} ->
+        []
+
+      %State{kind: :history, history_default: t_index} ->
+        [{:targets, Machine.transition(machine, t_index).targets}]
+
+      %State{initial: []} ->
+        []
+
+      %State{initial: initial} ->
+        [{:targets, initial}]
+    end
+  end
+
+  # A parallel ancestor's child regions that hold none of `targets`, each to
+  # be entered by its default; `[]` for any other ancestor.
+  @spec untargeted_regions(
+          machine :: Machine.t(),
+          ancestor :: non_neg_integer(),
+          targets :: [non_neg_integer()]
+        ) :: [{:default, non_neg_integer()}]
+  defp untargeted_regions(machine, ancestor, targets) do
+    if Machine.parallel?(machine, ancestor) do
+      for region <- Machine.child_states(machine, ancestor),
+          not Enum.any?(targets, &(&1 == region or Machine.descendant?(machine, &1, region))),
+          do: {:default, region}
+    else
+      []
+    end
+  end
+
+  # Marks `index` entered. The first time only, returns the work its own
+  # transitions add: each targeted transition's targets, as targets.
+  @spec mark_entered(
+          machine :: Machine.t(),
+          index :: non_neg_integer(),
+          entered :: MapSet.t(non_neg_integer())
+        ) :: {[{:targets, [non_neg_integer()]}], MapSet.t(non_neg_integer())}
+  defp mark_entered(machine, index, entered) do
+    if MapSet.member?(entered, index) do
+      {[], entered}
+    else
+      work =
+        for t_index <- Machine.at(machine, index).transitions,
+            targets = Machine.transition(machine, t_index).targets,
+            targets != [],
+            do: {:targets, targets}
+
+      {work, MapSet.put(entered, index)}
     end
   end
 
