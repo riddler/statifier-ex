@@ -1,6 +1,6 @@
 # ADR-0071: A chart's event vocabulary and its accepts check are pure functions on `Statifier.Chart`, outside `Statifier.Validator`
 
-Status: proposed - adds two public functions, `Statifier.Chart.events/1`
+Status: accepted - adds two public functions, `Statifier.Chart.events/1`
 and `Statifier.Chart.check_accepts/2`, and two optional keys to a
 statifier case's `host` object; widens `Statifier.Chart`'s stated scope
 from the binary contract alone to questions a host asks about a chart
@@ -305,3 +305,64 @@ listens for it.
 - [ADR-0002](0002-literal-w3c-appendix-d-port.md) (Appendix D's `nameMatch` and the entry procedures decision 2 follows)
 - [ADR-0003](0003-pure-core-with-effects.md) (the layering decision 5 keeps)
 - [ADR-0070](0070-statifier-emits-a-language-neutral-conformance-corpus.md) (the corpus, the `host` object and the statifier suite decision 7 extends)
+
+## Note (2026-09-22): `Statifier.Telemetry` already defined an `events` function
+
+This note decides nothing. It states one fact that a sentence of the
+Context reads past. No decision, consequence or Related entry changes.
+Every anchor below was read on `main` at `2cfad17`.
+
+The Context says, of `lib/` at `555f15a`, that "nothing in `lib/` defines
+an `events` function". `Statifier.Telemetry.events/0`
+(`lib/statifier/telemetry.ex`, `def events do`) was already there: it was
+added in `aba8ce2` and was on `main` at `555f15a`. It returns the telemetry
+event names that module can emit, and has nothing to do with a chart. So
+the sentence was inexact when it was written. The paragraph's point held:
+no function in `lib/` computed a chart's event vocabulary before
+`Statifier.Chart.events/1`.
+
+## Note (2026-09-22): accepted
+
+The operator accepted this record on 2026-09-22. The acceptance is the
+record's: no decision, consequence or Related entry changes here, and the
+Status line's extends clause stands as written. Every claim in this record
+was verified against `main` at `2cfad17` before the flip, with the
+Context's statements read as of `555f15a`, the commit it names. The
+Context's sentence about an `events` function is met by the note above.
+The Context's account of what `Statifier.Chart` holds and what the `host`
+object holds describes `555f15a`, before this record's implementation
+landed. Three further facts are recorded here.
+
+**A second over-count.** Decision 2 enters every region of a parallel
+ancestor of a transition's target that holds none of the targets. It does
+not bound that walk by the transition's domain, as Appendix D's
+`addAncestorStatesToEnter` does: above the domain the regions are already
+active and are not entered again. So a region's default-entry state can
+count as entered when, in practice, every entry into the parallel state
+targets one of that state's siblings. Decision 2's closing sentence allows
+this, since the rule over-approximates and never under-approximates, but
+the Consequences name only the over-count from a condition that is never
+true. An example: a root whose initial state `waiting` has a transition
+on `patron.registered` to `flagged`, and a parallel state `account` with
+two regions. Region `card` starts in `unissued`, which has a transition on
+`card.issued` to `issued`. Region `standing` starts in `good`, which has a
+transition on `fine.paid` to `good`, and also holds `flagged`. The only
+entry into `account` targets `flagged`, so `good` is never active. Yet
+`events/1` answers `["patron.registered", "card.issued", "fine.paid"]`.
+The target of `card.issued` has `account` as a parallel ancestor, and
+the rule enters `standing` by its default, although that transition's
+domain is `card` (`Statifier.Chart`'s `untargeted_regions/3`).
+
+**The schema's pair of conditions.** `conformance/schema/case.json`'s
+`host` object carries an `allOf` of two `if`/`then` clauses. They enforce
+decision 7's "present together or not at all" for `declared_events` and
+`expect_accepts`. Decision 7's "no new conditional" concerns which suites
+may carry the keys. The schema's existing top-level `allOf` still decides
+that by keeping `host` off scion and w3c cases, so the pair does not
+contradict it.
+
+**One `@doc` defers to the other.** The Consequences say each function's
+`@doc` states decision 2's rule and decision 1's never-expand rule.
+`Statifier.Chart.events/1`'s `@doc` states both.
+`Statifier.Chart.check_accepts/2`'s `@doc` states neither and defers to
+`events/1` for the vocabulary it compares against.
