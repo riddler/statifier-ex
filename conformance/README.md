@@ -88,8 +88,9 @@ superset, delegated as-is").
 Two send types are registered, and only two:
 
 - `library:timer` is every timer in the world. It belongs to the host: the
-  engine records the send and never fires it, and the case injects the
-  fired event as a step.
+  engine schedules nothing for it and never fires it, the host's processor
+  records it and delivers nothing, and the case injects the fired event as
+  a step.
 - `library:route` is a cross-execution send. Its target is the name of the
   receiving chart.
 
