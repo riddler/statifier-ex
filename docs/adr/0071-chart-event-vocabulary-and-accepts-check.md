@@ -4,7 +4,8 @@ Status: proposed - adds two public functions, `Statifier.Chart.events/1`
 and `Statifier.Chart.check_accepts/2`, and two optional keys to a
 statifier case's `host` object; widens `Statifier.Chart`'s stated scope
 from the binary contract alone to questions a host asks about a chart
-without running it; amends no record
+without running it; extends ADR-0070 decision 5 (the host object's
+members) without amending it
 
 ## Context
 
@@ -27,7 +28,7 @@ transition's `event` attribute, split once at compile time (that
 module's moduledoc). `Statifier.Machine.State`'s `transitions` field
 lists a state's own selectable transitions; an `<initial>` element's
 transition and a history's default live in `initial_transition` and
-`history_default` instead (the same moduledoc), and spec 3.3 and 3.6 give
+`history_default` instead (the same moduledoc), and spec 3.6 and 3.10 give
 neither an `event` attribute.
 
 **Descriptor matching exists once.** `Statifier.Interpreter.NameMatch`
