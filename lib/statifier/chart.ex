@@ -1,10 +1,11 @@
 defmodule Statifier.Chart do
   @moduledoc """
   The questions a host asks about a *chart* - a compiled
-  `Statifier.Machine.t()` - without running it. Two are answered here: its
-  versioned binary contract (`to_binary/1`, `from_binary/1`) and its event
+  `Statifier.Machine.t()` - without running it. Three are answered here: its
+  versioned binary contract (`to_binary/1`, `from_binary/1`), its event
   vocabulary (`events/1`), with the check of a declaration against that
-  vocabulary (`check_accepts/2`).
+  vocabulary (`check_accepts/2`), and what changed between two charts
+  (`diff/3`).
 
   ## The binary contract
 
@@ -67,6 +68,16 @@ defmodule Statifier.Chart do
   decision 3). They keep this module's layering: they depend on
   `Statifier.Machine` (and `check_accepts/2` on
   `Statifier.Interpreter.NameMatch`), never the reverse.
+
+  ## The diff
+
+  `diff/3` classifies a pair of compiled charts as identical, compatible,
+  mapped or breaking, and names the reasons (ADR-0072). It is structural:
+  it says what the two charts are, never what an execution will do, and it
+  moves nothing. A rename the engine cannot see is supplied by the caller as
+  a plain `mapping:` from old state ids to new ones. It shares `events/1`'s
+  "can be active" rule, which stays private to this module (ADR-0072
+  decision 5).
 
   ## No I/O
 
@@ -298,6 +309,464 @@ defmodule Statifier.Chart do
         )
     }
   end
+
+  @typedoc """
+  One of the four classes `diff/3` answers (ADR-0072 decision 1).
+  """
+  @type diff_class :: :identical | :compatible | :mapped | :breaking
+
+  @typedoc """
+  One reason `diff/3` reports. The ones marked breaking in `diff/3`'s doc
+  make a pair `:breaking`; the rest report without changing the class.
+  """
+  @type diff_reason ::
+          {:state_nameless, non_neg_integer()}
+          | {:state_unresolved, String.t()}
+          | {:state_changed, String.t(), [:kind | :parent | :atomic | :regions | :history_type]}
+          | {:state_mapped, String.t(), String.t()}
+          | {:state_removed, String.t()}
+          | {:state_added, String.t()}
+          | {:transition_removed, String.t(), non_neg_integer()}
+          | {:transition_added, String.t(), non_neg_integer()}
+          | {:event_removed, String.t()}
+          | {:event_added, String.t()}
+          | {:data_removed, String.t()}
+          | {:data_added, String.t()}
+          | {:mapping_unused, String.t()}
+
+  @typedoc """
+  What `diff/3` answers: the pair's class and its reasons, in `diff/3`'s
+  order.
+  """
+  @type diff :: %{class: diff_class(), reasons: [diff_reason()]}
+
+  @doc """
+  Classifies two compiled charts, `from` (the chart an execution is pinned
+  to) and `to` (a candidate), into one of four classes and returns the
+  reasons (ADR-0072 decision 1). `diff/2` is the head with `opts` defaulted
+  to `[]`.
+
+  - `:identical` - `Statifier.Machine.Identity.matches?/2` holds for the two
+    identities, `name` and `version` included (ADR-0052 decision 1).
+    Nothing structural is compared and `reasons` is `[]`. A machine with no
+    identity is never identical to anything.
+  - `:compatible` - the structural comparison found no breaking reason and
+    no mapped state. Additions are allowed and reported.
+  - `:mapped` - no breaking reason, and at least one state of `from` absent
+    from `to` is resolved by `opts[:mapping]`.
+  - `:breaking` - at least one breaking reason.
+
+  ## The structural comparison
+
+  Two states *correspond* when they carry the same id, or when the mapping
+  resolves a `from` state to a `to` state; the roots always correspond. A
+  state of `from` is *held* when it can be active under the rule `events/1`
+  states, or it is a history pseudo-state whose parent can be active. The
+  reasons:
+
+  - `{:state_nameless, index}` (breaking) - a held state of `from`, not the
+    root, with no id. A nameless state that is not held is ignored, and a
+    nameless state of `to` is never reported.
+  - `{:state_unresolved, id}` (breaking) - a held state of `from` with no
+    corresponding state in `to`.
+  - `{:state_changed, id, fields}` (breaking) - a held state of `from` whose
+    corresponding state differs in any of `fields`, in this order: `:kind`;
+    `:parent` (the parent's corresponding id); `:atomic`; `:regions` (both
+    parallel, and the corresponding ids of their child states differ);
+    `:history_type`.
+  - `{:state_mapped, from_id, to_id}` - a state of `from`, held or not,
+    resolved by the mapping and not reported as changed.
+  - `{:state_removed, id}` - a state of `from` that is not held and has no
+    corresponding state in `to`.
+  - `{:state_added, id}` - a state of `to` with an id that corresponds to no
+    state of `from`.
+  - `{:transition_removed, source_id, t_index}` (breaking) - a selectable
+    transition of a held state of `from` that matches no transition of the
+    corresponding state. A transition of an unresolved or nameless state is
+    covered by the state's own reason.
+  - `{:transition_added, source_id, t_index}` - a selectable transition of a
+    state of `to` that corresponds to a state of `from` and matches no
+    transition of that state. A transition of an added state is covered by
+    the state's own reason.
+  - `{:event_removed, descriptor}` (breaking) and `{:event_added,
+    descriptor}` - a descriptor in one side's `events/1` and not in the
+    other's, compared as strings. A pattern replaced by a wider one still
+    reports the removal: nothing reasons about which names a pattern stands
+    for.
+  - `{:data_removed, id}` (breaking) and `{:data_added, id}` - a `<data>`
+    id declared anywhere in one chart and nowhere in the other. A `<data>`
+    element's value is not compared.
+  - `{:mapping_unused, from_id}` - a mapping entry the comparison did not
+    read.
+
+  **The equality per element is never struct equality and never a source
+  slice.** A state compares by its id through correspondence, `kind`, its
+  parent's corresponding id, whether it is atomic, its child states'
+  corresponding ids when parallel, and `history_type`; its executable
+  content, `initial`, `donedata` and `invoke` list are not compared. A
+  transition matches another when its source's corresponding id, its
+  `events` joined as `events/1` joins them, its targets' corresponding ids
+  in the order written, its `type`, and its `cond` as authored (a static
+  value, or a compiled expression's source text) are all equal; its
+  content, `t_index` and locations are not compared, and a state's
+  transitions match as a multiset, so a reordering is not reported. A
+  datamodel key compares as the `<data>` element's `id`.
+
+  **Order.** The `from`-side state reasons in `from`'s document order, one
+  per state at most; then `:state_added` in `to`'s document order; then
+  `:transition_removed` in `from`'s `t_index` order; then
+  `:transition_added` in `to`'s `t_index` order; then `:event_removed` and
+  `:event_added` in each side's `events/1` order; then `:data_removed` and
+  `:data_added` in each side's `d_index` order; then `:mapping_unused`,
+  sorted by id.
+
+  ## The mapping (ADR-0072 decision 2)
+
+  `opts[:mapping]` is a plain map from a `from` state id to a `to` state id.
+  An entry is read only when its key is the id of a state of `from` that is
+  absent from `to` and its value is the id of a state of `to`; that state
+  then corresponds to the one the value names. Every other entry is
+  reported as `:mapping_unused` and changes no class. A mapped pair is
+  still compared, so a mapping onto a state of another kind or under
+  another parent is `:state_changed` and breaking.
+
+  Raises `ArgumentError` when `opts` holds anything but `mapping:`, when the
+  mapping is not a map from strings to strings, or when it would make one
+  state of `to` correspond to two states of `from`: two read entries naming
+  the same value, or a read entry whose value is also the id of a state of
+  `from`. Each is a caller's programming error, not data.
+
+  ## What the classes do not say (ADR-0072 decision 3)
+
+  The classes are structural: they say what the charts are, never what an
+  execution will do. A compatible pair can still behave differently (a
+  transition's content, an `<onentry>`, a condition's meaning, the document
+  order between two enabled transitions), and a breaking pair can be
+  harmless to every execution a host holds, since "held" over-approximates.
+  Nothing here moves an execution.
+
+  Pure over two `%Statifier.Machine{}`s: it reads no source text, needs no
+  `source` on either machine, and runs nothing.
+  """
+  @spec diff(from :: Machine.t(), to :: Machine.t(), opts :: keyword()) :: diff()
+  def diff(%Machine{} = from, %Machine{} = to, opts \\ []) do
+    mapping = diff_mapping!(opts)
+
+    if Identity.matches?(Machine.identity(from), Machine.identity(to)) do
+      %{class: :identical, reasons: []}
+    else
+      reasons = compare(from, to, mapping)
+      %{class: classify(reasons), reasons: reasons}
+    end
+  end
+
+  @spec diff_mapping!(opts :: term()) :: %{optional(String.t()) => String.t()}
+  defp diff_mapping!(opts) do
+    unless Keyword.keyword?(opts) do
+      raise ArgumentError, "diff/3's opts must be a keyword list, got: #{inspect(opts)}"
+    end
+
+    case Keyword.split(opts, [:mapping]) do
+      {_taken, [_first | _rest] = unknown} ->
+        raise ArgumentError, "diff/3 accepts only :mapping, got: #{inspect(unknown)}"
+
+      {taken, []} ->
+        mapping = Keyword.get(taken, :mapping, %{})
+
+        unless string_map?(mapping) do
+          raise ArgumentError,
+                "diff/3's :mapping must be a map from state ids to state ids, got: " <>
+                  inspect(mapping)
+        end
+
+        mapping
+    end
+  end
+
+  @spec string_map?(mapping :: term()) :: boolean()
+  defp string_map?(mapping) when is_map(mapping) and not is_struct(mapping) do
+    Enum.all?(mapping, fn {key, value} -> is_binary(key) and is_binary(value) end)
+  end
+
+  defp string_map?(_mapping), do: false
+
+  @spec classify(reasons :: [diff_reason()]) :: diff_class()
+  defp classify(reasons) do
+    cond do
+      Enum.any?(reasons, &breaking?/1) -> :breaking
+      Enum.any?(reasons, &match?({:state_mapped, _from_id, _to_id}, &1)) -> :mapped
+      true -> :compatible
+    end
+  end
+
+  @spec breaking?(reason :: diff_reason()) :: boolean()
+  defp breaking?({tag, _subject}) when tag in [:state_nameless, :state_unresolved], do: true
+  defp breaking?({tag, _subject}) when tag in [:event_removed, :data_removed], do: true
+  defp breaking?({:state_changed, _id, _fields}), do: true
+  defp breaking?({:transition_removed, _source_id, _t_index}), do: true
+  defp breaking?(_reason), do: false
+
+  # The structural comparison: every reason but the identity check, in the
+  # record's order.
+  @spec compare(from :: Machine.t(), to :: Machine.t(), mapping :: map()) :: [diff_reason()]
+  defp compare(from, to, mapping) do
+    {read, unused} = read_mapping(from, to, mapping)
+    corr = correspondence(from, to, read)
+    held = held_states(from)
+    to_corresponded = corr |> Map.values() |> MapSet.new()
+
+    Enum.concat([
+      state_reasons(from, to, corr, held, read),
+      for(
+        index <- state_indexes(to),
+        id = Machine.id(to, index),
+        id != nil,
+        not MapSet.member?(to_corresponded, index),
+        do: {:state_added, id}
+      ),
+      transition_reasons(from, to, corr, held),
+      list_delta(events(from), events(to), :event_removed, :event_added),
+      list_delta(data_ids(from), data_ids(to), :data_removed, :data_added),
+      Enum.map(Enum.sort(unused), &{:mapping_unused, &1})
+    ])
+  end
+
+  # Splits the mapping into the entries the comparison reads (a key that is
+  # a `from` state id absent from `to`, a value that is a `to` state id) and
+  # the keys of every other entry, refusing an entry set that would make one
+  # `to` state correspond to two `from` states.
+  @spec read_mapping(from :: Machine.t(), to :: Machine.t(), mapping :: map()) ::
+          {%{optional(String.t()) => String.t()}, [String.t()]}
+  defp read_mapping(from, to, mapping) do
+    {read, unused} =
+      Enum.split_with(mapping, fn {key, value} ->
+        Map.has_key?(from.id_to_index, key) and not Map.has_key?(to.id_to_index, key) and
+          Map.has_key?(to.id_to_index, value)
+      end)
+
+    values = Enum.map(read, &elem(&1, 1))
+
+    case {values -- Enum.uniq(values), Enum.filter(values, &Map.has_key?(from.id_to_index, &1))} do
+      {[], []} ->
+        {Map.new(read), Enum.map(unused, &elem(&1, 0))}
+
+      {[twice | _more], _shared} ->
+        raise ArgumentError,
+              "diff/3's :mapping maps two states onto #{inspect(twice)}, which one state of " <>
+                "the new chart cannot correspond to"
+
+      {[], [shared | _more]} ->
+        raise ArgumentError,
+              "diff/3's :mapping maps a state onto #{inspect(shared)}, which the old chart " <>
+                "also declares, so one state of the new chart would correspond to two"
+    end
+  end
+
+  # `from` state index -> corresponding `to` state index, for every `from`
+  # state that has one: the root, a shared id, or a read mapping entry.
+  @spec correspondence(from :: Machine.t(), to :: Machine.t(), read :: map()) ::
+          %{optional(non_neg_integer()) => non_neg_integer()}
+  defp correspondence(from, to, read) do
+    for {id, index} <- from.id_to_index,
+        to_id = if(Map.has_key?(to.id_to_index, id), do: id, else: Map.get(read, id)),
+        to_id != nil,
+        into: %{0 => 0},
+        do: {index, Map.fetch!(to.id_to_index, to_id)}
+  end
+
+  # A state an execution can hold: one `events/1`'s rule can enter, or a
+  # history pseudo-state whose parent it can enter.
+  @spec held_states(machine :: Machine.t()) :: MapSet.t(non_neg_integer())
+  defp held_states(machine) do
+    entered = machine |> entered_states() |> MapSet.new()
+
+    machine
+    |> state_indexes()
+    |> Enum.filter(fn index ->
+      case Machine.at(machine, index) do
+        %State{kind: :history, parent: parent} -> MapSet.member?(entered, parent)
+        %State{} -> MapSet.member?(entered, index)
+      end
+    end)
+    |> MapSet.new()
+  end
+
+  @spec state_reasons(
+          from :: Machine.t(),
+          to :: Machine.t(),
+          corr :: map(),
+          held :: MapSet.t(non_neg_integer()),
+          read :: map()
+        ) :: [diff_reason()]
+  defp state_reasons(from, to, corr, held, read) do
+    Enum.flat_map(state_indexes(from), fn index ->
+      id = Machine.id(from, index)
+
+      from_state_reason(
+        id,
+        index,
+        MapSet.member?(held, index),
+        Map.fetch(corr, index),
+        Map.fetch(read, id),
+        {from, to, corr}
+      )
+    end)
+  end
+
+  # The one reason, at most, a `from` state takes. The root always
+  # corresponds to the root and takes none.
+  @spec from_state_reason(
+          id :: String.t() | nil,
+          index :: non_neg_integer(),
+          held? :: boolean(),
+          corresponding :: {:ok, non_neg_integer()} | :error,
+          mapped_to :: {:ok, String.t()} | :error,
+          charts :: {Machine.t(), Machine.t(), map()}
+        ) :: [diff_reason()]
+  defp from_state_reason(_id, 0, _held?, _corresponding, _mapped_to, _charts), do: []
+
+  defp from_state_reason(nil, index, true, _corresponding, _mapped_to, _charts),
+    do: [{:state_nameless, index}]
+
+  defp from_state_reason(nil, _index, false, _corresponding, _mapped_to, _charts), do: []
+
+  defp from_state_reason(id, _index, true, :error, _mapped_to, _charts),
+    do: [{:state_unresolved, id}]
+
+  defp from_state_reason(id, _index, false, :error, _mapped_to, _charts),
+    do: [{:state_removed, id}]
+
+  defp from_state_reason(id, index, held?, {:ok, to_index}, mapped_to, charts) do
+    fields = if held?, do: changed_fields(index, to_index, charts), else: []
+
+    cond do
+      fields != [] -> [{:state_changed, id, fields}]
+      match?({:ok, _to_id}, mapped_to) -> [{:state_mapped, id, elem(mapped_to, 1)}]
+      true -> []
+    end
+  end
+
+  # The normalized fields a held state compares by, in the record's order.
+  @spec changed_fields(
+          from_index :: non_neg_integer(),
+          to_index :: non_neg_integer(),
+          charts :: {Machine.t(), Machine.t(), map()}
+        ) :: [:kind | :parent | :atomic | :regions | :history_type]
+  defp changed_fields(from_index, to_index, {from, to, corr}) do
+    a = Machine.at(from, from_index)
+    b = Machine.at(to, to_index)
+
+    [
+      kind: a.kind != b.kind,
+      parent: Map.get(corr, a.parent, :none) != b.parent,
+      atomic: Machine.atomic?(from, from_index) != Machine.atomic?(to, to_index),
+      regions:
+        a.kind == :parallel and b.kind == :parallel and
+          regions(from, from_index, corr) != MapSet.new(Machine.child_states(to, to_index)),
+      history_type: a.history_type != b.history_type
+    ]
+    |> Enum.filter(&elem(&1, 1))
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  # A parallel `from` state's child states, each as its corresponding `to`
+  # index; a child with none stays distinct from every `to` index.
+  @spec regions(machine :: Machine.t(), index :: non_neg_integer(), corr :: map()) ::
+          MapSet.t(non_neg_integer() | {:unresolved, non_neg_integer()})
+  defp regions(machine, index, corr) do
+    machine
+    |> Machine.child_states(index)
+    |> MapSet.new(&Map.get(corr, &1, {:unresolved, &1}))
+  end
+
+  # Removed transitions of held, corresponding `from` states and added
+  # transitions of corresponding `to` states, each side in `t_index` order.
+  @spec transition_reasons(
+          from :: Machine.t(),
+          to :: Machine.t(),
+          corr :: map(),
+          held :: MapSet.t(non_neg_integer())
+        ) :: [diff_reason()]
+  defp transition_reasons(from, to, corr, held) do
+    {removed, added} =
+      corr
+      |> Enum.map(fn {from_index, to_index} ->
+        {unmatched_from, unmatched_to} = match_transitions(from, to, from_index, to_index, corr)
+
+        removed =
+          if MapSet.member?(held, from_index),
+            do:
+              Enum.map(unmatched_from, &{:transition_removed, Machine.id(from, from_index), &1}),
+            else: []
+
+        {removed, Enum.map(unmatched_to, &{:transition_added, Machine.id(to, to_index), &1})}
+      end)
+      |> Enum.unzip()
+
+    Enum.sort_by(List.flatten(removed), &elem(&1, 2)) ++
+      Enum.sort_by(List.flatten(added), &elem(&1, 2))
+  end
+
+  # Matches one state pair's selectable transitions as a multiset, each
+  # `from` transition in `t_index` order taking the first equal `to` one;
+  # answers the `t_index`es left unmatched on each side.
+  @spec match_transitions(
+          from :: Machine.t(),
+          to :: Machine.t(),
+          from_index :: non_neg_integer(),
+          to_index :: non_neg_integer(),
+          corr :: map()
+        ) :: {[non_neg_integer()], [non_neg_integer()]}
+  defp match_transitions(from, to, from_index, to_index, corr) do
+    to_keys =
+      for t_index <- Enum.sort(Machine.at(to, to_index).transitions),
+          do: {t_index, transition_key(Machine.transition(to, t_index), & &1)}
+
+    translate = &Map.get(corr, &1, {:unresolved, &1})
+
+    {unmatched_from, unmatched_to} =
+      from
+      |> Machine.at(from_index)
+      |> Map.get(:transitions, [])
+      |> Enum.sort()
+      |> Enum.reduce({[], to_keys}, fn t_index, {unmatched, remaining} ->
+        key = transition_key(Machine.transition(from, t_index), translate)
+
+        case Enum.split_while(remaining, &(elem(&1, 1) != key)) do
+          {before, [_match | rest]} -> {unmatched, before ++ rest}
+          {_all, []} -> {[t_index | unmatched], remaining}
+        end
+      end)
+
+    {Enum.reverse(unmatched_from), Enum.map(unmatched_to, &elem(&1, 0))}
+  end
+
+  # A transition's normalized fields, its state indexes put through
+  # `translate` into the `to` chart's index space.
+  @spec transition_key(transition :: Statifier.Machine.Transition.t(), translate :: fun()) ::
+          tuple()
+  defp transition_key(transition, translate) do
+    {translate.(transition.source), Enum.map(transition.events, &Enum.join(&1, ".")),
+     Enum.map(transition.targets, translate), transition.type, cond_key(transition.cond)}
+  end
+
+  @spec cond_key(cond :: Machine.expr() | nil | term()) :: term()
+  defp cond_key({:compiled, _compiled, source}), do: {:compiled, source}
+  defp cond_key(other), do: other
+
+  @spec list_delta(from :: [String.t()], to :: [String.t()], removed :: atom(), added :: atom()) ::
+          [{atom(), String.t()}]
+  defp list_delta(from, to, removed, added) do
+    Enum.map(from -- to, &{removed, &1}) ++ Enum.map(to -- from, &{added, &1})
+  end
+
+  @spec data_ids(machine :: Machine.t()) :: [String.t()]
+  defp data_ids(machine) do
+    machine.data_elements |> Tuple.to_list() |> Enum.map(& &1.id) |> Enum.uniq()
+  end
+
+  @spec state_indexes(machine :: Machine.t()) :: Range.t()
+  defp state_indexes(machine), do: 0..(tuple_size(machine.states) - 1)
 
   # The least set of state indexes closed under `events/1`'s entry rule, as a
   # worklist: `{:default, index}` enters a state by its default and
