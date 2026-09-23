@@ -32,6 +32,15 @@ defmodule Mix.Statifier.Corpus.HostCase do
   chart with `declared_events`, and the case agrees only when both lists it
   answers are exactly `expect_accepts`' `unreachable` and `undeclared`, order
   included. Either key without the other is a disagreement.
+
+  A host object may carry a diff pair as well - `to_source` and
+  `expect_diff`, with an optional `mapping` and `expect_compatible_at`
+  (ADR-0072, `conformance/schema/case.json`) - and this runner compares
+  none of them: it runs such a case like any other host case. Nothing in
+  `lib/` calls the chart diff or the position predicate (ADR-0072
+  decision 6), so the test suite compares those four keys
+  (`test/corpus/diff_cases_test.exs`), through `run/2`'s `:after_steps`
+  option for the position the steps leave.
   """
 
   alias Mix.Statifier.Corpus.HostCase.Processor
@@ -43,9 +52,20 @@ defmodule Mix.Statifier.Corpus.HostCase do
 
   @doc """
   Runs one host case, returning `:agree` or `{:disagree, message}`.
+
+  `opts` takes `:after_steps`, a function the runner calls once, after the
+  last step's configuration agrees and before it compares the handed sends,
+  with the session's settled `Statifier.MachineState`; it answers `:ok` or
+  `{:disagree, message}`, and a disagreement is the case's. A case that
+  disagrees before the sends are compared leaves them in the calling
+  process's mailbox, so each run belongs in a process of its own, as
+  `Mix.Statifier.Corpus.Runner.run/1` gives it.
   """
-  @spec run(corpus_case :: map()) :: :agree | {:disagree, String.t()}
-  def run(%{"source" => source, "host" => host} = corpus_case) do
+  @spec run(
+          corpus_case :: map(),
+          opts :: [after_steps: (MachineState.t() -> :ok | {:disagree, String.t()})]
+        ) :: :agree | {:disagree, String.t()}
+  def run(%{"source" => source, "host" => host} = corpus_case, opts \\ []) do
     with {:ok, machine} <- compile(source),
          :ok <- accepts(machine, host) do
       session_id = MachineState.generate_session_id()
@@ -61,7 +81,8 @@ defmodule Mix.Statifier.Corpus.HostCase do
         )
 
       try do
-        drive(session, corpus_case, Map.get(host, "expect_sends", []))
+        after_steps = Keyword.get(opts, :after_steps, fn _settled -> :ok end)
+        drive(session, corpus_case, Map.get(host, "expect_sends", []), after_steps)
       after
         Session.stop(session)
         :global.unregister_name({Processor, session_id})
@@ -96,11 +117,12 @@ defmodule Mix.Statifier.Corpus.HostCase do
 
   defp accepts(_machine, _host), do: :ok
 
-  defp drive(session, corpus_case, expect_sends) do
+  defp drive(session, corpus_case, expect_sends, after_steps) do
     steps = Enum.map(corpus_case["steps"], &{&1["event"]["name"], &1["configuration"]})
 
     with :ok <- configuration(session, corpus_case["initial_configuration"]),
-         :ok <- steps(session, steps) do
+         :ok <- steps(session, steps),
+         :ok <- after_steps.(Session.snapshot(session)) do
       handed(session, expect_sends)
     end
   end

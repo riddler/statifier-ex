@@ -237,6 +237,106 @@ defmodule Corpus.SchemaTest do
              )
     end
 
+    # sabotage: host's expect_diff property deleted from case.json -> red
+    test "a statifier case's host may carry a diff pair with mapping and expect_compatible_at" do
+      diff = fixture("case-statifier-diff.json")
+
+      assert %{"to_source" => _to_source, "mapping" => %{}, "expect_diff" => %{}} = diff["host"]
+      assert is_boolean(diff["host"]["expect_compatible_at"])
+      assert errors("case.json", diff) == []
+    end
+
+    # sabotage: each of the host's four new allOf branches deleted in turn ->
+    # red on the half it guarded
+    test "to_source and expect_diff are present together, and mapping and expect_compatible_at need them" do
+      diff = fixture("case-statifier-diff.json")
+      {_expected, without_expected} = pop_in(diff, ["host", "expect_diff"])
+
+      without_to_source =
+        update_in(diff, ["host"], &Map.drop(&1, ["to_source", "mapping", "expect_compatible_at"]))
+
+      assert {"/host", "missing required expect_diff"} in errors("case.json", without_expected)
+      assert {"/host", "missing required to_source"} in errors("case.json", without_to_source)
+
+      bare = update_in(diff, ["host"], &Map.drop(&1, ["to_source", "expect_diff"]))
+      assert {"/host", "missing required to_source"} in errors("case.json", bare)
+
+      only_mapping = update_in(bare, ["host"], &Map.delete(&1, "expect_compatible_at"))
+      only_predicate = update_in(bare, ["host"], &Map.delete(&1, "mapping"))
+      assert {"/host", "missing required to_source"} in errors("case.json", only_mapping)
+      assert {"/host", "missing required to_source"} in errors("case.json", only_predicate)
+
+      neither = update_in(bare, ["host"], &Map.drop(&1, ["mapping", "expect_compatible_at"]))
+      assert errors("case.json", neither) == []
+    end
+
+    # sabotage: expect_diff's class enum widened to any string -> red on
+    # the unknown class; its "required" losing "reasons" -> red on the
+    # missing list; expect_compatible_at's type deleted -> red on the string
+    test "expect_diff is a class and its reasons, and expect_compatible_at a boolean" do
+      diff = fixture("case-statifier-diff.json")
+
+      assert "/host/expect_diff/class" in pointers(
+               "case.json",
+               put_in(diff, ["host", "expect_diff", "class"], "renamed")
+             )
+
+      {_reasons, without_reasons} = pop_in(diff, ["host", "expect_diff", "reasons"])
+      assert "/host/expect_diff" in pointers("case.json", without_reasons)
+
+      assert "/host/expect_compatible_at" in pointers(
+               "case.json",
+               put_in(diff, ["host", "expect_compatible_at"], "false")
+             )
+    end
+
+    # sabotage: the state_mapped branch of the reason allOf deleted -> red on
+    # the missing to_state; the state_added branch's "t_index": false
+    # deleted -> red on the transition member; the reason
+    # object's "additionalProperties": false removed -> red on the extra key
+    test "each diff reason carries exactly the members its reason names" do
+      diff = fixture("case-statifier-diff.json")
+      reason_at = ["host", "expect_diff", "reasons"]
+
+      with_reasons = fn reasons -> put_in(diff, reason_at, reasons) end
+
+      assert errors(
+               "case.json",
+               with_reasons.([
+                 %{"reason" => "state_nameless", "index" => 2},
+                 %{
+                   "reason" => "state_changed",
+                   "state" => "idle",
+                   "fields" => ["kind", "parent"]
+                 },
+                 %{"reason" => "transition_removed", "state" => "idle", "t_index" => 1},
+                 %{"reason" => "event_added", "descriptor" => "copy.available"},
+                 %{"reason" => "data_removed", "data_id" => "pending"},
+                 %{"reason" => "mapping_unused", "state" => "idle"}
+               ])
+             ) == []
+
+      assert {"/host/expect_diff/reasons/0", "missing required to_state"} in errors(
+               "case.json",
+               with_reasons.([%{"reason" => "state_mapped", "state" => "awaiting_pickup"}])
+             )
+
+      assert "/host/expect_diff/reasons/0/t_index" in pointers(
+               "case.json",
+               with_reasons.([%{"reason" => "state_added", "state" => "idle", "t_index" => 1}])
+             )
+
+      assert "/host/expect_diff/reasons/0/unexpected" in pointers(
+               "case.json",
+               with_reasons.([%{"reason" => "state_added", "state" => "idle", "unexpected" => 1}])
+             )
+
+      assert "/host/expect_diff/reasons/0/reason" in pointers(
+               "case.json",
+               with_reasons.([%{"reason" => "state_renamed", "state" => "idle"}])
+             )
+    end
+
     # sabotage: the w3c branch's conformance enum admitting null -> red
     test "a w3c case names its conformance class and the others carry null" do
       assert "/conformance" in pointers("case.json", %{
@@ -307,7 +407,8 @@ defmodule Corpus.SchemaTest do
     # :final_states -> red on case-w3c.json and case-statifier.json
     test "each fixture's required_features is what the feature detector finds in its source" do
       for name <-
-            ~w(case-scion.json case-w3c.json case-statifier.json case-statifier-accepts.json) do
+            ~w(case-scion.json case-w3c.json case-statifier.json case-statifier-accepts.json
+               case-statifier-diff.json) do
         %{"source" => source, "required_features" => features} = fixture(name)
 
         detected =

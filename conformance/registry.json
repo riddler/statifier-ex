@@ -1,6 +1,6 @@
 {
   "implementation": "statifier-ex",
-  "corpus_hash": "sha256:ea58259d875e87d1eb3a4dcdd0fc315948bcad7e96426453a9a47100d0bfaeec",
+  "corpus_hash": "sha256:8e1db39465da6c108d7b2c7f1cba197b6aa0a299970de90a25da2f5bca15202c",
   "claims": ["scion","w3c-mandatory","w3c-optional"],
   "entries": [
     {"case_id":"scion/actionSend/send1","suite":"scion"},

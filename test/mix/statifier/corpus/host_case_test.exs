@@ -1,7 +1,7 @@
 defmodule Mix.Statifier.Corpus.HostCaseTest do
   use ExUnit.Case, async: true
 
-  alias Mix.Statifier.Corpus.Runner
+  alias Mix.Statifier.Corpus.{HostCase, Runner}
 
   # A host case run through `Runner.run_case/1`, which hands every case with
   # a `host` object to `Mix.Statifier.Corpus.HostCase`.
@@ -175,6 +175,67 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
 
       assert {:disagree, "expect_accepts is present without declared_events"} =
                Runner.run_case(accepts_case(%{"expect_accepts" => @expected}))
+    end
+  end
+
+  describe "run/2's :after_steps option" do
+    @hold_source """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="idle">
+        <state id="idle">
+            <transition event="copy.available" target="awaiting_pickup"/>
+        </state>
+        <state id="awaiting_pickup">
+            <transition event="copy.collected" target="idle"/>
+        </state>
+    </scxml>
+    """
+
+    defp hold_case(host) do
+      %{
+        "id" => "statifier/diff/hold",
+        "source" => @hold_source,
+        "description" => "",
+        "initial_configuration" => ["idle"],
+        "steps" => [
+          %{"event" => %{"name" => "copy.available"}, "configuration" => ["awaiting_pickup"]}
+        ],
+        "host" => host
+      }
+    end
+
+    # sabotage: drive/4 calling the function before `steps/2` -> it sees
+    # idle -> red
+    test "calls the function once, with the settled state the last step left" do
+      parent = self()
+
+      after_steps = fn settled ->
+        send(parent, {:settled, Statifier.active_leaf_states(settled)})
+        :ok
+      end
+
+      assert HostCase.run(hold_case(%{}), after_steps: after_steps) == :agree
+      assert_received {:settled, leaves}
+      assert leaves == MapSet.new(["awaiting_pickup"])
+      refute_received {:settled, _leaves}
+    end
+
+    # sabotage: drive/4 ignoring the function's answer -> red
+    test "a disagreement the function answers is the case's" do
+      after_steps = fn _settled -> {:disagree, "the position is not the expected one"} end
+
+      assert HostCase.run(hold_case(%{}), after_steps: after_steps) ==
+               {:disagree, "the position is not the expected one"}
+    end
+
+    # sabotage: run/2's default function answering a disagreement -> red
+    test "runs a case carrying a diff pair like any other host case, with no function" do
+      host = %{
+        "to_source" => @hold_source,
+        "expect_diff" => %{"class" => "identical", "reasons" => []},
+        "expect_compatible_at" => true
+      }
+
+      assert HostCase.run(hold_case(host)) == :agree
     end
   end
 end

@@ -201,6 +201,20 @@ ordinary token. A case carrying them agrees only when, besides its
 configurations and sends, both lists are exactly `expect_accepts`', order
 included.
 
+A `host` object may also carry a diff pair, `to_source` and `expect_diff`,
+present together or not at all, with an optional `mapping` and an optional
+`expect_compatible_at`, each of which needs the pair
+([ADR-0072](../docs/adr/0072-chart-diff-classes-and-position-compatibility.md)).
+A runner honours the pair before it runs the case, by diffing `source` to
+`to_source` under that record's decisions 1 and 2, giving it `mapping` as
+the mapping when the case carries one, and writing each reason as the
+object `schema/case.json` gives it. It honours `expect_compatible_at` after
+the last step, by asking whether the position the steps left the chart in
+is untouched by the edit to `to_source` under decision 4. A case carrying
+them agrees only when, besides its configurations and sends, the class and
+the reasons are exactly `expect_diff`'s, order included, and the answer is
+`expect_compatible_at`.
+
 ## The check
 
 statifier-ex's check is `mix statifier.corpus --check`
