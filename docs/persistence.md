@@ -1,10 +1,27 @@
 # Persistence
 
-How to persist and reload a running chart safely, and the hazard that makes
+How to persist and reload an execution safely, and the hazard that makes
 "safely" a real qualifier rather than a formality. Read alongside
 [ADR-0052](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md), which is
 the decision record this page explains for a host author who has not read
 [ADR-0005](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0005-full-configuration-and-interned-state-indexes.md).
+
+## The four nouns
+
+This page uses four nouns, each with one job:
+
+| Noun | Identity | Owner | Changes when |
+|---|---|---|---|
+| **Document** | The host's stable id for the thing an author edits | The host's authoring store | Never |
+| **Revision** | The document id plus an ordinal or hash | The authoring package (`statifier_blocks`) or the host | Every saved edit |
+| **Chart** | The SHA-256 hash of the SCXML source bytes handed to `Statifier.compile/2` (`Statifier.Machine.Identity`, ADR-0052) | This engine | Every publish that changes a byte of the SCXML |
+| **Execution** | A minted id, pinned to one chart hash | The persistence package (`statifier_persistence`) or the host | Re-pinned only by an explicit migration |
+
+A position (below) is the saved state of one execution, and it belongs to
+the chart that execution is pinned to. Two revisions whose emitted SCXML is
+byte-identical are one chart. Publishing a new chart re-pins no execution:
+an execution moves to another chart only when a host migrates it on
+purpose, by story B below.
 
 ## The hazard
 
@@ -20,14 +37,14 @@ so directly:
 > Slight cost: a translation step at the boundary, and debugging views must
 > map indexes back to IDs (the Machine keeps both directions).
 
-Adding a state, removing one, or reordering the document renumbers every
+Adding a state, removing one, or reordering the SCXML source renumbers every
 index after the change point. Nothing about a bare `MapSet.t(non_neg_integer())`
 carries any information about which chart build produced it. Load a position
 that was saved against yesterday's chart onto today's recompiled chart and
 the integers still decode into a valid-looking `MachineState` - they just
 name different states than they did yesterday. The machine does not crash;
 it silently resumes the wrong configuration. That is the failure mode this
-whole document, and ADR-0052, exist to turn into a loud error instead.
+whole page, and ADR-0052, exist to turn into a loud error instead.
 
 ## What identity buys
 
@@ -35,9 +52,9 @@ Two separate facts, two separate fields, both stamped onto a position blob
 by `Statifier.Position.to_binary/1`:
 
 - **The content hash** (`Statifier.Machine.Identity`) detects a chart
-  revision change. It is a SHA-256 hash of the SCXML source bytes handed to
+  change. It is a SHA-256 hash of the SCXML source bytes handed to
   `Statifier.compile/2` - not a hash of the compiled `Machine` term, so it
-  agrees for two byte-identical documents regardless of what the compiler
+  agrees for two byte-identical sources regardless of what the compiler
   did with them, and disagrees the moment a state is added, removed, or
   reordered in the source.
 - **The format version** (`Statifier.Position.format_version/0`) detects a
@@ -59,27 +76,29 @@ since no ordinal was ever minted against a version-1 position (ADR-0059).
 
 Keep the old chart source compiled and reachable - the source bytes, not
 just the `Machine` built from them, since `Statifier.compile/2` needs the
-bytes again to reproduce the same identity. Run every position that was
-saved against the old revision to completion against that same compiled
-chart. Start every new position on the new revision. No translation
-happens, no data is lost, and the whole migration is bounded by how long a
-position lives: once the last position saved against the old revision
-finishes (or is abandoned), the old chart never needs to be loaded again.
+bytes again to reproduce the same identity. Run every execution pinned to
+the old chart to completion against that same compiled `Machine`. Start
+every new execution on the new chart. No translation happens, no data is
+lost, and the whole migration is bounded by how long an execution lives:
+once the last execution pinned to the old chart finishes (or is abandoned),
+the old chart never needs to be loaded again.
 
 This is the default recommendation. It costs nothing but keeping one extra
-compiled chart reachable for a while, and it never asks a position to
-change meaning mid-flight.
+compiled chart reachable for a while, and it never asks an execution's
+position to change meaning mid-flight.
 
 ## Migration story B: position migration via string ids
 
-`Statifier.Position.export/1` translates a `MachineState` into a map keyed
-by state ids (strings) instead of interned indexes; `Statifier.Position.import/2`
+An execution is re-pinned to another chart only by an explicit plan over
+this pair of functions. `Statifier.Position.export/1` translates a
+`MachineState` into a map keyed by state ids (strings) instead of interned
+indexes; `Statifier.Position.import/2`
 reverses the translation onto a *different* `Machine` than the one that
 produced the export. Between the two, a host - or an operator by hand - can
-rename an id, drop a field for a state the new revision deleted, or leave
+rename an id, drop a field for a state the new chart deleted, or leave
 the export untouched, before handing it to `import/2`. Unlike `to_binary/1`
-/ `from_binary/2`, `import/2` performs no identity check at all: crossing a
-revision on purpose is exactly what this pair is for.
+/ `from_binary/2`, `import/2` performs no identity check at all: crossing to
+another chart on purpose is exactly what this pair is for.
 
 A rename is not a one-field edit. A state id appears in *every* exported
 field that references that state, and `import/2` resolves all of them: an id
@@ -90,16 +109,16 @@ and the id sets it values), and in the state-id half of every
 `active_invocations` key. The error names the stale id but not the field it
 came from, so an import that still reports `{:error, {:unknown_state_ids,
 ["b"]}}` after an apparently complete rename is a field the edit missed, not
-a state the target revision lacks.
+a state the target chart lacks.
 
 What it cannot do:
 
-- **It cannot invent a state the new revision deleted.** If the export
+- **It cannot invent a state the new chart deleted.** If the export
   references a state id that no longer resolves against the target
   `Machine`, `import/2` returns
   `{:error, {:unknown_state_ids, ids}}` naming every such id, sorted, in one
   round trip. A host must resolve every one - by mapping it to a
-  replacement id in the exported map, or by accepting that the position
+  replacement id in the exported map, or by accepting that the execution
   cannot be migrated - before `import/2` will succeed.
 - **It cannot fix an `active_invocations` key whose state's `<invoke>`
   children were edited.** `active_invocations`' key pairs a state id with an
@@ -112,7 +131,7 @@ What it cannot do:
   `{:error, :internal_queue_not_empty}` for a `MachineState` with a
   non-empty internal event queue: those queued events were selected against
   the source chart's own transitions, so a position mid-macrostep is not a
-  thing to move across chart revisions. A host drains to quiescence - lets
+  thing to move across charts. A host drains to quiescence - lets
   the macrostep finish - before exporting. A *terminated* position never
   needs draining: `exit_interpreter/1` empties the internal queue as its
   last step, so a `status: :done` machine state is quiescent by
@@ -134,7 +153,7 @@ Three things, and only three:
    how a host proves to itself that "this position matches this chart" is
    still true.
 2. **The identity blob** (`Statifier.Machine.Identity.to_binary/1`), so a
-   host can record which revision a position belongs to without recompiling
+   host can record which chart a position belongs to without recompiling
    the source just to ask.
 3. **The position blob** (`Statifier.Position.to_binary/1`), which carries
    the identity itself alongside the position's own state.
@@ -191,9 +210,9 @@ position to `start_link/2`, which decodes it against that chart for you:
 
 `resume:` also accepts an already-decoded `%Statifier.MachineState{}` - the
 `Statifier.Position.import/2` migration-story-B output - so a host that
-migrated a position across a chart revision by hand can hand the result
+migrated an execution's position to another chart by hand can hand the result
 straight to `start_link/2` without a round trip through `to_binary/1`. Either
-shape inherits the same identity gate this whole document is about: a blob
+shape inherits the same identity gate this whole page is about: a blob
 that does not match `machine`, or a struct whose own `machine` does not match
 it, is refused rather than silently resumed against the wrong chart.
 
@@ -254,7 +273,7 @@ the position means and would leave it disagreeing with `states_to_invoke` and
 `<cancel>` or an exit sweep over a not-yet-re-established invocation stops
 nothing and crashes nothing. The host's obligation is to re-establish the
 processes behind `active_invocations`' ids through the invoke handler
-registry (ADR-0051); this document does not track that work item, but the
+registry (ADR-0051); this page does not track that work item, but the
 divergence exists precisely because it is not yet done.
 
 ### Refusals
@@ -267,7 +286,7 @@ silently-wrong session:
 | `{:conflicting_options, opts}` | `:resume` was passed alongside `:trace`, `:datamodel`, or `:max_macrostep_rounds` (`MachineState.new/2`'s own options, not read on this path) or `:invoked_by` (a child session is always library-started, never resumed) | Drop the conflicting option; a resumed position already carries its own trace/datamodel/rounds state |
 | `:not_a_statifier_blob` | The blob is not this library's own position envelope | Pass a blob written by `Statifier.Position.to_binary/1` |
 | `{:unsupported_format_version, v}` | The blob's format version is newer or older than this build understands | Load with a build that supports version `v`, or re-persist under the current version |
-| `{:identity_mismatch, expected, actual}` | The position was saved against a different chart revision than `machine` | Recompile the chart the position was actually saved against, or migrate the position via `Statifier.Position.export/1` / `import/2` (migration story B above) |
+| `{:identity_mismatch, expected, actual}` | The position was saved against a different chart than `machine` | Recompile the chart the position was actually saved against, or migrate the position via `Statifier.Position.export/1` / `import/2` (migration story B above) |
 | `:unidentified_chart` | Either side of the resume - the position's `machine` or the supplied `machine` - was never identified (for instance, a `Machine` resolved via `:invoke_source` or built with `Statifier.Compiler.compile/1` directly) | Compile the chart through `Statifier.compile/2` so it carries an identity |
 | `:position_not_quiescent` | The position's internal event queue is non-empty | Drain to quiescence - let the macrostep finish - before persisting, the same instruction `Statifier.Position.export/1` already gives |
 | `:position_not_running` | The position has `running: false` (`status: :done`) | Inspect a finished position with `Statifier.Position.from_binary/2` and `Statifier.active_leaf_states/1` directly; there is nothing left for a session to do with it |
@@ -335,7 +354,7 @@ callbacks are.** `Statifier.Session.Effects.plan/2` dispatches to a
 handler's planning callback while replaying; `perform/2`, the impure half,
 is never called during replay. A decoded recording therefore reproduces the
 recorded stream only where the handlers' planning callbacks are equivalent
-to the ones the original run used - an accepted environmental limit, the
+to the ones the original execution used - an accepted environmental limit, the
 same class as
 [ADR-0034](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0034-replay-re-drives-the-core-not-a-live-session.md)'s OTP
 `MapSet`-iteration caveat, not a defect to chase down.
@@ -374,7 +393,7 @@ the same rule positions and charts already live under.
 As with a position blob, reading a recording's identity without paying the
 recompile is not answered yet - deferred the same way
 [ADR-0052](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0052-chart-identity-and-position-serialization.md) defers it
-for positions. A host that needs to index many recordings by chart revision
+for positions. A host that needs to index many recordings by chart
 without recompiling each one on lookup stores
 `Statifier.Machine.Identity.to_binary/1` beside each recording blob at write
 time, the same pattern item 2 of "What a host must persist" above already
