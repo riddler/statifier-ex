@@ -10,6 +10,24 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.8.0] 2026-09-23
+
+Adds two pure functions a host can call on a pair of compiled charts before
+it publishes the second: a diff that classifies the edit and lists its
+reasons, and a check of whether one execution's exported position is
+untouched by that edit. Neither moves an execution, and nothing in the
+library calls the position check. The conformance corpus under
+`conformance/`, which is not part of the Hex package, gains diff cases in
+the `statifier` suite whose host object carries `to_source` and
+`expect_diff`, with an optional `mapping` and `expect_compatible_at`; a
+sibling implementation that vendors the corpus re-vendors it at this
+version's tag.
+
+### Added
+
+- Adds `Statifier.Chart.diff/3`, which classifies two compiled charts as `:identical`, `:compatible`, `:mapped` or `:breaking` and lists the reasons (a state an execution could hold with no counterpart, a removed transition, event or `<data>` key, each addition); a caller passes renamed states as a plain `mapping:` from old state ids to new ones, and the function never moves an execution.
+- Adds `Statifier.Position.compatible_at?/3`, which answers whether one execution's `export/1` map is untouched by the edit between two compiled charts: every id it names resolves in the new chart, its configuration is legal there, and each active state's transitions, `<onexit>` blocks and `<invoke>` elements are byte-identical by source slice (an ancestor's changed transition answers `false`), with its recorded history values still under their history's parent and no state waiting for an invoke pass; it is structural, not behavioural, reads no datamodel or timer, and the library never calls it.
+
 ## [2.7.0] 2026-09-22
 
 Adds two pure functions on `Statifier.Chart` that a host can call on a
