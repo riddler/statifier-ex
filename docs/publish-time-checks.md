@@ -75,6 +75,19 @@ execution as `error.communication` carrying the send's `sendid`
 committed. The routing side's outcomes are what `StatifierRouter.route/3`
 returns, and they are written to the binding's ledger.
 
+A source invoke's refusals (RT15 to RT17) go back to the host's invoke
+handler, which decides how the chart hears of them.
+
+Three kinds of router refusal have no row. The constructors
+`StatifierRouter.Config.new/1`, `StatifierRouter.Binding.new/1` and
+`StatifierRouter.Resolver.Static.new/1` refuse a malformed configuration
+before any event is routed, so they are configuration-time checks rather
+than runtime refusals. Each `ArgumentError` the router raises for a host
+callback that answers outside its contract is a host programming fault. And
+`StatifierRouter.Addresses.reap/3`, a maintenance sweep, refuses bad `:now`,
+`:limit` and `:after` options, which is not a chart or a message defect
+either.
+
 | # | Refusal | Raised by | Record | Literal? | Twin |
 |---|---|---|---|---|---|
 | RT1 | A send of the router's type names a route the host never registered: `{:error, {:unregistered_route, name}}`, a `send_refused` ledger row with reason `route` | `StatifierRouter.SendHandler` | `docs/adr/0005-routes.md` (section 7); `docs/adr/0006-the-execution-target.md` (the Note of 2026-09-21) | part: yes for `target`, no for `targetexpr` | `StatifierRouter.Routes.unregistered/2` (statifier_router 0.2.0), also composed by `StatifierRouter.Contracts.check/3` (statifier_router main, next release) |
@@ -91,6 +104,15 @@ returns, and they are written to the binding's ledger.
 | RT12 | The execution the event was for is terminal: `{:dropped, binding_id, :finished}` | `StatifierRouter.Delivery` | `docs/adr/0004-the-refusal-and-drop-vocabulary.md` (sections 1 and 3) | no | NONE |
 | RT13 | An event the receiving chart never listens for: not refused. It is delivered, recorded as delivered, and selects no transition. A `dropped: unmatched_event` outcome is deferred and is not in this release | `StatifierRouter.Delivery`; `Statifier.Interpreter.Selection` in the receiver | `docs/adr/0004-the-refusal-and-drop-vocabulary.md` (section 8); `docs/adr/0008-the-receiver-contract-at-publish.md` (decision 5) | yes, for a binding's `event` and for a send's literal `event` | `StatifierRouter.Contracts.check/3` (statifier_router main, next release), which falls back to `Statifier.Chart.check_accepts/2` (statifier 2.7.0) for a receiver that declares nothing |
 | RT14 | A route calls back into routing while it runs: `{:error, {:reentrant_route, execution_id}}` | `StatifierRouter.Delivery.deliver/4` | `docs/adr/0005-routes.md` (decision 5) | no: a host route's code does this, not a chart | NONE |
+| RT15 | A source invoke carries no `binding` param: `{:error, {:missing_binding_param, params}}`, returned to the host's invoke handler | `StatifierRouter.SourceInvoke.start/3` | `docs/adr/0007-the-source-invoke.md` (section 1) | yes, when the `<invoke>` writes no `binding` param | NONE |
+| RT16 | A source invoke names a binding the configuration does not hold: `{:error, {:unknown_binding, binding_id}}`, returned to the host's invoke handler | `StatifierRouter.subscribe/3`, reached through `StatifierRouter.SourceInvoke.start/3` | `docs/adr/0007-the-source-invoke.md` | part: yes when the `binding` param is a literal, given the host's configuration; no when it is an expression | NONE |
+| RT17 | A source invoke from an execution with no address row: `{:error, {:unaddressed_execution, execution_id}}`, returned to the host's invoke handler | `StatifierRouter.subscribe/3`, reached through `StatifierRouter.SourceInvoke.start/3` | `docs/adr/0007-the-source-invoke.md` (section 6) | no: it depends on how the execution was created | NONE |
+| RT18 | A delayed send of the router's type when the configuration has no timer queue: `{:error, {:no_timer_queue, send_id}}` | `StatifierRouter.SendHandler` (`schedule`) | `docs/adr/0005-routes.md` (section 5) | yes, given the host's configuration: a literal `delay` on a send of the router's type | NONE |
+| RT19 | A registered route's adapter answers `{:error, reason}`: the handler returns it, and at the executor seam it reaches the sender as `error.communication` carrying `sendid` | `StatifierRouter.SendHandler` (`hand_off`) | `docs/adr/0005-routes.md` (sections 3 and 7) | no: the adapter's service decides | NONE |
+| RT20 | The configuration's `:on_complete` route fails for an execution that has just finished: `{:error, {:on_complete, route_name, reason}}`; the delivery rolls back so it can be redriven | `StatifierRouter.Delivery` (`complete`) | no record names it; `docs/adr/0004-the-refusal-and-drop-vocabulary.md` (section 7) governs an error that is not an outcome, and `StatifierRouter.Config` documents the option | no | NONE |
+| RT21 | The host's chart resolver has no chart for the content hash an existing execution started on: `{:error, {:chart_not_resolved, content_hash}}`; the delivery rolls back | `StatifierRouter.Delivery` (`chart`) | `docs/adr/0002-addressing.md` ("A chart the host cannot resolve is an error, not an outcome"); `docs/adr/0004-the-refusal-and-drop-vocabulary.md` (section 7) | no: it depends on the host's store | NONE |
+| RT22 | The send handler runs with no configuration installed in the process: `{:error, {:no_config, StatifierRouter.SendHandler}}` | `StatifierRouter.SendHandler.fetch_config/0` | no record names it; `StatifierRouter.SendHandler.fetch_config/0` documents it | no: a host's code does this, not a chart | NONE |
+| RT23 | `route/3` is handed a malformed message or options: `{:error, :no_message_id}`, `{:error, {:invalid_event, event}}`, `{:error, {:invalid_opts, opts}}` or `{:error, {:invalid_value, :now, value}}`; `StatifierRouter.Webhook.handle/3` adds `{:error, {:invalid_request, request}}` | `StatifierRouter.route/3`; `StatifierRouter.Webhook` | `docs/adr/0004-the-refusal-and-drop-vocabulary.md` (section 7) | no: the message and the host's call decide | NONE |
 
 ## statifier_blocks
 
