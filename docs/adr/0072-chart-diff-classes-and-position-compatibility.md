@@ -25,7 +25,8 @@ anywhere.
 **What exists.** `Statifier.Chart` (`lib/statifier/chart.ex`) holds
 `format_version/0`, `to_binary/1`, `from_binary/1`, `events/1` and
 `check_accepts/2`, and no diff. `Statifier.Position`
-(`lib/statifier/position.ex`) holds `to_binary/1`, `from_binary/2`,
+(`lib/statifier/position.ex`) holds `format_version/0`, `to_binary/1`,
+`from_binary/2`,
 `export/1` and `import/2`, and no compatibility predicate.
 
 **Identity.** `Statifier.Machine.Identity`
@@ -71,10 +72,12 @@ string `id` (`Statifier.Machine.Data`). `Statifier.Machine.State`'s
 `configuration`, `entered_states`, `states_to_invoke`,
 `history_values`, `active_invocations`, the counters (`timer_counter`
 among them) and the datamodel (its `build_exported/2`). It carries no
-pending timer: a delayed send is an effect a host owns once it is
-emitted (ADR-0054), and the position keeps only the ordinal counter.
+pending timer: a delayed send leaves the position as a
+`%SendDelayed{}` effect (ADR-0054), which the session's timer table or
+a durable host schedules; the position keeps only the ordinal counter.
 `configuration` is full: every active state's ancestors are in it
-(ADR-0005). `states_to_invoke` is emptied at the end of every macrostep
+(ADR-0005), except the root, which `export/1` drops and `import/2`
+re-adds. `states_to_invoke` is emptied at the end of every macrostep
 by the invoke pass (`Statifier.Interpreter`'s `run_invoke_pass/1`), so a
 position between macrosteps holds none.
 
@@ -92,7 +95,8 @@ be refused whole.
 
 **1. `Statifier.Chart.diff/3` classifies a pair of compiled charts into
 one of four classes and returns the reasons.**
-`diff(from, to, opts \\ [])` takes two `%Statifier.Machine{}` values and
+`diff(from, to, opts \\ [])` (`diff/2` is its defaulted head) takes two
+`%Statifier.Machine{}` values and
 returns `%{class: class, reasons: [reason]}`, where `class` is one of
 `:identical`, `:compatible`, `:mapped` or `:breaking`.
 
@@ -134,10 +138,11 @@ ones marked breaking make the pair Breaking:
   (both parallel, and the corresponding ids of their children differ);
   `:history_type`. Each is a change after which a position that is legal
   in `from` can be illegal in `to` (spec 3.11, quoted in decision 4).
-- `{:state_mapped, from_id, to_id}`: a held state resolved by the
-  mapping, with no `:state_changed` reason.
-- `{:state_removed, id}`: a state of `from` that is not held and has no
-  corresponding state in `to`. Not breaking: no execution can be in it.
+- `{:state_mapped, from_id, to_id}`: any state of `from` resolved by the
+  mapping, held or not, with no `:state_changed` reason, so every
+  resolved state that makes a pair Mapped is named.
+- `{:state_removed, id}`: a state of `from` that is not held, has no
+  corresponding state in `to`, and is not resolved by the mapping. Not breaking: no execution can be in it.
 - `{:state_added, id}`: a state of `to` with an id that corresponds to no
   state of `from`.
 - `{:transition_removed, source_id, t_index}` (breaking): a selectable
@@ -225,6 +230,11 @@ elsewhere, from stable block ids for instance, is passed as it is.
 - `opts` accepts `mapping:` and nothing else. An unknown option, or a
   `mapping` that is not a map from strings to strings, raises
   `ArgumentError`: it is a caller's programming error, not data.
+- A mapping that would make one state of `to` correspond to two states
+  of `from` is refused the same way, with `ArgumentError`: two read
+  entries whose values name the same state, or a read entry whose value
+  names a state `from` also holds by that id. No result is defined for
+  it.
 
 **3. `diff/3` answers what the charts are, never what an execution will
 do.** The classes are structural. A Compatible pair can still behave
@@ -273,8 +283,10 @@ accept.
 - **A changed transition on an ancestor of an active state breaks it.**
   This follows from the rule above and is decided here so it is not
   argued later: `configuration` is full (ADR-0005), every ancestor of an
-  active state is in it, and a transition on an ancestor is selectable
-  from the active configuration.
+  active state except the root (which `export/1` drops and `import/2`
+  re-adds, and which holds no transition, `<onexit>` or `<invoke>`) is
+  in it, and a transition on an ancestor is selectable from the active
+  configuration.
 - **`history_values`.** Every recorded key resolves in `to_machine` to a
   history pseudo-state with the same `history_type` and the same parent
   id, and every recorded member resolves to a descendant of that parent.
@@ -364,8 +376,8 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
   `false`: `awaiting_pickup` does not resolve in `to`. The predicate
   takes no mapping, and a renamed active state is not byte-identical.
 - **The pending timer is not the engine's.** The `pickup` send's
-  deadline is held by the host that received the delayed-send effect,
-  not by the position (its `timer_counter` is an ordinal, not a
+  deadline is held by whatever scheduled the `%SendDelayed{}` effect
+  (the session's timer table or a durable host), not by the position (its `timer_counter` is an ordinal, not a
   deadline). "Lands in `ready_for_pickup` with its timer's deadline
   unchanged" rests on the persistence layer's pin source, which is not
   an engine surface, and neither function here claims it. What the
@@ -421,5 +433,5 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
 - [ADR-0071](0071-chart-event-vocabulary-and-accepts-check.md) (`events/1`, the event side of the diff, and decision 2's "can be active" rule)
 - [ADR-0052](0052-chart-identity-and-position-serialization.md) (decision 1: identity and `matches?/2`; decision 6: `export/1` and `import/2`)
 - [ADR-0005](0005-full-configuration-and-interned-state-indexes.md) (the full configuration the ancestor case rests on)
-- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (delayed sends are effects the host keys and keeps)
+- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (a delayed send leaves the position as a `%SendDelayed{}` effect, scheduled by the session's timer table or a durable host)
 - [ADR-0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) (the `sb-ADR-0004` cross-repo cite form)
