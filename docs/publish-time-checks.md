@@ -103,7 +103,7 @@ runtime.
 | S16 | A macrostep that does not reach quiescence within the round budget (`max_macrostep_rounds`, default 10,000): the fold stops and appends a `{:budget_exhausted, %Statifier.Effect.BudgetExhausted{}}` effect, and a session halts with `:budget_exhausted` | `Statifier.Interpreter` (the macrostep fold); `Statifier.Session` | `docs/adr/0019-macrostep-round-budget.md` | part: yes for a cycle of eventless transitions none of which carries a `cond`; no in general, where the data a `cond` reads decides whether the cycle ends | NONE |
 | S17 | A `<foreach>` whose `item` or `index` is not a legal variable name, or begins with `_`: `error.execution`, data `{:illegal_item_name, name}`, `{:illegal_index_name, name}` or `{:system_variable, name}`; the loop does not run | `Statifier.Machine.Content.Foreach` (`check_name`, `check_index`), through `Statifier.Interpreter.Content` | no record names it; `docs/datamodel.md` and the module's own documentation (spec 4.6.3) | yes: both names are literal attributes, and neither the compile pipeline nor `Statifier.Validator` checks them | NONE |
 | S18 | A `<script>`, in executable content or at the top level, that writes a root beginning with `_`: `error.execution`, data `{:system_variable, root}` | `Statifier.Evaluator.run_program/2`, raised through `Statifier.Interpreter.Content` or `Statifier.Interpreter` | `docs/adr/0026-script-as-predicator-statement-programs.md`; `docs/datamodel.md` ("Upstreaming to predicator", item 4) | yes: the script's assignment targets are names in its source | NONE |
-| S19 | A literal write location that does not parse as a location path (`<assign location>`, an `idlocation`, a `<finalize>` namelist write): it compiles, and the write fails with `error.execution` carrying the parse error | `Statifier.Interpreter.Datamodel` (`resolve_location`, through `write_location/4`) | no record names it; `docs/datamodel.md` | yes: the location is a literal attribute | NONE |
+| S19 | A literal write location (`<assign location>`, an `idlocation`, a `<finalize>` namelist write) that is not an assignable location: it does not parse; or it names something that cannot be assigned, such as a literal, a function call or an operator expression (predicator's `LocationError` type `:not_assignable`); or a bracket key is neither a string, an integer nor a variable (`:computed_key`, `copies[1 + 1]` or `copies[true]`). It compiles, and the write fails with `error.execution` carrying the error | `Statifier.Interpreter.Datamodel` (`resolve_location`, through `write_location/4`) | no record names it; `docs/datamodel.md` | yes: the location is a literal attribute, and none of these depends on the data | NONE |
 
 ## statifier_router
 
@@ -287,8 +287,15 @@ grep -rn -E '\{:error\b|\braise\b|^[[:space:]]*else\b|\{:(dropped|key_refused|se
 A function that returns a callback's answer as its last expression carries
 no `{:error` of its own, so each callback whose spec the search matched
 was followed to the function that calls it. Every refusal the search led
-to is a row, or falls in one of the kinds of refusal a section names as
-left out.
+to is a row or falls in one of the kinds of refusal a section names as left
+out, except four that are open for a later revision of this page: a `cond`
+that evaluates to something other than a boolean; the refusals of the
+`Statifier.Testing` helpers; the write step's refusals from
+`Predicator.ContextLocation.put/3` (predicator 9.0.0), `:not_a_container`
+and `:invalid_index`, which depend on the data because a negative index
+writes to a map and is refused only for a list; and a variable bracket key
+that is unbound or is neither a string nor an integer (`:undefined_variable`,
+`:invalid_key`).
 
 A new raise site, a new refusal reason in a sibling package, or a new
 publish-time function changes a row here. So does a twin that moves from a
