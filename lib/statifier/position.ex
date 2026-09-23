@@ -59,6 +59,7 @@ defmodule Statifier.Position do
 
   alias Statifier.{Machine, MachineState}
   alias Statifier.Machine.Identity
+  alias Statifier.Parser.Location
 
   # `@sobelow_skip` is read out of this file's AST by Sobelow, never at
   # runtime, so the compiler sees an attribute that is set and never used and
@@ -579,6 +580,190 @@ defmodule Statifier.Position do
     Map.new(active_invocations, fn {{state_id, invoke_index}, invoke_id} ->
       {{resolve_index!(machine, state_id), invoke_index}, invoke_id}
     end)
+  end
+
+  @doc """
+  Whether the execution whose `export/1` map is `exported`, pinned to
+  `from_machine`, is untouched at its position by the edit that produced
+  `to_machine` (ADR-0072 decision 4). Answers `true` only when every
+  condition below holds, and `false` otherwise.
+
+  - **Both machines carry a source**, and `exported` is a map `import/2`
+    accepts onto both of them: every id it names, in `configuration`,
+    `entered_states`, `states_to_invoke`, `history_values` and
+    `active_invocations`, resolves in `to_machine`, so `import/2` onto
+    `to_machine` would not refuse.
+  - **The configuration is legal in `to_machine`.** Each active state has
+    the same `kind` and the same parent id in both machines, and the
+    configuration resolved in `to_machine` meets SCXML spec 3.11: it holds
+    exactly one child of the `<scxml>` element, one or more atomic states,
+    every `<state>` and `<parallel>` ancestor of each atomic state it holds,
+    one and only one child of each non-atomic `<state>` it holds, and every
+    child of each `<parallel>` it holds. A `<history>` pseudo-state is never
+    a member of a legal configuration.
+  - **Each active state's own outgoing surface is byte-identical.** For
+    every state in the configuration, the source slices
+    (`Statifier.Parser.Location.slice/2` of each element's `location` over
+    each machine's `Statifier.Machine.source/1`) of its selectable
+    transitions, of its `<onexit>` blocks and of its `<invoke>` elements
+    compare equal, element by element and in order. A slice covers the
+    element and everything inside it, so a changed target, condition,
+    event, executable content, parameter or child content answers `false`.
+    `<onentry>` is not compared: it already executed.
+  - **A changed transition on an ancestor of an active state answers
+    `false`.** The configuration is full, so every ancestor of an active
+    state is itself in it and its transitions are compared by the rule
+    above: a transition on an ancestor is selectable from the active
+    configuration. The one ancestor `exported` does not name is the root,
+    which `export/1` drops and `import/2` re-adds; the root holds no
+    transition, `<onexit>` or `<invoke>`, so nothing of it is compared, and
+    legality is checked on the configuration with the root re-added.
+  - **`history_values`.** Every recorded key resolves in `to_machine` to a
+    `<history>` pseudo-state with the same `history_type` and the same
+    parent id as in `from_machine`, and every recorded member resolves to a
+    descendant of that parent. A recorded value is a configuration the
+    execution will re-enter.
+  - **`states_to_invoke` is empty.** A non-empty set is a position inside a
+    macrostep, before its invoke pass, and not a position to move across
+    charts.
+  - **`active_invocations`** needs nothing further: each key names an
+    active state and an index into its `<invoke>` list, which is compared
+    slice by slice above.
+
+  Structural is not behavioural. The predicate does not look past an
+  active state's own surface: an unchanged transition may target a state
+  whose content changed, and that is the new chart's behaviour, not a
+  change at the position. It reads no datamodel and no timer - a pending
+  timer is not in the export at all, only the `timer_counter` ordinal is -
+  compares no identity, and takes no mapping, so a renamed active state
+  answers `false`.
+
+  The predicate is pure and total: it changes nothing, raises on no input,
+  and answers `false` for an argument it cannot read. Nothing in this
+  library calls it - not `import/2`, not `Statifier.Chart.diff/3`, not a
+  session. Whether an execution moves, and onto which chart, is the host's
+  explicit decision.
+  """
+  @spec compatible_at?(from_machine :: Machine.t(), to_machine :: Machine.t(), exported :: term()) ::
+          boolean()
+  def compatible_at?(
+        %Machine{source: from_source} = from_machine,
+        %Machine{source: to_source} = to_machine,
+        exported
+      )
+      when is_binary(from_source) and is_binary(to_source) and is_map(exported) do
+    with {:ok, _from_state} <- __MODULE__.import(from_machine, exported),
+         {:ok, to_state} <- __MODULE__.import(to_machine, exported) do
+      MapSet.size(to_state.states_to_invoke) == 0 and
+        legal_configuration?(to_machine, to_state.configuration) and
+        Enum.all?(exported.configuration, &same_state?(from_machine, to_machine, &1)) and
+        Enum.all?(exported.history_values, &same_history?(from_machine, to_machine, &1))
+    else
+      _refused -> false
+    end
+  end
+
+  def compatible_at?(_from_machine, _to_machine, _exported), do: false
+
+  # One active state, named by its id: the same kind and parent id in both
+  # machines, and the same outgoing surface slice by slice.
+  @spec same_state?(from_machine :: Machine.t(), to_machine :: Machine.t(), id :: String.t()) ::
+          boolean()
+  defp same_state?(from_machine, to_machine, id) do
+    from_state = Machine.at(from_machine, resolve_index!(from_machine, id))
+    to_state = Machine.at(to_machine, resolve_index!(to_machine, id))
+
+    from_state.kind == to_state.kind and
+      parent_id(from_machine, from_state) == parent_id(to_machine, to_state) and
+      outgoing_surface(from_machine, from_state) == outgoing_surface(to_machine, to_state)
+  end
+
+  @spec parent_id(machine :: Machine.t(), state :: Machine.State.t()) :: String.t() | nil
+  defp parent_id(_machine, %Machine.State{parent: nil}), do: nil
+  defp parent_id(machine, %Machine.State{parent: parent}), do: Machine.id(machine, parent)
+
+  # The source slices of a state's selectable transitions, `<onexit>` blocks
+  # and `<invoke>` elements, each list in document order.
+  @spec outgoing_surface(machine :: Machine.t(), state :: Machine.State.t()) ::
+          {[binary()], [binary()], [binary()]}
+  defp outgoing_surface(%Machine{source: source} = machine, %Machine.State{} = state) do
+    transitions =
+      Enum.map(
+        state.transitions,
+        &Location.slice(Machine.transition(machine, &1).location, source)
+      )
+
+    onexit = Enum.map(state.onexit, &Location.slice(&1.location, source))
+    invoke = Enum.map(state.invoke, &Location.slice(&1.location, source))
+
+    {transitions, onexit, invoke}
+  end
+
+  # One recorded history value: its key is a `<history>` with the same type
+  # and parent id in both machines, and every member is a descendant of that
+  # parent in `to_machine`.
+  @spec same_history?(
+          from_machine :: Machine.t(),
+          to_machine :: Machine.t(),
+          entry :: {String.t(), MapSet.t(String.t())}
+        ) :: boolean()
+  defp same_history?(from_machine, to_machine, {key, members}) do
+    from_history = Machine.at(from_machine, resolve_index!(from_machine, key))
+    to_history = Machine.at(to_machine, resolve_index!(to_machine, key))
+
+    from_history.kind == :history and to_history.kind == :history and
+      from_history.history_type == to_history.history_type and
+      parent_id(from_machine, from_history) == parent_id(to_machine, to_history) and
+      Enum.all?(
+        members,
+        &Machine.descendant?(to_machine, resolve_index!(to_machine, &1), to_history.parent)
+      )
+  end
+
+  # SCXML spec 3.11's legal configuration, over the resolved index set with
+  # the root re-added. The root is a non-atomic member like any other, so
+  # "exactly one child of the <scxml> element" is `legal_member?/3`'s last
+  # arm applied to it. A `<history>` member is refused outright: it is a
+  # pseudo-state, never active, and the rules below count only
+  # `Machine.child_states/2`, which excludes it.
+  @spec legal_configuration?(machine :: Machine.t(), configuration :: MapSet.t(non_neg_integer())) ::
+          boolean()
+  defp legal_configuration?(machine, configuration) do
+    not Enum.any?(configuration, &Machine.history?(machine, &1)) and
+      Enum.any?(configuration, &Machine.atomic?(machine, &1)) and
+      Enum.all?(configuration, &legal_member?(machine, configuration, &1))
+  end
+
+  @spec legal_member?(
+          machine :: Machine.t(),
+          configuration :: MapSet.t(non_neg_integer()),
+          index :: non_neg_integer()
+        ) :: boolean()
+  defp legal_member?(machine, configuration, index) do
+    cond do
+      Machine.atomic?(machine, index) ->
+        machine
+        |> Machine.proper_ancestors(index)
+        |> Enum.all?(&MapSet.member?(configuration, &1))
+
+      Machine.parallel?(machine, index) ->
+        machine |> Machine.child_states(index) |> Enum.all?(&MapSet.member?(configuration, &1))
+
+      true ->
+        exactly_one_member?(machine, configuration, index)
+    end
+  end
+
+  @spec exactly_one_member?(
+          machine :: Machine.t(),
+          configuration :: MapSet.t(non_neg_integer()),
+          index :: non_neg_integer()
+        ) :: boolean()
+  defp exactly_one_member?(machine, configuration, index) do
+    machine
+    |> Machine.child_states(index)
+    |> Enum.count(&MapSet.member?(configuration, &1))
+    |> Kernel.==(1)
   end
 
   # Same rationale as `Statifier.Machine.Identity`'s own `safe_decode/1`
