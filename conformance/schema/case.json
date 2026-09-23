@@ -103,7 +103,7 @@
     },
     "host": {
       "type": "object",
-      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing. declared_events and expect_accepts are present together or not at all: the host checks the chart's declaration of the event names it accepts before it runs the case.",
+      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing. declared_events and expect_accepts are present together or not at all: the host checks the chart's declaration of the event names it accepts before it runs the case. to_source and expect_diff are present together or not at all, and mapping and expect_compatible_at each need them: the host diffs the case's chart to a second chart before it runs the case, and after the last step asks whether the position the steps left is untouched by the edit.",
       "properties": {
         "send_types": {
           "type": "array",
@@ -180,6 +180,264 @@
           },
           "required": ["unreachable", "undeclared"],
           "additionalProperties": false
+        },
+        "to_source": {
+          "type": "string",
+          "description": "The second chart of a diff pair: an SCXML document for the predicator datamodel, compiled as source is. The host diffs source to it before it runs the case. An authored case writes it as a third file beside the two, <name>.to.scxml, and the emitter carries its text here.",
+          "minLength": 1
+        },
+        "mapping": {
+          "type": "object",
+          "description": "The mapping the diff is given (ADR-0072 decision 2): each member's name is a state id of source and its value, a string, a state id of to_source. The diff reads an entry only for a state of source whose id is absent from to_source and whose value names a state of to_source; that state then corresponds to the one the value names, and every other entry is reported as mapping_unused. With no mapping the diff is given none."
+        },
+        "expect_diff": {
+          "type": "object",
+          "description": "What diffing source to to_source answers (ADR-0072 decision 1); a case agrees only when the class and the reasons are exactly these, order included.",
+          "properties": {
+            "class": {
+              "description": "identical when the two charts carry the same identity; otherwise breaking when any reason is a breaking one (state_nameless, state_unresolved, state_changed, transition_removed, event_removed, data_removed), mapped when none is and the mapping resolved at least one state, and compatible when neither.",
+              "enum": ["identical", "compatible", "mapped", "breaking"]
+            },
+            "reasons": {
+              "type": "array",
+              "description": "Every reason the diff reports, in its order: the reasons about states of source in source's document order, one per state at most; state_added in to_source's document order; transition_removed in source's t_index order; transition_added in to_source's t_index order; event_removed, event_added, data_removed and data_added, each in its chart's order; then mapping_unused, sorted by state id. Empty for an identical pair.",
+              "items": {
+                "type": "object",
+                "description": "One reason: reason names it, and the members it carries follow. A state is held when an execution can be in it.",
+                "properties": {
+                  "reason": {
+                    "description": "state_nameless: a held state of source, other than the root, with no id. state_unresolved: a held state of source with no corresponding state in to_source. state_changed: a held state whose corresponding state differs in fields. state_mapped: a state of source the mapping resolved. state_removed: a state of source that is not held and corresponds to nothing. state_added: a state of to_source that corresponds to no state of source. transition_removed: a selectable transition of a held state of source that matches no transition of its corresponding state. transition_added: a selectable transition of a state of to_source that corresponds to a state of source and matches no transition of that state. event_removed and event_added: an event descriptor in one chart's event vocabulary (the descriptors on transitions whose source state some path enters) and not in the other's, compared as strings. data_removed and data_added: a datamodel key one chart declares and the other does not. mapping_unused: a mapping entry the diff did not read.",
+                    "enum": ["state_nameless", "state_unresolved", "state_changed", "state_mapped", "state_removed", "state_added", "transition_removed", "transition_added", "event_removed", "event_added", "data_removed", "data_added", "mapping_unused"]
+                  },
+                  "state": {
+                    "type": "string",
+                    "description": "The state the reason is about, by id: a state of source, except for state_added, whose state is a state of to_source; for a transition, the state it belongs to in the chart its t_index counts in; for mapping_unused, the mapping entry's name.",
+                    "minLength": 1
+                  },
+                  "to_state": {
+                    "type": "string",
+                    "description": "For state_mapped: the state of to_source the mapping resolved state to.",
+                    "minLength": 1
+                  },
+                  "fields": {
+                    "type": "array",
+                    "description": "For state_changed: what differs, in this order: kind; parent (the parent's corresponding id); atomic (one is atomic and the other not); regions (both parallel, with their children's corresponding ids differing); history_type.",
+                    "items": { "enum": ["kind", "parent", "atomic", "regions", "history_type"] },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "index": {
+                    "type": "integer",
+                    "description": "For state_nameless: the state's index, states numbered from 0 depth-first in document order with the <scxml> element as 0.",
+                    "minimum": 1
+                  },
+                  "t_index": {
+                    "type": "integer",
+                    "description": "For a transition: its index in its chart - source's for transition_removed, to_source's for transition_added. Every <transition> element is numbered from 0, state by state in document order: a state's own transitions, as written and then its <initial> element's, before its children's.",
+                    "minimum": 0
+                  },
+                  "descriptor": {
+                    "type": "string",
+                    "description": "For an event reason: the event descriptor as the chart writes it on a transition.",
+                    "minLength": 1
+                  },
+                  "data_id": {
+                    "type": "string",
+                    "description": "For a datamodel reason: the <data> element's id, from any <datamodel> in the chart.",
+                    "minLength": 1
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": { "properties": { "reason": { "const": "state_nameless" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["index"],
+                      "properties": {
+                        "state": false,
+                        "to_state": false,
+                        "fields": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "state_unresolved" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "state_changed" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state", "fields"],
+                      "properties": {
+                        "to_state": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "state_mapped" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state", "to_state"],
+                      "properties": {
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "state_removed" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "state_added" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "transition_removed" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state", "t_index"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "transition_added" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state", "t_index"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "event_removed" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["descriptor"],
+                      "properties": {
+                        "state": false,
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "event_added" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["descriptor"],
+                      "properties": {
+                        "state": false,
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "data_id": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "data_removed" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["data_id"],
+                      "properties": {
+                        "state": false,
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "data_added" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["data_id"],
+                      "properties": {
+                        "state": false,
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false
+                      }
+                    }
+                  },
+                  {
+                    "if": { "properties": { "reason": { "const": "mapping_unused" } }, "required": ["reason"] },
+                    "then": {
+                      "required": ["state"],
+                      "properties": {
+                        "to_state": false,
+                        "fields": false,
+                        "index": false,
+                        "t_index": false,
+                        "descriptor": false,
+                        "data_id": false
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": ["class", "reasons"],
+          "additionalProperties": false
+        },
+        "expect_compatible_at": {
+          "type": "boolean",
+          "description": "Whether the position the case's steps leave the chart at, after the last step, is untouched by the edit to to_source (ADR-0072 decision 4): true only when every state the position names resolves in to_source, the configuration is legal there with each active state of the same kind and parent, every active state's own transitions, <onexit> blocks and <invoke> elements are byte-identical in both documents, every recorded history value resolves under the same history, and no state is waiting to be invoked. An ancestor of an active state is itself active, so a changed transition on it answers false. The predicate reads no datamodel and no timer, and takes no mapping: a renamed active state answers false."
         }
       },
       "additionalProperties": false,
@@ -191,6 +449,22 @@
         {
           "if": { "required": ["expect_accepts"] },
           "then": { "required": ["declared_events"] }
+        },
+        {
+          "if": { "required": ["to_source"] },
+          "then": { "required": ["expect_diff"] }
+        },
+        {
+          "if": { "required": ["expect_diff"] },
+          "then": { "required": ["to_source"] }
+        },
+        {
+          "if": { "required": ["mapping"] },
+          "then": { "required": ["to_source"] }
+        },
+        {
+          "if": { "required": ["expect_compatible_at"] },
+          "then": { "required": ["to_source"] }
         }
       ]
     }

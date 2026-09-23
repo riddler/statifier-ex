@@ -10,7 +10,7 @@ claim against the same cases
 | `README.md` | this file | hand, reviewed like code |
 | `RATCHET.md` | the contract a registry is written against: the claims, the pin, the rules a check enforces, and the vendoring recipe for a sibling implementation | hand, reviewed like code |
 | `schema/` | JSON Schemas (draft 2020-12) for every file below: `case.json` (one case), `corpus.json` (one corpus file), `manifest.json`, `registry.json`, `exclusions.json` | hand, reviewed like code |
-| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object. `library/` holds the library-world cases the section below describes, and `accepts/` the case that checks a chart's declared events against it; `send/` and `system_variables/` hold the earlier authored fixtures | hand, reviewed like code |
+| `cases/` | the `statifier` suite's cases, which this repository authors: per case, an SCXML document and a JSON file holding its description, its expected configurations and its `host` object. `library/` holds the library-world cases the section below describes, `accepts/` the case that checks a chart's declared events against it, and `diff/` the cases that diff two charts, each with a third file, `<name>.to.scxml`, holding the second chart; `send/` and `system_variables/` hold the earlier authored fixtures | hand, reviewed like code |
 | `corpus/` | one file per suite that has cases, holding that suite's cases: `scion.json` and `w3c.json` for the upstream suites, and `statifier.json` for the cases this repository authors itself (ADR-0070 decision 5) once it authors one | the emitter |
 | `manifest.json` | the corpus hash, the corpus files and the upstream suites (a claim pins a corpus by its hash and the statifier-ex tag it was vendored from, not by a version in the file) | the emitter |
 | `registry.json` | the cases statifier-ex passes, derived from `test/passing_tests.json` | the emitter |
@@ -125,6 +125,33 @@ transition matches changes no configuration - so this answer is what a
 host's publish step refuses on. The case's schema is this directory's
 `schema/case.json`; this suite shares no schema with the router's corpus or
 with a reference host's cases.
+
+The cases under `conformance/cases/diff/` are in this world too, and they
+prove the two questions a host asks before it moves an execution from one
+chart to an edited one; nothing in them moves anything. Each pairs the
+`hold_queue` chart with an edit of it: the host object carries the edited
+chart as `to_source` and `expect_diff`, the class and reasons
+`Statifier.Chart.diff/3` answers (ADR-0072 decisions 1 and 2), with the
+`mapping` it is given where a case gives one. The emitter runs these cases
+as it runs any host case; the class and the reasons, order included, are
+compared by this repository's test suite
+(`test/corpus/diff_cases_test.exs`), because nothing in `lib/` calls either
+function (ADR-0072 decision 6). There is one pair per class: the same bytes
+(identical), an added `<data>` key (compatible), and `awaiting_pickup`
+renamed to `ready_for_pickup` with a mapping (mapped) and without one
+(breaking). A case may also carry `expect_compatible_at`, what
+`Statifier.Position.compatible_at?/3` answers (ADR-0072 decision 4) at the
+position its steps leave the chart in: `Statifier.Position.export/1` holds
+atoms, sets and tuples, so the case states no position, and every such
+case's steps put `p-1`'s hold in `awaiting_pickup` with its pickup timer
+handed to the host. The predicate answers true when only `idle` is edited (a
+breaking pair harmless at this position), false when a transition of
+`awaiting_pickup` itself gains content (a compatible pair with no reasons),
+false when the edit is a transition of `open`, a compound state one case
+wraps around `idle` and `awaiting_pickup` and so an ancestor of the active
+state, and false for the rename with or without a mapping.
+`schema/case.json` gives each reason as an object: `reason`, then the
+members that reason carries.
 
 The authored cases that came before the library world keep their own
 domain: the three under `cases/send/` and the one under

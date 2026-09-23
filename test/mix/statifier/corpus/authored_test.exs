@@ -125,4 +125,75 @@ defmodule Mix.Statifier.Corpus.AuthoredTest do
                Authored.read(root)
     end
   end
+
+  describe "read/1 with a second chart" do
+    @to_scxml """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="ready_for_pickup">
+        <state id="ready_for_pickup"/>
+    </scxml>
+    """
+
+    defp put_second_chart(root, relative, scxml \\ @to_scxml) do
+      File.write!(Path.join([root, "conformance/cases", relative]) <> ".to.scxml", scxml)
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: put_to_source/3 returning the fields unchanged -> red
+    test "reads <name>.to.scxml into the case's host as to_source", %{tmp_dir: root} do
+      put_case(root, "diff/hold")
+      put_second_chart(root, "diff/hold")
+
+      assert {:ok, [hold]} = Authored.read(root)
+      assert hold["id"] == "statifier/diff/hold"
+      assert hold["source"] == @scxml
+      assert hold["host"] == Map.put(@fields["host"], "to_source", @to_scxml)
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: put_to_source/3's Map.update/4 default replaced by the
+    # fields' own host (nil) -> red
+    test "gives a case with no host object one holding only to_source", %{tmp_dir: root} do
+      put_case(root, "diff/hold", Map.delete(@fields, "host"))
+      put_second_chart(root, "diff/hold")
+
+      assert {:ok, [hold]} = Authored.read(root)
+      assert hold["host"] == %{"to_source" => @to_scxml}
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: all_paired/2's second-chart clause removed -> the lone
+    # second chart falls to the .to name clause -> red on the message
+    test "refuses a second chart without its case's .json and .scxml", %{tmp_dir: root} do
+      File.mkdir_p!(Path.join(root, "conformance/cases/diff"))
+      put_second_chart(root, "diff/lonely")
+
+      assert {:error, message} = Authored.read(root)
+      assert message =~ "conformance/cases/diff/lonely.to.scxml has no lonely.json beside it"
+      assert message =~ "conformance/cases/diff/lonely.to.scxml has no lonely.scxml beside it"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: put_to_source/3's first clause removed -> the written value
+    # is overwritten silently -> red
+    test "refuses a case JSON that writes to_source itself", %{tmp_dir: root} do
+      put_case(root, "diff/hold", put_in(@fields, ["host", "to_source"], @to_scxml))
+      put_second_chart(root, "diff/hold")
+
+      assert {:error, message} = Authored.read(root)
+
+      assert message ==
+               "conformance/cases/diff/hold.json writes host.to_source, " <>
+                 "which is read from its .to.scxml file"
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: all_paired/2's `.to` name clause removed -> the case reads
+    # -> red
+    test "refuses a case whose name ends in .to", %{tmp_dir: root} do
+      put_case(root, "diff/hold.to")
+
+      assert {:error, message} = Authored.read(root)
+      assert message =~ "conformance/cases/diff/hold.to.json names a case ending in .to"
+    end
+  end
 end
