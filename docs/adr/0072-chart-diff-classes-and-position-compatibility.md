@@ -73,8 +73,10 @@ string `id` (`Statifier.Machine.Data`). `Statifier.Machine.State`'s
 `history_values`, `active_invocations`, the counters (`timer_counter`
 among them) and the datamodel (its `build_exported/2`). It carries no
 pending timer: a delayed send leaves the position as a
-`%SendDelayed{}` effect (ADR-0054), which the session's timer table or
-a durable host schedules; the position keeps only the ordinal counter.
+`%SendDelayed{}` effect (ADR-0054), which the session's timer table, a
+durable host (self-routed sends only, ADR-0054 decision 2) or the
+processor registered for its send type (ADR-0069) schedules; the
+position keeps only the ordinal counter.
 `configuration` is full: every active state's ancestors are in it
 (ADR-0005), except the root, which `export/1` drops and `import/2`
 re-adds. `states_to_invoke` is emptied at the end of every macrostep
@@ -217,8 +219,8 @@ elsewhere, from stable block ids for instance, is passed as it is.
 - A mapping entry is read only for a state of `from` whose id is absent
   from `to`, and only when its value is a state id of `to`. Such a state
   corresponds to the state the entry names. Every other entry (a key
-  that is still present in `to`, a key `from` does not hold, or a value
-  `to` does not hold) is reported as `:mapping_unused` and changes no
+  that is still present in `to`, a key for which `from` has no state
+  with that id, or a value for which `to` has no state with that id) is reported as `:mapping_unused` and changes no
   class. An entry whose value names no state of `to` leaves its key
   unresolved.
 - Without a mapping, or with one that leaves a held state of `from`
@@ -233,7 +235,7 @@ elsewhere, from stable block ids for instance, is passed as it is.
 - A mapping that would make one state of `to` correspond to two states
   of `from` is refused the same way, with `ArgumentError`: two read
   entries whose values name the same state, or a read entry whose value
-  names a state `from` also holds by that id. No result is defined for
+  is also the id of a state of `from`. No result is defined for
   it.
 
 **3. `diff/3` answers what the charts are, never what an execution will
@@ -376,9 +378,11 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
   `false`: `awaiting_pickup` does not resolve in `to`. The predicate
   takes no mapping, and a renamed active state is not byte-identical.
 - **The pending timer is not the engine's.** The `pickup` send's
-  deadline is held by whatever scheduled the `%SendDelayed{}` effect
-  (the session's timer table or a durable host), not by the position (its `timer_counter` is an ordinal, not a
-  deadline). "Lands in `ready_for_pickup` with its timer's deadline
+  deadline is held by the processor registered for `library:timer`: it
+  is a host-registered send type, so for its `%SendDelayed{}` the
+  session schedules nothing and the processor owns the delay
+  (`Statifier.Send.Processor`'s moduledoc, ADR-0069). It is not held by
+  the position (its `timer_counter` is an ordinal, not a deadline). "Lands in `ready_for_pickup` with its timer's deadline
   unchanged" rests on the persistence layer's pin source, which is not
   an engine surface, and neither function here claims it. What the
   engine gives is the refusal half: `import/2` resolves every id before
@@ -388,8 +392,10 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
   derives state ids from block ids by a pure function (sb-ADR-0004
   decision 3), so a relabelled wait block keeps its state id and the new
   outcome adds a state: in block terms the edit is an identity mapping
-  plus a new state, and the blocks-compiled pair diffs Compatible or
-  Mapped, not as a rename. Only a hand-authored SCXML edit that rewrites
+  plus a new state. Nothing of `from` is absent from `to`, so the
+  blocks-compiled pair diffs Compatible, not as a rename; an identity
+  mapping passed with it changes nothing, since decision 2 reports each
+  of its entries (a key still present in `to`) as `:mapping_unused`. Only a hand-authored SCXML edit that rewrites
   the id sees the rename above.
 
 ## What this record does not decide
@@ -433,5 +439,5 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
 - [ADR-0071](0071-chart-event-vocabulary-and-accepts-check.md) (`events/1`, the event side of the diff, and decision 2's "can be active" rule)
 - [ADR-0052](0052-chart-identity-and-position-serialization.md) (decision 1: identity and `matches?/2`; decision 6: `export/1` and `import/2`)
 - [ADR-0005](0005-full-configuration-and-interned-state-indexes.md) (the full configuration the ancestor case rests on)
-- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (a delayed send leaves the position as a `%SendDelayed{}` effect, scheduled by the session's timer table or a durable host)
+- [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (a delayed send leaves the position as a `%SendDelayed{}` effect, scheduled by the session's timer table, a durable host for a self-routed send, or the processor registered for its send type under [ADR-0069](0069-host-registered-send-types.md))
 - [ADR-0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) (the `sb-ADR-0004` cross-repo cite form)
