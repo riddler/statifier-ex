@@ -13,15 +13,15 @@ This page uses four nouns, each with one job:
 | Noun | Identity | Owner | Changes when |
 |---|---|---|---|
 | **Document** | The host's stable id for the thing an author edits | The host's authoring store | Never |
-| **Revision** | The document id plus an ordinal or hash | The authoring package (`statifier_blocks`) or the host | Every saved edit |
-| **Chart** | The SHA-256 hash of the SCXML source bytes handed to `Statifier.compile/2` (`Statifier.Machine.Identity`, ADR-0052) | This engine | Every publish that changes a byte of the SCXML |
+| **Revision** | The document id plus an ordinal or hash | The host's revision store (a `statifier_blocks` document carries the ordinal in its `revision` field) | Every saved edit |
+| **Chart** | The SHA-256 hash of the SCXML source bytes handed to `Statifier.compile/2`, plus the optional `:chart_name` and `:chart_version` (`Statifier.Machine.Identity`, ADR-0052) | This engine | Every publish that changes a byte of the SCXML, or its name or version |
 | **Execution** | A minted id, pinned to one chart hash | The persistence package (`statifier_persistence`) or the host | Re-pinned only by an explicit migration |
 
 A position (below) is the saved state of one execution, and it belongs to
-the chart that execution is pinned to. Two revisions whose emitted SCXML is
-byte-identical are one chart. Publishing a new chart re-pins no execution:
-an execution moves to another chart only when a host migrates it on
-purpose, by story B below.
+the chart that execution is pinned to. Byte-identical SCXML compiled under
+the same name and version is one chart. Publishing a new chart re-pins no
+execution: an execution moves to another chart only when a host migrates it
+on purpose, by story B below.
 
 ## The hazard
 
