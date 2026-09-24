@@ -3,9 +3,11 @@ defmodule Statifier.Session.InvokeHandlerInheritanceTest do
 
   # Every test here starts a real child session (one, a real grandchild too)
   # on `Statifier.SessionSupervisor`, the module-qualified singleton
-  # `test/test_helper.exs` places once for the whole run, and registers a
-  # named listener process. `async: false` for the same reasons
-  # `invoke_observer_inheritance_test.exs` and `invoke_handler_test.exs` are.
+  # `test/test_helper.exs` places once for the whole run, and points the
+  # probe handler at the current test's pid (`listen/0`). `async: false` for
+  # the same reasons `invoke_observer_inheritance_test.exs` and
+  # `invoke_handler_test.exs` are, and because that pointer is one slot for
+  # the whole module.
 
   alias Statifier.{Compiler, Effect, Lowering, Parser, Session, StreamOrder, Validator}
   alias Statifier.Effect.Invoke
@@ -15,6 +17,13 @@ defmodule Statifier.Session.InvokeHandlerInheritanceTest do
   # it reports the *performing session's own id* alongside the invoke id, so
   # a test can tell a child's invocation from a grandchild's when both carry
   # the same document-authored `<invoke id>`.
+  #
+  # The report goes to the pid `listen/0` stored for the current test, not
+  # to a registered name: ExUnit does not wait for a finished test's process
+  # to exit before it starts the next test, so a fixed name registered by
+  # every test could still be held by an earlier test's process ("could not
+  # register ... the name is already taken"). Storing the pid overwrites the
+  # slot instead of claiming it, so nothing can collide.
   defmodule ProbeHandler do
     @moduledoc false
     @behaviour Statifier.Invoke.Handler
@@ -32,7 +41,11 @@ defmodule Statifier.Session.InvokeHandlerInheritanceTest do
 
     @impl Statifier.Invoke.Handler
     def perform(invoke_id, ctx) do
-      send(:invoke_handler_inheritance_listener, {:performed, ctx.session_id, invoke_id})
+      case :persistent_term.get({__MODULE__, :listener}, nil) do
+        nil -> :ok
+        listener -> send(listener, {:performed, ctx.session_id, invoke_id})
+      end
+
       :ok
     end
   end
@@ -95,8 +108,13 @@ defmodule Statifier.Session.InvokeHandlerInheritanceTest do
     """
   end
 
+  defp listen do
+    :persistent_term.put({ProbeHandler, :listener}, self())
+    on_exit(fn -> :persistent_term.erase({ProbeHandler, :listener}) end)
+  end
+
   defp start_parent(child_xml, opts) do
-    Process.register(self(), :invoke_handler_inheritance_listener)
+    listen()
     machine = compile!(parent_doc(child_xml))
     {:ok, parent} = Session.start_link(machine, [invoke_handlers: @handlers] ++ opts)
 
@@ -120,8 +138,10 @@ defmodule Statifier.Session.InvokeHandlerInheritanceTest do
   test "default off: the child cannot resolve a type the parent registered" do
     {_parent, child_pid} = start_parent(@probing_child_xml, [])
 
+    child_session_id = Session.session_id(child_pid)
+
     assert configuration(child_pid) == MapSet.new(["unresolved"])
-    refute_receive {:performed, _session_id, "cinv"}, 200
+    refute_receive {:performed, ^child_session_id, "cinv"}, 200
   end
 
   # sabotage: `inherited_invoke_handler_opts/1`'s `true`-shaped clause is
