@@ -103,7 +103,7 @@
     },
     "host": {
       "type": "object",
-      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. With no host object a case registers nothing. declared_events and expect_accepts are present together or not at all: the host checks the chart's declaration of the event names it accepts before it runs the case. to_source and expect_diff are present together or not at all, and mapping and expect_compatible_at each need them: the host diffs the case's chart to a second chart before it runs the case, and after the last step asks whether the position the steps left is untouched by the edit.",
+      "description": "Optional, and carried by no scion or w3c case: what a statifier case needs from the host running it. The host registers each of send_types with an Event I/O Processor of its own, which records every send it is handed and delivers none of them; a delayed send handed to it is its timer, and it never fires one. An expect_sends item's outcome says what more the host does with that send: reports it failed, or is handed a cancel for it. With no host object a case registers nothing. declared_events and expect_accepts are present together or not at all: the host checks the chart's declaration of the event names it accepts before it runs the case. to_source and expect_diff are present together or not at all, and mapping and expect_compatible_at each need them: the host diffs the case's chart to a second chart before it runs the case, and after the last step asks whether the position the steps left is untouched by the edit.",
       "properties": {
         "send_types": {
           "type": "array",
@@ -149,6 +149,10 @@
                 "type": "string",
                 "description": "Present only when the document names the send with an id or idlocation attribute: the sendid the delivered event carries. A generated id is never stated, because it is the implementation's own.",
                 "minLength": 1
+              },
+              "outcome": {
+                "description": "Present only when the host does more with the send than record it (ADR-0070's 2026-09-23 Amendment). fail: the host reports that it could not deliver the send, as soon as it is handed it and before the configuration that follows is read, so the sender takes error.communication carrying the send's sendid on its internal queue and the case's configurations say what it made of it. cancelled: a cancel naming the send, by its sendid, reaches the host's processor after the send is handed; only a delayed send can be cancelled, and a case agrees only when every cancelled send's item says so. With no outcome the host records the send and does nothing else with it.",
+                "enum": ["fail", "cancelled"]
               }
             },
             "required": ["type", "target", "event"],

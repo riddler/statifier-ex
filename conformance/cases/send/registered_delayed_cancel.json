@@ -1,5 +1,5 @@
 {
-  "description": "A delayed send of a registered type is handed to the host's processor with its delay, and the SCXML processor schedules nothing for it: its event never arrives back on the chart's own queue, so the click, not the reminder, moves the chart, and the chart then cancels the send.",
+  "description": "A delayed send of a registered type is handed to the host's processor with its delay, and the host never fires it, so the click, not the reminder, moves the chart; the cancel the chart then runs, naming the send, reaches the processor.",
   "initial_configuration": ["awaiting_click"],
   "steps": [
     {
@@ -15,7 +15,8 @@
         "target": "reminders",
         "event": { "name": "impression.reminder" },
         "delay_ms": 10,
-        "send_id": "reminder"
+        "send_id": "reminder",
+        "outcome": "cancelled"
       }
     ]
   }

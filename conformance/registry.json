@@ -1,6 +1,6 @@
 {
   "implementation": "statifier-ex",
-  "corpus_hash": "sha256:3912d79c50c449bb3c397346e16430f0d7d8bd87724b3cfa456a30a896d0b8f7",
+  "corpus_hash": "sha256:c79612f0e9609bdc85bbd3d8d2dcb14840ec14922d1b93a53cafa80e08529b34",
   "claims": ["scion","statifier","w3c-mandatory","w3c-optional"],
   "entries": [
     {"case_id":"scion/actionSend/send1","suite":"scion"},
@@ -147,6 +147,7 @@
     {"case_id":"statifier/library/patron_reinstated_after_block","suite":"statifier"},
     {"case_id":"statifier/send/registered_delayed_cancel","suite":"statifier"},
     {"case_id":"statifier/send/registered_immediate","suite":"statifier"},
+    {"case_id":"statifier/send/registered_send_failed","suite":"statifier"},
     {"case_id":"statifier/send/unregistered_type","suite":"statifier"},
     {"case_id":"statifier/system_variables/registered_ioprocessors","suite":"statifier"},
     {"case_id":"w3c/test144","suite":"w3c"},

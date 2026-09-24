@@ -19,14 +19,14 @@ defmodule Mix.Statifier.Corpus.Json do
   # suite; each other object's keys appear here in its schema's order too -
   # a host is send_types, expect_sends, declared_events, expect_accepts,
   # to_source, mapping, expect_diff, expect_compatible_at; an `expect_sends`
-  # item is type, target, event, delay_ms, send_id; an `expect_accepts`
+  # item is type, target, event, delay_ms, send_id, outcome; an `expect_accepts`
   # object is unreachable, undeclared; an `expect_diff` object is class,
   # reasons; and a reason is reason, then whichever of state, to_state,
   # fields, index, t_index, descriptor, data_id it carries.
   @key_order ~w(implementation id case_id corpus_hash claims entries suite file
                 case_count name url revision key reason detail adr spec conformance description
                 required_features source initial_configuration steps type target
-                event data delay_ms send_id configuration upstream document license notice
+                event data delay_ms send_id outcome configuration upstream document license notice
                 modified host send_types
                 expect_sends declared_events expect_accepts unreachable undeclared
                 to_source mapping expect_diff class reasons state to_state fields index

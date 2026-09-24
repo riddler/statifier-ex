@@ -322,3 +322,63 @@ disagrees. Both run an authored case through
 runs it, since `mix test` has no module to run. Which authored cases are
 claimed, and how many, is read from `conformance/registry.json`, per
 decision 8.
+
+## Amendment (2026-09-23): an `expect_sends` item may carry an `outcome`
+
+Status: proposed (2026-09-23)
+
+This Amendment adds one optional field to the item shape of decision 5's
+`expect_sends` and changes nothing else: the `host` object keeps its
+members, every decision above stands as written, and no text above is
+edited. It is this repository's first foot Amendment. ADR-0001 says an ADR
+is amended by a new ADR that supersedes it, but this change supersedes
+nothing: it widens one item shape that decision 5 left to the change that
+authored the first case, so the maintainer chose to record it here, at the
+foot, with a Status line of its own. Anchors below were read on `main` at
+`9bea212` unless they name this change.
+
+**Why.** Decision 5's host records every send it is handed and delivers
+none of them (`conformance/schema/case.json`, the `host` object's
+description). Nothing in the case shape told a runner to report a send as
+failed through `Statifier.Session.failed_send/3`, ADR-0069 decision 5's
+door, so a case in which the sender reads `error.communication` carrying
+the send's `sendid` could not be written; the door was covered only by
+`Statifier.Session.FailedSendTest`. And the authored case
+`statifier/send/registered_delayed_cancel` said in its description that
+the chart cancels the send, which the runner did not check: the runner
+read the processor's cancel messages and dropped them
+(`Mix.Statifier.Corpus.HostCase`'s `collect/1` at `9bea212`).
+
+**The field.** An `expect_sends` item may carry `outcome`, one of two
+strings:
+
+- `"fail"`: the runner reports the send handed at that item's position
+  through `Statifier.Session.failed_send/3` as soon as it is handed, and
+  before it reads the configuration that follows. The sender then takes
+  `error.communication` carrying the send's `sendid` on its internal queue,
+  and the case's configurations say what the chart did with it.
+- `"cancelled"`: a `<cancel>` naming the send, by its send id, must reach
+  the host's processor after the send was handed; the case disagrees when
+  none does. Only a delayed send can be cancelled, because a cancel reaches
+  a processor only for a delayed send it holds
+  (`Statifier.Send.Processor`'s moduledoc, "What `cancel/2` is handed").
+
+An item with no `outcome` is a send the host records and does nothing more
+with, and it claims nothing about a cancel: a case written before this
+Amendment means what it meant. The field is a closed enumeration, so
+whatever a runner does with a send is one of three things.
+
+**Where it lives.** The field and its meaning are in
+`conformance/schema/case.json`, and `Mix.Statifier.Corpus.HostCase`
+performs it (both changed by this change). Two authored cases use it:
+`statifier/send/registered_send_failed` (a `"fail"` item), and
+`statifier/send/registered_delayed_cancel`, rewritten in place under its
+own path so its ratchet entry in `test/passing_tests.json` stands, whose
+description now claims only what the runner checks (a `"cancelled"` item).
+
+**What would reopen this Amendment.** A case that needs the host to do a
+third thing with a send - fire a delayed send, report a failure later than
+the moment it is handed or with a reason the chart reads, or deliver the
+event to a target; a change to `Statifier.Session.failed_send/3`'s
+contract; or a case that needs to claim that a send was NOT cancelled,
+which an item without `outcome` does not claim.

@@ -1,0 +1,46 @@
+{
+  "id": "statifier/send/notice_or_pickup",
+  "suite": "statifier",
+  "spec": "send",
+  "conformance": null,
+  "description": "The host reports the hold notice failed, and the pickup timer is cancelled before it fires.",
+  "required_features": [
+    "basic_states",
+    "cancel_elements",
+    "event_transitions",
+    "onentry_actions",
+    "send_elements"
+  ],
+  "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"predicator\" initial=\"notifying\">\n    <state id=\"notifying\">\n        <onentry>\n            <send type=\"library:notice\" target=\"patron\" event=\"hold.ready\" id=\"notice\"/>\n            <send type=\"library:timer\" target=\"hold_queue\" event=\"pickup.expired\" id=\"pickup\" delay=\"10ms\"/>\n        </onentry>\n        <transition event=\"error.communication\" target=\"notice_failed\"/>\n    </state>\n    <state id=\"notice_failed\">\n        <onentry>\n            <cancel sendid=\"pickup\"/>\n        </onentry>\n    </state>\n</scxml>\n",
+  "initial_configuration": [
+    "notice_failed"
+  ],
+  "steps": [],
+  "host": {
+    "send_types": [
+      "library:notice",
+      "library:timer"
+    ],
+    "expect_sends": [
+      {
+        "type": "library:notice",
+        "target": "patron",
+        "event": {
+          "name": "hold.ready"
+        },
+        "send_id": "notice",
+        "outcome": "fail"
+      },
+      {
+        "type": "library:timer",
+        "target": "hold_queue",
+        "event": {
+          "name": "pickup.expired"
+        },
+        "delay_ms": 10,
+        "send_id": "pickup",
+        "outcome": "cancelled"
+      }
+    ]
+  }
+}
