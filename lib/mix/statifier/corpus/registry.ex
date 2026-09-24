@@ -5,17 +5,18 @@ defmodule Mix.Statifier.Corpus.Registry do
 
   `test/passing_tests.json` stays ADR-0006's ratchet file and `mix
   test.baseline` the only thing that grows it; the emitter calls `derive/4`
-  with the ratchet's SCION and W3C paths and writes what `encode/1` returns.
-  Nothing else writes the registry. The `internal_tests` globs never reach
-  this module: they name this repository's unit tests, not corpus cases.
+  with the ratchet's SCION, W3C and statifier paths and writes what
+  `encode/1` returns. Nothing else writes the registry. The `internal_tests`
+  globs never reach this module: they name this repository's unit tests, not
+  corpus cases.
 
-  Each ratchet path names the generated test module of exactly one corpus
-  case, and that case becomes one entry `{case_id, suite}`. A path that names
-  no case, or a path two cases share, stops the derivation naming it. A case
-  in the corpus but not in the ratchet has no entry: its absence is the claim
-  that statifier-ex does not pass it. A case with no generated test module -
-  a `statifier` case - has no ratchet path, so it enters the registry only
-  once the ratchet can name it.
+  Each ratchet path names exactly one corpus case - an upstream case by its
+  generated test module, an authored `statifier` case, which has none, by
+  its JSON file under `conformance/cases/` - and that case becomes one entry
+  `{case_id, suite}`. A path that names no case, or a path two cases share,
+  stops the derivation naming it. A case in the corpus but not in the
+  ratchet has no entry: its absence is the claim that statifier-ex does not
+  pass it.
 
   Claims are per suite, with no tiers: `scion`, `w3c-mandatory`,
   `w3c-optional` and `statifier`, the W3C suite split by each case's
@@ -35,9 +36,9 @@ defmodule Mix.Statifier.Corpus.Registry do
 
   @doc """
   Derives the registry from `cases` (the corpus), `ratchet` (the ratchet's
-  SCION and W3C paths, globs already expanded), the corpus hash the cases
-  were written under, and `generated_path`, which names a case's generated
-  test module or returns `nil` when it has none.
+  SCION, W3C and statifier paths, globs already expanded), the corpus hash
+  the cases were written under, and `ratchet_path`, which names the path the
+  ratchet names a case by or returns `nil` when it has none.
 
   ## Examples
 
@@ -60,12 +61,12 @@ defmodule Mix.Statifier.Corpus.Registry do
           cases :: [map()],
           ratchet :: Enumerable.t(),
           corpus_hash :: String.t(),
-          generated_path :: (map() -> Path.t() | nil)
+          ratchet_path :: (map() -> Path.t() | nil)
         ) :: {:ok, t()} | {:error, String.t()}
-  def derive(cases, ratchet, corpus_hash, generated_path) do
+  def derive(cases, ratchet, corpus_hash, ratchet_path) do
     by_path =
       cases
-      |> Enum.map(&{generated_path.(&1), &1})
+      |> Enum.map(&{ratchet_path.(&1), &1})
       |> Enum.reject(fn {path, _case} -> is_nil(path) end)
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
 

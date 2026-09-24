@@ -260,11 +260,14 @@ been trusted for a year.
 
 ## The regression ratchet
 
-- `test/passing_tests.json` - the registry of tests that must always pass. Three
-  lists (`internal_tests`, `scion_tests`, `w3c_tests`), whose entries are literal
-  paths or globs. The internal list is globbed, so unit tests are covered the moment
-  they are written; the conformance lists start empty and are grown one verified test
-  at a time.
+- `test/passing_tests.json` - the registry of tests that must always pass. Four
+  lists (`internal_tests`, `scion_tests`, `w3c_tests`, `statifier_tests`), whose
+  entries are literal paths or globs. The internal list is globbed, so unit tests are
+  covered the moment they are written; the conformance lists start empty and are
+  grown one verified test at a time. A `statifier_tests` entry is an authored
+  conformance case's JSON file under `conformance/cases/`: the case has no test
+  module, so both tasks below run it through `Mix.Statifier.Corpus.Runner`, as
+  `mix statifier.corpus` runs it, instead of `mix test`.
 - `mix test.regression` - runs exactly what the registry expands to, including the
   tags the excluded-by-default suites need. Any failure is a blocking regression, and
   an entry that matches no file on disk fails the run too: silently dropping a deleted
@@ -279,8 +282,9 @@ been trusted for a year.
 
 ### Per-corpus coverage figures
 
-Both tasks report per-corpus coverage - SCION and W3C separately, passing/total
-and a percentage - but each uses a different numerator. `mix test.baseline`'s
+Both tasks report per-corpus coverage - SCION, W3C and the authored `statifier`
+cases separately, passing/total and a percentage - but each uses a different
+numerator. `mix test.baseline`'s
 figure is the measured one: ratcheted tests plus every newly-passing candidate
 found in that scan. `mix test.regression`'s figure is the floor: ratcheted
 tests only, since that task never runs a file outside the registry. Both are

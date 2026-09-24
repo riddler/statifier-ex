@@ -3,6 +3,8 @@ defmodule Mix.Statifier.Corpus.AuthoredTest do
 
   import Statifier.TmpDir, only: [setup_tmp_dir: 1]
 
+  doctest Mix.Statifier.Corpus.Authored
+
   alias Mix.Statifier.Corpus.{Authored, Upstream}
 
   # The reader of conformance/cases/, against a scratch root per test.

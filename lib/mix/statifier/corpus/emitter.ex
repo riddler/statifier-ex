@@ -27,7 +27,7 @@ defmodule Mix.Statifier.Corpus.Emitter do
       naming the directory: it is not expanded into the upstream cases under
       it, so the file does not depend on the fetched tree.
     * `conformance/registry.json` - statifier-ex's claim against the corpus,
-      derived from the ratchet's SCION and W3C lists by
+      derived from the ratchet's SCION, W3C and statifier lists by
       `Mix.Statifier.Corpus.Registry` and pinned by the `corpus_hash`. A
       ratchet path that names no corpus case, or a ratchet that names none,
       stops the emit and nothing is written.
@@ -230,6 +230,16 @@ defmodule Mix.Statifier.Corpus.Emitter do
   end
 
   def generated_path(_corpus_case, _root), do: nil
+
+  @doc """
+  The path, relative to the project root, `test/passing_tests.json` names a
+  corpus case by: its generated test module (`generated_path/2`) for an
+  upstream case, and its JSON file under `conformance/cases/`
+  (`Mix.Statifier.Corpus.Authored.case_path/1`) for an authored one.
+  """
+  @spec ratchet_path(corpus_case :: map(), root :: Path.t()) :: Path.t() | nil
+  def ratchet_path(corpus_case, root),
+    do: generated_path(corpus_case, root) || Authored.case_path(corpus_case)
 
   # --- emit ----------------------------------------------------------------
 
@@ -442,7 +452,7 @@ defmodule Mix.Statifier.Corpus.Emitter do
     hash = @suites |> Enum.flat_map(&List.wrap(files[corpus_file(&1)])) |> corpus_hash()
 
     with {:ok, registry} <-
-           Registry.derive(cases, ratchet, hash, &generated_path(&1, root)) do
+           Registry.derive(cases, ratchet, hash, &ratchet_path(&1, root)) do
       by_id = Map.new(cases, &{&1["id"], &1})
 
       claims =
@@ -496,7 +506,7 @@ defmodule Mix.Statifier.Corpus.Emitter do
   end
 
   defp ratcheted?(corpus_case, ratchet, root) do
-    case generated_path(corpus_case, root) do
+    case ratchet_path(corpus_case, root) do
       nil -> false
       path -> MapSet.member?(ratchet, path)
     end

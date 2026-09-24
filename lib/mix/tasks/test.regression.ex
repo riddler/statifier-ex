@@ -8,6 +8,12 @@ defmodule Mix.Tasks.Test.Regression do
   missing feature. The conformance suites are excluded from `mix test` by
   default; this task includes the tags its registry entries need.
 
+  The `statifier_tests` list names authored conformance cases by their JSON
+  files under `conformance/cases/` (ADR-0070 decision 5). They have no test
+  module, so this task runs them through `Mix.Statifier.Corpus.Runner` -
+  as `mix statifier.corpus` runs them - once `mix test` has finished, and
+  any one that disagrees with its expectation is a regression too.
+
   ## Usage
 
       mix test.regression
@@ -34,6 +40,7 @@ defmodule Mix.Tasks.Test.Regression do
 
   use Mix.Task
 
+  alias Mix.Statifier.Corpus.Runner
   alias Mix.Statifier.RegressionRegistry
 
   @switches [registry: :string]
@@ -51,9 +58,12 @@ defmodule Mix.Tasks.Test.Regression do
   Runs the ratchet and reports the outcome instead of halting.
 
   `opts[:runner]` replaces the `mix test` shell-out with a function of the
-  argument list returning an exit status, `opts[:root]` moves the corpus scan
-  behind the coverage block to a fixture tree. Both exist so the tests can
-  drive this without spawning a nested `mix test`.
+  argument list returning an exit status, `opts[:case_runner]` replaces
+  running the authored cases with a function of their paths returning what
+  `Mix.Statifier.Corpus.Runner.run_paths/2` returns, and `opts[:root]` moves
+  the corpus scan behind the coverage block, and the authored cases, to a
+  fixture tree. All three exist so the tests can drive this without spawning
+  a nested `mix test` or starting the session runtime.
   """
   @spec execute(argv :: [String.t()], opts :: keyword()) :: :ok | {:error, String.t()}
   def execute(argv, opts \\ []) do
@@ -61,10 +71,16 @@ defmodule Mix.Tasks.Test.Regression do
     path = parsed[:registry] || RegressionRegistry.default_path()
     runner = Keyword.get(opts, :runner, &mix_test/1)
     root = Keyword.get(opts, :root, ".")
+    case_runner = Keyword.get(opts, :case_runner, &run_authored(&1, root))
 
     with {:ok, registry} <- RegressionRegistry.load(path),
          {:ok, files} <- resolve(registry, path) do
-      run_tests(files, runner, root)
+      {authored, modules} = Enum.split_with(files, &RegressionRegistry.authored?/1)
+
+      with :ok <- run_tests(modules, runner),
+           :ok <- run_cases(authored, case_runner) do
+        print_coverage(files, root)
+      end
     end
   end
 
@@ -83,14 +99,15 @@ defmodule Mix.Tasks.Test.Regression do
     end
   end
 
-  defp run_tests(files, runner, root) do
+  defp run_tests([], _runner), do: :ok
+
+  defp run_tests(files, runner) do
     count = length(files)
     Mix.shell().info("Running #{count} regression test file#{plural(files, "", "s")}...")
 
     case runner.(files ++ RegressionRegistry.test_args(files)) do
       0 ->
         Mix.shell().info("All #{count} regression test files passed.")
-        print_coverage(files, root)
         :ok
 
       status ->
@@ -98,6 +115,39 @@ defmodule Mix.Tasks.Test.Regression do
          "regression failure (mix test exited #{status}). " <>
            "Fix the code, or run `mix test.baseline` if the registry is wrong."}
     end
+  end
+
+  defp run_cases([], _case_runner), do: :ok
+
+  defp run_cases(paths, case_runner) do
+    count = length(paths)
+    Mix.shell().info("Running #{count} ratcheted authored case#{plural(paths, "", "s")}...")
+
+    with {:ok, outcomes} <- case_runner.(paths) do
+      outcomes
+      |> Enum.flat_map(fn
+        {path, {:disagree, message}} -> [{path, message}]
+        {_path, :agree} -> []
+      end)
+      |> judged(count)
+    end
+  end
+
+  defp judged([], count) do
+    Mix.shell().info("All #{count} ratcheted authored cases agree.")
+    :ok
+  end
+
+  defp judged(disagreeing, _count) do
+    {:error,
+     "regression failure: #{length(disagreeing)} ratcheted authored case(s) disagree " <>
+       "with their expectation:\n" <>
+       Enum.map_join(disagreeing, "\n", fn {path, message} -> "  - #{path}: #{message}" end)}
+  end
+
+  defp run_authored(paths, root) do
+    Runner.start_runtime()
+    Runner.run_paths(paths, root)
   end
 
   defp print_coverage(files, root) do

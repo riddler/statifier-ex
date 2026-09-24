@@ -95,11 +95,13 @@ registry records the hash; the tag is recorded beside the vendored copy (see
 
 **The `statifier` claim.** The `statifier` suite holds cases this
 repository authors itself (ADR-0070 decision 5). statifier-ex's own
-registry is derived from the ratchet's SCION and W3C lists, each path naming
-one generated test module, so a `statifier` case, which has no generated
-test module, has no ratchet path: it enters statifier-ex's registry only
-through the ratchet, once the ratchet can name it. Until then statifier-ex's
-registry has no `statifier` entry and makes no `statifier` claim.
+registry is derived from the ratchet's SCION, W3C and statifier lists. A
+SCION or W3C path names one generated test module; a `statifier` case has
+no generated test module, so the ratchet names it by its JSON file under
+`cases/` (`Mix.Statifier.Corpus.Authored.case_path/1`). An authored case
+enters statifier-ex's registry the way any other case does: `mix
+test.baseline` runs it and adds its path once it agrees, and the next emit
+derives its entry.
 
 ## Ordering and encoding
 

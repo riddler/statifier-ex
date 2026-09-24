@@ -23,6 +23,29 @@ defmodule Mix.Tasks.Test.BaselineTest do
     end
   end
 
+  # The authored cases' runner: every path it is handed agrees except those in
+  # `disagreeing`. It reports the batch it was handed, so a test can see an
+  # authored case never reached `mix test`.
+  defp case_runner(disagreeing) do
+    parent = self()
+
+    fn paths ->
+      send(parent, {:cases, paths})
+
+      {:ok,
+       Enum.map(paths, fn path ->
+         if path in disagreeing, do: {path, {:disagree, "wrong state"}}, else: {path, :agree}
+       end)}
+    end
+  end
+
+  defp authored(tmp_dir, relative) do
+    path = Path.join([tmp_dir, "conformance/cases", relative])
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "{}")
+    path
+  end
+
   defp registry(tmp_dir, contents \\ %{}) do
     path = Path.join(tmp_dir, "passing_tests.json")
     File.write!(path, RegressionRegistry.encode(contents))
@@ -125,6 +148,33 @@ defmodule Mix.Tasks.Test.BaselineTest do
 
       assert_received {:ran, ^w3c}
       refute_received {:ran, _other}
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: partition/2 handing authored cases to the mix test runner
+    #           (the split dropped) -> red, the stub runner sees them and the
+    #           case runner never does
+    test "--only statifier --add runs the authored cases through the case runner and ratchets the agreeing ones",
+         %{tmp_dir: tmp_dir} do
+      agreeing = authored(tmp_dir, "send/registered_immediate.json")
+      disagreeing = authored(tmp_dir, "send/unregistered_type.json")
+      corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      path = registry(tmp_dir)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Baseline.execute(
+                     ["--only", "statifier", "--add", "--registry", path],
+                     opts(tmp_dir, case_runner: case_runner([disagreeing]))
+                   )
+        end)
+
+      assert_received {:cases, [^agreeing, ^disagreeing]}
+      refute_received {:ran, _file}
+      assert output =~ "1 newly passing, 1 still failing"
+      assert output =~ "statifier: 1/2 (50.0%)"
+      assert reload(path)["statifier_tests"] == [agreeing]
     end
 
     @tag :isolated_tmp_dir
@@ -286,6 +336,30 @@ defmodule Mix.Tasks.Test.BaselineTest do
         assert message =~ bad
       end)
 
+      assert reload(path) == %{}
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: partition/2 dropping the disagreeing authored cases from its
+    #           failing list -> red, the disagreeing case is ratcheted in
+    test "a disagreeing authored case leaves the registry untouched", %{tmp_dir: tmp_dir} do
+      good = corpus(tmp_dir, "scion_tests/basic0_test.exs")
+      bad = authored(tmp_dir, "send/registered_immediate.json")
+      path = registry(tmp_dir)
+
+      capture_io(fn ->
+        assert {:error, message} =
+                 Baseline.execute(
+                   ["add", good, bad, "--registry", path],
+                   opts(tmp_dir, case_runner: case_runner([bad]))
+                 )
+
+        assert message =~ "do not pass"
+        assert message =~ bad
+      end)
+
+      assert_received {:ran, ^good}
+      assert_received {:cases, [^bad]}
       assert reload(path) == %{}
     end
 

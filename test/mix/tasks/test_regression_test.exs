@@ -20,6 +20,15 @@ defmodule Mix.Tasks.Test.RegressionTest do
     end
   end
 
+  defp case_runner(outcome) do
+    parent = self()
+
+    fn paths ->
+      send(parent, {:cases, paths})
+      {:ok, Enum.map(paths, &{&1, outcome})}
+    end
+  end
+
   defp registry(tmp_dir, contents) do
     path = Path.join(tmp_dir, "passing_tests.json")
     File.write!(path, RegressionRegistry.encode(contents))
@@ -48,6 +57,53 @@ defmodule Mix.Tasks.Test.RegressionTest do
     assert args == Enum.sort([scion, internal]) ++ ["--include", "scion"]
     assert output =~ "Running 2 regression test files..."
     assert output =~ "All 2 regression test files passed."
+  end
+
+  @tag :isolated_tmp_dir
+  # sabotage: execute/2 handing every resolved file to the mix test runner
+  #           (the authored split dropped) -> red, the JSON file reaches
+  #           mix test and the case runner never runs
+  test "runs the ratcheted authored cases through the case runner, not mix test", %{
+    tmp_dir: tmp_dir
+  } do
+    scion = test_file(tmp_dir, "scion_tests/basic0_test.exs")
+    case_file = test_file(tmp_dir, "conformance/cases/send/registered_immediate.json")
+    path = registry(tmp_dir, %{"scion_tests" => [scion], "statifier_tests" => [case_file]})
+
+    output =
+      capture_io(fn ->
+        assert :ok =
+                 Regression.execute(["--registry", path],
+                   runner: runner(0),
+                   case_runner: case_runner(:agree)
+                 )
+      end)
+
+    assert_received {:ran, args}
+    assert args == [scion, "--include", "scion"]
+    assert_received {:cases, [^case_file]}
+    assert output =~ "Running 1 ratcheted authored case..."
+    assert output =~ "All 1 ratcheted authored cases agree."
+  end
+
+  @tag :isolated_tmp_dir
+  # sabotage: run_cases/2 dropping the disagreeing outcomes -> red
+  test "a ratcheted authored case that disagrees is a regression", %{tmp_dir: tmp_dir} do
+    case_file = test_file(tmp_dir, "conformance/cases/send/registered_immediate.json")
+    path = registry(tmp_dir, %{"statifier_tests" => [case_file]})
+
+    capture_io(fn ->
+      assert {:error, message} =
+               Regression.execute(["--registry", path],
+                 runner: runner(0),
+                 case_runner: case_runner({:disagree, "Expected active states"})
+               )
+
+      assert message =~ "1 ratcheted authored case(s) disagree"
+      assert message =~ "#{case_file}: Expected active states"
+    end)
+
+    refute_received {:ran, _args}
   end
 
   @tag :isolated_tmp_dir

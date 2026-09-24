@@ -38,14 +38,13 @@ defmodule Mix.Tasks.Statifier.Corpus do
 
   use Mix.Task
 
-  alias Mix.Statifier.Corpus.Emitter
+  alias Mix.Statifier.Corpus.{Emitter, Runner}
 
   @switches [check: :boolean, scratch: :string]
 
   @impl Mix.Task
   def run(argv) do
-    Mix.Task.run("app.start")
-    start_runtime()
+    Runner.start_runtime()
 
     case execute(argv) do
       :ok -> :ok
@@ -69,13 +68,6 @@ defmodule Mix.Tasks.Statifier.Corpus do
       with {:ok, report} <- Emitter.check(config), do: print(report, "checked")
     else
       with {:ok, report} <- Emitter.emit(config), do: print(report, "ran")
-    end
-  end
-
-  defp start_runtime do
-    case Statifier.Supervisor.start_link([]) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
     end
   end
 

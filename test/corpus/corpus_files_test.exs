@@ -184,11 +184,13 @@ defmodule Corpus.CorpusFilesTest do
     # sabotage: n/a - asserts the committed generated file against the
     # committed ratchet, no lib/ behavior; deleting one entry line from
     # conformance/registry.json -> red
-    test "has one entry per SCION and W3C ratchet path, read from both files" do
+    test "has one entry per SCION, W3C and statifier ratchet path, read from both files" do
       registry = "conformance/registry.json" |> File.read!() |> JSON.decode!()
       {:ok, ratchet} = RegressionRegistry.load()
 
-      ratcheted = length(ratchet["scion_tests"]) + length(ratchet["w3c_tests"])
+      ratcheted =
+        length(ratchet["scion_tests"]) + length(ratchet["w3c_tests"]) +
+          length(ratchet["statifier_tests"])
 
       assert ratcheted > 0, "the ratchet names no conformance test, so nothing is checked"
       assert length(registry["entries"]) == ratcheted
@@ -197,7 +199,8 @@ defmodule Corpus.CorpusFilesTest do
     # sabotage: n/a - asserts the committed generated file, no lib/ behavior;
     # changing one entry's suite in conformance/registry.json -> red
     test "every entry is a corpus case with the same suite, none from an internal glob" do
-      suites = Map.new(all_cases(), &{&1["id"], &1["suite"]})
+      every_case = all_cases() ++ cases("statifier")
+      suites = Map.new(every_case, &{&1["id"], &1["suite"]})
       registry = "conformance/registry.json" |> File.read!() |> JSON.decode!()
       {:ok, ratchet} = RegressionRegistry.load()
 
@@ -212,8 +215,8 @@ defmodule Corpus.CorpusFilesTest do
       for %{"case_id" => id, "suite" => suite} <- registry["entries"] do
         assert Map.fetch(suites, id) == {:ok, suite}, id
 
-        corpus_case = Enum.find(all_cases(), &(&1["id"] == id))
-        refute MapSet.member?(internal, Emitter.generated_path(corpus_case, ".")), id
+        corpus_case = Enum.find(every_case, &(&1["id"] == id))
+        refute MapSet.member?(internal, Emitter.ratchet_path(corpus_case, ".")), id
       end
 
       manifest = "conformance/manifest.json" |> File.read!() |> JSON.decode!()
@@ -268,8 +271,8 @@ defmodule Corpus.CorpusFilesTest do
           suite != "statifier",
           do: assert(run == length(generated(suite)))
 
-      # An authored case has no generated module and no ratchet entry; every
-      # one ran, and the check refuses one that disagrees.
+      # An authored case has no generated module; the ratchet names it by its
+      # JSON file. Every one ran, and the check refuses one that disagrees.
       statifier = length(cases("statifier"))
       assert {"statifier", ^statifier, ^statifier} = List.keyfind(report.counts, "statifier", 0)
     end

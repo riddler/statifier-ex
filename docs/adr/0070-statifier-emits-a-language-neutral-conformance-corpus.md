@@ -283,3 +283,33 @@ than the sentence reads; every other claim in this record was verified
 against `main` at `f976629` before the flip, the statements this record
 pins to `abf713c` included, which are read as of that commit and not as of
 today's tree.
+
+## Note (2026-09-23): the ratchet has a `statifier` list, so authored cases are claimed like any other
+
+This note decides nothing new. Decision 3 says the emitter writes the
+registry from `test/passing_tests.json`'s SCION and W3C lists; read with
+decision 4's `statifier` claim, that left the claim unreachable, because
+an authored case has no generated test module for either list to name. At
+`716c4d9` the registry made no `statifier` claim although every authored
+case agreed when run. No decision, consequence or Related entry changes,
+and the Status line's extends clause stands as written: the ratchet file
+is still `test/passing_tests.json`, `mix test.baseline` still its only
+grower, and the emitter still the registry's only writer.
+
+**The ratchet names an authored case by its JSON file.** The ratchet file
+gains a fourth list, `statifier_tests`, whose entries are the authored
+cases' `.json` files under `conformance/cases/`
+(`Mix.Statifier.Corpus.Authored.case_path/1`). The emitter maps a corpus
+case to the path the ratchet names it by through
+`Mix.Statifier.Corpus.Emitter.ratchet_path/2`, and derives the registry
+from all three conformance lists, so decision 3's "SCION and W3C lists"
+now reads as the SCION, W3C and statifier lists.
+
+**The ratchet's rules hold for them unchanged.** `mix test.baseline` adds
+an authored case only after running it and seeing it agree, and `mix
+test.regression` re-runs every listed case and fails on one that
+disagrees. Both run an authored case through
+`Mix.Statifier.Corpus.Runner.run_paths/2`, as `mix statifier.corpus`
+runs it, since `mix test` has no module to run. Which authored cases are
+claimed, and how many, is read from `conformance/registry.json`, per
+decision 8.
