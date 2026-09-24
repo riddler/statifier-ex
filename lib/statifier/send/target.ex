@@ -109,6 +109,14 @@ defmodule Statifier.Send.Target do
   `http://www.w3.org/TR/scxml/`)" - not borrowed from `<send>`'s own short
   form.
 
+  `"http://www.w3.org/TR/scxml"`, the same URI without its trailing slash,
+  is a second short form on the same 6.4.2 licence. The W3C test suite's
+  own documents write it (test216's `<invoke>` does), so refusing it would
+  refuse a spelling the spec's authors use for the type 6.4.2 mandates. It
+  is accepted for `<invoke type>` only: `supported_type?/1` does not
+  accept it for `<send>`, whose 6.2.5 URI is a different string.
+  ADR-0051's 2026-09-23 Note records the choice.
+
   `nil` (the attribute omitted) is accepted as SCXML-typed, but that is this
   platform's choice rather than a spec default: 6.4.1's attribute table
   gives `<invoke type>` a Default Value of "none", where 6.2.5 mandates one
@@ -129,5 +137,6 @@ defmodule Statifier.Send.Target do
   @spec supported_invoke_type?(type :: String.t() | nil) :: boolean()
   def supported_invoke_type?(nil), do: true
   def supported_invoke_type?("scxml"), do: true
+  def supported_invoke_type?("http://www.w3.org/TR/scxml"), do: true
   def supported_invoke_type?(type), do: type == scxml_invoke_type()
 end

@@ -47,6 +47,13 @@
     },
     {
       "suite": "w3c",
+      "key": "test216",
+      "reason": "needs_invoke_src",
+      "detail": "<invoke srcexpr> evaluated as src: the child is loaded from src, which is never dereferenced (ADR-0038)",
+      "adr": 38
+    },
+    {
+      "suite": "w3c",
       "key": "test226",
       "reason": "needs_invoke_src",
       "detail": "<invoke src> with <param>: the child is loaded from src, which is never dereferenced (ADR-0038)",

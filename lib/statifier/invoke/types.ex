@@ -16,7 +16,8 @@ defmodule Statifier.Invoke.Types do
   `maybe_record_active_invocation/5` and
   `Statifier.Session.Effects.plan_invoke` answer "is this type registered"
   by calling it, so the two sites cannot drift. Built-in membership -
-  `nil`, `"scxml"`, and the bare `http://www.w3.org/TR/scxml/` URI - keeps
+  `nil`, `"scxml"`, the bare `http://www.w3.org/TR/scxml/` URI, and that URI
+  without its trailing slash - keeps
   delegating to `Statifier.Send.Target.supported_invoke_type?/1` rather than
   being reimplemented here, so 6.4's short-form and long-URI reasoning stays
   in exactly one place.
@@ -66,8 +67,9 @@ defmodule Statifier.Invoke.Types do
   `types` may be `nil` - "no declaration made", the same meaning `nil`
   carries on `%Statifier.MachineState{}.invoke_types` itself - in which case
   this answers exactly what `Statifier.Send.Target.supported_invoke_type?/1`
-  answers today: `true` for `nil`, `"scxml"`, and the bare
-  `http://www.w3.org/TR/scxml/` URI; `false` for everything else, including
+  answers today: `true` for `nil`, `"scxml"`, the bare
+  `http://www.w3.org/TR/scxml/` URI, and that URI without its trailing
+  slash; `false` for everything else, including
   the `#SCXMLEventProcessor` URI.
 
   A non-`nil` snapshot answers `true` for the built-in set unioned with the

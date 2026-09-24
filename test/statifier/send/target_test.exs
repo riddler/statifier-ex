@@ -122,6 +122,21 @@ defmodule Statifier.Send.TargetTest do
       assert Target.supported_invoke_type?(Target.scxml_invoke_type())
     end
 
+    # sabotage: the `"http://www.w3.org/TR/scxml"` short-form clause is
+    # deleted, falling through to the URI-equality clause -> the no-slash
+    # spelling is not equal to `scxml_invoke_type/0`'s URI, reddening this
+    # assertion
+    test "the no-slash URI is a second 6.4.2 short form, supported" do
+      assert Target.supported_invoke_type?("http://www.w3.org/TR/scxml")
+    end
+
+    # sabotage: `supported_type?/1` gains a `"http://www.w3.org/TR/scxml"`
+    # clause returning `true` -> the invoke short form would wrongly read as
+    # a supported send type, and this refute reddens
+    test "the no-slash invoke short form is not a supported send type" do
+      refute Target.supported_type?("http://www.w3.org/TR/scxml")
+    end
+
     # sabotage: n/a - this test only confirms an arbitrary unrelated string
     # falls through every supported clause; it is the negative space of the
     # two positive clauses above, not a new mutation to sabotage

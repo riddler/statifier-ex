@@ -1791,8 +1791,9 @@ defmodule Statifier.Interpreter do
     )
   end
 
-  # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its "scxml" short form)
-  # the built-in `type` this platform supports out of the box; a
+  # 6.4.1 makes `http://www.w3.org/TR/scxml/` (and its short forms, "scxml"
+  # and the URI without its trailing slash) the built-in `type` this
+  # platform supports out of the box; a
   # `type`/`typeexpr` naming anything else starts no child, so the
   # invocation is never live and is not recorded: 6.4's "MUST automatically
   # cancel the invoked component" has no invoked component to reach, and a

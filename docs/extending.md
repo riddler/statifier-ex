@@ -20,8 +20,8 @@ Until now that sentence named an intention with no destination. This document
 is the destination: a `Statifier.Invoke.Handler` is how your application
 registers itself to serve an `<invoke type="...">` value the built-in engine
 does not already know (`scxml` and its long-URI spelling,
-`http://www.w3.org/TR/scxml/`, are the only types shipped in the library
-itself). If what you are after is a durable `<send delay>` rather than an
+`http://www.w3.org/TR/scxml/`, with or without the trailing slash, are the
+only types shipped in the library itself). If what you are after is a durable `<send delay>` rather than an
 `<invoke>`, that is a different seam - see `docs/durable-timers.md`.
 
 ## Writing a `Statifier.Invoke.Handler`

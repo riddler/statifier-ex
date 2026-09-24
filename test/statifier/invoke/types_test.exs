@@ -34,7 +34,7 @@ defmodule Statifier.Invoke.TypesTest do
     # `FunctionClauseError` instead of answering, reddening every case
     # below
     test "answers exactly what Target.supported_invoke_type?/1 answers today" do
-      for type <- [nil, "scxml", Target.scxml_invoke_type()] do
+      for type <- [nil, "scxml", "http://www.w3.org/TR/scxml", Target.scxml_invoke_type()] do
         assert Types.registered?(nil, type) == Target.supported_invoke_type?(type)
         assert Types.registered?(nil, type)
       end

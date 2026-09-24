@@ -26,6 +26,9 @@
   "test201" =>
     {:needs_basichttp,
      "BasicHTTP Event I/O Processor as a <send type>: the event is delivered only by a processor that implements HTTP POST"},
+  "test216" =>
+    {:needs_invoke_src,
+     "<invoke srcexpr> evaluated as src: the child is loaded from src, which is never dereferenced (ADR-0038)"},
   "test226" =>
     {:needs_invoke_src,
      "<invoke src> with <param>: the child is loaded from src, which is never dereferenced (ADR-0038)"},

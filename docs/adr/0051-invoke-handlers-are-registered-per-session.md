@@ -374,3 +374,43 @@ Premise surface: `docs/persistence.md` and `lib/statifier/invoke/answer.ex`
 as of `17cc9ed`, plus statifier_persistence `sp-ADR-0011` at proposed. If
 `sp-ADR-0011` is not accepted in the form cited, this note is the only
 thing that has to change here.
+
+## Note (2026-09-23): the no-slash URI is a second built-in short form (st-8cts)
+
+A dated note. It decides nothing about registration: no decision,
+consequence or Related entry above changes, the Status line is untouched,
+and no accepted text above is edited. It records a widening of the
+built-in `<invoke type>` set this record's Context describes as "a
+hardcoded three-way string test", read at `c9cc9dc`; the test is now
+four-way.
+
+`Statifier.Send.Target.supported_invoke_type?/1` accepts
+`"http://www.w3.org/TR/scxml"`, the 6.4.2 URI without its trailing slash,
+beside `nil`, `"scxml"` and `http://www.w3.org/TR/scxml/`. The ground is the
+one the function's own `@doc` already gives for `"scxml"` (read at
+`c9cc9dc`): 6.4.2's "Processors MAY define short form notations as an
+authoring convenience". The W3C test suite writes this spelling itself -
+the `<invoke>` of `w3c/test216` in `conformance/corpus/w3c.json` - so a
+processor that refused it refused the type 6.4.2 mandates, as the suite's
+authors spell it.
+
+What this note does not change:
+
+- `<send>`. `Statifier.Send.Target.supported_type?/1` does not accept the
+  no-slash spelling, since 6.2.5's processor URI is a different string, and
+  `Statifier.Send.Target.parse/1`, which reads `<send target>` rather than
+  a type, is unchanged. This record's Context already keeps the `<send>`
+  set out of its scope.
+- Registration. `Statifier.Invoke.Types.registered?/2` still delegates the
+  built-in set to `supported_invoke_type?/1` (decision 3), so the new short
+  form reaches both classifier sites at once, and
+  `Statifier.Session.Effects.plan_invoke`'s default handler,
+  `Statifier.Invoke.Handler.Scxml`, serves it as it serves the other
+  built-in spellings (decision 4). A host that registers a handler under
+  this exact string still wins for it, as for `"scxml"`.
+
+One consequence for the corpus: `w3c/test216` had failed on its type before
+its `srcexpr` was reached. With the type accepted, it passes when an
+`invoke_source` resolver is supplied and fails without one, so it joins the
+`:needs_invoke_src` exclusions of `tools/corpus/scxml_w3/exclusions.exs`
+(ADR-0038: the library never dereferences `src`).
