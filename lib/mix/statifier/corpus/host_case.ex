@@ -26,6 +26,21 @@ defmodule Mix.Statifier.Corpus.HostCase do
   A registered delayed send is the host's timer, and this host never fires
   one.
 
+  An `expect_sends` item may carry an `outcome` the runner performs or
+  observes for that send (ADR-0070's 2026-09-23 Amendment). With
+  `"fail"`, the runner reports the send handed at that item's position
+  through `Statifier.Session.failed_send/3` as soon as it reads the
+  processor's message, before it reads the next configuration, so the
+  step that led to the send is the one whose configuration shows what
+  the sender made of the `error.communication` it got. With
+  `"cancelled"`, a `<cancel>` naming the send must reach the processor
+  after it was handed the send: when a cancel reaches the processor, the
+  runner writes `"outcome": "cancelled"` on each delayed send handed
+  before it under the cancel's send id, generated or not, whose item
+  asks for it, so the comparison above refuses a marked item no cancel
+  reached. An item with no `outcome` claims nothing about a cancel: a
+  cancel naming its send is not compared.
+
   A host object may also carry `declared_events` and `expect_accepts`,
   present together or not at all (ADR-0071 decision 7). Before it starts the
   session, the runner calls `Statifier.Chart.check_accepts/2` on the compiled
@@ -117,49 +132,90 @@ defmodule Mix.Statifier.Corpus.HostCase do
 
   defp accepts(_machine, _host), do: :ok
 
+  # `host` carries the case's `expect_sends` and the sends handed so far,
+  # newest first, each as `{send_id, expected_item, item}`.
   defp drive(session, corpus_case, expect_sends, after_steps) do
     steps = Enum.map(corpus_case["steps"], &{&1["event"]["name"], &1["configuration"]})
+    host = %{expect: expect_sends, handed: []}
 
-    with :ok <- configuration(session, corpus_case["initial_configuration"]),
-         :ok <- steps(session, steps),
+    with {:ok, host} <- configuration(session, corpus_case["initial_configuration"], host),
+         {:ok, host} <- steps(session, steps, host),
          :ok <- after_steps.(Session.snapshot(session)) do
-      handed(session, expect_sends)
+      handed(session, host)
     end
   end
 
-  defp steps(session, steps) do
-    Enum.reduce_while(steps, :ok, fn {name, expected}, :ok ->
+  defp steps(session, steps, host) do
+    Enum.reduce_while(steps, {:ok, host}, fn {name, expected}, {:ok, host} ->
       settle_short_timers(session, deadline(@settle_window_ms))
       :ok = Session.send_event(session, name)
 
-      case configuration(session, expected) do
-        :ok -> {:cont, :ok}
+      case configuration(session, expected, host) do
+        {:ok, host} -> {:cont, {:ok, host}}
         disagree -> {:halt, disagree}
       end
     end)
   end
 
-  defp handed(session, expect_sends) do
+  defp handed(session, host) do
     # A status call returns after every instruction the session performed
     # before it, so every message the processor sent is already here.
     _status = Session.status(session)
-    sends = collect([])
+    {host, _reported?} = pump(session, host)
+    sends = host.handed |> Enum.reverse() |> Enum.map(&elem(&1, 2))
 
-    if sends == expect_sends,
+    if sends == host.expect,
       do: :agree,
       else:
         {:disagree,
-         "Expected the sends handed to the host #{JSON.encode!(expect_sends)}, " <>
+         "Expected the sends handed to the host #{JSON.encode!(host.expect)}, " <>
            "but got #{JSON.encode!(sends)}"}
   end
 
-  defp collect(acc) do
+  # Reads every message the processor has sent so far into `host.handed`.
+  # A handed send whose expected item, at the same position, carries
+  # `"outcome": "fail"` is reported through `Statifier.Session.failed_send/3`
+  # here, and `reported?` says one was, so the caller reads the
+  # configuration again. A cancel marks the delayed sends it names whose
+  # expected item says `"cancelled"`.
+  defp pump(session, host, reported? \\ false) do
     receive do
-      {Processor, {:deliver, effect, event}} -> collect([item(effect, event) | acc])
-      {Processor, {:cancel, _cancel}} -> collect(acc)
+      {Processor, {:deliver, effect, event}} ->
+        expected = Enum.at(host.expect, length(host.handed))
+        {item, failed?} = perform_outcome(session, effect, item(effect, event), expected)
+
+        pump(
+          session,
+          %{host | handed: [{effect.send_id, expected, item} | host.handed]},
+          reported? or failed?
+        )
+
+      {Processor, {:cancel, cancel}} ->
+        pump(session, %{host | handed: cancel_named(host.handed, cancel.send_id)}, reported?)
     after
-      0 -> Enum.reverse(acc)
+      0 -> {host, reported?}
     end
+  end
+
+  defp perform_outcome(session, effect, item, %{"outcome" => "fail"}) do
+    :ok = Session.failed_send(session, effect)
+    {Map.put(item, "outcome", "fail"), true}
+  end
+
+  defp perform_outcome(_session, _effect, item, _expected), do: {item, false}
+
+  # A cancel reaches a processor only for a delayed send it was handed
+  # under the cancel's id (`Statifier.Send.Processor`'s "What `cancel/2` is
+  # handed"), so only delayed items are marked, and only those whose
+  # expected item makes the claim.
+  defp cancel_named(handed, send_id) do
+    Enum.map(handed, fn
+      {^send_id, %{"outcome" => "cancelled"} = expected, %{"delay_ms" => _delay} = item} ->
+        {send_id, expected, Map.put(item, "outcome", "cancelled")}
+
+      other ->
+        other
+    end)
   end
 
   defp item(effect, event) do
@@ -176,9 +232,12 @@ defmodule Mix.Statifier.Corpus.HostCase do
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
 
-  defp configuration(session, expected_ids) do
+  defp configuration(session, expected_ids, host) do
     expected = MapSet.new(expected_ids)
-    observed = poll(session, expected, deadline(@configuration_deadline_ms), {false, nil})
+
+    {observed, host} =
+      poll(session, expected, deadline(@configuration_deadline_ms), {false, nil}, host)
+
     actual = Statifier.active_leaf_states(observed)
 
     cond do
@@ -186,7 +245,7 @@ defmodule Mix.Statifier.Corpus.HostCase do
         {:disagree, "an active leaf state has no id, so the expectation cannot name it"}
 
       actual == expected ->
-        :ok
+        {:ok, host}
 
       true ->
         {:disagree,
@@ -197,16 +256,23 @@ defmodule Mix.Statifier.Corpus.HostCase do
   # A terminated chart's configuration is empty by construction; the one it
   # held at exit rides the `{:done, _}` effect, as `test_scxml/4` reads it.
   # The effect arrives once, so a poll that drained it hands it to the next.
-  defp poll(session, expected, deadline, {was_stable?, done}) do
+  # The processor's messages are read after the snapshot and the status
+  # call, so every send the session performed before them is read; a
+  # failure reported then is on the session's queue ahead of the next
+  # snapshot, so the snapshot just taken is stale and the poll goes round.
+  defp poll(session, expected, deadline, {was_stable?, done}, host) do
     done = done_effect() || done
     observed = observed(Session.snapshot(session), done)
     stable? = stable?(Session.status(session))
+    {host, reported?} = pump(session, host)
+    again = fn -> poll(session, expected, deadline, {stable? and not reported?, done}, host) end
 
     cond do
-      Statifier.active_leaf_states(observed) == expected -> observed
-      stable? and was_stable? -> observed
-      System.monotonic_time(:millisecond) >= deadline -> observed
-      true -> pause_then(fn -> poll(session, expected, deadline, {stable?, done}) end)
+      reported? -> again.()
+      Statifier.active_leaf_states(observed) == expected -> {observed, host}
+      stable? and was_stable? -> {observed, host}
+      System.monotonic_time(:millisecond) >= deadline -> {observed, host}
+      true -> pause_then(again)
     end
   end
 

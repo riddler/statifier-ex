@@ -111,6 +111,124 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
     end
   end
 
+  describe "run_case/1 with an expect_sends item's outcome" do
+    @outcome_source """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="awaiting_copy">
+        <state id="awaiting_copy">
+            <transition event="copy.available" target="notifying"/>
+            <transition event="copy.reserved" target="on_hold"/>
+        </state>
+        <state id="notifying">
+            <onentry>
+                <send type="library:notice" target="patron" event="hold.ready" id="notice"/>
+            </onentry>
+            <transition event="error.communication" cond="_event.sendid == 'notice'" target="notice_failed"/>
+            <transition event="error.communication" target="notice_failed_without_sendid"/>
+        </state>
+        <state id="notice_failed"/>
+        <state id="notice_failed_without_sendid"/>
+        <state id="on_hold">
+            <onentry>
+                <send type="library:timer" target="hold_queue" event="pickup.expired" id="pickup" delay="10ms"/>
+            </onentry>
+            <transition event="copy.collected" target="collected"/>
+            <transition event="hold.withdrawn" target="withdrawn"/>
+        </state>
+        <state id="collected">
+            <onentry>
+                <cancel sendid="pickup"/>
+            </onentry>
+        </state>
+        <state id="withdrawn"/>
+    </scxml>
+    """
+
+    @notice %{
+      "type" => "library:notice",
+      "target" => "patron",
+      "event" => %{"name" => "hold.ready"},
+      "send_id" => "notice"
+    }
+
+    @pickup %{
+      "type" => "library:timer",
+      "target" => "hold_queue",
+      "event" => %{"name" => "pickup.expired"},
+      "delay_ms" => 10,
+      "send_id" => "pickup"
+    }
+
+    defp outcome_case(steps, expect_sends) do
+      %{
+        "id" => "statifier/send/outcome",
+        "source" => @outcome_source,
+        "description" => "",
+        "initial_configuration" => ["awaiting_copy"],
+        "steps" =>
+          Enum.map(steps, fn {name, leaf} ->
+            %{"event" => %{"name" => name}, "configuration" => [leaf]}
+          end),
+        "host" => %{
+          "send_types" => ["library:notice", "library:timer"],
+          "expect_sends" => expect_sends
+        }
+      }
+    end
+
+    # sabotage: perform_outcome/4's "fail" clause not calling
+    # Session.failed_send/3 -> the chart stays in notifying -> red; pump/3
+    # reading the expected item one position later -> red
+    test "reports a fail item's send through failed_send/3, and the sender reads its sendid" do
+      notice = Map.put(@notice, "outcome", "fail")
+
+      assert Runner.run_case(outcome_case([{"copy.available", "notice_failed"}], [notice])) ==
+               :agree
+    end
+
+    # sabotage: perform_outcome/4's "fail" clause matching any expected item
+    # -> the send is reported and the chart reaches notice_failed -> red
+    test "reports only the send at a fail item's position" do
+      assert {:disagree, message} =
+               Runner.run_case(outcome_case([{"copy.available", "notice_failed"}], [@notice]))
+
+      assert message =~ ~s|Expected active states ["notice_failed"], but got ["notifying"]|
+    end
+
+    # sabotage: cancel_named/2 returning the handed sends unchanged -> red
+    test "agrees on a cancelled item when a cancel naming its send reached the processor" do
+      pickup = Map.put(@pickup, "outcome", "cancelled")
+
+      assert Runner.run_case(
+               outcome_case([{"copy.reserved", "on_hold"}, {"copy.collected", "collected"}], [
+                 pickup
+               ])
+             ) ==
+               :agree
+    end
+
+    # sabotage: cancel_named/2 marking every send under the cancel's id,
+    # whatever its item says -> red
+    test "a cancelled item no cancel reached disagrees, and an item without one claims nothing" do
+      pickup = Map.put(@pickup, "outcome", "cancelled")
+
+      assert {:disagree, message} =
+               Runner.run_case(
+                 outcome_case([{"copy.reserved", "on_hold"}, {"hold.withdrawn", "withdrawn"}], [
+                   pickup
+                 ])
+               )
+
+      assert message =~ ~s|"outcome":"cancelled"|
+
+      assert Runner.run_case(
+               outcome_case([{"copy.reserved", "on_hold"}, {"copy.collected", "collected"}], [
+                 @pickup
+               ])
+             ) ==
+               :agree
+    end
+  end
+
   describe "run_case/1 with declared_events and expect_accepts" do
     @loan_source """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">

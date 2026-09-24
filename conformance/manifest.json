@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "sha256:3912d79c50c449bb3c397346e16430f0d7d8bd87724b3cfa456a30a896d0b8f7",
+  "corpus_hash": "sha256:c79612f0e9609bdc85bbd3d8d2dcb14840ec14922d1b93a53cafa80e08529b34",
   "suites": [
     {
       "suite": "scion",
@@ -14,7 +14,7 @@
     {
       "suite": "statifier",
       "file": "corpus/statifier.json",
-      "case_count": 27
+      "case_count": 28
     }
   ],
   "upstreams": [

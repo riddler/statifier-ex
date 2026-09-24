@@ -152,6 +152,7 @@
     "conformance/cases/library/patron_reinstated_after_block.json",
     "conformance/cases/send/registered_delayed_cancel.json",
     "conformance/cases/send/registered_immediate.json",
+    "conformance/cases/send/registered_send_failed.json",
     "conformance/cases/send/unregistered_type.json",
     "conformance/cases/system_variables/registered_ioprocessors.json"
   ],

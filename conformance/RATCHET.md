@@ -180,10 +180,17 @@ one. Each `expect_sends` item is one send handed to it, in the order handed
 over the whole run: its `type`, its `target` as the document gives it, its
 `event` with a `name` and, when the send carries a payload, its `data`,
 `delay_ms` for a delayed send, and `send_id` only when the document names
-the send (`schema/case.json` states the shape). A case with a `host` object
+the send (`schema/case.json` states the shape). An item may also carry an
+`outcome` (ADR-0070's 2026-09-23 Amendment): with `"fail"`, the runner
+reports that send as failed as soon as it is handed, before it reads the
+configuration that follows, so the sender takes `error.communication`
+carrying the send's `sendid`; with `"cancelled"`, a cancel naming that send
+must reach the runner's processor after the send was handed. An item with
+no `outcome` claims nothing about a cancel. A case with a `host` object
 agrees when its configurations agree and the sends handed are exactly its
-`expect_sends`. A runner that cannot honour a case's `host` object treats it
-as any unsupported feature: the case fails with the feature named and is
+`expect_sends`, outcomes included. A runner that cannot honour a case's
+`host` object treats it as any unsupported feature: the case fails with the
+feature named and is
 never skipped (ADR-0006).
 
 A `host` object may also carry `declared_events` and `expect_accepts`,

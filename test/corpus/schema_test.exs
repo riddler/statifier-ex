@@ -176,6 +176,31 @@ defmodule Corpus.SchemaTest do
              )
     end
 
+    # sabotage: the expect_sends item's outcome property deleted from
+    # case.json (additionalProperties then refuses it) -> red on the
+    # fixture at /host/expect_sends/0/outcome
+    test "an expect_sends item may carry an outcome, fail or cancelled" do
+      outcome = fixture("case-statifier-outcome.json")
+
+      assert [%{"outcome" => "fail"}, %{"outcome" => "cancelled"}] =
+               outcome["host"]["expect_sends"]
+
+      assert errors("case.json", outcome) == []
+    end
+
+    # sabotage: the outcome's enum gaining "delivered" -> red on the first
+    # refusal
+    test "an expect_sends item refuses any other outcome" do
+      outcome = fixture("case-statifier-outcome.json")
+
+      for other <- ["delivered", 1] do
+        assert "/host/expect_sends/0/outcome" in pointers(
+                 "case.json",
+                 put_in(outcome, ["host", "expect_sends", Access.at(0), "outcome"], other)
+               )
+      end
+    end
+
     # sabotage: host's declared_events property deleted from case.json
     # (additionalProperties then refuses it) -> red on the accepting half
     test "a statifier case's host may carry declared_events with expect_accepts" do
