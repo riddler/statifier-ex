@@ -50,11 +50,19 @@ defmodule Statifier.Send.Processor do
   Those holds are the live session's own state. They are not part of the
   persisted position (`Statifier.Position`), so a session resumed from a
   position holds nothing: a `<cancel>` it runs for a delayed send handed
-  over before the position was saved reaches no processor. What a resumed
-  session should do about the delayed sends a processor was handed before
-  the save is not decided yet; until it is, a host whose processor keeps
-  such a send across a resume cancels or fires it by its own record, keyed
-  by the send id and the session scope.
+  over before the position was saved reaches no processor. Routing that
+  cancel is the host's job, as re-arming timers after a resume is
+  (ADR-0060 decision 7): the resumed session still emits the
+  `%Statifier.Effect.Cancel{}`, and the host matches it under ADR-0054
+  decision 3's cancellation key against the send id it recorded when its
+  processor was handed the delayed send.
+
+  A hold is released only when a `<cancel>` naming its send id is routed;
+  the library never learns that a processor's timer fired. A live session
+  therefore keeps one entry per distinct send id handed to a processor and
+  not cancelled since: an author-written id reused by later sends stays one
+  entry, and a generated id adds one per uncancelled send. The entries go
+  with the session process when it stops.
 
   ## When the host cannot deliver
 
