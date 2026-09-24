@@ -72,12 +72,12 @@ defmodule Statifier.Send.Processor do
   Spec 5.10 binds `_ioprocessors` to one entry for each Event I/O Processor
   a session supports, and a registered type is one. The session's
   `_ioprocessors` carries an entry keyed by each registered type string,
-  whose value is the map the optional `c:ioprocessors_entry/1` callback
-  returns for that type, or an empty map when the processor does not
-  implement it. `Statifier.Send.Types.from_send_types/1` reads the value
-  and `Statifier.MachineState.new/2` writes it, once, when the session
-  starts; `Statifier.Send.Types.from_send_types/1` says how it reads after
-  a resume.
+  whose value is the map the optional
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` callback returns for that
+  type, or an empty map when the processor does not implement it.
+  `Statifier.Send.Types.from_send_types/1` reads the value and
+  `Statifier.MachineState.new/2` writes it, once, when the session starts;
+  `Statifier.Send.Types.from_send_types/1` says how it reads after a resume.
 
   ## `ctx`
 
@@ -95,8 +95,8 @@ defmodule Statifier.Send.Processor do
 
   @typedoc """
   One instruction a planning callback returns - an element of
-  `Statifier.Session.Effects.t:instruction/0`, typed opaquely here as
-  `Statifier.Invoke.Handler.t:instruction/0` is.
+  `t:Statifier.Session.Effects.instruction/0`, typed opaquely here as
+  `t:Statifier.Invoke.Handler.instruction/0` is.
   """
   @type instruction :: term()
 

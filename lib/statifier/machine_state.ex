@@ -479,9 +479,10 @@ defmodule Statifier.MachineState do
   `nil` means "the built-in set only": no `:invoke_handlers` were passed at
   session start, so `Statifier.Invoke.Types.registered?/2` answers exactly
   `Statifier.Send.Target.supported_invoke_type?/1` - `nil`, `"scxml"`, and
-  the bare `http://www.w3.org/TR/scxml/` URI. Unlike `t:routes/0`, this is
-  stamped once per session rather than per drive: the registered set is a
-  `start_link/2` option, fixed for the session's whole lifetime.
+  the bare `http://www.w3.org/TR/scxml/` URI. Unlike
+  `t:Statifier.MachineState.routes/0`, this is stamped once per session rather
+  than per drive: the registered set is a `start_link/2` option, fixed for the
+  session's whole lifetime.
   """
   @type invoke_types :: InvokeTypes.t() | nil
 
@@ -490,10 +491,11 @@ defmodule Statifier.MachineState do
   `nil` means "no declaration": the built-in set only, so
   `Statifier.Send.Types.classify/2` refuses every type outside `nil`,
   `"scxml"`, and the SCXML Event I/O Processor URI - 6.2.5's closed set as
-  it stood before ADR-0069. Unlike `t:invoke_types/0`'s permissive `nil`
-  (ADR-0051's 2026-09-01 Note), this `nil` refuses, because the core has
-  never emitted an unsupported-type `<send>` for a caller to read. Stamped
-  once per session, like `t:invoke_types/0`, and dropped from a persisted
+  it stood before ADR-0069. Unlike `t:Statifier.MachineState.invoke_types/0`'s
+  permissive `nil` (ADR-0051's 2026-09-01 Note), this `nil` refuses, because
+  the core has never emitted an unsupported-type `<send>` for a caller to
+  read. Stamped once per session, like
+  `t:Statifier.MachineState.invoke_types/0`, and dropped from a persisted
   position the same way (ADR-0064).
   """
   @type send_types :: SendTypes.t() | nil
@@ -533,12 +535,13 @@ defmodule Statifier.MachineState do
   Options: `:trace` (default `false`), `:datamodel` (default `%{}`),
   `:session_id` (default a freshly generated `sess_` id, ADR-0008),
   `:max_macrostep_rounds` (default `10_000`), `:routes` (default `nil`,
-  ADR-0048 - see the `t:routes/0` typedoc for what `nil` means),
-  `:invoke_types` (default `nil`, ADR-0051 - see the `t:invoke_types/0`
-  typedoc for what `nil` means), and `:send_types` (default `nil`,
-  ADR-0069 - see the `t:send_types/0` typedoc). All four system variables
-  (`SystemVariables.initial/3`) are merged **over** the `:datamodel`
-  option's map, so author-supplied data can never shadow a system variable;
+  ADR-0048 - see the `t:Statifier.MachineState.routes/0` typedoc for what
+  `nil` means), `:invoke_types` (default `nil`, ADR-0051 - see the
+  `t:Statifier.MachineState.invoke_types/0` typedoc for what `nil` means), and
+  `:send_types` (default `nil`, ADR-0069 - see the
+  `t:Statifier.MachineState.send_types/0` typedoc). All four system variables
+  (`SystemVariables.initial/3`) are merged **over** the `:datamodel` option's
+  map, so author-supplied data can never shadow a system variable;
   `_ioprocessors` carries an entry for each type `:send_types` registers.
 
   `:datamodel` must be string-keyed at every level: raises `ArgumentError`
@@ -885,7 +888,7 @@ defmodule Statifier.MachineState do
   Stamps `routes` onto `machine_state` - ADR-0048 decision 2's per-drive
   snapshot write, called by `Statifier.Session` immediately before each
   core drive. Pass `nil` to clear a snapshot back to "no determination
-  made" (`t:routes/0`).
+  made" (`t:Statifier.MachineState.routes/0`).
   """
   @spec put_routes(machine_state :: t(), routes :: routes()) :: t()
   def put_routes(%__MODULE__{} = machine_state, routes),

@@ -125,7 +125,8 @@ defmodule Statifier.Send.Types do
   defp string_keyed?(_scalar), do: true
 
   @doc """
-  Classifies a resolved `<send type>` against `types` (see `t:class/0`).
+  Classifies a resolved `<send type>` against `types` (see
+  `t:Statifier.Send.Types.class/0`).
 
   A built-in spelling is `:built_in` whatever `types` holds, so the built-in
   processor keeps its targets. `nil` for `types` means "no declaration": the

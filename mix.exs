@@ -39,10 +39,11 @@ defmodule Statifier.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   # Hexdocs configuration. These paths are read off the publisher's disk at
-  # `mix docs` time and need no entry in package()'s files: list - the docs
-  # tarball hexdocs hosts is built separately from the package tarball
-  # `mix deps.get` fetches. ADRs are deliberately unpublished: the guides
-  # cite individual records by absolute GitHub URL instead.
+  # `mix docs` time - the docs tarball hexdocs hosts is built separately from
+  # the package tarball `mix deps.get` fetches. The guides README.md links to
+  # are in package()'s files: list as well, for the hex.pm page. ADRs are
+  # deliberately unpublished: the guides cite individual records by absolute
+  # GitHub URL instead.
   defp docs do
     [
       name: "Statifier",
@@ -78,7 +79,28 @@ defmodule Statifier.MixProject do
     [
       name: "statifier",
       licenses: ["MIT"],
-      files: ~w(lib/statifier lib/statifier.ex mix.exs README.md LICENSE CHANGELOG.md),
+      # Every guide README.md links to relatively ships in the package too,
+      # so the same relative link resolves on GitHub, HexDocs and the hex.pm
+      # package page (which renders README.md from this tarball).
+      files: ~w(
+        lib/statifier
+        lib/statifier.ex
+        mix.exs
+        README.md
+        LICENSE
+        CHANGELOG.md
+        docs/architecture.md
+        docs/datamodel.md
+        docs/extending.md
+        docs/persistence.md
+        docs/hosting-without-session.md
+        docs/durable-timers.md
+        docs/observability.md
+        docs/opentelemetry.md
+        docs/testing-charts.md
+        docs/chart-patterns.md
+        docs/family-reference.md
+      ),
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"

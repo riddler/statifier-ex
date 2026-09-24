@@ -27,10 +27,11 @@ defmodule Statifier.Invoke.Handler do
      idempotent on `invoke_id`**. The library performs no deduplication
      itself and cannot: it has no view of a host's durable store. This is
      the documented contract, not a suggestion. The same discipline
-     reaches cancellation from the other direction: `c:cancel/2` MAY be
-     planned for an invocation a host has already reported complete, so a
-     handler MUST tolerate cancelling an `invoke_id` it no longer knows.
-     See `c:cancel/2` for why.
+     reaches cancellation from the other direction:
+     `c:Statifier.Invoke.Handler.cancel/2` MAY be planned for an invocation a
+     host has already reported complete, so a handler MUST tolerate cancelling
+     an `invoke_id` it no longer knows. See
+     `c:Statifier.Invoke.Handler.cancel/2` for why.
   3. **`invoke_id` is a deterministic `%MachineState{}` counter** (ADR-0008,
      as amended), not a freshly minted value - which is exactly what makes
      it usable as an idempotency key across a crash and retry: replaying the
@@ -85,7 +86,7 @@ defmodule Statifier.Invoke.Handler do
   ## The instruction vocabulary
 
   A planning callback's returned instructions are elements of
-  `Statifier.Session.Effects.t:instruction/0` - the same list
+  `t:Statifier.Session.Effects.instruction/0` - the same list
   `Statifier.Session` and `Statifier.Replay` already fold. This behaviour
   adds exactly one opaque member to that vocabulary, `{:handler, module,
   term}`, which an executor routes back to `module.perform/2` - the
@@ -106,7 +107,7 @@ defmodule Statifier.Invoke.Handler do
 
   @typedoc """
   One instruction a planning callback returns - an element of
-  `Statifier.Session.Effects.t:instruction/0`, typed opaquely here so this
+  `t:Statifier.Session.Effects.instruction/0`, typed opaquely here so this
   behaviour carries no compile-time dependency on that module's concrete
   shape.
   """

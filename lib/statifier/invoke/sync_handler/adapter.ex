@@ -300,10 +300,11 @@ defmodule Statifier.Invoke.SyncHandler.Adapter do
   reporting half `perform/3` supplies.
 
   `ctx` is whatever that caller has to say about the call, handed to the
-  handler untouched: `t:dispatch_ctx/0`, any map, and not the plan context
-  `perform/3` needs. A session's drive passes its plan context; a durable
-  stepper passes what it knows, typically its own run id. Neither is a
-  special case here, because routing reads no key of it.
+  handler untouched: `t:Statifier.Invoke.SyncHandler.Adapter.dispatch_ctx/0`,
+  any map, and not the plan context `perform/3` needs. A session's drive
+  passes its plan context; a durable stepper passes what it knows, typically
+  its own run id. Neither is a special case here, because routing reads no key
+  of it.
   """
   @spec dispatch(
           modules :: [module()],

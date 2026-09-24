@@ -240,7 +240,7 @@ defmodule Statifier.Testing.HandlerCase do
   end
 
   @doc """
-  A plan context (`Statifier.Invoke.Handler.t:ctx/0`) declaring `type`
+  A plan context (`t:Statifier.Invoke.Handler.ctx/0`) declaring `type`
   registered and dispatching it to `handler` - the same three keys
   `Statifier.Session.Effects.plan/2` hands every planning callback.
   `overrides` merges over the defaults, since `ctx` is a plain map by
