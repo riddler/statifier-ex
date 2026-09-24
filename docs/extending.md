@@ -568,7 +568,7 @@ target" - the type names an Event I/O Processor, and the `target` is read by
 that processor. The library's built-in processor answers three spellings:
 the attribute omitted, `"scxml"`, and the processor URI
 `http://www.w3.org/TR/scxml/#SCXMLEventProcessor`.
-[ADR-0069](adr/0069-host-registered-send-types.md) lets a host register more,
+[ADR-0069](https://github.com/riddler/statifier-ex/blob/v2.8.0/docs/adr/0069-host-registered-send-types.md) lets a host register more,
 per session, in the same shape `:invoke_handlers` has.
 
 This section describes what the library does today. Everything ADR-0069

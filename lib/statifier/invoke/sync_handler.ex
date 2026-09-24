@@ -71,18 +71,19 @@ defmodule Statifier.Invoke.SyncHandler do
   instruction and durably recording that it ran replays the drive and
   produces the byte-identical instruction again. The adapter does not (and
   cannot) deduplicate that: it has no view of a host's durable store. So
-  `c:handle/3` inherits the obligation whole. A handler that only reads is
-  idempotent for free; a handler that **writes** keys its write on
-  something stable, and `invoke_id` is the value the library guarantees is
-  stable by construction (ADR-0008 as amended: it is a deterministic
-  `%Statifier.MachineState{}` counter, not a freshly minted value).
+  `c:Statifier.Invoke.SyncHandler.handle/3` inherits the obligation whole. A
+  handler that only reads is idempotent for free; a handler that **writes**
+  keys its write on something stable, and `invoke_id` is the value the library
+  guarantees is stable by construction (ADR-0008 as amended: it is a
+  deterministic `%Statifier.MachineState{}` counter, not a freshly minted
+  value).
 
-  `c:handle/3` is not handed `invoke_id`, which is deliberate: a sync
-  handler that needs a durable key needs the *host's* key - which run, which
-  order, which tenant - and the honest place to get that is the host's own
-  driver, not this seam. A handler that genuinely wants `invoke_id` writes
-  against `Statifier.Invoke.Handler` directly, which is still there and is
-  still the general answer.
+  `c:Statifier.Invoke.SyncHandler.handle/3` is not handed `invoke_id`, which
+  is deliberate: a sync handler that needs a durable key needs the *host's*
+  key - which run, which order, which tenant - and the honest place to get
+  that is the host's own driver, not this seam. A handler that genuinely wants
+  `invoke_id` writes against `Statifier.Invoke.Handler` directly, which is
+  still there and is still the general answer.
 
   ## When this is the wrong shape
 
@@ -93,20 +94,20 @@ defmodule Statifier.Invoke.SyncHandler do
       reply arrives later, anything reported from a different node. The
       whole point of `done_invocation/3` being a *door* is that it can be
       knocked on minutes or days later, and a sync handler answers before
-      `c:handle/3` returns;
+      `c:Statifier.Invoke.SyncHandler.handle/3` returns;
     * has something to cancel (spec 6.4.3) or an inbox to autoforward into
       (6.4.2's `autoforward`). The adapter plans nothing for either, because
       a call answered inside its own turn has neither;
     * needs `invoke_id`, `src`, or `content` off the
-      `%Statifier.Effect.Invoke{}`. `c:handle/3` sees the type and the
-      `<param>` values, and nothing else.
+      `%Statifier.Effect.Invoke{}`. `c:Statifier.Invoke.SyncHandler.handle/3`
+      sees the type and the `<param>` values, and nothing else.
 
   ## Terminal failure
 
-  `{:error, reason}` from `c:handle/3` is **permanent**, and that is a
-  property of this shape rather than a choice the adapter makes.
-  `Statifier.Session.failed_invocation/3` documents itself as the host's
-  call and not a handler callback's, because a `perform/2` error is
+  `{:error, reason}` from `c:Statifier.Invoke.SyncHandler.handle/3` is
+  **permanent**, and that is a property of this shape rather than a choice the
+  adapter makes. `Statifier.Session.failed_invocation/3` documents itself as
+  the host's call and not a handler callback's, because a `perform/2` error is
   ordinarily a transient signal belonging to whatever retry policy wraps
   it. A sync handler has no such policy: the call was made, it answered,
   and no later answer is coming. The adapter is that policy, in its
@@ -116,7 +117,7 @@ defmodule Statifier.Invoke.SyncHandler do
   """
 
   @typedoc """
-  The plan context - `Statifier.Invoke.Handler.ctx/0`, handed through
+  The plan context - `t:Statifier.Invoke.Handler.ctx/0`, handed through
   unchanged. See the moduledoc's "`ctx`" section.
   """
   @type ctx :: Statifier.Invoke.Handler.ctx()

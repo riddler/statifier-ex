@@ -175,7 +175,7 @@ defmodule Statifier.Session.Effects do
   @typedoc """
   The pure fold's context (ADR-0051 decisions 2, 4, and 6) - see the
   moduledoc's "The plan context" section, and
-  `Statifier.Invoke.Handler.t:ctx/0`, which this is (plus `invocation_types`,
+  `t:Statifier.Invoke.Handler.ctx/0`, which this is (plus `invocation_types`,
   a key no handler callback reads - see its own doc below). `session_id` is
   the sending session's own id (spec 5.10's `_sessionid`); `invoke_types` is
   the caller-declared registered-type snapshot `plan_invoke/3` judges
@@ -221,8 +221,9 @@ defmodule Statifier.Session.Effects do
 
   @doc """
   Plans `effects`, the core's own order preserved, into the instructions
-  `Statifier.Session` performs. `context` is the plan context (`t:context/0`
-  - see the moduledoc's "The plan context" section): `session_id` is the
+  `Statifier.Session` performs. `context` is the plan context
+  (`t:Statifier.Session.Effects.context/0` - see the moduledoc's "The plan
+  context" section): `session_id` is the
   sending session's own id (spec 5.10's `_sessionid`), needed to build a
   delivered event's `origin`; `invoke_types` is the registered-type
   snapshot `plan_invoke/3` judges against, `invoke_handlers` is the

@@ -15,9 +15,9 @@ defmodule Statifier.Invoke.Handler.Scxml do
   `{:forward, invoke_id, event}` instructions the planner once emitted
   directly for `:cancel_invoke`/`:autoforward` effects, and both effects now
   reach them through this seam rather than around it (ADR-0051 decision 6):
-  `Statifier.Session.Effects.plan_one/2`'s `:cancel_invoke` and
-  `:autoforward` arms read the invocation's own `type` from the plan
-  context's live `:invocation_types` map, look that type up in
+  the `:cancel_invoke` and `:autoforward` arms of the internal planning
+  step in `Statifier.Session.Effects` read the invocation's own `type` from
+  the plan context's live `:invocation_types` map, look that type up in
   `:invoke_handlers`, and land on this module whenever that lookup finds no
   registered handler - the ordinary case for an invocation started as
   `type=scxml`, and equally for a `cancel_invoke`/`autoforward` naming an

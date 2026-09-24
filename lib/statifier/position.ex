@@ -236,9 +236,10 @@ defmodule Statifier.Position do
 
   @doc """
   Translates `machine_state` into the string-id migration vocabulary
-  (`t:exported/0`) - the deliberate counterpart to `to_binary/1`'s refusal to
-  cross a chart revision. See this module's "`export/1` and `import/2`"
-  section above for what is carried, what is dropped, and why.
+  (`t:Statifier.Position.exported/0`) - the deliberate counterpart to
+  `to_binary/1`'s refusal to cross a chart revision. See this module's
+  "`export/1` and `import/2`" section above for what is carried, what is
+  dropped, and why.
 
   Every state index in every translated field is looked up with
   `Statifier.Machine.id/2`. The root, index `0`, has no written id and is
