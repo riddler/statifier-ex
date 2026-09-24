@@ -478,3 +478,42 @@ entry added to it. The earlier note's sentence that "ADR-0059 is not in
 the Related list" describes the record as it stood when that note was
 written, and its statement that the open question "is still open" stands
 as of that note; both stand as written.
+
+## Note (2026-09-23): held sends are live-session state; after a resume the host routes the cancel
+
+Decision 4 has the session keep which processor holds each registered-type
+delayed send id and route a `<cancel>` by it. This record said nothing about
+a resume, or about when a hold ends. Both are settled here, and neither adds
+a public function or a field to the position blob.
+
+- **Holds are live-session state.** The map is a field of the session's own
+  state, never of `%MachineState{}`, so the position blob does not carry it
+  and a resumed session starts with it empty (`Statifier.Session`'s
+  `held_sends` field). A `<cancel>` a resumed session runs for a delayed send
+  handed over before the save reaches no processor.
+- **After a resume, routing that cancel is the host's.** This follows
+  [ADR-0060](0060-resuming-a-session-from-a-persisted-position.md) decision
+  7, which makes re-arming timers after a resume the durable host's job,
+  driven off the same `SendDelayed`/`Cancel` effects. The resumed session
+  still emits the `%Effect.Cancel{}` (`plan_one/2`'s cancel arm in
+  `Statifier.Session.Effects`), and the host matches it under
+  [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md)
+  decision 3's cancellation key, `{session scope, send_id}`, against the
+  send id it recorded when its processor was handed the delayed send. A
+  resumed session keeps its `_sessionid` unless the host overrides it
+  (ADR-0060 decision 3), so by default the session scope is the same on
+  both sides of the resume.
+- **A hold is released only when its cancel is routed.** The library never
+  learns that a processor's timer fired, so nothing else releases one
+  (`Statifier.Session.Effects.release_held_send/2`). The bound: a live
+  session holds one entry per distinct send id handed to a processor and not
+  cancelled since. The map is keyed by send id, so an author-written id
+  reused by later sends stays one entry
+  (`Statifier.Session.Effects.register_held_send/3`); a generated id is fresh
+  on every execution, so each uncancelled generated-id send adds one. The
+  entries go with the session process when it stops.
+
+`Statifier.Send.Processor`'s moduledoc states the same rule, and
+`Statifier.Session.SendProcessorTest`'s "a resumed session" case pins the
+resume half: the cancel's effect reaches a subscriber and no processor is
+called. Cites read at `f2b7431`.

@@ -362,4 +362,42 @@ defmodule Statifier.Session.SendProcessorTest do
       assert Enum.any?(stream, &match?({:effect, {:cancel, %Cancel{send_id: "remind"}}}, &1))
     end
   end
+
+  # ADR-0069's 2026-09-23 Note: holds are live-session state, not position
+  # (ADR-0060 decision 7), so after a resume the host routes the cancel by
+  # the send id it recorded when it was handed the delayed send.
+  describe "a resumed session" do
+    # sabotage: `plan_one/2`'s cancel arm reads every registered type
+    # (`Map.keys(context.send_processors)`) instead of `held(context)` ->
+    # the post-resume cancel reaches `Recorder` and the `refute_received`
+    # reddens. Confirmed red and reverted.
+    test "a <cancel> naming a delayed send handed over before the resume emits the effect and calls no processor" do
+      {session, session_id} = start!()
+      send_and_settle(session, "remind")
+      assert_receive {Recorder, {:deliver, %SendDelayed{send_id: "remind"}, _event}}
+      assert :sys.get_state(session).held_sends == %{"remind" => ["myapp:sink"]}
+
+      {:ok, blob} = Statifier.Position.to_binary(Session.snapshot(session))
+      :ok = GenServer.stop(session)
+      {:ok, machine} = Statifier.compile(@chart)
+
+      {:ok, resumed} =
+        Session.start_link(machine,
+          resume: blob,
+          send_types: %{"myapp:sink" => Recorder},
+          subscribers: [self()]
+        )
+
+      assert Session.session_id(resumed) == session_id
+      assert :sys.get_state(resumed).held_sends == %{}
+
+      send_and_settle(resumed, "stop")
+
+      assert_receive {:statifier, ^session_id, {:effect, {:cancel, %Cancel{send_id: "remind"}}}}
+
+      assert Session.status(resumed).configuration == MapSet.new(["stopped"])
+      refute_received {Recorder, {:cancel, _cancel}}
+      assert :sys.get_state(resumed).held_sends == %{}
+    end
+  end
 end
