@@ -13,6 +13,28 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-09-23 - st-bdpe
+
+Approved-by: JohnnyT (the operator's campaign consent of 2026-09-23, which
+pre-approves exactly this change: enabling the `docs` and `doc_links` stages
+and the ex_quality dependency requirement they need)
+
+- .quality.exs: enables the Docs stage (`docs: [enabled: :auto]`) and the Doc
+  links stage (`doc_links: [enabled: :auto]`), with a comment giving the
+  reason
+- mix.exs: the dev dependency requirement moves from
+  `{:ex_quality, "~> 0.14", ...}` to `{:ex_quality, "~> 0.15", ...}`, options
+  unchanged, because the Doc links stage first ships in ex_quality 0.15.0
+
+Reason: the package's published docs had no check before publishing. The
+Docs stage fails on any ExDoc warning; the Doc links stage fails on the link
+mistakes ExDoc accepts silently (a README relative link to a file missing
+from the package files, a published relative link to a file that is not an
+extra, two extras sharing a basename, a silent rewrite to a different
+extra). Both run in CI unchanged, since CI's one job runs `mix gate.verify`.
+Adds two stages; loosens nothing, skips no existing check, and lowers no
+threshold. Neither is in the loop profile's `stages:` allow-list.
+
 ## 2026-09-19 - st-06sk
 
 Approved-by: JohnnyT (in session, 2026-09-19, for exactly this stage: one

@@ -30,6 +30,16 @@
     strict: true
   ],
 
+  # The published docs are part of the package, so the gate checks them the
+  # way HexDocs and hex.pm will read them. The Docs stage runs `mix docs` and
+  # fails on any ExDoc warning. The Doc links stage fails on the link rules
+  # ExDoc accepts silently: a README relative link to a file not in the
+  # package files, a published relative link to a file that is not an extra,
+  # two extras sharing a basename, and a silent rewrite to a different extra.
+  # `:auto` runs both whenever ex_doc is installed, which it is in dev.
+  docs: [enabled: :auto],
+  doc_links: [enabled: :auto],
+  
   # Disabled by default (and so absent from both a bare `mix quality` and
   # `--profile loop`) because it makes real `claude` CLI calls; the :merge
   # profile below re-enables it for the one path that wants it. See the
