@@ -1,6 +1,6 @@
 # ADR-0072: Two compiled charts diff into four classes with their reasons on `Statifier.Chart`, and "compatible at the position" is a separate predicate on `Statifier.Position`
 
-Status: proposed - adds two public functions, `Statifier.Chart.diff/3`
+Status: accepted - adds two public functions, `Statifier.Chart.diff/3`
 (`diff(from, to, opts \\ [])`) and `Statifier.Position.compatible_at?/3`;
 changes no existing function, struct or record; reuses
 `Statifier.Chart.events/1` (ADR-0071) for the event side and
@@ -441,3 +441,34 @@ The edited revision renames `awaiting_pickup` to `ready_for_pickup`
 - [ADR-0005](0005-full-configuration-and-interned-state-indexes.md) (the full configuration the ancestor case rests on)
 - [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (a delayed send leaves the position as a `%SendDelayed{}` effect, scheduled by the session's timer table, a durable host for a self-routed send, or the processor registered for its send type under [ADR-0069](0069-host-registered-send-types.md))
 - [ADR-0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) (the `sb-ADR-0004` cross-repo cite form)
+
+## Note (2026-09-23): accepted
+
+This note decides nothing. It records the flip and one reading of a word.
+No decision, consequence or Related entry changes.
+
+The code that implements this record shipped in statifier 2.8.0:
+`Statifier.Chart.diff/3` and `Statifier.Position.compatible_at?/3` are
+both at the `v2.8.0` tag (`a16c035`). Every claim above was verified at
+that tag and against `main` at `e7d37bf`. Between the two,
+`lib/statifier/chart.ex` is unchanged, `lib/statifier/position.ex`
+changed only in `export/1`'s `@doc` wording, and no other change in
+`lib/` touches a sentence this record cites. The Context's cites
+describe `lib/` as it stood at `018ec64`, before either function
+existed, and were checked there. The worked example was compiled from
+this record's text and run:
+`diff/2`, `diff/3` with the mapping and `compatible_at?/3` answer exactly
+the classes and reasons listed above.
+
+**`:regions` compares child states.** Decision 1 says `:regions` is
+reported when "the corresponding ids of their children differ", and the
+equality section says a state compares by "the corresponding ids of its
+children when it is parallel". The word is read as spec 3.11 reads it in
+the sentence decision 4 quotes ("If the configuration contains a
+<parallel> state, it contains all of its children"): the child states,
+which never include a `<history>` pseudo-state. `Statifier.Chart`'s
+`regions/3` compares `Statifier.Machine.child_states/2`, which excludes
+history children, and `diff/3`'s `@doc` says "child states". So a
+`<history>` added to a parallel state is reported as `{:state_added, id}`
+only, and a parallel pair whose child states match takes no `:regions`
+reason.
