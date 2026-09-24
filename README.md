@@ -44,6 +44,11 @@ document for 1.x users. (The pre-release SHA-pinning contract ended with
 Persisted position and recording blobs refuse with a typed error on a
 format-version or chart-identity mismatch rather than misreading.
 
+For a host moving from 2.5 to 2.8.1,
+[docs/upgrading.md](https://github.com/riddler/statifier-ex/blob/main/docs/upgrading.md)
+lists, release by release, what a host must change and what it may start
+using.
+
 ## Quick start
 
 Compile an SCXML document, initialize it, and send it events. Here is a card
