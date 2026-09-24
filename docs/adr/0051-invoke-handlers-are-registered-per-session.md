@@ -390,8 +390,10 @@ beside `nil`, `"scxml"` and `http://www.w3.org/TR/scxml/`. The ground is the
 one the function's own `@doc` already gives for `"scxml"` (read at
 `c9cc9dc`): 6.4.2's "Processors MAY define short form notations as an
 authoring convenience". The W3C test suite writes this spelling itself -
-the `<invoke>` of `w3c/test216` in `conformance/corpus/w3c.json` - so a
-processor that refused it refused the type 6.4.2 mandates, as the suite's
+the `<invoke>` of the upstream document `216/test216.txml`, as its case
+`w3c/test216` carried it in `conformance/corpus/w3c.json` read at
+`c9cc9dc`, and the case is now listed in `conformance/exclusions.json` - so
+a processor that refused it refused the type 6.4.2 mandates, as the suite's
 authors spell it.
 
 What this note does not change:
