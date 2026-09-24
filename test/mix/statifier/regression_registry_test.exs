@@ -148,6 +148,23 @@ defmodule Mix.Statifier.RegressionRegistryTest do
 
       assert {[], [^dir]} = RegressionRegistry.expand_patterns([dir])
     end
+
+    @tag :isolated_tmp_dir
+    # sabotage: entry?/1 dropping its authored arm (test modules only) -> red,
+    #           the glob expands to nothing
+    test "a glob over the authored cases expands to their JSON files alone", %{tmp_dir: tmp_dir} do
+      json = touch(tmp_dir, "conformance/cases/send/a.json")
+      touch(tmp_dir, "conformance/cases/send/a.scxml")
+      touch(tmp_dir, "conformance/cases/send/a.to.scxml")
+      stray = Path.join(tmp_dir, "elsewhere/*")
+      touch(tmp_dir, "elsewhere/b.json")
+
+      assert {[^json], [^stray]} =
+               RegressionRegistry.expand_patterns([
+                 Path.join(tmp_dir, "conformance/cases/**/*"),
+                 stray
+               ])
+    end
   end
 
   describe "files/1" do
@@ -182,6 +199,18 @@ defmodule Mix.Statifier.RegressionRegistryTest do
       assert RegressionRegistry.categorize("test/scion_tests/basic/basic0_test.exs") == :scion
       assert RegressionRegistry.categorize("test/scxml_tests/w3c/test144_test.exs") == :w3c
       assert RegressionRegistry.categorize("test/mix/tasks/thing_test.exs") == :internal
+    end
+
+    # sabotage: @suite_markers keying statifier on "cases/" -> red on the
+    #           internal test module under a cases/ directory
+    test "an authored case is statifier, and needs no tag because mix test never runs it" do
+      authored = "conformance/cases/send/registered_immediate.json"
+
+      assert RegressionRegistry.categorize(authored) == :statifier
+      assert RegressionRegistry.authored?(authored)
+      assert RegressionRegistry.categorize("test/statifier/cases/thing_test.exs") == :internal
+      refute RegressionRegistry.authored?("test/statifier/cases/thing_test.exs")
+      assert RegressionRegistry.test_args([authored]) == []
     end
 
     # sabotage: drop test_args/1's Enum.uniq() before mapping to tags -> red
@@ -264,6 +293,19 @@ defmodule Mix.Statifier.RegressionRegistryTest do
 
       assert RegressionRegistry.corpus_files(:scion, tmp_dir) == [nested]
       assert RegressionRegistry.corpus_files(:w3c, tmp_dir) == []
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: @suite_globs' statifier glob widened to "**/*" -> red, the
+    #           .scxml documents and the top-level stray count as cases
+    test "the statifier suite's files are the authored cases' JSON files", %{tmp_dir: tmp_dir} do
+      json = touch(tmp_dir, "conformance/cases/send/a.json")
+      touch(tmp_dir, "conformance/cases/send/a.scxml")
+      touch(tmp_dir, "conformance/cases/send/a.to.scxml")
+      touch(tmp_dir, "conformance/cases/stray.json")
+
+      assert RegressionRegistry.corpus_files(:statifier, tmp_dir) == [json]
+      assert RegressionRegistry.conformance_categories() == [:scion, :w3c, :statifier]
     end
 
     # sabotage: have corpus_files/2's :internal clause return a non-empty

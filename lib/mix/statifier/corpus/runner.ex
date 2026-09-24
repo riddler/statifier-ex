@@ -23,7 +23,7 @@ defmodule Mix.Statifier.Corpus.Runner do
   `expect_accepts` (ADR-0071 decision 7).
   """
 
-  alias Mix.Statifier.Corpus.HostCase
+  alias Mix.Statifier.Corpus.{Authored, HostCase}
   alias Statifier.Testing.Case
 
   # Well above the harness's own 4s configuration deadline per step, so a
@@ -52,6 +52,54 @@ defmodule Mix.Statifier.Corpus.Runner do
       {:exit, reason}, corpus_case ->
         {corpus_case["id"], {:disagree, "did not finish: #{inspect(reason)}"}}
     end)
+  end
+
+  @doc """
+  Runs the authored cases the regression ratchet names by `paths`, each
+  path the case's JSON file (`Mix.Statifier.Corpus.Authored.case_path/1`),
+  relative to `root` or already joined to it. Returns `{path, outcome}`
+  pairs in the order given, reading every authored case under `root`
+  once. A path that names no authored case disagrees, naming itself: the
+  ratchet never passes a case it cannot find. A malformed case tree is
+  refused as `Mix.Statifier.Corpus.Authored.read/1` refuses it.
+
+  The caller starts the session runtime first (`start_runtime/0`), as for
+  `run/1`.
+  """
+  @spec run_paths(paths :: [Path.t()], root :: Path.t()) ::
+          {:ok, [{Path.t(), outcome()}]} | {:error, String.t()}
+  def run_paths(paths, root) do
+    with {:ok, cases} <- Authored.read(root) do
+      by_path = Map.new(cases, &{Authored.case_path(&1), &1})
+      named = Enum.map(paths, &{&1, Map.get(by_path, relative(&1, root))})
+      found = for {_path, corpus_case} <- named, corpus_case != nil, do: corpus_case
+      outcomes = found |> run() |> Map.new()
+
+      {:ok,
+       Enum.map(named, fn
+         {path, nil} -> {path, {:disagree, "#{path} names no authored case"}}
+         {path, corpus_case} -> {path, Map.fetch!(outcomes, corpus_case["id"])}
+       end)}
+    end
+  end
+
+  defp relative(path, "."), do: path
+  defp relative(path, root), do: Path.relative_to(path, root)
+
+  @doc """
+  Starts the `:statifier` application and places `Statifier.Supervisor`,
+  the session runtime a case using `<send>`, `<invoke>` or a delay runs
+  through (ADR-0027: the library starts no processes of its own). Idempotent:
+  a runtime already placed is left as it is.
+  """
+  @spec start_runtime() :: :ok
+  def start_runtime do
+    Mix.Task.run("app.start")
+
+    case Statifier.Supervisor.start_link([]) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
   end
 
   @doc """

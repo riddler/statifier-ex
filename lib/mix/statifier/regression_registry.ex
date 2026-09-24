@@ -2,7 +2,7 @@ defmodule Mix.Statifier.RegressionRegistry do
   @moduledoc """
   Reads and writes `test/passing_tests.json`, the regression ratchet registry.
 
-  The registry names the tests that must always pass. It has three lists, one
+  The registry names the tests that must always pass. It has four lists, one
   per suite, and entries may be literal paths or globs:
 
       {
@@ -10,8 +10,15 @@ defmodule Mix.Statifier.RegressionRegistry do
         "internal_tests": ["test/statifier/**/*_test.exs"],
         "last_updated": "2026-08-02",
         "scion_tests": [],
+        "statifier_tests": [],
         "w3c_tests": []
       }
+
+  The `statifier` suite is the conformance cases this repository authors
+  under `conformance/cases/` (ADR-0070 decision 5). An authored case has no
+  generated test module, so its entry is the case's JSON file
+  (`Mix.Statifier.Corpus.Authored.case_path/1`), and the tasks run it
+  through `Mix.Statifier.Corpus.Runner` rather than `mix test`.
 
   `mix test.regression` runs exactly what this file expands to; `mix
   test.baseline` is the only supported way to grow it. This module holds the
@@ -25,14 +32,25 @@ defmodule Mix.Statifier.RegressionRegistry do
 
   @default_path "test/passing_tests.json"
 
-  @keys %{internal: "internal_tests", scion: "scion_tests", w3c: "w3c_tests"}
-  @categories [:internal, :scion, :w3c]
+  @keys %{
+    internal: "internal_tests",
+    scion: "scion_tests",
+    w3c: "w3c_tests",
+    statifier: "statifier_tests"
+  }
+  @categories [:internal, :scion, :w3c, :statifier]
 
-  @suite_dirs %{scion: "test/scion_tests", w3c: "test/scxml_tests"}
+  @suite_dirs %{
+    scion: "test/scion_tests",
+    w3c: "test/scxml_tests",
+    statifier: "conformance/cases"
+  }
+  @suite_globs %{scion: "**/*_test.exs", w3c: "**/*_test.exs", statifier: "*/*.json"}
+  @suite_markers %{scion: "scion_tests/", w3c: "scxml_tests/", statifier: "conformance/cases/"}
   @suite_tags %{scion: "scion", w3c: "scxml_w3"}
-  @suite_labels %{scion: "SCION", w3c: "W3C"}
+  @suite_labels %{scion: "SCION", w3c: "W3C", statifier: "statifier"}
 
-  @type category :: :internal | :scion | :w3c
+  @type category :: :internal | :scion | :w3c | :statifier
   @type t :: %{String.t() => term()}
   @type stats :: %{passing: non_neg_integer(), total: non_neg_integer(), percent: float() | nil}
 
@@ -63,6 +81,9 @@ defmodule Mix.Statifier.RegressionRegistry do
 
       iex> Mix.Statifier.RegressionRegistry.suite_dir(:w3c)
       "test/scxml_tests"
+
+      iex> Mix.Statifier.RegressionRegistry.suite_dir(:statifier)
+      "conformance/cases"
 
   """
   @spec suite_dir(category :: category()) :: String.t() | nil
@@ -181,10 +202,16 @@ defmodule Mix.Statifier.RegressionRegistry do
 
   defp expand_pattern(pattern) do
     if String.contains?(pattern, "*") do
-      pattern |> Path.wildcard() |> Enum.filter(&String.ends_with?(&1, "_test.exs"))
+      pattern |> Path.wildcard() |> Enum.filter(&entry?/1)
     else
       if File.regular?(pattern), do: [pattern], else: []
     end
+  end
+
+  # What a glob may expand to: a test module, or an authored case's JSON file.
+  defp entry?(path) do
+    String.ends_with?(path, "_test.exs") or
+      (authored?(path) and Path.extname(path) == ".json")
   end
 
   @doc """
@@ -214,13 +241,33 @@ defmodule Mix.Statifier.RegressionRegistry do
       iex> Mix.Statifier.RegressionRegistry.categorize("test/statifier/document_test.exs")
       :internal
 
+      iex> Mix.Statifier.RegressionRegistry.categorize("conformance/cases/send/registered_immediate.json")
+      :statifier
+
   """
   @spec categorize(path :: String.t()) :: category()
   def categorize(path) do
-    Enum.find_value(@suite_dirs, :internal, fn {category, dir} ->
-      if String.contains?(path, Path.basename(dir) <> "/"), do: category
+    Enum.find_value(@suite_markers, :internal, fn {category, marker} ->
+      if String.contains?(path, marker), do: category
     end)
   end
+
+  @doc """
+  Whether `path` names an authored `statifier` case rather than a test
+  module - the entries the tasks run through
+  `Mix.Statifier.Corpus.Runner` instead of `mix test`.
+
+  ## Examples
+
+      iex> Mix.Statifier.RegressionRegistry.authored?("conformance/cases/send/registered_immediate.json")
+      true
+
+      iex> Mix.Statifier.RegressionRegistry.authored?("test/scion_tests/basic/basic0_test.exs")
+      false
+
+  """
+  @spec authored?(path :: String.t()) :: boolean()
+  def authored?(path), do: categorize(path) == :statifier
 
   @doc """
   `mix test` arguments that make `paths` runnable.
@@ -278,7 +325,8 @@ defmodule Mix.Statifier.RegressionRegistry do
   end
 
   @doc """
-  Every test file on disk for a conformance `category`, sorted.
+  Every test file on disk for a conformance `category`, sorted - for the
+  `statifier` suite, every authored case's JSON file.
 
   Used by `mix test.baseline` to find candidates the registry does not know
   about yet. `root` prefixes the suite directory; it defaults to the project
@@ -293,7 +341,7 @@ defmodule Mix.Statifier.RegressionRegistry do
       dir ->
         dir
         |> then(&if root == ".", do: &1, else: Path.join(root, &1))
-        |> Path.join("**/*_test.exs")
+        |> Path.join(Map.fetch!(@suite_globs, category))
         |> Path.wildcard()
         |> Enum.sort()
     end

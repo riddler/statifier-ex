@@ -730,6 +730,57 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
       assert message =~ "statifier/send/registered_immediate (authored): Expected active states"
     end
+
+    @tag :isolated_tmp_dir
+    # sabotage: ratcheted?/3 and registry/4 keyed on generated_path/2 alone
+    # (the authored arm of ratchet_path/2 dropped) -> red, the listed case
+    # names no corpus case and the emit stops
+    test "a case the ratchet's statifier list names is claimed, and one it does not name is not",
+         %{config: config, root: root} do
+      author!(root)
+      author!(root, "unregistered_type")
+
+      rewrite_ratchet(
+        root,
+        &Map.put(&1, "statifier_tests", ["conformance/cases/send/registered_immediate.json"])
+      )
+
+      report = emit!(config)
+      registry = decoded(root, "registry.json")
+
+      assert "statifier" in registry["claims"]
+      assert {"statifier", 1} in report.claims
+
+      assert Enum.filter(registry["entries"], &(&1["suite"] == "statifier")) == [
+               %{"case_id" => "statifier/send/registered_immediate", "suite" => "statifier"}
+             ]
+
+      outside = Enum.map(report.outside_ratchet, &elem(&1, 0))
+      refute "statifier/send/registered_immediate" in outside
+      assert "statifier/send/unregistered_type" in outside
+
+      assert {:ok, _report} =
+               Emitter.check(Emitter.config(root: root, scratch: absent_scratch(root)))
+    end
+
+    @tag :isolated_tmp_dir
+    # sabotage: ratchet/1 reading only the SCION and W3C lists -> red, the
+    # statifier list is never read and the emit succeeds
+    test "a statifier list entry naming no authored case stops the emit", %{
+      config: config,
+      root: root
+    } do
+      author!(root)
+
+      rewrite_ratchet(
+        root,
+        &Map.put(&1, "statifier_tests", ["conformance/cases/send/no_such_case.json"])
+      )
+
+      assert {:error, message} = Emitter.emit(config)
+      assert message =~ "conformance/cases/send/no_such_case.json: names no corpus case"
+      refute File.exists?(Path.join(root, "conformance/registry.json"))
+    end
   end
 
   describe "Upstream.modified/0" do
@@ -775,6 +826,21 @@ defmodule Mix.Statifier.Corpus.EmitterTest do
 
       assert Emitter.generated_path(%{"suite" => "statifier", "id" => "statifier/send/x"}, ".") ==
                nil
+    end
+  end
+
+  describe "ratchet_path/2" do
+    @tag :isolated_tmp_dir
+    # sabotage: ratchet_path/2 returning generated_path/2 alone -> red on
+    # the authored case
+    test "names an upstream case by its module and an authored case by its JSON file" do
+      assert Emitter.ratchet_path(
+               %{"suite" => "scion", "id" => "scion/actionSend/send1", "spec" => "actionSend"},
+               "."
+             ) == "test/scion_tests/action_send/send1_test.exs"
+
+      assert Emitter.ratchet_path(%{"suite" => "statifier", "id" => "statifier/send/x"}, ".") ==
+               "conformance/cases/send/x.json"
     end
   end
 end

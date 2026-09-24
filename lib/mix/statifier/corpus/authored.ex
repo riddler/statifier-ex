@@ -65,6 +65,27 @@ defmodule Mix.Statifier.Corpus.Authored do
     end
   end
 
+  @doc """
+  The path, relative to the project root, of the JSON file an authored
+  case is written in - the path the regression ratchet
+  (`test/passing_tests.json`) names the case by, since an authored case has
+  no generated test module. Any other case has none.
+
+  ## Examples
+
+      iex> Mix.Statifier.Corpus.Authored.case_path(%{"suite" => "statifier", "id" => "statifier/send/unregistered_type"})
+      "conformance/cases/send/unregistered_type.json"
+
+      iex> Mix.Statifier.Corpus.Authored.case_path(%{"suite" => "scion", "id" => "scion/basic/basic0"})
+      nil
+
+  """
+  @spec case_path(corpus_case :: map()) :: Path.t() | nil
+  def case_path(%{"suite" => "statifier", "id" => "statifier/" <> spec_and_name}),
+    do: Path.join(@cases_dir, spec_and_name <> ".json")
+
+  def case_path(_corpus_case), do: nil
+
   defp read_cases(jsons, dir) do
     Enum.reduce_while(jsons, {:ok, []}, fn json, {:ok, acc} ->
       case read_case(json, dir) do

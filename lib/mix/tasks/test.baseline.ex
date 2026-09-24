@@ -16,15 +16,24 @@ defmodule Mix.Tasks.Test.Baseline do
       # Verify specific files and add them
       mix test.baseline add test/scion_tests/basic/basic0_test.exs
 
+      # An authored case is named by its JSON file
+      mix test.baseline add conformance/cases/send/registered_immediate.json
+
   ## Options
 
     * `--add` - ratchet in every newly passing test the scan found
-    * `--only` - restrict the scan to one suite, `scion` or `w3c`
+    * `--only` - restrict the scan to one suite, `scion`, `w3c` or `statifier`
     * `--registry` - registry to update, defaults to `test/passing_tests.json`
 
   Both forms run each candidate on its own before writing anything, so a test
   can only enter the registry by passing. `add` is all-or-nothing: if any named
   file fails, the registry is left untouched.
+
+  The `statifier` suite is the cases this repository authors under
+  `conformance/cases/` (ADR-0070 decision 5). They have no generated test
+  module, so a candidate there is the case's JSON file, and it is run through
+  `Mix.Statifier.Corpus.Runner`, as `mix statifier.corpus` runs it, instead
+  of `mix test`.
 
   The ratchet only moves forward. Nothing here removes an entry - a test that
   used to pass and now does not is a regression to fix, not a line to delete.
@@ -40,6 +49,7 @@ defmodule Mix.Tasks.Test.Baseline do
 
   use Mix.Task
 
+  alias Mix.Statifier.Corpus.Runner
   alias Mix.Statifier.RegressionRegistry
 
   @switches [add: :boolean, only: :string, registry: :string]
@@ -56,19 +66,24 @@ defmodule Mix.Tasks.Test.Baseline do
   Runs the task and reports the outcome instead of halting.
 
   `opts[:runner]` replaces the `mix test` shell-out with a function of the
-  argument list returning an exit status, `opts[:root]` moves the corpus scan
-  to a fixture tree, and `opts[:today]` fixes the date stamped into the
-  registry. All three exist so the tests can drive this without spawning a
-  nested `mix test`.
+  argument list returning an exit status, `opts[:case_runner]` replaces
+  running the authored cases with a function of their paths returning what
+  `Mix.Statifier.Corpus.Runner.run_paths/2` returns, `opts[:root]` moves the
+  corpus scan to a fixture tree, and `opts[:today]` fixes the date stamped
+  into the registry. All four exist so the tests can drive this without
+  spawning a nested `mix test` or starting the session runtime.
   """
   @spec execute(argv :: [String.t()], opts :: keyword()) :: :ok | {:error, String.t()}
   def execute(argv, opts \\ []) do
     {parsed, rest} = OptionParser.parse!(argv, strict: @switches)
 
+    root = Keyword.get(opts, :root, ".")
+
     context = %{
       path: parsed[:registry] || RegressionRegistry.default_path(),
-      root: Keyword.get(opts, :root, "."),
+      root: root,
       runner: Keyword.get(opts, :runner, &mix_test/1),
+      case_runner: Keyword.get(opts, :case_runner, &run_authored(&1, root)),
       today: Keyword.get(opts, :today, Date.utc_today())
     }
 
@@ -97,7 +112,10 @@ defmodule Mix.Tasks.Test.Baseline do
   defp categories(nil), do: {:ok, RegressionRegistry.conformance_categories()}
   defp categories("scion"), do: {:ok, [:scion]}
   defp categories("w3c"), do: {:ok, [:w3c]}
-  defp categories(other), do: {:error, "unknown suite #{inspect(other)} - use scion or w3c"}
+  defp categories("statifier"), do: {:ok, [:statifier]}
+
+  defp categories(other),
+    do: {:error, "unknown suite #{inspect(other)} - use scion, w3c or statifier"}
 
   defp scan(registry, categories, add?, context) do
     {candidates, tracked} = candidates(registry, categories, context.root)
@@ -110,10 +128,12 @@ defmodule Mix.Tasks.Test.Baseline do
 
       candidates ->
         Mix.shell().info("Checking #{length(candidates)} untracked conformance test files...")
-        {passing, failing} = partition(candidates, context.runner)
-        report(passing, failing)
-        print_coverage(tracked ++ passing, categories, context.root)
-        maybe_ratchet(registry, passing, add?, context)
+
+        with {:ok, {passing, failing}} <- partition(candidates, context) do
+          report(passing, failing)
+          print_coverage(tracked ++ passing, categories, context.root)
+          maybe_ratchet(registry, passing, add?, context)
+        end
     end
   end
 
@@ -135,9 +155,27 @@ defmodule Mix.Tasks.Test.Baseline do
     end
   end
 
-  defp partition(files, runner) do
-    Enum.split_with(files, &(runner.(RegressionRegistry.test_args([&1]) ++ [&1]) == 0))
+  # Test modules run one `mix test` each; authored cases run together
+  # through the case runner, each judged on its own outcome.
+  defp partition(files, context) do
+    {authored, modules} = Enum.split_with(files, &RegressionRegistry.authored?/1)
+
+    {passing, failing} =
+      Enum.split_with(
+        modules,
+        &(context.runner.(RegressionRegistry.test_args([&1]) ++ [&1]) == 0)
+      )
+
+    with {:ok, outcomes} <- run_cases(authored, context.case_runner) do
+      {agreeing, disagreeing} = Enum.split_with(outcomes, &match?({_path, :agree}, &1))
+      {:ok, {passing ++ paths(agreeing), failing ++ paths(disagreeing)}}
+    end
   end
+
+  defp run_cases([], _case_runner), do: {:ok, []}
+  defp run_cases(paths, case_runner), do: case_runner.(paths)
+
+  defp paths(outcomes), do: Enum.map(outcomes, &elem(&1, 0))
 
   defp report(passing, failing) do
     Mix.shell().info(
@@ -167,14 +205,16 @@ defmodule Mix.Tasks.Test.Baseline do
   defp add_named(registry, files, context) do
     Mix.shell().info("Verifying #{length(files)} test file(s) before adding...")
 
-    case Enum.reject(files, &(context.runner.(RegressionRegistry.test_args([&1]) ++ [&1]) == 0)) do
-      [] ->
-        ratchet(registry, files, context)
+    with {:ok, {_passing, failing}} <- partition(files, context) do
+      case failing do
+        [] ->
+          ratchet(registry, files, context)
 
-      failing ->
-        {:error,
-         "these files do not pass, so the registry was left unchanged:\n" <>
-           Enum.map_join(failing, "\n", &"  - #{&1}")}
+        failing ->
+          {:error,
+           "these files do not pass, so the registry was left unchanged:\n" <>
+             Enum.map_join(failing, "\n", &"  - #{&1}")}
+      end
     end
   end
 
@@ -199,6 +239,11 @@ defmodule Mix.Tasks.Test.Baseline do
           )
         end
     end
+  end
+
+  defp run_authored(paths, root) do
+    Runner.start_runtime()
+    Runner.run_paths(paths, root)
   end
 
   defp mix_test(args) do
