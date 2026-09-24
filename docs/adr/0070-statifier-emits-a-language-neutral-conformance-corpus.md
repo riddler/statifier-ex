@@ -286,15 +286,16 @@ today's tree.
 
 ## Note (2026-09-23): the ratchet has a `statifier` list, so authored cases are claimed like any other
 
-This note decides nothing new. Decision 3 says the emitter writes the
-registry from `test/passing_tests.json`'s SCION and W3C lists; read with
-decision 4's `statifier` claim, that left the claim unreachable, because
-an authored case has no generated test module for either list to name. At
-`716c4d9` the registry made no `statifier` claim although every authored
-case agreed when run. No decision, consequence or Related entry changes,
-and the Status line's extends clause stands as written: the ratchet file
-is still `test/passing_tests.json`, `mix test.baseline` still its only
-grower, and the emitter still the registry's only writer.
+This note extends decision 3's set of lists and one consequence; no other
+decision and no Related entry changes. Decision 3 says the emitter writes
+the registry from `test/passing_tests.json`'s SCION and W3C lists; read
+with decision 4's `statifier` claim, that left the claim unreachable,
+because an authored case has no generated test module for either list to
+name. At `716c4d9` the registry made no `statifier` claim although every
+authored case agreed when run. The Status line's extends clause stands as
+written: the ratchet file is still `test/passing_tests.json`, `mix
+test.baseline` still its only grower, and the emitter still the registry's
+only writer.
 
 **The ratchet names an authored case by its JSON file.** The ratchet file
 gains a fourth list, `statifier_tests`, whose entries are the authored
@@ -304,6 +305,14 @@ case to the path the ratchet names it by through
 `Mix.Statifier.Corpus.Emitter.ratchet_path/2`, and derives the registry
 from all three conformance lists, so decision 3's "SCION and W3C lists"
 now reads as the SCION, W3C and statifier lists.
+
+**The Consequences bullet on the two tasks.** The Consequences bullet
+"`mix test.regression` and `mix test.baseline` are unchanged" is read as
+of this record's acceptance. From this note on, both tasks also run
+authored cases through the case runner, as the next paragraph says. The
+rest of that bullet still holds: ratcheting a case in is still one line in
+`test/passing_tests.json`, an authored case included, and the registry
+follows at the next emit.
 
 **The ratchet's rules hold for them unchanged.** `mix test.baseline` adds
 an authored case only after running it and seeing it agree, and `mix
