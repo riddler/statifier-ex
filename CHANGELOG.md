@@ -10,6 +10,20 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.8.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.8.1] 2026-09-23
+
+A patch release: an `<invoke>` whose type is the SCXML type URI without its
+trailing slash now starts a child session instead of raising
+`error.execution`. The conformance corpus under `conformance/`, which is not
+part of the Hex package, gains a `statifier` case whose `expect_sends` items
+may carry an optional `outcome`, and `conformance/registry.json` now claims
+the authored `statifier` cases; a sibling implementation that vendors the
+corpus re-vendors it at this version's tag.
+
+### Changed
+
+- `<invoke type="http://www.w3.org/TR/scxml">`, the SCXML type URI without its trailing slash, now starts an SCXML child session like `"scxml"` and `http://www.w3.org/TR/scxml/` instead of raising `error.execution`; `Statifier.Send.Target.supported_invoke_type?/1` answers `true` for it, and `<send type>` is unchanged.
+
 ## [2.8.0] 2026-09-23
 
 Adds two pure functions a host can call on a pair of compiled charts before
