@@ -1,6 +1,7 @@
 defmodule Statifier.Invoke.Handler.Scxml do
   @moduledoc """
-  The built-in `type=scxml` (and long-URI, `http://www.w3.org/TR/scxml/`)
+  The built-in `type=scxml` (and long-URI, `http://www.w3.org/TR/scxml/`,
+  with or without its trailing slash)
   `Statifier.Invoke.Handler` - `Statifier.Session.Effects.plan_invoke`'s
   default entry for the built-in type set, not a name it special-cases
   (ADR-0051 decision 4).

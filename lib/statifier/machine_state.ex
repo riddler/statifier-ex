@@ -478,8 +478,9 @@ defmodule Statifier.MachineState do
   The caller-declared registered `<invoke type>` set (ADR-0051), or `nil`.
   `nil` means "the built-in set only": no `:invoke_handlers` were passed at
   session start, so `Statifier.Invoke.Types.registered?/2` answers exactly
-  `Statifier.Send.Target.supported_invoke_type?/1` - `nil`, `"scxml"`, and
-  the bare `http://www.w3.org/TR/scxml/` URI. Unlike
+  `Statifier.Send.Target.supported_invoke_type?/1` - `nil`, `"scxml"`, the
+  bare `http://www.w3.org/TR/scxml/` URI, and that URI without its trailing
+  slash. Unlike
   `t:Statifier.MachineState.routes/0`, this is stamped once per session rather
   than per drive: the registered set is a `start_link/2` option, fixed for the
   session's whole lifetime.
