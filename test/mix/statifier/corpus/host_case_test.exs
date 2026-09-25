@@ -229,6 +229,60 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
     end
   end
 
+  describe "run_case/1 with a step's event data" do
+    @data_source """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="awaiting_copy">
+        <state id="awaiting_copy">
+            <transition event="copy.available" cond="_event.data.copy_id == 'c-1'" target="notifying"/>
+            <transition event="copy.available" target="copy_unnamed"/>
+        </state>
+        <state id="notifying">
+            <onentry>
+                <send type="library:notice" target="patron" event="hold.ready">
+                    <param name="copy_id" expr="_event.data.copy_id"/>
+                </send>
+            </onentry>
+        </state>
+        <state id="copy_unnamed"/>
+    </scxml>
+    """
+
+    defp data_case(event) do
+      %{
+        "id" => "statifier/send/event_data",
+        "source" => @data_source,
+        "description" => "",
+        "initial_configuration" => ["awaiting_copy"],
+        "steps" => [%{"event" => event, "configuration" => ["notifying"]}],
+        "host" => %{
+          "send_types" => ["library:notice"],
+          "expect_sends" => [
+            %{
+              "type" => "library:notice",
+              "target" => "patron",
+              "event" => %{"name" => "hold.ready", "data" => %{"copy_id" => "c-1"}}
+            }
+          ]
+        }
+      }
+    end
+
+    # sabotage: event/1 injecting the step's event name alone, its data
+    # dropped -> the chart takes copy_unnamed and no send is handed -> red
+    test "delivers a step's event data as the injected event's payload" do
+      event = %{"name" => "copy.available", "data" => %{"copy_id" => "c-1"}}
+
+      assert Runner.run_case(data_case(event)) == :agree
+    end
+
+    # sabotage: event/1 giving every step the same fixed payload -> the
+    # chart reaches notifying -> red
+    test "a step without data injects an event with none" do
+      assert {:disagree, message} = Runner.run_case(data_case(%{"name" => "copy.available"}))
+      assert message =~ ~s|Expected active states ["notifying"], but got ["copy_unnamed"]|
+    end
+  end
+
   describe "run_case/1 with declared_events and expect_accepts" do
     @loan_source """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
