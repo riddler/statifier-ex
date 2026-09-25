@@ -75,6 +75,7 @@ defmodule Statifier.Publish do
   alias Statifier.Machine.Content.{Assign, Foreach, Script, Send}
   alias Statifier.Machine.Invoke, as: MachineInvoke
   alias Statifier.Parser.Location
+  alias Statifier.Send.Target
   alias Statifier.Send.Types, as: SendTypes
 
   @typedoc """
@@ -105,7 +106,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S15", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S15", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -119,6 +120,16 @@ defmodule Statifier.Publish do
   of kind `:unsupported_send_type` per `<send>` whose literal `type` the
   declared `send_types:` does not register, at the `<send>`'s location,
   with `data: %{type: type}`.
+
+  Row S2 reads every `<send>` whose `type` is built-in (absent, `"scxml"`,
+  or the SCXML Event I/O Processor URI) and whose `target` is a literal,
+  the rule the runtime applies before the send dispatches: a target
+  `Statifier.Send.Target.parse/1` cannot parse is a finding of kind
+  `:invalid_target`, at the `<send>`'s location, with `data: %{target:
+  target}`, in document order. A registered or unsupported `type` is not
+  judged (a registered processor's target is its own route string; an
+  unsupported type is S1's), and a `targetexpr` or a `typeexpr` is left to
+  the runtime. It needs no declaration.
 
   Row S15 composes `Statifier.Chart.check_accepts/2`: one finding of kind
   `:unreachable_name` per declared name no descriptor in the chart's
@@ -179,6 +190,20 @@ defmodule Statifier.Publish do
     for %{type: type, location: location} <-
           SendTypes.unsupported_sends(machine, declaration[:send_types]) do
       finding("S1", :unsupported_send_type, location, %{type: type})
+    end
+  end
+
+  # The target check `Statifier.Machine.Content.Send`'s `reject_reason/4`
+  # applies to a send whose type classifies as built-in: a target
+  # `Target.parse/1` answers `{:invalid, _}` for is refused with
+  # `{:invalid_target, target}`. Only a literal type and a literal target
+  # are judged here.
+  defp check("S2", %Machine{contents: contents}, _declaration) do
+    for %Send{target: {:static, target}, type: type, location: location} <-
+          Tuple.to_list(contents),
+        built_in_type?(type),
+        match?({:invalid, _target}, Target.parse(target)) do
+      finding("S2", :invalid_target, location, %{target: target})
     end
   end
 
@@ -256,6 +281,13 @@ defmodule Statifier.Publish do
       finding("S19", kind, location, %{attribute: attribute, source: source})
     end
   end
+
+  # An absent `type` is the SCXML Event I/O Processor (6.2.5); a
+  # `typeexpr` is resolved at run time and is not judged.
+  @spec built_in_type?(type :: Machine.expr() | nil) :: boolean()
+  defp built_in_type?(nil), do: true
+  defp built_in_type?({:static, type}), do: Target.supported_type?(type)
+  defp built_in_type?(_typeexpr), do: false
 
   @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
   defp foreach_name_kind(name, illegal) do

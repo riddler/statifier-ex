@@ -94,7 +94,7 @@ decides lands inside it as one check, and its cell changes when it does.
 | # | Refusal | Raised by | Record | Literal? | Twin |
 |---|---|---|---|---|---|
 | S1 | `<send>` names a `type` the session never registered: `error.execution`, data `{:unsupported_type, type}`, carrying the send's `sendid` | `Statifier.Machine.Content.Send`, raised through `Statifier.Interpreter.Content`; `Statifier.Session.Effects` for an effect a caller injects through `Statifier.Session.interpret/2` | `docs/adr/0047-send-static-target-type-invalidity-rejects-in-the-core.md`, `docs/adr/0069-host-registered-send-types.md` | part: yes for `type`, no for `typeexpr` | `Statifier.Send.Types.unsupported_sends/2` (statifier, since 2.6.0); the router composes it as `StatifierRouter.Routes.unsupported_types/2` (statifier_router 0.2.0) |
-| S2 | `<send>` with a built-in type writes a `target` the engine cannot parse: `error.execution`, data `{:invalid_target, target}`, carrying `sendid` | `Statifier.Machine.Content.Send`, through `Statifier.Interpreter.Content`; `Statifier.Session.Effects` for an injected effect | `docs/adr/0047-send-static-target-type-invalidity-rejects-in-the-core.md` | part: yes for `target`, no for `targetexpr` | NONE |
+| S2 | `<send>` with a built-in type writes a `target` the engine cannot parse: `error.execution`, data `{:invalid_target, target}`, carrying `sendid` | `Statifier.Machine.Content.Send`, through `Statifier.Interpreter.Content`; `Statifier.Session.Effects` for an injected effect | `docs/adr/0047-send-static-target-type-invalidity-rejects-in-the-core.md` | part: yes for `target`, no for `targetexpr` | `Statifier.Publish.findings/2` (statifier main, next release) |
 | S3 | `<send>` to a route that is missing from the snapshot the driver declared: `error.communication`, data `{:unreachable_target, target}`, carrying `sendid` | `Statifier.Machine.Content.Send`, through `Statifier.Interpreter.Content` | `docs/adr/0048-send-reachability-judged-against-a-route-snapshot.md` | part: yes for a `#_<invokeid>` target that no `<invoke id>` in the chart declares; no for a session id or `#_parent`, which depend on who started the execution | NONE |
 | S4 | A send whose target session does not exist or cannot be reached, found at delivery (no snapshot declared, a delayed send when its timer fires, an injected effect): `error.communication` carrying `sendid` | `Statifier.Session` (the `deliver` path and `communication_error`) | `docs/adr/0039-session-detected-send-failures-re-enter-the-core.md`, `docs/adr/0048-send-reachability-judged-against-a-route-snapshot.md` | no | NONE |
 | S5 | A host-registered send processor cannot deliver: `error.communication` carrying `sendid`, written by the host | `Statifier.Session.failed_send/3`; `Statifier.Interpreter.deliver_internal/5` when no session process is running | `docs/adr/0069-host-registered-send-types.md` (decision 5) | depends on the processor: the router's are RT1 to RT9, RT18 to RT22, RT24 and RT25 | NONE in statifier, which cannot see a processor's routes; the router's twins are in those rows |
@@ -263,8 +263,9 @@ Drop the `type` from the send and the chart still compiles, and
 `unsupported_sends/2` returns `[]`. The literal `target="overdue_notice"` is
 not a target the built-in processor can parse. The first time a loan falls
 due, the engine raises `error.execution` with data `{:invalid_target,
-"overdue_notice"}`. That is row S2, and its twin is NONE: a runtime refusal
-that a literal could have prevented.
+"overdue_notice"}`. That is row S2, a runtime refusal that a literal could
+have prevented, and `Statifier.Publish.findings/2` reports it before the
+chart runs: one finding of kind `:invalid_target` at the send's location.
 
 ## Keeping this table true
 
