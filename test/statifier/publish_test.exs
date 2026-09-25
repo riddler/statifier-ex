@@ -161,6 +161,105 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S2: a built-in <send> whose literal target the engine cannot parse" do
+    # Each chart compiles today; the runtime refuses the send in
+    # `Statifier.Machine.Content.Send`'s `reject_reason/4` with
+    # `{:invalid_target, target}`, the reason the finding's kind names.
+    defp send_chart(attributes) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="on_loan" datamodel="predicator">
+        <state id="on_loan">
+          <transition event="loan.due" target="overdue">
+            <send event="loan.overdue" #{attributes}/>
+          </transition>
+        </state>
+        <final id="overdue"/>
+      </scxml>
+      """)
+    end
+
+    # sabotage: `"S2"` removed from `@rows` -> red
+    test "the worked example without its type is one S2 finding at the send's location" do
+      assert Publish.findings(send_chart(~s(target="overdue_notice"))) == [
+               %{
+                 row: "S2",
+                 kind: :invalid_target,
+                 location: send_location(send_chart(~s(target="overdue_notice"))),
+                 data: %{target: "overdue_notice"}
+               }
+             ]
+    end
+
+    # sabotage: `built_in_type?/1`'s `{:static, type}` clause answers
+    # `false` -> red
+    test "a built-in type, short or long form, is judged the same way" do
+      for type <- ["scxml", "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"] do
+        assert [%{row: "S2", kind: :invalid_target, data: %{target: "overdue_notice"}}] =
+                 Publish.findings(send_chart(~s(type="#{type}" target="overdue_notice")))
+      end
+    end
+
+    # sabotage: the `Target.parse/1` filter dropped from the S2 clause -> red
+    # (every literal target reported)
+    test "a target the built-in processor can parse, or none at all, reports nothing" do
+      for target <- ["#_internal", "#_parent", "#_scxml_loan-7", "#_notices"] do
+        assert Publish.findings(send_chart(~s(target="#{target}"))) == []
+      end
+
+      assert Publish.findings(send_chart("")) == []
+    end
+
+    # sabotage: `built_in_type?/1`'s catch-all answers `true` -> red (the
+    # registered send's opaque route is reported)
+    test "a registered type's target is the processor's route and is not judged" do
+      registered = Send.Types.from_send_types(%{"library:notices" => Statifier.Send.Processor})
+
+      assert Publish.findings(send_chart(~s(type="library:notices" target="overdue_notice")),
+               send_types: registered
+             ) == []
+    end
+
+    # sabotage: the S2 clause's `target: {:static, target}` pattern widened
+    # to `target: target` -> red (a targetexpr is judged)
+    test "a targetexpr or a typeexpr is left to the runtime" do
+      assert Publish.findings(send_chart(~s(targetexpr="'overdue_notice'"))) == []
+      assert Publish.findings(send_chart(~s(typeexpr="'scxml'" target="overdue_notice"))) == []
+    end
+
+    # sabotage: `@rows` reordered to `["S2", "S1", "S15", "S17"]` -> red
+    test "S2 findings follow S1 and precede S15, one per send in document order" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+               initial="on_loan" datamodel="predicator">
+          <state id="on_loan">
+            <onentry>
+              <send event="loan.opened" target="first_notice"/>
+              <send event="loan.opened" type="library:notices" target="catalog"/>
+              <send event="loan.opened" target="second_notice"/>
+            </onentry>
+          </state>
+        </scxml>
+        """)
+
+      assert [
+               %{row: "S1", data: %{type: "library:notices"}},
+               %{row: "S2", data: %{target: "first_notice"}},
+               %{row: "S2", data: %{target: "second_notice"}},
+               %{row: "S15", kind: :unreachable_name}
+             ] = Publish.findings(machine, accepts: ["loan.renew"])
+    end
+
+    defp send_location(machine) do
+      [%Statifier.Machine.Content.Send{location: location}] =
+        for %Statifier.Machine.Content.Send{} = node <- Tuple.to_list(machine.contents),
+            do: node
+
+      location
+    end
+  end
+
   describe "row S17: a <foreach> item or index that is not a legal variable name" do
     # Each chart compiles today; the runtime refuses the loop in
     # `Statifier.Machine.Content.Foreach`'s `check_name` with the reason
