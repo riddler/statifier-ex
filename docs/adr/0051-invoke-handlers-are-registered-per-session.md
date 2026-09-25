@@ -265,8 +265,8 @@ reads `Effect.Invoke` off the pure core without registering anything. Whether
 `nil` should instead refuse every type outside the built-in set is a
 different question about decision 2, and this amendment does not reach it.
 
-The half-registration reading is the one the operator adopted; see the
-campaign-024 B2 ruling.
+The half-registration reading is the one the operator adopted, ruled on
+2026-09-01.
 
 Of the five layers decision 1 names as pinning it, four stay green
 unamended - `test/statifier/send/target_test.exs`,
@@ -322,7 +322,7 @@ declares a set for some invocations and relies on `nil` for others in the
 same deployment, which would mean the two paths are being used as one knob
 rather than as two.
 
-Recorded for `st-3sz8` under the campaign-024 wrap ruling 3 (the ruling that
+Recorded for `st-3sz8` under the operator's ruling of 2026-09-01 (the ruling that
 adopted the permissive reading), which also filed this bead. The
 half-registration half of that walk is the amendment above (`st-mv7t`, B2).
 
@@ -347,7 +347,7 @@ text above is edited. It records where the family's vocabulary for the
 *host's* side of a session now lives, so a reader who arrives here from a
 durable host is not left guessing.
 
-statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
+statifier_persistence `sp-ADR-0011` (proposed 2026-09-12) names the durable
 unit an **execution**: the host's own record of one chart session across
 process death, keyed by an `execution_id`. That is the host's noun for the
 thing this record's per-session registration is scoped to; it is not a new

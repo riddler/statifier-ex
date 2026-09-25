@@ -106,7 +106,7 @@ threshold moves, no test is skipped, and no scope narrows.
 ## 2026-08-22 - st-k7pm
 
 Approved-by: JohnnyT (operator ruling on sui-b5y, confirmed 2026-08-22,
-campaign 003 consent)
+under the operator's campaign consent)
 
 - .quality.exs: adds `format: [check: true]`, moving the Format stage from
   rewrite mode to check mode (`mix format --check-formatted`)
@@ -118,7 +118,7 @@ Check-mode was requested via the deciding bead sui-b5y in statifier-ui,
 designed as PLAN-format-check-mode.md in ex_quality, and ruled fleet-wide by
 the operator on 2026-08-22: the Format stage checks and fails on drift instead
 of rewriting files, and agents run `mix format` themselves before committing.
-The campaign 003 consent authorizes exactly this `.quality.exs` change and
+The operator's campaign consent authorizes exactly this `.quality.exs` change and
 nothing else in that file.
 
 This is a strengthening, not a weakening: before the change formatting could

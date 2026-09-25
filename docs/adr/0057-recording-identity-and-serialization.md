@@ -267,9 +267,9 @@ A dated note, recorded to prevent a false sweep. It decides nothing: no
 decision, consequence or Related entry changes and the Status line is
 untouched.
 
-statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
+statifier_persistence `sp-ADR-0011` (proposed 2026-09-12) names the durable
 unit an **execution**, with an `execution_id` the host owns, and the
-family's durable documentation moves to that noun in SF041
+family's durable documentation moves to that noun on 2026-09-12
 (`docs/persistence.md` and `docs/durable-timers.md`, in the same change
 that adds this note; both read at `17cc9ed` before it).
 

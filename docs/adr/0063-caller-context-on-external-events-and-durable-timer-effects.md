@@ -287,7 +287,7 @@ that emitted them, and no other effect does". That last clause was
 wrong about `<invoke>`, and the record's own Consequences named the
 trigger that would show it: "a third effect becoming durably stored (it
 claims the same stamp, as it claims `ordinal`)". A `statifier_oban`
-worker finding during campaign 025 is that trigger firing. An
+worker finding is that trigger firing. An
 asynchronous invoke handler (ADR-0051's dispatch) starts work that
 finishes minutes or hours later, in another process, and reports back
 through `Statifier.Session.send_invoked_event/3`. With the invoke seam
