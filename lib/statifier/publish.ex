@@ -107,7 +107,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S6", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S3", "S6", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -131,6 +131,18 @@ defmodule Statifier.Publish do
   judged (a registered processor's target is its own route string; an
   unsupported type is S1's), and a `targetexpr` or a `typeexpr` is left to
   the runtime. It needs no declaration.
+
+  Row S3 reads every `<send>` whose literal `target` names an invocation
+  (`#_<invokeid>`) and whose `type` is built-in (absent, `"scxml"`, or the
+  SCXML Event I/O Processor URI), the rule the runtime applies against the
+  route snapshot: a target whose invoke id no `<invoke id>` in the chart
+  declares is a finding of kind `:unreachable_target`, at the `<send>`'s
+  location, with `data: %{target: target}`, in document order. A delayed
+  send is judged too; the runtime finds the same target unreachable when
+  its timer fires. An `<invoke idlocation>` declares no id, a registered or
+  unsupported `type` is not judged, and a `targetexpr` or a `typeexpr` is
+  left to the runtime, as is a session id or `#_parent`, which depend on
+  who started the execution. It needs no declaration.
 
   Row S6 reads every `<invoke>` whose `type` is a literal, the rule the
   runtime applies before the invocation starts: a type
@@ -236,6 +248,28 @@ defmodule Statifier.Publish do
         built_in_type?(type),
         match?({:invalid, _target}, Target.parse(target)) do
       finding("S2", :invalid_target, location, %{target: target})
+    end
+  end
+
+  # The reachability check `Statifier.Machine.Content.Send`'s
+  # `reject_reason/4` applies to a send whose type classifies as built-in:
+  # an `{:invoke, id}` route missing from the snapshot is refused with
+  # `{:unreachable_target, target}`. The ids a snapshot can hold for this
+  # chart are its own literal `<invoke id>`s.
+  defp check("S3", %Machine{states: states, contents: contents}, _declaration) do
+    declared =
+      for %State{invoke: invokes} <- Tuple.to_list(states),
+          %MachineInvoke{id: id} <- invokes,
+          is_binary(id),
+          into: MapSet.new(),
+          do: id
+
+    for %Send{target: {:static, target}, type: type, location: location} <-
+          Tuple.to_list(contents),
+        built_in_type?(type),
+        {:invoke, invoke_id} <- [Target.parse(target)],
+        not MapSet.member?(declared, invoke_id) do
+      finding("S3", :unreachable_target, location, %{target: target})
     end
   end
 
