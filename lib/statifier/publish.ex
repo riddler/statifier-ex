@@ -239,11 +239,13 @@ defmodule Statifier.Publish do
   # macrostep fold spends (ADR-0019): each atomic state's eventless step,
   # the one `Statifier.Interpreter.Selection`'s
   # `select_eventless_transitions/1` must take when the step has no
-  # `cond`, and every cycle those steps close.
+  # `cond`, and every cycle those steps close. A history pseudo-state has
+  # no children but is never active, so it takes no step.
   defp check("S16", %Machine{states: states} = machine, _declaration) do
     steps =
-      for %State{index: index} <- Tuple.to_list(states),
+      for %State{index: index, kind: kind} <- Tuple.to_list(states),
           index != 0,
+          kind != :history,
           Machine.atomic?(machine, index),
           step = eventless_step(machine, index),
           step != nil,

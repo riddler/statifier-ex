@@ -442,6 +442,29 @@ defmodule Statifier.PublishTest do
              ] = Publish.findings(machine)
     end
 
+    # A history pseudo-state has no children, so it reads as atomic, but it
+    # is never active and takes no step of its own.
+    # sabotage: the `kind != :history` filter of the S16 clause dropped
+    # -> red (the history reports a self-cycle through its parent's
+    # targetless transition)
+    test "a history state is never a state of a cycle" do
+      machine =
+        cycle_chart("""
+          <state id="stacks" initial="aisle">
+            <transition/>
+            <history id="resume">
+              <transition target="aisle"/>
+            </history>
+            <state id="aisle"/>
+          </state>
+        """)
+
+      assert [%{row: "S16", kind: :eventless_cycle, data: %{states: ["aisle"]}}] =
+               Publish.findings(machine)
+
+      assert exhausts_budget?(machine)
+    end
+
     # Another region's transitions select in the same round and can take
     # the chart out, so a state inside a `<parallel>` is left to run time.
     # sabotage: the parallel-ancestor guard of `eventless_step/2` dropped
