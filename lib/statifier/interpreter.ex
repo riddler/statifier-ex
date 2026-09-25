@@ -482,6 +482,10 @@ defmodule Statifier.Interpreter do
   `running` flag, so the guard reads as the pseudocode's loop condition -
   otherwise begins a new macrostep, runs the finalize/autoforward pass,
   selects on `event`, runs whatever it enables, and folds to quiescence.
+
+  The returned state's `last_selection` is `:selected` when `event` selected
+  at least one transition and `:none` when it selected none, traced or not
+  (`t:Statifier.MachineState.last_selection/0`).
   """
   @spec handle_event(machine_state :: MachineState.t(), event :: Event.t()) ::
           {:ok, MachineState.t(), [Effect.t()]} | {:error, :not_running}
@@ -517,9 +521,21 @@ defmodule Statifier.Interpreter do
     {machine_state, selected_effects} = run_selected(machine_state, transitions, event)
     {machine_state, loop_effects} = main_event_loop(machine_state)
 
+    # The external event's own selection, read from `transitions` above
+    # rather than from inside `run_selected/3`: that tail also runs for
+    # every eventless and internal round `main_event_loop/1` folds, and a
+    # fold that quiesces ends on an empty eventless probe. Written after
+    # the fold so nothing in it can overwrite the answer, and outside the
+    # trace gate.
+    machine_state = %{machine_state | last_selection: selection_result(transitions)}
+
     {:ok, machine_state,
      dequeued ++ invoke_pass_effects ++ cond_effects ++ selected_effects ++ loop_effects}
   end
+
+  @spec selection_result(transitions :: [Transition.t()]) :: :selected | :none
+  defp selection_result([]), do: :none
+  defp selection_result([_transition | _rest]), do: :selected
 
   @doc """
   ADR-0039's re-entry seam: the sole path `Statifier.Session` uses to write

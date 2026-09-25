@@ -117,3 +117,51 @@ st-9i5r amendments explain rather than rewrite the rule they amend.
 - Interpreter code review gains a checklist item: a change that moves microstep
   state off the struct, drops locations in the compiler, or raises an internal
   event without cause metadata violates this ADR.
+
+## Note (2026-09-24): an external event's selection is on the returned state, traced or not
+
+Status: proposed (2026-09-24)
+
+This Note adds one field to machine_state and changes nothing above: items
+1 to 4, the trace gate and every trace effect stand as written, and no
+text above is edited. Anchors were read on `main` at `65f8ad7` unless they
+name this change.
+
+**Why.** Item 2 makes "transitions selected" a trace boundary, gated by an
+option. A caller that created its position without `trace: true` therefore
+had no way to tell an external event that moved nothing from one that
+selected a transition, short of comparing configurations, which a
+self-transition leaves unchanged.
+
+**What.** `%Statifier.MachineState{}` carries `last_selection`:
+`Statifier.Interpreter.handle_event/2` writes `:selected` when the
+transitions selected for the event it was handed are not empty and `:none`
+when they are, on every call and whether or not tracing is on; before any
+external event the field is `nil` (this change,
+`t:Statifier.MachineState.last_selection/0`). The value answers the same
+question the event's own `Trace.TransitionsSelected` effect answers, from
+the same list.
+
+**Where the stamp is taken.** In `handle_event/2`, from the external
+event's own selection, after the macrostep has folded. The private
+`run_selected/3` is not the site: it runs for the external event and again
+for every eventless and internal round of the macrostep
+(`internal_round/1`), and a macrostep that reaches quiescence ends on an
+empty eventless probe, so a stamp there would read `:none` after every
+such event.
+
+**What it does not say.** Why nothing was selected: an event no transition
+names and one whose matching transitions' guards were all false both read
+`:none`. A state `initialize/2` builds reads `nil`, and `deliver_internal/5`
+and `cancel/1` do not write it, so after them it keeps the last external
+event's answer.
+
+**Not position state.** `Statifier.Position.to_binary/1` leaves it out of
+the payload and `Statifier.Position.from_binary/2` drops it before
+rebuilding the struct, beside the fields ADR-0064 drops, so a restored
+position reads `nil` and the payload keeps the shape it had before the
+field existed (this change). `Statifier.Position.export/1` builds an
+explicit map (`build_exported/2`) that does not name it.
+
+**What would reopen this Note.** A caller that needs the reason nothing
+was selected, or needs the answer to survive a persisted position.

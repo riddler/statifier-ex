@@ -103,7 +103,10 @@ defmodule Statifier.Position do
   section above, and ADR-0064): all three are per-drive/per-session snapshots a driver
   re-stamps before the next drive, not durable position state, and
   `Routes.t()` in particular holds live session ids that have no business
-  sitting in a durable blob at rest.
+  sitting in a durable blob at rest. `last_selection` is dropped too: it
+  answers for the last external event a driver handed the core, not for the
+  position, so the payload keeps the shape it had before the field existed
+  (`t:Statifier.MachineState.last_selection/0`).
   """
   @spec to_binary(machine_state :: MachineState.t()) ::
           {:ok, binary()} | {:error, :unidentified_chart}
@@ -114,7 +117,7 @@ defmodule Statifier.Position do
     payload =
       machine_state
       |> Map.from_struct()
-      |> Map.drop([:machine, :routes, :invoke_types, :send_types])
+      |> Map.drop([:machine, :routes, :invoke_types, :send_types, :last_selection])
 
     {:ok, :erlang.term_to_binary({:statifier_position, @format_version, identity, payload})}
   end
@@ -143,7 +146,9 @@ defmodule Statifier.Position do
   `nil`), the same contract
   `import/2` already gives them: per-drive/per-session snapshots a driver
   re-stamps before the next drive, never durable position state
-  (ADR-0064).
+  (ADR-0064). `last_selection` is dropped the same way and comes back
+  `nil`, as it reads before any external event
+  (`t:Statifier.MachineState.last_selection/0`).
 
   `{:error, {:identity_mismatch, expected, actual}}`'s `expected` is the
   blob's own identity and `actual` is the supplied `machine`'s - both carried
@@ -173,7 +178,7 @@ defmodule Statifier.Position do
           upgraded_payload =
             version
             |> upgrade_payload(payload)
-            |> Map.drop([:routes, :invoke_types, :send_types])
+            |> Map.drop([:routes, :invoke_types, :send_types, :last_selection])
 
           {:ok, struct!(MachineState, Map.put(upgraded_payload, :machine, machine))}
         end
