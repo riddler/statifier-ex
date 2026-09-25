@@ -70,7 +70,7 @@ defmodule Statifier.Publish do
   and declaration always give the same findings.
   """
 
-  alias Statifier.{Chart, EventData, Machine}
+  alias Statifier.{Chart, Duration, EventData, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.{Block, Data, Donedata, Param, State, Transition}
   alias Statifier.Machine.Content.{Assign, Cancel, Foreach, If, Log, Script, Send}
@@ -107,7 +107,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S12", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S12", "S14", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S12: the system variables `Statifier.MachineState.new/2` seeds into
   # every datamodel (`Statifier.Evaluator.SystemVariables.initial/3`), which
@@ -216,6 +216,16 @@ defmodule Statifier.Publish do
   one the host reads against what it starts the chart with. An invoking
   parent's params reach only the child's `<data>` ids, so they add no
   root. It needs no declaration.
+
+  Row S14 reads every `<send>` whose `delay` is a literal, the rule the
+  runtime applies when the send runs, whatever its `type`: a `delay` that
+  `Statifier.Duration.to_ms/1` refuses (not a duration, or a duration with
+  a remainder finer than a millisecond) is a finding of kind
+  `:invalid_delay`, at the `delay` attribute's location (the `<send>`'s
+  when the attribute has none of its own), with `data: %{delay: delay}`,
+  in document order. A `delayexpr` is left to the runtime, and so is every
+  other failure the row names, since the data decides it. It needs no
+  declaration.
 
   Row S15 composes `Statifier.Chart.check_accepts/2`: one finding of kind
   `:unreachable_name` per declared name no descriptor in the chart's
@@ -397,6 +407,18 @@ defmodule Statifier.Publish do
         root <- Enum.uniq(for ["load", root] <- instructions, do: root),
         not MapSet.member?(readable, root) do
       finding("S12", :undeclared_root, location, %{root: root, source: source})
+    end
+  end
+
+  # The rule `Statifier.Machine.Content.Send`'s `resolve_delay/2` applies
+  # to every send before it dispatches: a literal `delay` resolves through
+  # `Statifier.Duration.to_ms/1`, and a string that is not a duration is
+  # refused with `{:invalid_delay, delay}`. A `delayexpr` is not judged.
+  defp check("S14", %Machine{contents: contents}, _declaration) do
+    for %Send{delay: {:static, delay}, attribute_locations: attrs, location: location} <-
+          Tuple.to_list(contents),
+        match?({:error, {:invalid_delay, _delay}}, Duration.to_ms(delay)) do
+      finding("S14", :invalid_delay, Map.get(attrs, :delay, location), %{delay: delay})
     end
   end
 
