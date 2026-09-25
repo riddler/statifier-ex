@@ -1,6 +1,6 @@
 # ADR-0073: One pure publish findings function, `Statifier.Publish.findings/2`, holds every publish-time check as a row of `docs/publish-time-checks.md`
 
-Status: proposed (2026-09-24) - adds one public module, `Statifier.Publish`,
+Status: accepted (2026-09-25) - adds one public module, `Statifier.Publish`,
 with one public function, `findings/2`; composes
 `Statifier.Send.Types.unsupported_sends/2` (ADR-0069 decision 3) and
 `Statifier.Chart.check_accepts/2` (ADR-0071 decision 3) without moving
@@ -280,3 +280,27 @@ worked example still returns the findings listed above, and with the
 location that the paragraph after it predicts. In
 `docs/publish-time-checks.md` the twelve rows' twin cells name
 `Statifier.Publish.findings/2`.
+
+## Note (2026-09-25): accepted
+
+This record is accepted on 2026-09-25, under the operator's word. Its
+Status line is the only line of it that changes; no decision,
+consequence or Related entry changes here, and this note decides nothing.
+
+Its code shipped in statifier 2.9.0: `Statifier.Publish.findings/2` came
+with this record in `2efc6c6`, which is in the `v2.9.0` tag (`f2365bb`),
+and statifier 2.9.0 is published. Every claim above was verified against
+`main` at `ffc0b2b`, where nothing under `lib/` or `test/` differs from
+that tag. Decision 4's "Today the function holds two rows" is read as the
+Note above records: superseded by the twelve checks that have since
+landed as decision 4 directs. The Context describes the package at
+`c100724`, as it says, and was checked there: the twelve rows it names
+were NONE in the table at that commit, and the two composed functions
+and the three stamped claims were as it describes them; each of those
+still holds on `main` except the NONE cells, which the Note above
+records. The worked example was compiled from this record's text and
+run on `main`: `findings/2` returns the listed findings with and without
+the declaration, and a declaration with an unknown key, a non-list, or a
+`send_types:` or `accepts:` value of the wrong shape raises
+`ArgumentError`. `Statifier.Validator` and `Statifier.compile/2` are
+unchanged since `2efc6c6`.
