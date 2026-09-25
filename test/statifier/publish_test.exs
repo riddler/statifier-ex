@@ -925,6 +925,118 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S14: a <send> whose literal delay is not a duration" do
+    # Each chart compiles today; the runtime refuses the send in
+    # `Statifier.Machine.Content.Send`'s `resolve_delay/2` with
+    # `{:invalid_delay, delay}`, the reason the finding's kind names.
+    defp delay_chart(sends) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="on_loan" datamodel="predicator">
+        <state id="on_loan">
+          <onentry>#{sends}</onentry>
+          <transition event="loan.due" target="overdue"/>
+        </state>
+        <final id="overdue"/>
+      </scxml>
+      """)
+    end
+
+    defp s14(machine), do: Enum.filter(Publish.findings(machine), &(&1.row == "S14"))
+
+    defp delayed_sends(machine) do
+      for %Statifier.Machine.Content.Send{} = node <- Tuple.to_list(machine.contents),
+          do: node
+    end
+
+    # sabotage: `"S14"` removed from `@rows` -> red
+    test "a literal delay that is not a duration is one S14 finding at the delay attribute" do
+      machine = delay_chart(~s(<send event="loan.reminder" delay="soon"/>))
+      [%{attribute_locations: %{delay: at}}] = delayed_sends(machine)
+
+      assert Publish.findings(machine) == [
+               %{row: "S14", kind: :invalid_delay, location: at, data: %{delay: "soon"}}
+             ]
+    end
+
+    # sabotage: the `Duration.to_ms/1` filter dropped from the S14 clause ->
+    # red (every literal delay reported)
+    test "a delay the engine resolves reports nothing, a leading dot and a week included" do
+      for delay <- ["100ms", "1.5s", ".5s", "2m", "2w", "1h30m"] do
+        assert Publish.findings(delay_chart(~s(<send event="loan.reminder" delay="#{delay}"/>))) ==
+                 [],
+               "delay #{inspect(delay)}"
+      end
+    end
+
+    # sabotage: the S14 clause's `delay: {:static, delay}` pattern widened to
+    # `delay: delay` -> red (a compiled delayexpr reaches `to_ms/1`)
+    test "a delayexpr is left to the runtime" do
+      assert Publish.findings(delay_chart(~s(<send event="loan.reminder" delayexpr="'soon'"/>))) ==
+               []
+    end
+
+    # The runtime resolves the delay before it judges the type, so a send
+    # of a registered type is refused the same way.
+    # sabotage: the S14 clause filters on `built_in_type?/1` -> red
+    test "a send of a registered type is judged too" do
+      machine =
+        delay_chart(~s(<send event="loan.reminder" type="library:notices" delay="tomorrow"/>))
+
+      assert [%{row: "S14", data: %{delay: "tomorrow"}}] =
+               Publish.findings(machine, send_types: notices_registered())
+    end
+
+    # The agreement with the runtime: every delay the check reports, the
+    # send's own `execute/2` refuses with the same data, and every delay it
+    # passes, that send dispatches.
+    # sabotage: the S14 clause's filter matches `{:ok, _ms}` instead -> red
+    test "the runtime refuses exactly the delays the check reports" do
+      reported = ["soon", "1.5ms", "5 s", "-1s"]
+      passed = ["0ms", "250ms", "0.5s"]
+
+      machine =
+        delay_chart(
+          Enum.map_join(reported ++ passed, &~s(<send event="loan.reminder" delay="#{&1}"/>))
+        )
+
+      assert Enum.map(s14(machine), & &1.data.delay) == reported
+
+      {machine_state, _effects} = Interpreter.initialize(machine)
+
+      context = %Statifier.ExecutableContent.Context{
+        machine_state: machine_state,
+        owner: {:onentry, 0, 0},
+        datamodel_context: Evaluator.context(machine_state)
+      }
+
+      for %{delay: {:static, delay}} = node <- delayed_sends(machine) do
+        result = Statifier.ExecutableContent.execute(node, context)
+
+        if delay in reported,
+          do: assert(result == {:error, {:invalid_delay, delay}}, "delay #{inspect(delay)}"),
+          else: assert({:ok, _context, [{:send_delayed, _effect}]} = result)
+      end
+    end
+
+    # sabotage: `@rows` reordered to put `"S14"` after `"S15"` -> red
+    test "S14 findings follow S2 and precede S15, one per send in document order" do
+      machine =
+        delay_chart("""
+        <send event="loan.reminder" delay="later"/>
+        <send event="loan.reminder" target="overdue_notice" delay="1s"/>
+        <send event="loan.reminder" delay="never"/>
+        """)
+
+      assert [
+               %{row: "S2", data: %{target: "overdue_notice"}},
+               %{row: "S14", data: %{delay: "later"}},
+               %{row: "S14", data: %{delay: "never"}},
+               %{row: "S15", kind: :unreachable_name}
+             ] = Publish.findings(machine, accepts: ["loan.due", "loan.renew"])
+    end
+  end
+
   describe "row S16: a cycle of eventless transitions none of which carries a cond" do
     # Each chart compiles today. A cycle the check reports never reaches
     # quiescence at run time: the macrostep fold spends its round budget
