@@ -1,10 +1,10 @@
 defmodule Statifier.PublishTest do
   @moduledoc """
   `Statifier.Publish.findings/2`: the one publish-time function, its
-  finding shape, its declaration, and the two checks it composes today
-  (ADR-0073 decisions 1 to 4). The loan chart is the example
-  `docs/publish-time-checks.md` walks; the inline charts each isolate one
-  clause.
+  finding shape, its declaration, the two checks it composes (ADR-0073
+  decisions 1 to 4), and each row's check that lands inside it. The loan
+  chart is the example `docs/publish-time-checks.md` walks; the inline
+  charts each isolate one clause.
   """
 
   use ExUnit.Case, async: true
@@ -251,6 +251,106 @@ defmodule Statifier.PublishTest do
             do: node
 
       location
+    end
+  end
+
+  describe "row S18: a <script> that writes a root beginning with _" do
+    @scripts """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+           initial="ready" datamodel="predicator">
+      <datamodel><data id="copies" expr="1"/></datamodel>
+      <script>_loans = 0; copies = 2</script>
+      <state id="ready">
+        <onentry>
+          <script>_event.seen = true; if copies > 0 { while false { _hold[0] = 1 } }</script>
+          <script>notes = _event.name; _event.count = 1</script>
+        </onentry>
+      </state>
+    </scxml>
+    """
+
+    # The runtime refusal is `Statifier.Evaluator.run_program/2`'s
+    # `{:system_variable, root}`: a write to any root beginning with `_`.
+    # sabotage: "S18" dropped from `@rows` -> red (no S18 finding at all)
+    test "every _-rooted assignment target is one finding, global scripts first, then <script> nodes in document order" do
+      assert [
+               %{row: "S18", kind: :system_variable, location: nil, data: %{root: "_loans"}},
+               %{
+                 row: "S18",
+                 kind: :system_variable,
+                 location: %Location{start_line: 7} = first,
+                 data: %{root: "_event"}
+               },
+               %{row: "S18", kind: :system_variable, location: first, data: %{root: "_hold"}},
+               %{
+                 row: "S18",
+                 kind: :system_variable,
+                 location: %Location{start_line: 8},
+                 data: %{root: "_event"}
+               }
+             ] = Publish.findings(chart(@scripts))
+    end
+
+    # sabotage: `location_root/1`'s `:property_access` clause answers ""
+    # instead of walking inward -> red (`_event.seen` missed); the same for
+    # its `:bracket_access` clause -> red (`_hold[0]` missed)
+    test "a write through a property or bracket accessor is judged by its root" do
+      roots =
+        for %{row: "S18", data: %{root: root}} <- Publish.findings(chart(@scripts)), do: root
+
+      assert "_hold" in roots
+      assert Enum.count(roots, &(&1 == "_event")) == 2
+    end
+
+    # sabotage: the `_` prefix filter in `system_roots_written/1` replaced
+    # by `is_binary/1` -> red (`notes` and `renewals` become findings)
+    test "a read of a system variable and a write to a declared root are not findings" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <datamodel><data id="notes"/></datamodel>
+        <script>notes = _sessionid</script>
+        <state id="s"><onentry><script>renewals = _name; notes = renewals</script></onentry></state>
+      </scxml>
+      """
+
+      assert Publish.findings(chart(xml)) == []
+    end
+
+    # sabotage: the per-script `Enum.uniq/1` dropped -> red (two findings)
+    test "a root written twice in one script is one finding" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <script>_x = 1; _x = 2</script>
+      </scxml>
+      """
+
+      assert [%{row: "S18", data: %{root: "_x"}}] = Publish.findings(chart(xml))
+    end
+
+    # A body outside the statement grammar compiles to `{:invalid, error}`
+    # and is row S13's, not this row's.
+    # sabotage: the content generator matches any `%Script{}` and reads
+    # `elem(program, 2)` -> red (raises on the `{:invalid, error}` pair)
+    test "a <script> that did not compile is not judged" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <state id="s"><onentry><script>_x = = 1</script></onentry></state>
+      </scxml>
+      """
+
+      assert Publish.findings(chart(xml)) == []
+    end
+
+    # sabotage: `@rows` reordered to `["S18", "S1", "S15", "S17"]` -> red
+    test "S18 findings come after S1's" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <script>_x = 1</script>
+        <state id="s"><onentry><send type="library:notices" event="e"/></onentry></state>
+      </scxml>
+      """
+
+      assert [%{row: "S1"}, %{row: "S18"}] = Publish.findings(chart(xml))
     end
   end
 
