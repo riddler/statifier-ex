@@ -460,6 +460,140 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S9: an inline <content> child that does not compile" do
+    # Each chart compiles today; the runtime refuses the child when the
+    # built-in handler starts it: `Statifier.Invoke.Source.resolve/2`
+    # answers `{:compile, errors}` or `{:content_not_markup, value}` and the
+    # session raises `error.communication`.
+    defp invoke_chart(invoke_attributes, body) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+        <state id="lending">
+          <invoke #{invoke_attributes}>
+            <content>#{body}</content>
+          </invoke>
+        </state>
+      </scxml>
+      """)
+    end
+
+    @broken_child ~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="nowhere"><state id="checked_out"/></scxml>)
+    @namespaceless_child ~s(<scxml version="1.0" initial="checked_out"><state id="checked_out"/></scxml>)
+
+    # sabotage: "S9" removed from `@rows` -> red
+    test "a child that does not compile is a :child_does_not_compile at the <invoke>" do
+      assert [
+               %{
+                 row: "S9",
+                 kind: :child_does_not_compile,
+                 location: %Location{start_line: 4},
+                 data: %{errors: [_first | _rest] = errors}
+               }
+             ] = Publish.findings(invoke_chart(~s(type="scxml"), @broken_child))
+
+      assert {:error, ^errors} = Statifier.compile(@broken_child, invoke_content_markup: true)
+    end
+
+    # sabotage: `built_in_child_type?/1`'s `nil` clause answers `false` -> red
+    # (the no-type invoke is missed); `{:static, _}` clause answers `false`
+    # -> red (the long-URI type is missed)
+    test "an <invoke> with no type, or the long scxml type URI, is the built-in handler and is judged" do
+      assert [%{row: "S9", kind: :child_does_not_compile}] =
+               Publish.findings(invoke_chart("", @broken_child))
+
+      assert [%{row: "S9", kind: :child_does_not_compile}] =
+               Publish.findings(
+                 invoke_chart(~s(type="http://www.w3.org/TR/scxml/"), @broken_child)
+               )
+    end
+
+    # sabotage: `invoke_content_markup: true` dropped from the child's
+    # compile -> red (a namespace-less child root is refused)
+    test "a child that compiles is not a finding, a namespace-less root included" do
+      assert Publish.findings(invoke_chart(~s(type="scxml"), @namespaceless_child)) == []
+    end
+
+    # sabotage: the value clause of `inline_child_defects/1` answers `[]`
+    # -> red
+    test "a body that reads as a value is a :content_not_markup" do
+      assert [
+               %{
+                 row: "S9",
+                 kind: :content_not_markup,
+                 location: %Location{start_line: 4},
+                 data: %{content: 42}
+               }
+             ] = Publish.findings(invoke_chart("", "42"))
+
+      assert [%{row: "S9", kind: :content_not_markup, data: %{content: :undefined}}] =
+               Publish.findings(invoke_chart("", "   "))
+    end
+
+    # sabotage: `built_in_child_type?/1`'s `{:static, _}` clause answers
+    # `true` -> red (the registered non-built-in type is judged); its
+    # catch-all answers `true` -> red (the `typeexpr` invoke is judged); the
+    # S9 clause reads a compiled `content`'s source as the body -> red (the
+    # `<content expr>` is judged)
+    test "a non-built-in type, a typeexpr and a <content expr> are left to the runtime" do
+      catalog = Invoke.Types.from_handlers(%{"library:catalog" => Statifier.Invoke.Handler})
+
+      assert Publish.findings(invoke_chart(~s(type="library:catalog"), @broken_child),
+               invoke_types: catalog
+             ) == []
+
+      assert Publish.findings(invoke_chart(~s(typeexpr="'scxml'"), @broken_child)) == []
+
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+          <datamodel><data id="child" expr="'not a chart'"/></datamodel>
+          <state id="lending"><invoke type="scxml"><content expr="child"/></invoke></state>
+        </scxml>
+        """)
+
+      assert Publish.findings(machine) == []
+    end
+
+    # sabotage: the S9 clause walks the states in reverse -> red
+    test "every state's <invoke>s are judged, in document order" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+          <state id="lending">
+            <invoke><content>1</content></invoke>
+            <state id="renewing">
+              <invoke><content>#{@broken_child}</content></invoke>
+            </state>
+          </state>
+        </scxml>
+        """)
+
+      assert [
+               %{row: "S9", kind: :content_not_markup, location: %Location{start_line: 3}},
+               %{row: "S9", kind: :child_does_not_compile, location: %Location{start_line: 5}}
+             ] = Publish.findings(machine)
+    end
+
+    # sabotage: `@rows` reordered to put "S9" before "S1" -> red
+    test "S9 findings come after S1's and before S17's" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+          <state id="lending">
+            <onentry>
+              <send type="library:notices" event="e"/>
+              <foreach array="[1]" item="_copy"/>
+            </onentry>
+            <invoke><content>1</content></invoke>
+          </state>
+        </scxml>
+        """)
+
+      assert [%{row: "S1"}, %{row: "S9"}, %{row: "S17"}] = Publish.findings(machine)
+    end
+  end
+
   describe "row S11: every literal write location's root is one the chart declares" do
     defp roots(body, invoke \\ "", top \\ "") do
       chart("""
