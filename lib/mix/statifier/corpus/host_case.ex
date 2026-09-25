@@ -8,7 +8,8 @@ defmodule Mix.Statifier.Corpus.HostCase do
   registration, so a host case runs here instead, through the same public
   session API: `Statifier.start_session/2` with `:send_types` naming
   `Mix.Statifier.Corpus.HostCase.Processor` for every registered type,
-  `Statifier.Session.send_event/2` for each step, and
+  `Statifier.Session.send_event/2` for each step, with the step's event
+  `data`, when it gives one, as the injected event's payload, and
   `Statifier.Session.status/1` and `Statifier.Session.snapshot/1` to wait
   for the chart to settle and read its active leaf states. The waiting
   follows `test_scxml/4`'s: a pending library timer is given a short window
@@ -135,7 +136,7 @@ defmodule Mix.Statifier.Corpus.HostCase do
   # `host` carries the case's `expect_sends` and the sends handed so far,
   # newest first, each as `{send_id, expected_item, item}`.
   defp drive(session, corpus_case, expect_sends, after_steps) do
-    steps = Enum.map(corpus_case["steps"], &{&1["event"]["name"], &1["configuration"]})
+    steps = Enum.map(corpus_case["steps"], &{&1["event"], &1["configuration"]})
     host = %{expect: expect_sends, handed: []}
 
     with {:ok, host} <- configuration(session, corpus_case["initial_configuration"], host),
@@ -146,9 +147,9 @@ defmodule Mix.Statifier.Corpus.HostCase do
   end
 
   defp steps(session, steps, host) do
-    Enum.reduce_while(steps, {:ok, host}, fn {name, expected}, {:ok, host} ->
+    Enum.reduce_while(steps, {:ok, host}, fn {event, expected}, {:ok, host} ->
       settle_short_timers(session, deadline(@settle_window_ms))
-      :ok = Session.send_event(session, name)
+      :ok = Session.send_event(session, event(event))
 
       case configuration(session, expected, host) do
         {:ok, host} -> {:cont, {:ok, host}}
@@ -156,6 +157,11 @@ defmodule Mix.Statifier.Corpus.HostCase do
       end
     end)
   end
+
+  # A step's event is injected as an external event, carrying the step's
+  # `data` as its payload when the step gives one.
+  defp event(%{"name" => name} = event),
+    do: Statifier.Event.external(name, data: Map.get(event, "data", :undefined))
 
   defp handed(session, host) do
     # A status call returns after every instruction the session performed
