@@ -72,8 +72,8 @@ defmodule Statifier.Publish do
 
   alias Statifier.{Chart, EventData, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
-  alias Statifier.Machine.{Block, Param, State, Transition}
-  alias Statifier.Machine.Content.{Assign, Foreach, Script, Send}
+  alias Statifier.Machine.{Block, Data, Donedata, Param, State, Transition}
+  alias Statifier.Machine.Content.{Assign, Cancel, Foreach, If, Log, Script, Send}
   alias Statifier.Machine.Invoke, as: MachineInvoke
   alias Statifier.Parser.Location
   alias Statifier.Send.Target
@@ -107,7 +107,12 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S12", "S15", "S16", "S17", "S18", "S19"]
+
+  # Row S12: the system variables `Statifier.MachineState.new/2` seeds into
+  # every datamodel (`Statifier.Evaluator.SystemVariables.initial/3`), which
+  # an expression reads without a `<data>` declaring them.
+  @system_variables ["_event", "_ioprocessors", "_name", "_sessionid"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -187,6 +192,30 @@ defmodule Statifier.Publish do
   one the host reads against what it starts the chart with. An invoking
   parent's params never supply one: they fill only the child's declared
   top-level `<data>` ids. It needs no declaration.
+
+  Row S12 reads the roots every compiled expression and `<script>` body in
+  the chart reads, the rule every evaluation applies: the engine
+  evaluates with unbound roots refused, so reading a root the datamodel
+  does not hold raises predicator's undefined-variable error. A root read
+  that the chart does not bring into being and that is not one of the four
+  system variables (`_event`, `_ioprocessors`, `_name`, `_sessionid`) is a
+  finding of kind `:undeclared_root`, with `data: %{root: root, source:
+  source}`, once per root per expression, in the order the expression
+  reads them. A chart brings a root into being with a `<data id>`, a
+  `<foreach>` `item` or `index` name, or an assignment in a `<script>` body
+  (top-level or in executable content). Each finding is at the attribute's
+  location (the element's when the attribute has none of its own): the
+  top-level scripts first, with no location, then each `<data>`, each
+  transition's `cond`, the executable content, and last each state's
+  `<donedata>` and `<invoke>`s, each in document order. A read behind a
+  short-circuit (`a or b`) is reported although the data may skip it, a
+  literal value is never read, and an expression that did not compile is
+  not judged by this row. A root the host supplies when it starts the
+  chart (the `:datamodel` option of `Statifier.MachineState.new/2`) is not
+  in the source, so the check cannot see it: a finding on such a root is
+  one the host reads against what it starts the chart with. An invoking
+  parent's params reach only the child's `<data>` ids, so they add no
+  root. It needs no declaration.
 
   Row S15 composes `Statifier.Chart.check_accepts/2`: one finding of kind
   `:unreachable_name` per declared name no descriptor in the chart's
@@ -351,6 +380,23 @@ defmodule Statifier.Publish do
         kind = root_kind(root, declared),
         kind != :ok do
       finding("S11", kind, location, %{attribute: attribute, source: source, root: root})
+    end
+  end
+
+  # The rule every evaluation applies: `Statifier.Evaluator.context/1`
+  # binds the datamodel's roots with unbound reads refused, so each `load`
+  # of a root it does not hold is predicator's undefined-variable error.
+  # The roots the chart can bring into the datamodel are its `<data>` ids,
+  # its `<foreach>` names and its scripts' assignment targets, beside the
+  # seeded system variables; any other root read is reported.
+  defp check("S12", %Machine{} = machine, _declaration) do
+    readable = readable_roots(machine)
+
+    for {source, %Predicator.Compiled{instructions: instructions}, location} <-
+          read_sites(machine),
+        root <- Enum.uniq(for ["load", root] <- instructions, do: root),
+        not MapSet.member?(readable, root) do
+      finding("S12", :undeclared_root, location, %{root: root, source: source})
     end
   end
 
@@ -695,6 +741,129 @@ defmodule Statifier.Publish do
   defp location_root({:identifier, name, _position}), do: name
   defp location_root({:property_access, inner, _property, _position}), do: location_root(inner)
   defp location_root({:bracket_access, inner, _key, _position}), do: location_root(inner)
+
+  # Row S12: every root a chart can hold when an expression reads it - the
+  # seeded system variables, the `<data>` ids, the `<foreach>` names, and
+  # every root a `<script>` body assigns.
+  @spec readable_roots(machine :: Machine.t()) :: MapSet.t(String.t())
+  defp readable_roots(%Machine{} = machine) do
+    data = for %Data{id: id} <- Tuple.to_list(machine.data_elements), do: id
+
+    foreach =
+      for %Foreach{item: item, index: index} <- Tuple.to_list(machine.contents),
+          name <- [item, index],
+          is_binary(name),
+          do: name
+
+    scripts =
+      for {:program, _compiled, source} <- script_programs(machine),
+          {:ok, {:program, statements, _position}} <- [Predicator.parse_program(source)],
+          statement <- statements,
+          root <- written_roots(statement),
+          do: root
+
+    MapSet.new(@system_variables ++ data ++ foreach ++ scripts)
+  end
+
+  @spec script_programs(machine :: Machine.t()) :: [Machine.program()]
+  defp script_programs(%Machine{global_scripts: global, contents: contents}) do
+    in_content = for %Script{program: program} <- Tuple.to_list(contents), do: program
+    for {:program, _compiled, _source} = program <- global ++ in_content, do: program
+  end
+
+  # Row S12's read sites, each a compiled expression or program with the
+  # location a finding on it carries, in the order the row reports them.
+  @spec read_sites(machine :: Machine.t()) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp read_sites(%Machine{} = machine) do
+    global = Enum.flat_map(machine.global_scripts, &site(&1, nil))
+
+    data =
+      Enum.flat_map(Tuple.to_list(machine.data_elements), fn %Data{} = data ->
+        site(data.value, data.value_location || data.location)
+      end)
+
+    conds =
+      Enum.flat_map(Tuple.to_list(machine.transitions), fn %Transition{} = transition ->
+        site(transition.cond, transition.cond_location || transition.location)
+      end)
+
+    content = Enum.flat_map(Tuple.to_list(machine.contents), &content_sites/1)
+
+    in_states =
+      Enum.flat_map(Tuple.to_list(machine.states), fn %State{} = state ->
+        donedata_sites(state.donedata) ++ Enum.flat_map(state.invoke, &invoke_sites/1)
+      end)
+
+    global ++ data ++ conds ++ content ++ in_states
+  end
+
+  @spec content_sites(node :: term()) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp content_sites(%Log{expr: expr, expr_location: at, location: node}),
+    do: site(expr, at || node)
+
+  defp content_sites(%Assign{value: value, expr_location: at, node_location: node}),
+    do: site(value, at || node)
+
+  defp content_sites(%If{branches: branches, location: node}),
+    do: Enum.flat_map(branches, &site(&1.cond, &1.cond_location || node))
+
+  defp content_sites(%Foreach{array: array, array_location: at, location: node}),
+    do: site(array, at || node)
+
+  defp content_sites(%Script{program: program, node_location: node}), do: site(program, node)
+
+  defp content_sites(%Send{attribute_locations: attrs, location: node} = send) do
+    attributes =
+      Enum.flat_map(
+        [event: :eventexpr, target: :targetexpr, type: :typeexpr, delay: :delayexpr],
+        fn {field, attribute} ->
+          site(Map.fetch!(send, field), Map.get(attrs, attribute, node))
+        end
+      )
+
+    attributes ++ param_sites(send.namelist ++ send.params) ++ site(send.content, node)
+  end
+
+  defp content_sites(%Cancel{sendid: sendid, attribute_locations: attrs, location: node}),
+    do: site(sendid, Map.get(attrs, :sendidexpr, node))
+
+  defp content_sites(_node), do: []
+
+  @spec donedata_sites(donedata :: Donedata.t() | nil) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp donedata_sites(nil), do: []
+
+  defp donedata_sites(%Donedata{} = donedata),
+    do:
+      site(donedata.expr, donedata.expr_location || donedata.location) ++
+        param_sites(donedata.params)
+
+  @spec invoke_sites(invoke :: MachineInvoke.t()) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp invoke_sites(%MachineInvoke{attribute_locations: attrs, location: node} = invoke) do
+    site(invoke.type, Map.get(attrs, :typeexpr, node)) ++
+      site(invoke.src, Map.get(attrs, :srcexpr, node)) ++
+      param_sites(invoke.namelist ++ invoke.params) ++ site(invoke.content, node)
+  end
+
+  @spec param_sites(params :: [Param.t()]) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp param_sites(params),
+    do: Enum.flat_map(params, &site(&1.expr, &1.expr_location || &1.location))
+
+  # A compiled expression or program is a read site; a literal, an absent
+  # attribute, or an expression that did not compile is not.
+  @spec site(value :: term(), location :: Location.t() | nil) ::
+          [{String.t(), Predicator.Compiled.t(), Location.t() | nil}]
+  defp site({:compiled, %Predicator.Compiled{} = compiled, source}, location),
+    do: [{source, compiled, location}]
+
+  defp site({:program, %Predicator.Compiled{} = compiled, source}, location),
+    do: [{source, compiled, location}]
+
+  defp site(_literal_absent_or_invalid, _location), do: []
 
   # An `<invoke>`'s `idlocation`, then - only when its `<finalize>` is
   # empty, the one case the runtime auto-assigns - every `namelist` entry

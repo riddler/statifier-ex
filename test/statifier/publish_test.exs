@@ -10,6 +10,7 @@ defmodule Statifier.PublishTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Evaluator, Interpreter, Invoke, Publish, Send}
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Interpreter.Datamodel
   alias Statifier.Parser.Location
 
@@ -765,6 +766,161 @@ defmodule Statifier.PublishTest do
       for source <- passed do
         assert {:ok, _state, _context, _write} =
                  Datamodel.write_location(machine_state, context, source, 2)
+      end
+    end
+  end
+
+  describe "row S12: a read of a root neither a <data> nor a system variable declares" do
+    defp reads(state_body, extra \\ "") do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+          <datamodel>
+              <data id="copies" expr="[]"/>
+          </datamodel>
+          <state id="lending">
+              #{state_body}
+          </state>
+          <final id="returned"/>
+          #{extra}
+      </scxml>
+      """)
+    end
+
+    defp s12(machine), do: for(%{row: "S12"} = finding <- Publish.findings(machine), do: finding)
+
+    # sabotage: `"S12"` removed from `@rows` -> red (no finding at all)
+    test "a cond that reads an undeclared root is one finding at the attribute" do
+      machine = reads(~s|<transition event="copy.returned" cond="fines > 0" target="returned"/>|)
+      [%{cond_location: cond_location}] = Tuple.to_list(machine.transitions)
+
+      assert s12(machine) == [
+               %{
+                 row: "S12",
+                 kind: :undeclared_root,
+                 location: cond_location,
+                 data: %{root: "fines", source: "fines > 0"}
+               }
+             ]
+    end
+
+    # sabotage: the `%Send{}` clause of `content_sites/1` answers `[]` -> red
+    # (the send's three reads go missing)
+    test "every read site is judged: top-level scripts, then <data>, conds, executable content, then each state's <donedata> and <invoke>s" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+               initial="lending" datamodel="predicator">
+            <script>total = r1</script>
+            <datamodel>
+                <data id="copies" expr="r2"/>
+            </datamodel>
+            <state id="lending">
+                <onentry>
+                    <log expr="r4"/>
+                    <assign location="copies" expr="r5"/>
+                    <if cond="r6"><log expr="1"/></if>
+                    <foreach array="r7" item="copy"><log expr="copy"/></foreach>
+                    <send eventexpr="r8" namelist="r10"><param name="p" expr="r9"/></send>
+                    <cancel sendidexpr="r11"/>
+                    <script>r12</script>
+                </onentry>
+                <invoke type="scxml" src="child.scxml"><param name="q" expr="r13"/></invoke>
+                <transition event="copy.returned" cond="r3" target="returned"/>
+            </state>
+            <final id="returned">
+                <donedata><param name="d" expr="r14"/></donedata>
+            </final>
+        </scxml>
+        """)
+
+      assert Enum.map(s12(machine), & &1.data.root) ==
+               ~w(r1 r2 r3 r4 r5 r6 r7 r8 r10 r9 r11 r12 r13 r14)
+    end
+
+    # sabotage: `scripts` dropped from `readable_roots/1`'s set -> red (the
+    # root the top-level script assigns is reported)
+    test "a <data> id, a system variable, a <foreach> name and a root a <script> assigns are declared" do
+      machine =
+        reads(
+          """
+          <onentry>
+              <foreach array="copies" item="copy" index="i"><log expr="copy + i"/></foreach>
+              <log expr="copy"/>
+              <log expr="_event.name + _sessionid + _name + _ioprocessors"/>
+          </onentry>
+          <transition event="copy.returned" cond="renewals > 2 and copies" target="returned"/>
+          """,
+          "<script>renewals = 0</script>"
+        )
+
+      assert s12(machine) == []
+    end
+
+    # The seeded list the check keeps must name every root the runtime
+    # seeds, so a read of any of them is never a finding.
+    # sabotage: `"_ioprocessors"` dropped from `@system_variables` -> red
+    test "every system variable the runtime seeds is readable" do
+      machine = reads("")
+      roots = Map.keys(SystemVariables.initial(machine, "session"))
+      machine = reads(~s|<onentry><log expr="#{Enum.join(roots, " + ")}"/></onentry>|)
+
+      assert s12(machine) == []
+    end
+
+    # sabotage: `Enum.uniq/1` dropped from the S12 clause -> red (two
+    # findings for `fines`)
+    test "one finding per root per expression; a path is judged by its root, a function name never" do
+      machine =
+        reads(
+          ~s|<onentry><log expr="fines.total + fines.count + len(copies) + holds[0]"/></onentry>|
+        )
+
+      assert [%{data: %{root: "fines"}}, %{data: %{root: "holds"}}] = s12(machine)
+    end
+
+    # sabotage: `@rows` reordered to put `"S12"` after `"S15"` -> red
+    test "S12 findings follow S2 and precede S15" do
+      machine =
+        reads("""
+        <transition event="copy.returned" cond="fines > 0" target="returned">
+            <send event="loan.closed" target="closing_notice"/>
+        </transition>
+        """)
+
+      assert [
+               %{row: "S2"},
+               %{row: "S12", data: %{root: "fines"}},
+               %{row: "S15", kind: :unreachable_name}
+             ] = Publish.findings(machine, accepts: ["loan.renew", "copy.returned"])
+    end
+
+    # The agreement with the runtime: every expression the check reports
+    # raises predicator's undefined-variable error when the engine
+    # evaluates it, and every one it passes evaluates.
+    # sabotage: the `not MapSet.member?/2` filter dropped from the S12
+    # clause -> red (every read reported)
+    test "the runtime refuses exactly the reads the check reports" do
+      reported = ["fines > 0", "fines.total", "len(holds)", "_x"]
+      passed = ["copies", "_event", "copies == []", "In('lending')"]
+      onentry = Enum.map_join(reported ++ passed, &~s|<log expr="#{&1}"/>|)
+      machine = reads("<onentry>#{onentry}</onentry>")
+
+      assert Enum.map(s12(machine), & &1.data.source) == reported
+
+      {machine_state, _effects} = Interpreter.initialize(machine)
+      context = Evaluator.context(machine_state)
+
+      for source <- reported do
+        {:ok, compiled} = Predicator.compile_with_positions(source)
+
+        assert {:error, %Evaluator.Error{error: %Predicator.Errors.UndefinedVariableError{}}} =
+                 Evaluator.evaluate(context, {:compiled, compiled, source})
+      end
+
+      for source <- passed do
+        {:ok, compiled} = Predicator.compile_with_positions(source)
+        assert {:ok, _value} = Evaluator.evaluate(context, {:compiled, compiled, source})
       end
     end
   end
