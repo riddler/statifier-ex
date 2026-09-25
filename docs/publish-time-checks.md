@@ -89,8 +89,8 @@ this package holds over a compiled chart and the host's declaration,
 and returns findings that each name their row here
 (`docs/adr/0073-one-publish-findings-function-holds-every-publish-time-check.md`).
 It composes the twins of S1 and S15 and holds one check each for S2,
-S3, S6, S9 and S11 to S19. A row that gains a check lands inside it as
-one check, and its cell changes when it does.
+S3, S6, S9, S11 to S14 and S16 to S19. A row that gains a check lands
+inside it as one check, and its cell changes when it does.
 
 | # | Refusal | Raised by | Record | Literal? | Twin |
 |---|---|---|---|---|---|
