@@ -71,7 +71,7 @@ defmodule Statifier.Publish do
 
   alias Statifier.{Chart, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
-  alias Statifier.Machine.Content.Foreach
+  alias Statifier.Machine.Content.{Foreach, Script}
   alias Statifier.Parser.Location
   alias Statifier.Send.Types, as: SendTypes
 
@@ -103,7 +103,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S15", "S17"]
+  @rows ["S1", "S15", "S17", "S18"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -133,6 +133,17 @@ defmodule Statifier.Publish do
   attribute's location, with `data: %{attribute: :item | :index, name:
   name}`, in document order, `item` before `index`; an absent `index` is
   not judged. It needs no declaration.
+
+  Row S18 reads every `<script>` body's assignment targets, the rule the
+  runtime applies when the script runs: an assignment whose target's root
+  begins with `_` is a finding of kind `:system_variable`, with
+  `data: %{root: root}`, once per root per script, an assignment inside an
+  `if` or `while` body included. Top-level scripts come first, in document
+  order, with no location (the compiled chart keeps none for them); then
+  every `<script>` in executable content, in document order, at the
+  `<script>`'s location. A read of a system variable is not a finding, and
+  a body that did not compile is not judged by this row. It needs no
+  declaration.
 
   See the moduledoc for the finding shape and the declaration's keys.
   """
@@ -175,6 +186,24 @@ defmodule Statifier.Publish do
     end
   end
 
+  # The rule `Statifier.Evaluator.run_program/2` applies to a program's
+  # writes: a root beginning with `_` is a system variable, refused as
+  # `{:system_variable, root}`. The targets are read from the program's own
+  # source, which the compiled machine keeps beside its instructions.
+  defp check("S18", %Machine{global_scripts: global, contents: contents}, _declaration) do
+    top_level = for {:program, _compiled, source} <- global, do: {source, nil}
+
+    in_content =
+      for %Script{program: {:program, _compiled, source}, node_location: location} <-
+            Tuple.to_list(contents),
+          do: {source, location}
+
+    for {source, location} <- top_level ++ in_content,
+        root <- system_roots_written(source) do
+      finding("S18", :system_variable, location, %{root: root})
+    end
+  end
+
   @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
   defp foreach_name_kind(name, illegal) do
     cond do
@@ -183,6 +212,38 @@ defmodule Statifier.Publish do
       true -> illegal
     end
   end
+
+  @spec system_roots_written(source :: String.t()) :: [String.t()]
+  defp system_roots_written(source) do
+    case Predicator.parse_program(source) do
+      {:ok, {:program, statements, _position}} ->
+        statements
+        |> Enum.flat_map(&written_roots/1)
+        |> Enum.filter(&String.starts_with?(&1, "_"))
+        |> Enum.uniq()
+
+      _error ->
+        []
+    end
+  end
+
+  @spec written_roots(statement :: term()) :: [String.t()]
+  defp written_roots({:assignment, target, _value, _position}), do: [location_root(target)]
+
+  defp written_roots({:if, _condition, then_block, else_block, _position}),
+    do: written_roots(then_block) ++ written_roots(else_block)
+
+  defp written_roots({:while, _condition, body, _position}), do: written_roots(body)
+
+  defp written_roots({:block, statements, _position}),
+    do: Enum.flat_map(statements, &written_roots/1)
+
+  defp written_roots(_expression_or_nil), do: []
+
+  @spec location_root(target :: term()) :: String.t()
+  defp location_root({:identifier, name, _position}), do: name
+  defp location_root({:property_access, inner, _property, _position}), do: location_root(inner)
+  defp location_root({:bracket_access, inner, _key, _position}), do: location_root(inner)
 
   @spec finding(row :: String.t(), kind :: atom(), location :: Location.t() | nil, data :: map()) ::
           finding()
