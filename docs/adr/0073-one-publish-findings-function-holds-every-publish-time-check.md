@@ -255,3 +255,28 @@ location, and nothing else about the function changes.
 - [ADR-0051](0051-invoke-handlers-are-registered-per-session.md) (decision 2: `Statifier.Invoke.Types`, the `invoke_types:` key)
 - [ADR-0048](0048-send-reachability-judged-against-a-route-snapshot.md) (the route snapshot, which is not a key)
 - [ADR-0056](0056-renumbered-adr-citations-pointers-move-history-stands.md) (the cross-repo cite form)
+
+## Note (2026-09-25): the twelve rows have landed
+
+This note decides nothing. It records that the twelve checks decision 4
+names have landed, each as decision 4 directs, so its sentence "Today the
+function holds two rows" describes the function as this record wrote it
+and is superseded. No decision, consequence or Related entry changes.
+Every anchor below was read on `main` at `ffc0b2b`, and nothing under
+`lib/` or `test/` differs between that commit and the `v2.9.0` tag
+(`f2365bb`).
+
+The row list in `lib/statifier/publish.ex` (`@rows`) now names fourteen
+rows in the table's order: S1, S2, S3, S6, S9, S11, S12, S13, S14, S15,
+S16, S17, S18 and S19. Each has one private `check/3` clause and no module
+or public function of its own; S1 and S15 still compose
+`Statifier.Send.Types.unsupported_sends/2` and
+`Statifier.Chart.check_accepts/2`. `test/statifier/publish_test.exs` has
+one `describe` block per landed row, and removing a landed row's id and
+its clause turns cases in that file red for every one of the twelve.
+Decision 3's `invoke_types:` key is now read, by row S6's clause. The
+worked example still returns the findings listed above, and with the
+`type` dropped it returns the one `row: "S2"` finding at the send's
+location that the paragraph after it predicts. In
+`docs/publish-time-checks.md` the twelve rows' twin cells name
+`Statifier.Publish.findings/2`.
