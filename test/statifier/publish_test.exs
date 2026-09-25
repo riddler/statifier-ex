@@ -151,7 +151,7 @@ defmodule Statifier.PublishTest do
     end
 
     # sabotage: the `:invoke_types` guard narrowed to `is_nil(value)` -> red
-    test "invoke_types: is accepted as nil or a Statifier.Invoke.Types and changes nothing today" do
+    test "invoke_types: is accepted as nil or a Statifier.Invoke.Types" do
       registered = Invoke.Types.from_handlers(%{"library:catalog" => Statifier.Invoke.Handler})
 
       assert Publish.findings(loan(), send_types: notices_registered(), invoke_types: nil) == []
@@ -257,6 +257,84 @@ defmodule Statifier.PublishTest do
             do: node
 
       location
+    end
+  end
+
+  describe "row S6: an <invoke> whose literal type is not registered" do
+    # The runtime refusal is `Statifier.Interpreter`'s
+    # `reject_unregistered_type` (and `Statifier.Session.Effects`'
+    # `plan_invoke`): an `error.execution` with the invocation as its
+    # origin, and no child starts. Each chart below compiles today.
+    @invokes """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+           initial="checking" datamodel="predicator">
+      <state id="checking">
+        <invoke type="library:catalog" src="catalog://copies"/>
+        <invoke type="scxml" src="lookup.scxml"/>
+        <transition event="done" target="holding"/>
+      </state>
+      <state id="holding">
+        <invoke src="hold.scxml"/>
+        <invoke typeexpr="'library:' + 'holds'" src="holds://queue"/>
+        <invoke type="library:holds" src="holds://queue"/>
+      </state>
+    </scxml>
+    """
+
+    defp catalog_registered do
+      Invoke.Types.from_handlers(%{"library:catalog" => Statifier.Invoke.Handler})
+    end
+
+    # sabotage: "S6" removed from `@rows` -> red (no S6 finding at all)
+    test "with no invoke_types: every non-built-in literal type is one finding, in document order" do
+      assert [
+               %{
+                 row: "S6",
+                 kind: :unregistered_invoke_type,
+                 location: %Location{start_line: 4},
+                 data: %{type: "library:catalog"}
+               },
+               %{
+                 row: "S6",
+                 kind: :unregistered_invoke_type,
+                 location: %Location{start_line: 11},
+                 data: %{type: "library:holds"}
+               }
+             ] = Publish.findings(chart(@invokes))
+    end
+
+    # sabotage: the S6 clause passes `nil` to `registered?/2` instead of
+    # `declaration[:invoke_types]` -> red (the registered type is still
+    # reported)
+    test "a registered type is not a finding; the built-ins stay registered" do
+      assert [%{row: "S6", data: %{type: "library:holds"}}] =
+               Publish.findings(chart(@invokes), invoke_types: catalog_registered())
+    end
+
+    # sabotage: the S6 clause matches any `type`, not only `{:static, type}`
+    # -> red (the `typeexpr`'s compiled form becomes a finding)
+    test "an absent type and a typeexpr are not judged" do
+      types =
+        for %{row: "S6", data: %{type: type}} <- Publish.findings(chart(@invokes)), do: type
+
+      assert types == ["library:catalog", "library:holds"]
+    end
+
+    # sabotage: `@rows` reordered to
+    # `["S1", "S2", "S15", "S6", "S16", "S17", "S18", "S19"]` -> red
+    test "S6 findings come after S1's and before S15's" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <state id="s">
+          <onentry><send type="library:notices" event="e"/></onentry>
+          <invoke type="library:catalog" src="catalog://copies"/>
+          <transition event="copy.returned" target="s"/>
+        </state>
+      </scxml>
+      """
+
+      assert [%{row: "S1"}, %{row: "S6"}, %{row: "S15"}] =
+               Publish.findings(chart(xml), accepts: ["patron.blocked", "copy.returned"])
     end
   end
 

@@ -55,8 +55,9 @@ defmodule Statifier.Publish do
       built-in set only, so every non-built-in `<send type>` is reported.
     - `invoke_types:` - a `Statifier.Invoke.Types.t()`, the set a host
       builds with `Statifier.Invoke.Types.from_handlers/1` from its
-      `:invoke_handlers` map. Read by row S6's check when it lands; until
-      then accepted and unread.
+      `:invoke_handlers` map, what row S6's check reads. `nil` is no
+      declaration: the built-in set only, so every non-built-in
+      `<invoke type>` is reported.
     - `accepts:` - the event names the host declares the chart accepts, a
       list of strings. `nil` is no declaration: the computed vocabulary
       is the contract and row S15 reports nothing.
@@ -106,7 +107,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S6", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -130,6 +131,17 @@ defmodule Statifier.Publish do
   judged (a registered processor's target is its own route string; an
   unsupported type is S1's), and a `targetexpr` or a `typeexpr` is left to
   the runtime. It needs no declaration.
+
+  Row S6 reads every `<invoke>` whose `type` is a literal, the rule the
+  runtime applies before the invocation starts: a type
+  `Statifier.Invoke.Types.registered?/2` does not register against the
+  declared `invoke_types:` is one finding of kind
+  `:unregistered_invoke_type`, at the `<invoke>`'s location, with
+  `data: %{type: type}`, in document order. With no `invoke_types:` only
+  the built-in `scxml` types are registered, as `registered?/2` answers
+  for `nil`. An `<invoke>` with no `type` is the built-in `scxml` type and
+  is not a finding; a `typeexpr` is resolved at run time and is not
+  judged.
 
   Row S15 composes `Statifier.Chart.check_accepts/2`: one finding of kind
   `:unreachable_name` per declared name no descriptor in the chart's
@@ -224,6 +236,19 @@ defmodule Statifier.Publish do
         built_in_type?(type),
         match?({:invalid, _target}, Target.parse(target)) do
       finding("S2", :invalid_target, location, %{target: target})
+    end
+  end
+
+  # The rule `Statifier.Interpreter`'s `registered_type` and
+  # `Statifier.Session.Effects`' `plan_invoke` apply before an invocation
+  # starts, through the one shared classifier, `InvokeTypes.registered?/2`.
+  # Only a literal `type` is judged: a `typeexpr` compiles to
+  # `{:compiled, ...}` and is left to the runtime.
+  defp check("S6", %Machine{states: states}, declaration) do
+    for %Machine.State{invoke: invokes} <- Tuple.to_list(states),
+        %Machine.Invoke{type: {:static, type}, location: location} <- invokes,
+        not InvokeTypes.registered?(declaration[:invoke_types], type) do
+      finding("S6", :unregistered_invoke_type, location, %{type: type})
     end
   end
 
