@@ -515,7 +515,9 @@ defmodule Statifier.PublishTest do
     end
 
     # sabotage: the value clause of `inline_child_defects/1` answers `[]`
-    # -> red
+    # -> red; an `inline_child_defects(nil)` clause answering `[]` -> red
+    # (a `null` body reads as `nil`, and with no `src` beside `<content>`
+    # the runtime's resolve answers `:no_source`)
     test "a body that reads as a value is a :content_not_markup" do
       assert [
                %{
@@ -528,6 +530,9 @@ defmodule Statifier.PublishTest do
 
       assert [%{row: "S9", kind: :content_not_markup, data: %{content: :undefined}}] =
                Publish.findings(invoke_chart("", "   "))
+
+      assert [%{row: "S9", kind: :content_not_markup, data: %{content: nil}}] =
+               Publish.findings(invoke_chart("", "null"))
     end
 
     # sabotage: `built_in_child_type?/1`'s `{:static, _}` clause answers

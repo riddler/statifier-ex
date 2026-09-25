@@ -162,8 +162,9 @@ defmodule Statifier.Publish do
   compiled as a standalone chart with `invoke_content_markup: true`. A body
   that does not compile is a finding of kind `:child_does_not_compile`,
   with `data: %{errors: errors}`, `Statifier.compile/2`'s own error list; a
-  body that reads as a value rather than a string (a number, or nothing but
-  whitespace) is `:content_not_markup`, with `data: %{content: value}`.
+  body that reads as a value rather than a string (a number, `null`, or
+  nothing but whitespace) is `:content_not_markup`, with
+  `data: %{content: value}`.
   Each finding is at the `<invoke>`'s location, in document order. A
   `<content expr>`, a `src`, a `typeexpr` and a non-built-in `type` are
   left to the runtime; a child that compiles but fails to start is too. It
@@ -637,8 +638,6 @@ defmodule Statifier.Publish do
   defp built_in_child_type?(_typeexpr), do: false
 
   @spec inline_child_defects(content :: term()) :: [{atom(), map()}]
-  defp inline_child_defects(nil), do: []
-
   defp inline_child_defects(content) when is_binary(content) do
     case Statifier.compile(content, invoke_content_markup: true) do
       {:ok, _child} -> []
