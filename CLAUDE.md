@@ -65,8 +65,15 @@ should do the work, stop before the irreversible step, and report.
 | `bd close <id>` | never for a mirrored bead whose other half is not merged to its own repo's `origin/main`; a mirrored bead whose other half has ALSO landed may be closed by the campaign conductor under a consent naming this exception, both halves together, each verified against its remote; otherwise the issue's branch is merged into `origin/main`, verified against the remote | for a bead whose description carries a `mirrors:` line while its other half is unlanded, campaign consent included; at commit time, at PR-open time, or on a local merge that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 | a version bump on a release bead's branch | an operator-authorized release bead, inside a campaign carrying the operator's explicit consent | on any other bead, on main, or when the operator has not named this repo's release bead |
-| a release (tag, `mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
+| a release (tag, `mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign. See Campaign consent below the table. |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
+
+**Campaign consent.** An adopted fleet campaign consent may grant the
+campaign's conductor three acts this table otherwise reserves: merging a
+campaign pull request, the version bump and tag of a release prep, and flipping
+a decision record to accepted. Each is granted only as far as that consent's
+text names it. `mix hex.publish` and the flip of a record whose decision is
+cryptographic stay the operator's in every campaign.
 
 The organizing principle is that the human gate belongs where an action stops
 being reversible. A commit on a private per-issue branch is undone with
