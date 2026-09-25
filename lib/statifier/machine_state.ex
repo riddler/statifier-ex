@@ -421,6 +421,7 @@ defmodule Statifier.MachineState do
     send_counter: 0,
     timer_counter: 0,
     caller_context: nil,
+    last_selection: nil,
     datamodel: %{},
     running: true,
     status: :running,
@@ -501,6 +502,32 @@ defmodule Statifier.MachineState do
   """
   @type send_types :: SendTypes.t() | nil
 
+  @typedoc """
+  Whether the last external event selected any transition: `:selected` or
+  `:none`, and `nil` before any external event has been handled.
+
+  `Statifier.Interpreter.handle_event/2` is its one writer. It reads the
+  transitions selected for the event it was handed - the same list the
+  `Statifier.Effect.Trace.TransitionsSelected` effect for that event names -
+  and writes the answer onto the state it returns, on every call, whether
+  or not the position was created with `trace: true`. The eventless and
+  internal rounds that follow in the same macrostep do not change it, so an
+  event whose transition leads on to further rounds still reads
+  `:selected`. A state built by `Statifier.Interpreter.initialize/2` reads
+  `nil`; `Statifier.Interpreter.deliver_internal/5` and
+  `Statifier.Interpreter.cancel/1` leave it where it stood.
+
+  It tells an event that moved nothing from one that selected a
+  transition. It does not say why nothing was selected: an event no
+  transition names and one whose every matching transition's guard was
+  false both read `:none`.
+
+  It is not position state. `Statifier.Position.to_binary/1` leaves it out
+  of the blob and `Statifier.Position.from_binary/2` restores `nil`, and
+  `Statifier.Position.export/1` does not carry it.
+  """
+  @type last_selection :: :selected | :none | nil
+
   @type t :: %__MODULE__{
           machine: Machine.t(),
           configuration: MapSet.t(non_neg_integer()),
@@ -513,6 +540,7 @@ defmodule Statifier.MachineState do
           send_counter: non_neg_integer(),
           timer_counter: non_neg_integer(),
           caller_context: term(),
+          last_selection: last_selection(),
           datamodel: datamodel(),
           running: boolean(),
           status: :running | :done,
@@ -574,6 +602,7 @@ defmodule Statifier.MachineState do
       send_counter: 0,
       timer_counter: 0,
       caller_context: nil,
+      last_selection: nil,
       datamodel:
         Map.merge(
           author_datamodel,
