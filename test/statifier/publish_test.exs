@@ -460,6 +460,176 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S11: every literal write location's root is one the chart declares" do
+    defp roots(body, invoke \\ "", top \\ "") do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+          <datamodel>
+              <data id="copies" expr="[]"/>
+              <data id="slot" expr="0"/>
+          </datamodel>
+          #{top}
+          <state id="lending">
+              <onentry>#{body}</onentry>
+              #{invoke}
+          </state>
+      </scxml>
+      """)
+    end
+
+    defp s11(machine), do: for(%{row: "S11"} = finding <- Publish.findings(machine), do: finding)
+
+    # sabotage: `"S11"` removed from `@rows` -> red (no finding at all)
+    test "an <assign> to a root no <data> declares is :unbound_location, at the attribute" do
+      assert [
+               %{
+                 row: "S11",
+                 kind: :unbound_location,
+                 location: %Location{start_line: 9},
+                 data: %{attribute: :location, source: "patron.name", root: "patron"}
+               }
+             ] = s11(roots(~s|<assign location="patron.name" expr="'Ada'"/>|))
+    end
+
+    # sabotage: `root_kind/2`'s `_` arm removed -> red (`_event` is not
+    # declared, so it reads :unbound_location)
+    test "a root that begins with _ is :system_variable, before the declared check" do
+      assert [
+               %{kind: :system_variable, data: %{root: "_event"}},
+               %{kind: :system_variable, data: %{root: "_hold"}}
+             ] =
+               s11(
+                 roots(
+                   ~s|<assign location="_event.name" expr="1"/><assign location="_hold" expr="1"/>|
+                 )
+               )
+    end
+
+    # sabotage: `declared_roots/1` drops the `<data>` ids -> red
+    test "a declared root, through a property, an index or a variable key, reports nothing" do
+      body =
+        ~s|<assign location="slot" expr="1"/><assign location="copies[0]" expr="1"/>| <>
+          ~s|<assign location="copies[slot].title" expr="1"/>|
+
+      assert s11(roots(body)) == []
+    end
+
+    # sabotage: `declared_roots/1` drops the `<foreach>` names -> red
+    test "a <foreach> item or index is a root the loop declares" do
+      body = """
+      <foreach array="copies" item="copy" index="at"><log expr="copy"/></foreach>
+      <assign location="copy" expr="1"/><assign location="at" expr="1"/>
+      """
+
+      assert s11(roots(body)) == []
+    end
+
+    # sabotage: `declared_roots/1` drops the script roots -> red
+    test "a root a <script> assigns, top-level or in content, is declared" do
+      body = ~s|<script>hold = 1</script><assign location="hold.until" expr="2"/>|
+      top = "<script>if (true) { ledger = [] }</script>"
+
+      assert s11(roots(body <> ~s|<assign location="ledger[0]" expr="2"/>|, "", top)) == []
+
+      assert [%{data: %{root: "ledger"}}] =
+               s11(roots(body <> ~s|<assign location="ledger[0]" expr="2"/>|))
+    end
+
+    # sabotage: `write_targets/1`'s `%Send{}` arm answers `[]` -> red
+    test "a <send idlocation> and an <invoke idlocation> are judged at their attribute" do
+      invoke = ~s|<invoke type="scxml" src="child.scxml" idlocation="child_id"/>|
+
+      assert [
+               %{
+                 kind: :unbound_location,
+                 location: %Location{},
+                 data: %{attribute: :idlocation, source: "notice_id"}
+               },
+               %{kind: :unbound_location, data: %{attribute: :idlocation, source: "child_id"}}
+             ] = s11(roots(~s|<send event="loan.due" idlocation="notice_id"/>|, invoke))
+    end
+
+    # sabotage: the `%Block{content: []}` arm of `invoke_write_targets/1`
+    # answers `[]` -> red
+    test "an empty <finalize> judges each namelist entry and <param location> it writes" do
+      invoke = """
+      <invoke type="scxml" src="child.scxml" namelist="copies due_on">
+          <finalize/>
+      </invoke>
+      <invoke type="scxml" src="child.scxml">
+          <param name="fine" location="fine"/>
+          <finalize/>
+      </invoke>
+      """
+
+      assert [
+               %{data: %{attribute: :namelist, source: "due_on", root: "due_on"}},
+               %{data: %{attribute: :location, source: "fine", root: "fine"}}
+             ] = s11(roots("", invoke))
+    end
+
+    # sabotage: the S11 clause takes the root as the source up to its first
+    # non-name character, whether or not the location resolves -> red
+    test "a location that does not resolve is row S19's alone" do
+      machine =
+        roots(~s|<assign location="patron + 1" expr="2"/><assign location="patron +" expr="2"/>|)
+
+      assert s11(machine) == []
+      assert [%{row: "S19"}, %{row: "S19"}] = Publish.findings(machine)
+    end
+
+    # sabotage: `@rows` reordered to put "S11" after "S15" -> red
+    test "S11 findings follow S1 and S2 and precede S15" do
+      body = """
+      <send type="library:notices" event="loan.overdue"/>
+      <send target="!!" event="loan.overdue"/>
+      <assign location="patron" expr="1"/>
+      """
+
+      assert [%{row: "S1"}, %{row: "S2"}, %{row: "S11"}, %{row: "S15"}] =
+               Publish.findings(roots(body), accepts: ["never.selected"])
+    end
+
+    # The agreement with the runtime: every location the check reports,
+    # `Statifier.Interpreter.Datamodel.write_location/4` refuses with the
+    # same reason, and every location it passes, that write takes.
+    # sabotage: `root_kind/2`'s last arm answers `:ok` -> red
+    test "the runtime write refuses exactly the locations the check reports" do
+      reported = ["patron", "patron.name", "_sessionid", "_x.y"]
+      passed = ["slot", "copies[0]", "copies[slot]"]
+      body = Enum.map_join(reported ++ passed, &~s|<assign location="#{&1}" expr="2"/>|)
+      machine = roots(body)
+
+      assert Enum.map(s11(machine), &{&1.kind, &1.data.source}) == [
+               {:unbound_location, "patron"},
+               {:unbound_location, "patron.name"},
+               {:system_variable, "_sessionid"},
+               {:system_variable, "_x.y"}
+             ]
+
+      {machine_state, _effects} = Interpreter.initialize(machine)
+      context = Evaluator.context(machine_state)
+
+      assert {:error, {:unbound_location, "patron"}} =
+               Datamodel.write_location(machine_state, context, "patron", 2)
+
+      assert {:error, {:unbound_location, "patron.name"}} =
+               Datamodel.write_location(machine_state, context, "patron.name", 2)
+
+      assert {:error, {:system_variable, "_sessionid"}} =
+               Datamodel.write_location(machine_state, context, "_sessionid", 2)
+
+      assert {:error, {:system_variable, "_x"}} =
+               Datamodel.write_location(machine_state, context, "_x.y", 2)
+
+      for source <- passed do
+        assert {:ok, _state, _context, _write} =
+                 Datamodel.write_location(machine_state, context, source, 2)
+      end
+    end
+  end
+
   describe "row S16: a cycle of eventless transitions none of which carries a cond" do
     # Each chart compiles today. A cycle the check reports never reaches
     # quiescence at run time: the macrostep fold spends its round budget

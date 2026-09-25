@@ -107,7 +107,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S3", "S6", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S3", "S6", "S11", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -154,6 +154,24 @@ defmodule Statifier.Publish do
   for `nil`. An `<invoke>` with no `type` is the built-in `scxml` type and
   is not a finding; a `typeexpr` is resolved at run time and is not
   judged.
+
+  Row S11 reads the same literal write locations row S19 reads, in the
+  same order, and judges the root of each one that resolves, the rule the
+  runtime write applies after it resolves the location: a root that begins
+  with `_` is a system variable, a finding of kind `:system_variable`; any
+  other root the chart does not bring into being is a finding of kind
+  `:unbound_location`. A chart brings a root into being with a `<data id>`,
+  a `<foreach>` `item` or `index` name, or an assignment in a `<script>`
+  body (top-level or in executable content), each of which the runtime
+  datamodel can hold when the write runs. Each finding is at the
+  attribute's location, with `data: %{attribute: :location | :idlocation |
+  :namelist, source: source, root: root}`. A location that does not resolve
+  is row S19's, not this row's. A root the host supplies when it starts the
+  chart (the `:datamodel` option of `Statifier.MachineState.new/2`) is not
+  in the source, so the check cannot see it: a finding on such a root is
+  one the host reads against what it starts the chart with. An invoking
+  parent's params never supply one: they fill only the child's declared
+  top-level `<data>` ids. It needs no declaration.
 
   Row S15 composes `Statifier.Chart.check_accepts/2`: one finding of kind
   `:unreachable_name` per declared name no descriptor in the chart's
@@ -286,6 +304,24 @@ defmodule Statifier.Publish do
     end
   end
 
+  # The rule `Statifier.Interpreter.Datamodel.write_location/4` applies
+  # once the location resolves: a root beginning with `_` is refused as
+  # `{:system_variable, root}` first, then a root the datamodel does not
+  # hold as `{:unbound_location, location}`. The roots the chart can bring
+  # into the datamodel are its `<data>` ids, its `<foreach>` names and its
+  # scripts' assignment targets; any other is reported.
+  defp check("S11", %Machine{} = machine, _declaration) do
+    declared = declared_roots(machine)
+
+    for {attribute, source, location} <- write_targets(machine),
+        {:ok, [root | _rest]} <- [resolve_location(source)],
+        is_binary(root),
+        kind = root_kind(root, declared),
+        kind != :ok do
+      finding("S11", kind, location, %{attribute: attribute, source: source, root: root})
+    end
+  end
+
   defp check("S15", machine, declaration) do
     %{unreachable: unreachable, undeclared: undeclared} =
       Chart.check_accepts(machine, declaration[:accepts])
@@ -366,7 +402,19 @@ defmodule Statifier.Publish do
   # `Predicator.context_location/3`. Only a variable bracket key reads the
   # data, so each one is bound to `0`, a valid key; every other refusal of
   # that function is the source's alone.
-  defp check("S19", %Machine{contents: contents, states: states}, _declaration) do
+  defp check("S19", %Machine{} = machine, _declaration) do
+    for {attribute, source, location} <- write_targets(machine),
+        kind = unassignable_kind(source),
+        kind != :ok do
+      finding("S19", kind, location, %{attribute: attribute, source: source})
+    end
+  end
+
+  # Every literal write location, the targets rows S11 and S19 judge:
+  # executable content first, in document order, then each state's
+  # `<invoke>`s in document order.
+  @spec write_targets(machine :: Machine.t()) :: [{atom(), String.t(), Location.t() | nil}]
+  defp write_targets(%Machine{contents: contents, states: states}) do
     in_content =
       Enum.flat_map(Tuple.to_list(contents), fn
         %Assign{location: source, location_location: at, node_location: node} ->
@@ -386,11 +434,54 @@ defmodule Statifier.Publish do
           target <- invoke_write_targets(invoke),
           do: target
 
-    for {attribute, source, location} <- in_content ++ in_invokes,
+    for {_attribute, source, _location} = target <- in_content ++ in_invokes,
         is_binary(source),
-        kind = unassignable_kind(source),
-        kind != :ok do
-      finding("S19", kind, location, %{attribute: attribute, source: source})
+        do: target
+  end
+
+  # The roots a chart can bring into the runtime datamodel: every `<data>`
+  # id (`Statifier.Interpreter.Datamodel.initialize/1` seeds each one), every
+  # `<foreach>` `item` and `index` (the loop declares them before it runs),
+  # and every root a `<script>` assigns (`Statifier.Evaluator.run_program/2`
+  # merges a fresh root into the datamodel).
+  @spec declared_roots(machine :: Machine.t()) :: MapSet.t(String.t())
+  defp declared_roots(%Machine{} = machine) do
+    data = for data <- Tuple.to_list(machine.data_elements), do: data.id
+
+    foreach =
+      for %Foreach{item: item, index: index} <- Tuple.to_list(machine.contents),
+          name <- [item, index],
+          is_binary(name),
+          do: name
+
+    scripts =
+      for source <- script_sources(machine),
+          root <- roots_written(source),
+          do: root
+
+    MapSet.new(data ++ foreach ++ scripts)
+  end
+
+  # The source of every `<script>` that compiled: top-level first, then
+  # those in executable content, in document order.
+  @spec script_sources(machine :: Machine.t()) :: [String.t()]
+  defp script_sources(%Machine{global_scripts: global, contents: contents}) do
+    top_level = for {:program, _compiled, source} <- global, do: source
+
+    in_content =
+      for %Script{program: {:program, _compiled, source}} <- Tuple.to_list(contents),
+          do: source
+
+    top_level ++ in_content
+  end
+
+  @spec root_kind(root :: String.t(), declared :: MapSet.t(String.t())) ::
+          :ok | :system_variable | :unbound_location
+  defp root_kind(root, declared) do
+    cond do
+      String.starts_with?(root, "_") -> :system_variable
+      MapSet.member?(declared, root) -> :ok
+      true -> :unbound_location
     end
   end
 
@@ -520,11 +611,19 @@ defmodule Statifier.Publish do
 
   @spec system_roots_written(source :: String.t()) :: [String.t()]
   defp system_roots_written(source) do
+    source
+    |> roots_written()
+    |> Enum.filter(&String.starts_with?(&1, "_"))
+  end
+
+  # Every root a program's assignments write, once each, in the order they
+  # first appear; a body that does not parse writes nothing.
+  @spec roots_written(source :: String.t()) :: [String.t()]
+  defp roots_written(source) do
     case Predicator.parse_program(source) do
       {:ok, {:program, statements, _position}} ->
         statements
         |> Enum.flat_map(&written_roots/1)
-        |> Enum.filter(&String.starts_with?(&1, "_"))
         |> Enum.uniq()
 
       _error ->
@@ -581,12 +680,17 @@ defmodule Statifier.Publish do
   @spec unassignable_kind(source :: String.t()) ::
           :ok | :parse_error | :not_assignable | :invalid_node | :computed_key
   defp unassignable_kind(source) do
-    case Predicator.context_location(source, bracket_variables(source)) do
+    case resolve_location(source) do
       {:ok, _path} -> :ok
       {:error, %Predicator.Errors.ParseError{}} -> :parse_error
       {:error, %Predicator.Errors.LocationError{type: type}} -> location_kind(type)
     end
   end
+
+  @spec resolve_location(source :: String.t()) ::
+          {:ok, Predicator.ContextLocation.location_path()} | {:error, term()}
+  defp resolve_location(source),
+    do: Predicator.context_location(source, bracket_variables(source))
 
   @spec location_kind(type :: atom()) :: :ok | :not_assignable | :invalid_node | :computed_key
   defp location_kind(type) when type in [:not_assignable, :invalid_node, :computed_key], do: type
