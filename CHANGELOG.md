@@ -10,6 +10,45 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.8.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.9.0] 2026-09-25
+
+A minor release, adding two things a host can read. `Statifier.Publish.findings/2`
+is a new pure function a host calls on a compiled chart before it
+publishes it, with a declaration of the deployment's send types, invoke
+types and accepted event names; it returns a list of findings, each a map
+naming its row of `docs/publish-time-checks.md`, its `kind`, its location
+and its data. It holds rows S1 (kind `:unsupported_send_type`) and S15
+(kinds `:unreachable_name` and `:undeclared_descriptor`), whose checks
+already existed, and a new check for each of rows S2, S3, S6, S9, S11,
+S12, S13, S14, S16, S17, S18 and S19, with the kinds the bullets below
+name; a host that matches on a finding's `kind` should expect those atoms
+and no others. `Statifier.MachineState` gains a `last_selection` field
+(`:selected`, `:none`, or `nil` before any external event); it is not
+position state, so a position blob keeps the shape it had in 2.8.1.
+
+### Added
+
+- `Statifier.Publish.findings/2`: one pure publish-time function over a
+  compiled chart and the host's declaration (registered send types, invoke
+  types, accepted event names), returning a list of findings that each name
+  their row of `docs/publish-time-checks.md`. It composes
+  `Statifier.Send.Types.unsupported_sends/2` (row S1) and
+  `Statifier.Chart.check_accepts/2` (row S15); the rows the table lists as
+  NONE land inside it one check at a time.
+- `Statifier.Publish.findings/2` reports row S2: a `<send>` with a built-in or absent `type` whose literal `target` the engine cannot parse (`:invalid_target`), at the send's location with `data: %{target: target}`, before the runtime refuses the send.
+- `Statifier.Publish.findings/2` reports row S3 of `docs/publish-time-checks.md`: a `<send>` with a built-in type whose literal `#_<invokeid>` target names no `<invoke id>` in the chart, as kind `:unreachable_target` with `data: %{target: target}`, before the send is refused at run time.
+- `Statifier.Publish.findings/2` reports row S6 of `docs/publish-time-checks.md`: an `<invoke>` whose literal `type` the declared `invoke_types:` does not register (with no declaration, any type outside the built-in `scxml` set), as kind `:unregistered_invoke_type` at the `<invoke>`'s location with `data: %{type: type}`, before the invocation is refused at run time.
+- `Statifier.Publish.findings/2` reports row S9 of `docs/publish-time-checks.md`: an `<invoke>` of the built-in `scxml` type whose inline `<content>` does not compile as a child chart (`:child_does_not_compile`, `data: %{errors: errors}`) or reads as a value rather than markup, `null` included (`:content_not_markup`, `data: %{content: value}`), at the `<invoke>`'s location, before the child fails to start at run time.
+- `Statifier.Publish.findings/2` reports row S11: a literal write location (an `<assign>`'s `location`, a `<send>`'s or an `<invoke>`'s `idlocation`, or a target an empty `<finalize>` writes) whose root begins with `_` (`:system_variable`) or is not one the chart declares with a `<data>` id, a `<foreach>` name or a `<script>` assignment (`:unbound_location`), at the attribute's location with `data: %{attribute: :location | :idlocation | :namelist, source: source, root: root}`, before the runtime write refuses it.
+- `Statifier.Publish.findings/2` reports row S12: an expression or `<script>` body that reads a root no `<data>`, `<foreach>` name or `<script>` assignment in the chart declares and that is not a system variable (`:undeclared_root`), at the attribute's location with `data: %{root: root, source: source}`, before the runtime raises predicator's undefined-variable error.
+- `Statifier.Publish.findings/2` reports row S13 of `docs/publish-time-checks.md`: every compile failure the compiler defers to run time (a `<data expr>`, an `<assign expr>`, a `<script>` body in executable content or at the top level, a `<send>` or `<invoke>` `namelist` entry), as kind `:compile_error` at the failing expression's location with `data: %{element: :data | :assign | :script | :send | :invoke, source: source}`, in document order, before the node raises `error.execution` at run time.
+- `Statifier.Publish.findings/2` reports row S14: a `<send>` whose literal `delay` is not a duration the engine can resolve (`:invalid_delay`), at the `delay` attribute's location with `data: %{delay: delay}`, before the runtime refuses the send.
+- `Statifier.Publish.findings/2` reports row S16: a cycle of eventless transitions none of which carries a `cond` (`:eventless_cycle`), at the location of the transition taken from the cycle's first state with `data: %{states: [id]}`, before the macrostep spends its round budget at run time.
+- `Statifier.Publish.findings/2` reports row S17: a `<foreach>` whose literal `item` or `index` is not a legal variable name (`:illegal_item_name`, `:illegal_index_name`) or begins with `_` (`:system_variable`), at the attribute's location with `data: %{attribute: :item | :index, name: name}`, before the runtime refuses the loop.
+- `Statifier.Publish.findings/2` reports row S18 of `docs/publish-time-checks.md`: a `<script>` whose assignment target's root begins with `_`, as kind `:system_variable` with `data: %{root: root}`, before the script is refused at run time.
+- `Statifier.Publish.findings/2` reports row S19: a literal write location (an `<assign>`'s `location`, a `<send>`'s or an `<invoke>`'s `idlocation`, or a target an empty `<finalize>` writes) that does not parse (`:parse_error`) or is not an assignable location (`:not_assignable`, `:invalid_node`, `:computed_key`), at the attribute's location with `data: %{attribute: :location | :idlocation | :namelist, source: source}`, before the runtime write refuses it.
+- `Statifier.MachineState` gains `last_selection`: `Statifier.Interpreter.handle_event/2` sets it to `:selected` when the event selected at least one transition and `:none` when it selected none, with or without tracing; it is `nil` before any external event, and a position restored with `Statifier.Position.from_binary/2` reads `nil` because the blob does not carry it.
+
 ## [2.8.1] 2026-09-23
 
 A patch release: an `<invoke>` whose type is the SCXML type URI without its
