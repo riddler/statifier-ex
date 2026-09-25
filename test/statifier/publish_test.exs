@@ -9,7 +9,8 @@ defmodule Statifier.PublishTest do
 
   use ExUnit.Case, async: true
 
-  alias Statifier.{Invoke, Publish, Send}
+  alias Statifier.{Evaluator, Interpreter, Invoke, Publish, Send}
+  alias Statifier.Interpreter.Datamodel
   alias Statifier.Parser.Location
 
   @loan """
@@ -351,6 +352,173 @@ defmodule Statifier.PublishTest do
       """
 
       assert [%{row: "S1"}, %{row: "S18"}] = Publish.findings(chart(xml))
+    end
+  end
+
+  describe "row S19: every literal write location is assignable" do
+    defp writes(onentry, invoke \\ "") do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+          <datamodel>
+              <data id="copies" expr="[]"/>
+              <data id="slot" expr="0"/>
+          </datamodel>
+          <state id="lending">
+              <onentry>#{onentry}</onentry>
+              #{invoke}
+          </state>
+      </scxml>
+      """)
+    end
+
+    defp s19(machine), do: for(%{row: "S19"} = finding <- Publish.findings(machine), do: finding)
+
+    # sabotage: `"S19"` removed from `@rows` -> red (no finding at all)
+    test "an <assign location> that names an operator expression is :not_assignable, at the attribute" do
+      assert [
+               %{
+                 row: "S19",
+                 kind: :not_assignable,
+                 location: %Location{start_line: 8},
+                 data: %{attribute: :location, source: "copies + 1"}
+               }
+             ] = s19(writes(~s|<assign location="copies + 1" expr="2"/>|))
+    end
+
+    # sabotage: the `ParseError` arm of `unassignable_kind/1` answers `:ok`
+    # -> red
+    test "a location that does not parse is :parse_error" do
+      assert [%{kind: :parse_error, data: %{source: "copies +"}}] =
+               s19(writes(~s|<assign location="copies +" expr="2"/>|))
+    end
+
+    # sabotage: `location_kind/1`'s guard narrowed to `[:not_assignable]`
+    # -> red
+    test "a membership test, an object literal, a cast, a duration and a relative date are :invalid_node" do
+      sources = ["copies in copies", "{}", "copies::integer", "3d", "3d ago"]
+      onentry = Enum.map_join(sources, &~s|<assign location="#{&1}" expr="2"/>|)
+
+      assert Enum.map(s19(writes(onentry)), &{&1.kind, &1.data.source}) ==
+               Enum.map(sources, &{:invalid_node, &1})
+    end
+
+    # sabotage: `location_kind/1`'s guard narrowed to
+    # `[:not_assignable, :invalid_node]` -> red
+    test "a computed bracket key is :computed_key" do
+      onentry =
+        ~s|<assign location="copies[1 + 1]" expr="2"/><assign location="copies[true]" expr="2"/>|
+
+      assert [
+               %{kind: :computed_key, data: %{source: "copies[1 + 1]"}},
+               %{kind: :computed_key, data: %{source: "copies[true]"}}
+             ] = s19(writes(onentry))
+    end
+
+    # sabotage: `unassignable_kind/1`'s `{:ok, _path}` arm answers
+    # `:not_assignable` -> red
+    test "assignable locations, a variable bracket key included, report nothing" do
+      onentry =
+        ~s|<assign location="slot" expr="1"/><assign location="copies[0]" expr="1"/>| <>
+          ~s|<assign location="copies[slot]" expr="1"/><assign location="copies['a'].b" expr="1"/>|
+
+      assert s19(writes(onentry)) == []
+    end
+
+    # The runtime resolves a bracket key before the expression it indexes,
+    # so an unbound variable key would answer first and hide the refusal.
+    # sabotage: `bracket_variables/1` answers `%{}` -> red
+    test "a variable bracket key does not hide the refusal of what it indexes" do
+      assert [%{kind: :not_assignable, data: %{source: "len(copies)[slot]"}}] =
+               s19(writes(~s|<assign location="len(copies)[slot]" expr="2"/>|))
+    end
+
+    # sabotage: the `%Send{}` arm of the S19 clause answers `[]` -> red
+    test "a <send idlocation> is judged at its attribute" do
+      assert [
+               %{
+                 kind: :invalid_node,
+                 location: %Location{},
+                 data: %{attribute: :idlocation, source: "3d"}
+               }
+             ] =
+               s19(writes(~s|<send event="loan.due" idlocation="3d"/>|))
+    end
+
+    # sabotage: `invoke_write_targets/1`'s `idlocation` answers `[]` -> red
+    test "an <invoke idlocation> is judged" do
+      invoke = ~s|<invoke type="scxml" src="child.scxml" idlocation="{}"/>|
+
+      assert [%{kind: :invalid_node, data: %{attribute: :idlocation, source: "{}"}}] =
+               s19(writes("", invoke))
+    end
+
+    # sabotage: the `%Block{content: []}` arm of `invoke_write_targets/1`
+    # answers `[]` -> red
+    test "an empty <finalize> judges each namelist entry and <param location> it writes" do
+      invoke = """
+      <invoke type="scxml" src="child.scxml" namelist="copies f()">
+          <finalize/>
+      </invoke>
+      <invoke type="scxml" src="child.scxml">
+          <param name="due" location="-slot"/>
+          <finalize/>
+      </invoke>
+      """
+
+      assert [
+               %{kind: :not_assignable, data: %{attribute: :namelist, source: "f()"}},
+               %{kind: :not_assignable, data: %{attribute: :location, source: "-slot"}}
+             ] = s19(writes("", invoke))
+    end
+
+    # sabotage: `invoke_write_targets/1` judges the targets whatever the
+    # `<finalize>` holds -> red
+    test "a populated or absent <finalize> writes no namelist entry, so none is judged" do
+      populated = """
+      <invoke type="scxml" src="child.scxml" namelist="f()">
+          <finalize><assign location="slot" expr="1"/></finalize>
+      </invoke>
+      """
+
+      absent = ~s|<invoke type="scxml" src="child.scxml" namelist="f()"/>|
+
+      assert s19(writes("", populated)) == []
+      assert s19(writes("", absent)) == []
+    end
+
+    # sabotage: `in_content ++ in_invokes` swapped -> red
+    test "executable content comes before the invokes" do
+      invoke = ~s|<invoke type="scxml" src="child.scxml" idlocation="{}"/>|
+
+      assert [%{data: %{source: "copies + 1"}}, %{data: %{source: "{}"}}] =
+               s19(writes(~s|<assign location="copies + 1" expr="2"/>|, invoke))
+    end
+
+    # The agreement with the runtime: every location the check reports,
+    # `Statifier.Interpreter.Datamodel.write_location/4` refuses, and every
+    # location it passes, that write takes.
+    # sabotage: `location_kind/1` answers `:ok` for every type -> red
+    test "the runtime write refuses exactly the locations the check reports" do
+      reported = ["copies +", "copies + 1", "len(copies)[slot]", "{}", "3d ago", "copies[1 + 1]"]
+      passed = ["slot", "copies[0]", "copies[slot]"]
+      onentry = Enum.map_join(reported ++ passed, &~s|<assign location="#{&1}" expr="2"/>|)
+      machine = writes(onentry)
+
+      assert Enum.map(s19(machine), & &1.data.source) == reported
+
+      {machine_state, _effects} = Interpreter.initialize(machine)
+      context = Evaluator.context(machine_state)
+
+      for source <- reported do
+        assert {:error, _reason} =
+                 Datamodel.write_location(machine_state, context, source, 2)
+      end
+
+      for source <- passed do
+        assert {:ok, _state, _context, _write} =
+                 Datamodel.write_location(machine_state, context, source, 2)
+      end
     end
   end
 

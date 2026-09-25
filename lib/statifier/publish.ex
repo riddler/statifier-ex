@@ -71,7 +71,9 @@ defmodule Statifier.Publish do
 
   alias Statifier.{Chart, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
-  alias Statifier.Machine.Content.{Foreach, Script}
+  alias Statifier.Machine.{Block, Param}
+  alias Statifier.Machine.Content.{Assign, Foreach, Script, Send}
+  alias Statifier.Machine.Invoke, as: MachineInvoke
   alias Statifier.Parser.Location
   alias Statifier.Send.Types, as: SendTypes
 
@@ -103,7 +105,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S15", "S17", "S18"]
+  @rows ["S1", "S15", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -144,6 +146,24 @@ defmodule Statifier.Publish do
   `<script>`'s location. A read of a system variable is not a finding, and
   a body that did not compile is not judged by this row. It needs no
   declaration.
+
+  Row S19 reads every literal write location - an `<assign>`'s `location`,
+  a `<send>`'s or an `<invoke>`'s `idlocation`, and each target an empty
+  `<finalize>` writes (a `namelist` entry, or a `<param>`'s `location`) -
+  and resolves it the way the runtime write does, with every variable used
+  as a bracket key standing for a valid key, since that value is the
+  data's. A location that does not parse is a finding of kind
+  `:parse_error`; one that names something that cannot be assigned (a
+  literal, a string, a list, a function call, an operator expression) is
+  `:not_assignable`; a membership test, an object literal, a cast, a
+  duration or a relative date is `:invalid_node`; a bracket key that is
+  neither a string, an integer nor a variable is `:computed_key`. Each
+  finding is at the attribute's location (the element's when the attribute
+  has none of its own), with `data: %{attribute: :location | :idlocation |
+  :namelist, source: source}`: executable content first, in document
+  order, then each state's `<invoke>`s in document order, `idlocation`
+  before the `<finalize>` targets. A `namelist` entry that did not compile
+  is row S13's, not this row's. It needs no declaration.
 
   See the moduledoc for the finding shape and the declaration's keys.
   """
@@ -204,6 +224,39 @@ defmodule Statifier.Publish do
     end
   end
 
+  # The rule `Statifier.Interpreter.Datamodel.write_location/4` applies
+  # before it writes: the location resolves through
+  # `Predicator.context_location/3`. Only a variable bracket key reads the
+  # data, so each one is bound to `0`, a valid key; every other refusal of
+  # that function is the source's alone.
+  defp check("S19", %Machine{contents: contents, states: states}, _declaration) do
+    in_content =
+      Enum.flat_map(Tuple.to_list(contents), fn
+        %Assign{location: source, location_location: at, node_location: node} ->
+          [{:location, source, at || node}]
+
+        %Send{idlocation: source, attribute_locations: attrs, location: node}
+        when is_binary(source) ->
+          [{:idlocation, source, Map.get(attrs, :idlocation, node)}]
+
+        _node ->
+          []
+      end)
+
+    in_invokes =
+      for state <- Tuple.to_list(states),
+          invoke <- state.invoke,
+          target <- invoke_write_targets(invoke),
+          do: target
+
+    for {attribute, source, location} <- in_content ++ in_invokes,
+        is_binary(source),
+        kind = unassignable_kind(source),
+        kind != :ok do
+      finding("S19", kind, location, %{attribute: attribute, source: source})
+    end
+  end
+
   @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
   defp foreach_name_kind(name, illegal) do
     cond do
@@ -244,6 +297,62 @@ defmodule Statifier.Publish do
   defp location_root({:identifier, name, _position}), do: name
   defp location_root({:property_access, inner, _property, _position}), do: location_root(inner)
   defp location_root({:bracket_access, inner, _key, _position}), do: location_root(inner)
+
+  # An `<invoke>`'s `idlocation`, then - only when its `<finalize>` is
+  # empty, the one case the runtime auto-assigns - every `namelist` entry
+  # and `<param location>` that compiled, the targets that write reads.
+  @spec invoke_write_targets(invoke :: MachineInvoke.t()) ::
+          [{atom(), String.t(), Location.t() | nil}]
+  defp invoke_write_targets(%MachineInvoke{} = invoke) do
+    idlocation =
+      if is_binary(invoke.idlocation),
+        do: [
+          {:idlocation, invoke.idlocation,
+           Map.get(invoke.attribute_locations, :idlocation, invoke.location)}
+        ],
+        else: []
+
+    finalize =
+      case invoke.finalize do
+        %Block{content: []} ->
+          for {attribute, params} <- [namelist: invoke.namelist, location: invoke.params],
+              %Param{kind: :location, expr: {:compiled, _compiled, source}} = param <- params,
+              do: {attribute, source, param.expr_location || param.location}
+
+        _absent_or_populated ->
+          []
+      end
+
+    idlocation ++ finalize
+  end
+
+  @spec unassignable_kind(source :: String.t()) ::
+          :ok | :parse_error | :not_assignable | :invalid_node | :computed_key
+  defp unassignable_kind(source) do
+    case Predicator.context_location(source, bracket_variables(source)) do
+      {:ok, _path} -> :ok
+      {:error, %Predicator.Errors.ParseError{}} -> :parse_error
+      {:error, %Predicator.Errors.LocationError{type: type}} -> location_kind(type)
+    end
+  end
+
+  @spec location_kind(type :: atom()) :: :ok | :not_assignable | :invalid_node | :computed_key
+  defp location_kind(type) when type in [:not_assignable, :invalid_node, :computed_key], do: type
+  defp location_kind(_type_the_data_decides), do: :ok
+
+  # Every identifier in the source bound to `0`, so a variable bracket key
+  # resolves whatever the data will hold; the other identifiers are never
+  # read by the resolution.
+  @spec bracket_variables(source :: String.t()) :: %{String.t() => 0}
+  defp bracket_variables(source) do
+    case Predicator.Lexer.tokenize(source) do
+      {:ok, tokens} ->
+        for {:identifier, _line, _column, _length, name} <- tokens, into: %{}, do: {name, 0}
+
+      _error ->
+        %{}
+    end
+  end
 
   @spec finding(row :: String.t(), kind :: atom(), location :: Location.t() | nil, data :: map()) ::
           finding()
