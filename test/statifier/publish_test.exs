@@ -203,8 +203,12 @@ defmodule Statifier.PublishTest do
     # sabotage: the `Target.parse/1` filter dropped from the S2 clause -> red
     # (every literal target reported)
     test "a target the built-in processor can parse, or none at all, reports nothing" do
+      # `#_notices` parses; that no `<invoke id>` declares it is row S3's.
       for target <- ["#_internal", "#_parent", "#_scxml_loan-7", "#_notices"] do
-        assert Publish.findings(send_chart(~s(target="#{target}"))) == []
+        assert for(
+                 %{row: "S2"} = finding <- Publish.findings(send_chart(~s(target="#{target}"))),
+                 do: finding
+               ) == []
       end
 
       assert Publish.findings(send_chart("")) == []
@@ -257,6 +261,124 @@ defmodule Statifier.PublishTest do
             do: node
 
       location
+    end
+  end
+
+  describe "row S3: a literal #_<invokeid> target no <invoke id> in the chart declares" do
+    # Each chart compiles today; with a route snapshot declared, the runtime
+    # refuses the send in `Statifier.Machine.Content.Send`'s
+    # `reject_reason/4` with `{:unreachable_target, target}`.
+    defp invoke_chart(sends) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+        <state id="lending">
+          <invoke id="catalog" type="scxml">
+            <content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="done"/></scxml></content>
+          </invoke>
+          <onentry>
+            #{sends}
+          </onentry>
+        </state>
+      </scxml>
+      """)
+    end
+
+    # sabotage: "S3" dropped from `@rows` -> red
+    test "a target naming no declared invoke is one :unreachable_target at the send" do
+      assert [
+               %{
+                 row: "S3",
+                 kind: :unreachable_target,
+                 location: %Location{start_line: 8},
+                 data: %{target: "#_holds"}
+               }
+             ] = Publish.findings(invoke_chart(~s(<send target="#_holds" event="loan.hold"/>)))
+    end
+
+    # sabotage: the S3 clause judges against an empty set of declared ids
+    # -> red (`#_catalog` reported)
+    test "a target naming a declared <invoke id> is not a finding" do
+      assert Publish.findings(invoke_chart(~s(<send target="#_catalog" event="loan.hold"/>))) ==
+               []
+    end
+
+    # sabotage: the S3 clause judges the raw target instead of the parsed
+    # `{:invoke, id}` route -> red
+    test "a session, #_parent, #_internal or absent target is not this row's" do
+      sends = """
+      <send target="#_scxml_branch" event="a"/>
+      <send target="#_parent" event="b"/>
+      <send target="#_internal" event="c"/>
+      <send event="d"/>
+      """
+
+      assert Publish.findings(invoke_chart(sends)) == []
+    end
+
+    # sabotage: the built-in type filter dropped from the S3 clause -> red
+    # (the registered send's opaque target is reported)
+    test "a registered type's target is its processor's, and is not judged" do
+      machine = invoke_chart(~s(<send type="library:notices" target="#_holds" event="e"/>))
+      assert Publish.findings(machine, send_types: notices_registered()) == []
+    end
+
+    # sabotage: the built-in test narrowed to an absent `type` -> red
+    test "an explicit scxml type is built-in and judged" do
+      assert [%{row: "S3", data: %{target: "#_holds"}}] =
+               Publish.findings(invoke_chart(~s(<send type="scxml" target="#_holds" event="e"/>)))
+    end
+
+    # sabotage: the built-in type filter dropped from the S3 clause -> red
+    # (the `typeexpr` send is judged)
+    test "a targetexpr or a typeexpr is left to the runtime" do
+      sends = """
+      <send targetexpr="'#_holds'" event="a"/>
+      <send typeexpr="'scxml'" target="#_holds" event="b"/>
+      """
+
+      assert Publish.findings(invoke_chart(sends)) == []
+    end
+
+    # The runtime exempts a delayed send from the snapshot check and finds
+    # the same unreachable invoke when the timer fires; the literal decides
+    # it either way.
+    # sabotage: "S3" dropped from `@rows` -> red
+    test "a delayed send is judged too" do
+      assert [%{row: "S3", data: %{target: "#_holds"}}] =
+               Publish.findings(invoke_chart(~s(<send target="#_holds" delay="1s" event="e"/>)))
+    end
+
+    # An `idlocation` invoke's id is generated when it starts; no literal
+    # can name it.
+    # sabotage: "S3" dropped from `@rows` -> red
+    test "an <invoke idlocation> declares no id" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+               initial="lending" datamodel="predicator">
+          <datamodel><data id="holds"/></datamodel>
+          <state id="lending">
+            <invoke idlocation="holds" type="scxml">
+              <content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="done"/></scxml></content>
+            </invoke>
+            <onentry><send target="#_holds" event="e"/></onentry>
+          </state>
+        </scxml>
+        """)
+
+      assert [%{row: "S3", data: %{target: "#_holds"}}] = Publish.findings(machine)
+    end
+
+    # sabotage: `@rows` reordered to put "S3" before "S1" -> red
+    test "S3 findings come after S1's and before S15's" do
+      sends = """
+      <send target="#_holds" event="loan.hold"/>
+      <send type="library:notices" event="loan.notice"/>
+      """
+
+      assert [%{row: "S1"}, %{row: "S3"}, %{row: "S15"}] =
+               Publish.findings(invoke_chart(sends), accepts: ["loan.nothing"])
     end
   end
 
