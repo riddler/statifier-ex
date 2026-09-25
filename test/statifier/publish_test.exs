@@ -260,6 +260,252 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S16: a cycle of eventless transitions none of which carries a cond" do
+    # Each chart compiles today. A cycle the check reports never reaches
+    # quiescence at run time: the macrostep fold spends its round budget
+    # and appends `{:budget_exhausted, _}` (ADR-0019), which the helper
+    # below reads, so every reported case is pinned to the runtime refusal
+    # it twins and every escaping case to its absence.
+    defp exhausts_budget?(machine) do
+      {_machine_state, effects} = Statifier.initialize(machine, max_macrostep_rounds: 50)
+      Enum.any?(effects, &match?({:budget_exhausted, _}, &1))
+    end
+
+    defp cycle_chart(body) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+      #{body}
+        <final id="done"/>
+      </scxml>
+      """)
+    end
+
+    # sabotage: `"S16"` removed from `@rows` -> red
+    test "two states whose eventless transitions target each other are one finding" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition target="checking"/>
+          </state>
+          <state id="checking">
+            <transition target="shelving"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == [
+               %{
+                 row: "S16",
+                 kind: :eventless_cycle,
+                 location: transition_location(machine, "shelving"),
+                 data: %{states: ["shelving", "checking"]}
+               }
+             ]
+
+      assert exhausts_budget?(machine)
+    end
+
+    # sabotage: the targetless clause of `eventless_step/2` answers `nil`
+    # -> red
+    test "a targetless eventless transition is a cycle of its own state" do
+      machine = cycle_chart(~s(<state id="shelving"><transition/></state>))
+
+      assert [%{row: "S16", kind: :eventless_cycle, data: %{states: ["shelving"]}}] =
+               Publish.findings(machine)
+
+      assert exhausts_budget?(machine)
+    end
+
+    # sabotage: `entered_atomic/2` answers `nil` for an atomic target -> red
+    test "an eventless transition that targets its own state is a cycle of that state" do
+      machine = cycle_chart(~s(<state id="shelving"><transition target="shelving"/></state>))
+
+      assert [%{data: %{states: ["shelving"]}}] = Publish.findings(machine)
+      assert exhausts_budget?(machine)
+    end
+
+    # sabotage: `first_eventless/2` answers a transition with a `cond` as
+    # if it had none -> red
+    test "a cond on a transition of the cycle leaves it to the data" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition target="checking"/>
+          </state>
+          <state id="checking">
+            <transition cond="false" target="shelving"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == []
+      refute exhausts_budget?(machine)
+    end
+
+    # The engine takes the first enabled eventless transition in document
+    # order; a `cond` ahead of the cycle's transition can take the chart
+    # out of it, so the check does not guess.
+    # sabotage: `first_eventless/2` finds the first eventless transition
+    # without a `cond` instead of the first eventless one -> red
+    test "an earlier eventless transition with a cond in the same state leaves it to the data" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition cond="true" target="done"/>
+            <transition target="shelving"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == []
+      refute exhausts_budget?(machine)
+    end
+
+    # sabotage: `entered_atomic/2` returns the target for a compound state
+    # instead of following its initial -> red
+    test "a cycle through a compound state follows its initial child" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition target="stacks"/>
+          </state>
+          <state id="stacks" initial="aisle">
+            <state id="aisle">
+              <transition target="shelving"/>
+            </state>
+          </state>
+        """)
+
+      assert [%{data: %{states: ["shelving", "aisle"]}}] = Publish.findings(machine)
+      assert exhausts_budget?(machine)
+    end
+
+    # sabotage: `eventless_step/2` reads only the atomic state's own
+    # transitions, not its ancestors' -> red
+    test "an ancestor's eventless transition is taken when the atomic state has none" do
+      machine =
+        cycle_chart("""
+          <state id="stacks">
+            <transition target="stacks"/>
+            <state id="aisle"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == [
+               %{
+                 row: "S16",
+                 kind: :eventless_cycle,
+                 location: transition_location(machine, "stacks"),
+                 data: %{states: ["aisle"]}
+               }
+             ]
+
+      assert exhausts_budget?(machine)
+    end
+
+    # sabotage: `next_atomic/3` answers the source state for a targeted
+    # transition, as if it were targetless -> red
+    test "a chain that ends in a top-level final is not a cycle" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition target="checking"/>
+          </state>
+          <state id="checking">
+            <transition target="done"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == []
+      refute exhausts_budget?(machine)
+    end
+
+    # sabotage: the walk from each state collects its whole path, not only
+    # the part from the repeated state -> red (`arriving` is reported)
+    test "states that lead into a cycle are not part of it, and each cycle is one finding" do
+      machine =
+        cycle_chart("""
+          <state id="arriving">
+            <transition target="shelving"/>
+          </state>
+          <state id="shelving">
+            <transition target="checking"/>
+          </state>
+          <state id="checking">
+            <transition target="shelving"/>
+          </state>
+          <state id="mending">
+            <transition/>
+          </state>
+        """)
+
+      assert [
+               %{data: %{states: ["shelving", "checking"]}},
+               %{data: %{states: ["mending"]}}
+             ] = Publish.findings(machine)
+    end
+
+    # Another region's transitions select in the same round and can take
+    # the chart out, so a state inside a `<parallel>` is left to run time.
+    # sabotage: the parallel-ancestor guard of `eventless_step/2` dropped
+    # -> red
+    test "a state inside a parallel is left to run time" do
+      machine =
+        cycle_chart("""
+          <parallel id="desk">
+            <state id="returns">
+              <transition target="returns"/>
+            </state>
+            <state id="loans"/>
+          </parallel>
+        """)
+
+      assert Publish.findings(machine) == []
+    end
+
+    # What a history state enters depends on what it recorded at run time.
+    # sabotage: the `:history` clause of `entered_atomic/2` removed -> red
+    # (the history reads as an atomic state and takes its parent's step)
+    test "a transition into a history state is left to run time" do
+      machine =
+        cycle_chart("""
+          <state id="shelving">
+            <transition target="resume"/>
+          </state>
+          <state id="stacks" initial="aisle">
+            <transition target="shelving"/>
+            <history id="resume">
+              <transition target="aisle"/>
+            </history>
+            <state id="aisle"/>
+          </state>
+        """)
+
+      assert Publish.findings(machine) == []
+    end
+
+    # sabotage: `@rows` reordered to put `"S16"` after `"S17"` -> red
+    test "findings are ordered by row: S1, S16, then S17" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+          <state id="shelving">
+            <onentry>
+              <send type="library:notices" event="shelved"/>
+              <foreach array="[1]" item="1copy"/>
+            </onentry>
+            <transition/>
+          </state>
+        </scxml>
+        """)
+
+      assert [%{row: "S1"}, %{row: "S16"}, %{row: "S17"}] = Publish.findings(machine)
+    end
+
+    defp transition_location(machine, state_id) do
+      {:ok, index} = Statifier.Machine.index(machine, state_id)
+      [t_index | _rest] = Statifier.Machine.at(machine, index).transitions
+      Statifier.Machine.transition(machine, t_index).location
+    end
+  end
+
   describe "row S17: a <foreach> item or index that is not a legal variable name" do
     # Each chart compiles today; the runtime refuses the loop in
     # `Statifier.Machine.Content.Foreach`'s `check_name` with the reason

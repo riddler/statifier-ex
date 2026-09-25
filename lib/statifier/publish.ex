@@ -71,7 +71,7 @@ defmodule Statifier.Publish do
 
   alias Statifier.{Chart, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
-  alias Statifier.Machine.{Block, Param}
+  alias Statifier.Machine.{Block, Param, State, Transition}
   alias Statifier.Machine.Content.{Assign, Foreach, Script, Send}
   alias Statifier.Machine.Invoke, as: MachineInvoke
   alias Statifier.Parser.Location
@@ -106,7 +106,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S15", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -137,6 +137,26 @@ defmodule Statifier.Publish do
   `:undeclared_descriptor` per descriptor the declaration does not state,
   with `data: %{descriptor: descriptor}`; neither has a location. With no
   `accepts:` the row reports nothing.
+
+  Row S16 finds every cycle of eventless transitions none of which
+  carries a `cond`, the literal half of a macrostep that never reaches
+  quiescence and spends the round budget. From each atomic state it
+  follows the transition the engine must take with no event: the first
+  eventless transition in document order of the state, then of each
+  ancestor outward. When that transition has no `cond`, the state it
+  leads to is decided by the chart - the state itself for a targetless
+  transition, the target for an atomic one, the target's initial child,
+  followed down, for a compound one - and a state reached twice closes a
+  cycle. One finding of kind `:eventless_cycle` per cycle, at the
+  location of the transition taken from the cycle's first state in
+  document order, with `data: %{states: [id]}`, the atomic states the
+  cycle passes through in the order it passes through them, starting
+  there (an id is `nil` for a state that wrote none); cycles in document
+  order. A `cond` ahead of or on the taken transition, a state inside a
+  `<parallel>`, a transition with more than one target, and a history
+  state or `<parallel>` entered along the way each leave the state to run
+  time; a chain that reaches a top-level `<final>` ends the execution and
+  is no cycle. It needs no declaration.
 
   Row S17 reads every `<foreach>`'s literal `item` and `index` names, the
   rule the runtime applies before the loop runs: a name that begins with
@@ -215,6 +235,37 @@ defmodule Statifier.Publish do
       Enum.map(undeclared, &finding("S15", :undeclared_descriptor, nil, %{descriptor: &1}))
   end
 
+  # The literal half of the round budget `Statifier.Interpreter`'s
+  # macrostep fold spends (ADR-0019): each atomic state's eventless step,
+  # the one `Statifier.Interpreter.Selection`'s
+  # `select_eventless_transitions/1` must take when the step has no
+  # `cond`, and every cycle those steps close.
+  defp check("S16", %Machine{states: states} = machine, _declaration) do
+    steps =
+      for %State{index: index} <- Tuple.to_list(states),
+          index != 0,
+          Machine.atomic?(machine, index),
+          step = eventless_step(machine, index),
+          step != nil,
+          into: %{},
+          do: {index, step}
+
+    steps
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.reduce({MapSet.new(), []}, &walk_steps(&1, steps, &2))
+    |> elem(1)
+    |> Enum.map(&rotate_to_first/1)
+    |> Enum.sort()
+    |> Enum.map(fn [first | _rest] = cycle ->
+      {%Transition{location: location}, _next} = Map.fetch!(steps, first)
+
+      finding("S16", :eventless_cycle, location, %{
+        states: Enum.map(cycle, &Machine.id(machine, &1))
+      })
+    end)
+  end
+
   # The rule `Statifier.Machine.Content.Foreach`'s `execute/2` applies to
   # `item` and `index` before the loop runs: a `_` prefix is a system
   # variable, checked first, then the bare-variable-name shape.
@@ -288,6 +339,114 @@ defmodule Statifier.Publish do
   defp built_in_type?(nil), do: true
   defp built_in_type?({:static, type}), do: Target.supported_type?(type)
   defp built_in_type?(_typeexpr), do: false
+
+  # The transition the engine takes from `index` with no event, and the
+  # atomic state it leads to, when the chart alone decides both; `nil`
+  # otherwise. Another region of a `<parallel>` selects in the same round,
+  # so a state with a parallel ancestor is not decided here.
+  @spec eventless_step(machine :: Machine.t(), index :: non_neg_integer()) ::
+          {Transition.t(), non_neg_integer()} | nil
+  defp eventless_step(machine, index) do
+    ancestors = Machine.proper_ancestors(machine, index)
+
+    with false <- Enum.any?(ancestors, &Machine.parallel?(machine, &1)),
+         %Transition{} = transition <-
+           Enum.find_value([index | ancestors], &first_eventless(machine, &1)),
+         next when is_integer(next) <- next_atomic(machine, index, transition) do
+      {transition, next}
+    else
+      _undecided -> nil
+    end
+  end
+
+  # A state's first eventless transition in document order: the one the
+  # engine takes when it has no `cond`, `:undecided` when the data decides,
+  # `nil` when the state has none and the walk goes on outward.
+  @spec first_eventless(machine :: Machine.t(), index :: non_neg_integer()) ::
+          Transition.t() | :undecided | nil
+  defp first_eventless(machine, index) do
+    first =
+      machine
+      |> Machine.at(index)
+      |> Map.fetch!(:transitions)
+      |> Enum.map(&Machine.transition(machine, &1))
+      |> Enum.find(&(&1.events == []))
+
+    case first do
+      nil -> nil
+      %Transition{cond: nil} = transition -> transition
+      %Transition{} -> :undecided
+    end
+  end
+
+  @spec next_atomic(
+          machine :: Machine.t(),
+          index :: non_neg_integer(),
+          transition :: Transition.t()
+        ) :: non_neg_integer() | nil
+  defp next_atomic(_machine, index, %Transition{targets: []}), do: index
+
+  defp next_atomic(machine, _index, %Transition{targets: [target]}),
+    do: entered_atomic(machine, target)
+
+  defp next_atomic(_machine, _index, %Transition{}), do: nil
+
+  # The atomic state entering `index` leaves active, followed down each
+  # compound state's initial child. A history state enters what it
+  # recorded at run time.
+  @spec entered_atomic(machine :: Machine.t(), index :: non_neg_integer()) ::
+          non_neg_integer() | nil
+  defp entered_atomic(machine, index) do
+    case Machine.at(machine, index) do
+      %State{kind: :history} -> nil
+      %State{children: []} -> index
+      %State{kind: :state, initial: [initial]} -> entered_atomic(machine, initial)
+      %State{} -> nil
+    end
+  end
+
+  # Follows the steps from `start` until one is missing, one reaches a
+  # state an earlier walk already settled, or one repeats a state of this
+  # walk, which closes a cycle: the states from that one on.
+  @spec walk_steps(
+          start :: non_neg_integer(),
+          steps :: %{non_neg_integer() => {Transition.t(), non_neg_integer()}},
+          acc :: {MapSet.t(non_neg_integer()), [[non_neg_integer()]]}
+        ) :: {MapSet.t(non_neg_integer()), [[non_neg_integer()]]}
+  defp walk_steps(start, steps, {settled, cycles}) do
+    walk_steps(start, steps, settled, cycles, [], MapSet.new())
+  end
+
+  @spec walk_steps(
+          index :: non_neg_integer(),
+          steps :: %{non_neg_integer() => {Transition.t(), non_neg_integer()}},
+          settled :: MapSet.t(non_neg_integer()),
+          cycles :: [[non_neg_integer()]],
+          path :: [non_neg_integer()],
+          on_path :: MapSet.t(non_neg_integer())
+        ) :: {MapSet.t(non_neg_integer()), [[non_neg_integer()]]}
+  defp walk_steps(index, steps, settled, cycles, path, on_path) do
+    cond do
+      MapSet.member?(on_path, index) ->
+        cycle = path |> Enum.reverse() |> Enum.drop_while(&(&1 != index))
+        {MapSet.union(settled, on_path), [cycle | cycles]}
+
+      MapSet.member?(settled, index) or not Map.has_key?(steps, index) ->
+        {MapSet.union(settled, on_path), cycles}
+
+      true ->
+        {_transition, next} = Map.fetch!(steps, index)
+        walk_steps(next, steps, settled, cycles, [index | path], MapSet.put(on_path, index))
+    end
+  end
+
+  # A cycle read from its first state in document order.
+  @spec rotate_to_first(cycle :: [non_neg_integer()]) :: [non_neg_integer()]
+  defp rotate_to_first(cycle) do
+    first = Enum.min(cycle)
+    {before, from_first} = Enum.split_while(cycle, &(&1 != first))
+    from_first ++ before
+  end
 
   @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
   defp foreach_name_kind(name, illegal) do
