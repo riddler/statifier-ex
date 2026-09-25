@@ -83,6 +83,14 @@ refusal of a chart at run time:
 The build tasks under `lib/mix/` are tooling and are not part of the
 runtime.
 
+The one function a host calls for this table is
+`Statifier.Publish.findings/2` (statifier main, next release): it runs
+every check this package holds over a compiled chart and the host's
+declaration, and returns findings that each name their row here
+(`docs/adr/0073-one-publish-findings-function-holds-every-publish-time-check.md`).
+Today it composes the twins of S1 and S15; each NONE row that a literal
+decides lands inside it as one check, and its cell changes when it does.
+
 | # | Refusal | Raised by | Record | Literal? | Twin |
 |---|---|---|---|---|---|
 | S1 | `<send>` names a `type` the session never registered: `error.execution`, data `{:unsupported_type, type}`, carrying the send's `sendid` | `Statifier.Machine.Content.Send`, raised through `Statifier.Interpreter.Content`; `Statifier.Session.Effects` for an effect a caller injects through `Statifier.Session.interpret/2` | `docs/adr/0047-send-static-target-type-invalidity-rejects-in-the-core.md`, `docs/adr/0069-host-registered-send-types.md` | part: yes for `type`, no for `typeexpr` | `Statifier.Send.Types.unsupported_sends/2` (statifier, since 2.6.0); the router composes it as `StatifierRouter.Routes.unsupported_types/2` (statifier_router 0.2.0) |
