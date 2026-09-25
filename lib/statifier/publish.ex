@@ -71,6 +71,7 @@ defmodule Statifier.Publish do
 
   alias Statifier.{Chart, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
+  alias Statifier.Machine.Content.Foreach
   alias Statifier.Parser.Location
   alias Statifier.Send.Types, as: SendTypes
 
@@ -102,7 +103,11 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S15"]
+  @rows ["S1", "S15", "S17"]
+
+  # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
+  # must have, the same one the runtime refusal reads.
+  @foreach_name ~r/\A[A-Za-z_][A-Za-z0-9_]*\z/
 
   @doc """
   Every finding of every publish-time check this package holds, over
@@ -119,6 +124,15 @@ defmodule Statifier.Publish do
   `:undeclared_descriptor` per descriptor the declaration does not state,
   with `data: %{descriptor: descriptor}`; neither has a location. With no
   `accepts:` the row reports nothing.
+
+  Row S17 reads every `<foreach>`'s literal `item` and `index` names, the
+  rule the runtime applies before the loop runs: a name that begins with
+  `_` is a finding of kind `:system_variable`; any other name that is not a
+  bare variable name (a letter or `_`, then letters, digits or `_`) is
+  `:illegal_item_name` or `:illegal_index_name`. Each finding is at the
+  attribute's location, with `data: %{attribute: :item | :index, name:
+  name}`, in document order, `item` before `index`; an absent `index` is
+  not judged. It needs no declaration.
 
   See the moduledoc for the finding shape and the declaration's keys.
   """
@@ -143,6 +157,31 @@ defmodule Statifier.Publish do
 
     Enum.map(unreachable, &finding("S15", :unreachable_name, nil, %{name: &1})) ++
       Enum.map(undeclared, &finding("S15", :undeclared_descriptor, nil, %{descriptor: &1}))
+  end
+
+  # The rule `Statifier.Machine.Content.Foreach`'s `execute/2` applies to
+  # `item` and `index` before the loop runs: a `_` prefix is a system
+  # variable, checked first, then the bare-variable-name shape.
+  defp check("S17", %Machine{contents: contents}, _declaration) do
+    for %Foreach{} = node <- Tuple.to_list(contents),
+        {attribute, name, location, illegal} <- [
+          {:item, node.item, node.item_location, :illegal_item_name},
+          {:index, node.index, node.index_location, :illegal_index_name}
+        ],
+        is_binary(name),
+        kind = foreach_name_kind(name, illegal),
+        kind != :ok do
+      finding("S17", kind, location, %{attribute: attribute, name: name})
+    end
+  end
+
+  @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
+  defp foreach_name_kind(name, illegal) do
+    cond do
+      String.starts_with?(name, "_") -> :system_variable
+      Regex.match?(@foreach_name, name) -> :ok
+      true -> illegal
+    end
   end
 
   @spec finding(row :: String.t(), kind :: atom(), location :: Location.t() | nil, data :: map()) ::
