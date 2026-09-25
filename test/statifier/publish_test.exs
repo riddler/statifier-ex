@@ -925,6 +925,132 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S13: a compile failure the compiler deferred to run time" do
+    # The runtime refusal is the `error.execution` each deferred
+    # `{:invalid, error}` raises where its node runs:
+    # `Statifier.Interpreter.Datamodel`'s `bind_value`,
+    # `Statifier.Machine.Content.Assign`'s and
+    # `Statifier.Machine.Content.Script`'s `execute/2`,
+    # `Statifier.Interpreter`'s `run_global_script` and `evaluate_param`, and
+    # `Statifier.Machine.Content.Send`'s `evaluate_param`. Each chart below
+    # compiles today.
+    @deferred """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+           initial="lending" datamodel="predicator">
+      <datamodel>
+        <data id="copies" expr="1 +"/>
+        <data id="loans" expr="[]"/>
+      </datamodel>
+      <script>due = = 1</script>
+      <state id="lending">
+        <onentry>
+          <assign location="loans" expr="(("/>
+          <script>renewals = = 2</script>
+          <send event="loan.due" namelist="copies ]["/>
+        </onentry>
+        <invoke type="scxml" src="notices.scxml" namelist="loans )(">
+          <finalize/>
+        </invoke>
+      </state>
+    </scxml>
+    """
+
+    # sabotage: "S13" removed from `@rows` -> red (no S13 finding at all)
+    test "every deferred failure is one finding at the failing expression, in document order" do
+      assert [
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 4},
+                 data: %{element: :data, source: "1 +"}
+               },
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 7},
+                 data: %{element: :script, source: "due = = 1"}
+               },
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 10},
+                 data: %{element: :assign, source: "(("}
+               },
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 11},
+                 data: %{element: :script, source: "renewals = = 2"}
+               },
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 12},
+                 data: %{element: :send, source: "]["}
+               },
+               %{
+                 row: "S13",
+                 kind: :compile_error,
+                 location: %Location{start_line: 14},
+                 data: %{element: :invoke, source: ")("}
+               }
+             ] = Publish.findings(chart(@deferred))
+    end
+
+    # sabotage: the `Enum.sort_by/2` dropped from the S13 clause -> red (the
+    # later state's `<data>` is reported before the earlier `<assign>`)
+    test "a state-scoped <data> after executable content keeps its place in the document" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+        <datamodel><data id="loans"/></datamodel>
+        <state id="lending">
+          <onentry><assign location="loans" expr="(("/></onentry>
+          <transition event="loan.due" target="overdue"/>
+        </state>
+        <state id="overdue">
+          <datamodel><data id="fines" expr="1 +"/></datamodel>
+        </state>
+      </scxml>
+      """
+
+      assert [%{data: %{element: :assign}}, %{data: %{element: :data}}] =
+               Publish.findings(chart(xml))
+    end
+
+    # sabotage: `invalid_entries/2` matches every entry, not only
+    # `{:invalid, error}` -> red (the compiled `copies` entry becomes a
+    # finding, or the clause raises on its compiled form)
+    test "a namelist entry that compiled is not a finding" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <datamodel><data id="copies" expr="1"/></datamodel>
+        <state id="s"><onentry><send event="e" namelist="copies ]["/></onentry></state>
+      </scxml>
+      """
+
+      assert [%{row: "S13", data: %{element: :send, source: "]["}}] =
+               Publish.findings(chart(xml))
+    end
+
+    # sabotage: `@rows` reordered to put "S13" after "S15" -> red
+    test "S13 findings come after S6's and before S15's" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
+        <datamodel><data id="copies"/></datamodel>
+        <state id="s">
+          <onentry><assign location="copies" expr="(("/></onentry>
+          <invoke type="library:catalog" src="catalog://copies"/>
+          <transition event="copy.returned" target="s"/>
+        </state>
+      </scxml>
+      """
+
+      assert [%{row: "S6"}, %{row: "S13"}, %{row: "S15"}] =
+               Publish.findings(chart(xml), accepts: ["patron.blocked", "copy.returned"])
+    end
+  end
+
   describe "row S14: a <send> whose literal delay is not a duration" do
     # Each chart compiles today; the runtime refuses the send in
     # `Statifier.Machine.Content.Send`'s `resolve_delay/2` with
@@ -1477,14 +1603,14 @@ defmodule Statifier.PublishTest do
     # and is row S13's, not this row's.
     # sabotage: the content generator matches any `%Script{}` and reads
     # `elem(program, 2)` -> red (raises on the `{:invalid, error}` pair)
-    test "a <script> that did not compile is not judged" do
+    test "a <script> that did not compile is not judged by this row" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator">
         <state id="s"><onentry><script>_x = = 1</script></onentry></state>
       </scxml>
       """
 
-      assert Publish.findings(chart(xml)) == []
+      assert [%{row: "S13", data: %{element: :script}}] = Publish.findings(chart(xml))
     end
 
     # sabotage: `@rows` reordered to `["S18", "S1", "S15", "S17"]` -> red

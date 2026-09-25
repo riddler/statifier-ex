@@ -71,6 +71,7 @@ defmodule Statifier.Publish do
   """
 
   alias Statifier.{Chart, Duration, EventData, Machine}
+  alias Statifier.Compiler.Error, as: CompilerError
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.{Block, Data, Donedata, Param, State, Transition}
   alias Statifier.Machine.Content.{Assign, Cancel, Foreach, If, Log, Script, Send}
@@ -107,7 +108,22 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S12", "S14", "S15", "S16", "S17", "S18", "S19"]
+  @rows [
+    "S1",
+    "S2",
+    "S3",
+    "S6",
+    "S9",
+    "S11",
+    "S12",
+    "S13",
+    "S14",
+    "S15",
+    "S16",
+    "S17",
+    "S18",
+    "S19"
+  ]
 
   # Row S12: the system variables `Statifier.MachineState.new/2` seeds into
   # every datamodel (`Statifier.Evaluator.SystemVariables.initial/3`), which
@@ -216,6 +232,18 @@ defmodule Statifier.Publish do
   one the host reads against what it starts the chart with. An invoking
   parent's params reach only the child's `<data>` ids, so they add no
   root. It needs no declaration.
+
+  Row S13 lists every compile failure the compiler deferred to run time,
+  the ones it stores as `{:invalid, error}` on the compiled node instead of
+  failing `Statifier.compile/2`: a `<data expr>`, an `<assign expr>`, a
+  `<script>` body (in executable content or at the top level) and a
+  `namelist` entry of a `<send>` or an `<invoke>`. Each is one finding of
+  kind `:compile_error`, at the failing expression's location (the
+  attribute's span, or the `<script>`'s), with `data: %{element: :data |
+  :assign | :script | :send | :invoke, source: source}`, in document order.
+  The runtime raises `error.execution` carrying the same error the first
+  time the node runs; every other expression that fails to compile fails
+  `Statifier.compile/2` itself. It needs no declaration.
 
   Row S14 reads every `<send>` whose `delay` is a literal, the rule the
   runtime applies when the send runs, whatever its `type`: a `delay` that
@@ -410,6 +438,25 @@ defmodule Statifier.Publish do
     end
   end
 
+  # The failures `Statifier.Compiler` defers (spec 5.9.4 allows a run-time
+  # rejection): each is raised as `error.execution` where the node runs -
+  # `Statifier.Interpreter.Datamodel`'s `bind_value` for a `<data>`,
+  # `Statifier.Machine.Content.Assign` and `Statifier.Machine.Content.Script`
+  # in `execute/2`, `Statifier.Interpreter`'s `run_global_script` and
+  # `evaluate_param`, and `Statifier.Machine.Content.Send`'s
+  # `evaluate_param`. The error carries the failing expression's location
+  # and source, and its location orders the findings.
+  defp check("S13", %Machine{} = machine, _declaration) do
+    machine
+    |> deferred_failures()
+    |> Enum.sort_by(fn {_element, %CompilerError{location: location}} ->
+      location.start_offset
+    end)
+    |> Enum.map(fn {element, %CompilerError{location: location} = error} ->
+      finding("S13", :compile_error, location, %{element: element, source: source(error)})
+    end)
+  end
+
   # The rule `Statifier.Machine.Content.Send`'s `resolve_delay/2` applies
   # to every send before it dispatches: a literal `delay` resolves through
   # `Statifier.Duration.to_ms/1`, and a string that is not a duration is
@@ -591,6 +638,42 @@ defmodule Statifier.Publish do
   defp built_in_type?(nil), do: true
   defp built_in_type?({:static, type}), do: Target.supported_type?(type)
   defp built_in_type?(_typeexpr), do: false
+
+  # Every `{:invalid, error}` the compiled machine carries, with the element
+  # it sits on.
+  @spec deferred_failures(machine :: Machine.t()) :: [{atom(), CompilerError.t()}]
+  defp deferred_failures(%Machine{} = machine) do
+    data =
+      for %Data{value: {:invalid, error}} <- Tuple.to_list(machine.data_elements),
+          do: {:data, error}
+
+    top_level = for {:invalid, error} <- machine.global_scripts, do: {:script, error}
+
+    in_content =
+      Enum.flat_map(Tuple.to_list(machine.contents), fn
+        %Assign{value: {:invalid, error}} -> [{:assign, error}]
+        %Script{program: {:invalid, error}} -> [{:script, error}]
+        %Send{namelist: namelist} -> invalid_entries(:send, namelist)
+        _node -> []
+      end)
+
+    in_invokes =
+      for %State{invoke: invokes} <- Tuple.to_list(machine.states),
+          %MachineInvoke{namelist: namelist} <- invokes,
+          failure <- invalid_entries(:invoke, namelist),
+          do: failure
+
+    data ++ top_level ++ in_content ++ in_invokes
+  end
+
+  @spec invalid_entries(element :: atom(), namelist :: [Param.t()]) ::
+          [{atom(), CompilerError.t()}]
+  defp invalid_entries(element, namelist),
+    do: for(%Param{expr: {:invalid, error}} <- namelist, do: {element, error})
+
+  @spec source(error :: CompilerError.t()) :: String.t()
+  defp source(%CompilerError{reason: {:expression_compile_error, _owner, source, _parse_error}}),
+    do: source
 
   # The transition the engine takes from `index` with no event, and the
   # atomic state it leads to, when the chart alone decides both; `nil`
