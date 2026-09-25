@@ -325,7 +325,7 @@ decision 8.
 
 ## Amendment (2026-09-23): an `expect_sends` item may carry an `outcome`
 
-Status: proposed (2026-09-23)
+Status: accepted (2026-09-24)
 
 This Amendment adds one optional field to the item shape of decision 5's
 `expect_sends` and changes nothing else: the `host` object keeps its
@@ -382,3 +382,25 @@ the moment it is handed or with a reason the chart reads, or deliver the
 event to a target; a change to `Statifier.Session.failed_send/3`'s
 contract; or a case that needs to claim that a send was NOT cancelled,
 which an item without `outcome` does not claim.
+
+## Note (2026-09-24): the Amendment is accepted
+
+The Amendment above is accepted on 2026-09-24, under the operator's
+delegation of this one flip; its Status line is the only line of it that
+changes, and no decision, consequence or Related entry changes here. Its
+code is in the `v2.8.1` tag (`947c0b6`, the change that wrote the
+Amendment), and statifier 2.8.1 is published. Every claim in it was
+verified against `main` at `c100724`, and no file it cites has changed
+since `947c0b6`: the closed `outcome` enumeration, `"fail"` and
+`"cancelled"`, on an `expect_sends` item in
+`conformance/schema/case.json`; `Mix.Statifier.Corpus.HostCase`'s
+`pump/3`, which reports a `"fail"` item's send through
+`Statifier.Session.failed_send/3` before the next configuration is read,
+and its `cancel_named/2`, which marks only a delayed send whose item says
+`"cancelled"`; `Statifier.Send.Processor`'s moduledoc section "What
+`cancel/2` is handed"; `Statifier.Session.FailedSendTest`; and the two
+authored cases `statifier/send/registered_send_failed` and
+`statifier/send/registered_delayed_cancel`, both claimed in
+`conformance/registry.json` and listed in `test/passing_tests.json`. It
+is still this repository's only foot Amendment, and its sentence that it
+carries "a Status line of its own" stands as written.
