@@ -120,7 +120,7 @@ st-9i5r amendments explain rather than rewrite the rule they amend.
 
 ## Note (2026-09-24): an external event's selection is on the returned state, traced or not
 
-Status: proposed (2026-09-24)
+Status: accepted (2026-09-25)
 
 This Note adds one field to machine_state and changes nothing above: items
 1 to 4, the trace gate and every trace effect stand as written, and no
@@ -165,3 +165,27 @@ explicit map (`build_exported/2`) that does not name it.
 
 **What would reopen this Note.** A caller that needs the reason nothing
 was selected, or needs the answer to survive a persisted position.
+
+## Note (2026-09-25): the 2026-09-24 Note is accepted
+
+The Note above is accepted on 2026-09-25, under the operator's word; its
+Status line is the only line of it that changes, and items 1 to 4, the
+record's own Status line and the Note's text stand as written. This note
+decides nothing.
+
+Its code shipped in statifier 2.9.0: `a64d056` (the change that wrote the
+Note) is in the `v2.9.0` tag (`f2365bb`), and nothing under `lib/` or
+`test/` has changed between that tag and `main` at `ffc0b2b`, where every
+claim in the Note was re-read. `t:Statifier.MachineState.last_selection/0`
+is `:selected | :none | nil`, and the struct and `Statifier.MachineState.new/2`
+default it to `nil`. `Statifier.Interpreter.handle_event/2` writes it from
+the external event's own `transitions`, through `selection_result/1`,
+after `main_event_loop/1` has folded and outside the trace gate; the
+private `run_selected/3` does not write it, and `internal_round/1` calls
+`run_selected/3` for the empty eventless probe as the Note says. No other
+function in `lib/` writes the field, so `initialize/2` leaves it `nil` and
+`deliver_internal/5` and `cancel/1` leave it where it stood.
+`Statifier.Position.to_binary/1` and `Statifier.Position.from_binary/2`
+drop it beside `routes`, `invoke_types` and `send_types`, and
+`build_exported/2` does not name it.
+`Statifier.Interpreter.LastSelectionTest` pins the three values.
