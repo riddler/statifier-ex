@@ -284,7 +284,7 @@ A dated note. It decides nothing: decisions 1-4, their amendments, and the
 Status line stand exactly as accepted, and no line above is edited. It
 records a vocabulary pointer only.
 
-statifier_persistence `sp-ADR-0011` (proposed, SF041) names the durable
+statifier_persistence `sp-ADR-0011` (proposed 2026-09-12) names the durable
 unit an **execution** and its identifier an `execution_id`. Three phrases
 in this record - decision 3's "the host's own durable run id for a
 process-less host", decision 4's "establish that the run is still live",

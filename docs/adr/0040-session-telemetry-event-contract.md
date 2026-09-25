@@ -564,7 +564,7 @@ its decision-3 table records that `:resume` "stays Session-only, since a
 rehydration is not an advance", so a durable driver emits no macrostep span
 under it. That record is unchanged by this note.
 
-Landed with `st-3sz8` under campaign-025 ruling R25-1, which pairs this note
+Landed with `st-3sz8` under the operator's ruling of 2026-09-01, which pairs this note
 with the same correction to `docs/opentelemetry.md`, where the bridge design's
 span-attribute prose carried the same stale four-value enum. The bridge itself
 treats `trigger` as a pass-through string, so no `opentelemetry_statifier`

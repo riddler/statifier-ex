@@ -162,7 +162,7 @@ assertions: they are the acceptance criteria in executable form.
 Four decisions settle the research's open questions. They are stated here and,
 for the first two, on the record in ADR-0034.
 
-**Decision 1 (research Q2 - the sharp one): replay re-drives the pure core and
+**Decision 1 (research open question 2 - the sharp one): replay re-drives the pure core and
 `Session.Effects.plan/1` directly, with no process and no timer.**
 
 `Statifier.Replay` is a pure fold over the recording's entries. It reuses
@@ -225,7 +225,7 @@ check sharp (a fabricated or mismatched firing still errors) without making
 it reject a real recording, and it is the single place replay must model a
 mechanic of `Process.cancel_timer/1` rather than of the core.
 
-**Decision 2 (research Q1): the recording carries ordinal order, no clock.**
+**Decision 2 (research open question 1): the recording carries ordinal order, no clock.**
 
 Entry position in the list is the whole of the ordering information, and it is
 sufficient: the bead requires firing *order*, and forbids re-waiting delays.
@@ -237,7 +237,7 @@ read, on the one path the ADR guard allowlists, to store a value replay must
 then ignore. `docs/observability.md:154`'s "with session timestamps" is
 amended to "in the session's serialized input order" in Phase 1.
 
-**Decision 3 (research Q3, Q4, Q6, Q7): the recording's shape and placement.**
+**Decision 3 (research open questions 3, 4, 6, 7): the recording's shape and placement.**
 
 - **Placement**: `Statifier.Session.Recording`, a pure `@opaque` struct held
   as a fifth field on `Session.State`, appended at the five input clauses -
@@ -245,7 +245,7 @@ amended to "in the session's serialized input order" in Phase 1.
   to flag and there is no argument to make. Enabled by `record: true` on
   `start_link/2`, off by default; when off the field is `nil` and each input
   clause skips one function call.
-- **Entries** (research Q7): `{:event, Event.t()}`, `:cancel`,
+- **Entries** (research open question 7): `{:event, Event.t()}`, `:cancel`,
   `{:timer, send_id, Event.t()}`, and `{:interpret, [Effect.t()]}`. **Batch
   boundaries are load-bearing and preserved.** One `interpret/2` call is one
   `perform/3` whose whole instruction list runs before the next
@@ -254,7 +254,7 @@ amended to "in the session's serialized input order" in Phase 1.
   is dropped - it is the one non-serializable term at the boundary
   (`lib/statifier/session.ex:484`), and it is a within-run correlation id with
   no meaning in a second run.
-- **Initial data** (research Q4): the recording captures `:trace`,
+- **Initial data** (research open question 4): the recording captures `:trace`,
   `:datamodel`, and `:max_macrostep_rounds` as supplied (defaults applied),
   and `:session_id` **resolved** - read off
   `machine_state.datamodel["_sessionid"]` whether the caller supplied it or
@@ -264,9 +264,9 @@ amended to "in the session's serialized input order" in Phase 1.
   supplied rather than post-merge, because `MachineState.new/2` merges
   `SystemVariables.initial/2` *over* it (`lib/statifier/machine_state.ex:398`)
   and replay re-runs that merge.
-- **Not recorded** (research Q6): the non-mutating calls and `stop/2`.
+- **Not recorded** (research open question 6): the non-mutating calls and `stop/2`.
 
-**Decision 4 (research Q5): what "the effect stream matches" means.**
+**Decision 4 (research open question 5): what "the effect stream matches" means.**
 
 `Replay.run/1` returns a `stream` of `{:effect, effect} | {:unroutable,
 effect} | {:halted, reason}` - the subscriber message shapes with the

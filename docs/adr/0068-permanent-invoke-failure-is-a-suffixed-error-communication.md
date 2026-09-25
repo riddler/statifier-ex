@@ -236,7 +236,7 @@ session is idle, so both queues are empty when it lands.
 
 ### Decision note 2026-08-29: a permanently undecodable stored payload reports through this door (st-uumw)
 
-Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator campaign-015 grant, PR 238) - additive; the record's own Status above is
+Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator's grant, PR 238) - additive; the record's own Status above is
 unchanged and this note decides nothing that record decided
 
 A host may store an invocation's arguments in an opaque, host-encoded form
@@ -353,7 +353,7 @@ should be read as deciding it.
 statifier_persistence `sp-ADR-0011` (accepted 2026-09-13, sp-5nv, PR #101;
 merged at proposed 2026-09-12) names the durable unit an **execution**, with
 an `execution_id` the host owns, and the family's durable documentation moved
-to that noun in SF041 - the same move ADR-0051's, ADR-0054's and ADR-0057's
+to that noun on 2026-09-12 - the same move ADR-0051's, ADR-0054's and ADR-0057's
 notes record for their own records.
 
 Decision 4 of this record is inside that move in substance and outside it in

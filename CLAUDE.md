@@ -98,7 +98,7 @@ a subagent it delegates to, on the terms the paragraph above sets out: a
 subagent that believes a trigger has fired reports that, it does not act on it.
 A version bump is the recorded exception: on a release bead the operator has
 named (in the campaign plan or their own words), the bump commit is release
-prep, not a release. (Recorded 2026-08-27 by the operator, campaign 008.)
+prep, not a release. (Recorded 2026-08-27 by the operator.)
 
 Merging a campaign PR is a recorded exception: under a campaign consent the
 operator has adopted verbatim that names automatic merges, with every
