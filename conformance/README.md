@@ -154,6 +154,31 @@ state, and false for the rename with or without a mapping.
 members that reason carries.
 
 The authored cases that came before the library world keep their own
-domain: the three under `cases/send/` and the one under
+domain: the four under `cases/send/` and the one under
 `cases/system_variables/` are fixtures for the behaviour they pin, not
 teaching examples, and nothing here rewrites them into this vocabulary.
+
+## What a send's outcome claims
+
+A case's `host` object lists in `expect_sends` the sends the case expects
+handed to the host's processor, in the order handed over the whole run;
+[`RATCHET.md`](RATCHET.md) states the item shape. An item may also carry an
+`outcome` (ADR-0070's 2026-09-23 Amendment), and `schema/case.json` allows
+exactly two values:
+
+- `"fail"`: the runner reports the send as failed as soon as it is handed,
+  before it reads the configuration that follows, so the sender takes
+  `error.communication` carrying the send's `sendid`, and the case's
+  configurations say what the chart made of it.
+  `cases/send/registered_send_failed` is such a case.
+- `"cancelled"`: a `<cancel>` naming the send must reach the processor
+  after the send was handed. Only a delayed send can be cancelled, because
+  a cancel reaches a processor only for a delayed send it was handed.
+  `cases/send/registered_delayed_cancel` is such a case: with the cancel
+  taken out of its document, no cancel reaches the processor and the case
+  disagrees.
+
+An item with no `outcome` claims nothing about the send beyond its being
+handed: the host records it and does nothing else with it, and a cancel
+naming it is not compared. A case agrees only when the sends handed are
+exactly its `expect_sends`, outcomes included.
