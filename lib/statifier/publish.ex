@@ -70,7 +70,7 @@ defmodule Statifier.Publish do
   and declaration always give the same findings.
   """
 
-  alias Statifier.{Chart, Machine}
+  alias Statifier.{Chart, EventData, Machine}
   alias Statifier.Invoke.Types, as: InvokeTypes
   alias Statifier.Machine.{Block, Param, State, Transition}
   alias Statifier.Machine.Content.{Assign, Foreach, Script, Send}
@@ -107,7 +107,7 @@ defmodule Statifier.Publish do
   # The rows this function holds, in the order their findings are
   # returned. A row lands by adding its id here and one `check/3` clause
   # below.
-  @rows ["S1", "S2", "S3", "S6", "S11", "S15", "S16", "S17", "S18", "S19"]
+  @rows ["S1", "S2", "S3", "S6", "S9", "S11", "S15", "S16", "S17", "S18", "S19"]
 
   # Row S17: the bare-variable-name shape a `<foreach>` `item` or `index`
   # must have, the same one the runtime refusal reads.
@@ -154,6 +154,20 @@ defmodule Statifier.Publish do
   for `nil`. An `<invoke>` with no `type` is the built-in `scxml` type and
   is not a finding; a `typeexpr` is resolved at run time and is not
   judged.
+
+  Row S9 reads every `<invoke>` of the built-in `scxml` type (no `type`, or
+  a literal one the built-in handler answers to) whose `<content>` is
+  inline text or markup, the rule the runtime applies when it starts the
+  child: the body is read as the invocation reads it, and a string is
+  compiled as a standalone chart with `invoke_content_markup: true`. A body
+  that does not compile is a finding of kind `:child_does_not_compile`,
+  with `data: %{errors: errors}`, `Statifier.compile/2`'s own error list; a
+  body that reads as a value rather than a string (a number, or nothing but
+  whitespace) is `:content_not_markup`, with `data: %{content: value}`.
+  Each finding is at the `<invoke>`'s location, in document order. A
+  `<content expr>`, a `src`, a `typeexpr` and a non-built-in `type` are
+  left to the runtime; a child that compiles but fails to start is too. It
+  needs no declaration.
 
   Row S11 reads the same literal write locations row S19 reads, in the
   same order, and judges the root of each one that resolves, the rule the
@@ -310,6 +324,23 @@ defmodule Statifier.Publish do
   # hold as `{:unbound_location, location}`. The roots the chart can bring
   # into the datamodel are its `<data>` ids, its `<foreach>` names and its
   # scripts' assignment targets; any other is reported.
+  # The rule the built-in `scxml` handler applies when it starts a child:
+  # `Statifier.Interpreter`'s `resolve_content` reads a literal `<content>`
+  # body through `EventData.coerce/1`, then
+  # `Statifier.Invoke.Source.resolve/2` compiles a string with
+  # `invoke_content_markup: true` and refuses any other value. Only a
+  # literal body under a literal built-in type is judged.
+  defp check("S9", %Machine{states: states}, _declaration) do
+    for state <- Tuple.to_list(states),
+        %MachineInvoke{type: type, content: {:static, body}, location: location} <-
+          state.invoke,
+        is_binary(body),
+        built_in_child_type?(type),
+        {kind, data} <- inline_child_defects(EventData.coerce({:text, body})) do
+      finding("S9", kind, location, data)
+    end
+  end
+
   defp check("S11", %Machine{} = machine, _declaration) do
     declared = declared_roots(machine)
 
@@ -599,6 +630,23 @@ defmodule Statifier.Publish do
     {before, from_first} = Enum.split_while(cycle, &(&1 != first))
     from_first ++ before
   end
+
+  @spec built_in_child_type?(type :: Machine.expr() | nil) :: boolean()
+  defp built_in_child_type?(nil), do: true
+  defp built_in_child_type?({:static, type}), do: Target.supported_invoke_type?(type)
+  defp built_in_child_type?(_typeexpr), do: false
+
+  @spec inline_child_defects(content :: term()) :: [{atom(), map()}]
+  defp inline_child_defects(nil), do: []
+
+  defp inline_child_defects(content) when is_binary(content) do
+    case Statifier.compile(content, invoke_content_markup: true) do
+      {:ok, _child} -> []
+      {:error, errors} -> [{:child_does_not_compile, %{errors: errors}}]
+    end
+  end
+
+  defp inline_child_defects(content), do: [{:content_not_markup, %{content: content}}]
 
   @spec foreach_name_kind(name :: String.t(), illegal :: atom()) :: :ok | atom()
   defp foreach_name_kind(name, illegal) do
