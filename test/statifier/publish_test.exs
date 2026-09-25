@@ -160,6 +160,100 @@ defmodule Statifier.PublishTest do
     end
   end
 
+  describe "row S17: a <foreach> item or index that is not a legal variable name" do
+    # Each chart compiles today; the runtime refuses the loop in
+    # `Statifier.Machine.Content.Foreach`'s `check_name` with the reason
+    # the finding's kind names.
+    defp foreach_chart(attributes) do
+      chart("""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+             initial="lending" datamodel="predicator">
+        <datamodel>
+          <data id="copies" expr="[1, 2]"/>
+        </datamodel>
+        <state id="lending">
+          <onentry>
+            <foreach array="copies" #{attributes}>
+              <log expr="'copy'"/>
+            </foreach>
+          </onentry>
+        </state>
+      </scxml>
+      """)
+    end
+
+    # sabotage: `"S17"` removed from `@rows` -> red
+    test "an item that is not a variable name is an :illegal_item_name at the attribute" do
+      assert [
+               %{
+                 row: "S17",
+                 kind: :illegal_item_name,
+                 location: %Location{start_line: 8},
+                 data: %{attribute: :item, name: "copy.id"}
+               }
+             ] = Publish.findings(foreach_chart(~s(item="copy.id")))
+    end
+
+    # sabotage: the `:index` tuple dropped from the S17 clause -> red
+    test "an index that is not a variable name is an :illegal_index_name" do
+      assert Publish.findings(foreach_chart(~s(item="copy" index="'n'"))) == [
+               %{
+                 row: "S17",
+                 kind: :illegal_index_name,
+                 location: machine_index_location(~s(item="copy" index="'n'")),
+                 data: %{attribute: :index, name: "'n'"}
+               }
+             ]
+    end
+
+    # sabotage: the `_` prefix test moved after the regex match in
+    # `foreach_name_kind/2` -> red (`_copy` matches the name shape)
+    test "a name that begins with _ is a :system_variable, item before index" do
+      assert [
+               %{kind: :system_variable, data: %{attribute: :item, name: "_copy"}},
+               %{kind: :system_variable, data: %{attribute: :index, name: "_n"}}
+             ] = Publish.findings(foreach_chart(~s(item="_copy" index="_n")))
+    end
+
+    # sabotage: `kind != :ok` filter dropped -> red (legal names reported)
+    test "legal names, and an absent index, report nothing" do
+      assert Publish.findings(foreach_chart(~s(item="copy" index="n"))) == []
+      assert Publish.findings(foreach_chart(~s(item="copy"))) == []
+    end
+
+    # sabotage: the S17 clause reads only the first `<foreach>` -> red
+    test "a nested <foreach> is judged too, in document order" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+               initial="lending" datamodel="predicator">
+          <state id="lending">
+            <onentry>
+              <foreach array="[[1]]" item="1row">
+                <foreach array="[2]" item="cell" index="_i"/>
+              </foreach>
+            </onentry>
+          </state>
+        </scxml>
+        """)
+
+      assert [
+               %{row: "S17", kind: :illegal_item_name, data: %{name: "1row"}},
+               %{row: "S17", kind: :system_variable, data: %{name: "_i"}}
+             ] = Publish.findings(machine)
+    end
+
+    defp machine_index_location(attributes) do
+      machine = foreach_chart(attributes)
+
+      [%Statifier.Machine.Content.Foreach{index_location: location}] =
+        for %Statifier.Machine.Content.Foreach{} = node <- Tuple.to_list(machine.contents),
+            do: node
+
+      location
+    end
+  end
+
   describe "a chart with nothing to report" do
     @clean """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="ready">
