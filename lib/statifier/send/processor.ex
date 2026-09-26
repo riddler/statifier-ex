@@ -64,6 +64,12 @@ defmodule Statifier.Send.Processor do
   entry, and a generated id adds one per uncancelled send. The entries go
   with the session process when it stops.
 
+  Where the fire time of such a send lives, which transaction a cancel
+  commits in, and which side drops a fire that races a cancel are
+  ADR-0074's: the host stores the absolute fire time when first handed
+  the send, commits the cancel with the position of the step that ran it,
+  and drops a stale fire itself; the session drops none.
+
   ## When the host cannot deliver
 
   A processor that cannot deliver a send while its sender still exists
