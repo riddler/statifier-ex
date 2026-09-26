@@ -13,6 +13,21 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-09-26 - st-1kyb
+
+Approved-by: <operator to fill>
+
+- .quality.exs: rewords the comment beside the Docs and Doc links stages so
+  it says what the Doc links stage checks; no stage option changes
+
+Reason: the comment said the Doc links stage fails on "a published relative
+link to a file that is not an extra", which reads as covering every
+published relative link, moduledoc links included. The stage reads relative
+links in the Markdown extras and the README only; a relative link in a
+moduledoc is the Docs stage's job. The comment now carries the wording the
+other packages in the family use. A comment-only change: it adds no stage,
+loosens nothing, skips no existing check, and lowers no threshold.
+
 ## 2026-09-23 - st-bdpe
 
 Approved-by: JohnnyT (the operator's campaign consent of 2026-09-23, which
