@@ -1,5 +1,5 @@
 {
-  "description": "A loan waits in awaiting_return with its due-date timer handed to the host while the loan chart is edited: the check-in step that routes after the wait gains a damaged outcome, a condition on a new damaged key sending the copy to a new in_repair final state ahead of the returned arm. The waiting step is renamed only in the name a reader sees: awaiting_return keeps its id, and nothing in it changes. The diff reports the three additions and no breaking reason, so the pair is compatible; awaiting_return's transitions and onexit are byte-identical in both charts, so at this position the predicate answers true.",
+  "description": "A loan waits in awaiting_return with its due-date timer handed to the host while the loan chart is edited: the check-in step that routes after the wait gains a damaged outcome, a condition on a new damaged key sending the copy to a new in_repair final state ahead of the returned arm. awaiting_return is unchanged, id and content alike: the damaged outcome is the only edit. The diff reports the three additions and no breaking reason, so the pair is compatible; awaiting_return's transitions and onexit are byte-identical in both charts, so at this position the predicate answers true.",
   "initial_configuration": [
     "awaiting_return"
   ],
