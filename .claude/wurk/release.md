@@ -8,7 +8,7 @@ override, and nothing below rewrites a step the skill already performs.
 Read this together with `.claude/wurk.json`'s `release` block. Between them
 they name every file a release commit here touches, and no others.
 
-The reference for the shape is `e739263`, the 2.4.0 prep - the most recent
+The reference for the shape is `f2365bb`, the 2.9.0 prep - the most recent
 release prep in this repo, and the commit every step below is modeled on.
 
 ## Why the recipe names no changelog
@@ -54,7 +54,7 @@ in the table below, in the same change that adds it.
 ## Step B: promote the changelog fragments
 
 Placed where the skill's changelog step would have been, and modeled on the
-2.4.0 prep commit `e739263`, which is the reference for the shape.
+2.9.0 prep commit `f2365bb`, which is the reference for the shape.
 
 1. Read every `changelog.d/*.md` fragment except `README.md`. Each is a Keep a
    Changelog section heading followed by its bullets.
@@ -71,7 +71,7 @@ Placed where the skill's changelog step would have been, and modeled on the
    mandatory: `2.2.1` has none, because its two bullets said everything there
    was to say. Write one when there is something the bullets do not say, and
    keep the reasoning for the version choice in the commit body, where
-   `e739263` put it.
+   `f2365bb` put it.
 4. Then the fragments' bullets, grouped by heading and ordered `Added`,
    `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
    **Carry every bullet over byte for byte.** The lead paragraph is the only
@@ -94,8 +94,8 @@ that judgement, not a rule that computes it.
 
 `release.readme_pin` is `true`. `README.md`'s `def deps` snippet carries
 `{:statifier, "~> X.Y"}` - the major/minor form with the patch component
-dropped that the skill's step 2 bumps. `e739263` shows the previous release
-moving it that way (`~> 2.3` to `~> 2.4`), and that is the commit the skill's
+dropped that the skill's step 2 bumps. `f2365bb` shows the previous release
+moving it that way (`~> 2.8` to `~> 2.9`), and that is the commit the skill's
 "check a previous release commit rather than inventing the format" step should
 be read against here.
 
@@ -113,17 +113,22 @@ Exactly these, and a release commit that touches anything else is wrong:
 | `CHANGELOG.md` | step B |
 | `changelog.d/*.md` (deleted) | step B |
 
-No `lib/` file appears in that table, and step A explains why. `e739263`
+No `lib/` file appears in that table, and step A explains why. `f2365bb`
 touched exactly this set.
 
 ## What a release here still is not
 
 The skill does not tag, push, open a request or publish, and this extension
-does not either. `CLAUDE.md` is explicit on both halves of the boundary:
+does not either. The tag comes later, once the prep has merged; the publish
+never comes from an agent. `CLAUDE.md` is explicit on each part of the
+boundary:
 
-- *a release (tag, `mix hex.publish`, GitHub release)* - trigger **never**,
-  still unauthorized **always**: "publishing is the operator's, in every
-  campaign".
+- *tagging a release prep* - allowed once "the release bead's version bump is
+  merged to `origin/main`; the tag names that version at the merged commit",
+  and still unauthorized "before the bump is on `origin/main`; a tag naming
+  any other version or commit".
+- *a release (`mix hex.publish`, GitHub release)* - trigger **never**, still
+  unauthorized **always**: "publishing is the operator's, in every campaign".
 - *a version bump on a release bead's branch* - allowed only on "an
   operator-authorized release bead, inside a campaign carrying the operator's
   explicit consent", and still unauthorized "on any other bead, on main, or
@@ -137,7 +142,12 @@ a named release bead's branch, under a campaign consent that names it - is
 release *prep*. `CLAUDE.md`'s changelog rule describes the whole arc, of which
 this recipe is the first two thirds: "a release assembles the fragments,
 deletes them, and tags." The assembling and the deleting are step B. The
-tagging is the operator's, here and in every campaign.
+tagging follows the merge, outside this recipe: `CLAUDE.md`'s Release preps
+paragraph says that once the prep is merged to `origin/main`, the conductor
+or the session that owns the release bead tags that merged commit with the
+new version and pushes the tag. The publish (`mix hex.publish`, a docs
+republish included) stays the operator's one release step, in every
+campaign.
 
 `.claude/wurk/commit.md`'s version-bump section records the same boundary from
 the commit side: the version field moves only through a release bead, never as

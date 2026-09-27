@@ -43,9 +43,11 @@ the public API tell the difference? If not, no fragment.
 Releases follow SemVer from 2.0.0 on (ADR-0066) and ship to Hex. The
 `mix.exs` version field moves only in a release-prep commit - the version
 bump plus the changelog promotion, landing alone in its own PR, under a
-consent that names it - and the tag and publish that follow are always the
-user's. Never edit the version field as part of any other commit; a diff
-that touches it alongside other work is a bug in the diff.
+consent that names it. Once that prep is merged to `origin/main`, the
+conductor or the session that owns the release bead tags the merged commit
+with the new version; the publish that follows (`mix hex.publish`) is always
+the user's. Never edit the version field as part of any other commit; a
+diff that touches it alongside other work is a bug in the diff.
 
 ## Gate-guard ledger: ADR-0011
 
