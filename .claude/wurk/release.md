@@ -129,19 +129,19 @@ boundary:
   any other version or commit".
 - *a release (`mix hex.publish`, GitHub release)* - trigger **never**, still
   unauthorized **always**: "publishing is the operator's, in every campaign".
-- *a version bump on a release bead's branch* - allowed only on "an
-  operator-authorized release bead, inside a campaign carrying the operator's
-  explicit consent", and still unauthorized "on any other bead, on main, or
-  when the operator has not named this repo's release bead". The recorded
-  exception says the same in prose: "on a release bead the operator has named
-  (in the campaign plan or their own words), the bump commit is release prep,
-  not a release."
+- *a version bump on a release bead's branch* - allowed on "a release bead
+  the operator has named (in the campaign plan or their own words); the bump
+  is release prep, the family norm, and no campaign consent has to name it",
+  and still unauthorized "on any other bead, on main, or when the operator
+  has not named this repo's release bead". The recorded exception says the
+  same in prose: "on a release bead the operator has named (in the campaign
+  plan or their own words), the bump commit is release prep, not a release."
 
 So the one thing this recipe performs - the bump plus the step B promotion, on
-a named release bead's branch, under a campaign consent that names it - is
-release *prep*. `CLAUDE.md`'s changelog rule describes the whole arc, of which
-this recipe is the first two thirds: "a release assembles the fragments,
-deletes them, and tags." The assembling and the deleting are step B. The
+the branch of a release bead the operator has named - is release *prep*.
+`CLAUDE.md`'s changelog rule describes the whole arc, of which this recipe is
+the first two thirds: "a release assembles the fragments, deletes them, and
+tags." The assembling and the deleting are step B. The
 tagging follows the merge, outside this recipe: `CLAUDE.md`'s Release preps
 paragraph says that once the prep is merged to `origin/main`, the conductor
 or the session that owns the release bead tags that merged commit with the
