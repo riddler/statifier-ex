@@ -64,7 +64,7 @@ should do the work, stop before the irreversible step, and report.
 | merging a campaign PR | a campaign consent the operator adopted verbatim that names automatic merges, with every named condition met (full gate green, CI green, firewall scan clean with a positive control, any named review gate passed) | outside such a consent; any named condition unmet; any PR the consent's carve-outs hold for the operator |
 | `bd close <id>` | never for a mirrored bead whose other half is not merged to its own repo's `origin/main`; a mirrored bead whose other half has ALSO landed may be closed by the campaign conductor under a consent naming this exception, both halves together, each verified against its remote; otherwise the issue's branch is merged into `origin/main`, verified against the remote | for a bead whose description carries a `mirrors:` line while its other half is unlanded, campaign consent included; at commit time, at PR-open time, or on a local merge that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
-| a version bump on a release bead's branch | an operator-authorized release bead, inside a campaign carrying the operator's explicit consent | on any other bead, on main, or when the operator has not named this repo's release bead |
+| a version bump on a release bead's branch | a release bead the operator has named (in the campaign plan or their own words); the bump is release prep, the family norm, and no campaign consent has to name it | on any other bead, on main, or when the operator has not named this repo's release bead |
 | tagging a release prep | the release bead's version bump is merged to `origin/main`; the tag names that version at the merged commit | before the bump is on `origin/main`; a tag naming any other version or commit |
 | a release (`mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
@@ -106,8 +106,7 @@ operator has adopted verbatim that names automatic merges, with every
 condition that consent names met (full gate green, CI green, firewall scan
 clean with a positive control, any named review gate passed), the conductor's
 merge executes the operator's own authorization - the consent's text is what
-may be done and nothing more. (Recorded 2026-09-01 by the operator, campaign
-025 post-wrap queue walk.)
+may be done and nothing more. (Recorded 2026-09-01 by the operator.)
 
 **Release preps.** The version bump and the tag of a release prep are the
 family norm, not a grant a campaign consent has to name. On a release bead
