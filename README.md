@@ -32,7 +32,7 @@ Add `statifier` to your dependencies:
 ```elixir
 def deps do
   [
-    {:statifier, "~> 2.9"}
+    {:statifier, "~> 2.10"}
   ]
 end
 ```
