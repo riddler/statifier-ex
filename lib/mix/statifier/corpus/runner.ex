@@ -91,9 +91,17 @@ defmodule Mix.Statifier.Corpus.Runner do
   the session runtime a case using `<send>`, `<invoke>` or a delay runs
   through (ADR-0027: the library starts no processes of its own). Idempotent:
   a runtime already placed is left as it is.
+
+  It also puts OTP's `:inets`, `:ssl` and `:public_key` on the code path,
+  which Mix leaves off for an application no dependency lists: a case whose
+  `host` runs an Event I/O Processor delivers through the processor's
+  default transport on `:httpc` and a loopback front on `:inets` httpd
+  (`Mix.Statifier.Corpus.HostCase`), and `:httpc` reads `:public_key` even
+  for a plain `http:` request.
   """
   @spec start_runtime() :: :ok
   def start_runtime do
+    Enum.each([:inets, :public_key, :ssl], &Mix.ensure_application!/1)
     Mix.Task.run("app.start")
 
     case Statifier.Supervisor.start_link([]) do

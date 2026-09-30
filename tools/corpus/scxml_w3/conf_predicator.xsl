@@ -630,9 +630,14 @@ Stubbed: multidimensional array comparison has no predicator equivalent. -->
 
 <!-- SITE SPECIFIC INFORMATION FOR BASIC HTTP EVENT I/O PROCESSOR
 
-BasicHTTP Event I/O Processor support is out of scope (exclusions.exs,
-:needs_basichttp). Every template below is stubbed rather than emitting the
-regex-based ECMAScript forms the upstream stylesheet used. -->
+The Basic HTTP Event I/O Processor is Statifier.Send.BasicHTTP (ADR-0075),
+which a host registers; a corpus case that names it declares
+host.event_io_processors, and the corpus host runs it behind a loopback
+front. conf:basicHTTPAccessURITarget emits the IRP's own spelling of the
+access URI, the short _ioprocessors key's location. Every other template
+below is stubbed rather than emitting the regex-based ECMAScript forms the
+upstream stylesheet used, so the checks they carried on the raw message
+are not made. -->
 
 <xsl:template match="//@conf:testOnServer">
 </xsl:template>
@@ -644,6 +649,7 @@ regex-based ECMAScript forms the upstream stylesheet used. -->
 </xsl:template>
 
 <xsl:template match="//@conf:basicHTTPAccessURITarget">
+	<xsl:attribute name="targetexpr">_ioprocessors[&apos;basichttp&apos;][&apos;location&apos;]</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:methodIsPost">

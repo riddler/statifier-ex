@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-09-26",
+  "last_updated": "2026-09-30",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -312,6 +312,17 @@
     "test/scxml_tests/mandatory/system_variables/test339_test.exs",
     "test/scxml_tests/mandatory/system_variables/test342_test.exs",
     "test/scxml_tests/mandatory/system_variables/test346_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test509_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test510_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test518_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test519_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test520_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test522_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test531_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test532_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test534_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test567_test.exs",
+    "test/scxml_tests/optional/basic_http_event_processor/test577_test.exs",
     "test/scxml_tests/optional/ecma_profile/test278_test.exs",
     "test/scxml_tests/optional/scxml_event_processor/test193_test.exs"
   ]

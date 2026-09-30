@@ -57,6 +57,7 @@ defmodule Statifier.MixProject do
         "docs/architecture.md",
         "docs/datamodel.md",
         "docs/extending.md",
+        "docs/basichttp.md",
         "docs/persistence.md",
         "docs/hosting-without-session.md",
         "docs/durable-timers.md",
@@ -92,6 +93,7 @@ defmodule Statifier.MixProject do
         docs/architecture.md
         docs/datamodel.md
         docs/extending.md
+        docs/basichttp.md
         docs/persistence.md
         docs/hosting-without-session.md
         docs/durable-timers.md

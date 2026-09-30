@@ -2,6 +2,10 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
   use ExUnit.Case, async: true
 
   alias Mix.Statifier.Corpus.{HostCase, Runner}
+  alias Statifier.Send.BasicHTTP
+  alias Statifier.Send.BasicHTTP.Transport.Httpc
+
+  doctest Mix.Statifier.Corpus.HostCase
 
   # A host case run through `Runner.run_case/1`, which hands every case with
   # a `host` object to `Mix.Statifier.Corpus.HostCase`.
@@ -408,6 +412,106 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
       }
 
       assert HostCase.run(hold_case(host)) == :agree
+    end
+  end
+
+  describe "a host that runs an Event I/O Processor" do
+    # A W3C-shaped case whose host object carries event_io_processors, its
+    # one key there (ADR-0075 decision 7). The document sends `ping` to its
+    # own Basic HTTP location and passes only when the event comes back.
+
+    @basic_http "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
+
+    @delivering """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="s0">
+        <state id="s0">
+            <onentry>
+                <send event="timeout" delay="3s"/>
+                <send event="ping" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
+                      targetexpr="_ioprocessors['basichttp']['location']"/>
+            </onentry>
+            <transition event="ping" target="pass"/>
+            <transition event="*" target="fail"/>
+        </state>
+        <final id="pass"/>
+        <final id="fail"/>
+    </scxml>
+    """
+
+    defp delivering_case(host) do
+      %{
+        "id" => "w3c/delivering",
+        "source" => @delivering,
+        "description" => "",
+        "initial_configuration" => ["pass"],
+        "steps" => [],
+        "host" => host
+      }
+    end
+
+    # sabotage: run/2 handing with_event_io_processors/2 [] instead of the
+    # host's list -> the send's type is unregistered and the chart reaches
+    # fail -> red
+    test "delivers the document's send through a loopback front, and agrees" do
+      assert Runner.run_case(delivering_case(%{"event_io_processors" => [@basic_http]})) ==
+               :agree
+    end
+
+    # sabotage: with_event_io_processors/2 registering the recording
+    # processor for the URI instead -> the send is handed, not delivered,
+    # and the chart reaches fail -> red
+    test "hands none of the processor's sends to the recording processor" do
+      host = %{
+        "event_io_processors" => [@basic_http],
+        "send_types" => ["myapp:sink"],
+        "expect_sends" => []
+      }
+
+      assert Runner.run_case(delivering_case(host)) == :agree
+    end
+
+    # sabotage: with_event_io_processors/2 dropping the short-form entry ->
+    # the map has one key -> red
+    test "registers the processor under its URI and its short form, at a live front" do
+      HostCase.with_event_io_processors([@basic_http], fn send_types ->
+        assert %{
+                 @basic_http => {BasicHTTP, [base_url: base_url]},
+                 "basichttp" => {BasicHTTP, [base_url: base_url]}
+               } = send_types
+
+        assert map_size(send_types) == 2
+
+        assert Httpc.post(base_url <> "/sess_nobody", [{"content-type", "text/plain"}], "x") ==
+                 {:ok, 404}
+
+        send(self(), {:base_url, base_url})
+      end)
+
+      assert_received {:base_url, base_url}
+      assert {:error, _reason} = Httpc.post(base_url <> "/sess_nobody", [], "")
+    end
+
+    # sabotage: with_event_io_processors/2 without its `after` -> the front
+    # outlives the raise and still answers -> red
+    test "stops the front when the function raises, and raises on a URI outside the set" do
+      assert_raise RuntimeError, "inside", fn ->
+        HostCase.with_event_io_processors([@basic_http], fn %{@basic_http => {_m, opts}} ->
+          send(self(), {:base_url, opts[:base_url]})
+          raise "inside"
+        end)
+      end
+
+      assert_received {:base_url, base_url}
+      assert {:error, _reason} = Httpc.post(base_url <> "/sess_nobody", [], "")
+
+      assert_raise KeyError, fn ->
+        HostCase.with_event_io_processors(["urn:example:other"], & &1)
+      end
+    end
+
+    # sabotage: the `[]` clause handing `fun` a map with an entry -> red
+    test "starts no front and hands an empty map when no processor is named" do
+      assert HostCase.with_event_io_processors([], & &1) == %{}
     end
   end
 end

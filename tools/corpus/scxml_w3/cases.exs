@@ -21,7 +21,9 @@
 # disclaimer under conformance/LICENSES/. The document itself goes into the
 # heredoc exactly as the corpus holds it - already transformed for the
 # predicator datamodel and formatted - and `required_features` is the case's
-# own field.
+# own field. A case whose host runs an Event I/O Processor calls test_scxml/5
+# inside Mix.Statifier.Corpus.HostCase.with_event_io_processors/2, which
+# registers the processor and starts its loopback front for the test.
 #
 # Plain `elixir`, not `mix run`: nothing here needs the project compiled.
 
@@ -100,7 +102,7 @@ defmodule Cases.Emit do
     #{header(corpus_case, upstream, copyright)}
     defmodule #{inspect(module)} do
       use Statifier.Case, async: true
-
+      #{aliases(corpus_case)}
       @moduletag :scxml_w3
       @tag required_features: [#{features}]
       @tag conformance: #{inspect(conformance)}, spec: #{inspect(spec)}
@@ -110,7 +112,7 @@ defmodule Cases.Emit do
 
         description = #{inspect(description)}
 
-        test_scxml(xml, description, #{inspect(conf)}, #{inspect(events)})
+        #{run_call(corpus_case, conf, events)}
       end
     end
     """
@@ -119,6 +121,23 @@ defmodule Cases.Emit do
     out |> Path.dirname() |> File.mkdir_p!()
     File.write!(out, Code.format_string!(source) |> IO.iodata_to_binary() |> Kernel.<>("\n"))
   end
+
+  # A case whose host runs an Event I/O Processor (ADR-0075 decision 7) is
+  # run with that processor registered, delivering through a loopback front
+  # started for the test (Mix.Statifier.Corpus.HostCase, which the module
+  # aliases); every other case is the one test_scxml/4 call.
+  defp run_call(%{"host" => %{"event_io_processors" => uris}}, conf, events) do
+    "HostCase.with_event_io_processors(#{inspect(uris)}, fn send_types -> " <>
+      "test_scxml(xml, description, #{inspect(conf)}, #{inspect(events)}, send_types: send_types) end)"
+  end
+
+  defp run_call(_corpus_case, conf, events),
+    do: "test_scxml(xml, description, #{inspect(conf)}, #{inspect(events)})"
+
+  defp aliases(%{"host" => %{"event_io_processors" => _uris}}),
+    do: "alias Mix.Statifier.Corpus.HostCase\n"
+
+  defp aliases(_corpus_case), do: ""
 
   defp header(%{"id" => id, "upstream" => case_upstream}, upstream, copyright) do
     %{"document" => document, "license" => license, "notice" => notice} = case_upstream

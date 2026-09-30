@@ -2,7 +2,6 @@
 #
 # Reasons:
 #   :needs_predicator_feature - blocked on an upstream predicator capability
-#   :needs_basichttp         - BasicHTTP Event I/O Processor, out of scope
 #   :needs_invoke_src        - the case passes only when <invoke src> is
 #                              resolved to a document; the library never
 #                              dereferences src (ADR-0038) and the corpus
@@ -23,9 +22,6 @@
 # names, not on an exclusion here.
 
 %{
-  "test201" =>
-    {:needs_basichttp,
-     "BasicHTTP Event I/O Processor as a <send type>: the event is delivered only by a processor that implements HTTP POST"},
   "test216" =>
     {:needs_invoke_src,
      "<invoke srcexpr> evaluated as src: the child is loaded from src, which is never dereferenced (ADR-0038)"},
@@ -40,22 +36,5 @@
      "<invoke src> and <content> treated identically: the src child is never loaded, as src is never dereferenced (ADR-0038)"},
   "test276" =>
     {:needs_invoke_src,
-     "top-level <data> values supplied at instantiation: the child is loaded from src, which is never dereferenced (ADR-0038)"},
-  "test509" => {:needs_basichttp, "BasicHTTP Event I/O Processor MUST accept POST requests"},
-  "test510" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor MUST validate and enqueue the message"},
-  "test518" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor namelist -> POST parameter mapping"},
-  "test519" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor param children -> POST parameter mapping"},
-  "test520" => {:needs_basichttp, "BasicHTTP Event I/O Processor content child -> message body"},
-  "test522" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor _ioprocessors['basichttp'] entry"},
-  "test531" => {:needs_basichttp, "BasicHTTP Event I/O Processor _scxmleventname -> event name"},
-  "test532" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor HTTP method -> event name fallback"},
-  "test534" => {:needs_basichttp, "BasicHTTP Event I/O Processor send/@event -> _scxmleventname"},
-  "test567" => {:needs_basichttp, "BasicHTTP Event I/O Processor message content -> _event.data"},
-  "test577" =>
-    {:needs_basichttp, "BasicHTTP Event I/O Processor missing target -> error.communication"}
+     "top-level <data> values supplied at instantiation: the child is loaded from src, which is never dereferenced (ADR-0038)"}
 }

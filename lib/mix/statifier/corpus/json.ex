@@ -17,8 +17,9 @@ defmodule Mix.Statifier.Corpus.Json do
   # initial_configuration, steps, upstream, host; a registry is
   # implementation, corpus_hash, claims, entries, and an entry case_id,
   # suite; each other object's keys appear here in its schema's order too -
-  # a host is send_types, expect_sends, declared_events, expect_accepts,
-  # to_source, mapping, expect_diff, expect_compatible_at; an `expect_sends`
+  # a host is event_io_processors, send_types, expect_sends,
+  # declared_events, expect_accepts, to_source, mapping, expect_diff,
+  # expect_compatible_at; an `expect_sends`
   # item is type, target, event, delay_ms, send_id, outcome; an `expect_accepts`
   # object is unreachable, undeclared; an `expect_diff` object is class,
   # reasons; and a reason is reason, then whichever of state, to_state,
@@ -27,7 +28,7 @@ defmodule Mix.Statifier.Corpus.Json do
                 case_count name url revision key reason detail adr spec conformance description
                 required_features source initial_configuration steps type target
                 event data delay_ms send_id outcome configuration upstream document license notice
-                modified host send_types
+                modified host event_io_processors send_types
                 expect_sends declared_events expect_accepts unreachable undeclared
                 to_source mapping expect_diff class reasons state to_state fields index
                 t_index descriptor data_id expect_compatible_at

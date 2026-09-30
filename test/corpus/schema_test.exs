@@ -17,6 +17,7 @@ defmodule Corpus.SchemaTest do
   @fixture_dir "test/fixtures/corpus_schema"
   @schemas ~w(case.json corpus.json manifest.json registry.json exclusions.json)
   @draft "https://json-schema.org/draft/2020-12/schema"
+  @basic_http "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
 
   defp schema(name), do: Checker.load(@schema_dir, name)
   defp fixture(name), do: Checker.load(@fixture_dir, name)
@@ -99,12 +100,69 @@ defmodule Corpus.SchemaTest do
     end
 
     # sabotage: deleting the scion branch's "not" -> red
-    test "refuses host on a scion or w3c case" do
-      host = fixture("case-statifier.json")["host"]
+    test "refuses host on a scion case, event_io_processors included" do
+      scion = fixture("case-scion.json")
 
-      for name <- ~w(case-scion.json case-w3c.json) do
-        assert "" in pointers("case.json", Map.put(fixture(name), "host", host))
+      assert "" in pointers(
+               "case.json",
+               Map.put(scion, "host", fixture("case-statifier.json")["host"])
+             )
+
+      assert "" in pointers(
+               "case.json",
+               Map.put(scion, "host", %{"event_io_processors" => [@basic_http]})
+             )
+    end
+
+    # sabotage: the w3c branch's host losing "additionalProperties": false ->
+    # red on send_types
+    test "refuses every host key on a w3c case but event_io_processors" do
+      host = Map.put(fixture("case-statifier.json")["host"], "event_io_processors", [@basic_http])
+      pointers = pointers("case.json", Map.put(fixture("case-w3c.json"), "host", host))
+
+      for key <- Map.keys(host) -- ["event_io_processors"] do
+        assert "/host/#{key}" in pointers
       end
+
+      refute "/host/event_io_processors" in pointers
+    end
+
+    # sabotage: the w3c branch's host losing "required" -> red on the empty host
+    test "a w3c case's host carries event_io_processors, and nothing else" do
+      w3c = fixture("case-w3c.json")
+
+      assert errors("case.json", Map.put(w3c, "host", %{"event_io_processors" => [@basic_http]})) ==
+               []
+
+      assert {"/host", "missing required event_io_processors"} in errors(
+               "case.json",
+               Map.put(w3c, "host", %{})
+             )
+    end
+
+    # sabotage: event_io_processors' items losing their "enum" -> red on the
+    # other URI
+    test "event_io_processors is a non-empty, unique list from its closed set" do
+      with_processors = &Map.put(fixture("case-w3c.json"), "host", %{"event_io_processors" => &1})
+
+      assert "/host/event_io_processors/0" in pointers(
+               "case.json",
+               with_processors.(["http://www.w3.org/TR/scxml/#SCXMLEventProcessor"])
+             )
+
+      assert "/host/event_io_processors" in pointers("case.json", with_processors.([]))
+
+      assert "/host/event_io_processors" in pointers(
+               "case.json",
+               with_processors.([@basic_http, @basic_http])
+             )
+
+      statifier = fixture("case-statifier.json")
+
+      assert errors(
+               "case.json",
+               put_in(statifier, ["host", "event_io_processors"], [@basic_http])
+             ) == []
     end
 
     # sabotage: host's send_types items losing "type": "string" -> red
