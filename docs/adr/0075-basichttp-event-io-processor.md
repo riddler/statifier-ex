@@ -424,3 +424,35 @@ enqueued is answered 204 again with nothing enqueued. This repository's
 loopback front, which lives only as long as one test run, does not
 deduplicate; statifier_router's durable front, which must survive a
 restart, is the one that will.
+
+### Amendment 2026-09-30: a registration's options reach the planning callbacks, and `perform/2` gets its configuration through the payload
+
+Status: proposed (2026-09-30) - amends decision 8 point b in part (which
+callbacks receive `:opts`); every other decision, the Amendment above,
+and the record's own Status are unchanged.
+
+Decision 8 point b says a `{module, opts}` registration's options reach
+"the plan context a processor's callbacks receive, under an added `:opts`
+key". `Statifier.Send.Processor` has three callbacks that take its
+`ctx()`: `deliver/3`, `cancel/2` and `perform/2`. The code that
+statifier 2.10.0 ships gives `:opts` to two of them. This Amendment
+states that rule as the decision:
+
+- A `{module, opts}` registration's options reach the context
+  `deliver/3` and `cancel/2` receive, under `:opts`
+  (`Statifier.Session.Effects`'s private `processor_for/2`, at
+  `c8894aea`).
+- `perform/2` receives the session's plan context without `:opts`
+  (`Statifier.Session`'s private `perform_instruction/3`, at
+  `c8894aea`), because a `{:handler, module, payload}` instruction names
+  its module and not the registration it came from, so the session has
+  no one registration's options to add.
+- A processor that needs its configuration when it performs carries it
+  in the instruction payload `deliver/3` plans. `Statifier.Send.BasicHTTP`
+  carries its transport this way.
+
+The `Statifier.Send.Processor` moduledoc, section "Registration options",
+names `deliver/3` and `cancel/2` as the callbacks whose context carries
+`:opts`, at `c8894aea`. A bare-module registration is
+unchanged: none of its callbacks receives an `:opts` key. This Amendment
+decides nothing beyond which callbacks receive `:opts`.
