@@ -149,6 +149,14 @@ defmodule Statifier.Testing.Case do
     `#{@default_configuration_deadline_ms}`) - upper bound on waiting for a
     session to reach an expected configuration. Bounds only the wrong answer: a
     chart that cannot change again exits the poll immediately.
+
+  One more option registers send types, and has no default:
+
+  - `:send_types` - a `:send_types` map (`Statifier.Session.start_link/2`'s
+    option of that name) the session is started with, for a document whose
+    `<send>`s go through a registered Event I/O Processor (ADR-0075). A call
+    that passes it always drives the document through a session; a call
+    without it starts its session exactly as before.
   """
   @spec test_scxml(
           xml :: String.t(),
@@ -160,7 +168,7 @@ defmodule Statifier.Testing.Case do
   def test_scxml(xml, description, expected_initial_config, events, opts \\ []) do
     detected = validate_features!(xml, description)
 
-    if session_required?(detected) do
+    if session_required?(detected) or Keyword.has_key?(opts, :send_types) do
       drive_through_session(xml, expected_initial_config, events, opts)
     else
       drive_synchronously(xml, expected_initial_config, events)
@@ -203,7 +211,12 @@ defmodule Statifier.Testing.Case do
   # discard-on-termination).
   defp drive_through_session(xml, expected_initial_config, events, opts) do
     machine = parse_document(xml)
-    {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
+
+    {:ok, session} =
+      Statifier.start_session(
+        machine,
+        [subscribers: [self()]] ++ Keyword.take(opts, [:send_types])
+      )
 
     try do
       assert_configuration_eventually(session, expected_initial_config, opts)

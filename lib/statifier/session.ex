@@ -412,7 +412,7 @@ defmodule Statifier.Session do
             # `%{}`. `init/1` derives the `%MachineState{}` `send_types` stamp
             # from this same map's keys through
             # `Statifier.Send.Types.from_send_types/1`, the one constructor.
-            send_types: %{String.t() => module()},
+            send_types: %{String.t() => SendTypes.registration()},
             # ADR-0069 decision 4's cancel routing: which registered types'
             # processors hold a delayed send under each send id, so a
             # `<cancel>` naming it reaches them. Kept by the `{:notify, _}`
@@ -557,9 +557,12 @@ defmodule Statifier.Session do
       subtrees their own. Handlers descend independently of `:invoke_source`,
       which ADR-0038 leaves to its own option, and independently of
       `:inherit_observers`, which is an observation knob.
-    - `:send_types` - a `%{type_string => module}` map of the Event I/O
-      Processor types this session registers for `<send type="...">`
-      (ADR-0069 decision 2). Default `%{}`, which registers nothing: only
+    - `:send_types` - a `%{type_string => registration}` map of the Event
+      I/O Processor types this session registers for `<send type="...">`
+      (ADR-0069 decision 2), each registration a `Statifier.Send.Processor`
+      module or `{module, opts}` (ADR-0075 decision 8, point b; see
+      `Statifier.Send.Processor`'s "Registration options"). Default `%{}`,
+      which registers nothing: only
       the built-in types (the attribute absent, `"scxml"`, and the SCXML
       Event I/O Processor URI) are supported, exactly as before. The
       `%MachineState{}` `send_types` snapshot this session's core is stamped
@@ -1264,7 +1267,7 @@ defmodule Statifier.Session do
           session_id :: String.t(),
           invoked_by :: {pid(), String.t()} | nil,
           invoke_handlers :: %{String.t() => module()},
-          send_types :: %{String.t() => module()}
+          send_types :: %{String.t() => SendTypes.registration()}
         ) :: {MachineState.t(), [Effect.t()], keyword(), :initialize | :resume, binary() | nil}
   defp boot(:fresh, machine, opts, session_id, invoked_by, invoke_handlers, send_types) do
     machine_opts =

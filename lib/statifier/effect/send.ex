@@ -43,9 +43,9 @@ defmodule Statifier.Effect.Send do
   different case entirely: it is an argument failure that discards the
   whole `<send>` (ADR-0036), never a value that reaches `data` at all. This
   settles the `#_internal`, same-session, and `#_scxml_<sessionid>` routes
-  that exist today; a future external-wire processor (BasicHTTP or
-  otherwise) owns its own `:undefined` encoding at its own boundary, not
-  here.
+  that exist today; a registered external-wire processor, such as
+  `Statifier.Send.BasicHTTP` (ADR-0075), owns its own `:undefined`
+  encoding at its own boundary, not here.
   """
 
   alias Statifier.Machine.Content

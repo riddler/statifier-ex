@@ -63,7 +63,13 @@ defmodule Statifier.Evaluator.SystemVariables do
   `"location"`, is always there. A session that registers send types
   (ADR-0069) supports each of them too, so `_ioprocessors` also carries one
   entry per registered type string, whose value the type's processor
-  supplied (`Statifier.Send.Types.from_send_types/1` read it). With
+  supplied. A processor that exports the optional
+  `c:Statifier.Send.Processor.ioprocessors_entry/2` is asked here, with
+  the type string and a context carrying `session_id` and the
+  registration's `opts`, so its entry can address this one session
+  (ADR-0075 decision 3); a processor that exports only
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` gets the entry
+  `Statifier.Send.Types.from_send_types/1` read, exactly as before. With
   `send_types` `nil`, which is what a session registering nothing carries,
   the map holds the SCXML entry alone, exactly as before registered types
   existed. A registered entry never replaces the SCXML entry: a set naming
@@ -108,16 +114,41 @@ defmodule Statifier.Evaluator.SystemVariables do
       "_event" => :undefined,
       "_ioprocessors" =>
         Map.put(
-          registered_entries(send_types),
+          registered_entries(send_types, session_id),
           @scxml_event_processor,
           %{"location" => scxml_location(session_id)}
         )
     }
   end
 
-  @spec registered_entries(send_types :: Types.t() | nil) :: %{String.t() => map()}
-  defp registered_entries(nil), do: %{}
-  defp registered_entries(%Types{entries: entries}), do: entries
+  @spec registered_entries(send_types :: Types.t() | nil, session_id :: String.t()) ::
+          %{String.t() => map()}
+  defp registered_entries(nil, _session_id), do: %{}
+
+  defp registered_entries(%Types{entries: entries, processors: processors}, session_id) do
+    Map.new(entries, fn {type, entry} ->
+      case Map.fetch(processors, type) do
+        {:ok, {module, opts}} -> {type, session_entry(module, type, opts, session_id, entry)}
+        :error -> {type, entry}
+      end
+    end)
+  end
+
+  # ADR-0075 decision 3: a module that exports `/2` is asked for its entry
+  # with the session id; one that exports only `/1` keeps the entry the
+  # registered set was built with.
+  @spec session_entry(
+          module :: module(),
+          type :: String.t(),
+          opts :: keyword(),
+          session_id :: String.t(),
+          entry :: map()
+        ) :: map()
+  defp session_entry(module, type, opts, session_id, entry) do
+    if function_exported?(module, :ioprocessors_entry, 2),
+      do: Types.session_entry!(module, type, %{session_id: session_id, opts: opts}),
+      else: entry
+  end
 
   @doc """
   `_event`'s value for `event` - spec 5.10.1's fields, read straight off

@@ -135,6 +135,15 @@ defmodule Statifier.Session.Recording do
   - into `{:error, {:unknown_handler_modules, names}}`, sorted, so a host
   learns the whole set of modules it needs to load in one round trip.
 
+  A `{module, opts}` `:send_types` registration (ADR-0075 decision 8,
+  point b) crosses the same way, with its options as strings too: the
+  module is written as its name, each option key as its name, and each
+  option value that is an atom other than `true`, `false` and `nil` as
+  `{:atom, name}`; any other option value is written as it is.
+  `from_binary/1` resolves the module, the keys and the atom values back
+  with `String.to_existing_atom/1`, and a name that does not resolve joins
+  the same `{:unknown_handler_modules, names}` list.
+
   What the codec does not, and cannot, verify: that a resolved handler
   module's planning callbacks (ADR-0051 decision 4) behave the way they did
   when the recording was made. Replay's determinism depends on that
@@ -227,14 +236,16 @@ defmodule Statifier.Session.Recording do
   context is built from this recorded map, not from an empty one.
 
   `:send_types` is `Statifier.Session.start_link/2`'s own
-  `%{type_string => module}` map (ADR-0069), kept as the map rather than
+  `%{type_string => registration}` map (ADR-0069; a registration is a
+  module or `{module, opts}`, ADR-0075), kept as the map rather than
   the snapshot derived from it, so `Statifier.Replay` re-derives the
   snapshot through `Statifier.Send.Types.from_send_types/1`, the one
   constructor. It is kept only when non-empty: a session that registers no
   send type records exactly the options it recorded before ADR-0069, and
   an absent key replays as "no declaration". `to_binary/1` writes its
-  module values as strings, never atoms or code, under ADR-0057 decision
-  5's rule for `:invoke_handlers`.
+  module values, and a registration's options, as strings, never atoms or
+  code, under ADR-0057 decision 5's rule for `:invoke_handlers` (see the
+  moduledoc's "The binary contract" section).
 
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
@@ -634,11 +645,26 @@ defmodule Statifier.Session.Recording do
   defp encode_opts(opts) do
     opts
     |> Keyword.replace_lazy(:invoke_handlers, &module_names/1)
-    |> Keyword.replace_lazy(:send_types, &module_names/1)
+    |> Keyword.replace_lazy(:send_types, &registration_names/1)
   end
 
   defp module_names(map),
     do: Map.new(map, fn {type, module} -> {type, Atom.to_string(module)} end)
+
+  # ADR-0075 decision 8, point b: a `{module, opts}` registration is written
+  # with its options as strings too (see the moduledoc's "The binary
+  # contract" section); a bare module exactly as `module_names/1` writes it.
+  defp registration_names(map) do
+    Map.new(map, fn
+      {type, {module, opts}} -> {type, {Atom.to_string(module), Enum.map(opts, &option_name/1)}}
+      {type, module} -> {type, Atom.to_string(module)}
+    end)
+  end
+
+  defp option_name({key, value}) when is_atom(value) and value not in [true, false, nil],
+    do: {Atom.to_string(key), {:atom, Atom.to_string(value)}}
+
+  defp option_name({key, value}), do: {Atom.to_string(key), value}
 
   @spec decode_opts(opts :: keyword()) ::
           {:ok, keyword()} | {:error, {:unknown_handler_modules, [String.t()]}}
@@ -647,7 +673,7 @@ defmodule Statifier.Session.Recording do
       Enum.reduce([:invoke_handlers, :send_types], {opts, []}, fn key, {opts, unknown} ->
         case Keyword.fetch(opts, key) do
           {:ok, modules} ->
-            {resolved, missing} = resolve_modules(modules)
+            {resolved, missing} = resolve_modules(modules, key == :send_types)
             {Keyword.put(opts, key, resolved), missing ++ unknown}
 
           :error ->
@@ -665,14 +691,57 @@ defmodule Statifier.Session.Recording do
   # returning the resolved map and every name that did not resolve. Shared
   # by `:invoke_handlers` and `:send_types`, whose unresolved names are
   # reported together in one `{:unknown_handler_modules, names}` error.
-  @spec resolve_modules(modules :: map()) :: {map(), [String.t()]}
-  defp resolve_modules(modules) do
+  @spec resolve_modules(modules :: map(), options? :: boolean()) :: {map(), [String.t()]}
+  defp resolve_modules(modules, options?) do
     Enum.reduce(modules, {%{}, []}, fn {type, name}, {resolved, unknown} ->
-      case existing_atom(name) do
-        {:ok, module} -> {Map.put(resolved, type, module), unknown}
-        :error -> {resolved, [handler_name(name) | unknown]}
+      case resolve_registration(name, options?) do
+        {:ok, registration} -> {Map.put(resolved, type, registration), unknown}
+        {:error, missing} -> {resolved, missing ++ unknown}
       end
     end)
+  end
+
+  # One recorded value: a module name, or (for `:send_types` only, ADR-0075)
+  # a `{module name, options}` pair written by `registration_names/1`.
+  @spec resolve_registration(name :: term(), options? :: boolean()) ::
+          {:ok, term()} | {:error, [String.t()]}
+  defp resolve_registration({name, opts}, true) when is_list(opts) do
+    {options, missing} = Enum.map_reduce(opts, [], &resolve_option/2)
+
+    case {existing_atom(name), missing} do
+      {{:ok, module}, []} -> {:ok, {module, options}}
+      {{:ok, _module}, missing} -> {:error, missing}
+      {:error, missing} -> {:error, [handler_name(name) | missing]}
+    end
+  end
+
+  defp resolve_registration(name, _options?) do
+    case existing_atom(name) do
+      {:ok, module} -> {:ok, module}
+      :error -> {:error, [handler_name(name)]}
+    end
+  end
+
+  @spec resolve_option(option :: term(), missing :: [String.t()]) :: {term(), [String.t()]}
+  defp resolve_option({key, {:atom, value}}, missing) do
+    {resolved_key, missing} = resolve_name(key, missing)
+    {resolved_value, missing} = resolve_name(value, missing)
+    {{resolved_key, resolved_value}, missing}
+  end
+
+  defp resolve_option({key, value}, missing) do
+    {resolved_key, missing} = resolve_name(key, missing)
+    {{resolved_key, value}, missing}
+  end
+
+  defp resolve_option(other, missing), do: {other, [handler_name(other) | missing]}
+
+  @spec resolve_name(name :: term(), missing :: [String.t()]) :: {term(), [String.t()]}
+  defp resolve_name(name, missing) do
+    case existing_atom(name) do
+      {:ok, atom} -> {atom, missing}
+      :error -> {name, [handler_name(name) | missing]}
+    end
   end
 
   # `String.to_existing_atom/1` has no non-raising variant, so the rescue is

@@ -57,6 +57,10 @@ defmodule Statifier.Session.Effects do
   instructions are spliced into the plan in place of any delivery. The
   target is never parsed. A delayed send of a registered type is planned
   the same way, with no `{:schedule, ...}`: the processor owns the timer.
+  A `:send_processors` value is a module or `{module, opts}` (ADR-0075
+  decision 8, point b); for `{module, opts}` the context the processor's
+  `deliver/3` and `cancel/2` receive carries the options under an added
+  `:opts` key, and for a bare module it is the plan context unchanged.
 
   A `<cancel>` always plans `{:cancel_timers, send_id}` for the library's
   own timers, as before. When the plan context's `:held_sends` map, or a
@@ -97,7 +101,8 @@ defmodule Statifier.Session.Effects do
   optional keys for registered send types (ADR-0069): `send_types`, the
   registered set read off `%MachineState{}` exactly as `invoke_types` is;
   `send_processors`, the session's `:send_types` map from type to
-  `Statifier.Send.Processor` module; and `held_sends`, the live
+  `Statifier.Send.Processor` registration (a module or `{module, opts}`);
+  and `held_sends`, the live
   `send_id => [type]` map of delayed sends a processor holds. A context
   without them plans exactly as a session with no registered send type
   does.
@@ -192,7 +197,7 @@ defmodule Statifier.Session.Effects do
           required(:invoke_handlers) => %{String.t() => module()},
           required(:invocation_types) => %{String.t() => String.t()},
           optional(:send_types) => Types.t() | nil,
-          optional(:send_processors) => %{String.t() => module()},
+          optional(:send_processors) => %{String.t() => Types.registration()},
           optional(:held_sends) => held_sends()
         }
 
@@ -306,7 +311,8 @@ defmodule Statifier.Session.Effects do
   defp plan_one({:cancel, %Cancel{send_id: send_id} = cancel} = effect, context) do
     processors =
       Enum.flat_map(Map.get(held(context), send_id, []), fn type ->
-        {:ok, instructions} = processor_for(type, context).cancel(cancel, context)
+        {module, ctx} = processor_for(type, context)
+        {:ok, instructions} = module.cancel(cancel, ctx)
         instructions
       end)
 
@@ -408,19 +414,26 @@ defmodule Statifier.Session.Effects do
   # planned for it - no delivery, no `{:schedule, ...}`, no target parse.
   @spec hand_off(send :: Send.t() | SendDelayed.t(), context :: context()) :: [instruction()]
   defp hand_off(send, %{session_id: session_id} = context) do
-    {:ok, instructions} =
-      processor_for(send.type, context).deliver(send, delivered_event(send, session_id), context)
-
+    {module, ctx} = processor_for(send.type, context)
+    {:ok, instructions} = module.deliver(send, delivered_event(send, session_id), ctx)
     instructions
   end
 
-  # The processor module registered for `type`. `Statifier.Session` and
-  # `Statifier.Replay` derive `:send_types` and `:send_processors` from one
-  # map, so a registered type always has a module; a context that declares a
-  # set without the map is the caller's error and raises here.
-  @spec processor_for(type :: String.t(), context :: context()) :: module()
-  defp processor_for(type, context),
-    do: context |> Map.get(:send_processors, %{}) |> Map.fetch!(type)
+  # The processor module registered for `type`, with the context its
+  # planning callbacks receive. `Statifier.Session` and `Statifier.Replay`
+  # derive `:send_types` and `:send_processors` from one map, so a
+  # registered type always has a module; a context that declares a set
+  # without the map is the caller's error and raises here. A `{module,
+  # opts}` registration adds its options to the context under `:opts`; a
+  # bare module's context is the plan context unchanged (ADR-0075 decision
+  # 8, point b).
+  @spec processor_for(type :: String.t(), context :: context()) :: {module(), map()}
+  defp processor_for(type, context) do
+    case context |> Map.get(:send_processors, %{}) |> Map.fetch!(type) do
+      {module, opts} -> {module, Map.put(context, :opts, opts)}
+      module -> {module, context}
+    end
+  end
 
   # An `<invoke>`'s own routing (see moduledoc's "`<invoke>` routing"
   # section). Unlike `plan_send/3`, there is no target to check - `<invoke>`

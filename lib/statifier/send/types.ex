@@ -24,9 +24,12 @@ defmodule Statifier.Send.Types do
 
   Beside the set, a registered set carries each type's `_ioprocessors`
   entry (spec 5.10), the value its processor supplies through the optional
-  `c:Statifier.Send.Processor.ioprocessors_entry/1` callback, so
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` callback, and each
+  type's module and registration options, so
   `Statifier.MachineState.new/2` can write the entries from the same
-  stamp it classifies against.
+  stamp it classifies against, asking a processor that implements the
+  optional `c:Statifier.Send.Processor.ioprocessors_entry/2` once the
+  session id is known (ADR-0075 decision 3).
 
   `unsupported_sends/2` is the pure pre-start check of ADR-0069 decision 3.
   It lives here rather than in `Statifier.Validator`, because
@@ -40,9 +43,30 @@ defmodule Statifier.Send.Types do
   alias Statifier.Parser.Location
   alias Statifier.Send.Target
 
-  defstruct types: MapSet.new(), entries: %{}
+  defstruct types: MapSet.new(), entries: %{}, processors: %{}
 
-  @type t :: %__MODULE__{types: MapSet.t(String.t()), entries: %{String.t() => map()}}
+  @typedoc """
+  One `:send_types` value (ADR-0075 decision 8, point b): a bare
+  `Statifier.Send.Processor` module, or the module with its registration
+  options. The options reach the processor's
+  `c:Statifier.Send.Processor.ioprocessors_entry/2` context and, for a
+  `{module, opts}` registration only, the plan context its callbacks
+  receive, under `:opts`.
+  """
+  @type registration :: module() | {module(), keyword()}
+
+  @typedoc """
+  The registered set. `types` is the set `classify/2` answers against;
+  `entries` holds each type's `_ioprocessors` value as
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` returned it (or an
+  empty map); `processors` holds each type's module and options, a bare
+  module's options being `[]`.
+  """
+  @type t :: %__MODULE__{
+          types: MapSet.t(String.t()),
+          entries: %{String.t() => map()},
+          processors: %{String.t() => {module(), keyword()}}
+        }
 
   @typedoc """
   What `classify/2` answers for one resolved `<send type>`:
@@ -60,7 +84,8 @@ defmodule Statifier.Send.Types do
 
   @doc """
   Builds the registered set from a `:send_types` map
-  (`%{type_string => module}`), derived from the map's own keys rather than
+  (`%{type_string => registration}`, a `t:registration/0` being a module
+  or `{module, opts}`), derived from the map's own keys rather than
   declared beside it - the `<send>` counterpart of
   `Statifier.Invoke.Types.from_handlers/1`.
 
@@ -79,19 +104,44 @@ defmodule Statifier.Send.Types do
   empty map when the module does not export it. Raises `ArgumentError`
   when a returned value is not a map, or holds an atom key other than
   `true` or `false` at any level, because every datamodel key is a string.
-  `Statifier.Evaluator.SystemVariables.initial/3` says when the entries are
+  `processors` keeps each type's module and options (ADR-0075 decision 3),
+  so `Statifier.Evaluator.SystemVariables.initial/3` can ask a module that
+  exports `c:Statifier.Send.Processor.ioprocessors_entry/2` for its entry
+  once the session id is known; that function says when the entries are
   written and how they read after a resume.
   """
-  @spec from_send_types(send_types :: %{optional(String.t()) => module()}) :: t() | nil
+  @spec from_send_types(send_types :: %{optional(String.t()) => registration()}) :: t() | nil
   def from_send_types(send_types) when is_map(send_types) and map_size(send_types) == 0,
     do: nil
 
   def from_send_types(send_types) when is_map(send_types) do
+    processors = Map.new(send_types, fn {type, registration} -> {type, split(registration)} end)
+
     %__MODULE__{
       types: send_types |> Map.keys() |> MapSet.new(),
-      entries: Map.new(send_types, fn {type, module} -> {type, entry!(module, type)} end)
+      entries:
+        Map.new(processors, fn {type, {module, _opts}} -> {type, entry!(module, type)} end),
+      processors: processors
     }
   end
+
+  # The module and options of one `t:registration/0`: a bare module's
+  # options are `[]`. Callable across the library's own modules (the
+  # planner reads registrations through it) but not part of its public API,
+  # hence `@doc false`.
+  @doc false
+  @spec split(registration :: registration()) :: {module(), keyword()}
+  def split({module, opts}) when is_atom(module) and is_list(opts), do: {module, opts}
+  def split(module) when is_atom(module), do: {module, []}
+
+  # The value `module` returns from `ioprocessors_entry/2` for `type` and
+  # `context`, checked as `from_send_types/1` checks a `/1` entry.
+  # Internal: `Statifier.Evaluator.SystemVariables.initial/3` is its one
+  # caller (ADR-0075 decision 3), hence `@doc false`.
+  @doc false
+  @spec session_entry!(module :: module(), type :: String.t(), context :: map()) :: map()
+  def session_entry!(module, type, context),
+    do: checked!(module.ioprocessors_entry(type, context), module, type)
 
   # The processor's own `_ioprocessors` value for `type`, checked at the one
   # constructor so a value that reaches the datamodel is string-keyed by
@@ -103,6 +153,11 @@ defmodule Statifier.Send.Types do
         do: module.ioprocessors_entry(type),
         else: %{}
 
+    checked!(entry, module, type)
+  end
+
+  @spec checked!(entry :: term(), module :: module(), type :: String.t()) :: map()
+  defp checked!(entry, module, type) do
     unless is_map(entry) and string_keyed?(entry) do
       raise ArgumentError,
             "#{inspect(module)}.ioprocessors_entry(#{inspect(type)}) must return a map " <>
