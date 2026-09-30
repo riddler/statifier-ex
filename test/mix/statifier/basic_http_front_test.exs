@@ -103,6 +103,35 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
     end
   end
 
+  describe "the dedup key" do
+    # sabotage: `BasicHTTPFront.respond/1` hands the decoder no
+    # `:send_key` -> the event carries no `sendid`, the conditioned
+    # transition never matches, and the chart reaches `fail`. Confirmed
+    # red and reverted.
+    test "reaches the decoder, which sets the event's sendid", %{front: front} do
+      test_scxml(
+        """
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+              <state id="s">
+                <onentry>
+                  <send type="basichttp" event="loop" id="once"
+                        targetexpr="_ioprocessors['basichttp']['location']"/>
+                </onentry>
+                <transition event="loop" cond="_event.sendid == 'once'" target="pass"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <final id="pass"/>
+              <final id="fail"/>
+            </scxml>
+        """,
+        "a send's key arrives with it",
+        ["pass"],
+        [],
+        send_types: send_types(front)
+      )
+    end
+  end
+
   describe "the front's status rule" do
     # sabotage: `answer/2` answers 200 after enqueueing -> the status
     # reads 200 and the equality reddens. Confirmed red and reverted.
@@ -153,6 +182,16 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
     test "answers an error when nothing listens, over http and https" do
       assert {:error, _reason} = Httpc.post("http://127.0.0.1:1/x", [], "")
       assert {:error, _reason} = Httpc.post("https://127.0.0.1:1/x", [], "")
+    end
+
+    # sabotage: `Httpc.ensure_loaded/1` answers `:ok` without loading ->
+    # the missing module reads as loadable and the equality reddens.
+    # Confirmed red and reverted.
+    test "a module it needs that cannot be loaded is an error, not a crash" do
+      assert Httpc.ensure_loaded([:ssl, :public_key]) == :ok
+
+      assert Httpc.ensure_loaded([:ssl, :no_such_module_for_this_test]) ==
+               {:error, {:not_loadable, :no_such_module_for_this_test, :nofile}}
     end
   end
 end

@@ -86,9 +86,9 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           </scxml>
       """)
 
-      assert_receive {:basichttp_post, "http://sink.test/in",
-                      [{"content-type", "application/x-www-form-urlencoded"}], body}
+      assert_receive {:basichttp_post, "http://sink.test/in", headers, body}
 
+      assert {"content-type", "application/x-www-form-urlencoded"} in headers
       assert URI.decode_query(body) == %{"_scxmleventname" => "ping", "Var1" => "2", "p" => "x"}
     end
 

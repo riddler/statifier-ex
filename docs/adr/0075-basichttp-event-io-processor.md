@@ -361,3 +361,64 @@ nothing:
 - [ADR-0051](0051-invoke-handlers-are-registered-per-session.md) (decision 4, the planning and performing split)
 - [ADR-0057](0057-recording-identity-and-serialization.md) (decision 5, registrations recorded as strings)
 - [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md) (the processor-owned timer and its cancellation key)
+
+### Amendment 2026-09-30: every POST carries the send's dedup key, and the receiver deduplicates
+
+Status: proposed (2026-09-30) - amends decision 4 (the outbound mapping)
+and decision 5 (the inbound decoder) by addition; every other decision,
+and the record's own Status above, are unchanged. Ruled by the operator,
+2026-09-30.
+
+[ADR-0069](0069-host-registered-send-types.md) decision 4 binds every
+registered processor: "A processor MUST be idempotent on the ADR-0054
+decision 3 dedup key's components read off the effect", because "after a
+crash and retry, a host may perform the same effect more than once."
+Decision 8 point d above has the processor make one attempt per
+`perform/2` and keep no memory between calls, so a host that performs the
+same instruction twice POSTs twice. Neither decision 4 nor decision 5 said
+how the MUST is met. This Amendment says it.
+
+**The processor is at-least-once, and the receiver deduplicates.** Every
+POST the processor makes, immediate or delayed, whatever its body,
+carries the send's dedup key in one request header:
+
+- **Name:** `scxml-send-key`.
+- **Value:** the eight components of
+  [ADR-0054](0054-durable-timers-consume-the-effect-vocabulary.md)
+  decision 3's deduplication key, as that record and ADR-0059 order them,
+  joined by `/`: the session scope, `send_id`, `macrostep`, `microstep`,
+  `round`, `c_index`, `owner`, `ordinal`.
+  - The session scope is the plan context's `session_id` (spec 5.10's
+    `_sessionid` for a live session, a host's own scope for a
+    process-less host), percent-encoded.
+  - `send_id` is percent-encoded. Percent-encoding here escapes every
+    byte outside RFC 3986's unreserved set (`A-Z a-z 0-9 - . _ ~`), so
+    neither field can carry a `/`.
+  - `macrostep`, `microstep`, `round`, `c_index` and `ordinal` are
+    decimal integers.
+  - `owner` is spelled `onentry.S.B`, `onexit.S.B` or `finalize.S.B` with
+    its state and block indexes, or `transition.T` with its transition
+    index.
+  - A component the effect does not carry is the empty string.
+
+Every component is a deterministic counter or a static position, so a
+re-performed instruction sends a byte-identical value. A receiver that
+enqueues a request only when it has not already enqueued one with the same
+`scxml-send-key` delivers each send once: for such a receiver ADR-0069's
+MUST holds end to end. A receiver that ignores the header sees
+at-least-once delivery. The processor itself still keeps no memory across
+`perform/2` calls.
+
+**What the decoder does with it.** `decode/1`'s request map takes the
+header's value under an optional `:send_key` key. A well-formed value
+(eight `/`-separated fields whose second field percent-decodes to UTF-8)
+sets the event's `sendid` to that decoded send id, the field 5.10.1 sets
+"If the sending entity has specified a value for this"; a malformed one is
+`{:error, {:malformed_send_key, value}}`, answered 400 by decision 5's
+status rule; an absent one leaves `sendid` unset, as before. The decoder
+does no deduplicating: it is pure and remembers nothing. A front
+deduplicates on the header's whole value, and a request it has already
+enqueued is answered 204 again with nothing enqueued. This repository's
+loopback front, which lives only as long as one test run, does not
+deduplicate; statifier_router's durable front, which must survive a
+restart, is the one that will.
