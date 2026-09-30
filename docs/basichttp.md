@@ -11,7 +11,9 @@ made, nothing is started, and `_ioprocessors` holds the SCXML processor's
 entry alone.
 
 The decisions behind the processor are
-[ADR-0075](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0075-basichttp-event-io-processor.md).
+[ADR-0075](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0075-basichttp-event-io-processor.md)
+and its Amendment of 2026-09-30, which adds the `scxml-send-key` header
+below.
 
 ## Registering it
 
@@ -41,7 +43,11 @@ needs the options form. Its options:
   `Statifier.Send.BasicHTTP.Transport.Httpc`, on OTP's `:httpc`, which
   verifies TLS peers against the system CA store and bounds each request
   with a timeout. The package adds no dependency for it; the last section
-  below shows an adapter on `req`.
+  below shows an adapter on `req`. When `:ssl` or `:public_key` cannot be
+  loaded, the default adapter answers
+  `{:error, {:not_loadable, module, reason}}` instead of making the
+  request, and the processor reports the miss to the sender like any
+  other failed delivery.
 
 Neither type string is a built-in spelling, so the registration redirects
 no built-in send.
@@ -71,18 +77,22 @@ at the base URL, and for each request it:
    running session;
 2. hands the request to `Statifier.Send.BasicHTTP.decode/1`, a pure
    function that knows no session;
-3. enqueues the event it answers as an external event, for example with
+3. unless it has already enqueued a request carrying the same
+   `scxml-send-key` header value (next section), enqueues the event the
+   decoder answers as an external event, for example with
    `Statifier.Session.send_event/2`;
 4. answers by the status rule below.
 
 `decode/1` takes a map of the request's `:method`, `:content_type` (`nil`
 when absent), `:body` and `:query` (`nil` when the URL has none), and
-answers `{:ok, event}` or `{:error, reason}`. The status rule:
+optionally `:send_key`, the `scxml-send-key` header's value. It answers
+`{:ok, event}` or `{:error, reason}`. The status rule:
 
 | `decode/1` answers | The front answers |
 |---|---|
-| `{:ok, event}` | 204, once the event is enqueued and before it is processed |
+| `{:ok, event}` | 204, once the event is enqueued and before it is processed; 204 again, with nothing enqueued, for a `scxml-send-key` value the front has already enqueued |
 | `{:error, {:method_not_allowed, method}}` | 405, with `Allow: POST` |
+| `{:error, {:malformed_send_key, value}}` | 400 |
 | any other `{:error, _}` | 400 |
 | (the path names no session the front can reach) | 404 |
 
@@ -97,12 +107,16 @@ def call(%Plug.Conn{path_info: [session_id]} = conn, _opts) do
     method: conn.method,
     content_type: conn |> Plug.Conn.get_req_header("content-type") |> List.first(),
     body: body,
-    query: if(conn.query_string == "", do: nil, else: conn.query_string)
+    query: if(conn.query_string == "", do: nil, else: conn.query_string),
+    send_key: conn |> Plug.Conn.get_req_header("scxml-send-key") |> List.first()
   }
 
   with {:ok, pid} <- MyApp.Sessions.whereis(session_id),
        {:ok, event} <- Statifier.Send.BasicHTTP.decode(request) do
-    :ok = Statifier.Session.send_event(pid, event)
+    # MyApp.Delivered records each key once and answers whether it was new.
+    if MyApp.Delivered.first?(session_id, request.send_key),
+      do: :ok = Statifier.Session.send_event(pid, event)
+
     Plug.Conn.send_resp(conn, 204, "")
   else
     :no_session -> Plug.Conn.send_resp(conn, 404, "")
@@ -116,7 +130,40 @@ end
 This repository's own loopback front, which its conformance runs deliver
 through, is `Mix.Statifier.BasicHTTPFront`: repository tooling on OTP's
 `:inets` httpd, not part of the package, and a small model of the steps
-above.
+above. It lives only as long as one test run and does not deduplicate.
+
+## At-least-once delivery and the `scxml-send-key` header
+
+The processor makes one POST each time an instruction is performed, and
+keeps no memory between performs. A host that performs the same
+instruction twice - after a crash and a retry, for example - POSTs
+twice, so delivery is at-least-once. To let the receiver deliver each
+send once, every POST the processor makes, immediate or delayed and
+whatever its body, carries the send's deduplication key in a request
+header:
+
+- **Name:** `scxml-send-key`.
+- **Value:** eight fields joined by `/`: the session scope (the
+  sender's `_sessionid` for a live session), the send id, `macrostep`,
+  `microstep`, `round`, `c_index`, `owner` and `ordinal`. The session
+  scope and the send id are percent-encoded, so neither carries a `/`;
+  the counters are decimal integers; `owner` is spelled `onentry.S.B`,
+  `onexit.S.B`, `finalize.S.B` or `transition.T` with its indexes. A
+  field the send does not carry is the empty string.
+
+Every field is a deterministic counter or a static position, so a
+re-performed send carries a byte-identical value. A front that enqueues
+a request only when it has not already enqueued one with the same value
+delivers each send once; a front that ignores the header sees
+at-least-once delivery. The decoder does not deduplicate: it is pure and
+remembers nothing, so the front keeps the record of the values it has
+enqueued, and answers a repeat 204 with nothing enqueued.
+
+`decode/1` only checks the value's shape. It sets no field of the event
+from it, and a value that is not eight `/`-separated fields whose second
+field percent-decodes to UTF-8 is
+`{:error, {:malformed_send_key, value}}`, which the front answers 400. A
+request without the header decodes as before.
 
 ## The mapping, both ways
 
@@ -135,7 +182,8 @@ A parameter value is written as text: a string as it is, a number or a
 boolean as its literal, `nil` as `null`, and an undefined value as the
 empty string. The processor makes one attempt. A transport error, or a
 status outside 2xx, reaches the sender as `error.communication` carrying
-the send id, through `Statifier.Session.failed_send/3`. A `<send delay>` is
+the send id, through `Statifier.Session.failed_send/3`. Every request also
+carries the `scxml-send-key` header above. A `<send delay>` is
 held by the processor's own timer, and a `<cancel>` naming the send cancels
 it while it has not fired.
 
