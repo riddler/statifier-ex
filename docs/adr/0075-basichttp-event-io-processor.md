@@ -1,6 +1,6 @@
 # ADR-0075: The Basic HTTP Event I/O Processor is a registered send type in statifier-ex, with a pure inbound decoder, an injected transport and a corpus host declaration
 
-Status: proposed (2026-09-30) - builds on ADR-0069 (the processor is a
+Status: accepted (2026-09-30) - builds on ADR-0069 (the processor is a
 registered send type in that record's sense); amends ADR-0069 decision 2
 in part (a registration value may carry options) and adds an optional
 callback to its processor behaviour; amends ADR-0070 decision 5 in part
@@ -364,7 +364,7 @@ nothing:
 
 ### Amendment 2026-09-30: every POST carries the send's dedup key, and the receiver deduplicates
 
-Status: proposed (2026-09-30) - amends decision 4 (the outbound mapping)
+Status: accepted (2026-09-30) - amends decision 4 (the outbound mapping)
 and decision 5 (the inbound decoder) by addition; every other decision,
 and the record's own Status above, are unchanged. The header,
 at-least-once delivery and deduplication by the receiver were ruled by
@@ -427,7 +427,7 @@ restart, is the one that will.
 
 ### Amendment 2026-09-30: a registration's options reach the planning callbacks, and `perform/2` gets its configuration through the payload
 
-Status: proposed (2026-09-30) - amends decision 8 point b in part (which
+Status: accepted (2026-09-30) - amends decision 8 point b in part (which
 callbacks receive `:opts`); every other decision, the Amendment above,
 and the record's own Status are unchanged.
 
@@ -456,3 +456,51 @@ names `deliver/3` and `cancel/2` as the callbacks whose context carries
 `:opts`, at `c8894aea`. A bare-module registration is
 unchanged: none of its callbacks receives an `:opts` key. This Amendment
 decides nothing beyond which callbacks receive `:opts`.
+
+## Note (2026-09-30): accepted
+
+This record and its two Amendments of 2026-09-30 are accepted on
+2026-09-30. Their three Status lines are the only lines of the record
+that change; no decision, consequence, Related entry or Amendment
+paragraph changes here, and this Note decides nothing.
+
+Their code shipped in statifier 2.10.0: `Statifier.Send.BasicHTTP`, its
+transport behaviour, the `:httpc` adapter, the optional
+`ioprocessors_entry/2` callback and the `{module, opts}` registration came
+in `15044527`; the `scxml-send-key` header in `b4e4a459`, and the
+decoder's rule that sets no event field from it in `3ffcf9df`; the schema
+key, the loopback front in the corpus host, the transform template and
+the eleven claims in `b6f7fcab`. All four are in the `v2.10.0` tag
+(`c8894aea`), and statifier 2.10.0 is published. Every claim above was
+verified against `main` at `39942820`, which differs from that tag only
+by the second Amendment above; nothing under `lib/`, `test/`, `tools/`
+or `conformance/` differs.
+
+Decision 8 point b's sentence on "the plan context a processor's
+callbacks receive" is read with the Amendment of 2026-09-30 on which
+callbacks receive `:opts`: the options reach `deliver/3` and `cancel/2`,
+and `perform/2` gets its configuration through the instruction payload.
+
+The Context describes the package at `dc1900d0`, as it says, and was
+checked there: the twelve documents excluded as `:needs_basichttp` in
+both exclusion files and absent from the corpus and the ratchet;
+`ioprocessors_entry/1` taking the type string alone; a `:send_types`
+value typed as a bare module; `Statifier.Machine.Content.Send`'s private
+`data/3`; the handler clause of `Statifier.Session`'s private
+`perform_instruction/3`; `failed_send/3` as a cast; and the `w3c` and
+`scion` branches of `conformance/schema/case.json` each refusing `host`.
+On `main` each of those is as the Decision directs: both exclusion files
+carry none of the twelve, all twelve are in `conformance/corpus/w3c.json`
+with `host.event_io_processors`, the eleven are in
+`test/passing_tests.json` and `conformance/registry.json`, and test201 is
+in neither. The sentences the Consequences name as made stale have each
+been rewritten by that code.
+
+Decision 1's durable-execution front, and the front decisions 3 and 9
+leave to it, belong to statifier_router and are not built yet; nothing
+on `main` here contradicts them. The Consequences bullet "Code builds
+against this record at proposed. It stays proposed until the code that
+implements it ships in a published version." is met here: the code
+shipped in 2.10.0 and the record is accepted. Each Amendment's own
+Status line, which says the record's Status is unchanged, speaks of what
+that Amendment changes and still holds as written.
