@@ -6,7 +6,9 @@ defmodule Statifier.Send.BasicHTTP.Transport.Httpc do
 
   This package's application list names none of them, so a host that
   registers nothing starts nothing. The adapter starts `:inets` and `:ssl`
-  itself on its first POST.
+  itself on its first POST, and checks that `:ssl` and `:public_key` can
+  be loaded; when they cannot, the POST answers `{:error, reason}` and the
+  processor reports the miss.
 
   For an `https` URL it verifies the peer (`verify: :verify_peer`) against
   the system CA store (`:public_key.cacerts_get/0`) and checks the host
@@ -63,7 +65,25 @@ defmodule Statifier.Send.BasicHTTP.Transport.Httpc do
   defp ensure_started do
     with {:ok, _inets} <- Application.ensure_all_started(:inets),
          {:ok, _ssl} <- Application.ensure_all_started(:ssl),
-         do: :ok
+         do: ensure_loaded([:ssl, :public_key])
+  end
+
+  # `:httpc` calls into `:public_key` on every request, `http:` included,
+  # and an application that reports itself started can still have modules
+  # the code path cannot load (a Mix task whose path was pruned, for one).
+  # A module that cannot load answers `{:error, {:not_loadable, module,
+  # reason}}`, so the processor reports a miss instead of crashing the
+  # sending session. Internal; public only so its refusal can be tested
+  # with a module that does not exist.
+  @doc false
+  @spec ensure_loaded(modules :: [module()]) :: :ok | {:error, term()}
+  def ensure_loaded(modules) do
+    Enum.reduce_while(modules, :ok, fn module, :ok ->
+      case Code.ensure_loaded(module) do
+        {:module, ^module} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, {:not_loadable, module, reason}}}
+      end
+    end)
   end
 
   @spec content_type(headers :: [{String.t(), String.t()}]) ::

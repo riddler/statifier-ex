@@ -25,7 +25,7 @@ defmodule Statifier.Send.BasicHTTPTest do
         data: :undefined,
         send_id: "send_1",
         c_index: 3,
-        owner: {:state, 1},
+        owner: {:onentry, 2, 0},
         macrostep: 1,
         microstep: 1,
         round: 0,
@@ -48,6 +48,9 @@ defmodule Statifier.Send.BasicHTTPTest do
     post
   end
 
+  defp content_type(post), do: post.headers |> List.keyfind("content-type", 0) |> elem(1)
+  defp send_key(post), do: post.headers |> List.keyfind("scxml-send-key", 0) |> elem(1)
+
   describe "deliver/3: the outbound mapping (C.2.2)" do
     # sabotage: `post/2` leaves `_scxmleventname` out of `named` -> the body
     # carries the params alone and the equality reddens. Confirmed red and
@@ -56,7 +59,7 @@ defmodule Statifier.Send.BasicHTTPTest do
       post = planned(send_effect(data: %{"Var1" => 2, "name" => "two words"}))
 
       assert post.url == @target
-      assert post.headers == [{"content-type", @form}]
+      assert content_type(post) == @form
 
       assert URI.decode_query(post.body) == %{
                "_scxmleventname" => "ping",
@@ -71,7 +74,7 @@ defmodule Statifier.Send.BasicHTTPTest do
     test "a send with no parameters and no content sends the event name alone" do
       post = planned(send_effect(data: :undefined))
 
-      assert post.headers == [{"content-type", @form}]
+      assert content_type(post) == @form
       assert post.body == "_scxmleventname=ping"
     end
 
@@ -81,7 +84,7 @@ defmodule Statifier.Send.BasicHTTPTest do
       post = planned(send_effect(data: "some content"))
 
       assert post.url == @target <> "?_scxmleventname=ping"
-      assert post.headers == [{"content-type", "text/plain"}]
+      assert content_type(post) == "text/plain"
       assert post.body == "some content"
     end
 
@@ -132,7 +135,7 @@ defmodule Statifier.Send.BasicHTTPTest do
       assert BasicHTTP.deliver(effect, Event.external("ping"), ctx()) ==
                {:ok,
                 [
-                  {:raise, :platform, "error.communication", {:content, 3, {:state, 1}},
+                  {:raise, :platform, "error.communication", {:content, 3, {:onentry, 2, 0}},
                    sendid: "send_1"}
                 ]}
     end
@@ -154,6 +157,50 @@ defmodule Statifier.Send.BasicHTTPTest do
 
       assert {:ok, [{:handler, BasicHTTP, {:post_after, 250, %{url: @target, send: ^delayed}}}]} =
                BasicHTTP.deliver(delayed, Event.external("ping"), ctx())
+    end
+
+    # sabotage: `send_key/2` leaves out `ordinal` -> the value has seven
+    # fields and both equalities redden. Confirmed red and reverted.
+    test "every POST carries the send's dedup key, form body or content body" do
+      key = "sess_sender/send_1/1/1/0/3/onentry.2.0/1"
+
+      assert send_key(planned(send_effect(data: %{"a" => 1}))) == key
+      assert send_key(planned(send_effect(data: "some content"))) == key
+    end
+
+    # sabotage: `escape/1` returns the value unencoded -> the send id's
+    # `/` and space survive and the equality reddens. Confirmed red and
+    # reverted.
+    test "the key escapes the session scope and send id and spells a transition owner" do
+      effect =
+        send_effect(
+          send_id: "a/b c",
+          owner: {:transition, 4},
+          macrostep: 7,
+          microstep: 2,
+          round: 1,
+          ordinal: 9
+        )
+
+      assert send_key(planned(effect, %{session_id: "sess/x"})) ==
+               "sess%2Fx/a%2Fb%20c/7/2/1/3/transition.4/9"
+    end
+
+    # sabotage: the `SendDelayed` clause of `deliver/3` builds its request
+    # with `headers: []` -> no key travels and the membership assertion
+    # reddens. Confirmed red and reverted.
+    test "a delayed send's POST carries its key too" do
+      delayed =
+        struct!(
+          SendDelayed,
+          Map.from_struct(send_effect(owner: {:onexit, 5, 1}, ordinal: 4))
+          |> Map.put(:delay_ms, 250)
+        )
+
+      assert {:ok, [{:handler, BasicHTTP, {:post_after, 250, post}}]} =
+               BasicHTTP.deliver(delayed, Event.external("ping"), ctx())
+
+      assert {"scxml-send-key", "sess_sender/send_1/1/1/0/3/onexit.5.1/4"} in post.headers
     end
 
     # sabotage: `cancel/2` returns `{:ok, []}` -> no cancel instruction is
@@ -239,6 +286,28 @@ defmodule Statifier.Send.BasicHTTPTest do
 
       assert {:ok, %Event{name: "HTTP.POST", data: "plain words"}} =
                BasicHTTP.decode(request(%{content_type: nil, body: "plain   words"}))
+    end
+
+    # sabotage: `sendid/1` answers `{:ok, nil}` for every value -> the
+    # well-formed key sets no `sendid` and the first match reddens.
+    # Confirmed red and reverted.
+    test "a well-formed scxml-send-key sets the event's sendid to its send id" do
+      assert {:ok, %Event{sendid: "a/b c"}} =
+               BasicHTTP.decode(request(%{send_key: "sess_1/a%2Fb%20c/1/1/0/3/onentry.2.0/1"}))
+
+      assert {:ok, %Event{sendid: nil}} = BasicHTTP.decode(request(%{send_key: nil}))
+      assert {:ok, %Event{sendid: nil}} = BasicHTTP.decode(request(%{}))
+    end
+
+    # sabotage: `sendid/1` accepts any field count (the `with` pattern
+    # matches `[_scope, send_id | _rest]`) -> the short key decodes and
+    # the equality reddens. Confirmed red and reverted.
+    test "a malformed scxml-send-key is refused" do
+      assert BasicHTTP.decode(request(%{send_key: "sess_1/x/1"})) ==
+               {:error, {:malformed_send_key, "sess_1/x/1"}}
+
+      assert BasicHTTP.decode(request(%{send_key: "s/%FF/1/1/0/3/transition.1/1"})) ==
+               {:error, {:malformed_send_key, "s/%FF/1/1/0/3/transition.1/1"}}
     end
 
     # sabotage: `post_only/1` answers `:ok` for every method -> a GET

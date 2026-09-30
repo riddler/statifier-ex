@@ -10,7 +10,10 @@ defmodule Mix.Statifier.BasicHTTPFront do
   A request to that location is resolved to the live session registered
   under the id in `Statifier.Registry`, decoded by
   `Statifier.Send.BasicHTTP.decode/1`, and enqueued on the session as an
-  external event. The status rule is the decoder's (ADR-0075 decision 5):
+  external event, with the request's `scxml-send-key` header handed to the
+  decoder. This front does not deduplicate on that header (ADR-0075's
+  Amendment of 2026-09-30 leaves that to a front that outlives a restart).
+  The status rule is the decoder's (ADR-0075 decision 5):
 
     - 204 once the event is enqueued, before it is processed;
     - 405 with `Allow: POST` for any other method;
@@ -74,9 +77,12 @@ defmodule Mix.Statifier.BasicHTTPFront do
   def respond(mod_data) do
     %URI{path: path, query: query} = mod_data |> mod(:request_uri) |> to_string() |> URI.parse()
 
+    headers = mod(mod_data, :parsed_header)
+
     request = %{
       method: mod_data |> mod(:method) |> to_string(),
-      content_type: content_type(mod(mod_data, :parsed_header)),
+      content_type: header(headers, ~c"content-type"),
+      send_key: header(headers, ~c"scxml-send-key"),
       body: mod_data |> mod(:entity_body) |> IO.iodata_to_binary(),
       query: query
     }
@@ -112,9 +118,9 @@ defmodule Mix.Statifier.BasicHTTPFront do
     end
   end
 
-  @spec content_type(headers :: [{charlist(), charlist()}]) :: String.t() | nil
-  defp content_type(headers) do
-    case List.keyfind(headers, ~c"content-type", 0) do
+  @spec header(headers :: [{charlist(), charlist()}], name :: charlist()) :: String.t() | nil
+  defp header(headers, name) do
+    case List.keyfind(headers, name, 0) do
       {_name, value} -> to_string(value)
       nil -> nil
     end

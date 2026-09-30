@@ -65,8 +65,21 @@ defmodule Statifier.Send.BasicHTTP do
   returns `{:error, reason}`. When no live session is registered under that
   id it returns `{:error, reason}` only, and the dead-letter rule of
   `failed_send/3`'s documentation is the host's (ADR-0075 decision 8, point
-  d). The processor keeps no memory across `perform/2` calls, so a host
-  that performs the same instruction twice POSTs twice.
+  d).
+
+  **At-least-once, deduplicated by the receiver** (ADR-0075's Amendment of
+  2026-09-30). The processor keeps no memory across `perform/2` calls, so
+  a host that performs the same instruction twice POSTs twice. Every POST
+  therefore carries the send's ADR-0054 decision 3 dedup key in the
+  `scxml-send-key` header: eight fields joined by `/`, in the record's
+  order - the session scope (the plan context's `session_id`), the send
+  id, `macrostep`, `microstep`, `round`, `c_index`, `owner` and `ordinal`.
+  The session scope and the send id are percent-encoded (every byte outside
+  RFC 3986's unreserved set), the counters are decimal, and `owner` is
+  spelled `onentry.S.B`, `onexit.S.B`, `transition.T` or `finalize.S.B`
+  with its indexes. A receiver that deduplicates on the header sees each
+  send once, which is ADR-0069's idempotency MUST end to end; a receiver
+  that ignores it sees at-least-once delivery.
 
   `perform/2` runs in the process that performs the instruction, which for
   `Statifier.Session` is the sending session, so a slow location holds that
@@ -90,7 +103,8 @@ defmodule Statifier.Send.BasicHTTP do
   an external event. The status rule a front applies (ADR-0075 decision 5):
 
     - `{:ok, event}` - answer 204 once the event is enqueued, before it is
-      processed;
+      processed (a front that has already enqueued a request carrying the
+      same `scxml-send-key` answers 204 again and enqueues nothing);
     - `{:error, {:method_not_allowed, method}}` - answer 405 with
       `Allow: POST`;
     - any other `{:error, _}` - answer 400;
@@ -106,21 +120,27 @@ defmodule Statifier.Send.BasicHTTP do
   @uri "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
   @event_name_param "_scxmleventname"
   @form "application/x-www-form-urlencoded"
+  @send_key_header "scxml-send-key"
 
   @typedoc """
   What `decode/1` is handed: the request's method, its content type (`nil`
-  when the request carries none), its body, and its query string (`nil`
-  when the URL has none).
+  when the request carries none), its body, its query string (`nil` when
+  the URL has none), and optionally the value of its `scxml-send-key`
+  header (`nil` or absent when the request carries none).
   """
   @type request :: %{
           required(:method) => String.t(),
           required(:content_type) => String.t() | nil,
           required(:body) => binary(),
-          required(:query) => String.t() | nil
+          required(:query) => String.t() | nil,
+          optional(:send_key) => String.t() | nil
         }
 
   @typedoc "Why `decode/1` could not form an event from a request."
-  @type decode_error :: {:method_not_allowed, String.t()} | {:not_utf8, :query | :body}
+  @type decode_error ::
+          {:method_not_allowed, String.t()}
+          | {:not_utf8, :query | :body}
+          | {:malformed_send_key, String.t()}
 
   @typep post :: %{
            url: String.t(),
@@ -227,6 +247,11 @@ defmodule Statifier.Send.BasicHTTP do
       same text rung, and the query string then contributes the event name
       only.
     - `origintype` is the processor URI.
+    - A well-formed `:send_key` (the `scxml-send-key` header's eight
+      fields) sets the event's `sendid` to the key's send id, which 5.10.1
+      asks for when the sending entity specified one; the front
+      deduplicates on the header's whole value. A malformed one is
+      `{:error, {:malformed_send_key, value}}`.
 
   A query string or a body that is not UTF-8 once decoded forms no
   datamodel string, and is `{:error, {:not_utf8, :query | :body}}`.
@@ -235,7 +260,8 @@ defmodule Statifier.Send.BasicHTTP do
   def decode(%{method: method} = request) do
     with :ok <- post_only(method),
          {:ok, query} <- pairs(Map.get(request, :query), :query),
-         {:ok, body, text} <- body(request) do
+         {:ok, body, text} <- body(request),
+         {:ok, sendid} <- sendid(Map.get(request, :send_key)) do
       {names, params} = Enum.split_with(query ++ body, &match?({@event_name_param, _value}, &1))
 
       name =
@@ -244,7 +270,23 @@ defmodule Statifier.Send.BasicHTTP do
           [] -> "HTTP." <> String.upcase(method)
         end
 
-      {:ok, Event.external(name, data: data(params, text), origintype: @uri)}
+      {:ok, Event.external(name, data: data(params, text), origintype: @uri, sendid: sendid)}
+    end
+  end
+
+  # The send id a well-formed `scxml-send-key` value names (its second
+  # field), or `nil` when the request carries none.
+  @spec sendid(send_key :: String.t() | nil) :: {:ok, String.t() | nil} | {:error, decode_error()}
+  defp sendid(nil), do: {:ok, nil}
+
+  defp sendid(send_key) do
+    with [_scope, send_id, _macro, _micro, _round, _c_index, _owner, _ordinal] <-
+           String.split(send_key, "/"),
+         decoded = URI.decode(send_id),
+         true <- String.valid?(decoded) do
+      {:ok, decoded}
+    else
+      _malformed -> {:error, {:malformed_send_key, send_key}}
     end
   end
 
@@ -316,12 +358,44 @@ defmodule Statifier.Send.BasicHTTP do
 
     %{
       url: url,
-      headers: [{"content-type", content_type}],
+      headers: [{"content-type", content_type}, {@send_key_header, send_key(send, ctx)}],
       body: body,
       transport: ctx |> Map.get(:opts, []) |> Keyword.get(:transport, Transport.Httpc),
       send: send
     }
   end
+
+  # The ADR-0054 decision 3 dedup key, spelled as ADR-0075's Amendment of
+  # 2026-09-30 states (see the moduledoc's "At-least-once").
+  @spec send_key(send :: Effect.Send.t() | Effect.SendDelayed.t(), ctx :: map()) :: String.t()
+  defp send_key(send, %{session_id: session_id}) do
+    Enum.join(
+      [
+        escape(session_id),
+        escape(send.send_id),
+        field(send.macrostep),
+        field(send.microstep),
+        field(send.round),
+        field(send.c_index),
+        owner(send.owner),
+        field(send.ordinal)
+      ],
+      "/"
+    )
+  end
+
+  @spec escape(value :: String.t() | nil) :: String.t()
+  defp escape(nil), do: ""
+  defp escape(value), do: URI.encode(value, &URI.char_unreserved?/1)
+
+  @spec field(value :: non_neg_integer() | nil) :: String.t()
+  defp field(nil), do: ""
+  defp field(value), do: Integer.to_string(value)
+
+  @spec owner(owner :: Statifier.Machine.Content.owner() | nil) :: String.t()
+  defp owner({kind, state, block}), do: "#{kind}.#{state}.#{block}"
+  defp owner({:transition, transition}), do: "transition.#{transition}"
+  defp owner(nil), do: ""
 
   @spec form(pairs :: [{String.t(), String.t()}]) :: String.t()
   defp form(pairs), do: URI.encode_query(pairs, :www_form)

@@ -1,5 +1,6 @@
 ### Added
 
 - The W3C Basic HTTP Event I/O Processor, `Statifier.Send.BasicHTTP`: register it in `:send_types` under `http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor` and `basichttp` as `{Statifier.Send.BasicHTTP, base_url: ...}`, and both `_ioprocessors` keys carry one location, the base URL and the session id. A registration without `:base_url` is refused when the session starts. Sends POST through an injectable `Statifier.Send.BasicHTTP.Transport` (OTP `:httpc` by default; no new dependency); a delayed send is the processor's timer and a `<cancel>` stops it. `decode/1` turns a request into an event for a host's own front, and a failed delivery raises `error.communication` on the sender.
+- Every Basic HTTP POST carries the send's dedup key in an `scxml-send-key` header, so a receiver that deduplicates on it delivers each send once; `decode/1` takes the header's value as `:send_key` and sets the event's `sendid` from it.
 - A `:send_types` value may now be `{module, opts}`: the options reach the processor's callbacks under the plan context's `:opts` key and are recorded as strings. A processor may implement the optional `ioprocessors_entry/2`, which receives the session id and the options.
 - `Statifier.Testing.Case.test_scxml/5` takes a `:send_types` option.
