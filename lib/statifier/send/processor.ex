@@ -93,13 +93,32 @@ defmodule Statifier.Send.Processor do
   `Statifier.MachineState.new/2` writes it, once, when the session starts;
   `Statifier.Send.Types.from_send_types/1` says how it reads after a resume.
 
+  An entry that must address one session, such as a location a receiver
+  POSTs to, cannot be built from the type alone. A processor that
+  implements the optional `c:Statifier.Send.Processor.ioprocessors_entry/2`
+  is asked for its entry with the type string and a context carrying the
+  session id and the registration's options, when the session starts
+  (ADR-0075 decision 3); it is asked instead of `/1`, and a processor that
+  implements only `/1` is asked as before.
+
+  ## Registration options
+
+  A `:send_types` value is a bare module or `{module, opts}` (ADR-0075
+  decision 8, point b). The options reach
+  `c:Statifier.Send.Processor.ioprocessors_entry/2`'s context as `:opts`
+  and, for a `{module, opts}` registration only, the plan context
+  `deliver/3` and `cancel/2` receive, under `:opts`. A bare-module
+  registration's plan context carries no `:opts` key, exactly as before.
+
   ## `ctx`
 
   The plan context `Statifier.Session.Effects.plan/2` threads through its
   fold, handed over unchanged: a plain map carrying `session_id` (spec
   5.10's `_sessionid`) and no pid, no `%MachineState{}` and no session
   struct, so a processor cannot reach into the session through it. A key
-  added to it later is additive for every processor already written.
+  added to it later is additive for every processor already written:
+  `:opts`, a `{module, opts}` registration's options, is one (see
+  "Registration options" above).
   """
 
   alias Statifier.{Effect, Event}
@@ -150,5 +169,25 @@ defmodule Statifier.Send.Processor do
   """
   @callback ioprocessors_entry(type :: String.t()) :: map()
 
-  @optional_callbacks perform: 2, ioprocessors_entry: 1
+  @typedoc """
+  What `c:Statifier.Send.Processor.ioprocessors_entry/2` is handed beside the
+  type string: the session's `_sessionid` and the registration's options
+  (`[]` for a bare-module registration).
+  """
+  @type entry_context :: %{session_id: String.t(), opts: keyword()}
+
+  @doc """
+  The value of this processor's `_ioprocessors` entry for the registered
+  type string `type` in the session `context` names (ADR-0075 decision 3):
+  for example a `"location"` built from the session id and a base URL in
+  the registration's options. Called once, when the session starts, and
+  asked instead of `c:Statifier.Send.Processor.ioprocessors_entry/1` when
+  a processor implements both. Pure and deterministic, and string-keyed at
+  every level, as `c:Statifier.Send.Processor.ioprocessors_entry/1` is. A
+  processor that cannot build its entry from `context` raises
+  `ArgumentError`, which refuses the session's start. Optional.
+  """
+  @callback ioprocessors_entry(type :: String.t(), context :: entry_context()) :: map()
+
+  @optional_callbacks perform: 2, ioprocessors_entry: 1, ioprocessors_entry: 2
 end

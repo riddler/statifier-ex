@@ -171,7 +171,7 @@ defmodule Statifier.Replay do
             # plan context's `send_processors` for the same reason
             # `invoke_handlers` is, and the live holds `Statifier.Session`
             # keeps for its cancel routing, kept here by the same rule.
-            send_processors: %{String.t() => module()},
+            send_processors: %{String.t() => SendTypes.registration()},
             held_sends: Effects.held_sends()
           }
   end

@@ -78,8 +78,11 @@ defmodule Statifier.Send.Target do
   ("Processors MAY define short form notations") - a MAY this codebase
   chose to honor, not a MUST - and the processor's own type URI
   (`SystemVariables.scxml_event_processor/0`) is the long form. Anything
-  else is unsupported: this engine implements only the SCXML Event I/O
-  Processor (see the plan's "What We're NOT Doing" on BasicHTTP).
+  else is not built in: the SCXML Event I/O Processor is the one processor
+  this engine delivers for itself. Any other type, the Basic HTTP Event I/O
+  Processor (`Statifier.Send.BasicHTTP`, ADR-0075) included, is supported
+  only when a host registers it (`Statifier.Send.Types.classify/2`,
+  ADR-0069).
   """
   @spec supported_type?(type :: String.t() | nil) :: boolean()
   def supported_type?(nil), do: true
