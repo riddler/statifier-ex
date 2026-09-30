@@ -610,7 +610,9 @@ Statifier.Session.start_link(machine,
 ```
 
 `:send_types` is a `%{type_string => module}` map, each module a
-`Statifier.Send.Processor`. The default is `%{}`, which registers nothing:
+`Statifier.Send.Processor`; a value may also be `{module, opts}`, whose
+options reach the processor (`Statifier.Send.Processor`'s "Registration
+options"). The default is `%{}`, which registers nothing:
 only the built-in spellings are supported, and with no `:send_types` passed
 nothing observable changes. The session derives the registered set from
 the map's own keys through `Statifier.Send.Types.from_send_types/1`, the one
@@ -774,7 +776,10 @@ a session supports, and a registered type is one. A session registering
 
 The entry is keyed by the type string, and its value is the map your
 processor's optional `ioprocessors_entry/1` returns for that type - an
-empty map when it does not implement the callback. The value must be
+empty map when it does not implement the callback. A processor whose
+entry must address the session, such as a location a receiver POSTs to,
+implements the optional `ioprocessors_entry/2` instead, which is handed
+the session id and the registration's options. The value must be
 string-keyed at every level, as every datamodel value is;
 `Statifier.Send.Types.from_send_types/1` raises `ArgumentError` otherwise,
 so a bad value fails the session's start. The SCXML processor's own entry,
@@ -787,6 +792,15 @@ driver's re-stamp of `send_types` on a resume replaces the classifier's set
 and does not rewrite `_ioprocessors`. Re-stamp the set the session started
 with; a different set after a resume would need mid-session registration,
 which ADR-0069 names as a trigger that would reopen it.
+
+### The Basic HTTP processor
+
+The library ships one registered processor of its own:
+`Statifier.Send.BasicHTTP`, SCXML appendix C.2's Basic HTTP Event I/O
+Processor, which delivers a send as an HTTP POST and turns a POST your
+host's front receives into an event. [The Basic HTTP Event I/O
+Processor](basichttp.md) says how to register it, the front your host
+writes around its decoder, and the mapping both ways.
 
 ### After a resume
 

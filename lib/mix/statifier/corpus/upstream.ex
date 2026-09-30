@@ -29,10 +29,14 @@ defmodule Mix.Statifier.Corpus.Upstream do
   the Apache License 2.0's section 4(b) requires of a modified file. A W3C
   case carries the transformed document as
   `Mix.Statifier.Corpus.XmlFormat` formats it, and the IRP's own expectation:
-  a test passes by reaching the final state `pass` with no event sent.
+  a test passes by reaching the final state `pass` with no event sent. A W3C
+  document that names an Event I/O Processor the corpus host runs as a
+  `<send>`'s type (`Mix.Statifier.Corpus.HostCase.event_io_processors/1`)
+  also carries a `host` object whose one key, `event_io_processors`, names
+  it (ADR-0075 decision 7): the host delivers through it.
   """
 
-  alias Mix.Statifier.Corpus.{Files, XmlFormat}
+  alias Mix.Statifier.Corpus.{Files, HostCase, XmlFormat}
   alias Statifier.Testing.FeatureDetector
 
   @scion_notice "LICENSES/Apache-2.0.txt"
@@ -243,7 +247,7 @@ defmodule Mix.Statifier.Corpus.Upstream do
     with {:ok, description} <- Files.read(Path.rootname(input) <> ".description"),
          {:ok, uri} <- fetch_uri(uris, name) do
       {:ok,
-       %{
+       put_host(%{
          "id" => "w3c/#{name}",
          "suite" => "w3c",
          "spec" => spec,
@@ -258,7 +262,14 @@ defmodule Mix.Statifier.Corpus.Upstream do
            "license" => "BSD-3-Clause-W3C",
            "notice" => @w3c_notice
          }
-       }}
+       })}
+    end
+  end
+
+  defp put_host(%{"source" => source} = corpus_case) do
+    case HostCase.event_io_processors(source) do
+      [] -> corpus_case
+      uris -> Map.put(corpus_case, "host", %{"event_io_processors" => uris})
     end
   end
 

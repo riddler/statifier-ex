@@ -57,10 +57,30 @@ defmodule Mix.Statifier.Corpus.HostCase do
   decision 6), so the test suite compares those four keys
   (`test/corpus/diff_cases_test.exs`), through `run/2`'s `:after_steps`
   option for the position the steps leave.
+
+  A host object may carry `event_io_processors`, the one host key a `w3c`
+  case may carry (ADR-0075 decision 7): the Event I/O Processor URIs the
+  host runs with a location that reaches the running session. For each one
+  the runner starts a loopback front (`Mix.Statifier.BasicHTTPFront`) and
+  registers the processor under its URI and its short form with the
+  front's base URL, beside the case's `send_types`, so every send to it is
+  delivered through the front and none is handed to the recording
+  processor (`with_event_io_processors/2`). The front is stopped when the
+  case ends. The item set is closed; its one member is the Basic HTTP
+  Event I/O Processor, `Statifier.Send.BasicHTTP`.
   """
 
+  alias Mix.Statifier.BasicHTTPFront
   alias Mix.Statifier.Corpus.HostCase.Processor
   alias Statifier.{MachineState, Session}
+
+  @basic_http "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
+
+  # The closed item set of `host.event_io_processors`
+  # (conformance/schema/case.json): each URI with the processor module and
+  # the short form it is registered under beside the URI (ADR-0075
+  # decision 2).
+  @event_io_processors %{@basic_http => {Statifier.Send.BasicHTTP, "basichttp"}}
 
   @settle_window_ms 100
   @configuration_deadline_ms 4_000
@@ -87,22 +107,82 @@ defmodule Mix.Statifier.Corpus.HostCase do
       session_id = MachineState.generate_session_id()
       :yes = :global.register_name({Processor, session_id}, self())
 
-      send_types = Map.new(Map.get(host, "send_types", []), &{&1, Processor})
+      recorded = Map.new(Map.get(host, "send_types", []), &{&1, Processor})
 
-      {:ok, session} =
-        Statifier.start_session(machine,
-          session_id: session_id,
-          send_types: send_types,
-          subscribers: [self()]
-        )
+      with_event_io_processors(Map.get(host, "event_io_processors", []), fn delivering ->
+        {:ok, session} =
+          Statifier.start_session(machine,
+            session_id: session_id,
+            send_types: Map.merge(recorded, delivering),
+            subscribers: [self()]
+          )
 
-      try do
-        after_steps = Keyword.get(opts, :after_steps, fn _settled -> :ok end)
-        drive(session, corpus_case, Map.get(host, "expect_sends", []), after_steps)
-      after
-        Session.stop(session)
-        :global.unregister_name({Processor, session_id})
-      end
+        try do
+          after_steps = Keyword.get(opts, :after_steps, fn _settled -> :ok end)
+          drive(session, corpus_case, Map.get(host, "expect_sends", []), after_steps)
+        after
+          Session.stop(session)
+          :global.unregister_name({Processor, session_id})
+        end
+      end)
+    end
+  end
+
+  @doc """
+  The Event I/O Processor URIs of `host.event_io_processors`' closed item
+  set that `source` names as a `<send>`'s `type`, sorted: what a corpus
+  case transformed from `source` declares in `host.event_io_processors`.
+
+  ## Examples
+
+      iex> Mix.Statifier.Corpus.HostCase.event_io_processors(
+      ...>   ~s|<send type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" event="e"/>|
+      ...> )
+      ["http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"]
+
+      iex> Mix.Statifier.Corpus.HostCase.event_io_processors(~s|<send event="e"/>|)
+      []
+
+  """
+  @spec event_io_processors(source :: String.t()) :: [String.t()]
+  def event_io_processors(source) do
+    @event_io_processors
+    |> Map.keys()
+    |> Enum.filter(&Regex.match?(~r/<send\b[^>]*\btype="#{Regex.escape(&1)}"/, source))
+    |> Enum.sort()
+  end
+
+  @doc """
+  Runs `fun` with the `:send_types` entries that register every processor
+  `uris` names, delivering through a loopback front started for the call
+  and stopped when `fun` returns or raises; answers what `fun` answers.
+
+  Each processor is registered under its URI and its short form, with the
+  front's base URL as its `:base_url` (ADR-0075 decisions 2 and 3). With no
+  URI, no front is started and `fun` is handed an empty map. A URI outside
+  the closed set raises.
+  """
+  @spec with_event_io_processors(
+          uris :: [String.t()],
+          fun :: (%{String.t() => {module(), keyword()}} -> result)
+        ) :: result
+        when result: term()
+  def with_event_io_processors([], fun), do: fun.(%{})
+
+  def with_event_io_processors(uris, fun) do
+    {:ok, front} = BasicHTTPFront.start()
+
+    try do
+      uris
+      |> Enum.flat_map(fn uri ->
+        {module, short} = Map.fetch!(@event_io_processors, uri)
+        registration = {module, base_url: front.base_url}
+        [{uri, registration}, {short, registration}]
+      end)
+      |> Map.new()
+      |> fun.()
+    after
+      BasicHTTPFront.stop(front)
     end
   end
 

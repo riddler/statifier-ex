@@ -16,8 +16,8 @@ ADR-0053)
    127 native upstream SCION cases; the rest are excluded at generation time,
    with the count and the reason per case in `tools/corpus/scion/exclusions.exs`
    (see `tools/corpus/README.md`). Excluded by default.
-3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 156 emitted tests (154
-   mandatory + 2 optional) out of 193 upstream W3C cases. Excluded by default.
+3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 168 emitted tests (154
+   mandatory + 14 optional) out of 193 upstream W3C cases. Excluded by default.
    Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
    entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
 
@@ -299,13 +299,13 @@ printed. Surfacing the figures there would need a JSON summary mode for the
 task plus a guarded `.quality.exs` edit with its own ledger entry (see the
 "Which skipped stages" discipline in `CLAUDE.md`) - both out of scope here.
 
-The denominator behind both figures is the emitted corpus: 119 SCION and 156
+The denominator behind both figures is the emitted corpus: 119 SCION and 168
 W3C files on disk today (`test/scion_tests/`, `test/scxml_tests/` - the W3C
-figure is 154 `mandatory/` plus 2 `optional/`), not the upstream suites (127
+figure is 154 `mandatory/` plus 14 `optional/`), not the upstream suites (127
 native SCION cases, 193 W3C cases). The emitted count is
 the only one 100% is reachable against - some upstream cases have no
 predicator equivalent and are excluded at generation time (script tags, list
-concatenation, the BasicHTTP Event I/O Processor tree, and more), so no build
+concatenation, an `<invoke src>` the library never dereferences, and more), so no build
 of this engine could ever pass every upstream case under the predicator
 datamodel commitment (docs/datamodel.md). `tools/corpus/README.md` documents
 the exclusion counts and reasons; a future edit to those exclusions changes

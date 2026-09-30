@@ -126,7 +126,10 @@ Fetch and transform pull 198 W3C documents and 316 SCION cases (127 native + the
 `SCXMLTest.<Section>.<Name>`, `use Statifier.Case`, `@moduletag :scxml_w3`,
 `@tag required_features: [...]` read from the corpus case,
 inline XML heredoc (4-space base indent, the corpus case's source: pretty-printed from the transformed
-`.scxml`, comments stripped), and a single `test_scxml/4` call. `use
+`.scxml`, comments stripped), and a single `test_scxml/4` call; for a case
+whose `host` names an Event I/O Processor, the call is `test_scxml/5` inside
+`Mix.Statifier.Corpus.HostCase.with_event_io_processors/2`, which registers
+the processor behind a loopback front for the test. `use
 Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
 `test/support` compatibility shims over `Statifier.Testing.Case` and
 `Statifier.Testing.FeatureDetector`, the real modules promoted into `lib/`
@@ -134,8 +137,8 @@ Statifier.Case` and `Statifier.FeatureDetector` in generated output are the
 files need no regeneration on the promoting branch. Adopting the new names in
 generated output is a future regeneration's call, not something owed here. Of
 the 198 downloaded W3C documents, 5 are dependency documents an `<invoke>` loads at
-runtime rather than conformance cases, leaving 193 cases; 156 of those emit
-(154 mandatory + 2 optional), and the rest are filtered out (see below).
+runtime rather than conformance cases, leaving 193 cases; 168 of those emit
+(154 mandatory + 14 optional), and the rest are filtered out (see below).
 `test/scxml_tests/` is populated.
 
 The **SCION generator** produces `SCIONTest.<Spec>.<Name>Test`,
@@ -163,7 +166,7 @@ path-shape invariant directly so that class of drift fails a gate instead of
 waiting for a case-sensitive filesystem to surface it.
 
 `mix test.regression` and `mix test.baseline` report per-corpus coverage
-against these emitted counts (119 SCION, 156 W3C), not the upstream suite
+against these emitted counts (119 SCION, 168 W3C), not the upstream suite
 sizes above - see `docs/testing.md`'s regression ratchet section - so an edit
 to either exclusions file that changes what emits also changes what those
 tasks report as the denominator. `test/corpus/readme_counts_test.exs` pins
@@ -180,9 +183,15 @@ Three filters apply before a W3C case is emitted, all applied by
   untouched, so they keep their original datamodel and are out of scope for
   the predicator commitment (docs/datamodel.md).
 - **exclusions.exs**: tests with no predicator equivalent (script, list
-  concatenation, string prefix, and the BasicHTTP Event I/O Processor tree),
-  and tests that pass only when an `<invoke src>` is resolved, which the
-  library never does (ADR-0038), recorded with a reason atom per ADR-0004.
+  concatenation, string prefix), and tests that pass only when an
+  `<invoke src>` is resolved, which the library never does (ADR-0038),
+  recorded with a reason atom per ADR-0004. The Basic HTTP Event I/O
+  Processor's documents are not excluded: each is emitted with a `host`
+  object naming the processor in `event_io_processors`, and its generated
+  module registers the processor behind a loopback front
+  (`Mix.Statifier.Corpus.HostCase`, ADR-0075). `test201` among them is
+  emitted and left out of the ratchet, for the reason ADR-0075 decision 7
+  gives.
 - **sub_documents.exs**: manifest `<dep>` documents an `<invoke>` loads at
   runtime rather than a `<start>` document run as its own conformance test.
   This is a different category from `exclusions.exs`: an exclusion is a test
