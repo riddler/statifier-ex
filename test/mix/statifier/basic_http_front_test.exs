@@ -104,31 +104,46 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
   end
 
   describe "the dedup key" do
-    # sabotage: `BasicHTTPFront.respond/1` hands the decoder no
-    # `:send_key` -> the event carries no `sendid`, the conditioned
-    # transition never matches, and the chart reaches `fail`. Confirmed
-    # red and reverted.
-    test "reaches the decoder, which sets the event's sendid", %{front: front} do
+    # sabotage: `decode/1` sets the event's `sendid` from the key's second
+    # field -> the generated send id reaches `_event.sendid`, the first
+    # transition matches, and the chart reaches `fail`. Confirmed red and
+    # reverted.
+    test "a POST whose key names a generated send id delivers an event with no sendid",
+         %{front: front} do
       test_scxml(
         """
             <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
               <state id="s">
                 <onentry>
-                  <send type="basichttp" event="loop" id="once"
+                  <send type="basichttp" event="loop"
                         targetexpr="_ioprocessors['basichttp']['location']"/>
                 </onentry>
-                <transition event="loop" cond="_event.sendid == 'once'" target="pass"/>
+                <transition event="loop" cond="_event.sendid !== undefined" target="fail"/>
+                <transition event="loop" target="pass"/>
                 <transition event="*" target="fail"/>
               </state>
               <final id="pass"/>
               <final id="fail"/>
             </scxml>
         """,
-        "a send's key arrives with it",
+        "a generated send id is not the event's sendid",
         ["pass"],
         [],
         send_types: send_types(front)
       )
+    end
+
+    # sabotage: `BasicHTTPFront.respond/1` hands the decoder `send_key: nil`
+    # -> the malformed header is never checked, the POST is answered 204,
+    # and the match reddens. Confirmed red and reverted.
+    test "the front hands the header to the decoder, which refuses a malformed one",
+         %{front: front} do
+      {_session, session_id} = start_idle!(front)
+      url = String.to_charlist(front.base_url <> "/" <> session_id)
+      request = {url, [{~c"scxml-send-key", ~c"not/a/key"}], ~c"text/plain", "x"}
+
+      assert {:ok, {{_version, 400, _reason}, _headers, _body}} =
+               :httpc.request(:post, request, [], [])
     end
   end
 

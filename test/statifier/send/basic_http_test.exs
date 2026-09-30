@@ -288,18 +288,18 @@ defmodule Statifier.Send.BasicHTTPTest do
                BasicHTTP.decode(request(%{content_type: nil, body: "plain   words"}))
     end
 
-    # sabotage: `sendid/1` answers `{:ok, nil}` for every value -> the
-    # well-formed key sets no `sendid` and the first match reddens.
-    # Confirmed red and reverted.
-    test "a well-formed scxml-send-key sets the event's sendid to its send id" do
-      assert {:ok, %Event{sendid: "a/b c"}} =
-               BasicHTTP.decode(request(%{send_key: "sess_1/a%2Fb%20c/1/1/0/3/onentry.2.0/1"}))
+    # sabotage: `decode/1` sets the event's `sendid` from the key's second
+    # field -> the generated `send_3` reaches `sendid` and the first match
+    # reddens. Confirmed red and reverted.
+    test "a well-formed scxml-send-key sets no event field: sendid stays nil" do
+      assert {:ok, %Event{sendid: nil}} =
+               BasicHTTP.decode(request(%{send_key: "sess_1/send_3/1/1/0/3/onentry.2.0/1"}))
 
       assert {:ok, %Event{sendid: nil}} = BasicHTTP.decode(request(%{send_key: nil}))
       assert {:ok, %Event{sendid: nil}} = BasicHTTP.decode(request(%{}))
     end
 
-    # sabotage: `sendid/1` accepts any field count (the `with` pattern
+    # sabotage: `check_send_key/1` accepts any field count (the `with` pattern
     # matches `[_scope, send_id | _rest]`) -> the short key decodes and
     # the equality reddens. Confirmed red and reverted.
     test "a malformed scxml-send-key is refused" do
