@@ -1,8 +1,8 @@
-# Upgrading from 2.5 to 2.8.1: what a host changes
+# Upgrading from 2.5 to 2.10.0: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.8.1 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.10.0 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 [CHANGELOG.md](../CHANGELOG.md) says what the library changed; this page
@@ -121,3 +121,60 @@ needs the new behaviour requires `{:statifier, "~> 2.8 and >= 2.8.1"}`.
 
 **A host may start:** nothing new. The corpus changes follow 2.6.1's
 rule: a sibling implementation re-vendors at the `v2.8.1` tag.
+
+## 2.9.0
+
+**A host must change:** NONE. `Statifier.MachineState` gains a
+`last_selection` field, which a position blob does not carry, so a
+position saved under 2.8.1 restores as before.
+
+**A host may start:** running every publish-time check in one call.
+Requires `{:statifier, "~> 2.9"}`.
+
+- `Statifier.Publish.findings/2` takes a compiled chart and a declaration
+  of the host's `send_types:`, `invoke_types:` and `accepts:`, and answers
+  a list of findings, each naming its row of
+  [Publish-time checks](publish-time-checks.md) with a `kind`, a location
+  and its data. Like 2.7.0's functions, it refuses nothing: which finding
+  refuses a publish is your decision.
+- `Statifier.MachineState`'s `last_selection` reads `:selected` when the
+  last external event selected a transition, `:none` when it selected
+  none, and `nil` before any external event.
+
+## 2.10.0
+
+**A host must change:** NONE. A session that registers no send type sees
+nothing new: no request is made, nothing is started, and `_ioprocessors`
+holds the SCXML processor's entry alone. A `{:statifier, "~> 2.9"}`
+requirement already accepts 2.10.0.
+
+**A host may start:** the W3C Basic HTTP Event I/O Processor (ADR-0075).
+Requires `{:statifier, "~> 2.10"}`.
+
+- Register `{Statifier.Send.BasicHTTP, base_url: base}` in `:send_types`
+  under both of its type strings,
+  `"http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"` and
+  `"basichttp"`. Each string's `_ioprocessors` entry holds one
+  `"location"`: the base URL, `/`, and the session's `_sessionid`. A
+  registration without `:base_url` refuses the session's start with an
+  `ArgumentError`. The POSTs go through OTP's `:httpc` by default, and a
+  `:transport` option names your own `Statifier.Send.BasicHTTP.Transport`;
+  the package adds no dependency.
+- The processor receives nothing on its own: your front answers at the
+  base URL and hands each request to `Statifier.Send.BasicHTTP.decode/1`,
+  which answers the event to enqueue or the reason to refuse the request.
+- Every POST carries the send's deduplication key in an `scxml-send-key`
+  header. A front that enqueues a request only when it has not already
+  enqueued one with the same value delivers each send once; one that
+  ignores the header sees at-least-once delivery.
+- For a processor of your own, a `:send_types` value may now be
+  `{module, opts}`: the options reach `deliver/3` and `cancel/2` under the
+  plan context's `:opts` key. A processor may implement the optional
+  `ioprocessors_entry/2`, which receives the type string and a context
+  carrying the session id and the options, so its entry can address one
+  session. A bare-module registration behaves as it did in 2.9.0.
+
+The guide is [The Basic HTTP Event I/O Processor](basichttp.md). The
+conformance corpus claims the processor's W3C documents and its case
+schema gains `host.event_io_processors`; a sibling implementation
+re-vendors the corpus at the `v2.10.0` tag, which is not a host step.
