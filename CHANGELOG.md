@@ -10,6 +10,26 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.10.0] 2026-09-30
+
+A minor release, adding the W3C Basic HTTP Event I/O Processor as
+`Statifier.Send.BasicHTTP`, a send type a host registers per session; a
+session that registers nothing sees nothing new, and the package adds no
+dependency. A `:send_types` value may now be `{module, opts}`, and a
+processor may implement the optional `ioprocessors_entry/2`. The
+conformance corpus under `conformance/`, which is not part of the Hex
+package, claims eleven more W3C documents and its case schema gains
+`host.event_io_processors`; a sibling implementation that vendors the
+corpus re-vendors it at this version's tag.
+
+### Added
+
+- The W3C Basic HTTP Event I/O Processor, `Statifier.Send.BasicHTTP`: register it in `:send_types` under `http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor` and `basichttp` as `{Statifier.Send.BasicHTTP, base_url: ...}`, and both `_ioprocessors` keys carry one location, the base URL and the session id. A registration without `:base_url` is refused when the session starts. Sends POST through an injectable `Statifier.Send.BasicHTTP.Transport` (OTP `:httpc` by default; no new dependency); a delayed send is the processor's timer and a `<cancel>` stops it. `decode/1` turns a request into an event for a host's own front, and a failed delivery raises `error.communication` on the sender.
+- Every Basic HTTP POST carries the send's dedup key in an `scxml-send-key` header, so a receiver that deduplicates on it delivers each send once; `decode/1` takes the header's value as `:send_key` and refuses a malformed one, and sets no event field from it.
+- A `:send_types` value may now be `{module, opts}`: the options reach the processor's callbacks under the plan context's `:opts` key and are recorded as strings. A processor may implement the optional `ioprocessors_entry/2`, which receives the session id and the options.
+- `Statifier.Testing.Case.test_scxml/5` takes a `:send_types` option.
+- The conformance corpus claims eleven more W3C documents, the Basic HTTP Event I/O Processor's: test509, test510, test518, test519, test520, test522, test531, test532, test534, test567 and test577. test201 is in the corpus and unclaimed. The case schema gains `host.event_io_processors`, the Event I/O Processors a host runs with a location that reaches the session, and the one `host` key a W3C case may carry. A new guide, `docs/basichttp.md`.
+
 ## [2.9.0] 2026-09-25
 
 A minor release, adding two things a host can read. `Statifier.Publish.findings/2`
