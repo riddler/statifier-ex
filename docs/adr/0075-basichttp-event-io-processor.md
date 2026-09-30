@@ -366,8 +366,10 @@ nothing:
 
 Status: proposed (2026-09-30) - amends decision 4 (the outbound mapping)
 and decision 5 (the inbound decoder) by addition; every other decision,
-and the record's own Status above, are unchanged. Ruled by the operator,
-2026-09-30.
+and the record's own Status above, are unchanged. The header,
+at-least-once delivery and deduplication by the receiver were ruled by
+the operator, 2026-09-30; what the decoder does with the header is this
+record's.
 
 [ADR-0069](0069-host-registered-send-types.md) decision 4 binds every
 registered processor: "A processor MUST be idempotent on the ADR-0054
@@ -410,14 +412,14 @@ at-least-once delivery. The processor itself still keeps no memory across
 `perform/2` calls.
 
 **What the decoder does with it.** `decode/1`'s request map takes the
-header's value under an optional `:send_key` key. A well-formed value
-(eight `/`-separated fields whose second field percent-decodes to UTF-8)
-sets the event's `sendid` to that decoded send id, the field 5.10.1 sets
-"If the sending entity has specified a value for this"; a malformed one is
+header's value under an optional `:send_key` key, and sets no event field
+from it: an inbound event's `sendid` stays unset, as it is for a request
+without the header. A value that is not eight `/`-separated fields whose
+second field percent-decodes to UTF-8 is
 `{:error, {:malformed_send_key, value}}`, answered 400 by decision 5's
-status rule; an absent one leaves `sendid` unset, as before. The decoder
-does no deduplicating: it is pure and remembers nothing. A front
-deduplicates on the header's whole value, and a request it has already
+status rule; an absent one changes nothing. The decoder does no
+deduplicating: it is pure and remembers nothing. A front deduplicates on
+the `scxml-send-key` header's value itself, and a request it has already
 enqueued is answered 204 again with nothing enqueued. This repository's
 loopback front, which lives only as long as one test run, does not
 deduplicate; statifier_router's durable front, which must survive a

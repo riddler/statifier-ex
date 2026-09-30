@@ -247,11 +247,10 @@ defmodule Statifier.Send.BasicHTTP do
       same text rung, and the query string then contributes the event name
       only.
     - `origintype` is the processor URI.
-    - A well-formed `:send_key` (the `scxml-send-key` header's eight
-      fields) sets the event's `sendid` to the key's send id, which 5.10.1
-      asks for when the sending entity specified one; the front
-      deduplicates on the header's whole value. A malformed one is
-      `{:error, {:malformed_send_key, value}}`.
+    - `:send_key`, the `scxml-send-key` header's value, sets no event
+      field: the front deduplicates on the header's value itself, and the
+      event's `sendid` stays unset. A value that is not the header's eight
+      fields is `{:error, {:malformed_send_key, value}}`.
 
   A query string or a body that is not UTF-8 once decoded forms no
   datamodel string, and is `{:error, {:not_utf8, :query | :body}}`.
@@ -261,7 +260,7 @@ defmodule Statifier.Send.BasicHTTP do
     with :ok <- post_only(method),
          {:ok, query} <- pairs(Map.get(request, :query), :query),
          {:ok, body, text} <- body(request),
-         {:ok, sendid} <- sendid(Map.get(request, :send_key)) do
+         :ok <- check_send_key(Map.get(request, :send_key)) do
       {names, params} = Enum.split_with(query ++ body, &match?({@event_name_param, _value}, &1))
 
       name =
@@ -270,21 +269,20 @@ defmodule Statifier.Send.BasicHTTP do
           [] -> "HTTP." <> String.upcase(method)
         end
 
-      {:ok, Event.external(name, data: data(params, text), origintype: @uri, sendid: sendid)}
+      {:ok, Event.external(name, data: data(params, text), origintype: @uri)}
     end
   end
 
-  # The send id a well-formed `scxml-send-key` value names (its second
-  # field), or `nil` when the request carries none.
-  @spec sendid(send_key :: String.t() | nil) :: {:ok, String.t() | nil} | {:error, decode_error()}
-  defp sendid(nil), do: {:ok, nil}
+  # Checks an `scxml-send-key` value's shape (ADR-0075's Amendment of
+  # 2026-09-30); the decoder sets no event field from it.
+  @spec check_send_key(send_key :: String.t() | nil) :: :ok | {:error, decode_error()}
+  defp check_send_key(nil), do: :ok
 
-  defp sendid(send_key) do
+  defp check_send_key(send_key) do
     with [_scope, send_id, _macro, _micro, _round, _c_index, _owner, _ordinal] <-
            String.split(send_key, "/"),
-         decoded = URI.decode(send_id),
-         true <- String.valid?(decoded) do
-      {:ok, decoded}
+         true <- send_id |> URI.decode() |> String.valid?() do
+      :ok
     else
       _malformed -> {:error, {:malformed_send_key, send_key}}
     end
