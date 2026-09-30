@@ -517,3 +517,39 @@ a public function or a field to the position blob.
 `Statifier.Session.SendProcessorTest`'s "a resumed session" case pins the
 resume half: the cancel's effect reaches a subscriber and no processor is
 called. Cites read at `f2b7431`.
+
+## Note (2026-09-30): the corpus names non-built-in send types, and ADR-0075 answers the reopen trigger
+
+The Consequences give a reason that no longer holds as written: "No
+conformance result moves: the corpus names no type outside the built-in
+set." Documents in the corpus, and one excluded from it, name a type
+outside the built-in set in a literal `type` attribute. Read at
+`dc1900d0`:
+
+- **W3C test199** (`w3c/test199` in `conformance/corpus/w3c.json`,
+  mandatory, `test/scxml_tests/mandatory/send/test199_test.exs`) sends
+  with `type="27"` and expects `error.execution`. It runs with no
+  registration and is in `test/passing_tests.json`: decision 3's core
+  refusal is the result it expects, so no result moved for it.
+- **W3C test201** names the Basic HTTP Event I/O Processor's URI. It is
+  one of the twelve documents excluded as `:needs_basichttp`
+  (`tools/corpus/scxml_w3/exclusions.exs`), and it is not generated at
+  `dc1900d0`: it is absent from `conformance/corpus/w3c.json` and from
+  `test/scxml_tests/optional/`. ADR-0070 decision 5 recorded it as
+  generated at `abf713c`.
+- **The statifier suite** (`conformance/corpus/statifier.json`) names
+  `library:notice`, `library:route`, `library:timer`, `myapp:sink` and
+  `myapp:unregistered` in literal `type` attributes. The cases that
+  register the first four declare them in `host.send_types`
+  ([ADR-0070](0070-statifier-emits-a-language-neutral-conformance-corpus.md)
+  decision 5 and its 2026-09-23 Amendment), so the corpus has named
+  registered types since those cases were authored.
+
+The reopen trigger "a corpus document naming a non-built-in send type" is
+answered by
+[ADR-0075](0075-basichttp-event-io-processor.md), at proposed: the Basic
+HTTP Event I/O Processor is a registered send type in this record's
+sense, and the twelve documents enter the corpus with a host declaration.
+When that record is implemented, conformance results move. That is where
+the answer lives. This note decides nothing: no decision or consequence
+of this record changes, and the Status line stands as written.
