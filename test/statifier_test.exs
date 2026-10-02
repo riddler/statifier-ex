@@ -411,4 +411,65 @@ defmodule StatifierTest do
       assert Machine.compile_opts(machine) == []
     end
   end
+
+  describe "compile/1 - a <send> <param>'s expr and location" do
+    defp loan_chart(param) do
+      """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="lending">
+          <datamodel>
+              <data id="stock" expr="3"/>
+          </datamodel>
+          <state id="lending">
+              <onentry>
+                  <send event="loan.requested">
+                      #{param}
+                  </send>
+              </onentry>
+          </state>
+      </scxml>
+      """
+    end
+
+    defp sent_data(machine) do
+      {_machine_state, effects} = Statifier.initialize(machine)
+
+      [data] = for {:send, %Statifier.Effect.Send{data: data}} <- effects, do: data
+
+      data
+    end
+
+    # sabotage: `Checks.Param`'s `send_params/1` reports every `<send>`
+    # `<param>` as `param_expr_and_location` instead of passing it to
+    # `check_param/1` -> the refusal arrives under the wrong reason and the
+    # `{:param_no_value, "copies"}` match reddens (dropping the send arm
+    # altogether brings back the `FunctionClauseError` raise this test names)
+    test "a <param> with neither attribute is refused as a value, not raised" do
+      xml = loan_chart(~s(<param name="copies"/>))
+
+      assert {:error, [%Statifier.Validator.Error{reason: {:param_no_value, "copies"}}]} =
+               Statifier.compile(xml)
+    end
+
+    # sabotage: `Checks.Param.check/2`'s `++ send_params(document)` arm is
+    # dropped -> the `<param>` carrying both attributes compiles again (taking `location`),
+    # `Statifier.compile/1` answers {:ok, %Machine{}} and the {:error, _}
+    # match reddens
+    test "a <param> with both attributes is refused" do
+      xml = loan_chart(~s(<param name="copies" expr="2" location="stock"/>))
+
+      assert {:error, [%Statifier.Validator.Error{reason: {:param_expr_and_location, "copies"}}]} =
+               Statifier.compile(xml)
+    end
+
+    # sabotage: `Checks.Param`'s `send_params/1` maps every `<send>` `<param>`
+    # to a `param_no_value` error -> `Statifier.compile/1` refuses this
+    # well-formed chart and the {:ok, machine} match reddens
+    test "a <param> with only expr or only location compiles and sends its value" do
+      xml =
+        loan_chart(~s(<param name="copies" expr="2"/><param name="stock" location="stock"/>))
+
+      assert {:ok, machine} = Statifier.compile(xml)
+      assert sent_data(machine) == %{"copies" => 2, "stock" => 3}
+    end
+  end
 end

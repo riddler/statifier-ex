@@ -167,4 +167,102 @@ defmodule Statifier.Validator.Checks.ParamTest do
       assert error.location.start_line == 4
     end
   end
+
+  describe "check/2 - <param> under <send>" do
+    # sabotage: `check/2`'s `++ send_params(document)` arm is dropped, so
+    # only donedata and invoke params are walked -> the `<send>`'s
+    # attribute-less `<param>` goes unreported and the {:error, _} match
+    # reddens
+    test "a <send> <param> with neither expr nor location is reported at the element's own line" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="lending">
+              <onentry>
+                  <send event="loan.requested">
+                      <param name="copies"/>
+                  </send>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 5
+    end
+
+    # sabotage: the same dropped `++ send_params(document)` arm -> the
+    # transition's `<send>` `<param>` carrying both attributes goes
+    # unreported and the {:error, _} match reddens
+    test "a <send> <param> with both expr and location is reported at the element's own line" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <datamodel>
+              <data id="copies" expr="2"/>
+          </datamodel>
+          <state id="lending">
+              <transition event="return">
+                  <send event="loan.returned">
+                      <param name="copies" expr="1" location="copies"/>
+                  </send>
+              </transition>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_expr_and_location, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 8
+    end
+
+    # sabotage: `Checks.Send.sends/1`'s `descend/1` stops at the top of a
+    # block (its `%DIf{}` clause returns `[]`) -> the `<send>` nested in the
+    # `<if>` is never reached and the {:error, _} match reddens
+    test "a <send> nested in an <if> inside <onexit> has its <param> walked too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="lending">
+              <onexit>
+                  <if cond="true">
+                      <send event="loan.closed">
+                          <param name="copies"/>
+                      </send>
+                  </if>
+              </onexit>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 6
+    end
+
+    # sabotage: `send_params/1` maps every `<send>` `<param>` to a
+    # `param_no_value` error instead of passing it to `check_param/1` ->
+    # both well-formed params below are reported and the {:ok, _} match
+    # reddens
+    test "a <send> <param> with only expr or only location reports nothing" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <datamodel>
+              <data id="stock" expr="3"/>
+          </datamodel>
+          <state id="lending">
+              <onentry>
+                  <send event="loan.requested">
+                      <param name="copies" expr="2"/>
+                      <param name="stock" location="stock"/>
+                  </send>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(xml)
+    end
+  end
 end

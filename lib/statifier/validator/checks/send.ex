@@ -93,11 +93,23 @@ defmodule Statifier.Validator.Checks.Send do
   satisfies all eight.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
-  def check(%Document{states: states}, %Context{}) do
+  def check(%Document{} = document, %Context{}) do
+    document
+    |> sends()
+    |> Enum.flat_map(&check_send/1)
+  end
+
+  # Every `<send>` in the document, in walk order, over the reach the
+  # moduledoc's last paragraph names. Callable across the validator's own
+  # checks (`Checks.Param` walks each one's `<param>` children through it,
+  # so the two never disagree on where a `<send>` can sit) but not part of
+  # the library's public API, hence `@doc false`.
+  @doc false
+  @spec sends(document :: Document.t()) :: [DSend.t()]
+  def sends(%Document{states: states}) do
     states
     |> flatten()
     |> Enum.flat_map(&sends_of/1)
-    |> Enum.flat_map(&check_send/1)
   end
 
   defp flatten(states) do
