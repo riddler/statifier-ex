@@ -645,3 +645,84 @@ execution and sees the processor's own exception.
 The other answers of the live call (`:ok`, a refused registration,
 `{:error, :not_running}`, `{:error, :recorded_session}`, and `:ok` for a
 session that registers nothing) are unchanged.
+
+### Amendment 2026-10-02: a list or a map value is written as JSON text, and a body is read as UTF-8 text whatever its type
+
+Status: proposed - amends decision 4 (the outbound mapping) and decision 5
+(the inbound decoder) by addition, and answers decision 9's row
+"Non-scalar values in `params` (a map, a list, `:undefined`)" and the
+residue sentence "JSON bodies and charset handling are residue" in its row
+"A non-form content type inbound"; every other decision, the Amendments
+above, and the record's own Status are unchanged.
+
+Decision 9 left two encodings open. Outbound, statifier 2.10.0 writes a
+parameter value that is a list or a map with `inspect/1`, an Elixir
+rendering no receiver in another language reads. Inbound, it said nothing
+about a JSON body or a charset. The rule below was ruled by the operator,
+2026-10-01.
+
+**Outbound: a list or a map is JSON text.** A parameter value (a `<param>`
+or a `namelist` entry inside the form body), and a `<content>` body that is
+a list, is written as follows:
+
+| The value | Written as |
+|---|---|
+| A string | As it is (unchanged) |
+| A number or a boolean | Its literal (unchanged) |
+| `nil` | `null` (unchanged) |
+| `:undefined` | The empty string (unchanged) |
+| A list or a map every value inside which has a JSON form | JSON text, through Elixir's own `JSON` module (no dependency; the package requires Elixir `~> 1.18`, which ships it) |
+| `:undefined` inside such a list or map | JSON `null` |
+| A list or a map holding anything with no JSON form | The whole value's `inspect/1` text (unchanged) |
+| Any other value (a tuple, an atom, a struct such as a `Date`) | Its `inspect/1` text (unchanged) |
+
+A value has a JSON form when it is a UTF-8 string, a number, a boolean,
+`nil`, `:undefined`, a proper list of such values, or a map whose every key
+is a UTF-8 string and whose every value is such a value. The check is the
+private `json/1` of `Statifier.Send.BasicHTTP`, and the writing its
+private `encode/1`.
+
+- **Map keys are strings.** JSON object keys are strings, and the
+  datamodel's maps are string-keyed: predicator turns a value's atom keys
+  into string keys, except `true` and `false`, when the value is bound into
+  a context (`Predicator.Context.bind/3`'s documentation, predicator 9.0.0),
+  and `Statifier.Evaluator`'s `context/1` binds every datamodel root that
+  way. A map
+  with any key that is not a string (an atom, `true`, a number) has no JSON
+  form here. Writing an atom key as its name is not taken: `%{:a => 1, "a"
+  => 2}` would become an object with two members named `a`.
+- **No `inspect/1` inside JSON.** A list or a map that holds a value with
+  no JSON form keeps its whole `inspect/1` text, the text 2.10.0 writes for
+  it, rather than a JSON text with an Elixir rendering inside it or a
+  failed send. Either of those would change what such a send POSTs or
+  answers; the whole-value text changes nothing for it.
+- **The body's content type does not change.** A `<content>` body that is a
+  list is JSON text sent as `text/plain`, as every non-map content body is
+  (decision 4). A `<content expr>` that evaluates to a map is still
+  form-encoded (decision 4), so its top-level keys stay form parameters and
+  only the lists and maps inside it are JSON text.
+
+A receiver that uses this record's decoder reads such a form value through
+the text rung, so a JSON array or object that is also a predicator literal
+reads back as a list or a map, and `null` as `nil`.
+
+**Inbound: unchanged, and now recorded.** A JSON body
+(`application/json`) is a body of another content type (decision 5): it
+goes through `Statifier.EventData`'s text rung, so a JSON object or array
+that is also a predicator literal becomes a map or a list in
+`_event.data`, and any other text stays a string. The decoder reads no
+charset: a body that is not UTF-8 is `{:error, {:not_utf8, :body}}`,
+answered 400 by decision 5's status rule, whatever charset its content
+type names, and a form body's values are held to the same test
+(`Statifier.Send.BasicHTTP`'s private `body/1`, at `1d1361db`). A
+datamodel string is UTF-8, so a front whose senders use another charset
+transcodes the body before it calls `decode/1`.
+
+**The one changed answer.** A list or a map parameter value, and a list
+`<content>` body, that 2.10.0 wrote as `inspect/1` text is now JSON text,
+with `:undefined` inside it as `null`. Nothing else changes: every scalar
+keeps its text, a value with no JSON form keeps its `inspect/1` text, and
+the inbound decoder answers as before. The encoding runs only inside this
+processor, so a session that registers nothing sees nothing new: a list
+or a map sent through a built-in type reaches its event as the value
+itself, as before (`Statifier.Send.BasicHTTPSessionTest`).
