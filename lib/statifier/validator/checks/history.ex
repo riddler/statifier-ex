@@ -21,7 +21,9 @@ defmodule Statifier.Validator.Checks.History do
       non-compound parent has already been reported by
       `:history_bad_parent`, and testing descendancy against it (an id that
       may not even exist, for the document root) would be a second,
-      meaningless error for the same mistake.
+      meaningless error for the same mistake. Descendancy is decided by the
+      tree's structure, so a parent with no `id` is checked like any other;
+      the reported `parent_id` is then `nil`.
   - `{:history_bad_type, raw}` when `type` was written and, sliced back out
     of `context.source`, is neither `"shallow"` nor `"deep"`.
     Lowering silently maps any out-of-range value to the `:shallow`
@@ -88,16 +90,39 @@ defmodule Statifier.Validator.Checks.History do
     end
   end
 
-  defp target_descendancy_errors(%State{transitions: transitions}, %State{id: parent_id}, context) do
+  defp target_descendancy_errors(
+         %State{transitions: transitions},
+         %State{id: parent_id} = parent,
+         context
+       ) do
     Enum.flat_map(transitions, fn transition ->
       location = Map.get(transition.attribute_locations, :target, transition.location)
 
       transition.target
-      |> Enum.filter(
-        &(Map.has_key?(context.states, &1) and not Context.descendant?(context, parent_id, &1))
-      )
+      |> Enum.filter(&resolved_outside?(&1, parent, context))
       |> Enum.map(&Error.initial_not_descendant(&1, parent_id, location))
     end)
+  end
+
+  # An unresolved target is check 2's to report, never this check's.
+  defp resolved_outside?(target, parent, context) do
+    case Map.fetch(context.states, target) do
+      {:ok, state} -> not inside?(state, parent, context.parents)
+      :error -> false
+    end
+  end
+
+  # Descendancy by the tree's structure, not by id: climbs `state`'s parent
+  # chain (`Context`'s `parents`, keyed by the struct itself) and answers
+  # whether `ancestor` is on it. A parent with no id has no entry in the
+  # id-keyed ancestry `Context.descendant?/3` reads, so an id test could not
+  # place a target under it.
+  defp inside?(%State{} = state, ancestor, parents) do
+    case Map.fetch!(parents, state) do
+      ^ancestor -> true
+      %State{} = parent -> inside?(parent, ancestor, parents)
+      %Document{} -> false
+    end
   end
 
   defp type_errors(%State{attribute_locations: attribute_locations}, context) do

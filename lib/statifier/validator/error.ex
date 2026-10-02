@@ -35,7 +35,7 @@ defmodule Statifier.Validator.Error do
           | {:empty_id}
           | {:unresolved_target, id :: binary()}
           | {:unresolved_initial, id :: binary()}
-          | {:initial_not_descendant, id :: binary(), parent_id :: binary()}
+          | {:initial_not_descendant, id :: binary(), parent_id :: binary() | nil}
           | {:initial_on_atomic_state, id :: binary()}
           | {:initial_attribute_and_element, id :: binary()}
           | {:transition_count, owner :: owner(), count :: non_neg_integer()}
@@ -165,17 +165,30 @@ defmodule Statifier.Validator.Error do
   Check 3 (spec 3.3, 3.6): a resolved initial target `id` is not a
   descendant of the state it initializes, `parent_id` - ancestry, not
   direct-child membership (v1's bug).
+
+  Check 5 (spec 3.10) reuses it for a history's default target against the
+  history's parent. `parent_id` is `nil` when that parent has no `id`: a
+  compound `<state>` or `<parallel>` need not carry one, and check 5
+  decides descendancy by the tree's structure, so the target is still
+  reported.
   """
-  @spec initial_not_descendant(id :: binary(), parent_id :: binary(), location :: Location.t()) ::
-          t()
+  @spec initial_not_descendant(
+          id :: binary(),
+          parent_id :: binary() | nil,
+          location :: Location.t()
+        ) :: t()
   def initial_not_descendant(id, parent_id, %Location{} = location)
-      when is_binary(id) and is_binary(parent_id) do
+      when is_binary(id) and (is_binary(parent_id) or is_nil(parent_id)) do
     %__MODULE__{
       reason: {:initial_not_descendant, id, parent_id},
-      message: "initial state #{inspect(id)} is not a descendant of #{inspect(parent_id)}",
+      message:
+        "initial state #{inspect(id)} is not a descendant of #{describe_parent(parent_id)}",
       location: location
     }
   end
+
+  defp describe_parent(nil), do: "its parent state, which has no id"
+  defp describe_parent(parent_id), do: inspect(parent_id)
 
   @doc """
   Check 3 (spec 3.3): `id` names a state carrying an `initial`

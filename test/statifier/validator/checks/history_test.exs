@@ -269,6 +269,56 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:error, [%Error{reason: {:unresolved_target, "missing"}}], _warnings} =
                validate!(xml)
     end
+
+    # sabotage: inside?/3's `^ancestor -> true` clause answers false (every
+    # parent chain climbs to the document) -> the grandchild target under
+    # the id-less parent is reported as outside it, reddening the {:ok, _}
+    # assertion below
+    test "a default target inside a parent with no id is accepted" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state>
+              <state id="on_loan">
+                  <state id="due"/>
+              </state>
+              <history id="loan_history">
+                  <transition target="due"/>
+              </history>
+          </state>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(xml)
+    end
+
+    # sabotage: inside?/3's `%Document{} -> false` clause answers true (the
+    # document counts as the parent) -> the target outside the id-less
+    # parent is accepted, reddening the error match below; and
+    # describe_parent(nil) in Error renders `inspect(nil)` -> the message
+    # reads "a descendant of nil", reddening the message assertion
+    test "a default target outside a parent with no id is reported with a nil parent id" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state>
+              <state id="on_loan"/>
+              <history id="loan_history">
+                  <transition target="returned"/>
+              </history>
+          </state>
+          <state>
+              <state id="returned"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:initial_not_descendant, "returned", nil}} = error],
+              _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 5
+      assert error.message =~ "which has no id"
+    end
   end
 
   describe "check/2 - history_bad_type" do
