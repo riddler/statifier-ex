@@ -35,7 +35,11 @@ defmodule Statifier.Send.Processor do
   **A delayed send is the processor's timer.** For a
   `%Statifier.Effect.SendDelayed{}` the session schedules nothing: the
   processor owns the delay, and spec 6.2's discard at termination is its
-  fire-time check (ADR-0054 decision 4).
+  fire-time check (ADR-0054 decision 4). A processor that holds the delay
+  in a process it starts from `perform/2` may hand that process to
+  `Statifier.Session.HaltNotice.watch/2`: a `Statifier.Session` then sends
+  it a message when the session halts, so the fire-time check reads the
+  process's own mailbox and never has to call a session that may be busy.
 
   ## What `cancel/2` is handed
 

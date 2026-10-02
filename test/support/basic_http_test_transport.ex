@@ -4,7 +4,8 @@ defmodule Statifier.BasicHTTPTestTransport do
   It reports each POST to the process registered under this module's name,
   when there is one, as `{:basichttp_post, url, headers, body}`, and answers
   from the URL's path: `/answer/<status>` answers `{:ok, status}`,
-  `/answer/error` answers `{:error, :econnrefused}`, and anything else
+  `/answer/error` answers `{:error, :econnrefused}`, `/answer/raise` raises
+  a `RuntimeError` (after reporting the POST), and anything else
   `{:ok, 204}`.
   """
 
@@ -21,6 +22,7 @@ defmodule Statifier.BasicHTTPTestTransport do
 
     case URI.parse(url).path do
       "/answer/error" -> {:error, :econnrefused}
+      "/answer/raise" -> raise "the test transport raised"
       "/answer/" <> status -> {:ok, String.to_integer(status)}
       _other -> {:ok, 204}
     end

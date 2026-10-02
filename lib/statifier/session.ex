@@ -346,7 +346,7 @@ defmodule Statifier.Session do
   alias Statifier.Machine.Identity
   alias Statifier.Send.{Routes, Target}
   alias Statifier.Send.Types, as: SendTypes
-  alias Statifier.Session.{Effects, Inbox, Invocations, Recording, Telemetry, Timers}
+  alias Statifier.Session.{Effects, HaltNotice, Inbox, Invocations, Recording, Telemetry, Timers}
 
   defmodule State do
     @moduledoc false
@@ -1155,6 +1155,9 @@ defmodule Statifier.Session do
   defp init_boot(machine, opts, resume) do
     session_id = resolve_session_id(opts, resume)
     register_session(session_id)
+    # ADR-0069 decision 4: a processor's process watched from `perform/2`
+    # hears this session's halt (`Statifier.Session.HaltNotice`).
+    HaltNotice.mark_session()
 
     invoked_by = Keyword.get(opts, :invoked_by)
     invoke_handlers = Keyword.get(opts, :invoke_handlers, %{})
@@ -1876,8 +1879,14 @@ defmodule Statifier.Session do
 
       {nil, _unchanged} ->
         case Map.get(state.subscribers, pid) do
-          ^ref -> {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
-          _other -> {:noreply, state}
+          ^ref ->
+            {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
+
+          # A process a processor watched (`HaltNotice.watch/2`) has ended,
+          # or a monitor this session does not own: either way, no reply.
+          _other ->
+            _forgotten? = HaltNotice.forget(ref)
+            {:noreply, state}
         end
     end
   end
@@ -2354,6 +2363,9 @@ defmodule Statifier.Session do
   defp perform_instruction({:halt, reason}, state, override) do
     reason = override || reason
     state = %{state | halted: reason} |> discard_pending_timers(reason)
+    # Spec 6.2 for a processor's own timers: every halt reason is told, so a
+    # held delayed send is discarded whatever the session's status now is.
+    HaltNotice.halted(reason)
     return_done_event(reason, state)
     notify(state, {:halted, reason})
     Telemetry.halt(state.session_id, reason, state.machine_state)

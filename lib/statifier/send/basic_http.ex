@@ -94,11 +94,19 @@ defmodule Statifier.Send.BasicHTTP do
   **A delayed send is this processor's timer** (ADR-0069 decision 4). A
   `<send delay>` is held by a timer process `perform/2` starts, and
   `cancel/2` plans the cancellation of every timer held under the send id
-  (spec 6.3). The timers are kept in the dictionary of the process that
-  performs the instructions, so a host that performs them itself performs
-  a delayed send and its cancel in one process. At fire time the timer
-  POSTs only if that process is a `Statifier.Session` still running: a
-  session that has stopped, or halted, discards the send (spec 6.2).
+  (spec 6.3). The session performing the send keeps the timer through
+  `Statifier.Session.HaltNotice` until it ends, and tells it when the
+  session halts. When the delay passes, the timer POSTs unless its
+  mailbox already holds a cancel, its session's halt notice (`:done`,
+  `:cancelled` or `:budget_exhausted`) or its session's end, so a cancel
+  the timer has received before the POST always wins, and a session that
+  has stopped, or halted, discards the send (spec 6.2). The timer never
+  calls the session, so a session busy at fire time does not delay or
+  drop the POST. A transport that raises inside the timer is a miss like
+  any other: it reaches the sender as `error.communication` through
+  `Statifier.Session.failed_send/3`, with the reason `{:raised,
+  exception}`. A delayed send performed outside a `Statifier.Session` has
+  no session to hold it and is discarded.
 
   ## Inbound (C.2.1)
 
@@ -121,6 +129,7 @@ defmodule Statifier.Send.BasicHTTP do
 
   alias Statifier.{Effect, Event, EventData, Session}
   alias Statifier.Send.BasicHTTP.Transport
+  alias Statifier.Session.HaltNotice
 
   @uri "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
   @event_name_param "_scxmleventname"
@@ -259,15 +268,24 @@ defmodule Statifier.Send.BasicHTTP do
 
   def perform({:post_after, delay_ms, post}, ctx) do
     owner = self()
-    key = {__MODULE__, post.send.send_id}
     # ADR-0075 decision 9 / ADR-0069 decision 4: the processor owns the delay.
     timer = spawn(fn -> hold(owner, delay_ms, post, ctx) end)
-    Process.put(key, [timer | Enum.filter(Process.get(key, []), &Process.alive?/1)])
-    :ok
+
+    case HaltNotice.watch({__MODULE__, post.send.send_id}, timer) do
+      :ok ->
+        :ok
+
+      :not_a_session ->
+        # ADR-0075 decision 9: no session will tell the timer of a halt, so
+        # the send is discarded (spec 6.2), as it was before the notice.
+        send(timer, :cancel)
+        :ok
+    end
   end
 
   def perform({:cancel, send_id}, _ctx) do
-    {__MODULE__, send_id} |> Process.delete() |> List.wrap() |> Enum.each(&send(&1, :cancel))
+    # ADR-0075 decision 9: a cancel reaches every timer held under the id.
+    {__MODULE__, send_id} |> HaltNotice.take() |> Enum.each(&send(&1, :cancel))
     :ok
   end
 
@@ -488,27 +506,45 @@ defmodule Statifier.Send.BasicHTTP do
   end
 
   # A delayed send's timer process: POSTs after `delay_ms` unless it is
-  # cancelled first or its owner stops, and at fire time only while its
-  # owner is a session still running (spec 6.2's discard at termination).
+  # cancelled first, its owner halts (`HaltNotice`) or its owner stops
+  # (spec 6.2's discard at termination).
   @spec hold(owner :: pid(), delay_ms :: non_neg_integer(), post :: post(), ctx :: map()) ::
           :ok | {:error, term()}
   defp hold(owner, delay_ms, post, ctx) do
     # ADR-0075 decision 9: the timer ends when the session that owns it does.
     ref = Process.monitor(owner)
 
-    # ADR-0075 decision 9: a cancel, the owner's end, or the delay, first.
+    # ADR-0075 decision 9: a cancel, the owner's halt or end, or the delay, first.
     receive do
       :cancel -> :ok
+      {:statifier_halted, ^owner, _reason} -> :ok
       {:DOWN, ^ref, :process, ^owner, _reason} -> :ok
     after
-      delay_ms -> if running?(owner), do: post_now(post, ctx), else: :ok
+      delay_ms -> if stopped?(owner, ref), do: :ok, else: post_later(post, ctx)
     end
   end
 
-  @spec running?(owner :: pid()) :: boolean()
-  defp running?(owner) do
-    match?(%{status: :running}, Session.status(owner))
-  catch
-    :exit, _reason -> false
+  # The fire-time check, which reads the mailbox and never calls the
+  # session: a stop that arrived after the delay passed, but before the
+  # POST, still wins.
+  @spec stopped?(owner :: pid(), ref :: reference()) :: boolean()
+  defp stopped?(owner, ref) do
+    # ADR-0075 decision 9: the same three stops as `hold/4`, without waiting.
+    receive do
+      :cancel -> true
+      {:statifier_halted, ^owner, _reason} -> true
+      {:DOWN, ^ref, :process, ^owner, _reason} -> true
+    after
+      0 -> false
+    end
+  end
+
+  # A delayed POST runs in the timer, where a raise would end the process
+  # with nobody told: a raising transport is reported as a miss instead.
+  @spec post_later(post :: post(), ctx :: map()) :: :ok | {:error, term()}
+  defp post_later(post, ctx) do
+    post_now(post, ctx)
+  rescue
+    exception -> report(post.send, ctx, {:raised, exception})
   end
 end

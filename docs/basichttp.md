@@ -227,7 +227,12 @@ status outside 2xx, reaches the sender as `error.communication` carrying
 the send id, through `Statifier.Session.failed_send/3`. Every request also
 carries the `scxml-send-key` header above. A `<send delay>` is
 held by the processor's own timer, and a `<cancel>` naming the send cancels
-it while it has not fired.
+it while it has not fired: a cancel the timer has received before its POST
+always wins. The timer never calls the session, so a session busy when the
+delay passes still has the send POSTed, and a session that has halted
+(`:done`, `:cancelled` or `:budget_exhausted`) or stopped discards it. A
+delayed send whose transport raises reaches the sender as
+`error.communication`, as any other miss does.
 
 Inbound, `decode/1` turns one request into one event (C.2.1):
 
