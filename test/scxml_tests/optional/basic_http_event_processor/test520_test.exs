@@ -17,6 +17,7 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test520 do
   @moduletag :scxml_w3
   @tag required_features: [
          :basic_states,
+         :conditional_transitions,
          :event_transitions,
          :final_states,
          :log_elements,
@@ -39,8 +40,8 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test520 do
                     <content>this is some content</content>
                 </send>
             </onentry>
-            <transition event="HTTP.POST" target="pass" />
-            <transition event="HTTP.POST" target="pass" />
+            <transition event="HTTP.POST" cond="_event.data == 'this is some content'" target="pass" />
+            <transition event="HTTP.POST" cond="_event.data == 'this is some content'" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">

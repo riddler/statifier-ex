@@ -17,6 +17,7 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test519 do
   @moduletag :scxml_w3
   @tag required_features: [
          :basic_states,
+         :conditional_transitions,
          :event_transitions,
          :final_states,
          :log_elements,
@@ -39,7 +40,7 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test519 do
                     <param name="param1" expr="1" />
                 </send>
             </onentry>
-            <transition event="test" target="pass" />
+            <transition event="test" cond="_event.data['param1'] == 1" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">

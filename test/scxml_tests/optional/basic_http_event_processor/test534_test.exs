@@ -17,6 +17,7 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test534 do
   @moduletag :scxml_w3
   @tag required_features: [
          :basic_states,
+         :conditional_transitions,
          :event_transitions,
          :final_states,
          :log_elements,
@@ -36,7 +37,7 @@ defmodule SCXMLTest.BasicHttpEventProcessor.Test534 do
                 <send event="timeout" delay="30s" />
                 <send event="test" targetexpr="_ioprocessors['basichttp']['location']" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" />
             </onentry>
-            <transition event="test" target="pass" />
+            <transition event="test" cond="_event.name == 'test'" target="pass" />
             <transition event="*" target="fail" />
         </state>
         <final id="pass">
