@@ -189,7 +189,7 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
     # sabotage: Statifier.Interpreter's main_event_loop/3 (outside this
     # change) clearing states_to_invoke in its not-running branch before
     # exit_interpreter/1 -> the ending step's position states [] -> red
-    test "after the step that ends the chart, states_to_invoke keeps the states that step entered" do
+    test "after the step that ends the chart, states_to_invoke keeps the states entered in its last macrostep" do
       loan = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
           <state id="on_loan">
