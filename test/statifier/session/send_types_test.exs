@@ -162,6 +162,35 @@ defmodule Statifier.Session.SendTypesTest do
       refute_receive {:crash_report, _report}, 200
     end
 
+    # sabotage: `Session`'s `rejected_registration/1` drops its
+    # `SendTypes.registration?/1` arm -> the caller asks `split/1` with a
+    # malformed value, raises `FunctionClauseError` before any process is
+    # spawned, and the `{:error, {:function_clause, _}}` match reddens on
+    # `{:raised_in_caller, FunctionClauseError}`. Confirmed red and reverted.
+    test "a malformed registration is left to init/1, which answers as before" do
+      for send_types <- [
+            %{"library:shelve" => "not a module"},
+            %{"library:shelve" => {ShelfProcessor, :not_a_list}},
+            %{"library:shelve" => ShelfProcessor, "library:renew" => "not a module"}
+          ] do
+        machine = compile!(@chart)
+
+        # A raise in the caller is caught into a value, so a caller-side
+        # check that raises fails the match below rather than the test run.
+        answer =
+          ExUnit.CaptureLog.with_log(fn ->
+            try do
+              Session.start_link(machine, send_types: send_types)
+            rescue
+              exception -> {:raised_in_caller, exception.__struct__}
+            end
+          end)
+          |> elem(0)
+
+        assert {:error, {:function_clause, _stack}} = answer
+      end
+    end
+
     # sabotage: `rejected_registration/1` sorts the type strings descending ->
     # `"library:z-return"` is named and the match reddens. Confirmed red
     # and reverted.
