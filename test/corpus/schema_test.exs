@@ -420,6 +420,99 @@ defmodule Corpus.SchemaTest do
              )
     end
 
+    # sabotage: the step item's expect_position property deleted from
+    # case.json (additionalProperties then refuses it) -> red on the fixture
+    # at /steps/0/expect_position
+    test "a statifier case's step may carry an expect_position" do
+      position = fixture("case-statifier-position.json")
+
+      assert [%{"expect_position" => %{"datamodel" => %{"patron_id" => "p-1"}}}] =
+               position["steps"]
+
+      assert errors("case.json", position) == []
+    end
+
+    # sabotage: expect_position's "required" losing "datamodel" -> red on the
+    # missing member; its "additionalProperties": false removed -> red on
+    # the extra member
+    test "an expect_position carries every member and no other" do
+      position = fixture("case-statifier-position.json")
+      at = ["steps", Access.at(0), "expect_position"]
+
+      for member <- ~w(configuration entered_states states_to_invoke history_values
+                       active_invocations running datamodel) do
+        {_value, without} = pop_in(position, at ++ [member])
+
+        assert {"/steps/0/expect_position", "missing required #{member}"} in errors(
+                 "case.json",
+                 without
+               )
+      end
+
+      assert "/steps/0/expect_position/queue" in pointers(
+               "case.json",
+               put_in(position, at ++ ["queue"], [])
+             )
+    end
+
+    # sabotage: the configuration member's items losing "type": "string" ->
+    # red on the number; running's "type" deleted -> red on the string;
+    # active_invocations' item losing "required" -> red on the missing index
+    test "an expect_position's members each have their shape" do
+      position = fixture("case-statifier-position.json")
+      at = ["steps", Access.at(0), "expect_position"]
+      with_member = &put_in(position, at ++ [&1], &2)
+
+      assert "/steps/0/expect_position/configuration/0" in pointers(
+               "case.json",
+               with_member.("configuration", [1])
+             )
+
+      assert "/steps/0/expect_position/running" in pointers(
+               "case.json",
+               with_member.("running", "true")
+             )
+
+      assert "/steps/0/expect_position/history_values" in pointers(
+               "case.json",
+               with_member.("history_values", [])
+             )
+
+      assert errors(
+               "case.json",
+               with_member.("active_invocations", [%{"state" => "desk", "index" => 0}])
+             ) == []
+
+      assert "/steps/0/expect_position/active_invocations/0" in pointers(
+               "case.json",
+               with_member.("active_invocations", [%{"state" => "desk"}])
+             )
+
+      assert "/steps/0/expect_position/active_invocations/0/invokeid" in pointers(
+               "case.json",
+               with_member.("active_invocations", [
+                 %{"state" => "desk", "index" => 0, "invokeid" => "desk.1"}
+               ])
+             )
+    end
+
+    # sabotage: the scion branch's steps "expect_position": false deleted ->
+    # red on the scion case; the w3c branch's -> red on the w3c case
+    test "a scion or w3c case's step refuses an expect_position" do
+      expected = hd(fixture("case-statifier-position.json")["steps"])["expect_position"]
+
+      # The w3c fixture has no step, so both take the scion fixture's.
+      steps =
+        Enum.map(fixture("case-scion.json")["steps"], &Map.put(&1, "expect_position", expected))
+
+      for name <- ~w(case-scion.json case-w3c.json) do
+        upstream = fixture(name)
+
+        assert "/steps/0/expect_position" in pointers("case.json", %{upstream | "steps" => steps}),
+               "#{name} accepted an expect_position"
+      end
+    end
+
     # sabotage: the w3c branch's conformance enum admitting null -> red
     test "a w3c case names its conformance class and the others carry null" do
       assert "/conformance" in pointers("case.json", %{
@@ -491,7 +584,7 @@ defmodule Corpus.SchemaTest do
     test "each fixture's required_features is what the feature detector finds in its source" do
       for name <-
             ~w(case-scion.json case-w3c.json case-statifier.json case-statifier-accepts.json
-               case-statifier-diff.json) do
+               case-statifier-diff.json case-statifier-position.json) do
         %{"source" => source, "required_features" => features} = fixture(name)
 
         detected =

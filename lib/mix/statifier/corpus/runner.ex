@@ -21,9 +21,17 @@ defmodule Mix.Statifier.Corpus.Runner do
   object carries `declared_events`, it also compares
   `Statifier.Chart.check_accepts/2`'s answer with the case's
   `expect_accepts` (ADR-0071 decision 7).
+
+  A `statifier` case whose step carries an `expect_position` (ADR-0076)
+  runs through `Mix.Statifier.Corpus.HostCase` as well, with or without a
+  `host` object: once a step's configuration agrees, the session's state
+  is exported with `Statifier.Position.export/1` and compared, in the form
+  `Mix.Statifier.Corpus.PositionExpectation` renders, with that step's
+  `expect_position`. `test_scxml/4` reads no position between its steps,
+  so a case that states one cannot run there.
   """
 
-  alias Mix.Statifier.Corpus.{Authored, HostCase}
+  alias Mix.Statifier.Corpus.{Authored, HostCase, PositionExpectation}
   alias Statifier.Testing.Case
 
   # Well above the harness's own 4s configuration deadline per step, so a
@@ -112,7 +120,9 @@ defmodule Mix.Statifier.Corpus.Runner do
 
   @doc """
   Runs one case through `Statifier.Testing.Case.test_scxml/4`, or through
-  `Mix.Statifier.Corpus.HostCase.run/1` when it carries a `host` object.
+  `Mix.Statifier.Corpus.HostCase.run/1` when it carries a `host` object or
+  a step carries an `expect_position`; a case with no `host` object runs
+  there as a host that registers nothing.
   """
   @spec run_case(corpus_case :: map()) :: outcome()
   def run_case(%{"host" => _host} = corpus_case) do
@@ -124,6 +134,12 @@ defmodule Mix.Statifier.Corpus.Runner do
   end
 
   def run_case(corpus_case) do
+    if PositionExpectation.expected?(corpus_case),
+      do: run_case(Map.put(corpus_case, "host", %{})),
+      else: run_case_without_host(corpus_case)
+  end
+
+  defp run_case_without_host(corpus_case) do
     steps = Enum.map(corpus_case["steps"], &{&1["event"], &1["configuration"]})
 
     :ok =
