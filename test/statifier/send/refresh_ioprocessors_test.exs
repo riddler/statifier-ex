@@ -304,5 +304,31 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       assert Session.refresh_ioprocessors(session) == :ok
       assert :erlang.term_to_binary(Session.snapshot(session)) == :erlang.term_to_binary(before)
     end
+
+    # sabotage: the nil-stamp clause of `Session.handle_call/3` is moved
+    # after the recorded-session clause -> the call answers
+    # `{:error, :recorded_session}` and the equality reddens. Confirmed red
+    # and reverted.
+    test "a recorded session that registers nothing answers :ok and its position is byte-identical" do
+      {:ok, machine} = Statifier.compile(@idle)
+      session = start!(machine, record: true)
+      before = Session.snapshot(session)
+
+      assert Session.refresh_ioprocessors(session) == :ok
+      assert :erlang.term_to_binary(Session.snapshot(session)) == :erlang.term_to_binary(before)
+    end
+
+    # sabotage: the nil-stamp clause of `Session.handle_call/3` is moved
+    # after the halted clause -> the call answers `{:error, :not_running}`
+    # and the equality reddens. Confirmed red and reverted.
+    test "a halted session that registers nothing answers :ok", %{machine: machine} do
+      session = start!(machine, [])
+      :ok = Session.send_event(session, "deliver")
+      assert Session.status(session).status == :done
+      before = Session.snapshot(session)
+
+      assert Session.refresh_ioprocessors(session) == :ok
+      assert :erlang.term_to_binary(Session.snapshot(session)) == :erlang.term_to_binary(before)
+    end
   end
 end
