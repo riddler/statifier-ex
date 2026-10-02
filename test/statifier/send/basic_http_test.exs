@@ -234,6 +234,24 @@ defmodule Statifier.Send.BasicHTTPTest do
     end
   end
 
+  describe "check_registration/2" do
+    # sabotage: `check_registration/2`'s string `:base_url` arm answers
+    # `{:error, {:missing_option, :base_url}}` -> the `== :ok` assertion
+    # reddens. Confirmed red and reverted.
+    test "a registration with a string :base_url is accepted" do
+      assert BasicHTTP.check_registration("basichttp", base_url: "http://front.test/in") == :ok
+    end
+
+    # sabotage: `check_registration/2`'s missing-option arm answers `:ok` -> the
+    # `==` assertion reddens. Confirmed red and reverted.
+    test "a registration without a string :base_url names the missing option" do
+      for opts <- [[], [transport: Statifier.BasicHTTPTestTransport], [base_url: :front]] do
+        assert BasicHTTP.check_registration("basichttp", opts) ==
+                 {:error, {:missing_option, :base_url}}
+      end
+    end
+  end
+
   describe "decode/1: the inbound half (C.2.1)" do
     defp request(fields),
       do: Map.merge(%{method: "POST", content_type: @form, body: "", query: nil}, fields)

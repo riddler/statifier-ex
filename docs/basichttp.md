@@ -36,8 +36,11 @@ A `:send_types` value is a bare module or `{module, opts}`; this processor
 needs the options form. Its options:
 
 - `:base_url` (required) - the address your front answers at. A
-  registration without it is refused when the session starts, with an
-  `ArgumentError` naming the option.
+  registration without it (or with a value that is not a string) is
+  refused when the session starts fresh, with
+  `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`
+  and no crash report. A resumed session is not refused: its position
+  carries the `_ioprocessors` entries it started with.
 - `:transport` - the module the POSTs go through, a
   `Statifier.Send.BasicHTTP.Transport`. The default is
   `Statifier.Send.BasicHTTP.Transport.Httpc`, on OTP's `:httpc`, which

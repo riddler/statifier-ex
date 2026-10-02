@@ -53,18 +53,44 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
              }
     end
 
-    # sabotage: `ioprocessors_entry/2` falls back to a default base URL
-    # instead of raising -> the session starts and the match reddens.
+    # sabotage: `init_accepted/4`'s fresh clause boots whatever
+    # `rejected_registration/1` answers -> `ioprocessors_entry/2` raises,
+    # the start answers the `ArgumentError` shape and the match reddens.
     # Confirmed red and reverted.
-    test "a registration without :base_url is refused when the session starts" do
+    test "a registration without :base_url is refused by name when the session starts" do
       {:ok, machine} = Statifier.compile(@idle)
 
-      ExUnit.CaptureLog.capture_log(fn ->
-        assert {:error, {%ArgumentError{message: message}, _stack}} =
-                 Statifier.start_session(machine, send_types: %{"basichttp" => BasicHTTP})
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error,
+                  {:send_types,
+                   {:invalid_registration, "basichttp", {:missing_option, :base_url}}}} =
+                   Statifier.start_session(machine, send_types: %{"basichttp" => BasicHTTP})
+        end)
 
-        assert message =~ ":base_url"
-      end)
+      assert log == ""
+    end
+
+    # sabotage: `init_accepted/4`'s resume clause asks
+    # `rejected_registration/1` as a fresh start does -> the resume is
+    # refused and the `{:ok, _}` match reddens. Confirmed red and reverted.
+    test "a resume whose registration lacks :base_url is not refused, and keeps its entry" do
+      {:ok, machine} = Statifier.compile(@idle)
+      first = start!(@idle)
+      started = Session.snapshot(first)
+      {:ok, blob} = Statifier.Position.to_binary(started)
+      :ok = Session.stop(first)
+
+      assert {:ok, resumed} =
+               Statifier.start_session(machine,
+                 resume: blob,
+                 send_types: %{"basichttp" => BasicHTTP}
+               )
+
+      on_exit(fn -> if Process.alive?(resumed), do: Session.stop(resumed) end)
+
+      assert Session.snapshot(resumed).datamodel["_ioprocessors"]["basichttp"] ==
+               started.datamodel["_ioprocessors"]["basichttp"]
     end
   end
 

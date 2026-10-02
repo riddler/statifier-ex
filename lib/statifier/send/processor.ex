@@ -101,6 +101,16 @@ defmodule Statifier.Send.Processor do
   (ADR-0075 decision 3); it is asked instead of `/1`, and a processor that
   implements only `/1` is asked as before.
 
+  ## Refusing a registration
+
+  A processor that needs something from its registration, such as an
+  option its entry is built from, implements the optional
+  `c:Statifier.Send.Processor.check_registration/2`. A fresh start asks it
+  for every registration whose module exports it, and a registration it
+  rejects refuses the start with a named value instead of a crash. A
+  resume does not ask it, because the entries the persisted position
+  carries stand (ADR-0075 decision 3).
+
   ## Registration options
 
   A `:send_types` value is a bare module or `{module, opts}` (ADR-0075
@@ -185,9 +195,33 @@ defmodule Statifier.Send.Processor do
   a processor implements both. Pure and deterministic, and string-keyed at
   every level, as `c:Statifier.Send.Processor.ioprocessors_entry/1` is. A
   processor that cannot build its entry from `context` raises
-  `ArgumentError`, which refuses the session's start. Optional.
+  `ArgumentError`. A processor that also implements
+  `c:Statifier.Send.Processor.check_registration/2` refuses such a
+  registration at a fresh start before this callback is asked, and the
+  raise is then left to a direct caller. Optional.
   """
   @callback ioprocessors_entry(type :: String.t(), context :: entry_context()) :: map()
 
-  @optional_callbacks perform: 2, ioprocessors_entry: 1, ioprocessors_entry: 2
+  @doc """
+  Whether this processor can serve the registration of the type string
+  `type` with the registration's options `opts` (`[]` for a bare-module
+  registration). Pure. Answers `:ok`, or `{:error, reason}` naming what is
+  wrong, for example `{:missing_option, :base_url}`.
+
+  `Statifier.Session.start_link/2` asks it at a fresh start, before the
+  session boots, for every registration whose module exports it, in the
+  order of the type strings. The first `{:error, reason}` refuses the
+  start with `{:error, {:send_types, {:invalid_registration, type,
+  reason}}}` and no crash report. A resume does not ask it: the
+  `_ioprocessors` entries a persisted position carries stand (ADR-0075
+  decision 3). Optional: a processor that does not implement it is not
+  asked.
+  """
+  @callback check_registration(type :: String.t(), opts :: keyword()) ::
+              :ok | {:error, reason :: term()}
+
+  @optional_callbacks perform: 2,
+                      ioprocessors_entry: 1,
+                      ioprocessors_entry: 2,
+                      check_registration: 2
 end

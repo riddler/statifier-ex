@@ -134,6 +134,32 @@ defmodule Statifier.Send.Types do
   def split({module, opts}) when is_atom(module) and is_list(opts), do: {module, opts}
   def split(module) when is_atom(module), do: {module, []}
 
+  # The first registration of a `:send_types` map, in the order of its type
+  # strings, whose module exports the optional
+  # `c:Statifier.Send.Processor.check_registration/2` and answers
+  # `{:error, reason}`, as `{type, reason}`; `nil` when none does. A module
+  # that does not export the callback is not asked. Internal:
+  # `Statifier.Session`'s fresh start is its caller, hence `@doc false`.
+  @doc false
+  @spec rejected_registration(send_types :: %{optional(String.t()) => registration()}) ::
+          {String.t(), term()} | nil
+  def rejected_registration(send_types) when is_map(send_types) do
+    send_types
+    |> Enum.sort_by(fn {type, _registration} -> type end)
+    |> Enum.find_value(fn {type, registration} -> rejection(type, split(registration)) end)
+  end
+
+  @spec rejection(type :: String.t(), processor :: {module(), keyword()}) ::
+          {String.t(), term()} | nil
+  defp rejection(type, {module, opts}) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :check_registration, 2) do
+      case module.check_registration(type, opts) do
+        :ok -> nil
+        {:error, reason} -> {type, reason}
+      end
+    end
+  end
+
   # The value `module` returns from `ioprocessors_entry/2` for `type` and
   # `context`, checked as `from_send_types/1` checks a `/1` entry.
   # Internal: `Statifier.Evaluator.SystemVariables.initial/3` is its one

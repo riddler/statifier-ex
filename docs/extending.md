@@ -625,6 +625,14 @@ with `{:error, {:send_types, {:built_in_types, types}}}`, every offending
 key named and sorted. A built-in send can never be redirected to a host
 processor.
 
+At a fresh start the session also asks every registration whose processor
+exports the optional `check_registration/2` whether it can serve it, in the
+order of the type strings, and refuses the first one rejected before the
+session boots, with
+`{:error, {:send_types, {:invalid_registration, type, reason}}}` and no
+crash report. A resume does not ask: the `_ioprocessors` entries its
+position carries stand.
+
 `:inherit_send_types` is the `<send>` counterpart of
 `:inherit_invoke_handlers`, on the same start-time terms: `true` starts every
 child this session starts for an `<invoke>` with this session's
@@ -660,6 +668,7 @@ nothing for it itself. The behaviour has `Statifier.Invoke.Handler`'s split:
 | `cancel/2` | pure planning | the `%Statifier.Effect.Cancel{}` naming a delayed send this processor holds, and the plan context |
 | `perform/2` (optional) | the impure half | one `{:handler, module, payload}` instruction a planning callback returned |
 | `ioprocessors_entry/1` (optional) | pure | the registered type string; returns the processor's `_ioprocessors` value |
+| `check_registration/2` (optional) | pure | the registered type string and the registration's options; returns `:ok` or `{:error, reason}`, asked at a fresh start only |
 
 The planning callbacks return `{:ok, instructions}` and perform nothing; the
 usual instruction is `{:handler, __MODULE__, payload}`, which the session
