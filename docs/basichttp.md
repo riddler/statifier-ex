@@ -257,12 +257,13 @@ Inbound, `decode/1` turns one request into one event (C.2.1):
 Each value is read as a `<content>` body's text is: a predicator literal
 becomes that value, so `2` reads as the number 2, and anything else stays
 a string. A JSON body is a body of another content type, so a JSON object
-or array that is also a predicator literal reads as a map or a list, and a
-list or a map parameter this processor wrote as JSON reads back the same
-way. No charset is read: a body or a parameter that is not UTF-8
-is refused as `{:error, {:not_utf8, :body}}` (or `:query`), which the front
-answers 400, whatever charset the content type names. A front whose
-senders use another charset transcodes the body before it calls
+or array that is also a predicator literal reads as a map or a list. A
+list or a map parameter this processor writes as JSON is not promised to
+read back as the value that was sent: the text rung reads predicator
+literals, not JSON. No charset is read: a body or a parameter that is not
+UTF-8 is refused as `{:error, {:not_utf8, :body}}` (or `:query`), which
+the front answers 400, whatever charset the content type names. A front
+whose senders use another charset transcodes the body before it calls
 `decode/1`.
 
 ## What is not supported
