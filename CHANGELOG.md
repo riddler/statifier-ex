@@ -10,6 +10,51 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.11.0] 2026-10-02
+
+A minor release. A host can now refresh a session's registered
+`_ioprocessors` entries with `refresh_ioprocessors/1` on
+`Statifier.MachineState` and `Statifier.Session`, a send processor may
+implement the optional `check_registration/2` so that a fresh start
+refuses a registration it cannot serve by name, and
+`Statifier.Session.HaltNotice` tells a processor's timer when its session
+halts. Some existing answers change: a Basic HTTP registration without
+`:base_url`, a Basic HTTP delayed send whose transport raises, whose
+session is busy or whose cancel arrives before the POST, a list or map
+parameter on the wire, a `<send>` `<param>` with neither or both of
+`expr` and `location`, and three inputs the lowering and the validator
+raised on; `docs/upgrading.md` names each one.
+A session that registers nothing sees nothing new, and the package adds
+no dependency. The conformance corpus under `conformance/`, which is not
+part of the Hex package, checks more in four W3C Basic HTTP documents and
+its case schema gains a step's `expect_position`; a sibling
+implementation that vendors the corpus re-vendors it at this version's
+tag.
+
+### Added
+
+- `Statifier.MachineState.refresh_ioprocessors/1` and `Statifier.Session.refresh_ioprocessors/1` recompute a session's registered `_ioprocessors` entries from its registration, so a host can tell a chart a new location. A host whose Basic HTTP base URL moved across a resume re-stamps the position with the new registration and refreshes it before resuming; a live session refreshes on the call. The SCXML entry and an entry from a processor exporting only `ioprocessors_entry/1` are untouched, and a resume still reads the entries its position carries. A registration the processor rejects answers its reason (`{:error, {:missing_option, :base_url}}` for Basic HTTP without `:base_url`) and changes nothing; for a session that registers something, the live call also answers `{:error, :not_running}` once the session has halted and `{:error, :recorded_session}` for a session started with `record: true`. A session that registers nothing answers success and sees nothing change, running, halted or recorded. See ADR-0075's Amendment of 2026-10-02.
+- `Statifier.Session.refresh_ioprocessors/1` answers `{:error, {:ioprocessors_entry, type, exception}}` when a registered processor's entry raises during the refresh, and the session keeps running at the position it held before the call: no entry is stored. `Statifier.MachineState.refresh_ioprocessors/1` still raises the entry's exception. See ADR-0075's Amendments of 2026-10-02.
+- A send processor may implement the optional `check_registration/2`, which answers `:ok` or `{:error, reason}` for a registration's type string and options. A fresh session start asks it for every registration whose module exports it and refuses the first one rejected with `{:error, {:send_types, {:invalid_registration, type, reason}}}` before any session process is spawned, so with no crash report; a resume does not ask it. A processor that does not implement it is not asked, and a session that registers nothing sees nothing new.
+- `Statifier.Session.HaltNotice`: a send processor that holds a delay in a process it starts from `perform/2` can hand that process to `HaltNotice.watch/2`, and the session sends it `{:statifier_halted, session, reason}` when the session halts (`:done`, `:cancelled` or `:budget_exhausted`), at once when it already has, without ever calling it. `HaltNotice.take/1` removes and returns the processes watched under a key, and the session forgets each one when it ends. Outside a session `watch/2` keeps nothing and answers `:not_a_session`. A session that registers nothing sees nothing new.
+- A `statifier` conformance case's step may carry an optional `expect_position`: the position the chart holds after that step, as `Statifier.Position.export/1` gives it, in a JSON rendering that leaves out the fields another implementation need not share (the counters, the chart's identity, its status and step stamps, and the `_event`, `_ioprocessors`, `_name` and `_sessionid` variables). `conformance/schema/case.json` validates it, refuses it on `scion` and `w3c` cases, and the conformance runner compares it after the step (ADR-0076). Three new library cases state the position after a history state records, across a parallel state's regions, and as a datamodel variable changes. The corpus hash in `conformance/manifest.json` moves, so an implementation that vendors the corpus re-vendors it at the next tag.
+
+### Changed
+
+- A fresh session start whose `Statifier.Send.BasicHTTP` registration has no usable string `:base_url` (any registration `ioprocessors_entry/2` cannot build its entry from) now answers `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`, refused before any session process is spawned and so with no crash report, instead of the error a session process that exited gave (`{:error, {%ArgumentError{}, stacktrace}}` for a missing option). Every registration it can build its entry from still starts. A host that matched the `ArgumentError` shape matches the named refusal instead. A resumed session is not refused and does not change: its position carries the `_ioprocessors` entries it started with. `ioprocessors_entry/2` still raises `ArgumentError` for a direct caller.
+- A `Statifier.Send.BasicHTTP` delayed send whose transport raises now reaches the sender as `error.communication`, through `Statifier.Session.failed_send/3` with the reason `{:raised, exception}`; before, the raise ended the timer and nothing reached the chart. An immediate send whose transport raises is unchanged.
+- A `Statifier.Send.BasicHTTP` delayed send of a live session that is busy when the delay passes is now POSTed; before, the timer asked the session for its status and dropped the send when the call timed out.
+- A cancel that a `Statifier.Send.BasicHTTP` delayed send's timer has received before its POST now always wins; before, a cancel that arrived while the timer was checking its session could be ignored and the send POSTed.
+- `Statifier.Send.BasicHTTP` now writes a parameter value that is a list or a map, and a `<content>` body that is a list, as JSON text through Elixir's own `JSON` module (`["Dune",2]`, `{"title":"Dune"}`); before, it wrote the value's `inspect/1` text. An undefined value inside such a list or map is written as JSON `null`. A list or a map that holds anything with no JSON form (a key that is not a string, a struct such as a `Date`, a tuple, a string that is not UTF-8) keeps its whole `inspect/1` text, as before, and every scalar keeps its text: a top-level undefined value is still the empty string and `nil` is still `null`. A `<content>` body that is a list is still sent as `text/plain`. The inbound decoder is unchanged: a JSON body is read through the text rung, and a body that is not UTF-8 is refused whatever charset it names. A session that registers nothing sees nothing new. See ADR-0075's Amendment on list and map values.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, now checks a `<send>`'s `<param>` children as it already checked `<donedata>` and `<invoke>` params (spec 5.7: exactly one of `expr` and `location`). A `<send>` `<param>` with neither attribute is refused as `{:param_no_value, name}` instead of `Statifier.compile/2` raising `FunctionClauseError`. A `<send>` `<param>` with both attributes is now refused as `{:param_expr_and_location, name}`; it compiled before, taking `location`, so a chart that carried one must drop one of the two attributes.
+- `Statifier.Validator.validate/2` no longer raises `FunctionClauseError` on a `<history>` whose compound parent has no `id`: the default target is checked against the parent by the tree's structure, so a target inside the parent is accepted and one outside it is reported as `{:initial_not_descendant, target, nil}`. The `parent_id` in an `:initial_not_descendant` reason may now be `nil`; a host that matches it as a binary should also handle `nil`.
+- `Statifier.Lowering.lower/2`, and so `Statifier.compile/2`, answers `{:error, [%Statifier.Lowering.Error{reason: {:unexpected_root, name}}]}` for a document whose root is any SCXML element other than `<scxml>` (`<state>`, `<parallel>`, `<final>`, `<history>`, `<transition>`, ...) instead of raising `BadMapError`, and `{:unsupported_element, "scxml"}` for an `<scxml>` nested below the root instead of raising `FunctionClauseError`. A caller that rescued either raise matches the error tuple instead.
+- The W3C Basic HTTP documents test518, test519, test520 and test534 now check the decoded event their transition takes, not its name alone: test518 that the namelist location arrives in `_event.data` with its value, test519 that the named parameter does, test520 that `_event.data` is the sent body text under both of the suite's encoded spellings, and test534 that the `_scxmleventname` parameter is the event's name. No claim narrows. The corpus hash in `conformance/manifest.json` moves, so an implementation that vendors the corpus re-vendors it at the next tag.
+
+### Fixed
+
+- A `Statifier.Send.BasicHTTP` delayed send's timer no longer stays in the session's process dictionary after it fires. A delayed send performed outside a `Statifier.Session` is still discarded, now with no call sent to the process that performed it. A session halted `:done`, `:cancelled` or `:budget_exhausted`, or stopped, still discards a delayed send it holds.
+
 ## [2.10.0] 2026-09-30
 
 A minor release, adding the W3C Basic HTTP Event I/O Processor as
