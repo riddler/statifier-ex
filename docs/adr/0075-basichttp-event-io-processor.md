@@ -504,3 +504,98 @@ implements it ships in a published version." is met here: the code
 shipped in 2.10.0 and the record is accepted. Each Amendment's own
 Status line, which says the record's Status is unchanged, speaks of what
 that Amendment changes and still holds as written.
+
+### Amendment 2026-10-02: a host refreshes the registered `_ioprocessors` entries by an explicit call
+
+Status: proposed - amends decision 3 (when the entries are written) and
+answers decision 9's row "A location read after a resume on a host whose
+base URL moved"; every other decision, the two Amendments above, and the
+record's own Status are unchanged.
+
+Decision 3 says the entries "are still written once, when the session
+starts", so a resumed session reads the location it started with. A host
+whose base URL moved across a resume, or whose front rotated a location,
+had no way to tell the chart. This Amendment adds that way as an
+explicit, additive host call, and leaves the resume itself as it was
+(ruled by the operator, 2026-10-01).
+
+**The two calls.**
+
+- `Statifier.MachineState.refresh_ioprocessors/1` takes a position and
+  answers `{:ok, machine_state}` or `{:error, reason}`. It is pure.
+- `Statifier.Session.refresh_ioprocessors/1` takes a live session and
+  answers `:ok` or `{:error, reason}`. It is a `GenServer.call`, so the
+  host learns the answer; it is the one call that changes a session's
+  position, where every other change arrives through a cast.
+
+**What a refresh recomputes and what it leaves.** Each registration
+reads as follows, against the registration the position is stamped with
+(`Statifier.Evaluator.SystemVariables`'s `refreshed_ioprocessors/3`):
+
+| `_ioprocessors` key | After a refresh |
+|---|---|
+| A registered type whose processor exports `ioprocessors_entry/2` | Asked again with the type, `_sessionid` and the stamped registration's options, as at session start |
+| A registered type whose processor exports only `ioprocessors_entry/1` | Unchanged; the re-stamped set's own `/1` entry is not used |
+| The SCXML Event I/O Processor's URI | Unchanged |
+| A type the stamp does not name | Unchanged |
+| A type the stamp names that the datamodel has no key for | Not added |
+
+The set of keys never changes, so the registered type set stays fixed
+for the session's lifetime, as ADR-0069 decision 2 has it: a refresh
+changes entry values, never what is registered.
+
+**When it refuses.** Before any entry is recomputed, every processor in
+the first row of the table that exports `check_registration/2` is asked,
+in type order, through the asker `Statifier.Send.Types` already holds for
+the fresh-start refusal (ADR-0069's Amendment of 2026-10-02). The first
+`{:error, reason}` is the answer and nothing changes: for the Basic HTTP
+processor without `:base_url`, `{:error, {:missing_option, :base_url}}`.
+A check that raises or answers outside its contract does not stop the
+refresh. A processor that exports `ioprocessors_entry/2` and no check is
+asked for its entry as it is, and an entry that raises, or is not a
+string-keyed map, raises out of the pure call as it does at session
+start; inside a live session that raise exits the session.
+
+The live call answers two more errors, each changing nothing:
+
+- `{:error, :not_running}` once the session has halted (`:done`,
+  `:cancelled` or `:budget_exhausted`): no chart is left to read the
+  entries.
+- `{:error, :recorded_session}` for a session started with
+  `record: true`. A recording is a persisted, versioned format
+  (ADR-0057 decision 4; `Statifier.Session.Recording`'s
+  `@format_version` is 5 at `f250ce2f`), and its entries hold delivered
+  inputs only, with no entry for a datamodel refresh
+  (`Statifier.Replay`'s private `apply_entry/2` has one clause per entry
+  kind, at `f250ce2f`). Recording a live refresh would need a new entry
+  kind and so a format version bump, which moves every recording's
+  envelope, a session's that registers nothing included. A recorded
+  session refreshes before it starts instead (next paragraph).
+
+**The resume stays as it was; the host's step is re-stamp, then refresh.**
+A resume still reads the entries its position carries, and nothing
+recomputes them on its own: recomputing on every resume would change
+what every resumed session reads. A host whose base URL moved re-stamps
+the position with `Statifier.MachineState.put_send_types/2`, calls the
+pure refresh, and passes the result to `Statifier.Session.start_link/2`'s
+`:resume`. This answers decision 9's row: the moved base URL is the
+host's to carry, through this call.
+
+**Replay.** A session resumed this way and started with `record: true`
+takes its recording's anchor from the position it boots with
+(`Statifier.Session`'s private `boot/7`, at `f250ce2f`), which already
+holds the refreshed entries, so a replay reads the same location the
+live session read. The live call is never recorded, because a recorded
+session refuses it.
+
+**A sibling's rotation.** statifier_router documents, in the moduledoc
+of `StatifierRouter.BasicHTTP` (read at `1bc8a8f`), that a rotated
+location "does not reach the execution's own `_ioprocessors`" and that
+the router hands its token to `ioprocessors_entry/2` through the
+registration. With these calls a front can re-stamp the registration
+with the current token and refresh, so the chart reads the rotated
+location. Whether and how the router does so is its own record's to
+decide.
+
+Nothing changes for a session that registers nothing: its stamp is
+`nil`, and both calls answer success with the position byte-identical.

@@ -42,7 +42,8 @@ defmodule Statifier.Evaluator.SystemVariables do
   `send_types`.
 
   `_sessionid`, `_name`, and `_ioprocessors` are session-lifetime and are
-  never rewritten afterward - `_sessionid` stays stable for the session's
+  never rewritten afterward, except a registered `_ioprocessors` entry a
+  host refreshes (see below) - `_sessionid` stays stable for the session's
   whole lifetime (ADR-0008). `_event` is different: it is seeded here to
   `:undefined` and thereafter written only by `MachineState.put_event/2`.
 
@@ -75,17 +76,29 @@ defmodule Statifier.Evaluator.SystemVariables do
   existed. A registered entry never replaces the SCXML entry: a set naming
   the processor URI still reads the SCXML entry under that key.
 
-  The entries are written here, once, when the session starts, and
-  nowhere else. `_ioprocessors` is part of the datamodel, so a persisted
-  position (`Statifier.Position`) carries the entries as they were written,
-  and a resumed session reads the entries it started with.
-  `MachineState.put_send_types/2`, the driver's re-stamp on a resume
+  The entries are written here, when the session starts, and rewritten
+  only when a host asks for it. `_ioprocessors` is part of the datamodel,
+  so a persisted position (`Statifier.Position`) carries the entries as
+  they were written, and a resumed session reads the entries it started
+  with. `MachineState.put_send_types/2`, the driver's re-stamp on a resume
   (ADR-0064), replaces the classifier's set and does not rewrite
   `_ioprocessors`. The registration is fixed for the session's lifetime
   (ADR-0069 decision 2), and a host that re-stamps the set it started with
   reads the same entries it would have written; a set that changes across a
   resume is a mid-session registration, which ADR-0069 names as a trigger
   that would reopen that record.
+
+  The one rewrite is a host's explicit refresh (ADR-0075's Amendment of
+  2026-10-02): `Statifier.MachineState.refresh_ioprocessors/1`, and
+  `Statifier.Session.refresh_ioprocessors/1` for a live session, ask every
+  registered processor that exports
+  `c:Statifier.Send.Processor.ioprocessors_entry/2` for its entry again,
+  from the registration the position is stamped with, so a host whose
+  base URL moved, or whose front rotated a location, can tell the chart.
+  The refresh replaces entry values and nothing else: the SCXML entry, an
+  entry from a processor that exports only
+  `c:Statifier.Send.Processor.ioprocessors_entry/1`, and the set of keys
+  stay as they were, so the registered type set stays fixed.
 
   ## Why `_event` is seeded rather than left absent
 
@@ -148,6 +161,56 @@ defmodule Statifier.Evaluator.SystemVariables do
     if function_exported?(module, :ioprocessors_entry, 2),
       do: Types.session_entry!(module, type, %{session_id: session_id, opts: opts}),
       else: entry
+  end
+
+  # The refresh `Statifier.MachineState.refresh_ioprocessors/1` writes
+  # (ADR-0075's Amendment of 2026-10-02): `ioprocessors` with every key that
+  # names a registered type whose processor exports `ioprocessors_entry/2`
+  # recomputed from `send_types`'s registration and `session_id`. Every
+  # such processor that exports `check_registration/2` is asked first, in
+  # type order, and the first `{:error, reason}` is the answer, before any
+  # entry is recomputed. A check that answers outside its contract does not
+  # stop the refresh, and an entry that raises raises here, as it does at
+  # session start. Internal, hence `@doc false`.
+  @doc false
+  @spec refreshed_ioprocessors(
+          ioprocessors :: %{String.t() => map()},
+          send_types :: Types.t(),
+          session_id :: String.t()
+        ) :: {:ok, %{String.t() => map()}} | {:error, term()}
+  def refreshed_ioprocessors(ioprocessors, %Types{processors: processors}, session_id)
+      when is_map(ioprocessors) and is_binary(session_id) do
+    refreshable =
+      processors
+      |> Enum.filter(fn {type, {module, _opts}} ->
+        type != @scxml_event_processor and Map.has_key?(ioprocessors, type) and
+          Code.ensure_loaded?(module) and function_exported?(module, :ioprocessors_entry, 2)
+      end)
+      |> Enum.sort_by(fn {type, _processor} -> type end)
+
+    case Enum.find_value(refreshable, &rejected/1) do
+      nil ->
+        {:ok,
+         Enum.reduce(refreshable, ioprocessors, fn {type, {module, opts}}, acc ->
+           Map.put(
+             acc,
+             type,
+             Types.session_entry!(module, type, %{session_id: session_id, opts: opts})
+           )
+         end)}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  @spec rejected({type :: String.t(), processor :: {module(), keyword()}}) ::
+          {:error, term()} | nil
+  defp rejected({type, processor}) do
+    case Types.check_registration(type, processor) do
+      {:error, _reason} = error -> error
+      _ok_or_unanswered -> nil
+    end
   end
 
   @doc """

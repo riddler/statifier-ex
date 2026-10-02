@@ -803,6 +803,13 @@ and does not rewrite `_ioprocessors`. Re-stamp the set the session started
 with; a different set after a resume would need mid-session registration,
 which ADR-0069 names as a trigger that would reopen it.
 
+The same set with different options (a moved base URL, say) is a host's
+refresh, not a new registration: re-stamp the position with the new
+options and call `Statifier.MachineState.refresh_ioprocessors/1` before
+resuming it, or call `Statifier.Session.refresh_ioprocessors/1` on a live
+session. Both ask every processor that exports `ioprocessors_entry/2`
+for its entry again and change no other entry and no key.
+
 ### The Basic HTTP processor
 
 The library ships one registered processor of its own:
