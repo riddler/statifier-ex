@@ -133,6 +133,44 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
       )
     end
 
+    # sabotage: `decode/1` sets the event's `sendid` from the key's second
+    # field, percent-decoded -> the author's `hold.ready` reaches
+    # `_event.sendid` on the first event and the chart reaches `fail`.
+    # Confirmed red and reverted.
+    test "an author-named send and a generated one both arrive with no sendid",
+         %{front: front} do
+      test_scxml(
+        """
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="named">
+              <state id="named">
+                <onentry>
+                  <send id="hold.ready" type="basichttp" event="ready"
+                        targetexpr="_ioprocessors['basichttp']['location']"/>
+                </onentry>
+                <transition event="ready" cond="_event.sendid !== undefined" target="fail"/>
+                <transition event="ready" target="generated"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <state id="generated">
+                <onentry>
+                  <send type="basichttp" event="due"
+                        targetexpr="_ioprocessors['basichttp']['location']"/>
+                </onentry>
+                <transition event="due" cond="_event.sendid !== undefined" target="fail"/>
+                <transition event="due" target="pass"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <final id="pass"/>
+              <final id="fail"/>
+            </scxml>
+        """,
+        "a named and a generated send id are not the event's sendid",
+        ["pass"],
+        [],
+        send_types: send_types(front)
+      )
+    end
+
     # sabotage: `BasicHTTPFront.respond/1` hands the decoder `send_key: nil`
     # -> the malformed header is never checked, the POST is answered 204,
     # and the match reddens. Confirmed red and reverted.
@@ -144,6 +182,47 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
 
       assert {:ok, {{_version, 400, _reason}, _headers, _body}} =
                :httpc.request(:post, request, [], [])
+    end
+  end
+
+  describe "the event's origin" do
+    # sabotage: `decode/1` passes `origin: @uri` to `Event.external/2` beside
+    # `origintype` -> the request arrives with an origin, the first
+    # transition matches, and the chart reaches `fail`. Confirmed red and
+    # reverted.
+    test "an inbound event has no origin, and a reply goes to a location the sender put in a param",
+         %{front: front} do
+      test_scxml(
+        """
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="asking">
+              <state id="asking">
+                <onentry>
+                  <send type="basichttp" event="hold.request"
+                        targetexpr="_ioprocessors['basichttp']['location']">
+                    <param name="replyto" expr="_ioprocessors['basichttp']['location']"/>
+                  </send>
+                </onentry>
+                <transition event="hold.request" cond="_event.origin !== undefined" target="fail"/>
+                <transition event="hold.request" cond="_event.origintype == '#{@uri}'"
+                            target="replying"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <state id="replying">
+                <onentry>
+                  <send type="basichttp" event="hold.ready" targetexpr="_event.data.replyto"/>
+                </onentry>
+                <transition event="hold.ready" target="pass"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <final id="pass"/>
+              <final id="fail"/>
+            </scxml>
+        """,
+        "a reply through a location carried in a param",
+        ["pass"],
+        [],
+        send_types: send_types(front)
+      )
     end
   end
 

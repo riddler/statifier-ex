@@ -727,3 +727,90 @@ the inbound decoder answers as before. The encoding runs only inside this
 processor, so a session that registers nothing sees nothing new: a list
 or a map sent through a built-in type reaches its event as the value
 itself, as before (`Statifier.Send.BasicHTTPSessionTest`).
+
+### Amendment 2026-10-02: an inbound event's `sendid` and `origin` stay unset
+
+Status: proposed - amends decision 5 (the inbound decoder) by addition, and
+answers decision 9's row "`_event.origin` on an inbound event"; every other
+decision, the Amendments above, and the record's own Status are unchanged.
+
+Spec 5.10.1 asks for two event fields this decoder leaves unset: `sendid`,
+when the sending `<send>` named an id, and `origin`, an address a reply can
+be sent to. The first Amendment of 2026-09-30 says the decoder sets no
+event field from the `scxml-send-key` header, without weighing an
+author-named id, and decision 9 leaves `origin` as residue. This Amendment
+decides both as statifier 2.10.0 already answers them, and says why (ruled
+by the operator, 2026-10-01). No answer changes.
+
+**`sendid` stays unset, for a named send as for a generated one.** The one
+send id a POST carries is the second field of its `scxml-send-key` header
+(the first Amendment of 2026-09-30). That field holds the send's id
+whichever way it was made: the author's `id` attribute as written, or
+`send_` and a counter when the author wrote none
+(`Statifier.Machine.Content.Send`'s private `generate_send_id/2`, at
+`b794f906`), and both travel in the header the same way
+(`Statifier.Send.BasicHTTPTest`'s test "an author-named send id and a
+generated one travel in the same key field"). From the header alone the
+decoder cannot tell the two apart,
+and 5.10.1 asks for `sendid` only when the author named one, so setting it
+from every header would hand a chart an id its author never wrote. The
+trade-off is accepted: an author-named send also arrives with
+`_event.sendid` unset. Carrying an author-named id separately, in a
+parameter or a header of its own, is not taken: it is a wire shape every
+sibling processor and every front would have to match. A chart that needs
+the id on the receiving side sends it in a `<param>`. The round trip
+through the loopback front is
+`Mix.Statifier.BasicHTTPFrontTest`'s test "an author-named send and a
+generated one both arrive with no sendid".
+
+**`origin` stays unset; a sender that wants a reply sends its location.**
+The request `decode/1` is handed carries the method, the content type, the
+body, the query string and the `scxml-send-key` value
+(`Statifier.Send.BasicHTTP`'s `t:request/0`, at `b794f906`). None of them
+is an address the receiver can POST back to, so `_event.origin` stays
+unset, and `origintype` is the processor URI as decision 5 says. A sender
+that wants a reply puts its own location in a parameter, for example
+`<param name="replyto" expr="_ioprocessors['basichttp']['location']"/>`,
+and the receiver replies with `targetexpr="_event.data.replyto"`. A
+location is not a predicator literal, so the text rung (decision 8 point
+f) keeps it a string. The decoder's answer is
+`Statifier.Send.BasicHTTPTest`'s test "an inbound event's origin stays
+unset, and its origintype is the processor URI", and the reply recipe end
+to end is `Mix.Statifier.BasicHTTPFrontTest`'s test "an inbound event has
+no origin, and a reply goes to a location the sender put in a param".
+
+Nothing changes for a session that registers nothing: the decoder runs
+only for this processor's inbound requests.
+
+## Note (2026-10-02): query parameters beside each kind of body, and which callbacks receive `:opts`
+
+This Note decides nothing. It states what decision 5 leaves implicit about
+the query string, as the decoder reads it at `b794f906`, and points a
+reader of decision 8 point b at the Amendment that settled it.
+
+**Query parameters.** Decision 5 names the query string only as a place
+the event name is read from, before the body. Its other parameters are
+read by the body's kind (`Statifier.Send.BasicHTTP.decode/1` and its
+private `data/2`, at `b794f906`):
+
+| The body | The query string's other parameters |
+|---|---|
+| A form body (`application/x-www-form-urlencoded`) | Join `_event.data` beside the body's parameters, each through the text rung. The query string's pairs come first, so a name both carry takes the body's value: `Statifier.EventData.coerce/1`'s `{:params, _}` rung keeps the last duplicate |
+| A body of any other content type, or a request with no content type | Dropped: `_event.data` is the body through the text rung, and the query string gives the event name only |
+
+Beside either kind, a query string that is not UTF-8 once decoded is
+`{:error, {:not_utf8, :query}}` (`Statifier.Send.BasicHTTP`'s private
+`pairs/2`). The two rows are `Statifier.Send.BasicHTTPTest`'s tests
+"beside a form body the query string's other parameters join the data, a
+body parameter winning a name both carry" and "beside a body of another
+content type the query string gives the event name only".
+
+**Which callbacks receive `:opts`.** Settled by the Amendment of
+2026-09-30 "a registration's options reach the planning callbacks, and
+`perform/2` gets its configuration through the payload": a
+`{module, opts}` registration's options reach `deliver/3` and `cancel/2`
+under `:opts` (`Statifier.Session.Effects`'s private `processor_for/2`, at
+`b794f906`), and `perform/2` receives the plan context without them
+(`Statifier.Session`'s private `perform_instruction/3`, at `b794f906`), so
+`Statifier.Send.BasicHTTP` carries its transport in the instruction
+payload `deliver/3` plans.

@@ -252,7 +252,7 @@ Inbound, `decode/1` turns one request into one event (C.2.1):
 | no `_scxmleventname` | `HTTP.` and the method in upper case as its name (`HTTP.POST`) |
 | a form body | every other parameter, query string included, in `_event.data` |
 | a body of any other content type | the body as `_event.data`; the query string gives the name only |
-| (always) | the processor URI as `origintype` |
+| (always) | the processor URI as `origintype`, and no `sendid` or `origin` |
 
 Each value is read as a `<content>` body's text is: a predicator literal
 becomes that value, so `2` reads as the number 2, and anything else stays
@@ -271,7 +271,14 @@ whose senders use another charset transcodes the body before it calls
 - A charset other than UTF-8 inbound: such a body is refused, not
   transcoded.
 - `_event.origin` on an inbound event: the decoder has no address a reply
-  could be sent to.
+  could be sent to. A sender that wants a reply puts its own location in a
+  parameter, `<param name="replyto"
+  expr="_ioprocessors['basichttp']['location']"/>`, and the receiver
+  replies with `targetexpr="_event.data.replyto"`.
+- `_event.sendid` on an inbound event, even for a send whose author named
+  its `id`: the `scxml-send-key` header carries a named id and a generated
+  one alike, so the decoder cannot tell them apart. A receiver that needs
+  the id gets it in a parameter.
 - A location after a resume on a host whose base URL moved: the persisted
   `_ioprocessors` keeps the location written when the session started.
 - Authentication of inbound POSTs: C.2 defines none, and a front that

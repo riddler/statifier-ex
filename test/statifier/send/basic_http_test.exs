@@ -186,6 +186,18 @@ defmodule Statifier.Send.BasicHTTPTest do
                "sess%2Fx/a%2Fb%20c/7/2/1/3/transition.4/9"
     end
 
+    # sabotage: `send_key/2` writes the send id only when it starts with
+    # `send_` and the empty string otherwise -> the author's `hold.ready`
+    # leaves the key and the first equality reddens. Confirmed red and
+    # reverted.
+    test "an author-named send id and a generated one travel in the same key field" do
+      assert send_key(planned(send_effect(send_id: "hold.ready"))) ==
+               "sess_sender/hold.ready/1/1/0/3/onentry.2.0/1"
+
+      assert send_key(planned(send_effect(send_id: "send_7"))) ==
+               "sess_sender/send_7/1/1/0/3/onentry.2.0/1"
+    end
+
     # sabotage: the `SendDelayed` clause of `deliver/3` builds its request
     # with `headers: []` -> no key travels and the membership assertion
     # reddens. Confirmed red and reverted.
@@ -491,6 +503,47 @@ defmodule Statifier.Send.BasicHTTPTest do
 
       assert BasicHTTP.decode(request(%{content_type: "text/plain", body: <<0xFF>>})) ==
                {:error, {:not_utf8, :body}}
+    end
+
+    # sabotage: `decode/1` passes `origin: @uri` to `Event.external/2` beside
+    # `origintype` -> every decoded event carries an origin and both
+    # matches redden. Confirmed red and reverted.
+    test "an inbound event's origin stays unset, and its origintype is the processor URI" do
+      assert {:ok, %Event{origin: nil, origintype: @uri}} =
+               BasicHTTP.decode(request(%{body: "_scxmleventname=hold.ready&branch=north"}))
+
+      assert {:ok, %Event{origin: nil, origintype: @uri}} =
+               BasicHTTP.decode(request(%{content_type: "text/plain", body: "due"}))
+    end
+
+    # sabotage: `decode/1` splits `body ++ query` instead of `query ++ body`
+    # -> the query's `copies` is the last duplicate and wins, and the
+    # equality reddens. Confirmed red and reverted.
+    test "beside a form body the query string's other parameters join the data, a body parameter winning a name both carry" do
+      assert {:ok, %Event{name: "hold.ready", data: data}} =
+               BasicHTTP.decode(
+                 request(%{
+                   query: "branch=north&copies=1",
+                   body: "_scxmleventname=hold.ready&copies=3"
+                 })
+               )
+
+      assert data == %{"branch" => "north", "copies" => 3}
+    end
+
+    # sabotage: `data/2`'s text clause reads `data(params, text) when params
+    # != []` and answers `data(params, nil)` -> the query's `branch` becomes
+    # a one-key map in the data and the equality reddens. Confirmed red and
+    # reverted.
+    test "beside a body of another content type the query string gives the event name only" do
+      assert {:ok, %Event{name: "hold.ready", data: "due"}} =
+               BasicHTTP.decode(
+                 request(%{
+                   content_type: "text/plain",
+                   query: "_scxmleventname=hold.ready&branch=north",
+                   body: "due"
+                 })
+               )
     end
   end
 end
