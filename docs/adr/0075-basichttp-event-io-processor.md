@@ -703,8 +703,9 @@ private `encode/1`.
   only the lists and maps inside it are JSON text.
 
 A receiver that uses this record's decoder reads such a form value through
-the text rung, so a JSON array or object that is also a predicator literal
-reads back as a list or a map, and `null` as `nil`.
+the text rung (decision 5). This record does not promise that the value
+reads back as the list or the map that was sent: the text rung reads
+predicator literals, not JSON.
 
 **Inbound: unchanged, and now recorded.** A JSON body
 (`application/json`) is a body of another content type (decision 5): it
