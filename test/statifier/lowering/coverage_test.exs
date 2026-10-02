@@ -15,8 +15,9 @@ defmodule Statifier.Lowering.CoverageTest do
     foreach invoke donedata cancel script
   )
 
-  # The dispatch map's own keys that name an element in
-  # `@scxml_element_names` (`lib/statifier/lowering.ex`) - `finalize` is also
+  # The names lowering builds that are in `@scxml_element_names`: the
+  # dispatch map's own keys (`lib/statifier/lowering.ex`) plus the root
+  # `scxml`, which `lower/2` builds directly - `finalize` is also
   # a dispatch key but, like the parser's own 25-name vocabulary this list
   # mirrors, is not itself one of the 25 names this file scans for, so it
   # stays out of both `@supported` and `@scxml_element_names` here.
