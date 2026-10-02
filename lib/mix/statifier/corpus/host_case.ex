@@ -58,6 +58,16 @@ defmodule Mix.Statifier.Corpus.HostCase do
   (`test/corpus/diff_cases_test.exs`), through `run/2`'s `:after_steps`
   option for the position the steps leave.
 
+  A step may carry an `expect_position` (ADR-0076). Once that step's
+  configuration agrees, the runner reads the session's state with
+  `Statifier.Session.snapshot/1`, renders its export with
+  `Mix.Statifier.Corpus.PositionExpectation.render/1`, and the case agrees
+  only when the rendering is exactly the step's `expect_position`. A case
+  that carries one on any step needs every state of its document to carry
+  an id, and disagrees before it starts a session when one has none. The
+  runner hands such a case here even when it carries no `host` object, as
+  a host that registers nothing.
+
   A host object may carry `event_io_processors`, the one host key a `w3c`
   case may carry (ADR-0075 decision 7): the Event I/O Processor URIs the
   host runs with a location that reaches the running session. For each one
@@ -72,6 +82,7 @@ defmodule Mix.Statifier.Corpus.HostCase do
 
   alias Mix.Statifier.BasicHTTPFront
   alias Mix.Statifier.Corpus.HostCase.Processor
+  alias Mix.Statifier.Corpus.PositionExpectation
   alias Statifier.{MachineState, Session}
 
   @basic_http "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
@@ -103,7 +114,8 @@ defmodule Mix.Statifier.Corpus.HostCase do
         ) :: :agree | {:disagree, String.t()}
   def run(%{"source" => source, "host" => host} = corpus_case, opts \\ []) do
     with {:ok, machine} <- compile(source),
-         :ok <- accepts(machine, host) do
+         :ok <- accepts(machine, host),
+         :ok <- named(machine, corpus_case) do
       session_id = MachineState.generate_session_id()
       :yes = :global.register_name({Processor, session_id}, self())
 
@@ -221,30 +233,48 @@ defmodule Mix.Statifier.Corpus.HostCase do
 
   defp accepts(_machine, _host), do: :ok
 
+  defp named(machine, corpus_case) do
+    if PositionExpectation.expected?(corpus_case),
+      do: PositionExpectation.named(machine),
+      else: :ok
+  end
+
   # `host` carries the case's `expect_sends` and the sends handed so far,
   # newest first, each as `{send_id, expected_item, item}`.
   defp drive(session, corpus_case, expect_sends, after_steps) do
-    steps = Enum.map(corpus_case["steps"], &{&1["event"], &1["configuration"]})
     host = %{expect: expect_sends, handed: []}
 
     with {:ok, host} <- configuration(session, corpus_case["initial_configuration"], host),
-         {:ok, host} <- steps(session, steps, host),
+         {:ok, host} <- steps(session, corpus_case["steps"], host),
          :ok <- after_steps.(Session.snapshot(session)) do
       handed(session, host)
     end
   end
 
   defp steps(session, steps, host) do
-    Enum.reduce_while(steps, {:ok, host}, fn {event, expected}, {:ok, host} ->
+    steps
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, host}, fn {step, number}, {:ok, host} ->
+      %{"event" => event, "configuration" => expected} = step
       settle_short_timers(session, deadline(@settle_window_ms))
       :ok = Session.send_event(session, event(event))
 
-      case configuration(session, expected, host) do
-        {:ok, host} -> {:cont, {:ok, host}}
+      with {:ok, host} <- configuration(session, expected, host),
+           :ok <- position(session, step, number) do
+        {:cont, {:ok, host}}
+      else
         disagree -> {:halt, disagree}
       end
     end)
   end
+
+  # A step's `expect_position` is compared with the session's state once
+  # the step's configuration agrees. A snapshot is read between macrosteps,
+  # so the internal queue it holds is empty and the export can answer.
+  defp position(session, %{"expect_position" => expected, "event" => event}, number),
+    do: PositionExpectation.compare(expected, Session.snapshot(session), {number, event["name"]})
+
+  defp position(_session, _step, _number), do: :ok
 
   # A step's event is injected as an external event, carrying the step's
   # `data` as its payload when the step gives one.

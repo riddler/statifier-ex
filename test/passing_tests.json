@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-09-30",
+  "last_updated": "2026-10-02",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -145,6 +145,8 @@
     "conformance/cases/library/loan_dispute_returns_to_history.json",
     "conformance/cases/library/loan_due_soon_then_overdue.json",
     "conformance/cases/library/loan_lost_after_timer.json",
+    "conformance/cases/library/loan_position_counts_renewals.json",
+    "conformance/cases/library/loan_position_records_history.json",
     "conformance/cases/library/loan_renew_refused_at_max.json",
     "conformance/cases/library/loan_renew_refused_by_hold.json",
     "conformance/cases/library/loan_renew_within_limit.json",
@@ -152,6 +154,7 @@
     "conformance/cases/library/patron_checkout_allowed.json",
     "conformance/cases/library/patron_checkout_refused_while_owed.json",
     "conformance/cases/library/patron_initial_both_regions.json",
+    "conformance/cases/library/patron_position_in_every_region.json",
     "conformance/cases/library/patron_reinstated_after_block.json",
     "conformance/cases/send/registered_delayed_cancel.json",
     "conformance/cases/send/registered_immediate.json",

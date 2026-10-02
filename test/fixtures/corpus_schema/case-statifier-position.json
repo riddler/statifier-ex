@@ -1,0 +1,63 @@
+{
+  "id": "statifier/library/patron_position_in_every_region",
+  "suite": "statifier",
+  "spec": "library",
+  "conformance": null,
+  "description": "Patron p-1 is assessed a fine, and the position after the step names every region of the parallel patron state.",
+  "required_features": [
+    "basic_states",
+    "compound_states",
+    "conditional_transitions",
+    "data_elements",
+    "datamodel",
+    "event_transitions",
+    "internal_transitions",
+    "parallel_states"
+  ],
+  "source": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"predicator\" initial=\"patron\">\n    <datamodel>\n        <data id=\"patron_id\" expr=\"'p-1'\"/>\n    </datamodel>\n\n    <parallel id=\"patron\">\n        <state id=\"standing\" initial=\"good\">\n            <state id=\"good\">\n                <transition event=\"patron.blocked\" target=\"blocked\"/>\n            </state>\n            <state id=\"blocked\">\n                <transition event=\"patron.reinstated\" target=\"good\"/>\n            </state>\n        </state>\n\n        <state id=\"fines\" initial=\"none\">\n            <state id=\"none\">\n                <transition event=\"fine.assessed\" target=\"owed\"/>\n            </state>\n            <state id=\"owed\">\n                <transition event=\"fine.paid\" target=\"none\"/>\n            </state>\n        </state>\n\n        <state id=\"desk\" initial=\"waiting\">\n            <transition event=\"loan.requested\" type=\"internal\" cond=\"In('good') and not In('owed')\" target=\"checkout_allowed\"/>\n            <transition event=\"loan.requested\" type=\"internal\" target=\"checkout_refused\"/>\n\n            <state id=\"waiting\"/>\n            <state id=\"checkout_allowed\"/>\n            <state id=\"checkout_refused\"/>\n        </state>\n    </parallel>\n</scxml>\n",
+  "initial_configuration": [
+    "good",
+    "none",
+    "waiting"
+  ],
+  "steps": [
+    {
+      "event": {
+        "name": "fine.assessed"
+      },
+      "configuration": [
+        "good",
+        "owed",
+        "waiting"
+      ],
+      "expect_position": {
+        "configuration": [
+          "desk",
+          "fines",
+          "good",
+          "owed",
+          "patron",
+          "standing",
+          "waiting"
+        ],
+        "active_invocations": [],
+        "datamodel": {
+          "patron_id": "p-1"
+        },
+        "entered_states": [
+          "desk",
+          "fines",
+          "good",
+          "none",
+          "owed",
+          "patron",
+          "standing",
+          "waiting"
+        ],
+        "history_values": {},
+        "running": true,
+        "states_to_invoke": []
+      }
+    }
+  ]
+}
