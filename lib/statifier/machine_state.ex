@@ -979,7 +979,11 @@ defmodule Statifier.MachineState do
   changed: for `Statifier.Send.BasicHTTP` without `:base_url`,
   `{:error, {:missing_option, :base_url}}`. A check that raises or answers
   outside its contract does not stop the refresh, and an entry that raises
-  or is not a string-keyed map raises here, as it does in `new/2`.
+  or is not a string-keyed map raises here, as it does in `new/2`, with
+  nothing returned. The live `Statifier.Session.refresh_ioprocessors/1`
+  answers that raise as an error instead, because it must not exit a
+  running session; this call keeps raising, so a host refreshing a
+  position before a resume sees the processor's own exception.
   """
   @spec refresh_ioprocessors(machine_state :: t()) :: {:ok, t()} | {:error, term()}
   def refresh_ioprocessors(%__MODULE__{send_types: nil} = machine_state), do: {:ok, machine_state}
@@ -990,7 +994,8 @@ defmodule Statifier.MachineState do
     case SystemVariables.refreshed_ioprocessors(
            datamodel["_ioprocessors"],
            send_types,
-           datamodel["_sessionid"]
+           datamodel["_sessionid"],
+           :raise
          ) do
       {:ok, entries} ->
         {:ok, %{machine_state | datamodel: Map.put(datamodel, "_ioprocessors", entries)}}

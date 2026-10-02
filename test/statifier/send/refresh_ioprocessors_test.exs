@@ -50,6 +50,27 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       }
   end
 
+  defmodule Scanner do
+    @moduledoc false
+    # A parcel scanner whose entry raises once its jam flag, a
+    # `:persistent_term` key the registration names, is set, so a test can
+    # make a refresh raise after the session started cleanly.
+    @behaviour Statifier.Send.Processor
+
+    @impl Statifier.Send.Processor
+    def deliver(_effect, _event, _ctx), do: {:ok, []}
+
+    @impl Statifier.Send.Processor
+    def cancel(_cancel, _ctx), do: {:ok, []}
+
+    @impl Statifier.Send.Processor
+    def ioprocessors_entry(_type, %{session_id: session_id, opts: opts}) do
+      if :persistent_term.get(Keyword.fetch!(opts, :jam), false),
+        do: raise("scanner jammed"),
+        else: %{"location" => "scanner:dock-3/" <> session_id}
+    end
+  end
+
   @chart """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting">
         <datamodel>
@@ -329,6 +350,87 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
 
       assert Session.refresh_ioprocessors(session) == :ok
       assert :erlang.term_to_binary(Session.snapshot(session)) == :erlang.term_to_binary(before)
+    end
+  end
+
+  describe "a processor entry that raises during a refresh" do
+    setup %{route: route} do
+      jam = {__MODULE__, :jam, System.unique_integer([:positive])}
+      on_exit(fn -> :persistent_term.erase(jam) end)
+
+      types =
+        route
+        |> then(&send_types([base_url: @old_depot], &1))
+        |> Map.put("parcel:scanner", {Scanner, jam: jam})
+
+      %{jam: jam, types: types}
+    end
+
+    # sabotage: the live clause of `Session.handle_call/3` asks
+    # `refreshed_ioprocessors/4` with `:raise` instead of `:answer` -> the
+    # entry's raise exits the session, the call exits, and the equality on
+    # the answer reddens. Confirmed red and reverted.
+    test "the live call answers the raise, and the session keeps running at the same position",
+         %{machine: machine, jam: jam, types: types} do
+      session = start!(machine, send_types: types)
+      before = :erlang.term_to_binary(Session.snapshot(session))
+      :persistent_term.put(jam, true)
+
+      answer =
+        try do
+          Session.refresh_ioprocessors(session)
+        catch
+          :exit, reason -> {:exited, reason}
+        end
+
+      assert answer ==
+               {:error,
+                {:ioprocessors_entry, "parcel:scanner", %RuntimeError{message: "scanner jammed"}}}
+
+      assert Process.alive?(session)
+      assert :erlang.term_to_binary(Session.snapshot(session)) == before
+
+      :ok = Session.send_event(session, "read")
+      assert Session.status(session).configuration == MapSet.new(["read"])
+    end
+
+    # sabotage: `refreshed_ioprocessors/4`'s rescue drops the raising type
+    # and keeps the entries computed before it -> the courier's rotated
+    # entry is stored and the position equality reddens. Confirmed red and
+    # reverted.
+    test "an entry computed before the raise is not stored: the refresh is all or nothing",
+         %{machine: machine, route: route, jam: jam, types: types} do
+      session = start!(machine, send_types: types)
+      sid = Session.session_id(session)
+      before = :erlang.term_to_binary(Session.snapshot(session))
+      # "parcel:courier" sorts before "parcel:scanner", so its new entry is
+      # computed first and must still not land.
+      :persistent_term.put(route, "courier:route-2/")
+      :persistent_term.put(jam, true)
+
+      answer = Session.refresh_ioprocessors(session)
+
+      assert :erlang.term_to_binary(Session.snapshot(session)) == before
+
+      assert Session.snapshot(session).datamodel["_ioprocessors"]["parcel:courier"] == %{
+               "location" => "courier:route-1/" <> sid
+             }
+
+      assert {:error, {:ioprocessors_entry, "parcel:scanner", %RuntimeError{}}} = answer
+    end
+
+    # sabotage: `MachineState.refresh_ioprocessors/1` asks
+    # `refreshed_ioprocessors/4` with `:answer` instead of `:raise` -> the
+    # pure call answers an error tuple and `assert_raise` reddens. Confirmed
+    # red and reverted.
+    test "the pure call still raises", %{machine: machine, jam: jam, types: types} do
+      session = start!(machine, send_types: types)
+      position = Session.snapshot(session)
+      :persistent_term.put(jam, true)
+
+      assert_raise RuntimeError, "scanner jammed", fn ->
+        MachineState.refresh_ioprocessors(position)
+      end
     end
   end
 end

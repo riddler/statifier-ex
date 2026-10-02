@@ -108,7 +108,9 @@ and leave the SCXML entry as it is:
   registration has no `:base_url`; `{:error, :not_running}` once the
   session has halted; and `{:error, :recorded_session}` for a session
   started with `record: true`, whose recording has no place for a
-  refresh. Every error changes nothing.
+  refresh. A registered processor whose entry raises during the refresh
+  answers `{:error, {:ioprocessors_entry, type, exception}}`, and the
+  session keeps running. Every error changes nothing.
 
 ## The front you write around `decode/1`
 
