@@ -572,7 +572,13 @@ defmodule Statifier.Session do
       and refuses any other non-built-in type with `error.execution`, as
       before. A map naming a built-in spelling is refused before the session
       boots, with `{:error, {:send_types, {:built_in_types, types}}}`, so a
-      built-in send can never be redirected to a host processor.
+      built-in send can never be redirected to a host processor. At a
+      fresh start, a registration whose processor exports the optional
+      `c:Statifier.Send.Processor.check_registration/2` and rejects it is
+      refused before the session boots, with
+      `{:error, {:send_types, {:invalid_registration, type, reason}}}` for
+      the first such type in the order of the type strings; a resume does
+      not ask the processor.
     - `:inherit_send_types` - when `true`, every child session this session
       starts for an `<invoke>` is started with this session's `:send_types`
       map and `inherit_send_types: true` of its own. Default `false`, which
@@ -1048,12 +1054,38 @@ defmodule Statifier.Session do
   @spec init_registered(machine :: Machine.t(), opts :: keyword(), resume :: resume()) ::
           {:ok, State.t(), {:continue, tuple()}}
           | {:stop, {:send_types, {:built_in_types, [term()]}}}
+          | {:stop, {:send_types, {:invalid_registration, String.t(), term()}}}
   defp init_registered(machine, opts, resume) do
-    case opts |> Keyword.get(:send_types, %{}) |> built_in_send_types() do
-      [] -> init_boot(machine, opts, resume)
+    send_types = Keyword.get(opts, :send_types, %{})
+
+    case built_in_send_types(send_types) do
+      [] -> init_accepted(machine, opts, resume, send_types)
       built_ins -> {:stop, {:send_types, {:built_in_types, built_ins}}}
     end
   end
+
+  # ADR-0069's Amendment of 2026-10-02: a fresh start asks every
+  # registration whose processor exports the optional
+  # `check_registration/2` whether it can serve it, and refuses the first
+  # one rejected with a named value before the session boots. A resume is
+  # not asked: the `_ioprocessors` entries its position carries stand
+  # (ADR-0075 decision 3).
+  @spec init_accepted(
+          machine :: Machine.t(),
+          opts :: keyword(),
+          resume :: resume(),
+          send_types :: map()
+        ) ::
+          {:ok, State.t(), {:continue, tuple()}}
+          | {:stop, {:send_types, {:invalid_registration, String.t(), term()}}}
+  defp init_accepted(machine, opts, :fresh, send_types) do
+    case SendTypes.rejected_registration(send_types) do
+      nil -> init_boot(machine, opts, :fresh)
+      {type, reason} -> {:stop, {:send_types, {:invalid_registration, type, reason}}}
+    end
+  end
+
+  defp init_accepted(machine, opts, resume, _send_types), do: init_boot(machine, opts, resume)
 
   # The keys of a `:send_types` map that name a built-in spelling. Membership
   # is `Statifier.Send.Types.classify/2`'s answer against no declaration, so

@@ -17,6 +17,17 @@ defmodule Statifier.Session.SendTypesTest do
     @moduledoc false
   end
 
+  # A processor that exports the optional `check_registration/2` and
+  # accepts a registration only when its options carry `:shelf`.
+  defmodule ShelfProcessor do
+    @moduledoc false
+    @spec check_registration(type :: String.t(), opts :: keyword()) ::
+            :ok | {:error, {:missing_option, :shelf}}
+    def check_registration(_type, opts) do
+      if Keyword.has_key?(opts, :shelf), do: :ok, else: {:error, {:missing_option, :shelf}}
+    end
+  end
+
   @send_types %{"myapp:sink" => SinkProcessor}
 
   @chart """
@@ -108,6 +119,78 @@ defmodule Statifier.Session.SendTypesTest do
     # and this `{:ok, _}` match reddens. Confirmed red and reverted.
     test "a map naming only host types boots" do
       assert {:ok, _session} = Session.start_link(compile!(@chart), send_types: @send_types)
+    end
+  end
+
+  describe "a registration the processor rejects" do
+    setup do
+      Process.flag(:trap_exit, true)
+      :ok
+    end
+
+    # sabotage: `Types.rejection/2` answers `nil` for an `{:error, _}`
+    # -> the session boots and the `{:error, _}` match reddens. Confirmed
+    # red and reverted.
+    test "a fresh start is refused by name, with no crash report" do
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error,
+                  {:send_types,
+                   {:invalid_registration, "library:shelve", {:missing_option, :shelf}}}} =
+                   Session.start_link(compile!(@chart),
+                     send_types: %{"library:shelve" => ShelfProcessor}
+                   )
+        end)
+
+      assert log == ""
+    end
+
+    # sabotage: `rejected_registration/1` sorts the type strings descending ->
+    # `"library:z-return"` is named and the match reddens. Confirmed red
+    # and reverted.
+    test "the first rejected type, in the order of the type strings, is named" do
+      send_types = %{
+        "library:z-return" => ShelfProcessor,
+        "library:a-renew" => {ShelfProcessor, []},
+        "library:m-hold" => {ShelfProcessor, shelf: "holds"}
+      }
+
+      assert {:error, {:send_types, {:invalid_registration, "library:a-renew", _reason}}} =
+               Session.start_link(compile!(@chart), send_types: send_types)
+    end
+
+    # sabotage: `Types.rejection/2` drops its `function_exported?/3`
+    # check -> `SinkProcessor` is asked, the start fails, and the `{:ok, _}`
+    # match reddens. Confirmed red and reverted.
+    test "an accepted registration, and a processor without the callback, boot" do
+      assert {:ok, _session} =
+               Session.start_link(compile!(@chart),
+                 send_types: %{
+                   "library:shelve" => {ShelfProcessor, shelf: "returns"},
+                   "myapp:sink" => SinkProcessor
+                 }
+               )
+    end
+
+    # sabotage: `init_accepted/4`'s resume clause asks
+    # `rejected_registration/1` as a fresh start does -> the resume is
+    # refused and the `{:ok, _}` match reddens. Confirmed red and reverted.
+    test "a resume is not asked: its persisted position stands" do
+      machine = compile!(@chart)
+
+      {:ok, first} =
+        Session.start_link(machine,
+          send_types: %{"library:shelve" => {ShelfProcessor, shelf: "returns"}}
+        )
+
+      assert {:ok, blob} = Position.to_binary(Session.snapshot(first))
+      :ok = Session.stop(first)
+
+      assert {:ok, _resumed} =
+               Session.start_link(machine,
+                 resume: blob,
+                 send_types: %{"library:shelve" => ShelfProcessor}
+               )
     end
   end
 

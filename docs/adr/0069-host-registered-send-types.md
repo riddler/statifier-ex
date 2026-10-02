@@ -553,3 +553,66 @@ sense, and the twelve documents enter the corpus with a host declaration.
 When that record is implemented, conformance results move. That is where
 the answer lives. This note decides nothing: no decision or consequence
 of this record changes, and the Status line stands as written.
+
+## Amendment (2026-10-02): a processor may refuse a registration at a fresh start, by name
+
+Status: proposed - amends decision 1
+
+This Amendment adds one start-time refusal beside decision 1's refusal of
+a built-in spelling and changes nothing else: every decision above stands
+as written, and no text above is edited. Anchors below were read on `main`
+at `2a442885` unless they name this change. Ruled by the operator,
+2026-10-01.
+
+**Why.** Decision 1 refuses a registration that names a built-in spelling
+before the session boots, with a named value. A registration the
+processor itself cannot serve had no such door. The Basic HTTP Event I/O
+Processor needs a `:base_url` option to build its `_ioprocessors` location
+(ADR-0075 decision 3 and decision 8, point b), and without it
+`Statifier.Send.BasicHTTP.ioprocessors_entry/2` raised `ArgumentError` at
+`2a442885`, so a fresh start answered `{:error, {%ArgumentError{},
+stacktrace}}` and logged a crash report.
+
+**The callback.** `Statifier.Send.Processor` gains an optional
+`check_registration(type, opts) :: :ok | {:error, reason}` (this change),
+handed the registered type string and the registration's options (`[]`
+for a bare-module registration). The session asks it at a fresh start,
+before the session boots, for every registration whose module exports
+it, in the order of the type strings
+(`Statifier.Send.Types.rejected_registration/1`, this change). The first
+`{:error, reason}` refuses the start with
+
+```elixir
+{:error, {:send_types, {:invalid_registration, type, reason}}}
+```
+
+and no crash report (`Statifier.Session`'s `init_accepted/4`, this
+change). A module that does not export the callback is not asked, and a
+session that registers nothing asks nothing, so it sees nothing new.
+The session names no processor: the Basic HTTP processor is one module
+that exports the callback, answering `{:missing_option, :base_url}` when
+its options carry no string `:base_url`
+(`Statifier.Send.BasicHTTP.check_registration/2`, this change).
+`ioprocessors_entry/2` keeps its raise for a direct caller.
+
+**Why a resume is exempt.** A resume does not ask the callback. ADR-0075
+decision 3 writes the `_ioprocessors` entries once, when the session
+starts, and "a persisted position carries them in the datamodel, so a
+resumed session reads the location it started with". A resumed session
+never asks `ioprocessors_entry/2`, so a registration without the option
+breaks nothing the resumed session reads: the entries persisted with the
+position stand. Refusing the resume would change the answer of every
+resumed session whose host registers the processor bare, for no entry the
+session would otherwise get wrong.
+
+**What changes for a host.** One answer: a fresh start whose Basic HTTP
+registration lacks `:base_url` answers the named refusal above instead of
+the `ArgumentError` shape. A resume does not change.
+
+**Tests.** `Statifier.Session.SendTypesTest`'s "a registration the
+processor rejects" cases pin the refusal and its absent crash report, the
+order of the type strings, that a processor without the callback is not
+asked, and that a resume is not asked. `Statifier.Send.BasicHTTPSessionTest`
+pins the Basic HTTP refusal at a fresh start and a resume that is not
+refused and keeps its entry, and `Statifier.Send.BasicHTTPTest` pins
+`check_registration/2`'s two answers.

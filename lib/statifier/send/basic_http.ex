@@ -26,8 +26,12 @@ defmodule Statifier.Send.BasicHTTP do
       The session's `_ioprocessors` carries an entry under each registered
       string, both holding the same `"location"`: this URL, `/`, and the
       session's `_sessionid` (C.2.3, ADR-0075 decision 3). A registration
-      without it is refused when the session starts, with an
-      `ArgumentError` naming the option.
+      without it (or with a value that is not a string) is refused when
+      the session starts fresh, with
+      `{:error, {:send_types, {:invalid_registration, type,
+      {:missing_option, :base_url}}}}` and no crash report
+      (`check_registration/2`). A resumed session is not refused: its
+      position carries the entries it started with.
     - `:transport` - a `Statifier.Send.BasicHTTP.Transport` module the
       POSTs go through. Default `Statifier.Send.BasicHTTP.Transport.Httpc`,
       on OTP's `:httpc`; this package adds no dependency for it
@@ -151,10 +155,28 @@ defmodule Statifier.Send.BasicHTTP do
          }
 
   @doc """
+  Accepts a registration whose options carry a string `:base_url`, the
+  address the `_ioprocessors` location is built from (C.2.3), and answers
+  `{:error, {:missing_option, :base_url}}` for any other. A session's
+  fresh start asks it and refuses a rejected registration by name
+  (`Statifier.Send.Processor`'s "Refusing a registration").
+  """
+  @impl Statifier.Send.Processor
+  @spec check_registration(type :: String.t(), opts :: keyword()) ::
+          :ok | {:error, {:missing_option, :base_url}}
+  def check_registration(_type, opts) do
+    case Keyword.fetch(opts, :base_url) do
+      {:ok, base_url} when is_binary(base_url) -> :ok
+      _missing -> {:error, {:missing_option, :base_url}}
+    end
+  end
+
+  @doc """
   The `_ioprocessors` entry for `type`: a `"location"` that is the
   registration's `:base_url`, `/`, and the session's id (C.2.3, ADR-0075
   decision 3). Raises `ArgumentError` when the registration carries no
-  `:base_url`, which refuses the session's start.
+  `:base_url`; a session's fresh start refuses such a registration through
+  `check_registration/2` before this is asked.
   """
   @impl Statifier.Send.Processor
   @spec ioprocessors_entry(
