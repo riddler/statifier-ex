@@ -279,8 +279,9 @@ whose senders use another charset transcodes the body before it calls
   its `id`: the `scxml-send-key` header carries a named id and a generated
   one alike, so the decoder cannot tell them apart. A receiver that needs
   the id gets it in a parameter.
-- A location after a resume on a host whose base URL moved: the persisted
-  `_ioprocessors` keeps the location written when the session started.
+- A location that follows a moved base URL on its own: a resume keeps the
+  location the session started with until the host refreshes it, as
+  "When the base URL moves, or a location rotates" above shows.
 - Authentication of inbound POSTs: C.2 defines none, and a front that
   needs it adds it itself.
 - A session that is persisted and not running: the location reaches a
