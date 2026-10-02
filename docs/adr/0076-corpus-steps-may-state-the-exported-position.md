@@ -78,7 +78,7 @@ bytes; an id appears once. Keys are strings.
 |---|---|---|
 | `configuration` | asserted, as a sorted array of every active state's id, ancestors included and the `<scxml>` root left out | the state a conforming implementation is in after the step |
 | `entered_states` | asserted, sorted array, root left out | Appendix D's `isFirstEntry`, held per state: which states have ever been entered is fixed by the document and the steps |
-| `states_to_invoke` | asserted, sorted array | Appendix D's `statesToInvoke`; the invoke pass that ends a macrostep empties it, so after a step it is empty, and an implementation that does not clear it differs |
+| `states_to_invoke` | asserted, sorted array | Appendix D's `statesToInvoke`; the invoke pass that ends a macrostep empties it, so after a step that leaves the chart running it is empty, and an implementation that does not clear it differs. After the step that ends the chart it holds the states entered in that last macrostep, as Appendix D leaves it: `mainEventLoop` breaks out of its loop when `running` is false, before the invoke pass (`Statifier.Interpreter`'s `main_event_loop/3`) |
 | `history_values` | asserted, an object from each history state's id to its recorded ids as a sorted array; a history that recorded nothing has no member | the value spec 3.10 says a history state records is fixed by the document and the steps |
 | `active_invocations` | asserted as `{"state", "index"}` objects sorted by state then index; the invocation's id is left out | which `<invoke>` elements are running is the document's, but a generated id's `platformid` half is the implementation's (spec 6.4) |
 | `running` | asserted, the boolean | Appendix D's `running`: whether the chart has reached a top-level final state |

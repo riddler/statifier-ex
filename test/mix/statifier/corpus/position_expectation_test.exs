@@ -185,6 +185,46 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
                "a case that expects a position needs every state to carry an id, " <>
                  "and 1 state(s) of this document have none"
     end
+
+    # sabotage: Statifier.Interpreter's main_event_loop/3 (outside this
+    # change) clearing states_to_invoke in its not-running branch before
+    # exit_interpreter/1 -> the ending step's position states [] -> red
+    test "after the step that ends the chart, states_to_invoke keeps the states that step entered" do
+      loan = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
+          <state id="on_loan">
+              <transition event="copy.returned" target="returned"/>
+          </state>
+          <final id="returned"/>
+      </scxml>
+      """
+
+      returned = %{
+        "configuration" => [],
+        "entered_states" => ["on_loan", "returned"],
+        "states_to_invoke" => ["returned"],
+        "history_values" => %{},
+        "active_invocations" => [],
+        "running" => false,
+        "datamodel" => %{}
+      }
+
+      loan_case = %{
+        "id" => "statifier/library/loan_returned_position",
+        "source" => loan,
+        "description" => "",
+        "initial_configuration" => ["on_loan"],
+        "steps" => [
+          %{
+            "event" => %{"name" => "copy.returned"},
+            "configuration" => ["returned"],
+            "expect_position" => returned
+          }
+        ]
+      }
+
+      assert Runner.run_case(loan_case) == :agree
+    end
   end
 
   describe "render/1" do
