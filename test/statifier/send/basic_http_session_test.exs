@@ -12,7 +12,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
 
   import Statifier.Testing.Case, only: [test_scxml: 5]
 
-  alias Statifier.{BasicHTTPTestTransport, Session}
+  alias Statifier.{BasicHTTPTestTransport, CrashReportProbe, Session}
   alias Statifier.Send.BasicHTTP
 
   @uri "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
@@ -53,27 +53,27 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
              }
     end
 
-    # sabotage: `init_accepted/4`'s fresh clause boots whatever
-    # `rejected_registration/1` answers -> `ioprocessors_entry/2` raises,
-    # the start answers the `ArgumentError` shape and the match reddens.
-    # Confirmed red and reverted.
+    # sabotage: the refusal moved back into `init/1` (`start_link/2` skips
+    # `rejected_registration/1` and `init_registered/3` stops with the same
+    # value) -> the named reason still comes back, but the spawned process's
+    # `{:proc_lib, :crash}` report reaches the probe and `refute_receive`
+    # reddens. Confirmed red and reverted.
     test "a registration without :base_url is refused by name when the session starts" do
       {:ok, machine} = Statifier.compile(@idle)
+      CrashReportProbe.attach()
 
-      log =
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert {:error,
-                  {:send_types,
-                   {:invalid_registration, "basichttp", {:missing_option, :base_url}}}} =
-                   Statifier.start_session(machine, send_types: %{"basichttp" => BasicHTTP})
-        end)
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error,
+                {:send_types, {:invalid_registration, "basichttp", {:missing_option, :base_url}}}} =
+                 Statifier.start_session(machine, send_types: %{"basichttp" => BasicHTTP})
+      end)
 
-      assert log == ""
+      refute_receive {:crash_report, _report}, 200
     end
 
-    # sabotage: `init_accepted/4`'s resume clause asks
-    # `rejected_registration/1` as a fresh start does -> the resume is
-    # refused and the `{:ok, _}` match reddens. Confirmed red and reverted.
+    # sabotage: `Session`'s `rejected_registration/1` ignores `:resume` ->
+    # the resume is refused and the `{:ok, _}` match reddens. Confirmed red
+    # and reverted.
     test "a resume whose registration lacks :base_url is not refused, and keeps its entry" do
       {:ok, machine} = Statifier.compile(@idle)
       first = start!(@idle)
