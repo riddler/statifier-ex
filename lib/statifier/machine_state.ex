@@ -337,12 +337,14 @@ defmodule Statifier.MachineState do
   owns the shape of each; this module owns *when* each is written, and each
   has exactly one writer:
 
-  - `_sessionid`, `_name`, and `_ioprocessors` are written exactly once, by
+  - `_sessionid`, `_name`, and `_ioprocessors` are written once, by
     `new/2`, from `SystemVariables.initial/3` merged **over** the
     `:datamodel` option's map - an author-supplied datamodel can never
     shadow a system variable. `_ioprocessors` includes one entry per type
     in the `:send_types` option (ADR-0069); `put_send_types/2` does not
-    rewrite it.
+    rewrite it. The one later writer is `refresh_ioprocessors/1`, a host's
+    explicit call, which recomputes registered entry values and adds or
+    removes no key.
   - `_event` is **seeded** to `nil` by `new/2` from the same
     `SystemVariables.initial/2` map, and thereafter written only by
     `put_event/2`. That is one writer per phase rather than two writers of
@@ -940,8 +942,61 @@ defmodule Statifier.MachineState do
   exactly this reason, as they do `invoke_types`). The datamodel's
   `_ioprocessors` is not rewritten: it keeps the entries `new/2` wrote
   when the session started (`SystemVariables.initial/3` gives the reason).
+  A host whose registration's options moved across a resume (a new
+  `:base_url`, say) re-stamps here and then calls
+  `refresh_ioprocessors/1`, which reads the entries from this stamp.
   """
   @spec put_send_types(machine_state :: t(), send_types :: send_types()) :: t()
   def put_send_types(%__MODULE__{} = machine_state, send_types),
     do: %{machine_state | send_types: send_types}
+
+  @doc """
+  Recomputes the registered `_ioprocessors` entries from the registration
+  `machine_state` is stamped with (ADR-0075's Amendment of 2026-10-02).
+  Pure.
+
+  Every `_ioprocessors` key that names a type in the `send_types` stamp
+  whose processor exports
+  `c:Statifier.Send.Processor.ioprocessors_entry/2` is asked for again,
+  with the type, the session's `_sessionid` and the registration's
+  options, exactly as `new/2` asked at session start. Nothing else
+  changes: the SCXML Event I/O Processor's entry, an entry whose processor
+  exports only `c:Statifier.Send.Processor.ioprocessors_entry/1`, an entry
+  for a type the stamp does not name, and the set of keys are left as they
+  are, so no type is registered or dropped by a refresh.
+
+  This is a host's step, never the library's. A resume reads the entries
+  its position carries; a host whose registration's options moved (a new
+  `:base_url`, or a location its front rotated) re-stamps with
+  `put_send_types/2` and calls this before it hands the position on, for
+  instance to `Statifier.Session.start_link/2`'s `:resume`.
+
+  Answers `{:ok, machine_state}`, unchanged when the stamp is `nil` (a
+  session that registers nothing) or names no such processor. Before any
+  entry is recomputed, every such processor that exports
+  `c:Statifier.Send.Processor.check_registration/2` is asked, in type
+  order, and the first `{:error, reason}` is the answer, with nothing
+  changed: for `Statifier.Send.BasicHTTP` without `:base_url`,
+  `{:error, {:missing_option, :base_url}}`. A check that raises or answers
+  outside its contract does not stop the refresh, and an entry that raises
+  or is not a string-keyed map raises here, as it does in `new/2`.
+  """
+  @spec refresh_ioprocessors(machine_state :: t()) :: {:ok, t()} | {:error, term()}
+  def refresh_ioprocessors(%__MODULE__{send_types: nil} = machine_state), do: {:ok, machine_state}
+
+  def refresh_ioprocessors(
+        %__MODULE__{send_types: send_types, datamodel: datamodel} = machine_state
+      ) do
+    case SystemVariables.refreshed_ioprocessors(
+           datamodel["_ioprocessors"],
+           send_types,
+           datamodel["_sessionid"]
+         ) do
+      {:ok, entries} ->
+        {:ok, %{machine_state | datamodel: Map.put(datamodel, "_ioprocessors", entries)}}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
 end

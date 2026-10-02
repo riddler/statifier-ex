@@ -167,6 +167,19 @@ defmodule Statifier.Send.Types do
       else: Enum.find_value(answers, &rejection/1)
   end
 
+  # One registration's answer to the optional
+  # `c:Statifier.Send.Processor.check_registration/2`, through the same
+  # asker `rejected_registration/1` uses: `:ok` for a module that does not
+  # export it, `{:error, reason}` for a rejection, and `:unanswered` for a
+  # check that raises, throws, exits or answers outside its contract.
+  # Internal: `Statifier.Evaluator.SystemVariables`'s refresh of the
+  # registered `_ioprocessors` entries is its caller, hence `@doc false`.
+  @doc false
+  @spec check_registration(type :: String.t(), processor :: {module(), keyword()}) ::
+          :ok | {:error, term()} | :unanswered
+  def check_registration(type, {module, opts}) when is_atom(module) and is_list(opts),
+    do: answer(type, {module, opts})
+
   @spec rejection({type :: String.t(), answer :: :ok | {:error, term()}}) ::
           {String.t(), term()} | nil
   defp rejection({type, {:error, reason}}), do: {type, reason}
@@ -201,8 +214,9 @@ defmodule Statifier.Send.Types do
 
   # The value `module` returns from `ioprocessors_entry/2` for `type` and
   # `context`, checked as `from_send_types/1` checks a `/1` entry.
-  # Internal: `Statifier.Evaluator.SystemVariables.initial/3` is its one
-  # caller (ADR-0075 decision 3), hence `@doc false`.
+  # Internal: `Statifier.Evaluator.SystemVariables` is its one caller, at
+  # session start and on a refresh (ADR-0075 decision 3), hence
+  # `@doc false`.
   @doc false
   @spec session_entry!(module :: module(), type :: String.t(), context :: map()) :: map()
   def session_entry!(module, type, context),

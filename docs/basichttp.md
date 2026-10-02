@@ -73,6 +73,43 @@ each registered string, and both hold the same location: the base URL, a
 The entries are written once, when the session starts, and persist with
 the datamodel, so a resumed session reads the location it started with.
 
+### When the base URL moves, or a location rotates
+
+The library never rewrites the location on its own, and a resume does
+not either. Keeping the location current is the host's step, through one
+of two calls that recompute every registered entry from the registration
+and leave the SCXML entry as it is:
+
+- **Across a resume.** A host whose base URL moved re-stamps the
+  position with the new registration and refreshes it before it starts
+  the session:
+
+  ```elixir
+  {:ok, position} = Statifier.Position.from_binary(blob, machine)
+  send_types = %{"basichttp" => {Statifier.Send.BasicHTTP, base_url: new_base_url}}
+
+  {:ok, position} =
+    position
+    |> Statifier.MachineState.put_send_types(Statifier.Send.Types.from_send_types(send_types))
+    |> Statifier.MachineState.refresh_ioprocessors()
+
+  {:ok, session} =
+    Statifier.start_session(machine, resume: position, send_types: send_types)
+  ```
+
+  The chart then reads the new location. A session started this way with
+  `record: true` records the refreshed position as its starting point, so
+  a replay reads the same location.
+
+- **On a live session.** `Statifier.Session.refresh_ioprocessors/1` asks
+  the processor again from the registration the session holds, for a
+  front that rotated a location a processor reads at that moment. It
+  answers `:ok`; `{:error, {:missing_option, :base_url}}` when the
+  registration has no `:base_url`; `{:error, :not_running}` once the
+  session has halted; and `{:error, :recorded_session}` for a session
+  started with `record: true`, whose recording has no place for a
+  refresh. Every error changes nothing.
+
 ## The front you write around `decode/1`
 
 The library receives nothing on its own. Your host runs the HTTP endpoint

@@ -960,6 +960,47 @@ defmodule Statifier.Session do
   def snapshot(server), do: GenServer.call(server, :snapshot)
 
   @doc """
+  Recomputes this session's registered `_ioprocessors` entries, the live
+  counterpart of `Statifier.MachineState.refresh_ioprocessors/1`
+  (ADR-0075's Amendment of 2026-10-02): every registered type whose
+  processor exports `c:Statifier.Send.Processor.ioprocessors_entry/2` is
+  asked for its entry again, from the registration this session holds, so
+  a host whose front rotated a location can tell the chart. The SCXML
+  entry, an entry from a processor exporting only
+  `c:Statifier.Send.Processor.ioprocessors_entry/1`, and the set of keys
+  are left as they are. A session that registers nothing answers `:ok`
+  and changes nothing.
+
+  Answers `:ok`, or, changing nothing:
+
+    - `{:error, reason}` - the first `{:error, reason}` a registered
+      processor's `c:Statifier.Send.Processor.check_registration/2`
+      answered, in type order; for `Statifier.Send.BasicHTTP` without
+      `:base_url`, `{:error, {:missing_option, :base_url}}`.
+    - `{:error, :not_running}` - the session has halted (`:done`,
+      `:cancelled` or `:budget_exhausted`), so no chart is left to read
+      the entries.
+    - `{:error, :recorded_session}` - the session was started with
+      `record: true`. A recording (`Statifier.Session.Recording`) is a
+      persisted, versioned format with no entry for a refresh, so a
+      replay could not reproduce one. A host that records refreshes
+      before it starts the session instead: it re-stamps the position
+      with `Statifier.MachineState.put_send_types/2`, calls
+      `Statifier.MachineState.refresh_ioprocessors/1`, and passes the
+      result as `:resume`, and the recording's anchor then carries the
+      refreshed entries.
+
+  This is a call, not a cast: a host learns whether the entries moved.
+  It is the one call that changes the session's position; it is handled
+  between macrosteps, like every other message, so a chart reads the
+  refreshed entries from the next event it processes. An entry that
+  raises exits the session with that raise, as it would at start.
+  """
+  @spec refresh_ioprocessors(server :: server()) ::
+          :ok | {:error, :not_running | :recorded_session | term()}
+  def refresh_ioprocessors(server), do: GenServer.call(server, :refresh_ioprocessors)
+
+  @doc """
   A small status projection - `session_id`, `status`, `configuration` (as
   string ids), the three step counters, and the queued-event and
   pending-timer counts - for a caller polling in a loop, since `snapshot/1`
@@ -1574,6 +1615,22 @@ defmodule Statifier.Session do
   def handle_call(:session_id, _from, state), do: {:reply, state.session_id, state}
   def handle_call(:snapshot, _from, state), do: {:reply, state.machine_state, state}
   def handle_call(:status, _from, state), do: {:reply, build_status(state), state}
+
+  def handle_call(:refresh_ioprocessors, _from, %State{halted: halted} = state)
+      when halted != nil do
+    {:reply, {:error, :not_running}, state}
+  end
+
+  def handle_call(:refresh_ioprocessors, _from, %State{recording: nil} = state) do
+    case MachineState.refresh_ioprocessors(state.machine_state) do
+      {:ok, machine_state} -> {:reply, :ok, %{state | machine_state: machine_state}}
+      {:error, _reason} = error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call(:refresh_ioprocessors, _from, state) do
+    {:reply, {:error, :recorded_session}, state}
+  end
 
   def handle_call(:invocations, _from, state) do
     {:reply, Invocations.list(state.invocations), state}
