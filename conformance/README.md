@@ -210,8 +210,8 @@ members, and `schema/case.json` requires all of them:
 - `entered_states`: every state entered at least once;
 - `states_to_invoke`: the states whose invocations wait for the invoke
   pass: empty after a step that leaves the chart running, and after the
-  step that ends the chart, the states that step entered, because no
-  invoke pass runs once the chart has stopped;
+  step that ends the chart, the states entered in that step's last
+  macrostep, because no invoke pass runs once the chart has stopped;
 - `history_values`: each history state that has recorded a value, by
   id, with the ids it recorded;
 - `active_invocations`: each running invocation as the id of the state
