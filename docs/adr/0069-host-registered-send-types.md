@@ -556,7 +556,7 @@ of this record changes, and the Status line stands as written.
 
 ## Amendment (2026-10-02): a processor may refuse a registration at a fresh start, by name
 
-Status: proposed - amends decision 1
+Status: accepted (2026-10-02) - amends decision 1
 
 This Amendment adds one start-time refusal beside decision 1's refusal of
 a built-in spelling and changes nothing else: every decision above stands
@@ -649,3 +649,40 @@ refused by name), and a resume that is not
 refused and keeps
 its entry, and `Statifier.Send.BasicHTTPTest` pins
 `check_registration/2`'s two answers.
+
+## Note (2026-10-02): the Amendment of 2026-10-02 is accepted
+
+The Amendment of 2026-10-02 "a processor may refuse a registration at a
+fresh start, by name" is accepted on 2026-10-02. Its Status line is the
+only line of the record that changes; no decision, consequence, Note or
+Amendment paragraph changes here, and this Note decides nothing.
+
+Its code shipped in statifier 2.11.0: the tag `v2.11.0` names
+`bbc4c0ee`, and statifier 2.11.0 is published. Every claim the Amendment
+makes was verified against `main` at `bbc4c0ee`:
+
+- the optional callback: `Statifier.Send.Processor`'s
+  `check_registration/2`, listed in its optional callbacks;
+- the refusal at a fresh start, in the caller, before any process is
+  spawned, and nothing asked on a resume: `Statifier.Session.start_link/2`
+  and its private `rejected_registration/1`;
+- a map naming a built-in spelling, and a map holding a value that is not
+  a module or `{module, opts}`, left to `init/1`: the same private
+  `rejected_registration/1`, through `Statifier.Send.Types.registration?/1`;
+- the order of the type strings, every exporting module asked before any
+  answer is used, and a check that breaks its contract leaving the start to
+  `init/1`: `Statifier.Send.Types.rejected_registration/1`;
+- the Basic HTTP processor's two answers, through the one lookup it shares
+  with `ioprocessors_entry/2`, which keeps its raise:
+  `Statifier.Send.BasicHTTP.check_registration/2`;
+- `Statifier.start_session/2` starting its child through `start_link/2`:
+  `Statifier.start_session/2`;
+- the tests the Amendment names: `Statifier.Session.SendTypesTest`'s
+  "a registration the processor rejects" cases,
+  `Statifier.CrashReportProbe` under `test/support/`,
+  `Statifier.Send.BasicHTTPSessionTest`'s refusal, option-table and resume
+  tests, and `Statifier.Send.BasicHTTPTest`'s `check_registration/2`
+  tests.
+
+The Amendment's "Why" paragraph describes the package at `2a442885`, as it
+says, before the callback existed.

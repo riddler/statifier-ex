@@ -507,7 +507,7 @@ that Amendment changes and still holds as written.
 
 ### Amendment 2026-10-02: a host refreshes the registered `_ioprocessors` entries by an explicit call
 
-Status: proposed - amends decision 3 (when the entries are written) and
+Status: accepted (2026-10-02) - amends decision 3 (when the entries are written) and
 answers decision 9's row "A location read after a resume on a host whose
 base URL moved"; every other decision, the two Amendments above, and the
 record's own Status are unchanged.
@@ -607,7 +607,7 @@ the refresh neither needs a running chart nor escapes a recording.
 
 ### Amendment 2026-10-02: a live refresh answers an entry that raises, and the session keeps running
 
-Status: proposed - amends the Amendment above ("a host refreshes the
+Status: accepted (2026-10-02) - amends the Amendment above ("a host refreshes the
 registered `_ioprocessors` entries by an explicit call") in one sentence;
 every decision, every other Amendment, and the record's own Status are
 unchanged.
@@ -648,7 +648,7 @@ session that registers nothing) are unchanged.
 
 ### Amendment 2026-10-02: a list or a map value is written as JSON text, and a body is read as UTF-8 text whatever its type
 
-Status: proposed - amends decision 4 (the outbound mapping) and decision 5
+Status: accepted (2026-10-02) - amends decision 4 (the outbound mapping) and decision 5
 (the inbound decoder) by addition, and answers decision 9's row
 "Non-scalar values in `params` (a map, a list, `:undefined`)" and the
 residue sentence "JSON bodies and charset handling are residue" in its row
@@ -730,7 +730,7 @@ itself, as before (`Statifier.Send.BasicHTTPSessionTest`).
 
 ### Amendment 2026-10-02: an inbound event's `sendid` and `origin` stay unset
 
-Status: proposed - amends decision 5 (the inbound decoder) by addition, and
+Status: accepted (2026-10-02) - amends decision 5 (the inbound decoder) by addition, and
 answers decision 9's row "`_event.origin` on an inbound event"; every other
 decision, the Amendments above, and the record's own Status are unchanged.
 
@@ -814,3 +814,53 @@ under `:opts` (`Statifier.Session.Effects`'s private `processor_for/2`, at
 (`Statifier.Session`'s private `perform_instruction/3`, at `b794f906`), so
 `Statifier.Send.BasicHTTP` carries its transport in the instruction
 payload `deliver/3` plans.
+
+## Note (2026-10-02): the four Amendments of 2026-10-02 are accepted
+
+These four Amendments of 2026-10-02 are accepted on 2026-10-02:
+
+- "a host refreshes the registered `_ioprocessors` entries by an explicit
+  call";
+- "a live refresh answers an entry that raises, and the session keeps
+  running";
+- "a list or a map value is written as JSON text, and a body is read as
+  UTF-8 text whatever its type";
+- "an inbound event's `sendid` and `origin` stay unset".
+
+Their four Status lines are the only lines of the record that change; no
+decision, consequence, Related entry, Note or Amendment paragraph changes
+here, and this Note decides nothing. The Note of 2026-10-02 on query
+parameters decides nothing and has no status to change. The two
+Amendments of 2026-09-30 were accepted on 2026-09-30 and are untouched.
+
+Their code shipped in statifier 2.11.0: the tag `v2.11.0` names
+`bbc4c0ee`, and statifier 2.11.0 is published. Every claim the four make
+was verified against `main` at `bbc4c0ee`, with the first Amendment's
+paragraph "When it refuses." read as follows.
+
+- **A superseded sentence.** The first Amendment's sentence "inside a live
+  session that raise exits the session." no longer holds:
+  `Statifier.Session.refresh_ioprocessors/1` answers
+  `{:error, {:ioprocessors_entry, type, exception}}` and the session keeps
+  running. The second Amendment, "a live refresh answers an entry that
+  raises, and the session keeps running", names that change and replaces
+  the sentence; its code is `f6910b18`.
+- **A moved anchor.** The first Amendment cites
+  `Statifier.Evaluator.SystemVariables`'s `refreshed_ioprocessors/3`. The
+  same change, `f6910b18`, gave it a fourth argument that says whether an
+  entry's raise is raised (the pure call) or answered (the live call), and
+  the second Amendment cites it as `refreshed_ioprocessors/4`. The table
+  the first Amendment cites it for holds at `/4`.
+- **The order of the checks.** The first Amendment's "every processor in
+  the first row of the table that exports `check_registration/2` is asked,
+  in type order" is the order of asking: `refreshed_ioprocessors/4` asks
+  them in type order and the first `{:error, reason}` is the answer, so a
+  check after a refusing one is not asked. A fresh start asks every check
+  before it uses any answer (`Statifier.Send.Types.rejected_registration/1`,
+  ADR-0069's Amendment of 2026-10-02); a refresh does not.
+
+The first Amendment's cites to `f250ce2f` (the recording's format version,
+`Statifier.Replay`'s private `apply_entry/2`, `Statifier.Session`'s private
+`boot/7`) hold at `bbc4c0ee`, and its sentence on statifier_router quotes
+that package's moduledoc at `1bc8a8f`, as it says. The third and fourth
+Amendments' cites to `1d1361db` and `b794f906` hold at `bbc4c0ee`.

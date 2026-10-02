@@ -1,6 +1,6 @@
 # ADR-0076: A statifier corpus step may state the exported position it leaves, in a JSON rendering with the engine-local fields left out
 
-Status: proposed (2026-10-02) - extends ADR-0070 decision 2 (what a case
+Status: accepted (2026-10-02) - extends ADR-0070 decision 2 (what a case
 asserts) with one optional step member on `statifier` cases; adds the
 corpus schema's `expect_position` and the runner's check of it; changes
 no public function, struct, effect or position field, and no answer an
@@ -207,3 +207,40 @@ and a loan renewed twice states `"renewals": 2` in its datamodel
 - ADR-0005 (string ids at the boundary, the vocabulary `export/1` uses)
 - ADR-0008, ADR-0035, ADR-0059 (the three counters left out)
 - ADR-0066 (SemVer from 2.0.0 on)
+
+## Note (2026-10-02): accepted
+
+This record is accepted on 2026-10-02. Its Status line and its row's
+status cell in the ADR index are the only lines that change; no decision,
+consequence or Related entry changes here, and this Note decides nothing.
+
+Its code shipped in statifier 2.11.0: the tag `v2.11.0` names
+`bbc4c0ee`, and statifier 2.11.0 is published. Every claim was verified
+against `main` at `bbc4c0ee`:
+
+- decisions 1 and 5: `conformance/schema/case.json` gives a step an
+  optional `expect_position` with the seven members required and no
+  other allowed, and refuses it on a `scion` or `w3c` case's step;
+- decisions 2 and 3: `Mix.Statifier.Corpus.PositionExpectation.render/1`
+  writes exactly the seven members, the state ids sorted, the datamodel
+  without `_event`, `_ioprocessors`, `_name` and `_sessionid`, and refuses
+  a datamodel value with no JSON form, naming its variable;
+- decision 4: `Mix.Statifier.Corpus.PositionExpectation.named/1` counts the
+  states without an id, and `Mix.Statifier.Corpus.HostCase.run/2` asks it
+  before it starts the chart;
+- decision 6: `Mix.Statifier.Corpus.Runner.run_case/1` runs a case whose
+  step carries `expect_position` through `HostCase.run/2`, as a host that
+  registers nothing when the case has no `host` object, and
+  `Mix.Statifier.Corpus.PositionExpectation.compare/3` names the step, its
+  event and each member that differs; `Statifier.Testing.Case` is the same
+  at `v2.10.0` and `v2.11.0`;
+- decision 7 and the worked example: the cases
+  `patron_position_in_every_region`, `loan_position_records_history` and
+  `loan_position_counts_renewals` (under `conformance/cases/library/`) are
+  in `conformance/corpus/statifier.json`, in `test/passing_tests.json` and
+  in `conformance/registry.json`, and state the values the example quotes;
+  `corpus_hash` in `conformance/manifest.json` differs from its value at
+  `v2.10.0`.
+
+The Context describes the package at `151d94f`, as it says, before the
+schema key, the renderer and the cases existed.
