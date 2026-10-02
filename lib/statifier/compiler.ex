@@ -1140,12 +1140,15 @@ defmodule Statifier.Compiler do
 
   # `expr`/`param_location` are `String.t() | nil` (`Document.Param`'s own
   # typespec), so `<<_rest::binary>>` structurally excludes `nil` without a
-  # guard - unlike `build_invoke_param/3`/`build_donedata_param/2`, nothing
-  # upstream validates a `<send>`'s own `<param>` children (see
-  # `build_send_params/2`'s moduledoc reference), so `expr` and
-  # `param_location` both `nil` is reachable here, not just theoretical; no
-  # clause below matches that case, preserving the prior guard's
-  # `FunctionClauseError` exactly rather than papering over it.
+  # guard. Like `build_invoke_param/3`/`build_donedata_param/2`, these
+  # clauses rely on `Statifier.Validator.Checks.Param`, which refuses a
+  # `<send>` `<param>` carrying neither attribute (`:param_no_value`) or
+  # both (`:param_expr_and_location`) before this pass runs, so
+  # `Statifier.compile/2` never reaches either shape here. Only a direct
+  # `compile/1` call on a document that skipped the validator still can:
+  # neither attribute matches no clause and raises `FunctionClauseError`
+  # (an unvalidated document is a caller error, not a value to answer),
+  # and both attributes take the second clause, `location`.
   defp build_send_param(
          %DParam{expr: <<_rest::binary>> = source, param_location: nil} = param,
          owner

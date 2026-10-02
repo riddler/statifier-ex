@@ -11,32 +11,38 @@ defmodule Statifier.Validator.Checks.Param do
   shape rather than lowering refusing to build it - the same division of
   labour `Checks.Content` has with `<content>`.
 
-  Two places today hold a `%Statifier.Document.Param{}`: a `<final>`'s
-  `<donedata><param>` (`Statifier.Document.Donedata`) and any state's
-  `<invoke><param>` (`Statifier.Document.Invoke`), so this check walks both.
-  When `<send>` gains a `<param>` child, this walk grows a third arm; the
-  rule itself is unchanged, since spec 5.7 states it on `<param>` rather than
-  on whichever parent holds it.
+  Three places hold a `%Statifier.Document.Param{}`: a `<final>`'s
+  `<donedata><param>` (`Statifier.Document.Donedata`), any state's
+  `<invoke><param>` (`Statifier.Document.Invoke`) and any `<send>`'s own
+  `<param>` children (`Statifier.Document.Send`), so this check walks all
+  three. The rule is the same for each, since spec 5.7 states it on
+  `<param>` rather than on whichever parent holds it, and so are the two
+  reasons: a host matching on `:param_no_value` or
+  `:param_expr_and_location` sees one vocabulary whatever the parent. A
+  `<send>` sits in executable content rather than on a state, so its arm
+  reaches every `<send>` through `Checks.Send`'s own walk (every block a
+  `<send>` can appear in, `<if>` and `<foreach>` bodies and `<finalize>`
+  included) rather than a second walker that could disagree with it.
   """
 
   alias Statifier.Document
   alias Statifier.Document.{Donedata, State}
   alias Statifier.Document.Param, as: DParam
+  alias Statifier.Validator.Checks.Send
   alias Statifier.Validator.{Context, Error}
 
   @doc """
-  Walks every `<final>`'s `<donedata><param>` and every state's
-  `<invoke><param>` in the document and returns a `:param_expr_and_location`
+  Walks every `<final>`'s `<donedata><param>`, every state's
+  `<invoke><param>` and every `<send>`'s `<param>` in the document and
+  returns a `:param_expr_and_location`
   or `:param_no_value` error for each one whose `expr` and `location`
   attributes violate spec 5.7's exactly-one rule. Returns `[]` when every
   `<param>` in the document specifies exactly one.
   """
   @spec check(document :: Document.t(), context :: Context.t()) :: [Error.t()]
-  def check(%Document{states: states}, %Context{}) do
-    states
-    |> flatten()
-    |> Enum.flat_map(&params/1)
-    |> Enum.flat_map(&check_param/1)
+  def check(%Document{states: states} = document, %Context{}) do
+    state_params = states |> flatten() |> Enum.flat_map(&params/1)
+    Enum.flat_map(state_params ++ send_params(document), &check_param/1)
   end
 
   defp flatten(states) do
@@ -49,6 +55,12 @@ defmodule Statifier.Validator.Checks.Param do
 
   defp donedata_params(%Donedata{params: params}), do: params
   defp donedata_params(nil), do: []
+
+  defp send_params(document) do
+    document
+    |> Send.sends()
+    |> Enum.flat_map(& &1.params)
+  end
 
   defp check_param(%DParam{expr: nil, param_location: nil, name: name, location: location}) do
     [Error.param_no_value(name, location)]
