@@ -217,8 +217,9 @@ defmodule Statifier.Send.Processor do
   as `start_link/2`'s own return; no process is spawned, so no
   `{:proc_lib, :crash}` report is produced. A resume does not ask it: the
   `_ioprocessors` entries a persisted position carries stand (ADR-0075
-  decision 3). Optional: a processor that does not implement it is not
-  asked.
+  decision 3). A check that raises, throws, exits or answers anything
+  else refuses nothing: the start goes ahead as if no check had been
+  asked. Optional: a processor that does not implement it is not asked.
   """
   @callback check_registration(type :: String.t(), opts :: keyword()) ::
               :ok | {:error, reason :: term()}

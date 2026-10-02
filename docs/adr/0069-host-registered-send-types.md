@@ -596,14 +596,21 @@ that names a built-in spelling is left to decision 1's refusal, whose
 answer does not change. So is a map holding any value that is not a
 module or `{module, opts}`: the caller asks nothing for it and leaves it
 to `init/1`, which answers as it did before this change
-(`Statifier.Send.Types.registration?/1`, this change), so the check never
-raises in the caller. A module that does not export the callback is
+(`Statifier.Send.Types.registration?/1`, this change). Nor does a check
+that breaks the callback's contract refuse anything: when an asked check
+raises, throws, exits or answers anything other than `:ok` or
+`{:error, reason}`, the caller leaves the whole start to `init/1`, which
+answers as it did before this change
+(`Statifier.Send.Types.rejected_registration/1`, this change). So the
+check never raises in the caller. A module that does not export the
+callback is
 not asked, and a session that registers nothing asks nothing, so it sees
 nothing new.
 The session names no processor: the Basic HTTP processor is one module
 that exports the callback, answering `{:missing_option, :base_url}` when
-its options carry no string `:base_url`
-(`Statifier.Send.BasicHTTP.check_registration/2`, this change).
+its options are not a keyword list carrying a string `:base_url`, and
+never raising (`Statifier.Send.BasicHTTP.check_registration/2`, this
+change).
 `ioprocessors_entry/2` keeps its raise for a direct caller.
 
 **Why a resume is exempt.** A resume does not ask the callback. ADR-0075
@@ -618,7 +625,11 @@ session would otherwise get wrong.
 
 **What changes for a host.** One answer: a fresh start whose Basic HTTP
 registration lacks `:base_url` answers the named refusal above instead of
-the `ArgumentError` shape. A resume does not change.
+the `ArgumentError` shape. A Basic HTTP registration whose options are
+not a keyword list is a registration without a usable `:base_url` too: a
+fresh start answers the same named refusal for it, where the processor's
+raise gave the start that raise's own shape before. A resume does not
+change.
 
 **Tests.** `Statifier.Session.SendTypesTest`'s "a registration the
 processor rejects" cases pin the refusal, the absence of a
@@ -626,9 +637,12 @@ processor rejects" cases pin the refusal, the absence of a
 `Statifier.CrashReportProbe` under `test/support/`, which a control case
 shows does hear decision 1's refusal), the order of the type strings, that
 a processor without the callback is not asked, that a resume is not
-asked, and that a malformed registration still gets `init/1`'s answer.
+asked, that a malformed registration still gets `init/1`'s answer, and
+that a check breaking its contract leaves the whole start to `init/1`.
 `Statifier.Send.BasicHTTPSessionTest` pins the Basic HTTP refusal
 at a fresh start through `Statifier.start_session/2`, with no
-`{:proc_lib, :crash}` report, and a resume that is not refused and keeps
+`{:proc_lib, :crash}` report, the same refusal for options that are not a
+keyword list, through a bare `start_link/2`, and a resume that is not
+refused and keeps
 its entry, and `Statifier.Send.BasicHTTPTest` pins
 `check_registration/2`'s two answers.
