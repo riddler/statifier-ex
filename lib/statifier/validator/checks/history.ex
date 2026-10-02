@@ -21,9 +21,10 @@ defmodule Statifier.Validator.Checks.History do
       non-compound parent has already been reported by
       `:history_bad_parent`, and testing descendancy against it (an id that
       may not even exist, for the document root) would be a second,
-      meaningless error for the same mistake. Descendancy is decided by the
-      tree's structure, so a parent with no `id` is checked like any other;
-      the reported `parent_id` is then `nil`.
+      meaningless error for the same mistake. A parent with an `id` is
+      tested by id (`Context.descendant?/3`); a parent with no `id` is
+      tested by the tree's structure, and the reported `parent_id` is then
+      `nil`.
   - `{:history_bad_type, raw}` when `type` was written and, sliced back out
     of `context.source`, is neither `"shallow"` nor `"deep"`.
     Lowering silently maps any out-of-range value to the `:shallow`
@@ -104,12 +105,18 @@ defmodule Statifier.Validator.Checks.History do
     end)
   end
 
-  # An unresolved target is check 2's to report, never this check's.
-  defp resolved_outside?(target, parent, context) do
+  # An unresolved target is check 2's to report, never this check's. A
+  # parent with an id keeps the id test, `Context.descendant?/3`; only a
+  # parent with no id is placed by the tree's structure.
+  defp resolved_outside?(target, %State{id: nil} = parent, context) do
     case Map.fetch(context.states, target) do
       {:ok, state} -> not inside?(state, parent, context.parents)
       :error -> false
     end
+  end
+
+  defp resolved_outside?(target, %State{id: parent_id}, context) do
+    Map.has_key?(context.states, target) and not Context.descendant?(context, parent_id, target)
   end
 
   # Descendancy by the tree's structure, not by id: climbs `state`'s parent

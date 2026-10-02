@@ -4,6 +4,7 @@ defmodule Statifier.Validator.Checks.HistoryTest do
   alias Statifier.Document.State
   alias Statifier.{Lowering, Parser, Validator}
   alias Statifier.Parser.Location
+  alias Statifier.Validator.Checks.History
   alias Statifier.Validator.{Context, Error}
 
   defp lower!(xml) do
@@ -268,6 +269,42 @@ defmodule Statifier.Validator.Checks.HistoryTest do
 
       assert {:error, [%Error{reason: {:unresolved_target, "missing"}}], _warnings} =
                validate!(xml)
+    end
+
+    # Two states share the parent's id. The id test accepts a target under
+    # either of them; this pins that answer for a parent that has an id (the
+    # duplicate itself is check 1's to report, so the check runs alone).
+    #
+    # sabotage: resolved_outside?/3's `%State{id: nil}` pattern becomes a
+    # bare `parent`, so every parent takes the structural walk -> the
+    # target under the other "on_loan" is reported, reddening the assert
+    test "a parent with an id is tested by id when another state shares that id" do
+      for {first, second} <- [{:history, :target}, {:target, :history}] do
+        states = %{
+          history: """
+              <state id="on_loan">
+                  <state id="due"/>
+                  <history id="loan_history">
+                      <transition target="overdue"/>
+                  </history>
+              </state>
+          """,
+          target: """
+              <state id="on_loan">
+                  <state id="overdue"/>
+              </state>
+          """
+        }
+
+        xml = """
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+        #{states[first]}#{states[second]}</scxml>
+        """
+
+        document = lower!(xml)
+
+        assert [] == History.check(document, Context.build(document, xml))
+      end
     end
 
     # sabotage: inside?/3's `^ancestor -> true` clause answers false (every
