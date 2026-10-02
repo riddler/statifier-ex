@@ -134,6 +134,15 @@ defmodule Statifier.Send.Types do
   def split({module, opts}) when is_atom(module) and is_list(opts), do: {module, opts}
   def split(module) when is_atom(module), do: {module, []}
 
+  # Whether `split/1` accepts `registration`'s shape, by the same guards,
+  # without calling it. Internal: `Statifier.Session.start_link/2` leaves a
+  # map holding any other shape to `init/1`, hence `@doc false`.
+  @doc false
+  @spec registration?(registration :: term()) :: boolean()
+  def registration?({module, opts}) when is_atom(module) and is_list(opts), do: true
+  def registration?(module) when is_atom(module), do: true
+  def registration?(_other), do: false
+
   # The first registration of a `:send_types` map, in the order of its type
   # strings, whose module exports the optional
   # `c:Statifier.Send.Processor.check_registration/2` and answers

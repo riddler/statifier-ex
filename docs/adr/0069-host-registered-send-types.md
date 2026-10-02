@@ -593,7 +593,11 @@ as `start_link/2`'s own return (`Statifier.Session`'s
 `{:proc_lib, :crash}` report is produced. `Statifier.start_session/2`
 starts its child through `start_link/2` and answers the same value. A map
 that names a built-in spelling is left to decision 1's refusal, whose
-answer does not change. A module that does not export the callback is
+answer does not change. So is a map holding any value that is not a
+module or `{module, opts}`: the caller asks nothing for it and leaves it
+to `init/1`, which answers as it did before this change
+(`Statifier.Send.Types.registration?/1`, this change), so the check never
+raises in the caller. A module that does not export the callback is
 not asked, and a session that registers nothing asks nothing, so it sees
 nothing new.
 The session names no processor: the Basic HTTP processor is one module
@@ -621,8 +625,9 @@ processor rejects" cases pin the refusal, the absence of a
 `{:proc_lib, :crash}` report (heard through a `:logger` handler,
 `Statifier.CrashReportProbe` under `test/support/`, which a control case
 shows does hear decision 1's refusal), the order of the type strings, that
-a processor without the callback is not asked, and that a resume is not
-asked. `Statifier.Send.BasicHTTPSessionTest` pins the Basic HTTP refusal
+a processor without the callback is not asked, that a resume is not
+asked, and that a malformed registration still gets `init/1`'s answer.
+`Statifier.Send.BasicHTTPSessionTest` pins the Basic HTTP refusal
 at a fresh start through `Statifier.start_session/2`, with no
 `{:proc_lib, :crash}` report, and a resume that is not refused and keeps
 its entry, and `Statifier.Send.BasicHTTPTest` pins
