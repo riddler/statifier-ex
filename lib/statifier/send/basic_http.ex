@@ -59,8 +59,14 @@ defmodule Statifier.Send.BasicHTTP do
 
   A parameter value is written as text: a string as it is, a number or a
   boolean as its literal, `nil` as `null`, `:undefined` as the empty
-  string. Any other value (a list, a map) is written with `inspect/1`; its
-  encoding is not decided yet.
+  string. A list or a map is written as JSON text through Elixir's `JSON`
+  (`[1,2]`, `{"title":"Dune"}`), and `:undefined` inside it as JSON
+  `null`, when every value inside has a JSON form: a string that is
+  UTF-8, a number, a boolean, `nil`, `:undefined`, a list, or a map whose
+  keys are all strings. A list or a map holding anything else (an atom
+  key, a struct such as a `Date`, a tuple) keeps its `inspect/1` text
+  whole, as does any other value that is none of these. The same rule
+  writes a `<content>` body that is a list, still sent as `text/plain`.
 
   **One attempt, and a miss reaches the sender.** `perform/2` makes one
   POST. On a transport error, or a status outside 2xx, it reports the miss
@@ -312,6 +318,12 @@ defmodule Statifier.Send.BasicHTTP do
 
   A query string or a body that is not UTF-8 once decoded forms no
   datamodel string, and is `{:error, {:not_utf8, :query | :body}}`.
+
+  A JSON body (`application/json`) is a body of another content type: it
+  goes through the text rung like any other, so a JSON object or array
+  that is also a predicator literal reads as a map or a list, and anything
+  else stays a string. No charset is read: a body that is not UTF-8 is
+  `{:error, {:not_utf8, :body}}` whatever charset its content type names.
   """
   @spec decode(request :: request()) :: {:ok, Event.t()} | {:error, decode_error()}
   def decode(%{method: method} = request) do
@@ -469,7 +481,58 @@ defmodule Statifier.Send.BasicHTTP do
   defp encode(nil), do: "null"
   defp encode(:undefined), do: ""
   defp encode(value) when is_number(value) or is_boolean(value), do: to_string(value)
+
+  defp encode(value) when is_list(value) or is_map(value) do
+    case json(value) do
+      {:ok, json} -> JSON.encode!(json)
+      :error -> inspect(value)
+    end
+  end
+
   defp encode(value), do: inspect(value)
+
+  # The JSON form of a map or a list (ADR-0075's Amendment on non-scalar
+  # values): `:undefined` becomes `nil` (JSON `null`), a map must be
+  # string-keyed (a struct never is: its `:__struct__` key is an atom), a
+  # string must be UTF-8, and a value with no JSON form anywhere inside
+  # answers `:error`, so the whole value keeps its `inspect/1` text.
+  @spec json(value :: term()) :: {:ok, term()} | :error
+  defp json(:undefined), do: {:ok, nil}
+  defp json(value) when is_nil(value) or is_boolean(value) or is_number(value), do: {:ok, value}
+
+  defp json(value) when is_binary(value),
+    do: if(String.valid?(value), do: {:ok, value}, else: :error)
+
+  defp json(value) when is_list(value), do: json_list(value, [])
+  defp json(value) when is_map(value), do: json_map(Map.to_list(value), [])
+  defp json(_value), do: :error
+
+  @spec json_list(list :: maybe_improper_list(), acc :: [term()]) :: {:ok, [term()]} | :error
+  defp json_list([], acc), do: {:ok, Enum.reverse(acc)}
+
+  defp json_list([value | rest], acc) do
+    case json(value) do
+      {:ok, json} -> json_list(rest, [json | acc])
+      :error -> :error
+    end
+  end
+
+  defp json_list(_improper_tail, _acc), do: :error
+
+  @spec json_map(pairs :: [{term(), term()}], acc :: [{String.t(), term()}]) ::
+          {:ok, %{String.t() => term()}} | :error
+  defp json_map([], acc), do: {:ok, Map.new(acc)}
+
+  defp json_map([{key, value} | rest], acc) when is_binary(key) do
+    with true <- String.valid?(key),
+         {:ok, json} <- json(value) do
+      json_map(rest, [{key, json} | acc])
+    else
+      _no_json_form -> :error
+    end
+  end
+
+  defp json_map(_pairs, _acc), do: :error
 
   # One attempt; a miss goes to the sender through `failed_send/3`
   # (ADR-0075 decision 8, point d).

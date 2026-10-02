@@ -122,7 +122,7 @@ defmodule Statifier.Send.BasicHTTPTest do
                "null" => "null",
                "unbound" => "",
                "flag" => "true",
-               "list" => "[1, 2]"
+               "list" => "[1,2]"
              }
     end
 
@@ -211,6 +211,103 @@ defmodule Statifier.Send.BasicHTTPTest do
                ctx()
              ) ==
                {:ok, [{:handler, BasicHTTP, {:cancel, "send_1"}}]}
+    end
+  end
+
+  describe "deliver/3: a list or a map value is JSON text (ADR-0075's Amendment on non-scalar values)" do
+    defp params(post), do: URI.decode_query(post.body)
+
+    # sabotage: `encode/1`'s list-or-map clause is deleted, so a map falls
+    # through to `inspect/1` -> `loan` reads `%{"title" => "Dune"}` and the
+    # equality reddens. Confirmed red and reverted.
+    test "a map param is written as a JSON object" do
+      post =
+        planned(
+          send_effect(
+            data: %{"loan" => %{"title" => "Dune"}, "patron" => %{"id" => 7, "cards" => 2}}
+          )
+        )
+
+      assert %{"loan" => ~s({"title":"Dune"}), "patron" => patron} = params(post)
+      assert JSON.decode!(patron) == %{"id" => 7, "cards" => 2}
+    end
+
+    # sabotage: `json_list/2`'s empty clause answers `{:ok, acc}` without
+    # reversing -> the array is written back to front and the equality
+    # reddens. Confirmed red and reverted.
+    test "a list param is written as a JSON array, in order" do
+      post = planned(send_effect(data: %{"holds" => ["Dune", 2, 1.5, true, nil, [], %{}]}))
+
+      assert params(post)["holds"] == ~s(["Dune",2,1.5,true,null,[],{}])
+    end
+
+    # sabotage: `json/1`'s `:undefined` clause answers `{:ok, :undefined}` ->
+    # `JSON` writes the atom as the string "undefined" and the equalities
+    # redden. Confirmed red and reverted.
+    test "an undefined value inside a map or a list is JSON null, and a top-level one stays empty" do
+      post =
+        planned(
+          send_effect(
+            data: %{
+              "loan" => %{"due" => :undefined},
+              "holds" => [:undefined, "Dune"],
+              "renewal" => :undefined
+            }
+          )
+        )
+
+      assert params(post) == %{
+               "_scxmleventname" => "ping",
+               "loan" => ~s({"due":null}),
+               "holds" => ~s([null,"Dune"]),
+               "renewal" => ""
+             }
+    end
+
+    # sabotage: `json_map/2`'s catch-all skips a pair with a non-string key
+    # instead of answering `:error` -> the atom-keyed map is written `{}`
+    # and the equality reddens. Confirmed red and reverted.
+    test "a map with a key that is not a string keeps its whole inspect text" do
+      post = planned(send_effect(data: %{"loan" => %{"title" => "Dune", copies: 2}}))
+
+      assert params(post)["loan"] == inspect(%{"title" => "Dune", copies: 2})
+    end
+
+    # sabotage: `json/1`'s catch-all answers `{:ok, inspect(value)}` -> the
+    # tuple is written as a JSON string inside the array and the first
+    # equality reddens. Confirmed red and reverted.
+    test "a list holding a value with no JSON form keeps its whole inspect text" do
+      post =
+        planned(send_effect(data: %{"shelf" => ["Dune", {:aisle, 4}], "due" => [~D[2026-10-16]]}))
+
+      assert params(post)["shelf"] == inspect(["Dune", {:aisle, 4}])
+      assert params(post)["due"] == inspect([~D[2026-10-16]])
+
+      improper = planned(send_effect(data: %{"shelf" => ["Dune" | "Emma"]}))
+      assert params(improper)["shelf"] == inspect(["Dune" | "Emma"])
+    end
+
+    # sabotage: `json/1`'s binary clause answers `{:ok, ""}` for a string
+    # that is not UTF-8 -> the list is written `[""]` and the equality
+    # reddens. Confirmed red and reverted.
+    test "a list holding a string that is not UTF-8 keeps its whole inspect text" do
+      title = <<"caf", 0xE9>>
+      post = planned(send_effect(data: %{"titles" => [title]}))
+
+      assert params(post)["titles"] == inspect([title])
+
+      keyed = planned(send_effect(data: %{"loan" => %{title => "Dune"}}))
+      assert params(keyed)["loan"] == inspect(%{title => "Dune"})
+    end
+
+    # sabotage: `encode/1`'s list-or-map clause guards `is_map/1` alone ->
+    # a list content falls through to `inspect/1` and the body equality
+    # reddens. Confirmed red and reverted.
+    test "a content body that is a list is JSON text, still sent as text/plain" do
+      post = planned(send_effect(data: ["Dune", :undefined]))
+
+      assert content_type(post) == "text/plain"
+      assert post.body == ~s(["Dune",null])
     end
   end
 
@@ -310,6 +407,50 @@ defmodule Statifier.Send.BasicHTTPTest do
 
       assert {:ok, %Event{name: "HTTP.POST", data: "plain words"}} =
                BasicHTTP.decode(request(%{content_type: nil, body: "plain   words"}))
+    end
+
+    # sabotage: `form?/1` answers true for `application/json` too -> the JSON
+    # body is read as form pairs, `data` is a one-key map with the whole
+    # text as its key, and the equality reddens. Confirmed red and reverted.
+    test "a JSON body is a body of another content type: the text rung reads it" do
+      assert {:ok, %Event{name: "HTTP.POST", data: %{"title" => "Dune", "copies" => 2}}} =
+               BasicHTTP.decode(
+                 request(%{
+                   content_type: "application/json",
+                   body: ~s({"title":"Dune","copies":2})
+                 })
+               )
+
+      assert {:ok, %Event{data: ~s({"title": Dune})}} =
+               BasicHTTP.decode(
+                 request(%{
+                   content_type: "application/json; charset=utf-8",
+                   body: ~s({"title": Dune})
+                 })
+               )
+    end
+
+    # sabotage: `body/1`'s last arm reads a body that is not UTF-8 as
+    # Latin-1 (`:unicode.characters_to_binary(body, :latin1)`) instead of
+    # refusing it -> the text body decodes as Latin-1 text and the first
+    # equality reddens. Confirmed red and reverted.
+    test "a body that is not UTF-8 is refused whatever charset it names" do
+      latin1 = <<"caf", 0xE9>>
+
+      assert BasicHTTP.decode(
+               request(%{content_type: "text/plain; charset=iso-8859-1", body: latin1})
+             ) == {:error, {:not_utf8, :body}}
+
+      assert BasicHTTP.decode(
+               request(%{
+                 content_type: "application/json; charset=iso-8859-1",
+                 body: ~s(") <> latin1 <> ~s(")
+               })
+             ) == {:error, {:not_utf8, :body}}
+
+      assert BasicHTTP.decode(
+               request(%{content_type: @form <> "; charset=iso-8859-1", body: "title=caf%E9"})
+             ) == {:error, {:not_utf8, :body}}
     end
 
     # sabotage: `decode/1` sets the event's `sendid` from the key's second

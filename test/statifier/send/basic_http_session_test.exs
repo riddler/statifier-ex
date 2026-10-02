@@ -203,6 +203,30 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       assert URI.decode_query(body) == %{"_scxmleventname" => "ping", "Var1" => "2", "p" => "x"}
     end
 
+    # sabotage: `encode/1`'s list-or-map clause is deleted, so a map and a
+    # list fall through to `inspect/1` -> both parameters read as Elixir
+    # terms and the equality reddens. Confirmed red and reverted.
+    test "a map or a list in the datamodel reaches the target as JSON text" do
+      start!("""
+          <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+            <datamodel>
+              <data id="loan" expr="{title: 'Dune', due: undefined}"/>
+              <data id="holds" expr="['Dune', 2]"/>
+            </datamodel>
+            <state id="s">
+              <onentry>
+                <send type="basichttp" event="loaned" target="http://sink.test/in"
+                      namelist="loan holds"/>
+              </onentry>
+            </state>
+          </scxml>
+      """)
+
+      assert_receive {:basichttp_post, "http://sink.test/in", _headers, body}
+      assert %{"loan" => loan, "holds" => ~s(["Dune",2])} = URI.decode_query(body)
+      assert JSON.decode!(loan) == %{"title" => "Dune", "due" => nil}
+    end
+
     # sabotage: `deliver/3`'s nil-target clause raises `error.execution`
     # instead -> the chart takes the catch-all to `fail` and the
     # configuration assertion reddens. Confirmed red and reverted.
@@ -600,6 +624,40 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
 
       {:dictionary, dictionary} = Process.info(session, :dictionary)
       refute List.keymember?(dictionary, {HaltNotice, :watched}, 0)
+    end
+
+    # sabotage: `EventData.coerce/1`'s params rung writes a list value as
+    # JSON text (`Map.put(acc, name, JSON.encode!(value))` for a list) -> the
+    # internal event's `holds` is a string, `holds[0]` reads undefined, and
+    # the chart takes `fail`, so the configuration equality reddens.
+    # Confirmed red and reverted.
+    test "a session that registers nothing sends a map or a list param as the value itself" do
+      {:ok, machine} =
+        Statifier.compile("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+              <state id="s">
+                <onentry>
+                  <send event="loaned">
+                    <param name="loan" expr="{title: 'Dune', due: undefined}"/>
+                    <param name="holds" expr="['Dune', 2]"/>
+                  </send>
+                </onentry>
+                <transition event="loaned"
+                            cond="_event.data.loan.title == 'Dune' and _event.data.holds[0] == 'Dune'"
+                            target="pass"/>
+                <transition event="*" target="fail"/>
+              </state>
+              <final id="pass"/>
+              <final id="fail"/>
+            </scxml>
+        """)
+
+      {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
+      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      session_id = Session.session_id(session)
+
+      assert_receive {:statifier, ^session_id, {:halted, :done}}, 1_000
+      assert Session.status(session).configuration == MapSet.new(["pass"])
     end
   end
 end

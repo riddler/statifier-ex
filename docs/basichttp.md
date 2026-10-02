@@ -224,7 +224,15 @@ Outbound, a `<send>` to the processor becomes one POST (C.2.2):
 
 A parameter value is written as text: a string as it is, a number or a
 boolean as its literal, `nil` as `null`, and an undefined value as the
-empty string. The processor makes one attempt. A transport error, or a
+empty string. A list or a map is written as JSON text, so the list
+`['Dune', 2]` travels as `["Dune",2]` and an undefined value inside it as
+`null`, when everything inside it has a JSON form: a UTF-8 string, a
+number, a boolean, `nil`, an undefined value, a list, or a map whose keys
+are all strings. A list or a map holding anything else, and any other
+value, is written as its Elixir `inspect/1` text, whole. A `<content>`
+body that is a list is written the same way and still sent as
+`text/plain`. ADR-0075's Amendment on list and map values records the
+rule. The processor makes one attempt. A transport error, or a
 status outside 2xx, reaches the sender as `error.communication` carrying
 the send id, through `Statifier.Session.failed_send/3`. Every request also
 carries the `scxml-send-key` header above. A `<send delay>` is
@@ -248,14 +256,19 @@ Inbound, `decode/1` turns one request into one event (C.2.1):
 
 Each value is read as a `<content>` body's text is: a predicator literal
 becomes that value, so `2` reads as the number 2, and anything else stays
-a string.
+a string. A JSON body is a body of another content type, so a JSON object
+or array that is also a predicator literal reads as a map or a list, and a
+list or a map parameter this processor wrote as JSON reads back the same
+way. No charset is read: a body or a parameter that is not UTF-8
+is refused as `{:error, {:not_utf8, :body}}` (or `:query`), which the front
+answers 400, whatever charset the content type names. A front whose
+senders use another charset transcodes the body before it calls
+`decode/1`.
 
 ## What is not supported
 
-- JSON bodies and charset handling inbound: a non-form body is read as
-  text.
-- A parameter value that is a list or a map outbound: its encoding is not
-  decided; today it is written with `inspect/1`.
+- A charset other than UTF-8 inbound: such a body is refused, not
+  transcoded.
 - `_event.origin` on an inbound event: the decoder has no address a reply
   could be sent to.
 - A location after a resume on a host whose base URL moved: the persisted
