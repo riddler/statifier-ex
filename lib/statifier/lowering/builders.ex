@@ -3,7 +3,9 @@ defmodule Statifier.Lowering.Builders do
   One `build_*` function per supported SCXML element, reached through
   `Statifier.Lowering`'s dispatch map - the structural fix for v1's
   903-line, 73-clause `state_stack.ex` (`docs/architecture.md`,
-  "adding an element touches one builder").
+  "adding an element touches one builder"). `build_scxml/2` is the one
+  exception: `<scxml>` is only ever the root, so `Statifier.Lowering.lower/2`
+  calls it directly and the dispatch map does not hold it.
 
   Every builder lowers its own children first, through
   `Statifier.Lowering.walk_children`, before building its own struct, so

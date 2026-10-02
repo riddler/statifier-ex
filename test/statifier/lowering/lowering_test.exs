@@ -150,5 +150,69 @@ defmodule Statifier.LoweringTest do
 
       assert Location.slice(error.location, xml) == "<foo/>"
     end
+
+    # sabotage: `lower/2`'s root check admits `"history"` beside `@root`
+    # (`local_name in [@root, "history"]`) -> a `<history>` root is built by
+    # `build_scxml/2` into `{:ok, _}` and the `unexpected_root` match below
+    # reddens for "history"
+    test "a state-family root is refused as unexpected_root, not raised on" do
+      for {name, xml} <- [
+            {"state", ~s(<state id="checkout"/>)},
+            {"parallel", ~s(<parallel id="loan"/>)},
+            {"final", ~s(<final id="returned"/>)},
+            {"history", ~s(<history id="h"/>)}
+          ] do
+        assert {:error, [%Error{reason: {:unexpected_root, ^name}} = error]} =
+                 xml |> parse!() |> Lowering.lower(xml)
+
+        assert Location.slice(error.location, xml) == xml
+      end
+    end
+
+    # sabotage: the root check lists the state family (`local_name not in
+    # ~w(state parallel final history)` builds, the family is refused)
+    # instead of admitting only `"scxml"` -> a `<transition>` root is built
+    # into `{:ok, _}` and the `unexpected_root` match below reddens
+    test "any element name other than scxml is refused as a root, even one legal as a child" do
+      xml = ~s(<transition target="returned"/>)
+
+      assert {:error, [%Error{reason: {:unexpected_root, "transition"}}]} =
+               xml |> parse!() |> Lowering.lower(xml)
+    end
+
+    # sabotage: `lower/2` drops the `@root` check and builds every SCXML-
+    # vocabulary root with `build_scxml/2` -> a `<state>` root lowers to an
+    # empty document, `compile/1` answers the validator's `bad_namespace`
+    # instead, and the `unexpected_root` match below reddens
+    test "compile/1 answers the refusal for a state-family root" do
+      assert {:error, [%Error{reason: {:unexpected_root, "state"}}]} =
+               Statifier.compile(~s(<state id="checkout"/>))
+    end
+  end
+
+  describe "lower/1 - a nested <scxml>" do
+    # sabotage: the dispatch map regains an `"scxml"` key, here
+    # `"scxml" => &Builders.build_state/2` (a tagged result, so nothing
+    # raises) -> the nested `<scxml>` is placed as a state, `lower/2`
+    # answers `{:ok, _}`, and the `unsupported_element` match below reddens
+    test "an scxml child of the root is refused as unsupported_element" do
+      xml = ~s(<scxml><scxml/></scxml>)
+
+      assert {:error, [%Error{reason: {:unsupported_element, "scxml"}} = error]} =
+               xml |> parse!() |> Lowering.lower(xml)
+
+      assert Location.slice(error.location, xml) == "<scxml/>"
+    end
+
+    # sabotage: the same `"scxml" => &Builders.build_state/2` dispatch entry
+    # -> the `<scxml>` inside `<onentry>` is built as a state and reported
+    # as some other error than `unsupported_element`, and the match below
+    # reddens
+    test "an scxml nested in executable content is refused as unsupported_element" do
+      xml = ~s(<scxml><state id="shelved"><onentry><scxml/></onentry></state></scxml>)
+
+      assert {:error, [%Error{reason: {:unsupported_element, "scxml"}}]} =
+               xml |> parse!() |> Lowering.lower(xml)
+    end
   end
 end

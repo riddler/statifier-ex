@@ -32,7 +32,7 @@ defmodule Statifier.Lowering do
 
   ## Dispatch is context-free
 
-  The dispatch map's keys are exactly the supported element names; no
+  The dispatch map's keys are exactly the supported child element names; no
   `build_*` function in `Builders` takes a parent element name as an
   argument. A builder does not know or care what its parent was - the
   parent, when it exists, is what decides whether the child's tagged
@@ -40,6 +40,17 @@ defmodule Statifier.Lowering do
   parent's own element name is known only to itself, and is used solely to
   word a `{:misplaced_element, name, parent_name}` error about one of *its
   own* children - it is never handed down to a child builder.
+
+  ## Only `<scxml>` may be the root
+
+  `<scxml>` is the one element that may be a document's root, and it is
+  never a child. `lower/2` builds it directly and refuses every other root
+  name as `{:unexpected_root, local_name}`, whatever that name is, so a
+  root such as `<state>` is refused rather than handed to a builder whose
+  result has nowhere to go. `<scxml>` is not a key of the dispatch map
+  either, so an `<scxml>` nested anywhere below the root misses the map
+  and is reported as `{:unsupported_element, name}`, like any other name
+  the map does not hold.
 
   ## Relaxed input
 
@@ -54,8 +65,9 @@ defmodule Statifier.Lowering do
   alias Statifier.Lowering.{Builders, Error, Namespace}
   alias Statifier.Parser.DOM.{Element, Text}
 
+  @root "scxml"
+
   @dispatch %{
-    "scxml" => &Builders.build_scxml/2,
     "state" => &Builders.build_state/2,
     "parallel" => &Builders.build_parallel/2,
     "final" => &Builders.build_final/2,
@@ -97,7 +109,9 @@ defmodule Statifier.Lowering do
   when most of the tree built successfully. An element outside the SCXML
   vocabulary (and not using the relaxed no-namespace fallback) is reported
   as `{:foreign_element, name, uri, location}`; a non-`<scxml>` root name is
-  `{:unexpected_root, local_name, location}`.
+  `{:unexpected_root, local_name, location}`, whether or not that name is
+  legal as a child (`<state>`, `<transition>`, ...); an `<scxml>` nested
+  below the root is `{:unsupported_element, name, location}`.
   """
   @spec lower(root :: Element.t(), source :: binary()) ::
           {:ok, Document.t()} | {:error, [Error.t()]}
@@ -107,13 +121,11 @@ defmodule Statifier.Lowering do
     {uri, local_name} = Namespace.resolve(name, scope)
 
     if Namespace.scxml_vocabulary?(uri) do
-      case Map.fetch(@dispatch, local_name) do
-        {:ok, builder} ->
-          {document, errors} = builder.(root, %{ns_scope: scope, source: source})
-          finalize(%{document | namespace: uri}, errors)
-
-        :error ->
-          {:error, [Error.unexpected_root(local_name, location)]}
+      if local_name == @root do
+        {document, errors} = Builders.build_scxml(root, %{ns_scope: scope, source: source})
+        finalize(%{document | namespace: uri}, errors)
+      else
+        {:error, [Error.unexpected_root(local_name, location)]}
       end
     else
       {:error, [Error.foreign_element(name, uri, location)]}
