@@ -191,7 +191,20 @@ Three filters apply before a W3C case is emitted, all applied by
   module registers the processor behind a loopback front
   (`Mix.Statifier.Corpus.HostCase`, ADR-0075). `test201` among them is
   emitted and left out of the ratchet, for the reason ADR-0075 decision 7
-  gives.
+  gives. The upstream stylesheet checks these documents' inbound message
+  with regex searches over `_event.raw`; the event this engine forms
+  carries no raw message, so `conf_predicator.xsl` checks the decoded
+  event instead: a namelist location or a named parameter in
+  `_event.data`, the body text (percent-decoded, so both of the IRP's
+  encoded spellings name it) as `_event.data`, and the
+  `_scxmleventname` parameter as `_event.name`. Two upstream checks are
+  answered by the decoder's rules rather than by a check, and their
+  templates emit nothing: the method check (`conf:methodIsPost`), because
+  `Statifier.Send.BasicHTTP.decode/1` forms no event from a request that
+  is not a POST; and the raw-message check (`conf:eventRaw`, and the raw
+  half of the `_scxmleventname` check), because there is no raw message
+  and the event name has exactly two sources, that parameter or
+  `HTTP.` and the method when it is absent.
 - **sub_documents.exs**: manifest `<dep>` documents an `<invoke>` loads at
   runtime rather than a `<start>` document run as its own conformance test.
   This is a different category from `exclusions.exs`: an exclusion is a test

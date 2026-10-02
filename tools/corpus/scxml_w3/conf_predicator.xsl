@@ -215,7 +215,9 @@
 	<xsl:attribute name="expr">_event.<xsl:value-of select="."/></xsl:attribute>
 </xsl:template>
 
-<!-- returns the raw message structure as a string.  Stubbed: BasicHTTP only. -->
+<!-- returns the raw message structure as a string.  Stubbed: BasicHTTP only.
+     The event this engine forms carries no raw message (see the Basic HTTP
+     block at the end of this file), so there is nothing to return. -->
 <xsl:template match="//@conf:eventRaw">
 </xsl:template>
 
@@ -634,10 +636,37 @@ The Basic HTTP Event I/O Processor is Statifier.Send.BasicHTTP (ADR-0075),
 which a host registers; a corpus case that names it declares
 host.event_io_processors, and the corpus host runs it behind a loopback
 front. conf:basicHTTPAccessURITarget emits the IRP's own spelling of the
-access URI, the short _ioprocessors key's location. Every other template
-below is stubbed rather than emitting the regex-based ECMAScript forms the
-upstream stylesheet used, so the checks they carried on the raw message
-are not made. -->
+access URI, the short _ioprocessors key's location.
+
+The upstream stylesheet checks the inbound message with regex searches over
+_event.raw. The event this engine forms carries no raw message: the
+decoder (Statifier.Send.BasicHTTP.decode/1) turns the request into the
+event's name and _event.data, each value through the text rung (a
+predicator literal, else the string). So the checks below are made on the
+decoded event instead:
+
+  - conf:eventIdParamHasValue="1 2" checks _event.data['Var1'] == 2, the
+    namelist location as the form parameter's name;
+  - conf:eventNamedParamHasValue="param1 1" checks _event.data['param1'] == 1;
+    for the name _scxmleventname it checks _event.name, because the decoder
+    takes the event name from that parameter rather than keeping it in
+    _event.data;
+  - conf:messageBodyEquals checks _event.data against the body text,
+    percent-decoded first ('+' and %XX for ASCII), so the IRP's two
+    encoded spellings of one body both name the text the decoder forms.
+
+Two upstream checks are answered by the decoder's rules rather than by a
+check, and their templates stay empty:
+
+  - conf:methodIsPost: decode/1 forms no event from a request whose method
+    is not POST, so an event that arrives at all came by POST;
+  - conf:eventRaw, and the raw half of the _scxmleventname check: there is
+    no raw message, and the event name has exactly two sources, the
+    _scxmleventname parameter (query string first, then form body) or
+    HTTP.<METHOD> when it is absent, so a checked name proves the parameter.
+
+Every other template below stays stubbed rather than emitting the
+regex-based ECMAScript forms the upstream stylesheet used. -->
 
 <xsl:template match="//@conf:testOnServer">
 </xsl:template>
@@ -658,13 +687,38 @@ are not made. -->
 <xsl:template match="//@conf:multipleNamelist">
 </xsl:template>
 
+<!-- "<id> <value>": the namelist location Var<id> arrived as a parameter
+     holding the value -->
 <xsl:template match="//@conf:eventIdParamHasValue">
+	<xsl:attribute name="cond">
+		<xsl:analyze-string select="." regex="(\S+)(\s+)(\S+)">
+			<xsl:matching-substring>_event.data['Var<xsl:value-of select="regex-group(1)"/>'] == <xsl:value-of select="regex-group(3)"/></xsl:matching-substring>
+		</xsl:analyze-string>
+	</xsl:attribute>
 </xsl:template>
 
+<!-- "<name> <value>": the named parameter arrived holding the value; the
+     _scxmleventname parameter is the event's name -->
 <xsl:template match="//@conf:eventNamedParamHasValue">
+	<xsl:attribute name="cond">
+		<xsl:analyze-string select="." regex="(\S+)(\s+)(\S+)">
+			<xsl:matching-substring>
+				<xsl:choose>
+					<xsl:when test="regex-group(1) = '_scxmleventname'">_event.name == '<xsl:value-of select="regex-group(3)"/>'</xsl:when>
+					<xsl:otherwise>_event.data['<xsl:value-of select="regex-group(1)"/>'] == <xsl:value-of select="regex-group(3)"/></xsl:otherwise>
+				</xsl:choose>
+			</xsl:matching-substring>
+		</xsl:analyze-string>
+	</xsl:attribute>
 </xsl:template>
 
+<!-- the body text, given form-encoded or percent-encoded, is _event.data:
+     '+' is a space and %XX an ASCII character -->
 <xsl:template match="//@conf:messageBodyEquals">
+	<xsl:attribute name="cond">_event.data == '<xsl:analyze-string select="replace(., '\+', ' ')" regex="%([0-7][0-9A-Fa-f])">
+			<xsl:matching-substring><xsl:value-of select="codepoints-to-string(string-length(substring-before('0123456789ABCDEF', upper-case(substring(regex-group(1), 1, 1)))) * 16 + string-length(substring-before('0123456789ABCDEF', upper-case(substring(regex-group(1), 2, 1)))))"/></xsl:matching-substring>
+			<xsl:non-matching-substring><xsl:value-of select="."/></xsl:non-matching-substring>
+		</xsl:analyze-string>'</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:getNamedParamVal">
