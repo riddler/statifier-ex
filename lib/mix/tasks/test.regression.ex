@@ -14,6 +14,12 @@ defmodule Mix.Tasks.Test.Regression do
   as `mix statifier.corpus` runs them - once `mix test` has finished, and
   any one that disagrees with its expectation is a regression too.
 
+  Running them needs OTP's `:inets`, `:ssl` and `:public_key` applications,
+  which `Mix.Statifier.Corpus.Runner.start_runtime/0` puts on the code path
+  once `mix test` has finished and before the first authored case runs: on
+  an OTP built without `:ssl`, a registry listing any authored case raises
+  there.
+
   ## Usage
 
       mix test.regression

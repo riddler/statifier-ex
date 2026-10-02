@@ -35,6 +35,12 @@ defmodule Mix.Tasks.Test.Baseline do
   `Mix.Statifier.Corpus.Runner`, as `mix statifier.corpus` runs it, instead
   of `mix test`.
 
+  Running them needs OTP's `:inets`, `:ssl` and `:public_key` applications,
+  which `Mix.Statifier.Corpus.Runner.start_runtime/0` puts on the code path
+  before the first authored case runs: on an OTP built without `:ssl`, a
+  scan that finds an untracked `statifier` candidate, or an `add` that
+  names an authored case, raises there.
+
   The ratchet only moves forward. Nothing here removes an entry - a test that
   used to pass and now does not is a regression to fix, not a line to delete.
 
