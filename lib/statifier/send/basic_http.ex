@@ -26,9 +26,8 @@ defmodule Statifier.Send.BasicHTTP do
       The session's `_ioprocessors` carries an entry under each registered
       string, both holding the same `"location"`: this URL, `/`, and the
       session's `_sessionid` (C.2.3, ADR-0075 decision 3). A registration
-      without it (or with a value that is not a string, or with options
-      that are not a keyword list) is refused when
-      the session starts fresh, with
+      from which no entry can be built (no `:base_url`, or a value that
+      is not a string) is refused when the session starts fresh, with
       `{:error, {:send_types, {:invalid_registration, type,
       {:missing_option, :base_url}}}}`, before any session process is
       spawned and so with no crash report (`check_registration/2`). A
@@ -157,23 +156,25 @@ defmodule Statifier.Send.BasicHTTP do
          }
 
   @doc """
-  Accepts a registration whose options are a keyword list carrying a
-  string `:base_url`, the address the `_ioprocessors` location is built
-  from (C.2.3), and answers `{:error, {:missing_option, :base_url}}` for
-  any other, never raising. A session's
-  fresh start asks it and refuses a rejected registration by name
-  (`Statifier.Send.Processor`'s "Refusing a registration").
+  Answers `:ok` exactly when `ioprocessors_entry/2` would build an entry
+  from `opts`: when the one lookup both share finds a string `:base_url`
+  (the address the `_ioprocessors` location is built from, C.2.3). Any
+  other registration answers `{:error, {:missing_option, :base_url}}`,
+  including options whose lookup raises, so this never raises. A
+  session's fresh start asks it and refuses a rejected registration by
+  name (`Statifier.Send.Processor`'s "Refusing a registration").
   """
   @impl Statifier.Send.Processor
   @spec check_registration(type :: String.t(), opts :: keyword()) ::
           :ok | {:error, {:missing_option, :base_url}}
   def check_registration(_type, opts) do
-    with true <- Keyword.keyword?(opts),
-         {:ok, base_url} when is_binary(base_url) <- Keyword.fetch(opts, :base_url) do
-      :ok
-    else
-      _missing -> {:error, {:missing_option, :base_url}}
+    case base_url(opts) do
+      {:ok, _base_url} -> :ok
+      :error -> {:error, {:missing_option, :base_url}}
     end
+  rescue
+    _lookup_raised in [ArgumentError, FunctionClauseError] ->
+      {:error, {:missing_option, :base_url}}
   end
 
   @doc """
@@ -190,14 +191,26 @@ defmodule Statifier.Send.BasicHTTP do
         ) ::
           map()
   def ioprocessors_entry(type, %{session_id: session_id, opts: opts}) do
-    case Keyword.fetch(opts, :base_url) do
-      {:ok, base_url} when is_binary(base_url) ->
+    case base_url(opts) do
+      {:ok, base_url} ->
         %{"location" => base_url <> "/" <> session_id}
 
-      _missing ->
+      :error ->
         raise ArgumentError,
               "#{inspect(__MODULE__)} registered for #{inspect(type)} needs a :base_url " <>
                 "option, the address its _ioprocessors location is built from (C.2.3)"
+    end
+  end
+
+  # The one lookup `check_registration/2` and `ioprocessors_entry/2` share,
+  # so the check accepts exactly the registrations the entry can be built
+  # from. It raises where `Keyword.fetch/2` does (an improper list whose
+  # proper part holds no `:base_url`).
+  @spec base_url(opts :: keyword()) :: {:ok, String.t()} | :error
+  defp base_url(opts) do
+    case Keyword.fetch(opts, :base_url) do
+      {:ok, base_url} when is_binary(base_url) -> {:ok, base_url}
+      _missing -> :error
     end
   end
 

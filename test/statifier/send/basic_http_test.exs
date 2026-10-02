@@ -250,7 +250,7 @@ defmodule Statifier.Send.BasicHTTPTest do
             [transport: Statifier.BasicHTTPTestTransport],
             [base_url: :front],
             [1, 2],
-            [{:base_url, "http://front.test/in"} | :improper]
+            [{:a, 1} | :improper]
           ] do
         assert BasicHTTP.check_registration("basichttp", opts) ==
                  {:error, {:missing_option, :base_url}}
