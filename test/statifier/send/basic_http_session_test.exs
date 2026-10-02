@@ -25,6 +25,15 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
     :ok
   end
 
+  # A bare `Session.start_link/2` for one Basic HTTP registration, with a
+  # raise in the caller caught into a value, so a check that raises fails
+  # the caller's match rather than the test run.
+  defp bare_start(machine, opts) do
+    Session.start_link(machine, send_types: %{"basichttp" => {BasicHTTP, opts}})
+  rescue
+    exception -> {:raised_in_caller, exception.__struct__}
+  end
+
   defp start!(xml, send_types \\ @send_types) do
     {:ok, machine} = Statifier.compile(xml)
     {:ok, session} = Statifier.start_session(machine, send_types: send_types)
@@ -71,26 +80,33 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       refute_receive {:crash_report, _report}, 200
     end
 
-    # sabotage: `check_registration/2` drops its `Keyword.keyword?/1` step ->
-    # the improper list's `Keyword.fetch/2` raises, the session leaves the
-    # start to `init/1`, the start answers the raise's shape instead of the
-    # named refusal, and the match reddens. Confirmed red and reverted.
-    test "options that are not a keyword list are refused by name, in the caller" do
+    # sabotage: `check_registration/2` asks `Keyword.keyword?/1` before its
+    # lookup -> the four starting shapes are refused by name and the
+    # `{:ok, _}` match reddens. Also red: dropping its `rescue` (the improper
+    # list without the key answers `init/1`s raise instead of the named
+    # refusal). Confirmed red and reverted.
+    test "a bare start refuses exactly the registrations the entry cannot be built from" do
+      # A bare start links the caller to the process it spawns; trapping
+      # exits lets a refusal from `init/1` be read as a value.
+      Process.flag(:trap_exit, true)
       {:ok, machine} = Statifier.compile(@idle)
 
-      for opts <- [[{:base_url, @base_url} | :improper], [1, 2]] do
-        # A raise in the caller is caught into a value, so a check that
-        # raises fails the match below rather than the test run.
-        answer =
-          try do
-            Session.start_link(machine, send_types: %{"basichttp" => {BasicHTTP, opts}})
-          rescue
-            exception -> {:raised_in_caller, exception.__struct__}
-          end
+      # Shapes `ioprocessors_entry/2` builds an entry from: each starts.
+      for opts <- [
+            [{:base_url, @base_url} | :improper],
+            [{"a", 1}, {:base_url, @base_url}],
+            [{:base_url, @base_url}, :junk],
+            [{:base_url, @base_url}, {:a, 1, 2}]
+          ] do
+        assert {:ok, session} = bare_start(machine, opts)
+        :ok = Session.stop(session)
+      end
 
+      # Shapes it cannot build one from: each is refused by name.
+      for opts <- [[], [base_url: :front], [1, 2], [{:a, 1} | :improper]] do
         assert {:error,
                 {:send_types, {:invalid_registration, "basichttp", {:missing_option, :base_url}}}} =
-                 answer
+                 bare_start(machine, opts)
       end
     end
 

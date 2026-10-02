@@ -607,10 +607,11 @@ callback is
 not asked, and a session that registers nothing asks nothing, so it sees
 nothing new.
 The session names no processor: the Basic HTTP processor is one module
-that exports the callback, answering `{:missing_option, :base_url}` when
-its options are not a keyword list carrying a string `:base_url`, and
-never raising (`Statifier.Send.BasicHTTP.check_registration/2`, this
-change).
+that exports the callback. It answers `:ok` exactly when
+`ioprocessors_entry/2` would build its entry from the options, through
+the one lookup the two share, and `{:missing_option, :base_url}`
+otherwise, never raising (`Statifier.Send.BasicHTTP.check_registration/2`,
+this change).
 `ioprocessors_entry/2` keeps its raise for a direct caller.
 
 **Why a resume is exempt.** A resume does not ask the callback. ADR-0075
@@ -625,10 +626,11 @@ session would otherwise get wrong.
 
 **What changes for a host.** One answer: a fresh start whose Basic HTTP
 registration lacks `:base_url` answers the named refusal above instead of
-the `ArgumentError` shape. A Basic HTTP registration whose options are
-not a keyword list is a registration without a usable `:base_url` too: a
-fresh start answers the same named refusal for it, where the processor's
-raise gave the start that raise's own shape before. A resume does not
+the `ArgumentError` shape. The named refusal answers exactly the fresh
+starts the processor's entry would have failed: every registration from
+which `ioprocessors_entry/2` builds an entry still starts, and every one
+on which it raised (a missing key, a value that is not a string, or a list
+whose lookup raises) is refused by name instead. A resume does not
 change.
 
 **Tests.** `Statifier.Session.SendTypesTest`'s "a registration the
@@ -641,8 +643,9 @@ asked, that a malformed registration still gets `init/1`'s answer, and
 that a check breaking its contract leaves the whole start to `init/1`.
 `Statifier.Send.BasicHTTPSessionTest` pins the Basic HTTP refusal
 at a fresh start through `Statifier.start_session/2`, with no
-`{:proc_lib, :crash}` report, the same refusal for options that are not a
-keyword list, through a bare `start_link/2`, and a resume that is not
+`{:proc_lib, :crash}` report, a table of option shapes through a bare
+`start_link/2` (those the entry is built from start, the others are
+refused by name), and a resume that is not
 refused and keeps
 its entry, and `Statifier.Send.BasicHTTPTest` pins
 `check_registration/2`'s two answers.
