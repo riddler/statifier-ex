@@ -969,9 +969,11 @@ defmodule Statifier.Session do
   entry, an entry from a processor exporting only
   `c:Statifier.Send.Processor.ioprocessors_entry/1`, and the set of keys
   are left as they are. A session that registers nothing answers `:ok`
-  and changes nothing.
+  and changes nothing, whether it is running, halted or recording: there
+  is nothing to recompute, so `:ok` is true of it in every case.
 
-  Answers `:ok`, or, changing nothing:
+  For a session that registers something, answers `:ok`, or, changing
+  nothing:
 
     - `{:error, reason}` - the first `{:error, reason}` a registered
       processor's `c:Statifier.Send.Processor.check_registration/2`
@@ -991,8 +993,8 @@ defmodule Statifier.Session do
       refreshed entries.
 
   This is a call, not a cast: a host learns whether the entries moved.
-  It is the one call that changes the session's position; it is handled
-  between macrosteps, like every other message, so a chart reads the
+  It is the only one of this module's calls that changes the session's
+  position; it is handled between macrosteps, like every other message, so a chart reads the
   refreshed entries from the next event it processes. An entry that
   raises exits the session with that raise, as it would at start.
   """
@@ -1615,6 +1617,17 @@ defmodule Statifier.Session do
   def handle_call(:session_id, _from, state), do: {:reply, state.session_id, state}
   def handle_call(:snapshot, _from, state), do: {:reply, state.machine_state, state}
   def handle_call(:status, _from, state), do: {:reply, build_status(state), state}
+
+  # Nothing registered, nothing to recompute: `:ok` with the state untouched,
+  # ahead of the halted and recorded clauses, because a refresh that changes
+  # nothing neither needs a running chart nor escapes a recording.
+  def handle_call(
+        :refresh_ioprocessors,
+        _from,
+        %State{machine_state: %MachineState{send_types: nil}} = state
+      ) do
+    {:reply, :ok, state}
+  end
 
   def handle_call(:refresh_ioprocessors, _from, %State{halted: halted} = state)
       when halted != nil do

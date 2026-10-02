@@ -525,8 +525,8 @@ explicit, additive host call, and leaves the resume itself as it was
   answers `{:ok, machine_state}` or `{:error, reason}`. It is pure.
 - `Statifier.Session.refresh_ioprocessors/1` takes a live session and
   answers `:ok` or `{:error, reason}`. It is a `GenServer.call`, so the
-  host learns the answer; it is the one call that changes a session's
-  position, where every other change arrives through a cast.
+  host learns the answer; it is the only one of `Statifier.Session`'s
+  calls that changes a session's position.
 
 **What a refresh recomputes and what it leaves.** Each registration
 reads as follows, against the registration the position is stamped with
@@ -556,7 +556,8 @@ asked for its entry as it is, and an entry that raises, or is not a
 string-keyed map, raises out of the pure call as it does at session
 start; inside a live session that raise exits the session.
 
-The live call answers two more errors, each changing nothing:
+For a session that registers something, the live call answers two more
+errors, each changing nothing:
 
 - `{:error, :not_running}` once the session has halted (`:done`,
   `:cancelled` or `:budget_exhausted`): no chart is left to read the
@@ -599,3 +600,7 @@ decide.
 
 Nothing changes for a session that registers nothing: its stamp is
 `nil`, and both calls answer success with the position byte-identical.
+The live call answers `:ok` for it before it looks at anything else, so
+a session that registers nothing answers `:ok` when it has halted or
+was started with `record: true` too: there is nothing to recompute, so
+the refresh neither needs a running chart nor escapes a recording.
