@@ -404,3 +404,57 @@ authored cases `statifier/send/registered_send_failed` and
 `conformance/registry.json` and listed in `test/passing_tests.json`. It
 is still this repository's only foot Amendment, and its sentence that it
 carries "a Status line of its own" stands as written.
+
+## Note (2026-10-02): ADR-0075 amends decision 5 in part, the test201 path's history, and the foot Amendments
+
+This note decides nothing and changes no decision, consequence or
+Related entry; it points at a later record and corrects two statements of
+fact by addition. Anchors were read on `main` at `f649de54` unless they
+name another commit.
+
+**Decision 5 is amended in part by ADR-0075.** Decision 5 says "No W3C
+or SCION case carries it: upstream cases run with no registration."
+[ADR-0075](0075-basichttp-event-io-processor.md) amends that sentence in
+part (its Status line, and its decision 7, second bullet): a `w3c` case
+may carry a `host` object whose only key is `event_io_processors`, every
+other `host` key stays refused on `w3c` cases, and `scion` cases carry no
+`host` at all. On `main` the `w3c` branch of
+`conformance/schema/case.json` allows `host` with
+`event_io_processors` as its one required key and no other, the `scion`
+branch refuses `host`, and the `w3c/test201` entry in
+`conformance/corpus/w3c.json` carries `host.event_io_processors`. Every
+other part of decision 5 stands as written.
+
+**The test201 path's history.** Decision 5 names
+`test/scxml_tests/optional/send/test201_test.exs` as a generated W3C
+module "at `abf713c`", and the file is present at `abf713c`, so the
+sentence was true as of the commit it pins, which is how the 2026-09-19
+acceptance Note above says such statements are read. The file's history
+since, from `git log --no-renames` on the path: `115ae07f` removed it the
+same day, when test201 joined the `:needs_basichttp` exclusions, so it
+was not generated at `2105a449`, the commit that accepted this record,
+nor at `dc1900d0`, the commit ADR-0075's Consequences read when they say
+it "is not generated at `dc1900d0`". `b6f7fcab` generated it again, when
+the BasicHTTP documents left the exclusions. It is present at `v2.10.0`
+(`c8894aea`) and on `main`: test201 is in `conformance/corpus/w3c.json`
+and in neither `conformance/registry.json` nor `test/passing_tests.json`,
+so it is in the corpus and unclaimed, for the ordering reason ADR-0075's
+decision 7 gives. Decision 5's observation about the two modules is
+otherwise unchanged; ruled by the operator, 2026-10-02, that this note
+states the history rather than calling the file ungenerated.
+
+**The foot Amendments.** The Amendment above says it "is this
+repository's first foot Amendment", and the 2026-09-24 Note above says it
+"is still this repository's only foot Amendment". Neither holds. Before
+2026-09-23, five records already carried a dated Amendment with a Status
+line of its own, placed after their Consequences: ADR-0051
+(`### Amendment 2026-09-01`), ADR-0056 (`### Amendment 2026-09-02`),
+ADR-0063 (`### Amendment 2026-09-01`), ADR-0053
+(`### Amendment 2026-09-19`) and ADR-0059 (`### Amendment 2026-09-19`).
+Since 2026-09-24,
+[ADR-0075](0075-basichttp-event-io-processor.md) has gained three
+(`### Amendment 2026-09-30`, twice, and `### Amendment 2026-10-02`) and
+[ADR-0069](0069-host-registered-send-types.md) one
+(`## Amendment (2026-10-02)`). This record's Amendment is its own only
+Amendment, and the 2026-09-24 Note's sentence that it carries "a Status
+line of its own" still stands.
