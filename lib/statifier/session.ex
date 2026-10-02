@@ -673,9 +673,10 @@ defmodule Statifier.Session do
   # before any process is spawned, so a rejected registration is refused
   # by name and leaves no crash report. A resume is not asked: the
   # `_ioprocessors` entries its position carries stand (ADR-0075 decision
-  # 3). A map naming a built-in spelling, and a map holding any value that
-  # is not a module or `{module, opts}`, are left to `init/1`, whose
-  # answers are unchanged; this check never raises for them.
+  # 3). A map naming a built-in spelling, a map holding any value that is
+  # not a module or `{module, opts}`, and a map with a processor whose check
+  # raises or answers outside its contract, are left to `init/1`, whose
+  # answers are unchanged, so this check never raises in the caller.
   @spec rejected_registration(opts :: keyword()) :: {String.t(), term()} | nil
   defp rejected_registration(opts) do
     send_types = Keyword.get(opts, :send_types, %{})

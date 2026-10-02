@@ -26,7 +26,8 @@ defmodule Statifier.Send.BasicHTTP do
       The session's `_ioprocessors` carries an entry under each registered
       string, both holding the same `"location"`: this URL, `/`, and the
       session's `_sessionid` (C.2.3, ADR-0075 decision 3). A registration
-      without it (or with a value that is not a string) is refused when
+      without it (or with a value that is not a string, or with options
+      that are not a keyword list) is refused when
       the session starts fresh, with
       `{:error, {:send_types, {:invalid_registration, type,
       {:missing_option, :base_url}}}}`, before any session process is
@@ -156,9 +157,10 @@ defmodule Statifier.Send.BasicHTTP do
          }
 
   @doc """
-  Accepts a registration whose options carry a string `:base_url`, the
-  address the `_ioprocessors` location is built from (C.2.3), and answers
-  `{:error, {:missing_option, :base_url}}` for any other. A session's
+  Accepts a registration whose options are a keyword list carrying a
+  string `:base_url`, the address the `_ioprocessors` location is built
+  from (C.2.3), and answers `{:error, {:missing_option, :base_url}}` for
+  any other, never raising. A session's
   fresh start asks it and refuses a rejected registration by name
   (`Statifier.Send.Processor`'s "Refusing a registration").
   """
@@ -166,8 +168,10 @@ defmodule Statifier.Send.BasicHTTP do
   @spec check_registration(type :: String.t(), opts :: keyword()) ::
           :ok | {:error, {:missing_option, :base_url}}
   def check_registration(_type, opts) do
-    case Keyword.fetch(opts, :base_url) do
-      {:ok, base_url} when is_binary(base_url) -> :ok
+    with true <- Keyword.keyword?(opts),
+         {:ok, base_url} when is_binary(base_url) <- Keyword.fetch(opts, :base_url) do
+      :ok
+    else
       _missing -> {:error, {:missing_option, :base_url}}
     end
   end

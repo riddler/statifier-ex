@@ -245,7 +245,13 @@ defmodule Statifier.Send.BasicHTTPTest do
     # sabotage: `check_registration/2`'s missing-option arm answers `:ok` -> the
     # `==` assertion reddens. Confirmed red and reverted.
     test "a registration without a string :base_url names the missing option" do
-      for opts <- [[], [transport: Statifier.BasicHTTPTestTransport], [base_url: :front]] do
+      for opts <- [
+            [],
+            [transport: Statifier.BasicHTTPTestTransport],
+            [base_url: :front],
+            [1, 2],
+            [{:base_url, "http://front.test/in"} | :improper]
+          ] do
         assert BasicHTTP.check_registration("basichttp", opts) ==
                  {:error, {:missing_option, :base_url}}
       end

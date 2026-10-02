@@ -28,6 +28,24 @@ defmodule Statifier.Session.SendTypesTest do
     end
   end
 
+  # A processor whose `check_registration/2` breaks its contract as its
+  # options say, and whose `_ioprocessors` entry is not a map, so a start
+  # that reaches `init/1` is refused there with an `ArgumentError`.
+  defmodule BrokenCheckProcessor do
+    @moduledoc false
+    @spec check_registration(type :: String.t(), opts :: keyword()) :: term()
+    def check_registration(_type, opts) do
+      case Keyword.fetch!(opts, :check) do
+        :raise -> raise ArgumentError, "a check that raises"
+        :throw -> throw(:a_check_that_throws)
+        :junk -> :maybe
+      end
+    end
+
+    @spec ioprocessors_entry(type :: String.t()) :: term()
+    def ioprocessors_entry(_type), do: :not_a_map
+  end
+
   @send_types %{"myapp:sink" => SinkProcessor}
 
   @chart """
@@ -188,6 +206,41 @@ defmodule Statifier.Session.SendTypesTest do
           |> elem(0)
 
         assert {:error, {:function_clause, _stack}} = answer
+      end
+    end
+
+    # sabotage: `Types.ask/3` drops its `rescue` and `catch` -> the raising
+    # and throwing checks escape into the caller and the match reddens on
+    # `{:raised_in_caller, _}`. Also red: `ask/3` answering `{:error, other}`
+    # for a junk answer (a named refusal), and `rejected_registration/1`
+    # ignoring `:unanswered` (the mixed map's shelf refusal wins). Confirmed
+    # red and reverted.
+    test "a check that breaks its contract leaves the whole start to init/1" do
+      machine = compile!(@chart)
+
+      for check <- [:raise, :throw, :junk],
+          send_types <- [
+            %{"library:broken" => {BrokenCheckProcessor, check: check}},
+            %{
+              "library:a-shelve" => ShelfProcessor,
+              "library:b-broken" => {BrokenCheckProcessor, check: check}
+            }
+          ] do
+        # A raise in the caller is caught into a value, so a caller-side
+        # path that raises fails the match below rather than the test run.
+        {answer, _log} =
+          ExUnit.CaptureLog.with_log(fn ->
+            try do
+              Session.start_link(machine, send_types: send_types)
+            rescue
+              exception -> {:raised_in_caller, exception.__struct__}
+            catch
+              kind, value -> {:raised_in_caller, {kind, value}}
+            end
+          end)
+
+        assert {:error, {%ArgumentError{message: message}, _stack}} = answer
+        assert message =~ "must return a map"
       end
     end
 

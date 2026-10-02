@@ -146,27 +146,57 @@ defmodule Statifier.Send.Types do
   # The first registration of a `:send_types` map, in the order of its type
   # strings, whose module exports the optional
   # `c:Statifier.Send.Processor.check_registration/2` and answers
-  # `{:error, reason}`, as `{type, reason}`; `nil` when none does. A module
-  # that does not export the callback is not asked. Internal:
+  # `{:error, reason}`, as `{type, reason}`; `nil` when none does. Every
+  # exporting module is asked before any answer is used, and when one of
+  # them raises, throws, exits or answers anything other than `:ok` or
+  # `{:error, reason}`, the answer is `nil` too, so the caller leaves the
+  # start to `Statifier.Session`'s `init/1` as if nothing were asked. A
+  # module that does not export the callback is not asked. Internal:
   # `Statifier.Session`'s fresh start is its caller, hence `@doc false`.
   @doc false
   @spec rejected_registration(send_types :: %{optional(String.t()) => registration()}) ::
           {String.t(), term()} | nil
   def rejected_registration(send_types) when is_map(send_types) do
-    send_types
-    |> Enum.sort_by(fn {type, _registration} -> type end)
-    |> Enum.find_value(fn {type, registration} -> rejection(type, split(registration)) end)
+    answers =
+      send_types
+      |> Enum.sort_by(fn {type, _registration} -> type end)
+      |> Enum.map(fn {type, registration} -> {type, answer(type, split(registration))} end)
+
+    if Enum.any?(answers, &match?({_type, :unanswered}, &1)),
+      do: nil,
+      else: Enum.find_value(answers, &rejection/1)
   end
 
-  @spec rejection(type :: String.t(), processor :: {module(), keyword()}) ::
+  @spec rejection({type :: String.t(), answer :: :ok | {:error, term()}}) ::
           {String.t(), term()} | nil
-  defp rejection(type, {module, opts}) do
+  defp rejection({type, {:error, reason}}), do: {type, reason}
+  defp rejection({_type, :ok}), do: nil
+
+  # One module's answer to `check_registration/2`, `:ok` for a module that
+  # does not export it, and `:unanswered` for a check that does not keep the
+  # callback's contract, whatever it does instead.
+  @spec answer(type :: String.t(), processor :: {module(), keyword()}) ::
+          :ok | {:error, term()} | :unanswered
+  defp answer(type, {module, opts}) do
     if Code.ensure_loaded?(module) and function_exported?(module, :check_registration, 2) do
-      case module.check_registration(type, opts) do
-        :ok -> nil
-        {:error, reason} -> {type, reason}
-      end
+      ask(module, type, opts)
+    else
+      :ok
     end
+  end
+
+  @spec ask(module :: module(), type :: String.t(), opts :: keyword()) ::
+          :ok | {:error, term()} | :unanswered
+  defp ask(module, type, opts) do
+    case module.check_registration(type, opts) do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+      _other -> :unanswered
+    end
+  rescue
+    _exception -> :unanswered
+  catch
+    _kind, _value -> :unanswered
   end
 
   # The value `module` returns from `ioprocessors_entry/2` for `type` and

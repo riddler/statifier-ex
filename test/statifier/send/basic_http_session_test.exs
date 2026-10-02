@@ -71,6 +71,29 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       refute_receive {:crash_report, _report}, 200
     end
 
+    # sabotage: `check_registration/2` drops its `Keyword.keyword?/1` step ->
+    # the improper list's `Keyword.fetch/2` raises, the session leaves the
+    # start to `init/1`, the start answers the raise's shape instead of the
+    # named refusal, and the match reddens. Confirmed red and reverted.
+    test "options that are not a keyword list are refused by name, in the caller" do
+      {:ok, machine} = Statifier.compile(@idle)
+
+      for opts <- [[{:base_url, @base_url} | :improper], [1, 2]] do
+        # A raise in the caller is caught into a value, so a check that
+        # raises fails the match below rather than the test run.
+        answer =
+          try do
+            Session.start_link(machine, send_types: %{"basichttp" => {BasicHTTP, opts}})
+          rescue
+            exception -> {:raised_in_caller, exception.__struct__}
+          end
+
+        assert {:error,
+                {:send_types, {:invalid_registration, "basichttp", {:missing_option, :base_url}}}} =
+                 answer
+      end
+    end
+
     # sabotage: `Session`'s `rejected_registration/1` ignores `:resume` ->
     # the resume is refused and the `{:ok, _}` match reddens. Confirmed red
     # and reverted.

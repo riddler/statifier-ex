@@ -36,7 +36,8 @@ A `:send_types` value is a bare module or `{module, opts}`; this processor
 needs the options form. Its options:
 
 - `:base_url` (required) - the address your front answers at. A
-  registration without it (or with a value that is not a string) is
+  registration without it (or with a value that is not a string, or with
+  options that are not a keyword list) is
   refused when the session starts fresh, with
   `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`
   before any session process is spawned, so with no crash report. A
