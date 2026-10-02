@@ -34,6 +34,11 @@ defmodule Mix.Tasks.Statifier.Corpus do
   processes of its own), because a case that uses `<send>`, `<invoke>` or a
   delay runs through a session. Every refusal is printed as a sentence and
   exits non-zero.
+
+  Both modes also need OTP's `:inets`, `:ssl` and `:public_key`
+  applications, which `Mix.Statifier.Corpus.Runner.start_runtime/0` puts on
+  the code path before any case runs: on an OTP built without `:ssl` the
+  task raises there, whether or not any case runs an Event I/O Processor.
   """
 
   use Mix.Task

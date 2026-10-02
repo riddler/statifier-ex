@@ -133,6 +133,14 @@ defmodule Mix.Statifier.Corpus.HostCase do
   set that `source` names as a `<send>`'s `type`, sorted: what a corpus
   case transformed from `source` declares in `host.event_io_processors`.
 
+  The match is a text search, not a parse: a URI is found only where
+  `source` holds the full URI as `type="URI"` (double quotes, no space
+  around `=`) inside a `<send` start tag. The processor's short form
+  (`type="basichttp"`), a `typeexpr`, a single-quoted `type` and a
+  namespace-prefixed `<scxml:send>` are not matched, so a document naming
+  its processor in one of those ways gets no declaration; and because the
+  search reads text, a matching `<send>` inside an XML comment counts too.
+
   ## Examples
 
       iex> Mix.Statifier.Corpus.HostCase.event_io_processors(
