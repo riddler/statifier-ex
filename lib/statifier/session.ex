@@ -340,6 +340,7 @@ defmodule Statifier.Session do
 
   alias Statifier.{Effect, Event, Interpreter, Machine, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
+  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.{Answer, Source}
   alias Statifier.Invoke.Types, as: InvokeTypes
@@ -991,15 +992,30 @@ defmodule Statifier.Session do
       `Statifier.MachineState.refresh_ioprocessors/1`, and passes the
       result as `:resume`, and the recording's anchor then carries the
       refreshed entries.
+    - `{:error, {:ioprocessors_entry, type, exception}}` - the processor
+      registered as `type` raised `exception` while its entry was asked
+      for again (or answered something other than a string-keyed map,
+      raised as an `ArgumentError`). The session keeps running, at the
+      position it held before the call: every entry is computed before
+      any is stored, so none is. Only an exception is answered; a throw or
+      an exit out of an entry is outside the callback's contract and exits
+      the session. `Statifier.MachineState.refresh_ioprocessors/1` raises
+      the same exception instead.
 
   This is a call, not a cast: a host learns whether the entries moved.
   It is the only one of this module's calls that changes the session's
   position; it is handled between macrosteps, like every other message, so a chart reads the
   refreshed entries from the next event it processes. An entry that
-  raises exits the session with that raise, as it would at start.
+  raises an exception is answered, not raised, so a processor's raise
+  never exits a running session.
   """
   @spec refresh_ioprocessors(server :: server()) ::
-          :ok | {:error, :not_running | :recorded_session | term()}
+          :ok
+          | {:error,
+             :not_running
+             | :recorded_session
+             | {:ioprocessors_entry, String.t(), Exception.t()}
+             | term()}
   def refresh_ioprocessors(server), do: GenServer.call(server, :refresh_ioprocessors)
 
   @doc """
@@ -1637,10 +1653,28 @@ defmodule Statifier.Session do
     {:reply, {:error, :not_running}, state}
   end
 
-  def handle_call(:refresh_ioprocessors, _from, %State{recording: nil} = state) do
-    case MachineState.refresh_ioprocessors(state.machine_state) do
-      {:ok, machine_state} -> {:reply, :ok, %{state | machine_state: machine_state}}
-      {:error, _reason} = error -> {:reply, error, state}
+  # The live refresh asks with `:answer`, so an entry that raises is an
+  # error reply and the session keeps the state it held: a host's call
+  # never exits a running execution. The pure
+  # `MachineState.refresh_ioprocessors/1` keeps raising.
+  def handle_call(
+        :refresh_ioprocessors,
+        _from,
+        %State{recording: nil, machine_state: %MachineState{datamodel: datamodel} = machine_state} =
+          state
+      ) do
+    case SystemVariables.refreshed_ioprocessors(
+           datamodel["_ioprocessors"],
+           machine_state.send_types,
+           datamodel["_sessionid"],
+           :answer
+         ) do
+      {:ok, entries} ->
+        datamodel = Map.put(datamodel, "_ioprocessors", entries)
+        {:reply, :ok, %{state | machine_state: %{machine_state | datamodel: datamodel}}}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
     end
   end
 

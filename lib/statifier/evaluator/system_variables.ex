@@ -170,16 +170,29 @@ defmodule Statifier.Evaluator.SystemVariables do
   # such processor that exports `check_registration/2` is asked first, in
   # type order, and the first `{:error, reason}` is the answer, before any
   # entry is recomputed. A check that answers outside its contract does not
-  # stop the refresh, and an entry that raises raises here, as it does at
-  # session start. Internal, hence `@doc false`.
+  # stop the refresh. Every entry is computed before any is returned, so a
+  # refresh is all or nothing. An entry that raises, or is not a
+  # string-keyed map, raises here when `on_raise` is `:raise`, as it does at
+  # session start (the pure call); when it is `:answer` (the live
+  # session's call, which must not exit a running session) it answers
+  # `{:error, {:ioprocessors_entry, type, exception}}` instead. Only an
+  # exception is rescued: a throw or an exit out of an entry is outside
+  # the callback's contract (it returns a map or raises) and passes
+  # through. Internal, hence `@doc false`.
   @doc false
   @spec refreshed_ioprocessors(
           ioprocessors :: %{String.t() => map()},
           send_types :: Types.t(),
-          session_id :: String.t()
+          session_id :: String.t(),
+          on_raise :: :raise | :answer
         ) :: {:ok, %{String.t() => map()}} | {:error, term()}
-  def refreshed_ioprocessors(ioprocessors, %Types{processors: processors}, session_id)
-      when is_map(ioprocessors) and is_binary(session_id) do
+  def refreshed_ioprocessors(
+        ioprocessors,
+        %Types{processors: processors},
+        session_id,
+        on_raise
+      )
+      when is_map(ioprocessors) and is_binary(session_id) and on_raise in [:raise, :answer] do
     refreshable =
       processors
       |> Enum.filter(fn {type, {module, _opts}} ->
@@ -189,19 +202,32 @@ defmodule Statifier.Evaluator.SystemVariables do
       |> Enum.sort_by(fn {type, _processor} -> type end)
 
     case Enum.find_value(refreshable, &rejected/1) do
-      nil ->
-        {:ok,
-         Enum.reduce(refreshable, ioprocessors, fn {type, {module, opts}}, acc ->
-           Map.put(
-             acc,
-             type,
-             Types.session_entry!(module, type, %{session_id: session_id, opts: opts})
-           )
-         end)}
-
-      {:error, _reason} = error ->
-        error
+      nil -> refreshed_entries(refreshable, ioprocessors, session_id, on_raise)
+      {:error, _reason} = error -> error
     end
+  end
+
+  # Every refreshable entry, computed into `ioprocessors` before any is
+  # returned. The first entry that raises answers for the whole refresh
+  # (`:answer`) or re-raises with its own stacktrace
+  # (`:raise`), and the entries computed before it are dropped.
+  @spec refreshed_entries(
+          refreshable :: [{String.t(), {module(), keyword()}}],
+          ioprocessors :: %{String.t() => map()},
+          session_id :: String.t(),
+          on_raise :: :raise | :answer
+        ) :: {:ok, %{String.t() => map()}} | {:error, term()}
+  defp refreshed_entries(refreshable, ioprocessors, session_id, on_raise) do
+    Enum.reduce_while(refreshable, {:ok, ioprocessors}, fn {type, {module, opts}}, {:ok, acc} ->
+      try do
+        entry = Types.session_entry!(module, type, %{session_id: session_id, opts: opts})
+        {:cont, {:ok, Map.put(acc, type, entry)}}
+      rescue
+        exception ->
+          if on_raise == :raise, do: reraise(exception, __STACKTRACE__)
+          {:halt, {:error, {:ioprocessors_entry, type, exception}}}
+      end
+    end)
   end
 
   @spec rejected({type :: String.t(), processor :: {module(), keyword()}}) ::

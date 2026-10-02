@@ -604,3 +604,44 @@ The live call answers `:ok` for it before it looks at anything else, so
 a session that registers nothing answers `:ok` when it has halted or
 was started with `record: true` too: there is nothing to recompute, so
 the refresh neither needs a running chart nor escapes a recording.
+
+### Amendment 2026-10-02: a live refresh answers an entry that raises, and the session keeps running
+
+Status: proposed - amends the Amendment above ("a host refreshes the
+registered `_ioprocessors` entries by an explicit call") in one sentence;
+every decision, every other Amendment, and the record's own Status are
+unchanged.
+
+The Amendment above ends its paragraph "When it refuses." with "inside a
+live session that raise exits the session." That sentence is replaced by
+this Amendment (ruled by the operator, 2026-10-02). A refresh is a host's
+call into a running execution; a processor whose entry raises must not
+end that execution, where at session start the same raise only fails the
+start.
+
+**The answer.** When a registered processor's `ioprocessors_entry/2`
+raises during `Statifier.Session.refresh_ioprocessors/1`, the call
+answers `{:error, {:ioprocessors_entry, type, exception}}`, where `type`
+is the registered type string whose entry raised and `exception` is the
+raised exception struct. An entry that is not a string-keyed map is
+answered the same way, with the `ArgumentError` the entry check raises
+(`Statifier.Send.Types`'s `session_entry!/3`). The session keeps running.
+
+**All or nothing.** Every entry is computed before any is stored
+(`Statifier.Evaluator.SystemVariables`'s `refreshed_ioprocessors/4`), so
+after the error the session holds the position it held before the call:
+an entry computed ahead of the one that raised is not stored either.
+
+**What is answered.** Only an exception raised while an entry is
+computed. A throw or an exit out of `ioprocessors_entry/2` is outside the
+callback's contract, which returns a map or raises, and still exits the
+session.
+
+**The pure call is unchanged.** `Statifier.MachineState.refresh_ioprocessors/1`
+still raises the entry's exception, with nothing returned, as session
+start does: a host refreshing a position before a resume holds no running
+execution and sees the processor's own exception.
+
+The other answers of the live call (`:ok`, a refused registration,
+`{:error, :not_running}`, `{:error, :recorded_session}`, and `:ok` for a
+session that registers nothing) are unchanged.
