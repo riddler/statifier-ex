@@ -39,7 +39,8 @@ needs the options form. Its options:
   registration without it (or with a value that is not a string) is
   refused when the session starts fresh, with
   `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`
-  and no crash report. A resumed session is not refused: its position
+  before any session process is spawned, so with no crash report. A
+  resumed session is not refused: its position
   carries the `_ioprocessors` entries it started with.
 - `:transport` - the module the POSTs go through, a
   `Statifier.Send.BasicHTTP.Transport`. The default is

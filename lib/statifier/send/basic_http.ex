@@ -29,8 +29,9 @@ defmodule Statifier.Send.BasicHTTP do
       without it (or with a value that is not a string) is refused when
       the session starts fresh, with
       `{:error, {:send_types, {:invalid_registration, type,
-      {:missing_option, :base_url}}}}` and no crash report
-      (`check_registration/2`). A resumed session is not refused: its
+      {:missing_option, :base_url}}}}`, before any session process is
+      spawned and so with no crash report (`check_registration/2`). A
+      resumed session is not refused: its
       position carries the entries it started with.
     - `:transport` - a `Statifier.Send.BasicHTTP.Transport` module the
       POSTs go through. Default `Statifier.Send.BasicHTTP.Transport.Httpc`,

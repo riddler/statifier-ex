@@ -9,7 +9,7 @@ defmodule Statifier.Session.SendTypesTest do
   # does. These tests read the core's stamp; the planner's hand-off of a
   # registered type is not part of this change.
 
-  alias Statifier.{Position, Session}
+  alias Statifier.{CrashReportProbe, Position, Session}
   alias Statifier.Send.Types
   alias Statifier.Session.{Invocations, Recording}
 
@@ -128,21 +128,38 @@ defmodule Statifier.Session.SendTypesTest do
       :ok
     end
 
-    # sabotage: `Types.rejection/2` answers `nil` for an `{:error, _}`
-    # -> the session boots and the `{:error, _}` match reddens. Confirmed
-    # red and reverted.
-    test "a fresh start is refused by name, with no crash report" do
-      log =
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert {:error,
-                  {:send_types,
-                   {:invalid_registration, "library:shelve", {:missing_option, :shelf}}}} =
-                   Session.start_link(compile!(@chart),
-                     send_types: %{"library:shelve" => ShelfProcessor}
-                   )
-        end)
+    # sabotage: n/a - the control for the probe: `init/1`'s built-in
+    # refusal exits a spawned process, and the probe must hear its crash
+    # report, or the `refute_receive` below proves nothing.
+    test "the crash report probe hears a refusal init/1 makes" do
+      CrashReportProbe.attach()
 
-      assert log == ""
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error, {:send_types, {:built_in_types, ["scxml"]}}} =
+                 Session.start_link(compile!(@chart), send_types: %{"scxml" => SinkProcessor})
+      end)
+
+      assert_receive {:crash_report, _report}, 1_000
+    end
+
+    # sabotage: the refusal moved back into `init/1` (`start_link/2` skips
+    # `rejected_registration/1` and `init_registered/3` stops with the same
+    # value) -> the named reason still comes back, but the spawned process's
+    # `{:proc_lib, :crash}` report reaches the probe and `refute_receive`
+    # reddens. Confirmed red and reverted.
+    test "a fresh start is refused by name, with no crash report" do
+      CrashReportProbe.attach()
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error,
+                {:send_types,
+                 {:invalid_registration, "library:shelve", {:missing_option, :shelf}}}} =
+                 Session.start_link(compile!(@chart),
+                   send_types: %{"library:shelve" => ShelfProcessor}
+                 )
+      end)
+
+      refute_receive {:crash_report, _report}, 200
     end
 
     # sabotage: `rejected_registration/1` sorts the type strings descending ->
@@ -172,9 +189,9 @@ defmodule Statifier.Session.SendTypesTest do
                )
     end
 
-    # sabotage: `init_accepted/4`'s resume clause asks
-    # `rejected_registration/1` as a fresh start does -> the resume is
-    # refused and the `{:ok, _}` match reddens. Confirmed red and reverted.
+    # sabotage: `Session`'s `rejected_registration/1` ignores `:resume` ->
+    # the resume is refused and the `{:ok, _}` match reddens. Confirmed red
+    # and reverted.
     test "a resume is not asked: its persisted position stands" do
       machine = compile!(@chart)
 

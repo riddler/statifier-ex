@@ -627,11 +627,12 @@ processor.
 
 At a fresh start the session also asks every registration whose processor
 exports the optional `check_registration/2` whether it can serve it, in the
-order of the type strings, and refuses the first one rejected before the
-session boots, with
-`{:error, {:send_types, {:invalid_registration, type, reason}}}` and no
-crash report. A resume does not ask: the `_ioprocessors` entries its
-position carries stand.
+order of the type strings, and refuses the first one rejected in the
+caller, before any session process is spawned, with
+`{:error, {:send_types, {:invalid_registration, type, reason}}}`; no
+process exits, so there is no crash report. A map that names a built-in
+spelling gets the built-in refusal above instead. A resume does not ask:
+the `_ioprocessors` entries its position carries stand.
 
 `:inherit_send_types` is the `<send>` counterpart of
 `:inherit_invoke_handlers`, on the same start-time terms: `true` starts every

@@ -106,8 +106,9 @@ defmodule Statifier.Send.Processor do
   A processor that needs something from its registration, such as an
   option its entry is built from, implements the optional
   `c:Statifier.Send.Processor.check_registration/2`. A fresh start asks it
-  for every registration whose module exports it, and a registration it
-  rejects refuses the start with a named value instead of a crash. A
+  for every registration whose module exports it, before any session
+  process is spawned, and a registration it rejects refuses the start
+  with a named value instead of a process that exits. A
   resume does not ask it, because the entries the persisted position
   carries stand (ADR-0075 decision 3).
 
@@ -208,11 +209,13 @@ defmodule Statifier.Send.Processor do
   registration). Pure. Answers `:ok`, or `{:error, reason}` naming what is
   wrong, for example `{:missing_option, :base_url}`.
 
-  `Statifier.Session.start_link/2` asks it at a fresh start, before the
-  session boots, for every registration whose module exports it, in the
-  order of the type strings. The first `{:error, reason}` refuses the
-  start with `{:error, {:send_types, {:invalid_registration, type,
-  reason}}}` and no crash report. A resume does not ask it: the
+  `Statifier.Session.start_link/2` asks it at a fresh start (no
+  `:resume` option), in the caller, before any session process is
+  spawned, for every registration whose module exports it, in the order
+  of the type strings. The first `{:error, reason}` refuses the start
+  with `{:error, {:send_types, {:invalid_registration, type, reason}}}`
+  as `start_link/2`'s own return; no process is spawned, so no
+  `{:proc_lib, :crash}` report is produced. A resume does not ask it: the
   `_ioprocessors` entries a persisted position carries stand (ADR-0075
   decision 3). Optional: a processor that does not implement it is not
   asked.
