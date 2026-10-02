@@ -189,7 +189,7 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
     # sabotage: Statifier.Interpreter's main_event_loop/3 (outside this
     # change) clearing states_to_invoke in its not-running branch before
     # exit_interpreter/1 -> the ending step's position states [] -> red
-    test "after the step that ends the chart, states_to_invoke keeps the states entered in its last macrostep" do
+    test "after the step that ends the chart, states_to_invoke keeps the states entered since the last invoke pass" do
       loan = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
           <state id="on_loan">
@@ -211,6 +211,49 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
 
       loan_case = %{
         "id" => "statifier/library/loan_returned_position",
+        "source" => loan,
+        "description" => "",
+        "initial_configuration" => ["on_loan"],
+        "steps" => [
+          %{
+            "event" => %{"name" => "copy.returned"},
+            "configuration" => ["returned"],
+            "expect_position" => returned
+          }
+        ]
+      }
+
+      assert Runner.run_case(loan_case) == :agree
+    end
+
+    # sabotage: Statifier.Interpreter.ExitEntry's exit_states/2 (outside this
+    # change) keeping states_to_invoke instead of removing the exit set ->
+    # check_in stays in it -> red
+    test "after the step that ends the chart, states_to_invoke leaves out a state the step entered and exited" do
+      loan = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="on_loan">
+          <state id="on_loan">
+              <transition event="copy.returned" target="check_in"/>
+          </state>
+          <state id="check_in">
+              <transition target="returned"/>
+          </state>
+          <final id="returned"/>
+      </scxml>
+      """
+
+      returned = %{
+        "configuration" => [],
+        "entered_states" => ["check_in", "on_loan", "returned"],
+        "states_to_invoke" => ["returned"],
+        "history_values" => %{},
+        "active_invocations" => [],
+        "running" => false,
+        "datamodel" => %{}
+      }
+
+      loan_case = %{
+        "id" => "statifier/library/loan_checked_in_position",
         "source" => loan,
         "description" => "",
         "initial_configuration" => ["on_loan"],
