@@ -629,9 +629,17 @@ defmodule Statifier.Position do
     parent id as in `from_machine`, and every recorded member resolves to a
     descendant of that parent. A recorded value is a configuration the
     execution will re-enter.
-  - **`states_to_invoke` is empty.** A non-empty set is a position inside a
-    macrostep, before its invoke pass, and not a position to move across
-    charts.
+  - **`states_to_invoke` is empty.** A non-empty set marks one of two
+    positions, and the predicate answers `false` at both. One is a
+    position inside a macrostep, before its invoke pass, which is not a
+    position to move across charts. The other is a chart that ended by
+    entering a top-level final state: its last macrostep leaves the set
+    holding that final state, because no invoke pass runs once the chart
+    has stopped (ADR-0076, its `states_to_invoke` row). A stopped
+    chart's `configuration` is empty too, which the legality condition
+    above already answers `false`, so a stopped execution is not
+    compatible at its position, even onto its own chart; that holds as
+    well for a cancelled chart, whose set is empty.
   - **`active_invocations`** needs nothing further: each key names an
     active state and an index into its `<invoke>` list, which is compared
     slice by slice above.
