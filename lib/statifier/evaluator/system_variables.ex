@@ -173,7 +173,9 @@ defmodule Statifier.Evaluator.SystemVariables do
   # stop the refresh. Every entry is computed before any is returned, so a
   # refresh is all or nothing. An entry that raises, or is not a
   # string-keyed map, raises here when `on_raise` is `:raise`, as it does at
-  # session start (the pure call); when it is `:answer` (the live
+  # session start (the pure call), except that an Erlang-level error is
+  # re-raised as the exception struct `rescue` normalised it to rather than
+  # as its raw reason; when it is `:answer` (the live
   # session's call, which must not exit a running session) it answers
   # `{:error, {:ioprocessors_entry, type, exception}}` instead. Only an
   # exception is rescued: a throw or an exit out of an entry is outside

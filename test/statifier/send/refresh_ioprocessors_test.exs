@@ -137,7 +137,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
   end
 
   describe "MachineState.refresh_ioprocessors/1" do
-    # sabotage: `refreshed_ioprocessors/3` returns `ioprocessors` unchanged
+    # sabotage: `refreshed_ioprocessors/4` returns `ioprocessors` unchanged
     # on success -> the basichttp location still names the old depot and
     # the equality reddens. Confirmed red and reverted.
     test "a position re-stamped with a new base URL reads the new location, and nothing else moves",
@@ -157,9 +157,9 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
                Map.delete(position.datamodel, "_ioprocessors")
     end
 
-    # sabotage: `refreshed_ioprocessors/3`'s filter drops its
+    # sabotage: `refreshed_ioprocessors/4`'s filter drops its
     # `ioprocessors_entry/2` export check and a `/1`-only type is rewritten
-    # from the re-stamped set's entry -> the locker reads bay-8 and the
+    # from its processor's `/1` entry -> the locker reads bay-8 and the
     # equality reddens. Confirmed red and reverted.
     test "the SCXML entry and a /1-only processor's entry are untouched",
          %{machine: machine, route: route} do
@@ -183,7 +183,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       assert Map.keys(refreshed.datamodel["_ioprocessors"]) == Map.keys(before)
     end
 
-    # sabotage: `refreshed_ioprocessors/3`'s error arm answers
+    # sabotage: `refreshed_ioprocessors/4`'s error arm answers
     # `{:ok, ioprocessors}` -> the refresh reports success and the equality
     # reddens. Confirmed red and reverted.
     test "a registration without :base_url answers the missing option and changes nothing",
@@ -208,9 +208,9 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
   end
 
   describe "a resume after the base URL moved" do
-    # sabotage: `refresh_ioprocessors/1`'s success arm returns the
-    # unrefreshed `machine_state` -> the chart reads the old depot and the
-    # first equality reddens. Confirmed red and reverted.
+    # sabotage: `MachineState.refresh_ioprocessors/2`'s success arm returns
+    # the unrefreshed `machine_state` -> the chart reads the old depot and
+    # the first equality reddens. Confirmed red and reverted.
     test "the host re-stamps and refreshes before resuming, and the chart reads the new location",
          %{machine: machine, route: route} do
       blob = persisted_at_old_depot(machine, route)
@@ -234,7 +234,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       assert stale["depot"] == @old_depot <> "/" <> stale["_sessionid"]
     end
 
-    # sabotage: `MachineState.refresh_ioprocessors/1`'s success arm returns
+    # sabotage: `MachineState.refresh_ioprocessors/2`'s success arm returns
     # the unrefreshed `machine_state` -> the recording's anchor carries the
     # old depot, the replay reads it, and the depot equality reddens.
     # Confirmed red and reverted.
@@ -314,9 +314,9 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       assert Session.snapshot(session) == before
     end
 
-    # sabotage: `MachineState.refresh_ioprocessors/1`'s `send_types: nil`
-    # clause drops `_ioprocessors` from the datamodel -> the binaries differ
-    # and the equality reddens. Confirmed red and reverted.
+    # sabotage: the nil-stamp clause of `Session.handle_call/3` replies with
+    # `_ioprocessors` dropped from the datamodel -> the binaries differ and
+    # the equality reddens. Confirmed red and reverted.
     test "a session that registers nothing answers :ok and its position is byte-identical" do
       {:ok, machine} = Statifier.compile(@idle)
       session = start!(machine, [])
@@ -367,9 +367,9 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
     end
 
     # sabotage: the live clause of `Session.handle_call/3` asks
-    # `refreshed_ioprocessors/4` with `:raise` instead of `:answer` -> the
-    # entry's raise exits the session, the call exits, and the equality on
-    # the answer reddens. Confirmed red and reverted.
+    # `MachineState.refresh_ioprocessors/2` with `:raise` instead of
+    # `:answer` -> the entry's raise exits the session, the call exits, and
+    # the equality on the answer reddens. Confirmed red and reverted.
     test "the live call answers the raise, and the session keeps running at the same position",
          %{machine: machine, jam: jam, types: types} do
       session = start!(machine, send_types: types)
@@ -420,7 +420,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
     end
 
     # sabotage: `MachineState.refresh_ioprocessors/1` asks
-    # `refreshed_ioprocessors/4` with `:answer` instead of `:raise` -> the
+    # `refresh_ioprocessors/2` with `:answer` instead of `:raise` -> the
     # pure call answers an error tuple and `assert_raise` reddens. Confirmed
     # red and reverted.
     test "the pure call still raises", %{machine: machine, jam: jam, types: types} do

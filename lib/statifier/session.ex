@@ -340,7 +340,6 @@ defmodule Statifier.Session do
 
   alias Statifier.{Effect, Event, Interpreter, Machine, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
-  alias Statifier.Evaluator.SystemVariables
   alias Statifier.Event.Cause
   alias Statifier.Invoke.{Answer, Source}
   alias Statifier.Invoke.Types, as: InvokeTypes
@@ -997,9 +996,16 @@ defmodule Statifier.Session do
       for again (or answered something other than a string-keyed map,
       raised as an `ArgumentError`). The session keeps running, at the
       position it held before the call: every entry is computed before
-      any is stored, so none is. Only an exception is answered; a throw or
-      an exit out of an entry is outside the callback's contract and exits
-      the session. `Statifier.MachineState.refresh_ioprocessors/1` raises
+      any is stored, so none is. An Erlang-level error is answered as the
+      exception struct Elixir normalises it to: an entry that calls
+      `:erlang.error(:jam)` answers `%ErlangError{original: :jam}`. Only an
+      exception is answered; a throw or an exit out of an entry is outside
+      the callback's contract and is not. An exit exits the session. A
+      throw is taken by `GenServer` as the session's return from this
+      call: a thrown term that is not a valid reply exits the session with
+      `{:bad_return_value, term}`, and a thrown `{:reply, reply, new_state}`
+      is answered with `reply` and replaces the session's state with
+      `new_state`. `Statifier.MachineState.refresh_ioprocessors/1` raises
       the same exception instead.
 
   This is a call, not a cast: a host learns whether the entries moved.
@@ -1656,22 +1662,12 @@ defmodule Statifier.Session do
   # The live refresh asks with `:answer`, so an entry that raises is an
   # error reply and the session keeps the state it held: a host's call
   # never exits a running execution. The pure
-  # `MachineState.refresh_ioprocessors/1` keeps raising.
-  def handle_call(
-        :refresh_ioprocessors,
-        _from,
-        %State{recording: nil, machine_state: %MachineState{datamodel: datamodel} = machine_state} =
-          state
-      ) do
-    case SystemVariables.refreshed_ioprocessors(
-           datamodel["_ioprocessors"],
-           machine_state.send_types,
-           datamodel["_sessionid"],
-           :answer
-         ) do
-      {:ok, entries} ->
-        datamodel = Map.put(datamodel, "_ioprocessors", entries)
-        {:reply, :ok, %{state | machine_state: %{machine_state | datamodel: datamodel}}}
+  # `MachineState.refresh_ioprocessors/1` keeps raising; both read and
+  # write the position through the same `MachineState` step.
+  def handle_call(:refresh_ioprocessors, _from, %State{recording: nil} = state) do
+    case MachineState.refresh_ioprocessors(state.machine_state, :answer) do
+      {:ok, machine_state} ->
+        {:reply, :ok, %{state | machine_state: machine_state}}
 
       {:error, _reason} = error ->
         {:reply, error, state}

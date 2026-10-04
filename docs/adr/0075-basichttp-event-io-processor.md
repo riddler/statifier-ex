@@ -1052,3 +1052,50 @@ A sibling implementation, whose send report is synchronous (a miss is
 answered inside the call that made the send), bounds this loop itself
 (its bead sts-8zq); that bound is the sibling's own. This reference's
 recorded shape is the host responsibility above.
+
+## Note (2026-10-04): what the Amendment on a live refresh's raise replaces, and how a raise, a throw and an Erlang-level error reach the host
+
+This Note decides nothing and changes no answer. It states exactly
+what parts of the Amendment of 2026-10-02, "a live refresh answers an
+entry that raises, and the session keeps running", say loosely. The
+behaviour in the second and third points below was read by running a
+probe processor at `e5e11051`.
+
+**"That sentence" is that clause.** The Amendment quotes "inside a live
+session that raise exits the session." and says "That sentence is
+replaced". The words it quotes are the second clause of the earlier
+Amendment's sentence, which begins "A processor that exports
+`ioprocessors_entry/2` and no check is asked for its entry as it is".
+Only that clause is replaced; the sentence's first part, that such an
+entry raises out of the pure call as it does at session start, stands,
+as the Amendment's own paragraph "The pure call is unchanged" says.
+
+**An Erlang-level error is raised as an exception struct.** The
+Amendment's `exception` is "the raised exception struct", and the pure
+call "still raises the entry's exception ... as session start does".
+Both calls take the entry's raise through a `rescue`
+(`Statifier.Evaluator.SystemVariables`'s `refreshed_ioprocessors/4`),
+which turns an Erlang-level error into the exception struct Elixir
+normalises it to. An entry that calls `:erlang.error(:jam)` is answered
+by the live call as `%ErlangError{original: :jam}`, and the pure call
+raises that struct, while `Statifier.MachineState.new/2`, which builds
+the position at session start, raises the raw reason `:jam` for the same
+entry. An entry that fails on `:badarith` is an `ArithmeticError` from
+both refresh calls and the raw `:badarith` from `new/2`. A `rescue` sees
+the same exception from `new/2` and the pure refresh; only a `catch` of
+the `:error` kind tells them apart.
+
+**A throw does not always exit the session.** The Amendment's "What is
+answered" says a throw or an exit out of `ioprocessors_entry/2` "still
+exits the session". An exit does. A throw is taken by `GenServer` as the
+session's return from the call (`Statifier.Session.refresh_ioprocessors/1`):
+a thrown term that is not a valid reply exits the session with
+`{:bad_return_value, term}`, and a thrown `{:reply, reply, new_state}` is
+answered with `reply` and replaces the session's state with `new_state`.
+Either way the throw is outside the callback's contract, which returns a
+map or raises, and is not answered as an error.
+
+`Statifier.Session.refresh_ioprocessors/1`'s documentation states the
+second and third points for the live call, and
+`Statifier.MachineState.refresh_ioprocessors/1`'s states the second for
+the pure call.

@@ -983,19 +983,38 @@ defmodule Statifier.MachineState do
   nothing returned. The live `Statifier.Session.refresh_ioprocessors/1`
   answers that raise as an error instead, because it must not exit a
   running session; this call keeps raising, so a host refreshing a
-  position before a resume sees the processor's own exception.
+  position before a resume sees the processor's own exception. An
+  Erlang-level error is raised as the exception struct Elixir normalises
+  it to, not as the raw reason `new/2` raises: an entry that calls
+  `:erlang.error(:jam)` raises `%ErlangError{original: :jam}` here, and an
+  entry that fails on `:badarith` raises an `ArithmeticError`. A `rescue`
+  sees the same exception from both; only a `catch` of the `:error` kind
+  tells them apart.
   """
   @spec refresh_ioprocessors(machine_state :: t()) :: {:ok, t()} | {:error, term()}
   def refresh_ioprocessors(%__MODULE__{send_types: nil} = machine_state), do: {:ok, machine_state}
 
+  def refresh_ioprocessors(%__MODULE__{} = machine_state),
+    do: refresh_ioprocessors(machine_state, :raise)
+
+  # The one datamodel read and write of a refresh, shared by the pure call
+  # above (`:raise`) and the live `Statifier.Session.refresh_ioprocessors/1`
+  # (`:answer`, because it must not exit a running session), so a change to
+  # how a refresh reads or writes the position reaches both. Each caller
+  # answers a `send_types: nil` stamp itself first. Internal, hence
+  # `@doc false`.
+  @doc false
+  @spec refresh_ioprocessors(machine_state :: t(), on_raise :: :raise | :answer) ::
+          {:ok, t()} | {:error, term()}
   def refresh_ioprocessors(
-        %__MODULE__{send_types: send_types, datamodel: datamodel} = machine_state
+        %__MODULE__{send_types: %SendTypes{} = send_types, datamodel: datamodel} = machine_state,
+        on_raise
       ) do
     case SystemVariables.refreshed_ioprocessors(
            datamodel["_ioprocessors"],
            send_types,
            datamodel["_sessionid"],
-           :raise
+           on_raise
          ) do
       {:ok, entries} ->
         {:ok, %{machine_state | datamodel: Map.put(datamodel, "_ioprocessors", entries)}}
