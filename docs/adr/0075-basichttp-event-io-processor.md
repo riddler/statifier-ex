@@ -894,3 +894,37 @@ and the second is sent as its `inspect/1` text where it was a form body.
 This was ruled by the operator, 2026-10-03.
 `Statifier.Send.BasicHTTPTest` pins it with a `Date` and with a `MapSet`
 of pairs, and `Statifier.Send.BasicHTTPSessionTest` with a `Date`.
+
+## Note (2026-10-04): under `:budget_exhausted` the session's own delayed sends stay armed and this processor's are discarded
+
+The two delayed-send paths answer differently for one halt reason. When
+a session halts `:budget_exhausted`, the delayed sends it scheduled
+itself stay armed and deliver when they fire, while the delayed sends
+this processor holds are discarded without a request. Under `:done` and
+`:cancelled` both are discarded, so `:budget_exhausted` is the only
+reason on which they differ.
+
+The session's own delayed send is an internal effect the interpreter can
+still deliver. The budget halts a macrostep, not the session: ADR-0019
+keeps the state chart `running` and does not run `exit_interpreter/1`,
+and spec 6.2 discards a delayed message only when the session
+terminates. `Statifier.Session`'s private `discard_pending_timers/2`
+therefore leaves its timers armed under `:budget_exhausted` and cancels
+them under `:done` and `:cancelled`, the asymmetry the session's
+moduledoc names.
+
+This processor's delayed send is an external POST, held by a timer
+process outside the interpreter (decision 9's row "A delayed send and its
+cancel"). The session tells that timer of every halt reason through
+`Statifier.Session.HaltNotice.halted/1`, and the timer ends on the notice
+without posting (`Statifier.Send.BasicHTTP`'s private `hold/4`). A
+halted session drains no queued event (`Statifier.Session`'s
+`handle_continue/2`), so it could not answer the reply the POST would
+cause, and the send is discarded on every halt reason.
+
+No answer changes. Arming this processor's timers under
+`:budget_exhausted` would change what 2.11.0 does and was not taken. This
+was ruled by the operator, 2026-10-03.
+`Statifier.Send.BasicHTTPSessionTest` pins both answers in one session
+halted `:budget_exhausted`: its own delayed send reaches another session,
+and this processor's delayed send makes no request.

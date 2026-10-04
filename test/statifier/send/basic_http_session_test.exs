@@ -513,6 +513,70 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       refute_receive {:basichttp_post, _url, _headers, _body}, 300
     end
 
+    # The two delayed-send paths answer differently under
+    # `:budget_exhausted` (ADR-0075's foot Note of 2026-10-04): the
+    # session's own timer stays armed, because the interpreter has not
+    # exited, and delivers to the other session; the processor's timer is
+    # told of the halt and discards its POST. The sends sit in the parent
+    # state's `<onentry>`, so each is scheduled once before the eventless
+    # self-transition in `a` exhausts the budget.
+    #
+    # sabotage: `discard_pending_timers/2`'s `:budget_exhausted` clause is
+    # removed, so the general clause cancels the session's own timer too ->
+    # "later" never reaches the reader, which stays running, and the
+    # `{:halted, :done}` `assert_receive` reddens. Confirmed red and
+    # reverted.
+    # sabotage: the halt path calls `HaltNotice.halted/1` for every reason
+    # but `:budget_exhausted` (processor timers armed like the session's
+    # own) -> the POST fires and `refute_receive` reddens. Confirmed red and
+    # reverted.
+    test "under :budget_exhausted the session's own delayed send delivers and a processor's is discarded" do
+      {:ok, reader_machine} =
+        Statifier.compile("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting">
+              <state id="waiting">
+                <transition event="later" target="returned"/>
+              </state>
+              <final id="returned"/>
+            </scxml>
+        """)
+
+      {:ok, reader} =
+        Statifier.start_session(reader_machine,
+          session_id: "sess_library-reader",
+          subscribers: [self()]
+        )
+
+      on_exit(fn -> if Process.alive?(reader), do: Session.stop(reader) end)
+
+      {:ok, machine} =
+        Statifier.compile("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="loan">
+              <state id="loan">
+                <onentry>
+                  <send event="later" delay="100ms" target="#_scxml_sess_library-reader"/>
+                  <send type="basichttp" event="later" delay="100ms"
+                        target="http://sink.test/late"/>
+                </onentry>
+                <state id="a">
+                  <transition target="a"/>
+                </state>
+              </state>
+            </scxml>
+        """)
+
+      {:ok, session} =
+        Statifier.start_session(machine, send_types: @send_types, max_macrostep_rounds: 5)
+
+      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+
+      assert Session.status(session).status == :budget_exhausted
+
+      assert_receive {:statifier, "sess_library-reader", {:halted, :done}}, 1_000
+      refute_receive {:basichttp_post, _url, _headers, _body}, 300
+      assert Session.status(session).status == :budget_exhausted
+    end
+
     # sabotage: `perform/2`'s `:not_a_session` arm answers `:ok` without
     # sending the timer `:cancel` -> the timer POSTs at fire time and
     # `refute_receive` reddens. Confirmed red and reverted.
