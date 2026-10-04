@@ -48,6 +48,22 @@ vendors it from a statifier-ex tag, byte for byte, with `LICENSES/` and every
 case's `upstream` field, and writes its own registry against it. The recipe
 and the registry contract are [`RATCHET.md`](RATCHET.md).
 
+## A case in the corpus that is not claimed
+
+`w3c/test552` is in `corpus/w3c.json`, and its generated test module,
+`test/scxml_tests/mandatory/data/test552_test.exs`, runs with the rest of
+the `w3c` suite when that suite is included, but statifier-ex does not pass
+it: it is absent from `test/passing_tests.json` and so from
+`registry.json`. That is deliberate, not a gap the ratchet is waiting to
+close. The case reaches `pass` only when a `<data src>` is fetched at the
+time its `binding` names (in this document, at initialization), and the
+engine never fetches a datamodel source
+([ADR-0024](../docs/adr/0024-data-src-is-never-fetched.md)): a `<data>` with
+an `src` raises `error.execution` and leaves its id unbound, so the chart
+reaches `fail`. The case is not listed in `exclusions.json`, because an
+exclusion leaves a document out of the corpus and this one stays in it;
+ADR-0024 names it the acceptance test for any later change to that decision.
+
 ## The library world
 
 The cases under `conformance/cases/library/` share one small domain, so that
