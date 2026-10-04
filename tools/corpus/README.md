@@ -197,14 +197,24 @@ Three filters apply before a W3C case is emitted, all applied by
   event instead: a namelist location or a named parameter in
   `_event.data`, the body text (percent-decoded, so both of the IRP's
   encoded spellings name it) as `_event.data`, and the
-  `_scxmleventname` parameter as `_event.name`. Two upstream checks are
+  `_scxmleventname` parameter as `_event.name`. The body text is escaped
+  into the cond's single-quoted string (a backslash and an apostrophe);
+  only ASCII percent escapes are decoded, and a body carrying an escape
+  from `%80` up stops the transform with a message naming that limit
+  rather than emitting a cond for the wrong text. Two upstream checks are
   answered by the decoder's rules rather than by a check, and their
   templates emit nothing: the method check (`conf:methodIsPost`), because
   `Statifier.Send.BasicHTTP.decode/1` forms no event from a request that
   is not a POST; and the raw-message check (`conf:eventRaw`, and the raw
   half of the `_scxmleventname` check), because there is no raw message
   and the event name has exactly two sources, that parameter or
-  `HTTP.` and the method when it is absent.
+  `HTTP.` and the method when it is absent. In `test534`, the one
+  document that checks `_scxmleventname`, the transition's event
+  descriptor `test` already sends a name from the wrong source
+  (`HTTP.POST`) to the `*` transition and so to fail; what the emitted
+  cond `_event.name == 'test'` adds beyond the descriptor is the
+  exact-name check, refusing a name the descriptor's prefix match also
+  takes (`test.extra`, say).
 - **sub_documents.exs**: manifest `<dep>` documents an `<invoke>` loads at
   runtime rather than a `<start>` document run as its own conformance test.
   This is a different category from `exclusions.exs`: an exclusion is a test

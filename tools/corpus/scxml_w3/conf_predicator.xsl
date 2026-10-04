@@ -653,7 +653,9 @@ decoded event instead:
     _event.data;
   - conf:messageBodyEquals checks _event.data against the body text,
     percent-decoded first ('+' and %XX for ASCII), so the IRP's two
-    encoded spellings of one body both name the text the decoder forms.
+    encoded spellings of one body both name the text the decoder forms;
+    the text is escaped into its quoted string, and a body with a
+    non-ASCII escape is refused (the template's own comment).
 
 Two upstream checks are answered by the decoder's rules rather than by a
 check, and their templates stay empty:
@@ -663,7 +665,12 @@ check, and their templates stay empty:
   - conf:eventRaw, and the raw half of the _scxmleventname check: there is
     no raw message, and the event name has exactly two sources, the
     _scxmleventname parameter (query string first, then form body) or
-    HTTP.<METHOD> when it is absent, so a checked name proves the parameter.
+    HTTP.<METHOD> when it is absent. In test534, the one document that
+    checks _scxmleventname, the transition's event descriptor "test"
+    already sends a name from the wrong source (HTTP.POST) to the "*"
+    transition and so to fail; what the emitted cond _event.name == 'test'
+    adds beyond the descriptor is the exact-name check, refusing a name
+    the descriptor's prefix match also takes (test.extra, say).
 
 Every other template below stays stubbed rather than emitting the
 regex-based ECMAScript forms the upstream stylesheet used. -->
@@ -713,12 +720,25 @@ regex-based ECMAScript forms the upstream stylesheet used. -->
 </xsl:template>
 
 <!-- the body text, given form-encoded or percent-encoded, is _event.data:
-     '+' is a space and %XX an ASCII character -->
+     '+' is a space and %XX an ASCII character. The decoded text is quoted
+     as a single-quoted predicator string, so a backslash in it is written
+     \\ and an apostrophe \' (a %27 decodes to an apostrophe and is escaped
+     the same way). The limit: only ASCII escapes (%00 to %7F) are decoded.
+     A %XX from %80 up is one byte of a multi-byte UTF-8 character, which
+     this template does not join into its character, so the transform
+     refuses such a body: it stops with a message naming the attribute and
+     this limit rather than emit a cond that names the wrong text. -->
 <xsl:template match="//@conf:messageBodyEquals">
-	<xsl:attribute name="cond">_event.data == '<xsl:analyze-string select="replace(., '\+', ' ')" regex="%([0-7][0-9A-Fa-f])">
+	<xsl:if test="matches(., '%[89A-Fa-f][0-9A-Fa-f]')">
+		<xsl:message terminate="yes">conf:messageBodyEquals="<xsl:value-of select="."/>": a percent escape from %80 up is not decoded (the body template decodes ASCII escapes only); refusing the body rather than quoting the wrong text</xsl:message>
+	</xsl:if>
+	<xsl:variable name="decoded">
+		<xsl:analyze-string select="replace(., '\+', ' ')" regex="%([0-7][0-9A-Fa-f])">
 			<xsl:matching-substring><xsl:value-of select="codepoints-to-string(string-length(substring-before('0123456789ABCDEF', upper-case(substring(regex-group(1), 1, 1)))) * 16 + string-length(substring-before('0123456789ABCDEF', upper-case(substring(regex-group(1), 2, 1)))))"/></xsl:matching-substring>
 			<xsl:non-matching-substring><xsl:value-of select="."/></xsl:non-matching-substring>
-		</xsl:analyze-string>'</xsl:attribute>
+		</xsl:analyze-string>
+	</xsl:variable>
+	<xsl:attribute name="cond">_event.data == '<xsl:value-of select="replace(replace(string($decoded), '\\', '\\\\'), &quot;'&quot;, &quot;\\'&quot;)"/>'</xsl:attribute>
 </xsl:template>
 
 <xsl:template match="//@conf:getNamedParamVal">
