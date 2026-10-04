@@ -360,10 +360,13 @@ step.
   `:expression_compile_error`. In a `<data expr>`, an `<assign expr>`, a
   `<script>` or a `namelist` entry, where the compiler defers the
   failure, it raises `error.execution` when it runs, and
-  `Statifier.Publish.findings/2` reports it under row S13. As text read
-  as a value (a `<data>` element's text, a `<content>` element's text, a
-  Basic HTTP text body) it no longer folds to a string and is kept as its
-  text, quotes and backslash included.
+  `Statifier.Publish.findings/2` reports it under row S13. Wherever text
+  is read as a value, through `Statifier.Compiler.Expressions.inline_value/1`
+  or `Statifier.EventData.coerce/1`, it no longer folds to a string and is
+  kept as its text, quotes and backslash included: the text of a `<data>`
+  or an `<assign>` element; a `<content>` element's text under `<send>`,
+  `<invoke>` or `<donedata>`; an inbound Basic HTTP request's text body or
+  form parameter values.
 
 **A host may start:** nothing new.
 
