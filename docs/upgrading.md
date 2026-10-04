@@ -284,6 +284,14 @@ processor's own process that its session halted. Requires
   any session process is spawned; a resume does not ask it. A processor
   that does not implement it is not asked. ADR-0069's Amendment of
   2026-10-02 records the callback.
+  Corrected 2026-10-04: `Statifier.Send.BasicHTTP` implements the
+  callback, so 2.11.0 also adds the public function
+  `Statifier.Send.BasicHTTP.check_registration/2`, which a host may call
+  to check a Basic HTTP registration's options before a start. It answers
+  `:ok` exactly when `ioprocessors_entry/2` would build an entry from the
+  options (a string `:base_url`), and `{:error, {:missing_option, :base_url}}`
+  for any other registration, a `:base_url` that is present but not a
+  string included.
 - A processor that holds a delay in a process it starts from `perform/2`
   can hand that process to `Statifier.Session.HaltNotice.watch/2`; the
   session sends it `{:statifier_halted, session, reason}` when it halts
