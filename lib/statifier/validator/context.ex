@@ -100,7 +100,9 @@ defmodule Statifier.Validator.Context do
   # chain (`parents`, keyed by the struct itself) and answers whether
   # `ancestor` is on it. A state with no id has no entry in the id-keyed
   # `ancestors` map `descendant?/3` reads, so an id test cannot place a
-  # state under it; checks 3 and 5 both use this for such an ancestor.
+  # state under it, and two states that share an id cannot be told apart
+  # by it. Check 3 uses this for an ancestor with no id; check 5 uses it for
+  # every ancestor.
   @spec inside?(context :: t(), state :: State.t(), ancestor :: State.t()) :: boolean()
   def inside?(%__MODULE__{parents: parents} = context, %State{} = state, %State{} = ancestor) do
     case Map.fetch!(parents, state) do
