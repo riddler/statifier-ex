@@ -397,6 +397,18 @@ defmodule Statifier.Send.BasicHTTPTest do
                  {:error, {:missing_option, :base_url}}
       end
     end
+
+    # sabotage: `base_url/1` drops its `is_binary/1` guard, so any present
+    # `:base_url` is accepted -> `check_registration/2` answers `:ok` and the
+    # `==` assertion reddens; and its guard widened to
+    # `is_binary(base_url) or is_list(base_url)` -> the charlist answers `:ok`
+    # and this test alone reddens. Confirmed red and reverted.
+    test "a :base_url that is present but not a string names the same missing option" do
+      for base_url <- [8080, ~c"http://front.test/in", nil, %{"host" => "front.test"}] do
+        assert BasicHTTP.check_registration("basichttp", base_url: base_url) ==
+                 {:error, {:missing_option, :base_url}}
+      end
+    end
   end
 
   describe "decode/1: the inbound half (C.2.1)" do

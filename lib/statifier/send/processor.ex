@@ -114,7 +114,9 @@ defmodule Statifier.Send.Processor do
   process is spawned, and a registration it rejects refuses the start
   with a named value instead of a process that exits. A
   resume does not ask it, because the entries the persisted position
-  carries stand (ADR-0075 decision 3).
+  carries stand (ADR-0075 decision 3). A check that raises, throws, exits
+  or answers anything other than `:ok` or `{:error, reason}` refuses
+  nothing; the callback's own doc says what the start does then.
 
   ## Registration options
 
@@ -211,7 +213,12 @@ defmodule Statifier.Send.Processor do
   Whether this processor can serve the registration of the type string
   `type` with the registration's options `opts` (`[]` for a bare-module
   registration). Pure. Answers `:ok`, or `{:error, reason}` naming what is
-  wrong, for example `{:missing_option, :base_url}`.
+  wrong, for example `{:missing_option, :base_url}`. A reason names what
+  the registration cannot be served without, not only an option that is
+  absent: `Statifier.Send.BasicHTTP` answers
+  `{:missing_option, :base_url}` both for a registration with no
+  `:base_url` and for one whose `:base_url` is present but not a string,
+  and names no separate reason for a malformed value.
 
   `Statifier.Session.start_link/2` asks it at a fresh start (no
   `:resume` option), in the caller, before any session process is
