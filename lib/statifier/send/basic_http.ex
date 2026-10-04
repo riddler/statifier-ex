@@ -177,9 +177,12 @@ defmodule Statifier.Send.BasicHTTP do
   from `opts`: when the one lookup both share finds a string `:base_url`
   (the address the `_ioprocessors` location is built from, C.2.3). Any
   other registration answers `{:error, {:missing_option, :base_url}}`,
-  including options whose lookup raises, so this never raises. A
-  session's fresh start asks it and refuses a rejected registration by
-  name (`Statifier.Send.Processor`'s "Refusing a registration").
+  including options whose lookup raises, so this never raises. That one
+  reason covers a `:base_url` that is absent and one that is present but
+  not a string (an atom, an integer, a charlist): no separate reason
+  names a malformed value. A session's fresh start asks it and refuses a
+  rejected registration by name (`Statifier.Send.Processor`'s "Refusing a
+  registration").
   """
   @impl Statifier.Send.Processor
   @spec check_registration(type :: String.t(), opts :: keyword()) ::
