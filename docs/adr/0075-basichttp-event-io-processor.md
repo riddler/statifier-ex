@@ -928,3 +928,13 @@ was ruled by the operator, 2026-10-03.
 `Statifier.Send.BasicHTTPSessionTest` pins both answers in one session
 halted `:budget_exhausted`: its own delayed send reaches another session,
 and this processor's delayed send makes no request.
+
+## Note (2026-10-04): decision 8 point b's refusal "when the session starts" is answered by ADR-0069's fresh-start refusal
+
+Decision 8 point b's "a registration of the processor without it is
+refused when the session starts" is answered by ADR-0069's Amendment of
+2026-10-02, "a processor may refuse a registration at a fresh start, by
+name": a fresh start asks `Statifier.Send.BasicHTTP.check_registration/2`,
+which rejects a registration without `:base_url`, and the start is then
+refused by name; a resume does not ask it, as that Amendment's "Why a
+resume is exempt" says. This Note decides nothing and changes no answer.
