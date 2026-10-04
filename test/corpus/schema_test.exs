@@ -496,6 +496,26 @@ defmodule Corpus.SchemaTest do
              )
     end
 
+    # sabotage: history_values' "additionalProperties" deleted -> red on the
+    # string; its items losing "minLength" -> red on the empty id; its
+    # "uniqueItems" deleted -> red on the repeated id
+    test "an expect_position's history_values holds unique, non-empty ids per history" do
+      position = fixture("case-statifier-position.json")
+      at = ["steps", Access.at(0), "expect_position", "history_values"]
+      with_values = &put_in(position, at, &1)
+      h = "/steps/0/expect_position/history_values/h"
+
+      assert errors("case.json", with_values.(%{"h" => ["due_soon"], "hd" => ["a", "b"]})) == []
+      assert h in pointers("case.json", with_values.(%{"h" => "due_soon"}))
+      assert (h <> "/0") in pointers("case.json", with_values.(%{"h" => [1]}))
+      assert (h <> "/0") in pointers("case.json", with_values.(%{"h" => [""]}))
+
+      assert {h, "items are not unique"} in errors(
+               "case.json",
+               with_values.(%{"h" => ["due_soon", "due_soon"]})
+             )
+    end
+
     # sabotage: the scion branch's steps "expect_position": false deleted ->
     # red on the scion case; the w3c branch's -> red on the w3c case
     test "a scion or w3c case's step refuses an expect_position" do
@@ -730,15 +750,21 @@ defmodule Corpus.SchemaTest do
   describe "the checker" do
     # sabotage: n/a - harness plumbing; the checker is test support, and its
     # own keyword coverage is what the schema tests above exercise. Deleting
-    # the checker's final raising keyword/6 clause -> red here
+    # the checker's final raising keyword/6 clause -> red here; the walk
+    # skipping a schema-form additionalProperties -> red on the nested
+    # maxItems
     test "raises on a keyword it does not implement instead of ignoring it" do
       assert_raise ArgumentError, ~r/maxItems/, fn ->
         Checker.errors(%{"maxItems" => 1}, [1, 2], @schema_dir)
       end
 
-      assert Checker.unsupported_keywords(%{"additionalProperties" => %{}, "$ref" => "#/x"}) == [
+      assert Checker.unsupported_keywords(%{"additionalProperties" => true, "$ref" => "#/x"}) == [
                {"", "$ref"},
                {"", "additionalProperties"}
+             ]
+
+      assert Checker.unsupported_keywords(%{"additionalProperties" => %{"maxItems" => 1}}) == [
+               {"/additionalProperties", "maxItems"}
              ]
     end
   end

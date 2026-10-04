@@ -92,7 +92,12 @@
               },
               "history_values": {
                 "type": "object",
-                "description": "Each history state that has recorded a value, by id, with the ids it recorded as an array sorted ascending; a history state that has recorded nothing has no member."
+                "description": "Each history state that has recorded a value, by id, with the ids it recorded as an array sorted ascending; a history state that has recorded nothing has no member.",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "uniqueItems": true
+                }
               },
               "active_invocations": {
                 "type": "array",

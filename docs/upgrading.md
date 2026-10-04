@@ -335,3 +335,13 @@ step.
   accepted that was refused.
 
 **A host may start:** nothing new.
+
+The conformance corpus changes too. `conformance/schema/case.json` now
+refuses a step's `expect_position` whose `history_values` gives a
+history state anything but an array of unique, non-empty state ids, and
+the library case `loan_lost_after_timer` states the position after the
+step that stops its chart: `running` false, an empty configuration and
+`lost` still in `states_to_invoke`. The corpus hash in
+`conformance/manifest.json` moves, so a sibling implementation that
+vendors the corpus re-vendors it at the `v2.12.0` tag, which is not a
+host step.

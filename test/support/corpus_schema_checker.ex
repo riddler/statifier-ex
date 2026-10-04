@@ -5,7 +5,8 @@ defmodule Statifier.CorpusSchemaChecker do
 
   It implements exactly the draft 2020-12 keywords those schemas use -
   `type`, `enum`, `const`, `pattern`, `minLength`, `minimum`, `properties`,
-  `required`, `additionalProperties: false`, `items`, `minItems`,
+  `required`, `additionalProperties` (as `false` or as a schema every
+  property `properties` does not name must match), `items`, `minItems`,
   `uniqueItems`, `allOf`, `if`/`then`, `not`, and a `$ref` naming a sibling
   schema file - and treats `$schema`, `$id`, `title` and `description` as
   annotations. It is not a general JSON Schema engine: `unsupported_keywords/1`
@@ -78,9 +79,10 @@ defmodule Statifier.CorpusSchemaChecker do
 
   defp walk_keywords(_schema, _pointer), do: []
 
-  # Two keywords are implemented for one form only: `additionalProperties`
-  # as `false`, and `$ref` as a bare sibling file name.
-  defp supported?("additionalProperties", value), do: value == false
+  # Two keywords are implemented for some forms only: `additionalProperties`
+  # as `false` or as a schema object (never `true`), and `$ref` as a bare
+  # sibling file name.
+  defp supported?("additionalProperties", value), do: value == false or is_map(value)
 
   defp supported?("$ref", value),
     do: is_binary(value) and Regex.match?(~r/\A[a-z]+\.json\z/, value)
@@ -98,7 +100,13 @@ defmodule Statifier.CorpusSchemaChecker do
     single =
       for key <- ~w(items if then not), Map.has_key?(schema, key), do: {"/" <> key, schema[key]}
 
-    properties ++ all_of ++ single
+    additional =
+      case Map.get(schema, "additionalProperties") do
+        sub when is_map(sub) -> [{"/additionalProperties", sub}]
+        _other -> []
+      end
+
+    properties ++ all_of ++ single ++ additional
   end
 
   # --- validation ---------------------------------------------------------
@@ -168,6 +176,16 @@ defmodule Statifier.CorpusSchemaChecker do
     for key <- Map.keys(instance), key not in known do
       {pointer <> "/" <> key, "property is not allowed"}
     end
+  end
+
+  defp keyword("additionalProperties", sub, schema, instance, pointer, dir)
+       when is_map(sub) and is_map(instance) do
+    known = schema |> Map.get("properties", %{}) |> Map.keys()
+
+    instance
+    |> Enum.reject(fn {key, _value} -> key in known end)
+    |> Enum.sort()
+    |> Enum.flat_map(fn {key, value} -> check(sub, value, pointer <> "/" <> key, dir) end)
   end
 
   defp keyword("items", sub, _schema, instance, pointer, dir) when is_list(instance) do

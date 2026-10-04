@@ -230,7 +230,7 @@ members, and `schema/case.json` requires all of them:
   and not exited by a transition since: no invoke pass runs once the chart
   has stopped, and exiting the chart removes none of them;
 - `history_values`: each history state that has recorded a value, by
-  id, with the ids it recorded;
+  id, with the ids it recorded as an array of unique, non-empty ids;
 - `active_invocations`: each running invocation as the id of the state
   that owns its `<invoke>` and the `<invoke>`'s index among that state's
   own, without the invocation's id;
@@ -246,9 +246,12 @@ states a position on any step gives every state in its document an id,
 and the runner refuses one that does not. A `scion` or `w3c` case never
 carries the member.
 
-Three library cases carry it: `patron_position_in_every_region` after a
+Four library cases carry it: `patron_position_in_every_region` after a
 fine and a checkout request, with the parallel `patron` state and its
 three regions in the configuration; `loan_position_records_history`
 after a dispute and its resolution, with `due_soon` recorded under the
-history `h`; and `loan_position_counts_renewals` after each of two
-renewals, with `renewals` at 1 and then 2.
+history `h`; `loan_position_counts_renewals` after each of two
+renewals, with `renewals` at 1 and then 2; and `loan_lost_after_timer`
+after the lost-item timer stops the chart, with `running` false, an
+empty configuration, `lost` still in `states_to_invoke`, and `overdue`
+recorded under `h`.
