@@ -1,8 +1,8 @@
-# Upgrading from 2.5 to 2.11.0: what a host changes
+# Upgrading from 2.5 to 2.12.0: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.11.0 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.12.0 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 [CHANGELOG.md](../CHANGELOG.md) says what the library changed; this page
@@ -14,6 +14,13 @@ and its "must change" names the hosts each one reaches: a host whose
 charts carry a `<send>` `<param>` with both `expr` and `location`, a host
 that matched an error shape or rescued a raise the release replaces with a
 named refusal, and a receiver that parsed a list or map parameter's text.
+2.12.0 changes some answers too, and its "must change" names the hosts
+each one reaches: a receiver of a Basic HTTP send whose `<content expr>`
+evaluates to a struct, a host whose charts carry an `initial` on a
+compound state with no `id` naming a target outside that state, a host
+that reads the entries of a document already refused for a shared `id`,
+a host that holds predicator at 9.0 to 9.3, and a chart with a `\u` or
+`\U` escape in a string literal.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
