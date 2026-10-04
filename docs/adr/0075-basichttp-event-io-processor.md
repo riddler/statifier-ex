@@ -869,10 +869,13 @@ Amendments' cites to `1d1361db` and `b794f906` hold at `bbc4c0ee`.
 
 Decision 4 tells a body from form parameters by `data`'s shape, and says
 "a map is form-encoded". A struct is a map, so through statifier 2.11.0 a
-`<content expr>` that evaluates to a struct (a `Date`, for example) took
-the form arm: planning the send raised `Protocol.UndefinedError`, because
-a struct cannot be read as parameters, the session performing it exited,
-and no request was made.
+`<content expr>` that evaluates to a struct took the form arm, which reads
+`data` as parameter pairs. A struct that does not enumerate as pairs (a
+`Date`, for example) made planning the send raise
+(`Protocol.UndefinedError` for a `Date`), the session performing it
+exited, and no request was made. A struct that does enumerate as pairs
+(a `MapSet` of two-element tuples, for example) was sent as a form body
+of those pairs.
 
 A top-level struct is now never form-encoded. It is the body, written as
 its `inspect/1` text and sent as `text/plain`: the text the Amendment of
@@ -885,6 +888,9 @@ private `post/2`; the writing is its private `encode/1`, unchanged. The
 encoding runs only inside this processor, so a session that registers
 nothing sees nothing new.
 
+Both kinds of struct change answer: the first is sent where it raised,
+and the second is sent as its `inspect/1` text where it was a form body.
+
 This was ruled by the operator, 2026-10-03.
-`Statifier.Send.BasicHTTPTest` and `Statifier.Send.BasicHTTPSessionTest`
-pin it with a `Date`.
+`Statifier.Send.BasicHTTPTest` pins it with a `Date` and with a `MapSet`
+of pairs, and `Statifier.Send.BasicHTTPSessionTest` with a `Date`.
