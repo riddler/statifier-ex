@@ -142,8 +142,12 @@ boundary:
   merged to `origin/main`; the tag names that version at the merged commit",
   and still unauthorized "before the bump is on `origin/main`; a tag naming
   any other version or commit".
-- *a release (`mix hex.publish`, GitHub release)* - trigger **never**, still
-  unauthorized **always**: "publishing is the operator's, in every campaign".
+- *a release (`mix hex.publish`, GitHub release)* - trigger **never**: "an
+  agent or a session never runs `mix hex.publish`; the release workflow
+  (`.github/workflows/release.yml`) publishes on the tag push the tagging
+  row above already allows"; still unauthorized **always**: "a failed
+  release workflow is re-run from its Actions page, never worked round by
+  a local publish".
 - *a version bump on a release bead's branch* - allowed on "a release bead
   the operator has named (in the campaign plan or their own words); the bump
   is release prep, the family norm, and no campaign consent has to name it",
@@ -160,9 +164,10 @@ tags." The assembling and the deleting are step B. The
 tagging follows the merge, outside this recipe: `CLAUDE.md`'s Release preps
 paragraph says that once the prep is merged to `origin/main`, the conductor
 or the session that owns the release bead tags that merged commit with the
-new version and pushes the tag. The publish (`mix hex.publish`, a docs
-republish included) stays the operator's one release step, in every
-campaign.
+new version and pushes the tag. That tag push starts the publish: the
+release workflow publishes on it, an agent or a session never runs
+`mix hex.publish`, and a failed workflow is re-run from its Actions page,
+never worked round by a local publish (ADR-0077).
 
 `.claude/wurk/commit.md`'s version-bump section records the same boundary from
 the commit side: the version field moves only through a release bead, never as

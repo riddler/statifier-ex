@@ -66,7 +66,7 @@ should do the work, stop before the irreversible step, and report.
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and always inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 | a version bump on a release bead's branch | a release bead the operator has named (in the campaign plan or their own words); the bump is release prep, the family norm, and no campaign consent has to name it | on any other bead, on main, or when the operator has not named this repo's release bead |
 | tagging a release prep | the release bead's version bump is merged to `origin/main`; the tag names that version at the merged commit | before the bump is on `origin/main`; a tag naming any other version or commit |
-| a release (`mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
+| a release (`mix hex.publish`, GitHub release) | never - an agent or a session never runs `mix hex.publish`; the release workflow (`.github/workflows/release.yml`) publishes on the tag push the tagging row above already allows | always; a failed release workflow is re-run from its Actions page, never worked round by a local publish |
 | `git worktree remove`, branch delete | the branch is merged and the worktree is clean | uncommitted or unpushed work is present |
 
 The organizing principle is that the human gate belongs where an action stops
@@ -114,11 +114,13 @@ the operator has named (in the campaign plan or their own words), the prep -
 the version bump and the changelog promotion - lands through the rows above;
 once it is merged to `origin/main`, the conductor or the session that owns
 the release bead tags that merged commit with the new version and pushes the
-tag. Publishing (`mix hex.publish`, a docs republish included) is the
-operator's one release step, in every campaign, and no consent or relay
-delegates it. Merging the prep follows this file's merge row, and nothing
-else this file reserves for the operator changes. (Recorded 2026-09-25 by
-the operator.)
+tag. An agent or a session never runs `mix hex.publish` (a docs republish
+included): the release workflow publishes on that tag push, and a failed
+workflow is re-run from its Actions page, never worked round by a local
+publish (ADR-0077). Merging the prep follows this file's merge row, and
+nothing else this file reserves for the operator changes. (Recorded
+2026-09-25 by the operator; the publish sentence reworded 2026-10-04 in
+the operator's own words.)
 
 Widening this section is a decision for the user to make and record here. An
 agent may draft the change; it does not adopt it.
