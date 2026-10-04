@@ -316,5 +316,13 @@ step.
   receiver of such a send now gets the struct's `inspect/1` text as
   `text/plain` instead, the text it already reads for a struct inside a
   list or a map. A session that registers no send type sees nothing new.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, refuses
+  a chart whose compound `<state>` has no `id` and carries an `initial`
+  attribute or an `<initial>` element naming a target outside that state:
+  it reports `{:initial_not_descendant, target, nil}`. Before 2.12.0 such
+  a chart validated and `Statifier.compile/2` raised `KeyError`. A target
+  inside the state is accepted as before. If your host rescued the raise,
+  match the refusal instead, and if it matches that reason's parent id as
+  a binary, handle `nil` too, as 2.11.0 asked for a `<history>` parent.
 
 **A host may start:** nothing new.

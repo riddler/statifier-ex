@@ -168,8 +168,8 @@ defmodule Statifier.Validator.Error do
 
   Check 5 (spec 3.10) reuses it for a history's default target against the
   history's parent. `parent_id` is `nil` when that parent has no `id`: a
-  compound `<state>` or `<parallel>` need not carry one, and check 5
-  decides descendancy for such a parent by the tree's structure, so the
+  compound `<state>` or `<parallel>` need not carry one, and checks 3 and 5
+  both decide descendancy for such a parent by the tree's structure, so the
   target is still reported.
   """
   @spec initial_not_descendant(
