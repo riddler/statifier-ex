@@ -733,3 +733,51 @@ not refused by name: the start reaches `init/1`, and
 precedence over earlier start answers" cases pin each earlier answer
 without the Basic HTTP registration, the named refusal beside it, and the
 `ArgumentError` beside a processor whose check raises.
+
+## Note (2026-10-04): the halt notice a processor's own timer can watch
+
+Decision 4 makes a registered type's delayed send the processor's timer
+and leaves spec 6.2's discard at termination to the host's fire-time
+check; it does not say how a processor that holds the delay in a process
+of its own learns that the session has halted. Statifier 2.11.0 ships
+that as the public module `Statifier.Session.HaltNotice`, a contract a
+host's own send processor can depend on. This Note names it. It changes
+no answer and no decision. Anchors were read on `main` at `612b9322`;
+the module is unchanged since `v2.11.0`.
+
+- **Who calls `watch/2`.** A send processor, from inside its
+  `perform/2`, handing over a process it started there (the timer that
+  holds a delayed send) under a key of its own choosing:
+  `Statifier.Session.HaltNotice.watch/2`. A `Statifier.Session` runs
+  `perform/2` in the session's own process and marks that process as a
+  session when it boots (`Statifier.Session`'s private `init_boot/3`), so
+  only a call made in that process is kept. The same call from any other
+  process, the started process included, is a call outside a session
+  (below).
+- **What is sent.** `{:statifier_halted, session, reason}`, `session`
+  being the session's pid and `reason` one of `:done`, `:cancelled` or
+  `:budget_exhausted` (the module's `t:notice/0`). It is a message, never
+  a call, so a busy watched process never holds the session.
+- **When.** When the session halts, on every halt reason,
+  `:budget_exhausted` included: the session's halt tells every process
+  watched at that moment (`Statifier.Session.HaltNotice.halted/1`). A
+  process watched after the session has halted is sent the notice at
+  once, by `watch/2` itself. A process taken with `take/1` is sent no
+  notice (`Statifier.Session.HaltNotice.take/1`, which answers the
+  processes held under a key so a processor can cancel them), and a
+  watched process that ends is forgotten
+  (`Statifier.Session.HaltNotice.forget/1`).
+- **Outside a session.** In a process that is not a `Statifier.Session`
+  (a host that performs instructions in its own process), `watch/2`
+  keeps nothing and answers `:not_a_session`, and `take/1` answers `[]`.
+  Nothing will tell the started process of a halt, so the processor
+  decides its own fire-time check; the built-in Basic HTTP processor
+  discards the delayed send then (`Statifier.Send.BasicHTTP.perform/2`).
+
+`Statifier.Send.BasicHTTPSessionTest` pins the notice through the Basic
+HTTP processor: "a session that has halted discards a delayed send it
+still holds", "a session halted :cancelled discards a delayed send it
+still holds" and "a session halted :budget_exhausted discards the
+delayed sends it still holds" for the three halt reasons, and "a delayed
+send performed outside a session is discarded, with no call made" for
+the answer outside a session.
