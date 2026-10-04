@@ -239,7 +239,9 @@ members, and `schema/case.json` requires all of them:
   `_name` and `_sessionid` left out, an unset value written `null`.
 
 Every array of state ids is sorted, and the runner compares each member
-exactly. The export's counters, the chart's identity, its status, its
+as a JSON value: numbers by value (a float `2.0` agrees with a `2`),
+arrays in order, objects member by member, and anything else exactly. The
+export's counters, the chart's identity, its status, its
 step stamps and its options are not stated, because another
 implementation need not produce the same values for them. A case that
 states a position on any step gives every state in its document an id,

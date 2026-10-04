@@ -244,3 +244,86 @@ against `main` at `bbc4c0ee`:
 
 The Context describes the package at `151d94f`, as it says, before the
 schema key, the renderer and the cases existed.
+
+## Note (2026-10-04): six rendering points made exact, and numbers compared by JSON value
+
+This Note settles five points the rendering left inexact and adds one
+sentence on `states_to_invoke`; it adds a rule only in point 5, where
+decision 6's "equals" is defined for numbers. No decision, consequence or
+Related entry above changes. Each claim was verified against `main` at
+`738eaa8f`, except point 5's comparison, which lands with this Note;
+re-locate each cite by its anchor. That a Note settles these points and
+that numbers compare by JSON value was ruled by the operator, 2026-10-03.
+
+1. **`active_invocations` depends on what the host registered.**
+   Decision 2's row says which `<invoke>` elements are running is the
+   document's; it is the document's and the host's together. An
+   invocation is recorded only when `Statifier.Invoke.Types.registered?/2`
+   admits its type (`Statifier.Interpreter`'s
+   `maybe_record_active_invocation/5`): the built-in SCXML type always,
+   any other type only when the host declared it. A session declares the
+   keys of its `:invoke_handlers` (`Statifier.Invoke.Types.from_handlers/1`)
+   and refuses an undeclared type with `error.execution` before the
+   invocation starts (`registered_type/2`); a chart driven with no
+   declaration at all emits the invoke effect for any type but records
+   only the built-in one. The runner starts its session with no invoke
+   handlers (`Mix.Statifier.Corpus.HostCase.run/2`), so an expectation
+   lists only invocations of the built-in SCXML type.
+
+2. **`_name`.** Decision 3 leaves `_name` out as a constant that says
+   nothing about the position. When the document has a `name` attribute,
+   spec 5.10 fixes the value ("The SCXML Processor MUST bind the variable
+   _name at load time to the value of the 'name' attribute of the <scxml>
+   element"), so every conforming implementation holds the same `_name`;
+   without the attribute the spec gives no value, and this engine binds
+   `:undefined` (`Statifier.Evaluator.SystemVariables.initial/3`). Today
+   `Mix.Statifier.Corpus.PositionExpectation.render/1` leaves `_name` out
+   in both cases (its `@left_out_variables`). Asserting `_name` when the
+   document names itself, and leaving it out only when it does not,
+   because an unset `_name` is each implementation's own spelling, is the
+   rule; it is a later change, because it changes the rendering an
+   existing expectation is compared against, and until it lands the
+   rendering leaves `_name` out whether or not the document names itself.
+
+3. **`_event` after a step.** Decision 3's "`_event` is the step's own
+   event" is exact only for a step that raises nothing. `_event` holds the
+   last event the step processed: the external event, or, when the step
+   raises internal events (a `<raise>`, a `done.state.*` event, an
+   `error.*` event), the last of them dequeued. Both of `mainEventLoop`'s
+   assignments go through `Statifier.MachineState.put_event/2`, called for
+   the external event in `Statifier.Interpreter.handle_event/2` and for
+   each internal one in its `internal_round/1`. Leaving `_event` out stays
+   right for the reason decision 3 gives: its unset fields are each
+   implementation's own spelling.
+
+4. **`entered_states` costs an early-binding implementation a set it
+   never reads.** The row rests on Appendix D's `isFirstEntry`, which
+   `enterStates` consults only when `binding == "late"`. This engine keeps
+   the set under both bindings (`Statifier.MachineState`'s moduledoc
+   section on `entered_states`), though only late binding reads it
+   (`Statifier.Interpreter.Datamodel.enter_state/2` is a no-op under early
+   binding). A sibling that implements early binding only must still keep
+   the set to match the expectation; that is a deliberate cost of export
+   parity, since a position must be the same complete value whichever
+   binding produced it.
+
+5. **Numbers compare by JSON value.** The rendering and the expectation
+   are JSON values, and decision 6's "equals" is equality of JSON values:
+   two numbers agree when they are equal in value, so a float `2.0` the
+   chart holds agrees with an expected `2`; an array compares element by
+   element in order, an object member by member, and a string, a boolean
+   and `null` agree only with themselves. A member that differs is named
+   with both values (`Mix.Statifier.Corpus.PositionExpectation.compare/3`).
+   Before this Note the comparison was strict, so a float disagreed with
+   the integer it equals, and the differing members were picked with a
+   looser equality, so such a disagreement named no member.
+
+6. **`states_to_invoke` after the step that ends the chart.** Decision
+   2's row is exact, and in this engine the set it describes is always one
+   id, the top-level `<final>` the chart ended in. A transition to a
+   top-level final has the `<scxml>` root as its domain, so it exits every
+   active state, among them every state entered earlier in the same
+   macrostep, and enters only that final; reaching it sets `running` to
+   false, so no further microstep enters anything. The library case
+   `loan_lost_after_timer` (under `conformance/cases/library/`) states
+   `"states_to_invoke": ["lost"]` after its stopping step.

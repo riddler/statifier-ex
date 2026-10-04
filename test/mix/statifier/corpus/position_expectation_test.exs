@@ -268,6 +268,146 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
 
       assert Runner.run_case(loan_case) == :agree
     end
+
+    # sabotage: compare/3 matching the rendering against the expectation
+    # strictly (`{:ok, ^expected}`) again -> the float 2.0 disagrees with
+    # the case's 2 -> red
+    test "agrees when a number the chart holds as a float is the expectation's integer" do
+      fines = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="clear">
+          <datamodel>
+              <data id="fine_total" expr="0.5"/>
+          </datamodel>
+          <state id="clear">
+              <transition event="fine.assessed" target="owed">
+                  <assign location="fine_total" expr="fine_total + 1.5"/>
+              </transition>
+          </state>
+          <state id="owed"/>
+      </scxml>
+      """
+
+      owed = %{
+        "configuration" => ["owed"],
+        "entered_states" => ["clear", "owed"],
+        "states_to_invoke" => [],
+        "history_values" => %{},
+        "active_invocations" => [],
+        "running" => true,
+        "datamodel" => %{"fine_total" => 2}
+      }
+
+      fines_case = fn expected ->
+        %{
+          "id" => "statifier/library/patron_fine_position",
+          "source" => fines,
+          "description" => "",
+          "initial_configuration" => ["clear"],
+          "steps" => [
+            %{
+              "event" => %{"name" => "fine.assessed"},
+              "configuration" => ["owed"],
+              "expect_position" => expected
+            }
+          ]
+        }
+      end
+
+      assert Runner.run_case(fines_case.(owed)) == :agree
+
+      assert {:disagree, message} =
+               Runner.run_case(fines_case.(put_in(owed, ["datamodel", "fine_total"], 3)))
+
+      assert message ==
+               ~s|after step 1 (fine.assessed), expect_position differs: | <>
+                 ~s|datamodel: expected {"fine_total":3}, but got {"fine_total":2.0}|
+    end
+  end
+
+  describe "compare/3" do
+    defp patron_after_fine(datamodel) do
+      {:ok, machine} = Statifier.compile(@patron)
+      {machine_state, _effects} = Statifier.initialize(machine)
+      {:ok, machine_state, _effects} = Statifier.send_event(machine_state, "fine.assessed")
+      %{machine_state | datamodel: Map.merge(machine_state.datamodel, datamodel)}
+    end
+
+    defp expecting(datamodel),
+      do: put_in(@after_fine, ["datamodel"], Map.merge(%{"patron_id" => "p-1"}, datamodel))
+
+    # sabotage: same?/2's number clause comparing with === -> each float
+    # disagrees with the integer it equals -> red
+    test "compares numbers by JSON value, at the top of the datamodel and inside an array or object" do
+      position = patron_after_fine(%{"fine_total" => 2.0, "holds" => [%{"position" => 1.0}]})
+
+      assert PositionExpectation.compare(
+               expecting(%{"fine_total" => 2, "holds" => [%{"position" => 1}]}),
+               position,
+               {1, "fine.assessed"}
+             ) == :ok
+
+      assert PositionExpectation.compare(
+               expecting(%{"fine_total" => 2.0, "holds" => [%{"position" => 1.0}]}),
+               patron_after_fine(%{"fine_total" => 2, "holds" => [%{"position" => 1}]}),
+               {1, "fine.assessed"}
+             ) == :ok
+    end
+
+    # sabotage: same?/2's number clause answering true for every pair of
+    # numbers -> the 2.5 agrees with the 2 -> red
+    test "names the member whose number differs by value" do
+      assert {:disagree, message} =
+               PositionExpectation.compare(
+                 expecting(%{"fine_total" => 2}),
+                 patron_after_fine(%{"fine_total" => 2.5}),
+                 {1, "fine.assessed"}
+               )
+
+      assert message ==
+               ~s|after step 1 (fine.assessed), expect_position differs: | <>
+                 ~s|datamodel: expected {"fine_total":2,"patron_id":"p-1"}, | <>
+                 ~s|but got {"fine_total":2.5,"patron_id":"p-1"}|
+    end
+
+    # sabotage: same?/2's fallback clause answering true -> the string "2"
+    # agrees with the number 2 -> red
+    test "keeps a number apart from a string, a boolean and null" do
+      for {expected, got} <- [{2, "2"}, {1, true}, {0, nil}] do
+        assert {:disagree,
+                "after step 1 (fine.assessed), expect_position differs: datamodel: " <>
+                  _rest} =
+                 PositionExpectation.compare(
+                   expecting(%{"fine_total" => expected}),
+                   patron_after_fine(%{"fine_total" => got}),
+                   {1, "fine.assessed"}
+                 )
+      end
+    end
+
+    # sabotage: same?/2's list clause sorting both sides before comparing
+    # -> the reordered configuration agrees -> red; its map clause without
+    # the map_size/1 test -> the extra copy_id member agrees -> red
+    test "compares arrays in order and objects by their members" do
+      reordered = %{@after_fine | "configuration" => Enum.reverse(@after_fine["configuration"])}
+
+      assert {:disagree, message} =
+               PositionExpectation.compare(
+                 reordered,
+                 patron_after_fine(%{}),
+                 {1, "fine.assessed"}
+               )
+
+      assert message =~ "expect_position differs: configuration: expected"
+
+      assert {:disagree, message} =
+               PositionExpectation.compare(
+                 expecting(%{"holds" => [%{"position" => 1}]}),
+                 patron_after_fine(%{"holds" => [%{"position" => 1, "copy_id" => "c-1"}]}),
+                 {1, "fine.assessed"}
+               )
+
+      assert message =~ "expect_position differs: datamodel: expected"
+    end
   end
 
   describe "render/1" do

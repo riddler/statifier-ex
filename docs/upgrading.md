@@ -345,3 +345,10 @@ step that stops its chart: `running` false, an empty configuration and
 `conformance/manifest.json` moves, so a sibling implementation that
 vendors the corpus re-vendors it at the `v2.12.0` tag, which is not a
 host step.
+
+The conformance runner compares a position's numbers by JSON value: a
+float the chart holds agrees with an expected integer of the same value
+(`2.0` with `2`), where before it disagreed and its message named no
+member, and a number that differs in value still disagrees, naming the
+member. A sibling implementation's runner compares the same way; this is
+not a host step either.
