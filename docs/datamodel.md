@@ -1,7 +1,7 @@
 # Datamodel
 
 Statifier's datamodel is **predicator** ([predicator-ex](https://github.com/riddler/predicator-ex),
-`~> 9.0`). This is a commitment, not a stopgap ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)):
+`~> 9.4`). This is a commitment, not a stopgap ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)):
 we do not chase the ECMAScript datamodel, and we never evaluate raw Elixir code from
 a document. Documents declare `datamodel="predicator"` (accepted alias: `elixir` for
 continuity with v1's converted W3C tests).
@@ -215,7 +215,7 @@ Seams found in v1 that belong in predicator rather than in statifier's glue:
    partial context on error). Consumed here per ADR-0026; the statifier-side
    `<script>` implementation is st-af3.17. Predicator 8.0.0's
    `protected_roots:` option on `Predicator.execute/3`, consumed here under
-   this repo's current `~> 9.0` pin, is the 5.10 half of
+   this repo's current `~> 9.4` pin, is the 5.10 half of
    this same seam - a write to a protected root now fails at the attempt
    rather than needing a post-hoc diff to catch it - consumed here by
    st-i9d, which replaces the post-hoc root diff as the primary enforcement

@@ -341,6 +341,20 @@ step.
   empty one); it now also reports `{:initial_not_descendant, target,
   parent_id}`. No document that validated before is refused, and none is
   accepted that was refused.
+- `statifier` requires `{:predicator, "~> 9.4"}`, where it required
+  `~> 9.0`. A host that holds predicator at 9.0 to 9.3, in its own
+  `mix.exs` or in its `mix.lock`, moves to 9.4 with it (`mix deps.update
+  predicator`). With it, a string literal holding a non-ASCII character
+  in an expression reaches `_event.data` and a `Statifier.Send.BasicHTTP`
+  text body as the UTF-8 string written. Before 2.12.0 each such
+  character became one byte, the low eight bits of its code point, so a
+  text body carrying one was not the literal and was usually not valid
+  UTF-8.
+- With the same move, a `\u` or `\U` escape in an expression's string
+  literal is refused when the expression is evaluated, so a `<data expr>`
+  or any other expression carrying one raises `error.execution`. Before
+  2.12.0 the backslash was dropped and the letters kept (`'caf\u00e9'`
+  read as `cafu00e9`). Write the character itself instead.
 
 **A host may start:** nothing new.
 

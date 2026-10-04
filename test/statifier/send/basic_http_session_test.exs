@@ -252,6 +252,53 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       assert Process.alive?(session)
     end
 
+    # A string literal is the expression language's own value, so a
+    # non-ASCII one must reach both ends as the UTF-8 string written: the
+    # text body of a Basic HTTP POST, and `_event.data` of an internal
+    # send carrying the same `<content>` expression. The literals are built
+    # from their code points so this file stays ASCII; the chart text they
+    # are interpolated into carries the UTF-8 bytes.
+    for {width, literal} <- [
+          {"2-byte", "caf" <> <<0xE9::utf8>>},
+          {"3-byte", <<0x20AC::utf8>> <> " 12"},
+          {"4-byte", "clef " <> <<0x1D11E::utf8>>}
+        ] do
+      # sabotage: `mix.lock` (and the requirement) back at predicator 9.0.0,
+      # whose lexer keeps one byte per character, the low eight bits of its
+      # code point -> the body is not the literal and every width reddens;
+      # with the `_event.data` assertion moved first it reddens alone too.
+      # Confirmed red and reverted.
+      test "a #{width} UTF-8 literal reaches a text body and _event.data unchanged" do
+        literal = unquote(literal)
+
+        session =
+          start!("""
+              <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+                <datamodel><data id="seen"/></datamodel>
+                <state id="s">
+                  <onentry>
+                    <send type="basichttp" event="note" target="http://sink.test/in">
+                      <content expr="'#{literal}'"/>
+                    </send>
+                    <send event="noted"><content expr="'#{literal}'"/></send>
+                  </onentry>
+                  <transition event="noted">
+                    <assign location="seen" expr="_event.data"/>
+                  </transition>
+                </state>
+              </scxml>
+          """)
+
+        assert_receive {:basichttp_post, "http://sink.test/in?_scxmleventname=note", headers,
+                        body}
+
+        assert {"content-type", "text/plain"} in headers
+        assert String.valid?(body)
+        assert body == literal
+        assert %{datamodel: %{"seen" => ^literal}} = Session.snapshot(session)
+      end
+    end
+
     # sabotage: `deliver/3`'s nil-target clause raises `error.execution`
     # instead -> the chart takes the catch-all to `fail` and the
     # configuration assertion reddens. Confirmed red and reverted.

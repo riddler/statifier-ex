@@ -112,7 +112,7 @@ defmodule Statifier.MixProject do
 
   defp deps do
     [
-      {:predicator, "~> 9.0"},
+      {:predicator, "~> 9.4"},
       {:saxy, "~> 1.6"},
       {:telemetry, "~> 1.3"},
 
