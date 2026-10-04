@@ -295,11 +295,15 @@ step.
 **A host must change:** only where one of these reaches it.
 
 - `Statifier.Send.BasicHTTP` sends a `<content expr>` that evaluates to a
-  struct (a `Date`, for example) as the body, its `inspect/1` text as
-  `text/plain`. Before 2.12.0, planning the send raised
-  `Protocol.UndefinedError`, the session performing it exited, and no
-  request was made. A receiver reads the struct's `inspect/1` text, the
-  text it already reads for a struct inside a list or a map. A session
-  that registers no send type sees nothing new.
+  struct as the body, its `inspect/1` text as `text/plain`. Before
+  2.12.0 such a content took the form arm. A struct that does not
+  enumerate as parameter pairs (a `Date`, for example) made planning the
+  send raise (`Protocol.UndefinedError` for a `Date`), the session
+  performing it exited, and no request was made. A struct that does
+  enumerate as pairs (a `MapSet` of two-element tuples, for example) was
+  sent as an `application/x-www-form-urlencoded` body of those pairs; a
+  receiver of such a send now gets the struct's `inspect/1` text as
+  `text/plain` instead, the text it already reads for a struct inside a
+  list or a map. A session that registers no send type sees nothing new.
 
 **A host may start:** nothing new.

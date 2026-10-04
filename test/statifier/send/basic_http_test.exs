@@ -340,6 +340,19 @@ defmodule Statifier.Send.BasicHTTPTest do
       assert content_type(post) == "text/plain"
       assert post.body == inspect(~D[2026-10-16])
     end
+
+    # sabotage: `post/2`'s form arm drops `not is_struct/1` -> the `MapSet`
+    # enumerates as the pair `{"loan", "Dune"}` and is sent as a form body,
+    # with the event name in the body, so the URL equality reddens.
+    # Confirmed red and reverted.
+    test "a content body that is a struct enumerating as pairs is its inspect text too" do
+      shelf = MapSet.new([{"loan", "Dune"}])
+      post = planned(send_effect(data: shelf))
+
+      assert post.url == @target <> "?_scxmleventname=ping"
+      assert content_type(post) == "text/plain"
+      assert post.body == inspect(shelf)
+    end
   end
 
   describe "ioprocessors_entry/2 (C.2.3)" do
