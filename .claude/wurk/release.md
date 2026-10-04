@@ -72,12 +72,27 @@ Placed where the skill's changelog step would have been, and modeled on the
    was to say. Write one when there is something the bullets do not say, and
    keep the reasoning for the version choice in the commit body, where
    `f2365bb` put it.
+   When the lead paragraph says that a session that registers nothing sees
+   nothing new, it scopes that sentence to the send changes - the send
+   processors and send types a host registers - and does not let it read as
+   covering the whole release: a refusal in the lowering, the validator or
+   a `<send>` element's parameters reaches every chart, whatever the session
+   registers. Write it as "a session that registers nothing sees nothing new
+   from the send changes", or put it in the sentence that names them. A
+   released section is not edited to match; the rule binds the next lead
+   paragraph written.
 4. Then the fragments' bullets, grouped by heading and ordered `Added`,
    `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
    **Carry every bullet over byte for byte.** The lead paragraph is the only
    prose written at release time; reordering, consolidating or rewording a
    fragment's bullet is an editorial pass a human does separately, before the
    release.
+   **The order between fragments within a heading is free**: the prep may
+   place one fragment's bullets before another's for reading, as the 2.9.0,
+   2.10.0 and 2.11.0 preps (`f2365bb`, `c8894ae`, `bbc4c0e`) each did. What
+   is fixed is each fragment's own bullets - their order within the fragment
+   and their bytes - and that one fragment's bullets under a heading stay
+   together rather than interleaving with another's.
 5. **No link reference.** This `CHANGELOG.md` has no link-reference block at
    the end of the file and no `[X.Y.Z]:` definitions anywhere - the bracketed
    versions in the headings are deliberately unlinked, in every section back
