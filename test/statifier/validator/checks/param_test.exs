@@ -264,5 +264,109 @@ defmodule Statifier.Validator.Checks.ParamTest do
 
       assert {:ok, _document, _warnings} = validate!(xml)
     end
+
+    # sabotage: `Checks.Send.descend/1`'s `%DForeach{}` clause is dropped,
+    # so a `<foreach>` falls to the catch-all and is filtered out as a
+    # non-`<send>` -> the `<send>` in its body is never reached and the
+    # {:error, _} match reddens
+    test "a <send> inside a <foreach> body has its <param> walked too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <datamodel>
+              <data id="shelf" expr="[1, 2]"/>
+              <data id="book"/>
+          </datamodel>
+          <state id="lending">
+              <onentry>
+                  <foreach array="shelf" item="book">
+                      <send event="loan.requested">
+                          <param name="copies"/>
+                      </send>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 10
+    end
+
+    # sabotage: `Checks.Send.sends_of/1`'s `invoke_finalize_sends(state.invoke)`
+    # arm is dropped -> the `<send>` inside the `<invoke>`'s `<finalize>` is
+    # never reached and the {:error, _} match reddens
+    test "a <send> inside an <invoke>'s <finalize> has its <param> walked too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="lending">
+              <invoke type="loan.check">
+                  <finalize>
+                      <send event="loan.checked">
+                          <param name="copies"/>
+                      </send>
+                  </finalize>
+              </invoke>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 6
+    end
+
+    # sabotage: `Checks.Send.sends_of/1`'s `initial_sends(state.initial_element)`
+    # arm is dropped -> the `<send>` on the `<initial>` element's transition
+    # is never reached and the {:error, _} match reddens
+    test "a <send> on an <initial> element's transition has its <param> walked too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="lending">
+              <initial>
+                  <transition target="open">
+                      <send event="loan.opened">
+                          <param name="copies"/>
+                      </send>
+                  </transition>
+              </initial>
+              <state id="open"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 6
+    end
+
+    # sabotage: a `defp sends_of(%State{kind: :history}), do: []` clause is
+    # added ahead of `Checks.Send.sends_of/1`'s own, so the walk skips a
+    # `<history>` state -> the `<send>` on its default transition is never
+    # reached and the {:error, _} match reddens
+    test "a <send> on a <history> default transition has its <param> walked too" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="lending">
+              <state id="open"/>
+              <history id="resume">
+                  <transition target="open">
+                      <send event="loan.resumed">
+                          <param name="copies"/>
+                      </send>
+                  </transition>
+              </history>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:param_no_value, "copies"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 7
+    end
   end
 end

@@ -252,6 +252,17 @@ Statifier.Session.start_link(machine,
 )
 ```
 
+`Statifier.Compiler.compile/1` expects a document that
+`Statifier.Validator.validate/3` has already accepted, and it does not re-run
+the validator's checks. `Statifier.compile/2` runs the validator before it,
+so there a `<send>` `<param>` with neither `expr` nor `location` is refused
+as `{:param_no_value, name}` and one with both as
+`{:param_expr_and_location, name}`. Hand the bare compiler an unvalidated
+document and neither refusal happens: a `<send>` `<param>` with neither
+attribute raises `FunctionClauseError`, and one with both compiles as a
+`location` param, its `expr` ignored. Validate first, or compile from source
+with `Statifier.compile/2`.
+
 `MyApp.InvokeHandler.invoke_types/0` is the sorted union of every type its
 handler modules claim - the list a host hands its own document compiler as
 the set to lint an `<invoke type>` against - and `invoke_handlers/0` is that
