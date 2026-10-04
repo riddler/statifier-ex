@@ -227,6 +227,31 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       assert JSON.decode!(loan) == %{"title" => "Dune", "due" => nil}
     end
 
+    # sabotage: `post/2`'s form arm drops `not is_struct/1` -> the `Date`
+    # takes the form arm and raises in the session, no POST reaches this
+    # process and `assert_receive` reddens. Confirmed red and reverted.
+    test "a content expression that evaluates to a struct POSTs its inspect text as text/plain" do
+      session =
+        start!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+              <state id="s">
+                <transition event="loaned">
+                  <send type="basichttp" event="due" target="http://sink.test/in">
+                    <content expr="_event.data"/>
+                  </send>
+                </transition>
+              </state>
+            </scxml>
+        """)
+
+      Session.send_event(session, Statifier.Event.external("loaned", data: ~D[2026-10-16]))
+
+      assert_receive {:basichttp_post, "http://sink.test/in?_scxmleventname=due", headers, body}
+      assert {"content-type", "text/plain"} in headers
+      assert body == inspect(~D[2026-10-16])
+      assert Process.alive?(session)
+    end
+
     # sabotage: `deliver/3`'s nil-target clause raises `error.execution`
     # instead -> the chart takes the catch-all to `fail` and the
     # configuration assertion reddens. Confirmed red and reverted.

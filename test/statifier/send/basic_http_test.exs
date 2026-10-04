@@ -321,6 +321,25 @@ defmodule Statifier.Send.BasicHTTPTest do
       assert content_type(post) == "text/plain"
       assert post.body == ~s(["Dune",null])
     end
+
+    # sabotage: `post/2`'s form arm drops `not is_struct/1` -> a `Date` takes
+    # the form arm, mapping over it raises `Protocol.UndefinedError`, the
+    # rescue answers `{:raised, _}` and the match reddens. Confirmed red and
+    # reverted.
+    test "a content body that is a struct is its inspect text, sent as text/plain" do
+      # A raise is caught into a value, so it fails the match below.
+      planned =
+        try do
+          BasicHTTP.deliver(send_effect(data: ~D[2026-10-16]), Event.external("ignored"), ctx())
+        rescue
+          exception -> {:raised, exception.__struct__}
+        end
+
+      assert {:ok, [{:handler, BasicHTTP, {:post, post}}]} = planned
+      assert post.url == @target <> "?_scxmleventname=ping"
+      assert content_type(post) == "text/plain"
+      assert post.body == inspect(~D[2026-10-16])
+    end
   end
 
   describe "ioprocessors_entry/2 (C.2.3)" do

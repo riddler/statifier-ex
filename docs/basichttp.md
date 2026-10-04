@@ -220,6 +220,7 @@ Outbound, a `<send>` to the processor becomes one POST (C.2.2):
 | a `<content>` child | the content as the body, sent as `text/plain`; with an `event` too, `_scxmleventname` travels as a query parameter of the target URL |
 | no parameters and no content | `_scxmleventname` alone, as a form body |
 | a `<content expr>` that evaluates to a map | a form-encoded body, as parameters would be |
+| a `<content expr>` that evaluates to a struct (a `Date`, for example) | the struct's `inspect/1` text as the body, sent as `text/plain`; a struct is never form-encoded |
 | neither `target` nor `targetexpr` | no request: `error.communication` on the sender's internal queue, carrying the send id |
 
 A parameter value is written as text: a string as it is, a number or a
