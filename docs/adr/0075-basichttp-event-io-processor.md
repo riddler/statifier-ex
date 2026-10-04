@@ -1002,3 +1002,53 @@ source is.
   struct is form-encoded, `:undefined` sends `_scxmleventname` alone as a
   form body, and every other value is the body, sent as `text/plain`. Since
   the Note of 2026-10-04 on struct content, that includes a struct.
+
+## Note (2026-10-04): a chart that sends again on every miss loops without a bound, and avoiding the loop is the host's
+
+This Note decides nothing new in the engine and changes no answer. It
+records what this processor does for a chart whose `error.communication`
+handling sends again over a target that always fails, for example a state
+whose `<onentry>` sends a loan reminder and whose `error.communication`
+transition re-enters that state, against a location that never answers
+2xx.
+
+**What happens.** The chart loops without a bound: each miss starts the
+next send, and nothing in the engine stops it. A probe at `e287a1a6`
+drove such a chart in a `Statifier.Session` over a transport that fails
+at once, and the loop ran until it was cancelled.
+
+- **Every host call still returns.** A miss reaches the sender as a cast
+  (`Statifier.Session.failed_send/3`), so each miss is one message among
+  the session's others, and the session answers the calls queued between
+  two misses. A call waits at most for the request in flight; this
+  processor's moduledoc already says a slow location holds the sending
+  session for the length of the request.
+- **`cancel/1` stops it.** `Statifier.Session.cancel/1` halts the session
+  `:cancelled`; a miss reported after that writes nothing
+  (`Statifier.Session`'s `handle_cast/2` clause for a `:done` or
+  `:cancelled` sender), so no send is made after the cancel is handled.
+  The probe left no timer, no queued event and no message behind.
+- **The round budget does not bound it.** Each reported miss is written
+  to the internal queue through `Statifier.Interpreter.deliver_internal/5`,
+  which runs its own fold to quiescence with a fresh round budget, so
+  each miss starts a new fold and the budget is never the thing that
+  ends the loop.
+- **A subscriber receives every effect.** Each miss is folded in its own
+  macrostep span, and the send it causes reaches every subscriber as an
+  `{:effect, _}` message, so a loop against a location that fails at once
+  floods a subscriber's mailbox with messages it must receive.
+
+**Avoiding the loop is the host's.** A host that runs a chart which may
+send again on a miss does at least one of these: cancels the session
+(`Statifier.Session.cancel/1`) when it sees the misses repeat; keeps a
+step budget of its own (counting the `{:effect, _}` messages or the
+macrostep telemetry events of one session) and cancels when it is spent;
+or authors a guard on the event, for example a count of misses kept in
+the datamodel and a `cond` on the `error.communication` transition that
+stops re-entering after a number of misses. No bound is added to the
+engine. This was ruled by the operator, 2026-10-03.
+
+A sibling implementation, whose send report is synchronous (a miss is
+answered inside the call that made the send), bounds this loop itself;
+that bound is the sibling's own. This reference's recorded shape is the
+host responsibility above.
