@@ -2,7 +2,8 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Lowering, Parser, Validator}
-  alias Statifier.Validator.Error
+  alias Statifier.Validator.Checks.InitialTargets
+  alias Statifier.Validator.{Context, Error}
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -12,6 +13,11 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
 
   defp validate!(xml) do
     Validator.validate(lower!(xml), xml)
+  end
+
+  defp check(xml) do
+    document = lower!(xml)
+    InitialTargets.check(document, Context.build(document, xml))
   end
 
   describe "check/2 - unresolved_initial" do
@@ -128,6 +134,115 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
                validate!(xml)
 
       assert error.location.start_line == 4
+    end
+  end
+
+  describe "check/2 - a containing state with no id" do
+    # sabotage: check/2 keeps `Enum.filter(&(&1.id != nil))` ahead of
+    # check_state/2 -> the id-less state is never checked and both
+    # documents validate, reddening both error matches below
+    # sabotage: outside?/3's `%State{id: nil}` clause answers false -> the
+    # target outside the id-less state is accepted, reddening the same
+    # matches; and Context.inside?/3's `%Document{} -> false` clause answers
+    # true -> the same, reddening the same matches
+    test "an initial target outside the state is reported with a nil parent id" do
+      attribute_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state initial="returned">
+              <state id="on_loan"/>
+          </state>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:initial_not_descendant, "returned", nil}} = error],
+              _warnings} = validate!(attribute_xml)
+
+      assert error.location.start_line == 2
+      assert error.message =~ "which has no id"
+
+      element_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state>
+              <initial>
+                  <transition target="returned"/>
+              </initial>
+              <state id="on_loan"/>
+          </state>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:initial_not_descendant, "returned", nil}} = error],
+              _warnings} = validate!(element_xml)
+
+      assert error.location.start_line == 4
+    end
+
+    # sabotage: Context.inside?/3's `^ancestor -> true` clause answers false
+    # (every chain climbs to the document) -> the grandchild targets under
+    # the id-less state are reported as outside it, reddening both {:ok, _}
+    # matches below
+    test "an initial target inside the state is accepted" do
+      attribute_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state initial="overdue">
+              <state id="on_loan">
+                  <state id="overdue"/>
+              </state>
+          </state>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(attribute_xml)
+
+      element_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state>
+              <initial>
+                  <transition target="overdue"/>
+              </initial>
+              <state id="on_loan">
+                  <state id="overdue"/>
+              </state>
+          </state>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert {:ok, _document, _warnings} = validate!(element_xml)
+    end
+
+    # The two reasons that carry the state's own id are not answered for a
+    # state with none, as before it was checked; this pins that only the
+    # descendancy answer changed.
+    #
+    # sabotage: check_state/2's `%State{id: nil}` clause drops its
+    # `not atomic_for_initial?(state)` conjunct -> the atomic id-less
+    # state's target (not a descendant of a state with no children) is
+    # reported, reddening the first match; and unresolved_errors/3's
+    # `%State{id: nil}` clause is deleted -> the unresolved id is reported,
+    # reddening the second
+    test "an atomic or unresolved initial on a state with no id reports nothing" do
+      atomic_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state initial="returned"/>
+          <state id="returned"/>
+      </scxml>
+      """
+
+      assert [] == check(atomic_xml)
+
+      unresolved_xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state initial="missing">
+              <state id="on_loan"/>
+          </state>
+      </scxml>
+      """
+
+      assert [] == check(unresolved_xml)
     end
   end
 

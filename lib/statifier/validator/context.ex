@@ -95,6 +95,21 @@ defmodule Statifier.Validator.Context do
     kind in [:state, :parallel] and states != []
   end
 
+  @doc false
+  # Descendancy by the tree's structure, not by id: climbs `state`'s parent
+  # chain (`parents`, keyed by the struct itself) and answers whether
+  # `ancestor` is on it. A state with no id has no entry in the id-keyed
+  # `ancestors` map `descendant?/3` reads, so an id test cannot place a
+  # state under it; checks 3 and 5 both use this for such an ancestor.
+  @spec inside?(context :: t(), state :: State.t(), ancestor :: State.t()) :: boolean()
+  def inside?(%__MODULE__{parents: parents} = context, %State{} = state, %State{} = ancestor) do
+    case Map.fetch!(parents, state) do
+      ^ancestor -> true
+      %State{} = parent -> inside?(context, parent, ancestor)
+      %Document{} -> false
+    end
+  end
+
   defp walk(states, parent, ancestor_ids) do
     Enum.reduce(states, {%{}, %{}, %{}, []}, fn state,
                                                 {states_map, ancestors, parents, transitions} ->

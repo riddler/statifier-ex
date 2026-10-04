@@ -110,26 +110,13 @@ defmodule Statifier.Validator.Checks.History do
   # parent with no id is placed by the tree's structure.
   defp resolved_outside?(target, %State{id: nil} = parent, context) do
     case Map.fetch(context.states, target) do
-      {:ok, state} -> not inside?(state, parent, context.parents)
+      {:ok, state} -> not Context.inside?(context, state, parent)
       :error -> false
     end
   end
 
   defp resolved_outside?(target, %State{id: parent_id}, context) do
     Map.has_key?(context.states, target) and not Context.descendant?(context, parent_id, target)
-  end
-
-  # Descendancy by the tree's structure, not by id: climbs `state`'s parent
-  # chain (`Context`'s `parents`, keyed by the struct itself) and answers
-  # whether `ancestor` is on it. A parent with no id has no entry in the
-  # id-keyed ancestry `Context.descendant?/3` reads, so an id test could not
-  # place a target under it.
-  defp inside?(%State{} = state, ancestor, parents) do
-    case Map.fetch!(parents, state) do
-      ^ancestor -> true
-      %State{} = parent -> inside?(parent, ancestor, parents)
-      %Document{} -> false
-    end
   end
 
   defp type_errors(%State{attribute_locations: attribute_locations}, context) do

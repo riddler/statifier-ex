@@ -307,8 +307,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       end
     end
 
-    # sabotage: inside?/3's `^ancestor -> true` clause answers false (every
-    # parent chain climbs to the document) -> the grandchild target under
+    # sabotage: Context.inside?/3's `^ancestor -> true` clause answers false
+    # (every parent chain climbs to the document) -> the grandchild target under
     # the id-less parent is reported as outside it, reddening the {:ok, _}
     # assertion below
     test "a default target inside a parent with no id is accepted" do
@@ -329,8 +329,8 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:ok, _document, _warnings} = validate!(xml)
     end
 
-    # sabotage: inside?/3's `%Document{} -> false` clause answers true (the
-    # document counts as the parent) -> the target outside the id-less
+    # sabotage: Context.inside?/3's `%Document{} -> false` clause answers true
+    # (the document counts as the parent) -> the target outside the id-less
     # parent is accepted, reddening the error match below; and
     # describe_parent(nil) in Error renders `inspect(nil)` -> the message
     # reads "a descendant of nil", reddening the message assertion

@@ -23,7 +23,12 @@ defmodule Statifier.Validator.Checks.InitialTargets do
      not among the containing state's named descendants
      (`Context.descendant?/3`, ancestry all the way up, not direct-child
      membership - spec 3.3/3.6 both say "descendants", which is where v1 is
-     wrong). This check has **no analog** for `Document.initial`: spec 3.11's
+     wrong). A containing state with no `id` has no entry in that id-keyed
+     ancestry, so it is tested by the tree's structure instead and the
+     reported `parent_id` is `nil`, the rule the History check keeps for a
+     parent with no `id`. Such a state answers only this reason: the two
+     above carry the state's own id. This check has **no analog** for
+     `Document.initial`: spec 3.11's
      "additional requirement" ("all the states MUST be descendants of the
      containing `<state>` or `<parallel>` element") is written for `<state>`
      `initial` and for a `<transition>` inside `<initial>`/`<history>` only -
@@ -59,7 +64,6 @@ defmodule Statifier.Validator.Checks.InitialTargets do
     state_errors =
       document.states
       |> flatten()
-      |> Enum.filter(&(&1.id != nil))
       |> Enum.flat_map(&check_state(&1, context))
 
     state_errors ++ check_document_initial(document, context)
@@ -67,6 +71,17 @@ defmodule Statifier.Validator.Checks.InitialTargets do
 
   defp flatten(states) do
     Enum.flat_map(states, fn state -> [state | flatten(state.states)] end)
+  end
+
+  # A state with no id answers only the descendancy question: the atomic
+  # and unresolved reasons carry the state's own id, so those two cases
+  # report nothing for it, as they did before such a state was checked.
+  defp check_state(%State{id: nil} = state, context) do
+    if carries_initial?(state) and not atomic_for_initial?(state) do
+      check_initial_attribute(state, context) ++ check_initial_element(state, context)
+    else
+      []
+    end
   end
 
   defp check_state(%State{} = state, context) do
@@ -104,9 +119,9 @@ defmodule Statifier.Validator.Checks.InitialTargets do
     Enum.flat_map(initial, fn id ->
       cond do
         not Map.has_key?(context.states, id) ->
-          [Error.unresolved_initial(id, location)]
+          unresolved_errors(id, state, location)
 
-        not Context.descendant?(context, state.id, id) ->
+        outside?(id, state, context) ->
           [Error.initial_not_descendant(id, state.id, location)]
 
         true ->
@@ -122,11 +137,23 @@ defmodule Statifier.Validator.Checks.InitialTargets do
       location = Map.get(transition.attribute_locations, :target, transition.location)
 
       transition.target
-      |> Enum.filter(
-        &(Map.has_key?(context.states, &1) and not Context.descendant?(context, state.id, &1))
-      )
+      |> Enum.filter(&(Map.has_key?(context.states, &1) and outside?(&1, state, context)))
       |> Enum.map(&Error.initial_not_descendant(&1, state.id, location))
     end)
+  end
+
+  defp unresolved_errors(_id, %State{id: nil}, _location), do: []
+  defp unresolved_errors(id, %State{}, location), do: [Error.unresolved_initial(id, location)]
+
+  # `target` resolves (both callers test that first). A state with an id
+  # keeps the id test, `Context.descendant?/3`; only a state with no id is
+  # placed by the tree's structure.
+  defp outside?(target, %State{id: nil} = state, context) do
+    not Context.inside?(context, Map.fetch!(context.states, target), state)
+  end
+
+  defp outside?(target, %State{id: id}, context) do
+    not Context.descendant?(context, id, target)
   end
 
   defp check_document_initial(%Document{initial: []}, _context), do: []
