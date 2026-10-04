@@ -10,6 +10,41 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.12.0] 2026-10-04
+
+A minor release. The package now requires `{:predicator, "~> 9.4"}`
+where it required `~> 9.0`, so a host that holds predicator at 9.0 to
+9.3 moves to 9.4 with it; with that move a string literal holding a
+non-ASCII character reaches a chart as the UTF-8 string written, and
+one holding a `\u` or `\U` escape no longer reads as its letters with
+the backslash dropped. Some existing answers change: the validator
+refuses an `initial` on a compound state with no `id` whose target is
+outside that state, and reports a `<history>` default target under
+another state that shares its parent's `id`; and a Basic HTTP
+`<content expr>` that evaluates to a struct is sent as its `inspect/1`
+text. `docs/upgrading.md` names each one. A session that registers
+nothing sees nothing new from the send change; the validator's
+refusals and the predicator move reach every chart, whatever the
+session registers. The conformance corpus under `conformance/`, which
+is not part of the Hex package, refuses a malformed `history_values`
+in its case schema and states one more position in a library case, and
+its runner compares a position's numbers by JSON value; a sibling
+implementation that vendors the corpus re-vendors it at this version's
+tag.
+
+### Changed
+
+- `Statifier.Send.BasicHTTP` sends a `<content expr>` that evaluates to a struct (a `Date`, for example) as its `inspect/1` text, as `text/plain`: a struct that does not enumerate as parameter pairs (a `Date`) made planning the send raise and the session performing it exit, and one that does (a `MapSet` of two-element tuples) was sent as a form body of those pairs.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, refuses an `initial` attribute or an `<initial>` element on a compound state with no `id` whose target is outside that state, as `{:initial_not_descendant, target, nil}`: such a chart validated, and `Statifier.compile/2` raised `KeyError`.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, decides whether a `<history>` default target sits under the history's parent by the document's structure for every parent, so a target under another state that shares the parent's `id` is reported as `{:initial_not_descendant, target, parent_id}`: such a document was already refused for the shared `id` (as a duplicate, or as empty) and now carries this entry too.
+- With predicator 9.4, a string literal holding a `\u` or `\U` escape no longer reads as its letters with the backslash dropped (`'caf\u00e9'` read as `cafu00e9`); write the character itself instead. What a chart sees depends on where the literal sits: in an expression the compiler checks at load (a transition's `cond`, a `<log expr>` or a `<send>` `<content expr>`, for example) `Statifier.compile/2` refuses the document with an `:expression_compile_error`; in a `<data expr>`, an `<assign expr>`, a `<script>` or a `namelist` entry, where the compiler defers the failure, it raises `error.execution` when it runs and `Statifier.Publish.findings/2` reports it under row S13; and wherever text is read as a value, through `Statifier.Compiler.Expressions.inline_value/1` or `Statifier.EventData.coerce/1` (the text of a `<data>` or an `<assign>` element; a `<content>` element's text under `<send>`, `<invoke>` or `<donedata>`; an inbound Basic HTTP request's text body or form parameter values), it no longer folds to a string and is kept as its text, quotes and backslash included.
+- `conformance/schema/case.json` refuses a step's `expect_position` whose `history_values` gives a history state anything but an array of unique, non-empty state ids, and the `statifier/library/loan_lost_after_timer` case states the position after the step that stops its chart (`running` false, an empty configuration, `lost` still in `states_to_invoke`); the corpus hash in `conformance/manifest.json` moves, so a sibling implementation that vendors the corpus re-vendors it at the next tag.
+- `Mix.Statifier.Corpus.PositionExpectation.compare/3`, which the conformance runner uses to check a step's `expect_position`, compares numbers by JSON value: a float the chart holds agrees with an expected integer of the same value (`2.0` with `2`), where before it disagreed and named no member; a number that differs in value still disagrees, and the message names the member with both values.
+
+### Fixed
+
+- A string literal holding a non-ASCII character (U+00E9, U+20AC or U+1D11E, for example) in an expression evaluates to the UTF-8 string written, so it reaches `_event.data` and a `Statifier.Send.BasicHTTP` text body unchanged, where before each such character became one byte, the low eight bits of its code point; the fix is predicator's, so the requirement moves from `{:predicator, "~> 9.0"}` to `{:predicator, "~> 9.4"}`, and a host that holds predicator at 9.0 to 9.3 moves to 9.4 with it (`mix deps.update predicator`).
+
 ## [2.11.0] 2026-10-02
 
 A minor release. A host can now refresh a session's registered
