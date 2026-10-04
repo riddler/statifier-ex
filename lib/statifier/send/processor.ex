@@ -231,6 +231,20 @@ defmodule Statifier.Send.Processor do
   decision 3). A check that raises, throws, exits or answers anything
   else refuses nothing: the start goes ahead as if no check had been
   asked. Optional: a processor that does not implement it is not asked.
+
+  A check runs in its calling process. At a fresh start that is the
+  process calling `Statifier.Session.start_link/2`, before the session
+  starts. Under `Statifier.start_session/2`, or any supervisor child
+  spec, that process is the supervisor, so a check that ends it ends
+  every session that supervisor holds. On
+  `Statifier.MachineState.refresh_ioprocessors/1` it is the process
+  calling that function; on a live
+  `Statifier.Session.refresh_ioprocessors/1` it is the session's own
+  process. A check must not exit, link or signal its calling process. A
+  raise, a throw or an `exit/1` inside the check is caught, but an exit
+  signal is not: one the check sends to its own process with the reason
+  `:kill` ends that process, and one with the reason `:normal` ends it
+  unless it traps exits.
   """
   @callback check_registration(type :: String.t(), opts :: keyword()) ::
               :ok | {:error, reason :: term()}
