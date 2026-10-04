@@ -1049,6 +1049,6 @@ stops re-entering after a number of misses. No bound is added to the
 engine. This was ruled by the operator, 2026-10-03.
 
 A sibling implementation, whose send report is synchronous (a miss is
-answered inside the call that made the send), bounds this loop itself;
-that bound is the sibling's own. This reference's recorded shape is the
-host responsibility above.
+answered inside the call that made the send), bounds this loop itself
+(its bead sts-8zq); that bound is the sibling's own. This reference's
+recorded shape is the host responsibility above.
