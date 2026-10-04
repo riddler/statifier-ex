@@ -864,3 +864,27 @@ The first Amendment's cites to `f250ce2f` (the recording's format version,
 `boot/7`) hold at `bbc4c0ee`, and its sentence on statifier_router quotes
 that package's moduledoc at `1bc8a8f`, as it says. The third and fourth
 Amendments' cites to `1d1361db` and `b794f906` hold at `bbc4c0ee`.
+
+## Note (2026-10-04): a `<content expr>` that evaluates to a struct is sent as its `inspect/1` text, as `text/plain`
+
+Decision 4 tells a body from form parameters by `data`'s shape, and says
+"a map is form-encoded". A struct is a map, so through statifier 2.11.0 a
+`<content expr>` that evaluates to a struct (a `Date`, for example) took
+the form arm: planning the send raised `Protocol.UndefinedError`, because
+a struct cannot be read as parameters, the session performing it exited,
+and no request was made.
+
+A top-level struct is now never form-encoded. It is the body, written as
+its `inspect/1` text and sent as `text/plain`: the text the Amendment of
+2026-10-02 on JSON text already gives "Any other value (a tuple, an atom,
+a struct such as a `Date`)". Decision 4's "a map is form-encoded", and
+that Amendment's "A `<content expr>` that evaluates to a map is still
+form-encoded", read as a map that is not a struct. No miss is reported,
+because no transport failed. The arm is `Statifier.Send.BasicHTTP`'s
+private `post/2`; the writing is its private `encode/1`, unchanged. The
+encoding runs only inside this processor, so a session that registers
+nothing sees nothing new.
+
+This was ruled by the operator, 2026-10-03.
+`Statifier.Send.BasicHTTPTest` and `Statifier.Send.BasicHTTPSessionTest`
+pin it with a `Date`.

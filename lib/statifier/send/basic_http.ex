@@ -49,10 +49,12 @@ defmodule Statifier.Send.BasicHTTP do
     - A `<content>` child is the body, sent as `text/plain`; when the send
       also names an `event`, `_scxmleventname` travels as a query parameter
       of the target URL.
-    - The two are told apart by `data`'s shape: a map is form-encoded,
-      `:undefined` sends `_scxmleventname` alone as a form body, and any
-      other value is the body. A `<content expr>` that evaluates to a map
-      is therefore form-encoded.
+    - The two are told apart by `data`'s shape: a map that is not a
+      struct is form-encoded, `:undefined` sends `_scxmleventname` alone
+      as a form body, and any other value is the body. A `<content expr>`
+      that evaluates to a map is therefore form-encoded, and one that
+      evaluates to a struct (a `Date`, for example) is the body, its
+      `inspect/1` text sent as `text/plain`.
     - A send with neither `target` nor `targetexpr` raises C.2.2's
       `error.communication` on the sender's internal queue, carrying the
       send id, and makes no request.
@@ -414,7 +416,9 @@ defmodule Statifier.Send.BasicHTTP do
 
     {url, content_type, body} =
       case send.data do
-        data when is_map(data) ->
+        # A struct is a map but never form parameters: it falls to the
+        # text/plain arm below, as its `inspect/1` text.
+        data when is_map(data) and not is_struct(data) ->
           {send.target, @form, form(named ++ Enum.map(data, fn {k, v} -> {k, encode(v)} end))}
 
         :undefined ->

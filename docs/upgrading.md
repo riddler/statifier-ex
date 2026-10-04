@@ -289,3 +289,17 @@ optional `expect_position`, the position the chart holds after that step
 `conformance/manifest.json` moves, so a sibling implementation that
 vendors the corpus re-vendors it at the `v2.11.0` tag, which is not a host
 step.
+
+## 2.12.0
+
+**A host must change:** only where one of these reaches it.
+
+- `Statifier.Send.BasicHTTP` sends a `<content expr>` that evaluates to a
+  struct (a `Date`, for example) as the body, its `inspect/1` text as
+  `text/plain`. Before 2.12.0, planning the send raised
+  `Protocol.UndefinedError`, the session performing it exited, and no
+  request was made. A receiver reads the struct's `inspect/1` text, the
+  text it already reads for a struct inside a list or a map. A session
+  that registers no send type sees nothing new.
+
+**A host may start:** nothing new.
