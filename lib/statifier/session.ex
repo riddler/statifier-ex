@@ -607,6 +607,11 @@ defmodule Statifier.Session do
       otherwise to `machine_state.datamodel["_sessionid"]`; supplying it
       explicitly rewrites `datamodel["_sessionid"]` to agree, so the
       `session_id == datamodel["_sessionid"]` invariant always holds.
+      `_ioprocessors` is not rewritten: an entry built from the session
+      id, such as a Basic HTTP location, still names the position's id
+      until the host calls `refresh_ioprocessors/1` on the running
+      session (a session started with `record: true` answers that call
+      with `{:error, :recorded_session}`).
       `record: true` on a resumed session anchors the new
       `Statifier.Session.Recording.t()` at the resumed position rather than
       at the chart's initial configuration (ADR-0060 decision 6), so
@@ -1010,10 +1015,19 @@ defmodule Statifier.Session do
 
   This is a call, not a cast: a host learns whether the entries moved.
   It is the only one of this module's calls that changes the session's
-  position; it is handled between macrosteps, like every other message, so a chart reads the
-  refreshed entries from the next event it processes. An entry that
-  raises an exception is answered, not raised, so a processor's raise
-  never exits a running session.
+  position. Like every other message, on a running session it is served
+  only once the session has drained its queue: every event already
+  queued, and every event those macrosteps queue to the session itself,
+  is processed first, and a chart reads the refreshed entries from the
+  next event it processes after that. The call waits `GenServer.call/2`'s default 5 seconds, so
+  behind a long enough backlog it exits the caller with a timeout. A
+  timeout does not withdraw the request: the session still serves it
+  when it reaches it, so a refresh that succeeds is stored though its
+  answer is lost. An entry that raises an exception is answered, not
+  raised, so a processor's raise never exits a running session. A
+  running, unrecorded session resumed from a state built by hand without
+  an `_ioprocessors` map is outside this call's input, and the call
+  exits it (`Statifier.MachineState.refresh_ioprocessors/1` says why).
   """
   @spec refresh_ioprocessors(server :: server()) ::
           :ok

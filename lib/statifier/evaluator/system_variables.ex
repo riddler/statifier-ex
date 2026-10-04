@@ -180,7 +180,10 @@ defmodule Statifier.Evaluator.SystemVariables do
   # `{:error, {:ioprocessors_entry, type, exception}}` instead. Only an
   # exception is rescued: a throw or an exit out of an entry is outside
   # the callback's contract (it returns a map or raises) and passes
-  # through. Internal, hence `@doc false`.
+  # through. The guard is deliberate: a datamodel without an
+  # `_ioprocessors` map or a string `_sessionid` is outside the refresh's
+  # input (`Statifier.MachineState.refresh_ioprocessors/1` records it), so
+  # it raises `FunctionClauseError` here. Internal, hence `@doc false`.
   @doc false
   @spec refreshed_ioprocessors(
           ioprocessors :: %{String.t() => map()},
