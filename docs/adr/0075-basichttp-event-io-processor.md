@@ -938,3 +938,67 @@ name": a fresh start asks `Statifier.Send.BasicHTTP.check_registration/2`,
 which rejects a registration without `:base_url`, and the start is then
 refused by name; a resume does not ask it, as that Amendment's "Why a
 resume is exempt" says. This Note decides nothing and changes no answer.
+
+## Note (2026-10-04): the JSON text's key order, numbers and characters, and two citations of the Amendment on JSON text
+
+This Note decides nothing and changes no answer. It records what the
+Amendment of 2026-10-02 on JSON text leaves out about the bytes that text
+carries, so a sibling processor can write the same bytes, and it corrects
+two of that Amendment's citations. The rendering is Elixir's own `JSON`
+module's, which `Statifier.Send.BasicHTTP`'s private `encode/1` calls.
+Every example below was read by running this processor's `deliver/3` at
+`e287a1a6` on the toolchain the repository pins in `mise.toml` (Elixir
+1.18.3 on Erlang/OTP 27.3). This Note states what that toolchain writes;
+it does not promise the same bytes from another Elixir or OTP release.
+
+**Object key order.** `JSON` writes an object's members in the order the
+runtime's map iterator yields them, and that order depends on the map's
+size:
+
+| The map | Its members are written |
+|---|---|
+| Up to 32 keys | Sorted by key in Erlang term order, which for string keys is byte order: `"10"`, `"9"`, `"B"`, `"a"`, `"aa"`, `"b"`, then a key that is U+00E9 alone |
+| 33 keys or more | In the iterator's internal order, which is not sorted: a map of the 33 keys `k001` to `k033` is written beginning `k003`, `k033`, `k001`, `k025` |
+
+The limit applies to each object on its own: the maps run were each
+inside a list, and each was ordered by its own size. On that toolchain the 33
+keys put in the reverse order were written in the same order.
+Above 32 keys a sibling has no portable way to write the same order,
+only the same members and values; JSON itself gives an object's members
+no order. Sorting the keys of every object whatever its
+size was not taken: it would change the bytes 2.11.0 sends for a map of
+more than 32 keys. This was ruled by the operator, 2026-10-03.
+
+**Numbers.** An integer is written in full, whatever its size: 2^70 as
+`1180591620717411303424` and -2^64 as `-18446744073709551616`. A float is
+written in the shortest form that reads back as the same float, always
+with a fraction or an exponent and never as an integer: `2.0`, `1.5`,
+`0.1`, `123456789.0`, `1.0e15`, `1.0e16`, `1.0e20`, `1.0e-7`, and negative
+zero as `-0.0`. A number outside JSON text (a top-level `<content>` body,
+or a form parameter) is written by `encode/1` with `to_string/1`, and the
+run shows the same text there: `2.0`, `1.0e20`, `-0.0`.
+
+**Characters.** A string is written as its UTF-8 bytes. A character
+outside ASCII is written raw, never as a `\u` escape: U+00E9, U+20AC,
+U+1F600, U+2028 and U+2029 each appear as their own UTF-8 bytes. `"` is
+written `\"`, a backslash as two backslashes, a tab as `\t`, and U+0001
+as `\u0001`; `/`, `<` and U+007F are written as they are.
+
+**Two citations corrected.** Each bullet's rule is unchanged; only its
+source is.
+
+- The bullet "Map keys are strings" cites `Predicator.Context.bind/3`'s
+  documentation, predicator 9.0.0, for the exception that a `true` or a
+  `false` key is not turned into a string. That documentation does not
+  mention the exception. The exception is stated in the code
+  comment on `Predicator.Context`'s private `normalize_map/1`, in
+  predicator 9.0.0 (the version `mix.lock` locks at `e287a1a6`), and
+  that function keeps a `true` or `false` key as it is.
+- The bullet "The body's content type does not change" says a list
+  `<content>` body is sent as `text/plain` "as every non-map content body
+  is (decision 4)". Decision 4 names a content type only for a string ("a
+  string is sent as `text/plain`"). The wider rule is
+  `Statifier.Send.BasicHTTP`'s private `post/2`: a map that is not a
+  struct is form-encoded, `:undefined` sends `_scxmleventname` alone as a
+  form body, and every other value is the body, sent as `text/plain`. Since
+  the Note of 2026-10-04 on struct content, that includes a struct.
