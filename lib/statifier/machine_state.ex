@@ -335,16 +335,21 @@ defmodule Statifier.MachineState do
   alongside the author's own data in the datamodel - `datamodel` therefore
   is not "the author's data only". `Statifier.Evaluator.SystemVariables`
   owns the shape of each; this module owns *when* each is written, and each
-  has exactly one writer:
+  has one writer per phase:
 
-  - `_sessionid`, `_name`, and `_ioprocessors` are written once, by
-    `new/2`, from `SystemVariables.initial/3` merged **over** the
-    `:datamodel` option's map - an author-supplied datamodel can never
-    shadow a system variable. `_ioprocessors` includes one entry per type
-    in the `:send_types` option (ADR-0069); `put_send_types/2` does not
-    rewrite it. The one later writer is `refresh_ioprocessors/1`, a host's
-    explicit call, which recomputes registered entry values and adds or
-    removes no key.
+  - `_sessionid`, `_name`, and `_ioprocessors` are written by `new/2`,
+    from `SystemVariables.initial/3` merged **over** the `:datamodel`
+    option's map - an author-supplied datamodel can never shadow a system
+    variable. `_sessionid` and `_name` have no later writer in this
+    module; `Statifier.Session` rewrites `_sessionid` when a resume names
+    a `:session_id` of its own, and leaves `_ioprocessors` as the position
+    carried it. `_ioprocessors` includes one entry per type in the
+    `:send_types` option (ADR-0069); `put_send_types/2` does not rewrite
+    it. `_ioprocessors` has a second phase and a second writer:
+    `refresh_ioprocessors/1`, a host's explicit call (and the live
+    `Statifier.Session.refresh_ioprocessors/1`, through the same internal
+    step), which recomputes registered entry values and adds or removes
+    no key.
   - `_event` is **seeded** to `nil` by `new/2` from the same
     `SystemVariables.initial/2` map, and thereafter written only by
     `put_event/2`. That is one writer per phase rather than two writers of
@@ -990,6 +995,14 @@ defmodule Statifier.MachineState do
   entry that fails on `:badarith` raises an `ArithmeticError`. A `rescue`
   sees the same exception from both; only a `catch` of the `:error` kind
   tells them apart.
+
+  The datamodel this reads is the one `new/2` writes: an `_ioprocessors`
+  map and a string `_sessionid`. A state built by hand without them is
+  outside this call's input: with a `send_types` stamp that is not `nil`,
+  the call raises `FunctionClauseError` on it rather than answer, and the
+  live `Statifier.Session.refresh_ioprocessors/1` on a session resumed
+  from such a state exits that session. Every state `new/2` builds
+  carries both.
   """
   @spec refresh_ioprocessors(machine_state :: t()) :: {:ok, t()} | {:error, term()}
   def refresh_ioprocessors(%__MODULE__{send_types: nil} = machine_state), do: {:ok, machine_state}

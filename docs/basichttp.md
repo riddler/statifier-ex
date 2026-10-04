@@ -70,8 +70,10 @@ each registered string, and both hold the same location: the base URL, a
       event="ping"/>
 ```
 
-The entries are written once, when the session starts, and persist with
-the datamodel, so a resumed session reads the location it started with.
+The session writes the entries when it starts, and they persist with the
+datamodel; after that only a host's refresh (below) rewrites them, so a
+resumed session reads the location it started with unless the host
+refreshed it.
 
 ### When the base URL moves, or a location rotates
 
@@ -101,14 +103,28 @@ and leave the SCXML entry as it is:
   `record: true` records the refreshed position as its starting point, so
   a replay reads the same location.
 
+  The refresh builds the location from the position's own `_sessionid`.
+  A resume that passes a `:session_id` other than the position's rewrites
+  `_sessionid` but not `_ioprocessors`, so the location still ends in the
+  position's id, refreshed or not, while the session is registered under
+  the new one. A host that resumes under a new id and is not recording
+  calls the live refresh below once the session is running; it reads the
+  new `_sessionid`.
+
 - **On a live session.** `Statifier.Session.refresh_ioprocessors/1` asks
-  the processor again from the registration the session holds, for a
-  front that rotated a location a processor reads at that moment. It
-  answers `:ok`; `{:error, {:missing_option, :base_url}}` when the
-  registration has no `:base_url`; `{:error, :not_running}` once the
-  session has halted; and `{:error, :recorded_session}` for a session
-  started with `record: true`, whose recording has no place for a
-  refresh. A registered processor whose entry raises during the refresh
+  every registered processor again from the registration the session
+  holds. A running session's registration cannot change, so for Basic
+  HTTP, whose location is built from the registration's `:base_url` and
+  the session id alone, the call recomputes the location the session
+  already carries: a moved base URL reaches a Basic HTTP location only
+  across a resume, above. The live call is for a processor of your own
+  whose entry reads a value that can move while the session runs, such
+  as a location its front rotated. It answers `:ok`;
+  `{:error, {:missing_option, :base_url}}` when the registration has no
+  `:base_url`; `{:error, :not_running}` once the session has halted;
+  and `{:error, :recorded_session}` for a session started with
+  `record: true`, whose recording has no place for a refresh. A
+  registered processor whose entry raises during the refresh
   answers `{:error, {:ioprocessors_entry, type, exception}}`, and the
   session keeps running. Every error changes nothing.
 

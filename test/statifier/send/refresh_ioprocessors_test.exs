@@ -183,6 +183,37 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       assert Map.keys(refreshed.datamodel["_ioprocessors"]) == Map.keys(before)
     end
 
+    # sabotage: `refreshed_ioprocessors/4`'s filter drops its
+    # `Map.has_key?(ioprocessors, type)` test -> the annex's check is asked
+    # and answers the missing option, and the `{:ok, _}` match reddens.
+    # Confirmed red and reverted.
+    test "a type the stamp names that the datamodel has no key for gets no entry, and no check",
+         %{machine: machine, route: route} do
+      blob = persisted_at_old_depot(machine, route)
+      jam = {__MODULE__, :jam, System.unique_integer([:positive])}
+
+      # Two types registered after the position was persisted: a scanner
+      # whose entry would compute cleanly, and a second Basic HTTP type
+      # whose registration has no `:base_url` and whose check would refuse.
+      types =
+        [base_url: @new_depot]
+        |> send_types(route)
+        |> Map.put("parcel:scanner", {Scanner, jam: jam})
+        |> Map.put("depot:annex", {BasicHTTP, []})
+
+      position = restamped(blob, machine, types)
+      sid = position.datamodel["_sessionid"]
+      before = position.datamodel["_ioprocessors"]
+
+      assert {:ok, refreshed} = MachineState.refresh_ioprocessors(position)
+      after_refresh = refreshed.datamodel["_ioprocessors"]
+
+      assert Map.keys(after_refresh) == Map.keys(before)
+      refute Map.has_key?(after_refresh, "parcel:scanner")
+      refute Map.has_key?(after_refresh, "depot:annex")
+      assert after_refresh["basichttp"] == %{"location" => @new_depot <> "/" <> sid}
+    end
+
     # sabotage: `refreshed_ioprocessors/4`'s error arm answers
     # `{:ok, ioprocessors}` -> the refresh reports success and the equality
     # reddens. Confirmed red and reverted.
@@ -232,6 +263,36 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       stale = Session.snapshot(unrefreshed).datamodel
 
       assert stale["depot"] == @old_depot <> "/" <> stale["_sessionid"]
+    end
+
+    # sabotage: `Session`'s `stamp_session_id/2` also rewrites the
+    # `"basichttp"` entry from the new id -> the resumed location names the
+    # new id and the old-id equality reddens. Confirmed red and reverted.
+    test "a resume under a new :session_id keeps the position's id in the location until a live refresh",
+         %{machine: machine, route: route} do
+      blob = persisted_at_old_depot(machine, route)
+      new_types = send_types([base_url: @new_depot], route)
+
+      {:ok, position} =
+        machine |> then(&restamped(blob, &1, new_types)) |> MachineState.refresh_ioprocessors()
+
+      old_sid = position.datamodel["_sessionid"]
+      new_sid = MachineState.generate_session_id()
+
+      session = start!(machine, resume: position, send_types: new_types, session_id: new_sid)
+      resumed = Session.snapshot(session).datamodel
+
+      assert resumed["_sessionid"] == new_sid
+
+      assert resumed["_ioprocessors"]["basichttp"] == %{
+               "location" => @new_depot <> "/" <> old_sid
+             }
+
+      assert Session.refresh_ioprocessors(session) == :ok
+
+      assert Session.snapshot(session).datamodel["_ioprocessors"]["basichttp"] == %{
+               "location" => @new_depot <> "/" <> new_sid
+             }
     end
 
     # sabotage: `MachineState.refresh_ioprocessors/2`'s success arm returns
