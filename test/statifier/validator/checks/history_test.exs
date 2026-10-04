@@ -271,14 +271,15 @@ defmodule Statifier.Validator.Checks.HistoryTest do
                validate!(xml)
     end
 
-    # Two states share the parent's id. The id test accepts a target under
-    # either of them; this pins that answer for a parent that has an id (the
-    # duplicate itself is check 1's to report, so the check runs alone).
+    # Two states share the parent's id. The target sits under the OTHER
+    # "on_loan", outside the history's own parent, so it is reported in
+    # either document order (the duplicate itself is check 1's to report,
+    # so the check runs alone here; the validate!/1 test below shows both).
     #
-    # sabotage: resolved_outside?/3's `%State{id: nil}` pattern becomes a
-    # bare `parent`, so every parent takes the structural walk -> the
-    # target under the other "on_loan" is reported, reddening the assert
-    test "a parent with an id is tested by id when another state shares that id" do
+    # sabotage: resolved_outside?/3 tests an id-ful parent by id again
+    # (`Context.descendant?(context, parent.id, target)`) -> the target under
+    # the other "on_loan" is accepted, reddening the error match below
+    test "a parent with an id is placed by structure when another state shares that id" do
       for {first, second} <- [{:history, :target}, {:target, :history}] do
         states = %{
           history: """
@@ -303,8 +304,44 @@ defmodule Statifier.Validator.Checks.HistoryTest do
 
         document = lower!(xml)
 
-        assert [] == History.check(document, Context.build(document, xml))
+        assert [%Error{reason: {:initial_not_descendant, "overdue", "on_loan"}}] =
+                 History.check(document, Context.build(document, xml))
       end
+    end
+
+    # The whole validator on the same document: the duplicate id was already
+    # refused, and the misplaced default target now adds its own entry.
+    #
+    # sabotage: resolved_outside?/3 tests an id-ful parent by id again
+    # (`Context.descendant?(context, parent.id, target)`) -> only the
+    # :duplicate_id entry is left, reddening the two-reason match below
+    test "a document whose history target sits under a shared id reports both errors" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="on_loan">
+              <state id="due"/>
+              <history id="loan_history">
+                  <transition target="overdue"/>
+              </history>
+          </state>
+          <state id="on_loan">
+              <state id="overdue"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, errors, _warnings} = validate!(xml)
+
+      assert [
+               {:duplicate_id, "on_loan"},
+               {:initial_not_descendant, "overdue", "on_loan"}
+             ] == errors |> Enum.map(& &1.reason) |> Enum.sort()
+
+      assert %Error{location: %Location{start_line: 5}} =
+               Enum.find(
+                 errors,
+                 &match?(%Error{reason: {:initial_not_descendant, "overdue", "on_loan"}}, &1)
+               )
     end
 
     # sabotage: Context.inside?/3's `^ancestor -> true` clause answers false

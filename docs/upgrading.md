@@ -324,5 +324,14 @@ step.
   inside the state is accepted as before. If your host rescued the raise,
   match the refusal instead, and if it matches that reason's parent id as
   a binary, handle `nil` too, as 2.11.0 asked for a `<history>` parent.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, decides
+  whether a `<history>` default target sits under the history's parent by
+  the document's structure for every parent, as it already did for a
+  parent with no `id`. A document where two states share an `id` and a
+  history under one of them names a target under the other was already
+  refused for that `id` (`{:duplicate_id, id}`, or `{:empty_id}` for an
+  empty one); it now also reports `{:initial_not_descendant, target,
+  parent_id}`. No document that validated before is refused, and none is
+  accepted that was refused.
 
 **A host may start:** nothing new.
