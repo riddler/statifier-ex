@@ -100,12 +100,17 @@ defmodule Mix.Statifier.Corpus.Runner do
   through (ADR-0027: the library starts no processes of its own). Idempotent:
   a runtime already placed is left as it is.
 
-  It also puts OTP's `:inets`, `:ssl` and `:public_key` on the code path,
-  which Mix leaves off for an application no dependency lists: a case whose
-  `host` runs an Event I/O Processor delivers through the processor's
-  default transport on `:httpc` and a loopback front on `:inets` httpd
-  (`Mix.Statifier.Corpus.HostCase`), and `:httpc` reads `:public_key` even
-  for a plain `http:` request.
+  It also puts OTP's `:inets`, `:public_key` and `:ssl` on the code path,
+  in that order. Mix leaves them off for an application no dependency
+  lists, and they are needed: a case whose `host` runs an Event I/O
+  Processor delivers through the processor's default transport on
+  `:httpc` and a loopback front on `:inets` httpd
+  (`Mix.Statifier.Corpus.HostCase`), and `:httpc` reads `:public_key`
+  even for a plain `http:` request. It stops at the first
+  application it cannot find and raises `Mix.Error` naming that one alone,
+  which may be an application one of the three requires (each one's
+  requirements are looked up before the next of the three), so a host
+  missing more than one learns of them one at a time.
   """
   @spec start_runtime() :: :ok
   def start_runtime do

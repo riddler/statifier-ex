@@ -153,6 +153,14 @@ defmodule Mix.Statifier.Corpus.HostCase do
   its processor in one of those ways gets no declaration; and because the
   search reads text, a matching `<send>` inside an XML comment counts too.
 
+  The search also matches two shapes that are not a `<send>`'s `type`,
+  because it bounds the names `send` and `type` only by a character other
+  than an ASCII letter, a digit or an underscore (in a well-formed name, a
+  hyphen, a dot or a colon). An attribute whose name ends in `type` after
+  such a character counts as the `type`: `<send data-type="URI">` declares
+  the URI. And an element whose name is `send` followed by such a
+  character counts as a `<send>`: `<send-log type="URI">` declares it too.
+
   ## Examples
 
       iex> Mix.Statifier.Corpus.HostCase.event_io_processors(
