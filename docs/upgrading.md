@@ -350,11 +350,20 @@ step.
   character became one byte, the low eight bits of its code point, so a
   text body carrying one was not the literal and was usually not valid
   UTF-8.
-- With the same move, a `\u` or `\U` escape in an expression's string
-  literal is refused when the expression is evaluated, so a `<data expr>`
-  or any other expression carrying one raises `error.execution`. Before
-  2.12.0 the backslash was dropped and the letters kept (`'caf\u00e9'`
-  read as `cafu00e9`). Write the character itself instead.
+- With the same move, a string literal holding a `\u` or `\U` escape
+  no longer reads as its letters with the backslash dropped. Before
+  2.12.0 `'caf\u00e9'` read as `cafu00e9`; write the character itself
+  instead. What a chart sees depends on where the literal sits. In an
+  expression the compiler checks at load (a transition's `cond`, a
+  `<log expr>` or a `<send>` `<content expr>`, for example),
+  `Statifier.compile/2` refuses the document with an
+  `:expression_compile_error`. In a `<data expr>`, an `<assign expr>`, a
+  `<script>` or a `namelist` entry, where the compiler defers the
+  failure, it raises `error.execution` when it runs, and
+  `Statifier.Publish.findings/2` reports it under row S13. As text read
+  as a value (a `<data>` element's text, a `<content>` element's text, a
+  Basic HTTP text body) it no longer folds to a string and is kept as its
+  text, quotes and backslash included.
 
 **A host may start:** nothing new.
 
