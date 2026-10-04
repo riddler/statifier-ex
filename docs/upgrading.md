@@ -208,6 +208,17 @@ requirement already accepts 2.11.0.
   A resume is not refused and does not change: its position carries the
   `_ioprocessors` entries it started with. `ioprocessors_entry/2` still
   raises `ArgumentError` for a direct caller.
+  Corrected 2026-10-04: the named refusal is decided before the session
+  process starts, so a start that also had another fault answers it too,
+  where it answered that fault: a `:name` already registered
+  (`{:already_started, pid}`), an `:invoke_handlers` value that is not a
+  map (`{:function_clause, stacktrace}`), or another processor's
+  `_ioprocessors` entry that is not a map (that processor's
+  `ArgumentError`). Beside another processor whose `check_registration/2`
+  breaks its contract (it raises, throws, exits or answers anything other
+  than `:ok` or `{:error, reason}`), the registration is not refused by
+  name and the start answers the `ArgumentError` shape as before.
+  ADR-0069's Note of 2026-10-04 records this.
 - `Statifier.Lowering.lower/2`, and so `Statifier.compile/2`, answers
   `{:error, [%Statifier.Lowering.Error{reason: {:unexpected_root, name}}]}`
   for a document whose root is any SCXML element other than `<scxml>` (a

@@ -686,3 +686,50 @@ makes was verified against `main` at `bbc4c0ee`:
 
 The Amendment's "Why" paragraph describes the package at `2a442885`, as it
 says, before the callback existed.
+
+## Note (2026-10-04): the named refusal precedes the answers a start gave before it, except where the caller asks nothing
+
+The Amendment of 2026-10-02 says under "What changes for a host" that a
+fresh start whose Basic HTTP registration lacks `:base_url` "answers the
+named refusal above instead of the `ArgumentError` shape", and that every
+registration on which `ioprocessors_entry/2` raised "is refused by name
+instead". Both sentences name the one answer the refusal replaces when it
+is the only thing wrong with a start. This Note states what the refusal
+does beside the other things a start can get wrong. It changes no answer
+and no decision: the caller-side refusal keeps its precedence, ruled by
+the operator, 2026-10-03. Anchors were read on `main` at `e287a1a6`.
+
+**The precedence.** `Statifier.Session.start_link/2` asks its private
+`rejected_registration/1` before it calls `GenServer.start_link/3`, so
+when the caller refuses a registration by name, no session process is
+spawned and nothing `GenServer.start_link/3` or `init/1` would have
+answered is reached. A fresh start that also carries one of these answers
+the named refusal, where 2.10.0 answered the value beside each:
+
+- a `:name` already registered: `{:error, {:already_started, pid}}`;
+- an `:invoke_handlers` value that is not a map:
+  `{:error, {:function_clause, stacktrace}}`, from `init/1`;
+- another registration whose processor's `ioprocessors_entry/1` returns a
+  value that is not a map: `{:error, {%ArgumentError{}, stacktrace}}`, that
+  processor's raise, from `init/1`.
+
+The refusal is asked in the caller so that a refused start spawns no
+process and leaves no crash report; asking it after the process starts
+would undo that, and reordering it now would change an answer statifier
+2.11.0 published.
+
+**Where it does not apply.** The caller asks nothing, and the start
+answers as it did in 2.10.0, when the start is a resume, when the map
+names a built-in spelling, when it holds a value that is not a module or
+`{module, opts}`, or when an asked check breaks the callback's contract
+(`Statifier.Send.Types.rejected_registration/1`). So beside another
+processor whose `check_registration/2` raises, throws, exits or answers
+outside its contract, a Basic HTTP registration without `:base_url` is
+not refused by name: the start reaches `init/1`, and
+`Statifier.Send.BasicHTTP.ioprocessors_entry/2` raises its
+`ArgumentError` there, as it did in 2.10.0.
+
+**Tests.** `Statifier.Session.SendTypesTest`'s "the named refusal's
+precedence over earlier start answers" cases pin each earlier answer
+without the Basic HTTP registration, the named refusal beside it, and the
+`ArgumentError` beside a processor whose check raises.

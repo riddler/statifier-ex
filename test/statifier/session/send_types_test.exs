@@ -10,7 +10,7 @@ defmodule Statifier.Session.SendTypesTest do
   # registered type is not part of this change.
 
   alias Statifier.{CrashReportProbe, Position, Session}
-  alias Statifier.Send.Types
+  alias Statifier.Send.{BasicHTTP, Types}
   alias Statifier.Session.{Invocations, Recording}
 
   defmodule SinkProcessor do
@@ -44,6 +44,27 @@ defmodule Statifier.Session.SendTypesTest do
 
     @spec ioprocessors_entry(type :: String.t()) :: term()
     def ioprocessors_entry(_type), do: :not_a_map
+  end
+
+  # A processor that asks nothing at a fresh start and whose `_ioprocessors`
+  # entry is not a map, so a start that reaches `init/1` is refused there
+  # with this processor's `ArgumentError`.
+  defmodule NonMapEntryProcessor do
+    @moduledoc false
+    @spec ioprocessors_entry(type :: String.t()) :: term()
+    def ioprocessors_entry(_type), do: :not_a_map
+  end
+
+  # A processor whose `check_registration/2` raises, and whose
+  # `_ioprocessors` entry is a map, so a start that reaches `init/1` is
+  # answered by whichever other registration `init/1` cannot serve.
+  defmodule RaisingCheckProcessor do
+    @moduledoc false
+    @spec check_registration(type :: String.t(), opts :: keyword()) :: no_return()
+    def check_registration(_type, _opts), do: raise(ArgumentError, "a check that raises")
+
+    @spec ioprocessors_entry(type :: String.t()) :: map()
+    def ioprocessors_entry(_type), do: %{}
   end
 
   @send_types %{"myapp:sink" => SinkProcessor}
@@ -290,6 +311,99 @@ defmodule Statifier.Session.SendTypesTest do
                  resume: blob,
                  send_types: %{"library:shelve" => ShelfProcessor}
                )
+    end
+  end
+
+  describe "the named refusal's precedence over earlier start answers" do
+    # ADR-0069's Amendment of 2026-10-02 asks `check_registration/2` in the
+    # caller, before any process is spawned, so a fresh start whose Basic
+    # HTTP registration has no `:base_url` is refused by name ahead of every
+    # answer the spawned process, or `GenServer.start_link/3` itself, would
+    # have given. Each case below first pins the earlier answer without that
+    # registration, then the named refusal beside it.
+    setup do
+      Process.flag(:trap_exit, true)
+      :ok
+    end
+
+    @no_base_url %{"basichttp" => BasicHTTP}
+    @refused {:error,
+              {:send_types, {:invalid_registration, "basichttp", {:missing_option, :base_url}}}}
+
+    # A start answered in a value, with any raise in the caller caught into
+    # one, so a caller-side path that raises fails the match below rather
+    # than the test run.
+    defp start_answer(machine, opts) do
+      {answer, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          try do
+            Session.start_link(machine, opts)
+          rescue
+            exception -> {:raised_in_caller, exception.__struct__}
+          end
+        end)
+
+      answer
+    end
+
+    # sabotage: `start_link/2` calls `GenServer.start_link/3` before asking
+    # `rejected_registration/1` (the check moved after the start) -> the
+    # taken name answers `{:already_started, pid}` and the `@refused` match
+    # reddens. Confirmed red and reverted.
+    test "precedes a :name already taken" do
+      machine = compile!(@chart)
+      name = :send_types_precedence_taken_name
+      {:ok, first} = Session.start_link(machine, name: name)
+
+      assert {:error, {:already_started, ^first}} = start_answer(machine, name: name)
+
+      assert @refused = start_answer(machine, name: name, send_types: @no_base_url)
+      :ok = Session.stop(first)
+    end
+
+    # sabotage: as above, the check moved after the start -> the malformed
+    # `:invoke_handlers` reaches `init/1`, which answers
+    # `{:function_clause, _}`, and the `@refused` match reddens. Confirmed
+    # red and reverted.
+    test "precedes a malformed :invoke_handlers" do
+      machine = compile!(@chart)
+
+      assert {:error, {:function_clause, _stack}} =
+               start_answer(machine, invoke_handlers: [:not_a_map])
+
+      assert @refused =
+               start_answer(machine, invoke_handlers: [:not_a_map], send_types: @no_base_url)
+    end
+
+    # sabotage: as above, the check moved after the start -> `init/1`
+    # builds the entries and answers an `ArgumentError`, and the `@refused`
+    # match reddens. Confirmed red and reverted.
+    test "precedes another processor's non-map _ioprocessors entry" do
+      machine = compile!(@chart)
+      other = %{"library:notice" => NonMapEntryProcessor}
+
+      assert {:error, {%ArgumentError{message: message}, _stack}} =
+               start_answer(machine, send_types: other)
+
+      assert message =~ "must return a map"
+
+      assert @refused = start_answer(machine, send_types: Map.merge(other, @no_base_url))
+    end
+
+    # sabotage: `Types.rejected_registration/1` ignores `:unanswered` (the
+    # raising check no longer leaves the start to `init/1`) -> the Basic
+    # HTTP registration is refused by name and the `ArgumentError` match
+    # reddens. Confirmed red and reverted.
+    test "does not apply beside a processor whose check breaks its contract" do
+      machine = compile!(@chart)
+
+      send_types =
+        Map.merge(%{"library:notice" => RaisingCheckProcessor}, @no_base_url)
+
+      assert {:error, {%ArgumentError{message: message}, _stack}} =
+               start_answer(machine, send_types: send_types)
+
+      assert message =~ "needs a :base_url"
     end
   end
 
