@@ -71,14 +71,21 @@ defmodule Statifier.Session.HaltNotice do
   """
   @spec take(key :: term()) :: [pid()]
   def take(key) do
-    {taken, kept} = Enum.split_with(watched(), &match?({_ref, {^key, _pid}}, &1))
-    Process.put(@watched_key, Map.new(kept))
+    case Enum.split_with(watched(), &match?({_ref, {^key, _pid}}, &1)) do
+      # Nothing taken, nothing written: outside a session the caller's
+      # dictionary keeps no watched table, as the moduledoc says.
+      {[], _kept} ->
+        []
 
-    Enum.map(taken, fn {ref, {_key, pid}} ->
-      # ADR-0069 decision 4: a taken process is no longer the session's to forget.
-      Process.demonitor(ref, [:flush])
-      pid
-    end)
+      {taken, kept} ->
+        Process.put(@watched_key, Map.new(kept))
+
+        Enum.map(taken, fn {ref, {_key, pid}} ->
+          # ADR-0069 decision 4: a taken process is no longer the session's to forget.
+          Process.demonitor(ref, [:flush])
+          pid
+        end)
+    end
   end
 
   @doc false

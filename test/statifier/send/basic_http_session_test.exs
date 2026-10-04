@@ -603,6 +603,15 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       assert Process.get({HaltNotice, :watched}) == nil
     end
 
+    # sabotage: `HaltNotice.take/1` writes the kept table back when it takes
+    # nothing -> the caller's dictionary gains an empty watched entry and
+    # the `nil` equality reddens. Confirmed red and reverted.
+    test "a cancel performed outside a session leaves no entry in the caller's dictionary" do
+      assert BasicHTTP.perform({:cancel, "solo"}, %{session_id: "sess_none"}) == :ok
+      refute_received {:"$gen_call", _from, _request}
+      assert Process.get({HaltNotice, :watched}) == nil
+    end
+
     # sabotage: `post_later/2` loses its `rescue` -> the raise ends the
     # timer with nobody told, the chart never leaves `s` and the `{:halted,
     # :done}` `assert_receive` reddens. Confirmed red and reverted.
@@ -689,10 +698,15 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       assert watched(session) == %{}
     end
 
+    # The test checks the watched table only: every session, one that
+    # registers nothing included, keeps the session marker
+    # `HaltNotice.mark_session/0` and `HaltNotice.halted/1` write, which
+    # `HaltNotice.watch/2` reads and no public function answers.
+    #
     # sabotage: `HaltNotice.mark_session/0` also writes an empty watched
     # table -> a session that registers nothing gains the entry and the
     # `refute` reddens. Confirmed red and reverted.
-    test "a session that registers nothing keeps nothing for halt notices and keeps its own delayed send" do
+    test "a session that registers nothing keeps no watched processes and keeps its own delayed send" do
       {:ok, machine} =
         Statifier.compile("""
             <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
