@@ -24,7 +24,7 @@ defmodule Statifier.Lowering do
   A builder that cannot place or build something still returns the best
   partial result it can (or nothing, when it cannot build one at all) so the
   walk keeps going and later errors are still found - but that partial tree
-  is never handed back to the caller. `lower/1` returns `{:ok, document}`
+  is never handed back to the caller. `lower/2` returns `{:ok, document}`
   only when the accumulated error list is empty; any non-empty list means
   `{:error, errors}`, full stop, regardless of how much of the tree built
   successfully. Handing back a document that lowering itself does not trust
@@ -48,15 +48,22 @@ defmodule Statifier.Lowering do
   name as `{:unexpected_root, local_name}`, whatever that name is, so a
   root such as `<state>` is refused rather than handed to a builder whose
   result has nowhere to go. `<scxml>` is not a key of the dispatch map
-  either, so an `<scxml>` nested anywhere below the root misses the map
-  and is reported as `{:unsupported_element, name}`, like any other name
-  the map does not hold.
+  either, so an `<scxml>` at any walked child site (a child that
+  `walk_child/4` looks up) misses the map and is reported as
+  `{:unsupported_element, name}`, like any other name the map does not
+  hold. A builder that reads its element children itself instead of
+  walking them answers for an `<scxml>` there as for any other element
+  child, as its own `@doc` states; for example, under `<data>` it is a
+  `{:misplaced_element, name, "data"}`, and inside `<content>` or
+  `<assign>` it is part of the opaque markup slice.
 
   ## Relaxed input
 
-  Both dispatch sites (`lower/1`, `walk_child/4`) accept an element with no
+  Both sites that resolve an element's namespace (`lower/2` for the root,
+  `walk_child/4` for each walked child) accept an element with no
   namespace as SCXML's own vocabulary, not only one resolved to the SCXML
-  namespace. `Statifier.Lowering.Namespace.scxml_vocabulary?/1` is the
+  namespace; `walk_child/4` is the one site that looks a name up in the
+  dispatch map. `Statifier.Lowering.Namespace.scxml_vocabulary?/1` is the
   mechanism and its moduledoc states the commitment; this is a pointer for
   the reader who starts here instead.
   """
@@ -110,8 +117,8 @@ defmodule Statifier.Lowering do
   vocabulary (and not using the relaxed no-namespace fallback) is reported
   as `{:foreign_element, name, uri, location}`; a non-`<scxml>` root name is
   `{:unexpected_root, local_name, location}`, whether or not that name is
-  legal as a child (`<state>`, `<transition>`, ...); an `<scxml>` nested
-  below the root is `{:unsupported_element, name, location}`.
+  legal as a child (`<state>`, `<transition>`, ...); an `<scxml>` at a
+  walked child site is `{:unsupported_element, name, location}`.
   """
   @spec lower(root :: Element.t(), source :: binary()) ::
           {:ok, Document.t()} | {:error, [Error.t()]}
