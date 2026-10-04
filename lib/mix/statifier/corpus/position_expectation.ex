@@ -87,6 +87,11 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
   `machine_state`. `step` names the step in a disagreement: its one-based
   number and its event's name. Each member that differs is named, with
   both values as JSON.
+
+  Values compare as JSON values: two numbers agree when they are equal
+  in value, so a float `2.0` the chart holds agrees with an expected
+  `2`; an array compares element by element in order, an object member
+  by member; a string, a boolean and `null` agree only with themselves.
   """
   @spec compare(
           expected :: map(),
@@ -97,26 +102,47 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
     label = "after step #{number} (#{event}), expect_position"
 
     case render(machine_state) do
-      {:ok, ^expected} ->
-        :ok
-
       {:ok, actual} ->
-        differing =
-          (Map.keys(expected) ++ Map.keys(actual))
-          |> Enum.uniq()
-          |> Enum.sort()
-          |> Enum.reject(&(Map.get(expected, &1) == Map.get(actual, &1)))
-          |> Enum.map_join("; ", fn key ->
-            "#{key}: expected #{encode(Map.get(expected, key))}, " <>
-              "but got #{encode(Map.get(actual, key))}"
-          end)
-
-        {:disagree, "#{label} differs: #{differing}"}
+        (Map.keys(expected) ++ Map.keys(actual))
+        |> Enum.uniq()
+        |> Enum.sort()
+        |> Enum.reject(&same?(Map.get(expected, &1, :absent), Map.get(actual, &1, :absent)))
+        |> differs(expected, actual, label)
 
       {:error, reason} ->
         {:disagree, "#{label} cannot be compared: #{reason}"}
     end
   end
+
+  defp differs([], _expected, _actual, _label), do: :ok
+
+  defp differs(keys, expected, actual, label) do
+    differing =
+      Enum.map_join(keys, "; ", fn key ->
+        "#{key}: expected #{encode(Map.get(expected, key))}, " <>
+          "but got #{encode(Map.get(actual, key))}"
+      end)
+
+    {:disagree, "#{label} differs: #{differing}"}
+  end
+
+  # Equality of two JSON values: numbers by value, arrays in order,
+  # objects by their members, anything else only with itself.
+  defp same?(left, right) when is_number(left) and is_number(right), do: left == right
+
+  defp same?(left, right) when is_list(left) and is_list(right),
+    do:
+      length(left) == length(right) and
+        Enum.all?(Enum.zip(left, right), fn {l, r} -> same?(l, r) end)
+
+  defp same?(left, right) when is_map(left) and is_map(right),
+    do:
+      map_size(left) == map_size(right) and
+        Enum.all?(left, fn {key, value} ->
+          Map.has_key?(right, key) and same?(value, Map.fetch!(right, key))
+        end)
+
+  defp same?(left, right), do: left === right
 
   defp export(machine_state) do
     case Position.export(machine_state) do
