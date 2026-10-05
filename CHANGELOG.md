@@ -10,6 +10,22 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.12.1] 2026-10-05
+
+A patch release that changes documentation only: no module, function or
+behaviour changes, and no file under `lib/` differs from 2.12.0. The
+HexDocs sidebar groups the guides by kind of page, the how-to guides are
+titled by the task they answer, and the README reads as an introduction
+with a map of the documentation.
+
+### Changed
+
+- The HexDocs sidebar's single Guides group becomes three groups: How-to guides (`docs/extending.md`, `docs/persistence.md`, `docs/hosting-without-session.md`, `docs/durable-timers.md`, `docs/testing-charts.md`, `docs/chart-patterns.md`), Reference (`docs/datamodel.md`, `docs/basichttp.md`) and Explanation (`docs/architecture.md`, `docs/observability.md`, `docs/opentelemetry.md`). The README and this CHANGELOG stay ungrouped at the top. No page is added and no file is renamed.
+- The how-to guides' titles now start "How to" (for example, "How to persist and resume an execution").
+- `docs/family-reference.md`, a page for contributors to this repository and its siblings, is no longer in the HexDocs sidebar; it stays in the package files, and the README links it on GitHub.
+- The README is rewritten as an introduction: what the package is, why a statechart engine, installation, one basic-usage example (a library loan that may be renewed twice and comes due on a third renewal), a map of the documentation grouped by the reader's question (Learn, Do, Look up, Understand), compatibility, and a short Contributing section. The notes that followed the install snippet (SemVer, and persisted blobs refusing on a mismatch) are in the Compatibility section, the upgrade guide is linked from the map, and the contributor commands are reached through the Contributing section's link to the workflow page.
+- The repository carries a documentation manifest, `.claude/diataxis.md`, which the documentation tools read; it is not part of the package.
+
 ## [2.12.0] 2026-10-04
 
 A minor release. The package now requires `{:predicator, "~> 9.4"}`
