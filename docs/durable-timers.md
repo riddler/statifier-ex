@@ -1,4 +1,4 @@
-# Durable Timers: Delayed Sends That Outlive the Process
+# How to make a delayed send outlive the process
 
 This is a guide for a host application author who wants a `<send delay="...">`
 to survive past the process that scheduled it - a node restart, a deploy, a

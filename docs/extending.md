@@ -1,4 +1,4 @@
-# Extending Statifier: `<invoke>` handlers and `<send>` types
+# How to extend Statifier: `<invoke>` handlers and `<send>` types
 
 This is a guide for a host application author who wants to reach real
 computation - a database call, a background job, an LLM agent loop, an

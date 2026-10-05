@@ -1,4 +1,4 @@
-# Hosting the Pure Core Without `Statifier.Session`
+# How to host the pure core without `Statifier.Session`
 
 How to drive a chart with no session process anywhere: what your driver owes
 the interpreter for each effect it returns, how timers and `<invoke>`
