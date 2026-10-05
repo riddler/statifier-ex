@@ -44,6 +44,12 @@ defmodule Statifier.MixProject do
   # are in package()'s files: list as well, for the hex.pm page. ADRs are
   # deliberately unpublished: the guides cite individual records by absolute
   # GitHub URL instead.
+  #
+  # The sidebar groups pages by kind, in the family order (Tutorials, How-to
+  # guides, Reference, Explanation, Upgrading; a group appears only when it
+  # has a page). The README and the CHANGELOG stay ungrouped at the top.
+  # Contributor pages (decision records, plans, research, the family
+  # reference) are not extras.
   defp docs do
     [
       name: "Statifier",
@@ -54,21 +60,36 @@ defmodule Statifier.MixProject do
       extras: [
         "README.md",
         "CHANGELOG.md",
-        "docs/architecture.md",
-        "docs/datamodel.md",
         "docs/extending.md",
-        "docs/basichttp.md",
         "docs/persistence.md",
         "docs/hosting-without-session.md",
         "docs/durable-timers.md",
-        "docs/observability.md",
-        "docs/opentelemetry.md",
         "docs/testing-charts.md",
         "docs/chart-patterns.md",
-        "docs/family-reference.md"
+        "docs/datamodel.md",
+        "docs/basichttp.md",
+        "docs/architecture.md",
+        "docs/observability.md",
+        "docs/opentelemetry.md"
       ],
       groups_for_extras: [
-        Guides: ~r{docs/}
+        "How-to guides": [
+          "docs/extending.md",
+          "docs/persistence.md",
+          "docs/hosting-without-session.md",
+          "docs/durable-timers.md",
+          "docs/testing-charts.md",
+          "docs/chart-patterns.md"
+        ],
+        Reference: [
+          "docs/datamodel.md",
+          "docs/basichttp.md"
+        ],
+        Explanation: [
+          "docs/architecture.md",
+          "docs/observability.md",
+          "docs/opentelemetry.md"
+        ]
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]

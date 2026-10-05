@@ -150,8 +150,8 @@ Published guides on [hexdocs](https://hexdocs.pm/statifier/):
 - [Testing charts](docs/testing-charts.md) - testing your own state charts
 - [Chart patterns](docs/chart-patterns.md) - patterns for
   external-resource verdicts (park/retry, fail-fast)
-- [Family reference](docs/family-reference.md) - what the statifier sibling
-  repos copy from here
+- [Family reference](https://github.com/riddler/statifier-ex/blob/main/docs/family-reference.md) - what the
+  statifier sibling repos copy from here
 
 Architecture Decision Records live in the repository at
 [docs/adr/](https://github.com/riddler/statifier-ex/blob/main/docs/adr/README.md).

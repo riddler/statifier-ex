@@ -1,4 +1,4 @@
-# Testing your own charts
+# How to test your own charts
 
 This is a guide for a chart author outside this repository - someone who
 depends on `statifier` and wants to test the SCXML documents their own

@@ -1,4 +1,4 @@
-# Persistence
+# How to persist and resume an execution
 
 How to persist and reload an execution safely, and the hazard that makes
 "safely" a real qualifier rather than a formality. Read alongside

@@ -1,4 +1,4 @@
-# Chart patterns: external-resource verdicts
+# How to route a chart on an external resource's verdict
 
 This is a guide for a chart author whose document reaches an external
 resource - through an `<invoke>` handler (`docs/extending.md`) or an external
