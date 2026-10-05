@@ -6,24 +6,22 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/statifier/)
 [![License](https://img.shields.io/hexpm/l/statifier.svg)](https://github.com/riddler/statifier-ex/blob/main/LICENSE)
 
-A W3C SCXML-conformant statecharts engine for Elixir. Ground-up rewrite of
-[statifier](https://github.com/riddler/statifier) v1.x, built against the SCION
-and W3C conformance corpora from day one.
+A statechart (SCXML) interpreter for Elixir: compile a chart, step it with
+events, and read its configuration. It follows the W3C SCXML algorithm and
+hands back what the chart wants done as data, so your application decides
+how and when to do it.
 
-## Why a rewrite
+## Why a statechart engine
 
-v1 works, but its interpreter re-derived the SCXML semantics instead of porting
-the spec's algorithm, and the divergences account for nearly all of its remaining
-conformance failures. v2 is:
-
-- a **literal port of W3C SCXML Appendix D** - same functions, same names
-- a **pure functional core** returning effects - one semantics for every API,
-  sessions and timers layered on top
-- **predicator as the datamodel** - safe, non-evaluative expressions; no
-  ECMAScript, no eval
-- built **corpus-first** - 287 generated SCION/W3C conformance tests (119
-  SCION + 168 W3C) behind a forward-only regression ratchet inherited from
-  v1, with the generator committed this time
+A long-lived process - a loan that is renewed, comes due, and is returned or
+lost - usually ends up as a status column and conditionals spread across the
+code that touches it, and the question "what may happen next?" has no single
+answer. Statifier makes the chart that answer: states, guarded transitions
+and data live in one SCXML document; its expressions are
+[predicator](https://github.com/riddler/predicator-ex) expressions, with no
+ECMAScript and no `eval`; the core is pure and returns effects
+instead of performing them; and the interpreter is checked against 287
+generated SCION/W3C conformance tests (119 SCION + 168 W3C).
 
 ## Installation
 
@@ -37,136 +35,105 @@ def deps do
 end
 ```
 
-Releases follow [SemVer](https://semver.org); [CHANGELOG.md](CHANGELOG.md)
-is the upgrade briefing, and its `[2.0.0]` section is written as a migration
-document for 1.x users. (The pre-release SHA-pinning contract ended with
-2.0.0 - [ADR-0066](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0066-publishes-2-0-0-ending-the-sha-pinning-contract.md).)
-Persisted position and recording blobs refuse with a typed error on a
-format-version or chart-identity mismatch rather than misreading.
+## Basic usage
 
-For a host moving from 2.5 to 2.12.0,
-[docs/upgrading.md](https://github.com/riddler/statifier-ex/blob/main/docs/upgrading.md)
-lists, release by release, what a host must change and what it may start
-using.
-
-## Quick start
-
-Compile an SCXML document, initialize it, and send it events. Here is a card
-authorization that checks the amount against a budget before capturing it:
+A loan may be renewed twice; a third renewal makes it due instead:
 
 ```elixir
 source = """
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
-       datamodel="predicator" initial="authorizing">
+       datamodel="predicator" initial="on_loan">
   <datamodel>
-    <data id="amount" expr="4200"/>
-    <data id="budget_remaining" expr="10000"/>
+    <data id="renewals" expr="0"/>
   </datamodel>
 
-  <state id="authorizing">
-    <transition event="card.approved" cond="amount &lt;= budget_remaining"
-                target="capturing"/>
-    <transition event="card.approved" target="over_budget"/>
-    <transition event="card.declined" target="declined"/>
+  <state id="on_loan">
+    <transition event="loan.renew" cond="renewals &lt; 2" target="on_loan">
+      <assign location="renewals" expr="renewals + 1"/>
+    </transition>
+    <transition event="loan.renew" target="due"/>
+    <transition event="loan.returned" target="returned"/>
   </state>
 
-  <state id="capturing">
-    <invoke type="myapp:capture" id="capture">
-      <param name="amount" expr="amount"/>
-    </invoke>
-    <transition event="done.invoke.capture" target="settled"/>
-    <transition event="error.communication" target="needs_attention"/>
+  <state id="due">
+    <transition event="loan.returned" target="returned"/>
+    <transition event="loan.lost" target="lost"/>
   </state>
 
-  <state id="over_budget"/>
-  <state id="declined"/>
-  <state id="needs_attention"/>
-  <final id="settled"/>
+  <final id="returned"/>
+  <final id="lost"/>
 </scxml>
 """
 
-{:ok, machine} = Statifier.compile(source)
-{machine_state, _effects} = Statifier.initialize(machine)
+{:ok, chart} = Statifier.compile(source)
+{execution, _effects} = Statifier.initialize(chart)
 
-Statifier.active_leaf_states(machine_state)
-#=> MapSet.new(["authorizing"])
+{:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+{:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+Statifier.active_leaf_states(execution)
+#=> MapSet.new(["on_loan"])
 
-{:ok, machine_state, effects} = Statifier.send_event(machine_state, "card.approved")
-
-Statifier.active_leaf_states(machine_state)
-#=> MapSet.new(["capturing"])
+{:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+Statifier.active_leaf_states(execution)
+#=> MapSet.new(["due"])
 ```
 
-The guard is a [predicator](https://github.com/riddler/predicator-ex)
-expression evaluated against the chart's own datamodel - no ECMAScript and no
-`eval`. Because `4200 <= 10000` held, the run took the first arrow.
-
-Effects come back as data; the engine never performs them for you. Entering
-`capturing` did not call your payment service, it described the call:
-
-```elixir
-effects
-#=> [
-#=>   invoke: %Statifier.Effect.Invoke{
-#=>     invoke_id: "capture",
-#=>     type: "myapp:capture",
-#=>     params: %{"amount" => 4200},
-#=>     ...
-#=>   }
-#=> ]
-```
-
-Performing that effect is your host's job, and so is telling the chart how it
-went: `Statifier.Session.done_invocation/3` delivers
-`done.invoke.capture`, and `Statifier.Session.failed_invocation/3` delivers
-`error.communication.invoke.capture` once your retry policy is exhausted -
-which is the arrow that parks this run in `needs_attention` instead of waiting
-in `capturing` forever. See [Extending](docs/extending.md).
-
-That four-function surface (`compile/2`, `initialize/2`, `send_event/2`,
-`active_leaf_states/1`) is the whole entry point; sessions, durable timers,
-persistence, and telemetry layer on top of it.
+Those four functions are the whole entry point. Sessions, durable timers,
+persistence and telemetry are layered on top of them, and the guides below
+show each one.
 
 ## Documentation
 
-Published guides on [hexdocs](https://hexdocs.pm/statifier/):
+- Learn
+  - [Basic usage](https://hexdocs.pm/statifier/readme.html#basic-usage) - a
+    first chart compiled, started and stepped with events
+- Do
+  - [How to extend Statifier](docs/extending.md) - register your own
+    `<invoke>` handlers and `<send>` types, and report their outcome back
+  - [How to persist and resume an execution](docs/persistence.md) - save
+    where an execution stands and pick it up again after a restart
+  - [How to host the pure core without a session](docs/hosting-without-session.md) -
+    drive the core yourself and perform its effects
+  - [How to make a delayed send outlive the process](docs/durable-timers.md) -
+    keep a timer across a restart
+  - [How to test your own charts](docs/testing-charts.md) - assert the
+    configurations a chart walks through
+  - [How to route a chart on an external resource's verdict](docs/chart-patterns.md) -
+    park and retry, or fail fast
+  - [Upgrading](https://github.com/riddler/statifier-ex/blob/main/docs/upgrading.md) -
+    what a host changes, release by release
+- Look up
+  - [API reference](https://hexdocs.pm/statifier/api-reference.html) - every
+    public module and function
+  - [Datamodel](docs/datamodel.md) - predicator expressions, `<data>`,
+    `<assign>` and `<script>`
+  - [The Basic HTTP Event I/O Processor](docs/basichttp.md) - the mapping
+    between events and HTTP requests, and what is not supported
+  - [CHANGELOG](CHANGELOG.md) - what changed in each release
+- Understand
+  - [Architecture](docs/architecture.md) - the layers and the design
+    principles behind them
+  - [Observability](docs/observability.md) - the trace effects and what a
+    host can do with them
+  - [OpenTelemetry](docs/opentelemetry.md) - how spans map onto an execution
+  - [The decision records](https://github.com/riddler/statifier-ex/blob/main/docs/adr/README.md) -
+    why the engine is built the way it is
 
-- [Architecture](docs/architecture.md) - the layered design and the
-  decisions behind it
-- [Datamodel](docs/datamodel.md) - predicator expressions, `<data>`,
-  `<assign>`, and `<script>`
-- [Extending](docs/extending.md) - registering your own `<invoke>` handlers,
-  and reporting completion or permanent failure back to the chart
-- [Persistence](docs/persistence.md) - chart identity, persisted positions,
-  and resuming sessions
-- [Hosting without a session](docs/hosting-without-session.md) - driving
-  the pure core yourself: the per-effect driver contract, timers, invoke
-  handlers, quiescence, and naming your driver in telemetry
-- [Durable timers](docs/durable-timers.md) - scheduling delayed sends
-  outside the session process
-- [Observability](docs/observability.md) - trace effects and what to do
-  with them
-- [OpenTelemetry](docs/opentelemetry.md) - span topology and the OTel bridge
-- [Testing charts](docs/testing-charts.md) - testing your own state charts
-- [Chart patterns](docs/chart-patterns.md) - patterns for
-  external-resource verdicts (park/retry, fail-fast)
-- [Family reference](https://github.com/riddler/statifier-ex/blob/main/docs/family-reference.md) - what the
-  statifier sibling repos copy from here
+## Compatibility
 
-Architecture Decision Records live in the repository at
-[docs/adr/](https://github.com/riddler/statifier-ex/blob/main/docs/adr/README.md).
+- Elixir `~> 1.18`.
+- Runtime dependencies: `predicator ~> 9.4`, `saxy ~> 1.6`,
+  `telemetry ~> 1.3`.
+- Releases follow [SemVer](https://semver.org). Persisted position and
+  recording blobs refuse with a typed error on a format-version or
+  chart-identity mismatch rather than misreading.
 
-## Development
+## Contributing
 
-```bash
-mix deps.get
-mix quality --profile loop   # fast inner loop
-mix quality                  # full gate (required green before commit)
-```
-
-Issue tracking is [beads](https://github.com/gastownhall/beads) (`bd ready` to
-find work). Workflow, model roles, and worktree conventions:
-[docs/workflow.md](https://github.com/riddler/statifier-ex/blob/main/docs/workflow.md).
+The gate is `mix quality`; the workflow and its conventions are in
+[docs/workflow.md](https://github.com/riddler/statifier-ex/blob/main/docs/workflow.md),
+and what the sibling repos copy from here is in the
+[family reference](https://github.com/riddler/statifier-ex/blob/main/docs/family-reference.md).
 
 ## License
 
