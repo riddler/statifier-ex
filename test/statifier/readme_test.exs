@@ -1,7 +1,7 @@
 defmodule Statifier.ReadmeTest do
   @moduledoc """
-  Pins the runnable example in the root `README.md` - the card authorization
-  quick start - and the conformance-corpus counts its "Why a rewrite" section
+  Pins the runnable example in the root `README.md` - the library loan in its
+  "Basic usage" section - and the conformance-corpus counts its Why paragraph
   quotes. The chart here is the document printed in that README: if one
   changes, change both.
 
@@ -13,85 +13,86 @@ defmodule Statifier.ReadmeTest do
 
   use Statifier.Testing.Case, async: true
 
-  alias Statifier.Effect.Invoke
-
-  # The example chart from README.md's "Quick start", verbatim.
+  # The example chart from README.md's "Basic usage", verbatim.
   @chart """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
-         datamodel="predicator" initial="authorizing">
+         datamodel="predicator" initial="on_loan">
     <datamodel>
-      <data id="amount" expr="4200"/>
-      <data id="budget_remaining" expr="10000"/>
+      <data id="renewals" expr="0"/>
     </datamodel>
 
-    <state id="authorizing">
-      <transition event="card.approved" cond="amount &lt;= budget_remaining"
-                  target="capturing"/>
-      <transition event="card.approved" target="over_budget"/>
-      <transition event="card.declined" target="declined"/>
+    <state id="on_loan">
+      <transition event="loan.renew" cond="renewals &lt; 2" target="on_loan">
+        <assign location="renewals" expr="renewals + 1"/>
+      </transition>
+      <transition event="loan.renew" target="due"/>
+      <transition event="loan.returned" target="returned"/>
     </state>
 
-    <state id="capturing">
-      <invoke type="myapp:capture" id="capture">
-        <param name="amount" expr="amount"/>
-      </invoke>
-      <transition event="done.invoke.capture" target="settled"/>
-      <transition event="error.communication" target="needs_attention"/>
+    <state id="due">
+      <transition event="loan.returned" target="returned"/>
+      <transition event="loan.lost" target="lost"/>
     </state>
 
-    <state id="over_budget"/>
-    <state id="declined"/>
-    <state id="needs_attention"/>
-    <final id="settled"/>
+    <final id="returned"/>
+    <final id="lost"/>
   </scxml>
   """
 
-  describe "the README.md quick start chart" do
+  describe "the README.md basic usage chart" do
     # sabotage: `Statifier.Interpreter.Selection.select_transitions/2` returns
-    # `{machine_state, []}` instead of its enabled set -> `card.approved`
-    # drives no transition, the chart stays in "authorizing" instead of
-    # reaching "capturing" -> red. Reverted and confirmed green.
-    test "an in-budget approval walks the states the README prints" do
-      test_scxml(@chart, "in-budget approval captures", ["authorizing"], [
-        {%{"name" => "card.approved"}, ["capturing"]}
+    # `{machine_state, []}` instead of its enabled set -> `loan.renew` drives
+    # no transition, so the third renewal leaves the loan in "on_loan"
+    # instead of "due" -> red. Reverted and confirmed green.
+    test "walks the configurations the README prints" do
+      {:ok, chart} = Statifier.compile(@chart)
+      {execution, _effects} = Statifier.initialize(chart)
+
+      {:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+      {:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+      assert Statifier.active_leaf_states(execution) == MapSet.new(["on_loan"])
+
+      {:ok, execution, _effects} = Statifier.send_event(execution, "loan.renew")
+      assert Statifier.active_leaf_states(execution) == MapSet.new(["due"])
+    end
+
+    # sabotage: `Statifier.Machine.Content.Assign.execute/2` returns the
+    # context it was given, so `renewals` stays 0 -> the guard holds on every
+    # renewal and the third one keeps the loan in "on_loan" instead of "due"
+    # -> red. Reverted and confirmed green.
+    test "the guard counts renewals: two renew, the third makes the loan due" do
+      test_scxml(@chart, "renewal limit", ["on_loan"], [
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["due"]}
       ])
     end
 
     # sabotage: `Statifier.Interpreter.Selection.select_transitions/2` returns
-    # `{machine_state, []}` instead of its enabled set -> `card.declined`
-    # drives no transition, the chart stays in "authorizing" instead of
-    # reaching "declined" -> red. Reverted and confirmed green.
-    test "a declined authorization takes the declined arrow" do
-      test_scxml(@chart, "declined authorization", ["authorizing"], [
-        {%{"name" => "card.declined"}, ["declined"]}
+    # `{machine_state, []}` instead of its enabled set -> no event drives a
+    # transition, the loan never comes due and so is never returned or lost
+    # -> red. Reverted and confirmed green.
+    test "a due loan is returned or lost" do
+      test_scxml(@chart, "due loan returned", ["on_loan"], [
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["due"]},
+        {%{"name" => "loan.returned"}, ["returned"]}
       ])
-    end
 
-    # sabotage: `Statifier.Effect.Invoke`'s `params` field is built from `%{}`
-    # instead of the evaluated `<param>` map -> the asserted
-    # `%{"amount" => 4200}` payload the README prints comes back empty -> red.
-    # Reverted and confirmed green.
-    test "entering capturing yields the invoke effect the README prints" do
-      {:ok, machine} = Statifier.compile(@chart)
-      {machine_state, _effects} = Statifier.initialize(machine)
-
-      assert Statifier.active_leaf_states(machine_state) == MapSet.new(["authorizing"])
-
-      {:ok, machine_state, effects} = Statifier.send_event(machine_state, "card.approved")
-
-      assert Statifier.active_leaf_states(machine_state) == MapSet.new(["capturing"])
-
-      assert [invoke: %Invoke{invoke_id: "capture", type: "myapp:capture", params: params}] =
-               effects
-
-      assert params == %{"amount" => 4200}
+      test_scxml(@chart, "due loan lost", ["on_loan"], [
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["on_loan"]},
+        {%{"name" => "loan.renew"}, ["due"]},
+        {%{"name" => "loan.lost"}, ["lost"]}
+      ])
     end
   end
 
   describe "README.md conformance-corpus counts" do
     # sabotage: n/a - pins the README's corpus-count sentence against a fresh
     # count of the emitted corpus trees, no lib/ behavior.
-    test "the corpus-first bullet's counts match disk" do
+    test "the Why paragraph's counts match disk" do
       scion = emitted_count("test/scion_tests")
       w3c = emitted_count("test/scxml_tests")
       total = scion + w3c
