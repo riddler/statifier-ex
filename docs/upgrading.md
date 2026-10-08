@@ -1,8 +1,8 @@
-# Upgrading from 2.5 to 2.12.0: what a host changes
+# Upgrading from 2.5 to 2.12.1: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.12.0 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.12.1 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 [CHANGELOG.md](../CHANGELOG.md) says what the library changed; this page
@@ -20,7 +20,8 @@ evaluates to a struct, a host whose charts carry an `initial` on a
 compound state with no `id` naming a target outside that state, a host
 that reads the entries of a document already refused for a shared `id`,
 a host that holds predicator at 9.0 to 9.3, and a chart with a `\u` or
-`\U` escape in a string literal.
+`\U` escape in a string literal. 2.12.1 changes documentation only, and
+its "must change" is NONE.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
@@ -393,3 +394,12 @@ float the chart holds agrees with an expected integer of the same value
 member, and a number that differs in value still disagrees, naming the
 member. A sibling implementation's runner compares the same way; this is
 not a host step either.
+
+## 2.12.1
+
+**A host must change:** NONE. The release changes documentation only: no
+file under `lib/` differs from 2.12.0.
+
+**A host may start:** nothing new. The conformance corpus does not change,
+so a sibling implementation that vendored it at the `v2.12.0` tag has
+nothing to re-vendor.
