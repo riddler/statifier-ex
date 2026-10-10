@@ -123,6 +123,14 @@ defmodule Statifier.Testing.HandlerCase do
   # The invoke_id no fixture ever plans with, for the unknown-cancel check.
   @unknown_invoke_id "inv_conformance_unknown"
 
+  # How long check 5 waits for the session's exit. The bound only matters
+  # when the check is about to fail: a session that raises exits as soon as
+  # its initialization runs, and the wait returns on that message. On a
+  # loaded machine that initialization can be scheduled late, and one
+  # second was observed to be too short, so the bound is ten times that,
+  # still well inside ExUnit's default per-test timeout.
+  @exit_wait_ms 10_000
+
   @doc """
   Generates the conformance tests into the `use`-ing module, which must
   `use ExUnit.Case` first (the generated tests are ordinary `test` blocks).
@@ -482,7 +490,7 @@ defmodule Statifier.Testing.HandlerCase do
           {:ok, session} ->
             # Initialization runs after init/1 returns (handle_continue), so
             # the raise arrives as an exit of the linked session process.
-            assert_receive {:EXIT, ^session, reason}, 1_000
+            assert_receive {:EXIT, ^session, reason}, @exit_wait_ms
             assert_probe_exception(reason)
 
           {:error, reason} ->
