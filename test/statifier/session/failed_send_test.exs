@@ -219,6 +219,114 @@ defmodule Statifier.Session.FailedSendTest do
     end
   end
 
+  # A loan reminder to a branch desk that never answers: every miss goes
+  # through `waiting_for_desk` back to `reminding`, whose onentry sends the
+  # reminder again. Two rounds of budget let the first miss reach the halt.
+  @reminder_chart """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="reminding">
+      <state id="reminding">
+          <onentry>
+              <send type="myapp:sink" target="branch_desk" event="loan.reminder" id="reminder"/>
+          </onentry>
+          <transition event="error.communication" target="waiting_for_desk"/>
+      </state>
+      <state id="waiting_for_desk">
+          <transition target="reminding"/>
+      </state>
+  </scxml>
+  """
+
+  # Answers every handed send with `failed_send/3` until 300 ms have passed
+  # since the first halted message, and returns the counts. The deadline is
+  # read before every receive, so a stream that never pauses still ends.
+  defp miss_every_send(session, counts, nil), do: miss_every_send(session, counts, nil, 5_000)
+
+  defp miss_every_send(session, counts, deadline) do
+    case deadline - System.monotonic_time(:millisecond) do
+      left when left > 0 -> miss_every_send(session, counts, deadline, left)
+      _expired -> counts
+    end
+  end
+
+  defp miss_every_send(session, counts, deadline, left) do
+    receive do
+      {Sink, send} ->
+        :ok = Session.failed_send(session, send)
+        counts = %{counts | misses: counts.misses + 1, last_send: send}
+        miss_every_send(session, counts, deadline)
+
+      {:statifier, _session_id, {:halted, reason}} ->
+        counts = Map.update!(counts, :halted, &[reason | &1])
+        miss_every_send(session, counts, deadline || System.monotonic_time(:millisecond) + 300)
+
+      {:statifier, _session_id, _message} ->
+        miss_every_send(session, counts, deadline)
+    after
+      left -> counts
+    end
+  end
+
+  describe "failed_send/3 with a budget-halted sender" do
+    # sabotage: the `when state.halted == :budget_exhausted` clause is
+    # deleted -> the miss steps the halted core again, every re-send is
+    # missed in turn, and the one-halt equality reddens on a stream of
+    # halted messages. Confirmed red and reverted.
+    test "the miss is dropped and the halted message is sent once" do
+      session = start!(@reminder_chart, subscribers: [self()], max_macrostep_rounds: 2)
+
+      # The first halted message must arrive (bounded generously for a
+      # loaded machine); the 300 ms after it are the window a second one
+      # would have to land in, which the storm filled in well under that.
+      counts = miss_every_send(session, %{misses: 0, halted: [], last_send: nil}, nil)
+
+      assert counts.halted == [:budget_exhausted]
+      assert %{status: :budget_exhausted, queued_events: 0} = Session.status(session)
+    end
+
+    # sabotage: the budget-exhausted clause records an internal entry as the
+    # ordinary clause does -> the recording grows by the miss, and the
+    # recording equality reddens. Confirmed red and reverted.
+    test "the dropped miss drives nothing, queues nothing and records nothing" do
+      session =
+        start!(@reminder_chart, subscribers: [self()], max_macrostep_rounds: 2, record: true)
+
+      counts = miss_every_send(session, %{misses: 0, halted: [], last_send: nil}, nil)
+      assert counts.halted == [:budget_exhausted]
+      %Send{send_id: "reminder"} = send = counts.last_send
+
+      {:ok, before} = Session.recording(session)
+      snapshot = Session.snapshot(session)
+      status = Session.status(session)
+
+      :ok = Session.failed_send(session, send)
+
+      # `recording/1` is a call, so the cast above has been handled and any
+      # message it sent is already in this mailbox when it returns.
+      assert Session.recording(session) == {:ok, before}
+      assert Session.snapshot(session) == snapshot
+      assert Session.status(session) == status
+      refute_received {:statifier, _session_id, _message}
+    end
+
+    # sabotage: the budget-exhausted clause queues the miss on the inbox as
+    # an `error.communication` event -> the queued event sits ahead of the
+    # cancel entry, the drain stops at it, and the `{:halted, :cancelled}`
+    # receive and the status match redden. Confirmed red and reverted.
+    test "cancel/1 after a dropped miss halts the session :cancelled" do
+      session = start!(@reminder_chart, subscribers: [self()], max_macrostep_rounds: 2)
+
+      counts = miss_every_send(session, %{misses: 0, halted: [], last_send: nil}, nil)
+      assert counts.halted == [:budget_exhausted]
+
+      :ok = Session.failed_send(session, counts.last_send)
+      :ok = Session.cancel(session)
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:halted, :cancelled}}, 5_000
+      assert %{status: :cancelled, queued_events: 0} = Session.status(session)
+    end
+  end
+
   describe "a process-less host makes the same write" do
     # sabotage: `Interpreter.deliver_internal/5`'s `:platform` arm calls
     # `MachineState.raise_internal/4` instead of `raise_platform/4` -> the

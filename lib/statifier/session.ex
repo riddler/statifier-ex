@@ -107,7 +107,9 @@ defmodule Statifier.Session do
     - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
       message, following the effects that caused it, and the **last**
       message this session sends its subscribers for the run (ADR-0044
-      decision 2).
+      decision 2). A budget-halted session handed a further miss through
+      `failed_send/3` drops it without stepping, so the message stays the
+      last one.
 
   A late subscriber catches up by replaying the recording, not from any
   buffer this session retains (ADR-0049). `subscribe/3` with
@@ -883,6 +885,11 @@ defmodule Statifier.Session do
   host learns the sender has finished from the `{:halted, reason}` a
   subscriber receives, or from `status/1`. A processor whose route creates
   its target on a miss (get-or-create) has no miss to report.
+
+  **A budget-halted sender.** A sender halted `:budget_exhausted` is still
+  running, but it does not step on a miss either: the call writes nothing,
+  queues nothing and records nothing, no further message reaches a
+  subscriber, and the miss is the host's dead letter under the rule above.
 
   **No session process.** `Statifier.Interpreter.deliver_internal/5` takes
   the `%Statifier.MachineState{}` this session holds privately, which is
@@ -1958,20 +1965,35 @@ defmodule Statifier.Session do
   # `failed_send/3`'s own cast (ADR-0069 decision 5). A sender that has
   # halted `:done` or `:cancelled` has no internal queue to write: the
   # clause returns the state untouched, so nothing is recorded and nothing
-  # is written, and the dead letter is the host's (the door's own doc). A
-  # `:budget_exhausted` sender is still running and takes the ordinary
-  # clause, as a fired timer's delivery does. The ordinary clause writes
-  # through `deliver_internal/6`, the same ADR-0039 door
-  # `communication_error/4` uses, with the send's own content position as
-  # the origin and its `send_id` as `sendid` unconditionally (5.10.1's rule
-  # for an error event triggered by a failed send). Like the fired-timer
-  # clause, it reaches `deliver_internal/6` outside any `perform/3` fold, so
-  # it drains the deferred effects itself.
+  # is written, and the dead letter is the host's (the door's own doc).
+  #
+  # A `:budget_exhausted` sender is still running, but it is halted, and the
+  # moduledoc's halted message is the last one its subscribers receive.
+  # Writing through `deliver_internal/6` here would drive the core with a
+  # fresh budget and halt it again, and a chart that re-sends on every miss
+  # would do so for as long as its host keeps reporting misses. So the miss
+  # is dropped, as for `:done` and `:cancelled`: the clause below returns
+  # the state untouched, so the core is not called, nothing is recorded,
+  # nothing is queued and nothing is notified. The dead letter is the
+  # host's here too. Nothing is queued on purpose: an event on the inbox
+  # would sit ahead of a later `cancel/1`'s entry, which
+  # `handle_continue(:drain, _)` would then never reach.
   def handle_cast({:failed_send, _send, _failure}, state)
       when state.halted in [:done, :cancelled] do
     {:noreply, state}
   end
 
+  def handle_cast({:failed_send, _send, _failure}, state)
+      when state.halted == :budget_exhausted do
+    {:noreply, state}
+  end
+
+  # The ordinary clause writes through `deliver_internal/6`, the same
+  # ADR-0039 door `communication_error/4` uses, with the send's own content
+  # position as the origin and its `send_id` as `sendid` unconditionally
+  # (5.10.1's rule for an error event triggered by a failed send). Like the
+  # fired-timer clause, it reaches `deliver_internal/6` outside any
+  # `perform/3` fold, so it drains the deferred effects itself.
   def handle_cast({:failed_send, send, _failure}, state) do
     state =
       deliver_internal(
