@@ -344,6 +344,43 @@ defmodule Statifier.Validator.Checks.HistoryTest do
                )
     end
 
+    # The same shape with the shared id written empty: each `id=""` was
+    # already refused as empty, and the misplaced default target adds its
+    # own entry, naming the parent by its empty id.
+    #
+    # sabotage: resolved_outside?/3 tests an id-ful parent by id again
+    # (`Context.descendant?(context, parent.id, target)`) -> only the two
+    # :empty_id entries are left, reddening the three-reason match below
+    test "a document whose history target sits under a shared empty id reports both errors" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="">
+              <state id="due"/>
+              <history id="loan_history">
+                  <transition target="overdue"/>
+              </history>
+          </state>
+          <state id="">
+              <state id="overdue"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, errors, _warnings} = validate!(xml)
+
+      assert [
+               {:empty_id},
+               {:empty_id},
+               {:initial_not_descendant, "overdue", ""}
+             ] == errors |> Enum.map(& &1.reason) |> Enum.sort()
+
+      assert %Error{location: %Location{start_line: 5}} =
+               Enum.find(
+                 errors,
+                 &match?(%Error{reason: {:initial_not_descendant, "overdue", ""}}, &1)
+               )
+    end
+
     # sabotage: Context.inside?/3's `^ancestor -> true` clause answers false
     # (every parent chain climbs to the document) -> the grandchild target under
     # the id-less parent is reported as outside it, reddening the {:ok, _}
