@@ -29,9 +29,11 @@ defmodule Statifier.Validator.Checks.InitialTargets do
      wrong). A containing state with no `id` has no entry in that id-keyed
      ancestry, so it is tested by the tree's structure instead and the
      reported `parent_id` is `nil`, the rule the History check keeps for a
-     parent with no `id`. Such a state answers every reason here: only
-     `initial_on_atomic_state` carries the state's own id, and for it that
-     id is `nil` too. This check has **no analog** for
+     parent with no `id`. Such a state answers every reason here:
+     `unresolved_initial` carries the missing target, and the two reasons
+     that carry the state's own id (`initial_on_atomic_state`'s `id`,
+     `initial_not_descendant`'s `parent_id`) carry `nil`. This check has
+     **no analog** for
      `Document.initial`: spec 3.11's
      "additional requirement" ("all the states MUST be descendants of the
      containing `<state>` or `<parallel>` element") is written for `<state>`
