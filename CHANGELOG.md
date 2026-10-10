@@ -10,6 +10,33 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.13.0] 2026-10-09
+
+A minor release. `Statifier.Session.replace_send_type/3` replaces a
+running session's registration for one send type it already registers
+and recomputes that type's `_ioprocessors` entry; a session that
+registers nothing sees nothing new from the send changes. Some existing
+answers change: the validator refuses two documents whose `<state>` has
+no `id` where `Statifier.compile/2` raised `KeyError`, and reports
+`initial_not_descendant` beside the duplicate id refusal a shared-id
+document already had; and a session halted `:budget_exhausted` drops a
+failed send without stepping, where it stepped and sent another halted
+message.
+
+### Added
+
+- `Statifier.Session.replace_send_type/3` replaces a running session's registration for one send type it already registers and recomputes that type's `_ioprocessors` entry in the same call, so a host whose front moved a registration's options while the session runs (a new `:base_url` for `Statifier.Send.BasicHTTP`, or a rotated location) hands the session the new registration and the chart reads the new entry from its next event; later sends of the type go through the new registration. It answers `:ok`, or changes nothing and answers `{:error, :not_running}` for a halted session, `{:error, :recorded_session}` for a session started with `record: true`, `{:error, {:unknown_send_type, type}}` for a type the session does not register, `{:error, {:send_types, {:invalid_registration, type, reason}}}` when the processor's `check_registration/2` refuses the registration (as `start_link/2` spells that refusal), and `{:error, {:ioprocessors_entry, type, exception}}` when the entry raises, the session keeping its position. No existing call's answer changes.
+
+### Changed
+
+- `Statifier.Validator.validate/3` decides whether a `<state>`'s `initial` target is its descendant by the document's structure for every state: a document where two states share an id and one's `initial` names a state under the other now reports `{:initial_not_descendant, target, id}` beside the `{:duplicate_id, id}` it already reported.
+
+### Fixed
+
+- `Statifier.Validator.validate/3` refuses a `<state>` with no `id` whose `initial` names a missing state (`{:unresolved_initial, missing_id}`) and one with no child states that carries an `initial` (`{:initial_on_atomic_state, nil}`); both documents used to validate and `Statifier.compile/2` raised `KeyError`.
+- A session halted `:budget_exhausted` that is handed a miss through `Statifier.Session.failed_send/3` now drops it without stepping, as a session halted `:done` or `:cancelled` does, so a miss no longer sends its subscribers another halted message and is the host's dead letter; it used to step the halted chart again and send another halted message for every miss, without end for a chart that re-sends on each one. A session halted `:done` or `:cancelled` is unchanged.
+- `Statifier.Testing.HandlerCase`'s check that a handler exception propagates waits up to ten seconds for the session's exit instead of one, so the generated test no longer fails on a loaded CI machine; a passing run returns as soon as the exit arrives.
+
 ## [2.12.1] 2026-10-05
 
 A patch release that changes documentation only: no module, function or
