@@ -2,7 +2,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Lowering, Parser, Validator}
-  alias Statifier.Validator.Error
+  alias Statifier.Parser.Location
+  alias Statifier.Validator.Checks.InitialTargets
+  alias Statifier.Validator.{Context, Error}
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -73,8 +75,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
   end
 
   describe "check/2 - initial_not_descendant" do
-    # sabotage: descendant?/3 (Context) tests direct-child membership
-    # instead of ancestry -> a grandchild target is (wrongly) treated as
+    # sabotage: Context.inside?/3's `%State{} = parent ->` clause answers
+    # false instead of climbing (direct-child membership instead of
+    # ancestry) -> a grandchild target is (wrongly) treated as
     # non-descendant, reddening the grandchild assertion below
     test "a sibling initial target is reported, a grandchild target is not" do
       xml = """
@@ -107,9 +110,9 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       assert {:ok, _document, _warnings} = validate!(xml_grandchild)
     end
 
-    # sabotage: check_initial_element/2's Enum.reject(&Context.descendant?/3)
-    # becomes Enum.filter (keeps descendants instead of dropping them) ->
-    # the non-descendant target is silently dropped, reddening this
+    # sabotage: check_initial_element/2's Enum.filter keeps targets that
+    # are not outside?/3 instead of those that are -> the non-descendant
+    # target is silently dropped, reddening this
     test "an <initial> element's non-descendant transition target is reported" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
@@ -131,11 +134,95 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
     end
   end
 
+  describe "check/2 - a containing state that shares its id" do
+    # Two states share the containing state's id. The initial target sits
+    # under the OTHER "on_loan", outside the containing state, so it is
+    # reported in either document order, from an initial attribute and from
+    # an <initial> element (the duplicate itself is check 1's to report, so
+    # the check runs alone here; the validate!/1 test below shows both).
+    #
+    # sabotage: outside?/3 tests a state with an id by id again
+    # (`not Context.descendant?(context, state.id, target)` for a non-nil
+    # id) -> the target under the other "on_loan" is accepted, reddening the
+    # error match below
+    test "a containing state with an id is placed by structure when another state shares that id" do
+      containing = %{
+        attribute: """
+            <state id="on_loan" initial="overdue">
+                <state id="due"/>
+            </state>
+        """,
+        element: """
+            <state id="on_loan">
+                <initial>
+                    <transition target="overdue"/>
+                </initial>
+                <state id="due"/>
+            </state>
+        """
+      }
+
+      target = """
+          <state id="on_loan">
+              <state id="overdue"/>
+          </state>
+      """
+
+      for shape <- [:attribute, :element], target_first? <- [false, true] do
+        body =
+          if target_first?, do: target <> containing[shape], else: containing[shape] <> target
+
+        xml = """
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+        #{body}</scxml>
+        """
+
+        document = lower!(xml)
+
+        assert [%Error{reason: {:initial_not_descendant, "overdue", "on_loan"}}] =
+                 InitialTargets.check(document, Context.build(document, xml))
+      end
+    end
+
+    # The whole validator on the same document: the duplicate id was already
+    # refused, and the misplaced initial target now adds its own entry.
+    #
+    # sabotage: outside?/3 tests a state with an id by id again
+    # (`not Context.descendant?(context, state.id, target)` for a non-nil
+    # id) -> only the :duplicate_id entry is left, reddening the two-reason
+    # match below
+    test "a document whose initial target sits under a shared id reports both errors" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <state id="on_loan" initial="overdue">
+              <state id="due"/>
+          </state>
+          <state id="on_loan">
+              <state id="overdue"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, errors, _warnings} = validate!(xml)
+
+      assert [
+               {:duplicate_id, "on_loan"},
+               {:initial_not_descendant, "overdue", "on_loan"}
+             ] == errors |> Enum.map(& &1.reason) |> Enum.sort()
+
+      assert %Error{location: %Location{start_line: 2}} =
+               Enum.find(
+                 errors,
+                 &match?(%Error{reason: {:initial_not_descendant, "overdue", "on_loan"}}, &1)
+               )
+    end
+  end
+
   describe "check/2 - a containing state with no id" do
     # sabotage: check/2 keeps `Enum.filter(&(&1.id != nil))` ahead of
     # check_state/2 -> the id-less state is never checked and both
     # documents validate, reddening both error matches below
-    # sabotage: outside?/3's `%State{id: nil}` clause answers false -> the
+    # sabotage: outside?/3 answers false -> the
     # target outside the id-less state is accepted, reddening the same
     # matches; and Context.inside?/3's `%Document{} -> false` clause answers
     # true -> the same, reddening the same matches
@@ -370,7 +457,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
   end
 
   describe "check/2 - a valid document" do
-    # sabotage: same Enum.filter/Enum.reject inversion in
+    # sabotage: same Enum.filter inversion in
     # check_initial_element/2 as the non-descendant test above -> the
     # resolved, descendant <initial> target ("d" under "c") is wrongly
     # reported non-descendant, reddening this too (one mutation, two doors)

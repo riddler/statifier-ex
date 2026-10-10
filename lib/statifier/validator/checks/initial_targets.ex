@@ -23,13 +23,14 @@ defmodule Statifier.Validator.Checks.InitialTargets do
      it can skip the descendancy test below rather than re-reporting.
   3. `{:initial_not_descendant, id, parent_id}`: a resolved target - from
      `State.initial` or from an `<initial>` element's transitions - that is
-     not among the containing state's named descendants
-     (`Context.descendant?/3`, ancestry all the way up, not direct-child
-     membership - spec 3.3/3.6 both say "descendants", which is where v1 is
-     wrong). A containing state with no `id` has no entry in that id-keyed
-     ancestry, so it is tested by the tree's structure instead and the
-     reported `parent_id` is `nil`, the rule the History check keeps for a
-     parent with no `id`. Such a state answers every reason here:
+     not among the containing state's descendants (ancestry all the way
+     up, not direct-child membership - spec 3.3/3.6 both say
+     "descendants", which is where v1 is wrong). Descendancy is decided by
+     the tree's structure (`Context.inside?/3`) for every containing state,
+     with or without an `id`, the rule the History check keeps for a
+     history's parent: a state that shares its `id` with another is not
+     credited with the other's children, and a containing state with no
+     `id` reports a `nil` `parent_id`. Such a state answers every reason here:
      `unresolved_initial` carries the missing target, and the two reasons
      that carry the state's own id (`initial_on_atomic_state`'s `id`,
      `initial_not_descendant`'s `parent_id`) carry `nil`. This check has
@@ -137,15 +138,12 @@ defmodule Statifier.Validator.Checks.InitialTargets do
     end)
   end
 
-  # `target` resolves (both callers test that first). A state with an id
-  # keeps the id test, `Context.descendant?/3`; only a state with no id is
-  # placed by the tree's structure.
-  defp outside?(target, %State{id: nil} = state, context) do
+  # `target` resolves (both callers test that first). Every state is placed
+  # by the tree's structure, with or without an id: an id test cannot place
+  # a target under a state with no id, and cannot tell apart two states
+  # that share an id.
+  defp outside?(target, %State{} = state, context) do
     not Context.inside?(context, Map.fetch!(context.states, target), state)
-  end
-
-  defp outside?(target, %State{id: id}, context) do
-    not Context.descendant?(context, id, target)
   end
 
   defp check_document_initial(%Document{initial: []}, _context), do: []
