@@ -217,9 +217,9 @@ requirement already accepts 2.11.0.
   `_ioprocessors` entries it started with. `ioprocessors_entry/2` still
   raises `ArgumentError` for a direct caller.
   Corrected 2026-10-04: the named refusal is decided before the session
-  process starts, so a start that also had another fault answers it too,
-  where it answered that fault: a `:name` already registered
-  (`{:already_started, pid}`), an `:invoke_handlers` value that is not a
+  process starts, so a start that also had another fault answers the
+  named refusal too, where the start answered that other fault: a
+  `:name` already registered (`{:already_started, pid}`), an `:invoke_handlers` value that is not a
   map (`{:function_clause, stacktrace}`), or another processor's
   `_ioprocessors` entry that is not a map (that processor's
   `ArgumentError`). Beside another processor whose `check_registration/2`

@@ -319,8 +319,12 @@ defmodule Statifier.Session.SendTypesTest do
     # caller, before any process is spawned, so a fresh start whose Basic
     # HTTP registration has no `:base_url` is refused by name ahead of every
     # answer the spawned process, or `GenServer.start_link/3` itself, would
-    # have given. Each case below first pins the earlier answer without that
-    # registration, then the named refusal beside it.
+    # have given. Each case below but the last first pins the earlier answer
+    # without that registration, then the named refusal beside it. The last
+    # case pins the carve-out: beside another processor whose
+    # `check_registration/2` breaks its contract, the registration is not
+    # refused by name and the start answers, as before, the `ArgumentError`
+    # shape `init/1` gives for the Basic HTTP registration.
     setup do
       Process.flag(:trap_exit, true)
       :ok
