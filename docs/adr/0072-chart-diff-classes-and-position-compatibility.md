@@ -472,3 +472,37 @@ history children, and `diff/3`'s `@doc` says "child states". So a
 `<history>` added to a parallel state is reported as `{:state_added, id}`
 only, and a parallel pair whose child states match takes no `:regions`
 reason.
+
+## Note (2026-10-09): a non-empty `states_to_invoke` also marks an ended chart
+
+This note decides nothing and changes no answer. It names a second
+position that two sentences above leave out. No decision, consequence or
+Related entry changes. It was ruled by the operator, 2026-10-06, as a
+dated Note with no code.
+
+Two sentences treat a non-empty `states_to_invoke` as a position inside
+a macrostep only. The Context's "What a position holds" paragraph says
+the set "is emptied at the end of every macrostep by the invoke pass
+... so a position between macrosteps holds none". Decision 4's bullet
+"**`states_to_invoke` is empty.**" says "A non-empty set is a position
+inside a macrostep, before its invoke pass".
+
+Both miss a chart that ended by entering a top-level `<final>`. The
+invoke pass runs only while the chart is running: `Statifier.Interpreter`'s
+`main_event_loop/3` calls `run_invoke_pass/1` under
+`if machine_state.running`, so the macrostep that stops the chart is not
+followed by one. The export after that step holds the final state in
+`states_to_invoke`, as ADR-0076's `states_to_invoke` row states ("no
+invoke pass runs once the chart has stopped"). The library case
+`loan_lost_after_timer` (under `conformance/cases/library/`) pins it: its
+stopping step's position has `running` false, an empty `configuration`
+and `"states_to_invoke": ["lost"]`.
+
+`compatible_at?/3` answers `false` there, as decision 4 already requires
+for a non-empty set. `Statifier.Position.compatible_at?/3` requires the
+set to be empty and the configuration to be legal in `to_machine`, and a
+stopped chart fails both, so a stopped execution is not compatible at its
+position even onto its own chart. Its `@doc` names both cases. Every
+claim in this Note was read at `2556639d`, and the case was run there:
+its stopping position answers `false` onto its own chart, and still
+answers `false` with `states_to_invoke` emptied by hand.
