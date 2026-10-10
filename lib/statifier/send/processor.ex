@@ -127,6 +127,23 @@ defmodule Statifier.Send.Processor do
   `deliver/3` and `cancel/2` receive, under `:opts`. A bare-module
   registration's plan context carries no `:opts` key, exactly as before.
 
+  Any other value is outside that shape: a string, a `{module, opts}`
+  whose `opts` is not a list, a tuple whose first element is not an atom,
+  or a tuple of another size. `Statifier.Session.start_link/2` has no
+  named refusal for it. It asks no processor's
+  `c:check_registration/2` about a map that holds one, spawns the
+  session, and the session process stops while it starts, so the start
+  answers `{:error, {:function_clause, stacktrace}}`. The stacktrace's
+  first frame is the library's split of the registration, called with the
+  value as given:
+
+      {Statifier.Send.Types, :split, [value], _location}
+
+  The start does not raise in the caller.
+  `Statifier.Session.replace_send_type/3` takes the same two shapes and
+  raises `FunctionClauseError` in the caller for any other value, before
+  the session is asked.
+
   ## `ctx`
 
   The plan context `Statifier.Session.Effects.plan/2` threads through its
