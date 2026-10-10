@@ -60,8 +60,11 @@ defmodule Statifier.Session do
   entry is checked before any drive of the core - a queued ordinary event
   is not. One asymmetry: because the interpreter has *not* exited under
   `:budget_exhausted`, its already-scheduled delayed sends stay armed and
-  still deliver; they are discarded only when the eventual `cancel/1`
-  halts it `:cancelled`.
+  still fire; they are discarded only when the eventual `cancel/1` halts
+  it `:cancelled`. A fired send that targets another session is delivered
+  to it, while one that targets this session itself is enqueued on its
+  inbox, like any event sent to it, and is not drained while the session
+  stays halted.
 
   ## One subscriber stream
 
