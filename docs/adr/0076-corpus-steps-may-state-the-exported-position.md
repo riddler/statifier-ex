@@ -327,3 +327,25 @@ that numbers compare by JSON value was ruled by the operator, 2026-10-03.
    false, so no further microstep enters anything. The library case
    `loan_lost_after_timer` (under `conformance/cases/library/`) states
    `"states_to_invoke": ["lost"]` after its stopping step.
+
+## Note (2026-10-09): `_name` is asserted when the document names itself
+
+The rule point 2 of the 2026-10-04 Note states now holds; this Note
+records that and decides nothing new. No decision, consequence or Related
+entry above changes. That the rule lands now was decided by the conductor
+under a standing consent, 2026-10-09.
+
+- `Mix.Statifier.Corpus.PositionExpectation.render/1` keeps `_name` in the
+  rendered `datamodel` when the compiled document carries a `name`
+  attribute (`Statifier.Machine`'s `name` field), with the value the
+  engine bound at load time, and leaves it out when the document carries
+  none (its `drop_unset_name/2`). `_event`, `_ioprocessors` and
+  `_sessionid` stay left out in both cases (its `@left_out_variables`).
+- The sentences that list `_name` among the variables the rendering
+  leaves out (decision 3, and the 2026-10-02 Note's line for decisions 2
+  and 3) now hold for a document without a `name` attribute only; point
+  2's "until it lands the rendering leaves `_name` out whether or not the
+  document names itself" is met by this change.
+- No case under `conformance/cases/` names its document, so no
+  expectation in the library suite changes, no case's verdict changes,
+  and `corpus_hash` in `conformance/manifest.json` does not move.

@@ -16,12 +16,15 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
     ordinal among that state's own), sorted by `state` and then by `index`;
     the invocation's id is left out.
   - `running`: the export's boolean as it is.
-  - `datamodel`: the export's datamodel with `_event`, `_ioprocessors`,
-    `_name` and `_sessionid` removed. A string, a number, a boolean and
-    `nil` are written as they are, `:undefined` as `nil` (JSON `null`), a
-    list as an array and a map with string keys as an object, member by
-    member; any other value has no JSON form and is refused, naming its
-    variable.
+  - `datamodel`: the export's datamodel with `_event`, `_ioprocessors` and
+    `_sessionid` removed, and `_name` removed as well unless the document's
+    `<scxml>` element carries a `name` attribute: spec 5.10 binds `_name`
+    to that attribute's value, so every conforming implementation holds the
+    same one, while an unset `_name` is each implementation's own spelling.
+    A string, a number, a boolean and `nil` are written as they are,
+    `:undefined` as `nil` (JSON `null`), a list as an array and a map with
+    string keys as an object, member by member; any other value has no JSON
+    form and is refused, naming its variable.
 
   The export's other members (`identity`, `invoke_counter`, `send_counter`,
   `timer_counter`, `status`, `macrostep`, `microstep`, `round`, `trace` and
@@ -35,7 +38,7 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
 
   alias Statifier.{Machine, MachineState, Position}
 
-  @left_out_variables ~w(_event _ioprocessors _name _sessionid)
+  @left_out_variables ~w(_event _ioprocessors _sessionid)
 
   @doc """
   Whether any of `corpus_case`'s steps carries an `expect_position`.
@@ -68,7 +71,7 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
   @spec render(machine_state :: MachineState.t()) :: {:ok, map()} | {:error, String.t()}
   def render(%MachineState{} = machine_state) do
     with {:ok, exported} <- export(machine_state),
-         {:ok, datamodel} <- datamodel(exported.datamodel) do
+         {:ok, datamodel} <- datamodel(exported.datamodel, machine_state.machine.name) do
       {:ok,
        %{
          "configuration" => ids(exported.configuration),
@@ -160,9 +163,11 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
     |> Enum.map(fn {state, index} -> %{"state" => state, "index" => index} end)
   end
 
-  defp datamodel(datamodel) do
+  # `document_name` is the `<scxml>` element's `name` attribute, nil without one.
+  defp datamodel(datamodel, document_name) do
     datamodel
     |> Map.drop(@left_out_variables)
+    |> drop_unset_name(document_name)
     |> Enum.sort()
     |> Enum.reduce_while({:ok, %{}}, fn {name, value}, {:ok, acc} ->
       case value(value) do
@@ -176,6 +181,9 @@ defmodule Mix.Statifier.Corpus.PositionExpectation do
       end
     end)
   end
+
+  defp drop_unset_name(datamodel, name) when is_binary(name), do: datamodel
+  defp drop_unset_name(datamodel, _name), do: Map.delete(datamodel, "_name")
 
   defp value(:undefined), do: {:ok, nil}
 

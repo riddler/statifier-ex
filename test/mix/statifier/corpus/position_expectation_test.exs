@@ -421,9 +421,10 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
       end)
     end
 
-    # sabotage: "_name" dropped from @left_out_variables -> red on the
-    # datamodel; value/1's :undefined clause removed -> red, refused
-    test "leaves out the four system variables and writes an undefined value as null" do
+    # sabotage: drop_unset_name/2's fallback clause keeping "_name" -> the
+    # unset _name renders as null -> red; value/1's :undefined clause
+    # removed -> red, refused
+    test "leaves out the four system variables of a document with no name, and writes an undefined value as null" do
       machine_state = initialized(@patron)
 
       assert ~w(_event _ioprocessors _name _sessionid patron_id) ==
@@ -436,6 +437,23 @@ defmodule Mix.Statifier.Corpus.PositionExpectationTest do
 
       assert {:ok, %{"datamodel" => datamodel}} = PositionExpectation.render(due)
       assert datamodel == %{"patron_id" => "p-1", "due_at" => nil}
+    end
+
+    # sabotage: drop_unset_name/2's binary clause deleting "_name" as the
+    # fallback does -> the named document's _name is left out -> red;
+    # "_name" back in @left_out_variables -> red
+    test "writes _name when the document's scxml element carries a name attribute" do
+      named =
+        String.replace(
+          @patron,
+          ~s|datamodel="predicator" initial="patron">|,
+          ~s|datamodel="predicator" name="patron_record" initial="patron">|
+        )
+
+      machine_state = initialized(named)
+
+      assert {:ok, %{"datamodel" => datamodel}} = PositionExpectation.render(machine_state)
+      assert datamodel == %{"_name" => "patron_record", "patron_id" => "p-1"}
     end
 
     # sabotage: value/1's fallback clause answering {:ok, value} -> the Date
