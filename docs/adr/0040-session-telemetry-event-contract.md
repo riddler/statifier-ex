@@ -569,3 +569,56 @@ with the same correction to `docs/opentelemetry.md`, where the bridge design's
 span-attribute prose carried the same stale four-value enum. The bridge itself
 treats `trigger` as a pass-through string, so no `opentelemetry_statifier`
 code changes for it.
+
+## Note (2026-10-09): the re-entry path opens a macrostep span but does not advance `macrostep`
+
+This note decides nothing and changes no answer. It records how the
+ADR-0039 re-entry path counts today, which the ADR-0029 interaction
+section above leaves imprecise. No decision, consequence or table entry
+changes. It was ruled by the operator, 2026-10-06, as a dated Note with
+no code.
+
+The sentence in question says `init/1`, `drain_event/2`, `drain_cancel/1`
+and `deliver_internal/6` "each call the core and each advances the step
+counters". For `deliver_internal/6` that holds for two of the three
+counters only:
+
+- **`macrostep` does not advance.** `Statifier.Interpreter.deliver_internal/5`
+  raises the event onto the internal queue and folds
+  `main_event_loop/1` to quiescence, with no call to
+  `Statifier.MachineState.begin_macrostep/1`, the only writer of
+  `macrostep`. `handle_event/2` and `initialize/2` call it; the re-entry
+  door does not. A delivery through this door runs inside the
+  `macrostep` the session already holds.
+- **`round` advances on every delivery, and `microstep` when it takes a
+  transition.** The fold's `Statifier.Interpreter.microstep/1` calls
+  `Statifier.MachineState.begin_round/1` first on every round, and
+  `begin_microstep/1` runs once per round that takes a transition. Since
+  `macrostep` does not move, neither counter is reset, so both keep
+  climbing from where the last fold left them.
+- **The macrostep span still fires once per delivery.**
+  `Statifier.Session`'s `deliver_internal/6` wraps the core call in
+  `in_macrostep/4` with the trigger `:internal`, so each delivery emits
+  one `[:statifier, :session, :macrostep, :start]` and one `:stop`. The
+  stop event's `macrostep` measurement, read from the held position by
+  `Statifier.Telemetry.macrostep_stop/8`, then repeats the previous
+  value. A subscriber that counts stop events and one that reads the
+  `macrostep` measurement will disagree by the number of such deliveries.
+
+Every delivery through `deliver_internal/6` is counted this way: a
+`<send target="#_internal">`, a route the session could not reach
+(`communication_error/4`), and a host's `Statifier.Session.failed_send/3`.
+
+The send dedup key stays unique. ADR-0054 decision 3's key carries
+`macrostep`, `microstep` and `round` (`Statifier.Send.BasicHTTP`'s
+`send_key/2` spells all eight components). Within one `macrostep`,
+`round` only grows, because `begin_macrostep/1` is the only function
+that resets it, so a send made during a re-entry fold never repeats an
+earlier send's counter triple. The key relies on `round` and `microstep`
+advancing here, not on `macrostep`.
+
+Whether a re-entry delivery should be a macrostep of its own, by moving
+the counter or by changing the span, is not decided here. It will be
+answered once for both this engine and the TypeScript engine. Every
+claim in this Note was read at `b5e77403`, where a budget-halted
+session's `failed_send/3` still takes the ordinary clause.
