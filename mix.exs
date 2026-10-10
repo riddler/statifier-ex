@@ -68,9 +68,11 @@ defmodule Statifier.MixProject do
         "docs/chart-patterns.md",
         "docs/datamodel.md",
         "docs/basichttp.md",
+        "docs/publish-time-checks.md",
         "docs/architecture.md",
         "docs/observability.md",
-        "docs/opentelemetry.md"
+        "docs/opentelemetry.md",
+        "docs/upgrading.md"
       ],
       groups_for_extras: [
         "How-to guides": [
@@ -83,12 +85,16 @@ defmodule Statifier.MixProject do
         ],
         Reference: [
           "docs/datamodel.md",
-          "docs/basichttp.md"
+          "docs/basichttp.md",
+          "docs/publish-time-checks.md"
         ],
         Explanation: [
           "docs/architecture.md",
           "docs/observability.md",
           "docs/opentelemetry.md"
+        ],
+        Upgrading: [
+          "docs/upgrading.md"
         ]
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
