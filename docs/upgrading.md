@@ -5,7 +5,7 @@ executions and supplies the services a chart reaches through `<invoke>` and
 `<send>`. For each release from 2.6.0 to 2.12.1 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
-[CHANGELOG.md](../CHANGELOG.md) says what the library changed; this page
+The [Changelog](../CHANGELOG.md) says what the library changed; this page
 does not repeat it.
 
 No release in this range has a Breaking entry in the CHANGELOG. Every
@@ -63,7 +63,8 @@ raises `error.execution`.
    send. Routing a `<cancel>` for a send handed over before the position
    was saved is yours, as re-arming timers after a resume already is.
 
-The guide is the "`<send>` half" of [Extending](extending.md).
+The guide is the "`<send>` half" of
+[How to extend Statifier: `<invoke>` handlers and `<send>` types](extending.md).
 
 ## 2.6.1
 
@@ -92,8 +93,9 @@ the corpus re-vendors it at the `v2.6.1` tag; that is not a host step.
   call `check_accepts(machine, [name])` and read `unreachable`.
 
 Both functions report and refuse nothing: which list refuses a publish is
-your decision. [Publish-time checks](publish-time-checks.md) lists the
-runtime refusal each one stands in front of.
+your decision.
+[Publish-time checks: every runtime refusal and its twin](publish-time-checks.md)
+lists the runtime refusal each one stands in front of.
 
 ## 2.8.0
 
@@ -147,9 +149,9 @@ Requires `{:statifier, "~> 2.9"}`.
 - `Statifier.Publish.findings/2` takes a compiled chart and a declaration
   of the host's `send_types:`, `invoke_types:` and `accepts:`, and answers
   a list of findings, each naming its row of
-  [Publish-time checks](publish-time-checks.md) with a `kind`, a location
-  and its data. Like 2.7.0's functions, it refuses nothing: which finding
-  refuses a publish is your decision.
+  [Publish-time checks: every runtime refusal and its twin](publish-time-checks.md)
+  with a `kind`, a location and its data. Like 2.7.0's functions, it
+  refuses nothing: which finding refuses a publish is your decision.
 - `Statifier.MachineState`'s `last_selection` reads `:selected` when the
   last external event selected a transition, `:none` when it selected
   none, and `nil` before any external event.
