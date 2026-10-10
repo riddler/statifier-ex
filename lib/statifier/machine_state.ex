@@ -505,7 +505,9 @@ defmodule Statifier.MachineState do
   the core has never emitted an unsupported-type `<send>` for a caller to
   read. Stamped once per session, like
   `t:Statifier.MachineState.invoke_types/0`, and dropped from a persisted
-  position the same way (ADR-0064).
+  position the same way (ADR-0064). The set of types never changes after
+  the stamp; `Statifier.Session.replace_send_type/3` re-stamps a running
+  session with one type's registration replaced.
   """
   @type send_types :: SendTypes.t() | nil
 
@@ -1035,5 +1037,49 @@ defmodule Statifier.MachineState do
       {:error, _reason} = error ->
         error
     end
+  end
+
+  # The one replace step of the live `Statifier.Session.replace_send_type/3`
+  # (ADR-0069's Amendment of 2026-10-09): `machine_state` re-stamped with
+  # `type`'s registration replaced by `registration`, and the
+  # `_ioprocessors` entry for `type` recomputed from it as `new/2` computes
+  # an entry at session start. Every other entry, and the set of keys, are
+  # left as they are. An entry that raises, or is not a string-keyed map,
+  # is answered as `{:error, {:ioprocessors_entry, type, exception}}`, with
+  # nothing returned to store. The datamodel it reads is the one `new/2`
+  # writes, as `refresh_ioprocessors/1`'s is: a state without an
+  # `_ioprocessors` map or a string `_sessionid` raises
+  # `FunctionClauseError`. The session asks it only for a type its stamp
+  # already holds. Internal, hence `@doc false`: this is not a public
+  # counterpart of the live call, because a host that changes a
+  # registration before a resume re-stamps with `put_send_types/2`.
+  @doc false
+  @spec replace_send_type(
+          machine_state :: t(),
+          type :: String.t(),
+          registration :: SendTypes.registration()
+        ) :: {:ok, t()} | {:error, {:ioprocessors_entry, String.t(), Exception.t()}}
+  def replace_send_type(
+        %__MODULE__{
+          send_types: %SendTypes{} = send_types,
+          datamodel: %{"_ioprocessors" => ioprocessors, "_sessionid" => session_id} = datamodel
+        } = machine_state,
+        type,
+        registration
+      )
+      when is_map(ioprocessors) and is_binary(session_id) do
+    replaced = SendTypes.replace(send_types, type, registration)
+
+    entries =
+      SystemVariables.replaced_ioprocessors(ioprocessors, replaced, type, session_id)
+
+    {:ok,
+     %{
+       machine_state
+       | send_types: replaced,
+         datamodel: Map.put(datamodel, "_ioprocessors", entries)
+     }}
+  rescue
+    exception -> {:error, {:ioprocessors_entry, type, exception}}
   end
 end

@@ -7,9 +7,11 @@ defmodule Statifier.Send.Types do
 
   This is a claim, not an observation: it is stamped once per session via
   `Statifier.MachineState.new/2`'s `:send_types` option (or
-  `Statifier.MachineState.put_send_types/2` after a resume), fixed for the
-  session's lifetime, and carries no obligation to track anything between
-  writes.
+  `Statifier.MachineState.put_send_types/2` after a resume), and carries
+  no obligation to track anything between writes. The set of types is
+  fixed for the session's lifetime; one type's registration, its module
+  and options, can be replaced on a running session by
+  `Statifier.Session.replace_send_type/3`, which re-stamps the session.
 
   The module holds the two things ADR-0069 asks to exist exactly once:
 
@@ -122,6 +124,26 @@ defmodule Statifier.Send.Types do
       entries:
         Map.new(processors, fn {type, {module, _opts}} -> {type, entry!(module, type)} end),
       processors: processors
+    }
+  end
+
+  # `send_types` with `type`'s registration replaced by `registration`: its
+  # module and options in `processors`, and its `ioprocessors_entry/1`
+  # value in `entries`, built and checked as `from_send_types/1` builds and
+  # checks every entry, so it raises as that function raises. `types` and
+  # every other type are left as they are. Internal:
+  # `Statifier.MachineState`'s replace step for the live
+  # `Statifier.Session.replace_send_type/3` is its one caller, and it only
+  # replaces a type the set already holds, hence `@doc false`.
+  @doc false
+  @spec replace(send_types :: t(), type :: String.t(), registration :: registration()) :: t()
+  def replace(%__MODULE__{} = send_types, type, registration) when is_binary(type) do
+    {module, _opts} = processor = split(registration)
+
+    %{
+      send_types
+      | entries: Map.put(send_types.entries, type, entry!(module, type)),
+        processors: Map.put(send_types.processors, type, processor)
     }
   end
 
