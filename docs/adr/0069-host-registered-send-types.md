@@ -784,7 +784,7 @@ the answer outside a session.
 
 ## Amendment (2026-10-09): a running session's registration for one type can be replaced
 
-Status: proposed (2026-10-09) - amends decision 2 (the registration is
+Status: accepted (2026-10-09) - amends decision 2 (the registration is
 stamped once per session); decision 1, decisions 3 to 5, the Amendment of
 2026-10-02 and the Notes above are unchanged
 
@@ -882,3 +882,55 @@ in the table with the position unchanged, the registration kept after a
 raising entry, the caller-side raise for a malformed registration, a
 delayed send held before the call cancelled through the new
 registration, and an atom naming no module accepted and stored.
+
+## Note (2026-10-09): the Amendment of 2026-10-09 is accepted
+
+The Amendment of 2026-10-09 "a running session's registration for one
+type can be replaced" is accepted on 2026-10-09. Its Status line is the
+only line of the record that changes; no decision, consequence, Note or
+Amendment paragraph changes here, and this Note decides nothing.
+
+Its code shipped in statifier 2.13.0: the tag `v2.13.0` names
+`f0b1095f`, and statifier 2.13.0 is published, from the release
+workflow's run on that tag push
+(https://github.com/riddler/statifier-ex/actions/runs/38027624648).
+Every claim the Amendment makes was verified against `main` at
+`f0b1095f`:
+
+- the call, its guard and its caller-side `FunctionClauseError` for a
+  `type` that is not a string or a registration of another shape, an
+  atom naming no module accepted: `Statifier.Session.replace_send_type/3`;
+- the order of the answers, the halted and recorded refusals as
+  `refresh_ioprocessors/1` gives them, the unknown type, and the
+  session's `:send_types` map and `%MachineState{}` stamp replaced
+  together only on `:ok`: `Statifier.Session`'s `handle_call/3` clauses
+  for the call;
+- the processor's refusal spelled as `start_link/2` spells it, and a
+  check breaking its contract refusing nothing:
+  `Statifier.Send.Types.check_registration/2`;
+- the raising entry answered with the position as it was:
+  `Statifier.MachineState.replace_send_type/3`, which is `@doc false`;
+- the entry recomputed as at start, and every other entry and the set of
+  keys left as they are:
+  `Statifier.Evaluator.SystemVariables.replaced_ioprocessors/4`;
+- a child started afterwards under `:inherit_send_types` started with
+  the new registration: `Statifier.Session`'s `inherited_send_type_opts/1`,
+  which hands over the session's `:send_types` map;
+- a `<cancel>` planned through the type's current registration, the
+  session keeping only each held send's type, and `Statifier.Replay`
+  keeping the same map by the same rule:
+  `Statifier.Session.Effects.plan/2` and
+  `Statifier.Session.Effects.register_held_send/3`;
+- the pure re-stamp before a resume:
+  `Statifier.MachineState.put_send_types/2` and
+  `Statifier.MachineState.refresh_ioprocessors/1`;
+- the tests the Amendment names: `Statifier.Send.ReplaceSendTypeTest`.
+
+The Amendment's "Why" paragraph describes the package at `2556639d`, as
+it says, before the call existed. The changes to `Statifier.Session`
+after the Amendment merged (a budget-halted session dropping a failed
+send, and the two documentation changes that ADR-0075's two Notes of
+2026-10-09 record, on both refresh calls' input and on delayed sends
+under `:budget_exhausted`) change none of the answers above: a
+budget-halted session is halted, and the call answers it
+`{:error, :not_running}`.
