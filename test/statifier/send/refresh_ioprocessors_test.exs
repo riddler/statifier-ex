@@ -494,4 +494,80 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
       end
     end
   end
+
+  # ADR-0075's Note of 2026-10-09: a state built by hand without an
+  # `_ioprocessors` map or a string `_sessionid` is outside both refresh
+  # calls' input, and the answers below are pinned as they are, not as a
+  # contract to widen.
+  describe "a state outside the refresh calls' input" do
+    setup %{machine: machine, route: route} do
+      session = start!(machine, send_types: send_types([base_url: @old_depot], route))
+      position = Session.snapshot(session)
+      :ok = Session.stop(session)
+      %{position: position, types: send_types([base_url: @old_depot], route)}
+    end
+
+    # sabotage: `MachineState.refresh_ioprocessors/2` answers
+    # `{:ok, machine_state}` for a datamodel without `_ioprocessors` -> no
+    # raise, and the first `assert_raise` reddens. Confirmed red and
+    # reverted.
+    test "the pure call raises FunctionClauseError", %{position: position} do
+      without_map = %{position | datamodel: Map.delete(position.datamodel, "_ioprocessors")}
+      unnamed = %{position | datamodel: Map.put(position.datamodel, "_sessionid", :unnamed)}
+
+      assert_raise FunctionClauseError, fn -> MachineState.refresh_ioprocessors(without_map) end
+      assert_raise FunctionClauseError, fn -> MachineState.refresh_ioprocessors(unnamed) end
+    end
+
+    @tag :capture_log
+    # sabotage: the live clause of `Session.handle_call/3` replies `:ok`
+    # without asking `MachineState.refresh_ioprocessors/2` -> the call
+    # answers and the session stays up, and the exit match reddens.
+    # Confirmed red and reverted.
+    test "the live refresh exits a session resumed without an _ioprocessors map",
+         %{machine: machine, position: position, types: types} do
+      without_map = %{position | datamodel: Map.delete(position.datamodel, "_ioprocessors")}
+      {:ok, session} = Statifier.start_session(machine, resume: without_map, send_types: types)
+      ref = Process.monitor(session)
+
+      answer =
+        try do
+          Session.refresh_ioprocessors(session)
+        catch
+          :exit, reason -> {:exited, reason}
+        end
+
+      assert {:exited, {{:function_clause, _stack}, {GenServer, :call, _call}}} = answer
+      assert_receive {:DOWN, ^ref, :process, ^session, {:function_clause, _stack}}, 5_000
+    end
+
+    @tag :capture_log
+    # sabotage: the live `{:replace_send_type, ...}` clause of
+    # `Session.handle_call/3` replies `:ok` without asking
+    # `MachineState.replace_send_type/3` -> the call answers and the
+    # session stays up, and the exit match reddens. Confirmed red and
+    # reverted.
+    test "the replace call answers its own refusals first, then exits as the refresh does",
+         %{machine: machine, position: position, types: types} do
+      without_map = %{position | datamodel: Map.delete(position.datamodel, "_ioprocessors")}
+      {:ok, session} = Statifier.start_session(machine, resume: without_map, send_types: types)
+      ref = Process.monitor(session)
+
+      assert Session.replace_send_type(session, "parcel:van", BasicHTTP) ==
+               {:error, {:unknown_send_type, "parcel:van"}}
+
+      assert {:error, {:send_types, {:invalid_registration, "basichttp", _reason}}} =
+               Session.replace_send_type(session, "basichttp", BasicHTTP)
+
+      answer =
+        try do
+          Session.replace_send_type(session, "basichttp", {BasicHTTP, base_url: @new_depot})
+        catch
+          :exit, reason -> {:exited, reason}
+        end
+
+      assert {:exited, {{:function_clause, _stack}, {GenServer, :call, _call}}} = answer
+      assert_receive {:DOWN, ^ref, :process, ^session, {:function_clause, _stack}}, 5_000
+    end
+  end
 end

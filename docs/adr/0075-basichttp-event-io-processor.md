@@ -1099,3 +1099,54 @@ map or raises, and is not answered as an error.
 second and third points for the live call, and
 `Statifier.MachineState.refresh_ioprocessors/1`'s states the second for
 the pure call.
+
+## Note (2026-10-09): a state without an `_ioprocessors` map or a string `_sessionid` is outside both refresh calls' input
+
+This Note decides nothing new and changes no answer. It records where
+the two refresh calls of the Amendment of 2026-10-02, "a host refreshes
+the registered `_ioprocessors` entries by an explicit call", stop taking
+input, and that the `FunctionClauseError` a state outside it meets
+stays (decided by the conductor under a standing consent, 2026-10-09).
+The behaviour below was read on `main` at `92548200` and by running it.
+
+**The input is the datamodel `new/2` writes.** Both calls read an
+`_ioprocessors` map and a string `_sessionid`, the two keys
+`Statifier.MachineState.new/2` writes into every state it builds. A
+state built by hand without either, or with a `_sessionid` that is not
+a string, is outside both calls' input:
+
+- `Statifier.MachineState.refresh_ioprocessors/1` on such a state
+  raises `FunctionClauseError` when its `send_types` stamp is not `nil`,
+  from the guard of `Statifier.Evaluator.SystemVariables`'s
+  `refreshed_ioprocessors/4`. With a `nil` stamp it answers
+  `{:ok, machine_state}` unchanged, as it does for every state with that
+  stamp, and reads neither key.
+- `Statifier.Session.refresh_ioprocessors/1` on a running, unrecorded
+  session resumed from a state without an `_ioprocessors` map exits the
+  session with that `FunctionClauseError`, and the caller exits with
+  it. The answers that do not read the datamodel come first, as for any
+  session: a session that registers nothing answers `:ok`, a halted one
+  `{:error, :not_running}`, and a recorded one
+  `{:error, :recorded_session}`.
+
+**Why it stays.** An answer such as a named error would be a changed
+answer and a new wire shape for a state no host builds through the
+library, so it is not taken. Every state `new/2` builds carries both
+keys, so a host that builds its states through the library never meets
+this raise.
+
+**The replace call answers by its own contract.**
+`Statifier.Session.replace_send_type/3` (ADR-0069's Amendment of
+2026-10-09) on such a session gives its own refusals first, as it does
+for any session: `{:error, :not_running}`,
+`{:error, :recorded_session}`, `{:error, {:unknown_send_type, type}}`
+and `{:error, {:send_types, {:invalid_registration, type, reason}}}`.
+Only a call that passes all four reaches the replace step,
+`Statifier.MachineState`'s `replace_send_type/3`, whose head reads the
+same two keys, and a running, unrecorded session resumed without an
+`_ioprocessors` map then exits as the refresh does. Its documentation
+says so.
+
+`Statifier.MachineState.refresh_ioprocessors/1`'s and
+`Statifier.Session.refresh_ioprocessors/1`'s documentation each name
+this Note.

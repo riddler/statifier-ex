@@ -1037,7 +1037,9 @@ defmodule Statifier.Session do
   raised, so a processor's raise never exits a running session. A
   running, unrecorded session resumed from a state built by hand without
   an `_ioprocessors` map is outside this call's input, and the call
-  exits it (`Statifier.MachineState.refresh_ioprocessors/1` says why).
+  exits it (`Statifier.MachineState.refresh_ioprocessors/1` says why;
+  ADR-0075's Note of 2026-10-09 records the boundary and that the exit
+  stays).
   """
   @spec refresh_ioprocessors(server :: server()) ::
           :ok
