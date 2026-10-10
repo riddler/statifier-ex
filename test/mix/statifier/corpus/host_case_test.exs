@@ -419,6 +419,19 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
     # A W3C-shaped case whose host object carries event_io_processors, its
     # one key there (ADR-0075 decision 7). The document sends `ping` to its
     # own Basic HTTP location and passes only when the event comes back.
+    #
+    # Unlike the W3C cases it is shaped after, the document starts no
+    # `timeout` timer: a 3s timer raced the loopback round trip, so a
+    # machine loaded enough to stall that trip past 3s could send the chart
+    # to `fail`. No timer is needed for the case to end.
+    # The POST runs inside the session's macrostep and the front enqueues
+    # `ping` before it answers 204, so `ping` is queued before the session
+    # answers any call made after its macrostep; the runner reads a
+    # configuration only after two consecutive settled polls, so the second
+    # one reads past `ping`. A send that is never delivered leaves the chart
+    # in `s0` with nothing queued and no timer pending, which the runner
+    # reads as settled, and a send that fails raises an error event that `*`
+    # takes to `fail`. Either way the case disagrees without a clock.
 
     @basic_http "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
 
@@ -426,7 +439,6 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="predicator" initial="s0">
         <state id="s0">
             <onentry>
-                <send event="timeout" delay="3s"/>
                 <send event="ping" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
                       targetexpr="_ioprocessors['basichttp']['location']"/>
             </onentry>
@@ -459,7 +471,7 @@ defmodule Mix.Statifier.Corpus.HostCaseTest do
 
     # sabotage: with_event_io_processors/2 registering the recording
     # processor for the URI instead -> the send is handed, not delivered,
-    # and the chart reaches fail -> red
+    # and the chart stays in s0 -> red
     test "hands none of the processor's sends to the recording processor" do
       host = %{
         "event_io_processors" => [@basic_http],
