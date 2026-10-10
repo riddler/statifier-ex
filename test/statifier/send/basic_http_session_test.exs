@@ -33,7 +33,9 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
   # the sender through `failed_send/3` (decision 8, point d), and a delayed
   # send and its cancel (decision 9). Every POST goes through
   # `Statifier.BasicHTTPTestTransport`, which this test process registers
-  # under its own name to receive them, so the tests are `async: false`.
+  # under its own name to receive them, so the tests are `async: false`,
+  # and each test's setup waits for the previous holder of that name to
+  # exit before registering.
 
   import Statifier.Testing.Case, only: [test_scxml: 5]
 
@@ -48,8 +50,38 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
   @send_types %{@uri => {BasicHTTP, @opts}, "basichttp" => {BasicHTTP, @opts}}
 
   setup do
-    Process.register(self(), BasicHTTPTestTransport)
+    register_as_transport_listener()
     :ok
+  end
+
+  # sabotage: n/a - test setup plumbing; it asserts no lib/ behaviour.
+  # The previous test's process can still hold the transport's name while
+  # it exits, after this test's process has started, and registering then
+  # raises. So this waits for that holder's exit and reads the name again
+  # before registering; no other module registers it.
+  defp register_as_transport_listener do
+    case Process.whereis(BasicHTTPTestTransport) do
+      nil ->
+        Process.register(self(), BasicHTTPTestTransport)
+
+      holder ->
+        await_exit(holder)
+        register_as_transport_listener()
+    end
+  end
+
+  defp await_exit(holder) do
+    ref = Process.monitor(holder)
+
+    receive do
+      {:DOWN, ^ref, :process, ^holder, _reason} -> :ok
+    after
+      10_000 ->
+        flunk(
+          "the previous holder of #{inspect(BasicHTTPTestTransport)}'s name " <>
+            "did not exit within ten seconds"
+        )
+    end
   end
 
   # A bare `Session.start_link/2` for one Basic HTTP registration, with a
