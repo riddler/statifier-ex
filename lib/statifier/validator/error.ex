@@ -36,7 +36,7 @@ defmodule Statifier.Validator.Error do
           | {:unresolved_target, id :: binary()}
           | {:unresolved_initial, id :: binary()}
           | {:initial_not_descendant, id :: binary(), parent_id :: binary() | nil}
-          | {:initial_on_atomic_state, id :: binary()}
+          | {:initial_on_atomic_state, id :: binary() | nil}
           | {:initial_attribute_and_element, id :: binary()}
           | {:transition_count, owner :: owner(), count :: non_neg_integer()}
           | {:transition_missing_target, owner :: owner()}
@@ -195,16 +195,21 @@ defmodule Statifier.Validator.Error do
   attribute or `<initial>` element, and the spec MUST NOT: an atomic state
   (no `states` children, or a `:parallel`, `:final`, or `:history` kind) has
   nothing to default into. Fires ahead of, and suppresses, the descendancy
-  check for the same state.
+  check for the same state. `id` is `nil` when that state has no `id`: a
+  `<state>` need not carry one, and check 3 still reports its initial.
   """
-  @spec initial_on_atomic_state(id :: binary(), location :: Location.t()) :: t()
-  def initial_on_atomic_state(id, %Location{} = location) when is_binary(id) do
+  @spec initial_on_atomic_state(id :: binary() | nil, location :: Location.t()) :: t()
+  def initial_on_atomic_state(id, %Location{} = location)
+      when is_binary(id) or is_nil(id) do
     %__MODULE__{
       reason: {:initial_on_atomic_state, id},
-      message: "state #{inspect(id)} has no child states to default into",
+      message: "#{describe_state(id)} has no child states to default into",
       location: location
     }
   end
+
+  defp describe_state(nil), do: "a state with no id"
+  defp describe_state(id), do: "state #{inspect(id)}"
 
   @doc """
   Check 4 (spec 3.3, 3.6): a state carries both an `initial` attribute and

@@ -2,8 +2,7 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
   use ExUnit.Case, async: true
 
   alias Statifier.{Lowering, Parser, Validator}
-  alias Statifier.Validator.Checks.InitialTargets
-  alias Statifier.Validator.{Context, Error}
+  alias Statifier.Validator.Error
 
   defp lower!(xml) do
     {:ok, root} = Parser.parse(xml)
@@ -13,11 +12,6 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
 
   defp validate!(xml) do
     Validator.validate(lower!(xml), xml)
-  end
-
-  defp check(xml) do
-    document = lower!(xml)
-    InitialTargets.check(document, Context.build(document, xml))
   end
 
   describe "check/2 - unresolved_initial" do
@@ -214,35 +208,48 @@ defmodule Statifier.Validator.Checks.InitialTargetsTest do
       assert {:ok, _document, _warnings} = validate!(element_xml)
     end
 
-    # The two reasons that carry the state's own id are not answered for a
-    # state with none, as before it was checked; this pins that only the
-    # descendancy answer changed.
-    #
-    # sabotage: check_state/2's `%State{id: nil}` clause drops its
-    # `not atomic_for_initial?(state)` conjunct -> the atomic id-less
-    # state's target (not a descendant of a state with no children) is
-    # reported, reddening the first match; and unresolved_errors/3's
-    # `%State{id: nil}` clause is deleted -> the unresolved id is reported,
-    # reddening the second
-    test "an atomic or unresolved initial on a state with no id reports nothing" do
-      atomic_xml = """
-      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-          <state initial="returned"/>
-          <state id="returned"/>
-      </scxml>
-      """
-
-      assert [] == check(atomic_xml)
-
-      unresolved_xml = """
-      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-          <state initial="missing">
-              <state id="on_loan"/>
+    # sabotage: check_initial_attribute/2 answers [] for an unresolved id on
+    # a state with no id (the skip this check used to carry) -> the
+    # document validates and compile/2 raises KeyError, reddening the
+    # validate match below
+    test "an unresolved initial on a state with no id is reported by the missing id" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <state initial="missing">
+                  <state id="c"/>
+              </state>
           </state>
       </scxml>
       """
 
-      assert [] == check(unresolved_xml)
+      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 3
+      assert {:error, [%Error{reason: {:unresolved_initial, "missing"}}]} = Statifier.compile(xml)
+    end
+
+    # sabotage: check_state/2 answers [] for an atomic state with no id (the
+    # skip this check used to carry) -> the document validates and
+    # compile/2 raises KeyError, reddening the validate match below; and
+    # Error's describe_state/1 nil arm answers `state nil` -> the message
+    # match reddens
+    test "an initial on an atomic state with no id is reported with a nil id" do
+      xml = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+          <state id="a">
+              <state initial="a"/>
+          </state>
+      </scxml>
+      """
+
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, nil}} = error], _warnings} =
+               validate!(xml)
+
+      assert error.location.start_line == 3
+      assert error.message == "a state with no id has no child states to default into"
+      assert {:error, [%Error{reason: {:initial_on_atomic_state, nil}}]} = Statifier.compile(xml)
     end
   end
 
