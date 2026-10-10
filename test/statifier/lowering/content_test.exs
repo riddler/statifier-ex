@@ -35,7 +35,7 @@ defmodule Statifier.Lowering.ContentTest do
     state
   end
 
-  describe "lower/1 - <onentry> and <onexit>, happy path" do
+  describe "lower/2 - <onentry> and <onexit>, happy path" do
     # sabotage: `build_block/3` hardcodes the tag `:onentry` instead of using
     # its own `tag` argument -> the onexit assertion below reddens since the
     # block would land in `state.onentry` instead of `state.onexit`
@@ -102,7 +102,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <raise>, happy path" do
+  describe "lower/2 - <raise>, happy path" do
     # sabotage: `build_raise/2` splits `event` with `Attributes.list/2`
     # instead of reading it raw with `Attributes.value/2` -> this test
     # reddens because `event` would become `["a", "b"]`, not the raw string
@@ -115,7 +115,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <raise>, missing event" do
+  describe "lower/2 - <raise>, missing event" do
     # sabotage: `build_raise/2`'s `nil` branch is dropped in favor of always
     # building a `%Raise{event: nil}` (bypassing `@enforce_keys`'s guarantee
     # some other way) -> this test reddens because no
@@ -130,7 +130,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <log>, happy path" do
+  describe "lower/2 - <log>, happy path" do
     # sabotage: `build_log/2` swaps the `label` and `expr` reads -> this test
     # reddens since the values would land on the wrong fields
     test "label and expr both lower as raw strings" do
@@ -167,7 +167,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <assign>, happy path" do
+  describe "lower/2 - <assign>, happy path" do
     # sabotage: `build_assign/2` swaps the `location` and `expr` reads ->
     # this test reddens since the values would land on the wrong fields
     test "location and expr both lower as raw strings, with both attribute_locations recorded" do
@@ -193,7 +193,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <assign>, child text" do
+  describe "lower/2 - <assign>, child text" do
     # sabotage: `build_assign/2`'s `%Assign{}` literal drops `text:
     # DOM.text(element)` (leaving the struct default `text: nil`) -> this
     # test reddens since `text` would be `nil` instead of the child text.
@@ -284,7 +284,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <assign>, missing location" do
+  describe "lower/2 - <assign>, missing location" do
     # sabotage: `build_assign/2`'s `nil` branch is dropped in favor of always
     # building a `%Assign{location: nil}` (bypassing `@enforce_keys`'s
     # guarantee some other way) -> this test reddens because no
@@ -299,7 +299,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - misplaced <assign>" do
+  describe "lower/2 - misplaced <assign>" do
     # sabotage: the `%Assign{}`-specific `place/3` clause in
     # `lib/statifier/lowering/builders.ex` is deleted, so a misplaced
     # `<assign>` falls into the generic `{:content_node, node}` clause, which
@@ -316,7 +316,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - a transition's own content" do
+  describe "lower/2 - a transition's own content" do
     # sabotage: `build_transition/2` reverts to discarding `walk_children/2`'s
     # results (`{_results, errors} = ...`) instead of placing them via
     # `place_children/3` -> this test reddens because `transition.content`
@@ -329,11 +329,11 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - misplaced content" do
+  describe "lower/2 - misplaced content" do
     # sabotage: `place/3` gains a `{:state, _state}` clause for `%Block{}`
     # that silently drops the child (returning the parent unchanged, no
     # error) -> this test reddens because no `{:misplaced_element, ...}`
-    # error would be produced; `lower/1` would return `{:ok, _}` instead
+    # error would be produced; `lower/2` would return `{:ok, _}` instead
     test ~s(a <state> inside an <onentry> produces {:misplaced_element, "state", "onentry"}) do
       xml = ~s(<scxml><state id="s"><onentry><state id="nope"/></onentry></state></scxml>)
 
@@ -342,7 +342,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <if>/<elseif>/<else>, happy path" do
+  describe "lower/2 - <if>/<elseif>/<else>, happy path" do
     # sabotage: `place/3`'s `%If{}` clause for `{:elseif, _}`/`{:else, _}`
     # seals the open branch onto the *front* of `closed` instead of leaving
     # it as `[branch, open | closed]` (an off-by-one in the fold) -> the
@@ -399,7 +399,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <else/> as the first child, an empty first partition" do
+  describe "lower/2 - <else/> as the first child, an empty first partition" do
     # sabotage: `build_if/2` builds the first branch's `content` field with
     # a hardcoded non-empty default instead of `[]` -> this test's empty-list
     # match on the first branch reddens.
@@ -434,7 +434,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <if>/<elseif>, missing cond" do
+  describe "lower/2 - <if>/<elseif>, missing cond" do
     # sabotage: `build_if/2`'s `nil` branch is dropped in favor of always
     # building an `%If{}` with a `nil`-cond first branch (bypassing the
     # required-attribute rule) -> this test reddens because no
@@ -461,10 +461,10 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - a stray <elseif> outside any <if>" do
+  describe "lower/2 - a stray <elseif> outside any <if>" do
     # sabotage: a `place/3` clause is added that accepts `{:elseif, _}` into
     # any `%State{}` (dropping Decision 7's restriction to `%If{}` parents
-    # only) -> this test reddens because `lower/1` would return `{:ok, _}`
+    # only) -> this test reddens because `lower/2` would return `{:ok, _}`
     # instead of reporting the misplaced element.
     test ~s(a stray <elseif> directly under <state> produces {:misplaced_element, "elseif", "state"}) do
       xml = ~s(<scxml><state id="s"><elseif cond="true"/></state></scxml>)
@@ -476,7 +476,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - a nested <if>" do
+  describe "lower/2 - a nested <if>" do
     # sabotage: `place/3`'s `%If{}` clause for `{:content_node, node}`
     # appends to `closed` instead of the currently `open` branch -> the
     # nested `%If{}` would land in the outer `<if>`'s wrong branch (or be
@@ -521,7 +521,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <foreach>, happy path" do
+  describe "lower/2 - <foreach>, happy path" do
     # sabotage: `build_foreach/2` reads `element, "index"` through
     # `Attributes.value/2` unconditionally into `index` but the field is
     # dropped from the built `%Foreach{}` (hardcoded `nil` instead) -> this
@@ -562,7 +562,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - a self-closed <foreach>, an empty content list" do
+  describe "lower/2 - a self-closed <foreach>, an empty content list" do
     # sabotage: `build_foreach/2` builds the `%Foreach{}`'s `content` field
     # with a hardcoded non-empty default instead of the walked (empty)
     # children -> this test's empty-list match reddens.
@@ -585,7 +585,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <foreach>, missing required attributes" do
+  describe "lower/2 - <foreach>, missing required attributes" do
     # sabotage: `build_foreach/2`'s missing-attribute check for `array` is
     # dropped (only `item`'s absence is checked) -> this test would see no
     # `{:missing_attribute, "foreach", "array"}` error, reddening the match.
@@ -624,7 +624,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <assign> inside <foreach>" do
+  describe "lower/2 - <assign> inside <foreach>" do
     # sabotage: `place/3`'s `%Foreach{}` clause is moved below the
     # unconditional `%Assign{}` clause -> the `%Assign{}` clause matches
     # `{:content_node, %Assign{}}` against any parent first, so this
@@ -650,7 +650,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <foreach> and <if> nested in each other" do
+  describe "lower/2 - <foreach> and <if> nested in each other" do
     # sabotage: `place/3`'s `%Foreach{}` clause prepends into the wrong
     # field (e.g. always into a hardcoded `[]` rather than
     # `parent.content`) -> the nested `%If{}` would never appear inside the
@@ -727,7 +727,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <script>, happy path" do
+  describe "lower/2 - <script>, happy path" do
     # sabotage: `build_script/2` sets `text: nil` unconditionally instead of
     # `DOM.text(element)` -> the text assertion below reddens
     test "text is DOM.text/1's verbatim body" do
@@ -753,7 +753,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - <script src>, unsupported" do
+  describe "lower/2 - <script src>, unsupported" do
     # sabotage: `build_script/2`'s `case Attributes.value(element, "src")`
     # clauses are swapped (the `src` branch builds a struct, the `nil`
     # branch reports the error) -> a written `src` would build a struct
@@ -783,7 +783,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - misplaced <script>" do
+  describe "lower/2 - misplaced <script>" do
     # sabotage: `content_node_name/1`'s `%Script{}` clause is dropped ->
     # this `<script>` (misplaced, so it reaches `content_node_name/1` via
     # the generic `{:content_node, node}` catch-all) crashes with a
@@ -800,7 +800,7 @@ defmodule Statifier.Lowering.ContentTest do
     end
   end
 
-  describe "lower/1 - a top-level <script>" do
+  describe "lower/2 - a top-level <script>" do
     # sabotage: the `%Script{}`/`%Document{}` `place/3` clause is deleted,
     # leaving only the generic misplaced fallback -> a top-level `<script>`
     # would report `{:misplaced_element, "script", "scxml"}` instead of

@@ -15,7 +15,7 @@ defmodule Statifier.LoweringTest do
     document
   end
 
-  describe "lower/1 - the <scxml> root, happy path" do
+  describe "lower/2 - the <scxml> root, happy path" do
     # sabotage: build_scxml/2 assigns `version: Attributes.value(element, "datamodel")`
     # (swaps the two field reads) -> the version/datamodel assertions below
     # reddens
@@ -90,7 +90,7 @@ defmodule Statifier.LoweringTest do
     end
   end
 
-  describe "lower/1 - unsupported children of <scxml>" do
+  describe "lower/2 - unsupported children of <scxml>" do
     # sabotage: `finalize/2` drops `Enum.sort_by(errors, ...)` and returns the
     # accumulated list unsorted -> the ordered names assertion below reddens
     test "three unknown children report three errors in document order" do
@@ -115,7 +115,7 @@ defmodule Statifier.LoweringTest do
     end
   end
 
-  describe "lower/1 - stray text" do
+  describe "lower/2 - stray text" do
     # sabotage: `walk_child/4`'s text clause reports `location` from the
     # enclosing element instead of the text node's own `location` -> the
     # slice assertion below reddens
@@ -138,8 +138,8 @@ defmodule Statifier.LoweringTest do
     end
   end
 
-  describe "lower/1 - a non-scxml root" do
-    # sabotage: `lower/1` looks the builder up with the literal `"scxml"`
+  describe "lower/2 - a non-scxml root" do
+    # sabotage: `lower/2` looks the builder up with the literal `"scxml"`
     # instead of the root's own `name`, so any root name dispatches -> this
     # test reddens because no {:unexpected_root, _} error is produced
     test "a root element other than <scxml> is rejected" do
@@ -190,7 +190,7 @@ defmodule Statifier.LoweringTest do
     end
   end
 
-  describe "lower/1 - a nested <scxml>" do
+  describe "lower/2 - a nested <scxml>" do
     # sabotage: the dispatch map regains an `"scxml"` key, here
     # `"scxml" => &Builders.build_state/2` (a tagged result, so nothing
     # raises) -> the nested `<scxml>` is placed as a state, `lower/2`

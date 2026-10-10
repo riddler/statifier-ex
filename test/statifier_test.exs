@@ -35,7 +35,7 @@ defmodule StatifierTest do
   end
 
   # sabotage: in `Statifier.compile/1`, swap the `with` clause order so
-  # `Validator.validate/2` runs before `Lowering.lower/1` (pass the DOM
+  # `Validator.validate/2` runs before `Lowering.lower/2` (pass the DOM
   # root straight to the validator) -> this test reddens with a
   # FunctionClauseError instead of the expected [%Lowering.Error{}] match,
   # because the validator never receives a %Statifier.Document{}

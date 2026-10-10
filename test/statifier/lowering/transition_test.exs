@@ -20,7 +20,7 @@ defmodule Statifier.Lowering.TransitionTest do
     transition
   end
 
-  describe "lower/1 - <transition>, happy path" do
+  describe "lower/2 - <transition>, happy path" do
     # sabotage: `build_transition/2` sets `event: [Attributes.value(element,
     # "cond")]` instead of `Attributes.list(element, "event")` -> the split
     # assertion below reddens
@@ -63,7 +63,7 @@ defmodule Statifier.Lowering.TransitionTest do
     end
   end
 
-  describe "lower/1 - <transition> type" do
+  describe "lower/2 - <transition> type" do
     # sabotage: `build_transition/2` replaces
     # `Attributes.put_location(:type, element, "type")` with an
     # unconditional `Map.put/3` that ignores whether `type` was actually
@@ -123,7 +123,7 @@ defmodule Statifier.Lowering.TransitionTest do
     end
   end
 
-  describe "lower/1 - location" do
+  describe "lower/2 - location" do
     # sabotage: `build_transition/2` sets `location` to a span one byte
     # short of the element's own `end_offset` -> the slice-equality
     # assertion below reddens

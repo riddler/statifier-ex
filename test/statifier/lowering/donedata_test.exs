@@ -20,7 +20,7 @@ defmodule Statifier.Lowering.DonedataTest do
     state
   end
 
-  describe "lower/1 - <donedata>, happy path" do
+  describe "lower/2 - <donedata>, happy path" do
     # sabotage: `build_donedata/2` seeds the accumulator with
     # `content: %Content{location: element.location}` instead of the
     # struct's own `nil` default -> the empty-donedata assertion below
@@ -99,7 +99,7 @@ defmodule Statifier.Lowering.DonedataTest do
     end
   end
 
-  describe "lower/1 - <param> inside <donedata>" do
+  describe "lower/2 - <param> inside <donedata>" do
     # sabotage: `build_param/2`'s `name` case reads `Attributes.value(element,
     # "expr")` into the `name` field instead of the matched `name` variable
     # -> this assertion's `name: "x"` reddens
@@ -193,7 +193,7 @@ defmodule Statifier.Lowering.DonedataTest do
     end
   end
 
-  describe "lower/1 - element child inside <content>" do
+  describe "lower/2 - element child inside <content>" do
     # sabotage: `slice_markup/2`'s "has an element child" guard is inverted
     # (`not Enum.any?(...)`) -> the element child no longer triggers a slice,
     # so `markup` stays `nil` instead of the sliced child, reddening the
@@ -217,7 +217,7 @@ defmodule Statifier.Lowering.DonedataTest do
     end
   end
 
-  describe "lower/1 - multi-error accumulation across a <donedata> and a sibling <state>" do
+  describe "lower/2 - multi-error accumulation across a <donedata> and a sibling <state>" do
     # sabotage: `Lowering.walk_child/4`'s element clause drops the child's
     # own errors instead of prepending them (`{[result | results], errors}`
     # instead of `{[result | results], Enum.reverse(child_errors) ++

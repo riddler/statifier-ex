@@ -24,7 +24,7 @@ defmodule Statifier.Lowering.CancelTest do
     cancel
   end
 
-  describe "lower/1 - <cancel> attributes" do
+  describe "lower/2 - <cancel> attributes" do
     # sabotage: `build_cancel/2`'s `sendid:` field reads
     # `Attributes.value(element, "sendidexpr")` instead of `"sendid"` ->
     # this assertion's `sendid: "s1"` reddens

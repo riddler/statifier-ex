@@ -24,7 +24,7 @@ defmodule Statifier.Lowering.SendTest do
     send
   end
 
-  describe "lower/1 - <send> attributes" do
+  describe "lower/2 - <send> attributes" do
     # sabotage: `build_send/2`'s `eventexpr:` field reads
     # `Attributes.value(element, "event")` instead of `"eventexpr"` -> this
     # assertion's `eventexpr: "EventVar"` reddens
@@ -107,7 +107,7 @@ defmodule Statifier.Lowering.SendTest do
     end
   end
 
-  describe "lower/1 - <param> inside <send>" do
+  describe "lower/2 - <param> inside <send>" do
     # sabotage: `build_send/2` drops its `reverse_lists/1` call ->
     # `place/3`'s `{:param, param}` clause on `%Send{}` builds `params`
     # newest-first (prepending), so without the reversal the two params
@@ -136,7 +136,7 @@ defmodule Statifier.Lowering.SendTest do
     end
   end
 
-  describe "lower/1 - <content> inside <send>" do
+  describe "lower/2 - <content> inside <send>" do
     # sabotage: `place/3`'s `{:content, content}, %Send{}` clause is dropped
     # -> a `<send>`'s `<content>` child falls through to the generic
     # catch-all and is reported `{:misplaced_element, "content", "send"}`

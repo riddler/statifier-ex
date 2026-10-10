@@ -41,7 +41,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
       end
     end
 
-    # sabotage: `lower/1`'s `%{document | namespace: uri}` is changed to
+    # sabotage: `lower/2`'s `%{document | namespace: uri}` is changed to
     # `%{document | namespace: document.xmlns}`, stamping the literal
     # (unresolved) `xmlns` attribute instead of the resolved URI -> a
     # prefixed root's `xmlns` field is `nil` (only `xmlns:s` was written),
@@ -61,7 +61,7 @@ defmodule Statifier.Validator.Checks.BoilerplateTest do
     # A bare `xmlns` naming a genuinely foreign namespace never reaches this
     # check through the normal Parser -> Lowering -> Validator pipeline:
     # `Namespace.scxml_vocabulary?/1` (`uri in [nil, @scxml_namespace]`) is
-    # the gate `lower/1` itself applies to the root's own resolved name, so
+    # the gate `lower/2` itself applies to the root's own resolved name, so
     # a root xmlns pointing anywhere but the SCXML namespace is rejected at
     # lowering with `{:foreign_element, "scxml", uri}` before a `%Document{}`
     # ever exists. check_namespace/1's non-nil

@@ -24,7 +24,7 @@ defmodule Statifier.Lowering.InvokeTest do
     invoke
   end
 
-  describe "lower/1 - <invoke> attributes" do
+  describe "lower/2 - <invoke> attributes" do
     # sabotage: `build_invoke/2`'s `typeexpr:` field reads
     # `Attributes.value(element, "type")` instead of `"typeexpr"` -> this
     # assertion's `typeexpr: "TypeVar"` reddens
@@ -92,7 +92,7 @@ defmodule Statifier.Lowering.InvokeTest do
     end
   end
 
-  describe "lower/1 - <param> inside <invoke>" do
+  describe "lower/2 - <param> inside <invoke>" do
     # sabotage: `build_invoke/2` drops its `reverse_lists/1` call ->
     # `place/3`'s `{:param, param}` clause on `%Invoke{}` builds `params`
     # newest-first (prepending), so without the reversal the two params
@@ -119,7 +119,7 @@ defmodule Statifier.Lowering.InvokeTest do
     end
   end
 
-  describe "lower/1 - <content> inside <invoke>" do
+  describe "lower/2 - <content> inside <invoke>" do
     # sabotage: `place/3`'s `{:content, content}, %Invoke{}` clause is
     # dropped, leaving only the pre-existing `%Donedata{}` clause -> an
     # `<invoke>`'s `<content>` child falls through to the generic catch-all
@@ -140,7 +140,7 @@ defmodule Statifier.Lowering.InvokeTest do
     end
   end
 
-  describe "lower/1 - <finalize> inside <invoke>" do
+  describe "lower/2 - <finalize> inside <invoke>" do
     # sabotage: `build_invoke/2`'s struct literal seeds `finalize:
     # %Block{location: element.location}` instead of leaving the struct's
     # own `nil` default -> this test's `finalize: nil` assertion reddens
