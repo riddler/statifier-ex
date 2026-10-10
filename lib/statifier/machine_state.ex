@@ -1004,7 +1004,8 @@ defmodule Statifier.MachineState do
   the call raises `FunctionClauseError` on it rather than answer, and the
   live `Statifier.Session.refresh_ioprocessors/1` on a session resumed
   from such a state exits that session. Every state `new/2` builds
-  carries both.
+  carries both. ADR-0075's Note of 2026-10-09 records this boundary and
+  that the raise stays.
   """
   @spec refresh_ioprocessors(machine_state :: t()) :: {:ok, t()} | {:error, term()}
   def refresh_ioprocessors(%__MODULE__{send_types: nil} = machine_state), do: {:ok, machine_state}
