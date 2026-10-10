@@ -64,7 +64,7 @@ defmodule Statifier.Interpreter.ScriptAcceptanceTest do
   # `%If{}`/`%Foreach{}` generic `{:content_node, node}` clauses already
   # handle a `<script>` correctly for every parent but the top level - see
   # `content_test.exs`'s own top-level tests for that specific clause) is
-  # covered structurally by `lower/1` succeeding at all for this document;
+  # covered structurally by `lower/2` succeeding at all for this document;
   # this test's own reddening mutation is `Statifier.Machine.Content.Script`'s
   # `execute/2` returning `{:ok, context, []}` without ever calling
   # `Statifier.Evaluator.execute/2` -> `b`/`c`/`d`/`e` would all stay `0`

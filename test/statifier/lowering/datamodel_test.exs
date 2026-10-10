@@ -20,7 +20,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     state
   end
 
-  describe "lower/1 - <datamodel> at the document root" do
+  describe "lower/2 - <datamodel> at the document root" do
     # sabotage: `place/3`'s `{:datamodel, datamodel}` clause for `%Document{}`
     # is dropped, falling through to the generic misplaced-element catch-all
     # -> this test reddens because `document.datamodel_element` would stay
@@ -41,7 +41,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     end
   end
 
-  describe "lower/1 - <datamodel> on a state" do
+  describe "lower/2 - <datamodel> on a state" do
     # sabotage: `place/3`'s `{:datamodel, datamodel}` clause for `%State{}`
     # sets `initial_element` instead of `datamodel_element` -> this test
     # reddens because `state.datamodel_element` would stay `nil`
@@ -84,7 +84,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     end
   end
 
-  describe "lower/1 - <data>, the four shapes" do
+  describe "lower/2 - <data>, the four shapes" do
     # sabotage: `build_data/2` reads `expr` with `Attributes.list/2` instead
     # of `Attributes.value/2` -> this test reddens because `expr` would
     # become a list, not the raw string
@@ -203,7 +203,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     end
   end
 
-  describe "lower/1 - <data>, missing id" do
+  describe "lower/2 - <data>, missing id" do
     # sabotage: `build_data/2` defaults a missing id to nil instead of
     # erroring -> red
     test "a <data> with no id attribute produces a missing_attribute error" do
@@ -223,7 +223,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     end
   end
 
-  describe "lower/1 - <data>, an element child is misplaced" do
+  describe "lower/2 - <data>, an element child is misplaced" do
     # sabotage: `build_data/2` silently drops an element child instead of
     # reporting it via `Error.misplaced/3` -> this test reddens because no
     # `{:misplaced_element, ...}` error would be produced; lowering would
@@ -245,7 +245,7 @@ defmodule Statifier.Lowering.DatamodelTest do
     end
   end
 
-  describe "lower/1 - no <datamodel> at all" do
+  describe "lower/2 - no <datamodel> at all" do
     # sabotage: `build_scxml/2` unconditionally sets
     # `datamodel_element: %Datamodel{location: element.location}` instead of
     # leaving the struct default -> this test reddens because

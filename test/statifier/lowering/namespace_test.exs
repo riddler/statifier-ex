@@ -15,8 +15,8 @@ defmodule Statifier.Lowering.NamespaceTest do
     document
   end
 
-  describe "lower/1 - prefixed documents, the m0_test.exs shape" do
-    # sabotage: `Lowering.lower/1` dispatches on the raw `name` instead of the
+  describe "lower/2 - prefixed documents, the m0_test.exs shape" do
+    # sabotage: `Lowering.lower/2` dispatches on the raw `name` instead of the
     # resolved `local_name` (drops resolve-before-dispatch for the root) ->
     # `<ns0:scxml>` misses the dispatch map and this test reddens with
     # `{:unexpected_root, "ns0:scxml"}` instead of a matching tree
@@ -54,8 +54,8 @@ defmodule Statifier.Lowering.NamespaceTest do
     end
   end
 
-  describe "lower/1 - no xmlns at all" do
-    # sabotage: the SCXML-namespace check in `Lowering.lower/1` is changed
+  describe "lower/2 - no xmlns at all" do
+    # sabotage: the SCXML-namespace check in `Lowering.lower/2` is changed
     # from `uri in [nil, Namespace.scxml_namespace()]` to
     # `uri == Namespace.scxml_namespace()`, rejecting the lenient `nil` case
     # -> this test reddens with a `{:foreign_element, ...}` error instead of
@@ -71,7 +71,7 @@ defmodule Statifier.Lowering.NamespaceTest do
     end
   end
 
-  describe "lower/1 - a genuinely foreign namespace" do
+  describe "lower/2 - a genuinely foreign namespace" do
     # sabotage: `Lowering.walk_child/4`'s dispatch guard is widened from
     # `uri in [nil, Namespace.scxml_namespace()]` to `true`, accepting any
     # URI -> this test reddens because `<html:div>` falls through to
@@ -90,7 +90,7 @@ defmodule Statifier.Lowering.NamespaceTest do
       assert error.location != nil
     end
 
-    # sabotage: `Lowering.lower/1`'s dispatch guard (the root-level one) is
+    # sabotage: `Lowering.lower/2`'s dispatch guard (the root-level one) is
     # widened from `uri in [nil, Namespace.scxml_namespace()]` to `true` ->
     # this test reddens because `<ns0:state>` (the child, resolved against the
     # same foreign `ns0` binding) dispatches and builds instead of the root
@@ -109,7 +109,7 @@ defmodule Statifier.Lowering.NamespaceTest do
     end
   end
 
-  describe "lower/1 - subtree-local scoping" do
+  describe "lower/2 - subtree-local scoping" do
     # sabotage: `Namespace.push/2` accumulates declarations into a scope
     # shared across the whole walk (via the process dictionary) instead of
     # returning a fresh scope per element -> `<state id="B">`'s `foo:widget`

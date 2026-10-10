@@ -15,7 +15,7 @@ defmodule Statifier.Lowering.StateTest do
     document
   end
 
-  describe "lower/1 - the state family, happy path" do
+  describe "lower/2 - the state family, happy path" do
     # sabotage: `state_like/3` hardcodes `kind: :state` instead of using its
     # own `kind` argument -> the parallel/final-kind assertions below redden
     test "<state>, <parallel>, and <final> each build a State with the matching kind" do
@@ -101,7 +101,7 @@ defmodule Statifier.Lowering.StateTest do
     end
   end
 
-  describe "lower/1 - nesting" do
+  describe "lower/2 - nesting" do
     # sabotage: `place/3`'s `{:state, state}, %State{}` clause drops the
     # child instead of prepending it to `parent.states` -> the nested-chain
     # assertion below reddens since every level's `states` comes back empty
@@ -134,7 +134,7 @@ defmodule Statifier.Lowering.StateTest do
     end
   end
 
-  describe "lower/1 - initial attribute splitting" do
+  describe "lower/2 - initial attribute splitting" do
     # sabotage: `state_like/3` reads `Attributes.value(element, "initial")`
     # instead of `Attributes.list/2` for the `initial` field -> the split
     # assertion below reddens (a raw string instead of a three-element list)
@@ -173,7 +173,7 @@ defmodule Statifier.Lowering.StateTest do
     end
   end
 
-  describe "lower/1 - <initial>" do
+  describe "lower/2 - <initial>" do
     # sabotage: `build_initial/2` seeds the accumulator with
     # `transitions: [%Transition{location: element.location}]` instead of
     # the struct's own `[]` default -> the empty-list assertion below
@@ -227,7 +227,7 @@ defmodule Statifier.Lowering.StateTest do
     end
   end
 
-  describe "lower/1 - order preservation" do
+  describe "lower/2 - order preservation" do
     # sabotage: `state_like/3` skips the `Enum.reverse/1` call in
     # `reverse_lists/1` for the `states` and `transitions` slots -> both
     # lists come back reversed, and the interleave-by-offset assertion below
@@ -267,7 +267,7 @@ defmodule Statifier.Lowering.StateTest do
     end
   end
 
-  describe "lower/1 - misplacement" do
+  describe "lower/2 - misplacement" do
     # sabotage: `place/3`'s catch-all clause is dropped, replaced with a
     # clause that silently ignores unmatched tags (`{parent, nil}`) -> this
     # test reddens because the document lowers successfully instead of
