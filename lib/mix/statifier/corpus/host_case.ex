@@ -161,6 +161,12 @@ defmodule Mix.Statifier.Corpus.HostCase do
   the URI. And an element whose name is `send` followed by such a
   character counts as a `<send>`: `<send-log type="URI">` declares it too.
 
+  The search also misses one shape that is a `<send>`'s `type`, because
+  it reads a start tag only up to its first `>`. XML allows an unescaped
+  `>` inside an attribute value, and such a `>` in an attribute written
+  before `type` ends the search there: `<send event="fines>0" type="URI">`
+  declares nothing.
+
   ## Examples
 
       iex> Mix.Statifier.Corpus.HostCase.event_io_processors(
@@ -169,6 +175,11 @@ defmodule Mix.Statifier.Corpus.HostCase do
       ["http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"]
 
       iex> Mix.Statifier.Corpus.HostCase.event_io_processors(~s|<send event="e"/>|)
+      []
+
+      iex> Mix.Statifier.Corpus.HostCase.event_io_processors(
+      ...>   ~s|<send event="fines>0" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"/>|
+      ...> )
       []
 
   """
