@@ -314,8 +314,9 @@ continuing through 2.0.0, so upgraders keep one continuous record). The
 `[2.0.0]` section is written as a migration document for 1.x users rather
 than a transcript of the rewrite; later sections are ordinary release notes.
 
-Publishing to Hex (`mix hex.publish`) is a human action - the operator holds
-the package credentials. A release branch carries the version bump, the
+The release workflow publishes to Hex on the tag push (ADR-0077): an agent
+or a session never runs `mix hex.publish`, and a failed workflow is re-run
+from its Actions page. A release branch carries the version bump, the
 assembled changelog section, the fragment deletions, and the tag-worthy
 release commit; the tag itself lands on `main` after the merge.
 

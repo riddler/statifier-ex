@@ -46,7 +46,9 @@ bump plus the changelog promotion, landing alone in its own PR, on a
 release bead the operator has named (in the campaign plan or their own
 words). Once that prep is merged to `origin/main`, the conductor or the
 session that owns the release bead tags the merged commit with the new
-version; the publish that follows (`mix hex.publish`) is always the user's.
+version, and the release workflow publishes on the tag push (ADR-0077):
+an agent or a session never runs `mix hex.publish`, and a failed
+workflow is re-run from its Actions page.
 Never edit the version field as part of any other commit; a
 diff that touches it alongside other work is a bug in the diff.
 
