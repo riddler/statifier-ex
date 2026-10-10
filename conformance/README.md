@@ -222,7 +222,8 @@ members, and `schema/case.json` requires all of them:
 
 - `configuration`: every active state's id, the compound and parallel
   ancestors of the active leaves included and the `<scxml>` root left
-  out;
+  out; empty after the step that stops the chart, which exits every
+  state;
 - `entered_states`: every state entered at least once;
 - `states_to_invoke`: the states whose invocations wait for the invoke
   pass: empty after a step that leaves the chart running, and after the
