@@ -781,3 +781,89 @@ still holds" and "a session halted :budget_exhausted discards the
 delayed sends it still holds" for the three halt reasons, and "a delayed
 send performed outside a session is discarded, with no call made" for
 the answer outside a session.
+
+## Amendment (2026-10-09): a running session's registration for one type can be replaced
+
+Status: proposed (2026-10-09) - amends decision 2 (the registration is
+stamped once per session); decision 1, decisions 3 to 5, the Amendment of
+2026-10-02 and the Notes above are unchanged
+
+This Amendment adds one host call beside decision 2's start-time
+registration and changes nothing else: every decision above stands as
+written, and no text above is edited. Anchors below were read on `main`
+at `2556639d` unless they name this change. The call's name, its
+argument order and its answers were ruled by the operator, 2026-10-09.
+
+**Why.** Decision 2 stamps the registered set on `%MachineState{}`
+"once per session". A host whose front moves a registration's options
+while a session runs (the Basic HTTP processor's `:base_url`, or a
+location its front rotated) had no door to hand the session the new
+registration. `Statifier.Session.refresh_ioprocessors/1` asks every
+registered processor again, but from the registration the session
+already holds, so a Basic HTTP entry built from the old `:base_url`
+recomputes to the old location (`Statifier.Session.refresh_ioprocessors/1`,
+ADR-0075's Amendment of 2026-10-02). `Statifier.MachineState.put_send_types/2`
+re-stamps a position, which reaches a session only through a resume.
+
+**The call.** `Statifier.Session.replace_send_type(server, type,
+registration)` (this change) replaces the session's registration for one
+send type it already registers, a module or `{module, opts}` as a
+`:send_types` value is, and recomputes that type's `_ioprocessors` entry
+from it in the same call. The session's own `:send_types` map, which
+plans and performs its sends, and its `%MachineState{}` stamp are
+replaced together, so every later `<send>` of the type is delivered and
+cancelled through the new registration, and a child started afterwards
+under `:inherit_send_types` is started with it (`Statifier.Session`'s
+`handle_call/3` for the call, this change). The entry is computed as the
+session computed it at start: asked of a processor exporting
+`ioprocessors_entry/2` with the type, the session id and the new options,
+else the processor's `ioprocessors_entry/1` value
+(`Statifier.Evaluator.SystemVariables.replaced_ioprocessors/4`, this
+change). The SCXML entry, every other type's entry, and the set of keys
+are left as they are; a host that wants every entry asked again calls
+`refresh_ioprocessors/1` as well.
+
+**What does not change.** The set of registered types: the call replaces
+a type the session registers and adds none, so the set the core
+classifies against (decision 3) is the set the session started with, and
+the reopen trigger "a host needing mid-session registration" is not
+fired by it. A child already running keeps the registration it started
+with. No pure `%MachineState{}` counterpart is added: a host that changes
+a registration before a resume already re-stamps with
+`Statifier.MachineState.put_send_types/2` and refreshes with
+`Statifier.MachineState.refresh_ioprocessors/1`.
+
+**The answers.** `:ok` once the registration is stored and the entry
+recomputed, or, with the registration, the entries and the position as
+they were, in this order:
+
+| Case | Answer |
+|---|---|
+| the session has halted | `{:error, :not_running}` |
+| the session was started with `record: true` | `{:error, :recorded_session}` |
+| the session does not register `type` | `{:error, {:unknown_send_type, type}}` |
+| the processor's `check_registration/2` answers `{:error, reason}` | `{:error, {:send_types, {:invalid_registration, type, reason}}}` |
+| the entry raises, or is not a string-keyed map | `{:error, {:ioprocessors_entry, type, exception}}` |
+
+The first two are `refresh_ioprocessors/1`'s answers for the same
+sessions. The refusal is spelled as `start_link/2` spells the
+fresh-start refusal of the Amendment of 2026-10-02, not as the bare
+`{:error, reason}` a refresh answers, and a check that raises, throws,
+exits or answers outside its contract refuses nothing, as at a fresh
+start (`Statifier.Send.Types.check_registration/2`). The raising entry is
+answered as `refresh_ioprocessors/1` answers it, the session running on
+at the position it held (`Statifier.MachineState.replace_send_type/3`, an
+internal step, this change). A `type` that is not a string, or a
+`registration` that is not a module or `{module, opts}` with a keyword
+list, raises `FunctionClauseError` in the caller, before the session is
+asked (`Statifier.Session.replace_send_type/3`, this change).
+
+**What changes for a host.** One new call; no existing call's answer
+changes.
+
+**Tests.** `Statifier.Send.ReplaceSendTypeTest` (this change) pins the
+new Basic HTTP location after the call and the chart's read of it, a
+later send delivered through the new registration, a processor exporting
+only `ioprocessors_entry/1` taking its new module's entry, each refusal
+in the table with the position unchanged, the registration kept after a
+raising entry, and the caller-side raise for a malformed registration.

@@ -412,6 +412,9 @@ defmodule Statifier.Session do
             # `%{}`. `init/1` derives the `%MachineState{}` `send_types` stamp
             # from this same map's keys through
             # `Statifier.Send.Types.from_send_types/1`, the one constructor.
+            # `replace_send_type/3` replaces one type's value here and in the
+            # stamp together (ADR-0069's Amendment of 2026-10-09); the keys
+            # never change.
             send_types: %{String.t() => SendTypes.registration()},
             # ADR-0069 decision 4's cancel routing: which registered types'
             # processors hold a delayed send under each send id, so a
@@ -1014,8 +1017,8 @@ defmodule Statifier.Session do
       the same exception instead.
 
   This is a call, not a cast: a host learns whether the entries moved.
-  It is the only one of this module's calls that changes the session's
-  position. Like every other message, on a running session it is served
+  It and `replace_send_type/3` are the only two of this module's calls
+  that change the session's position. Like every other message, on a running session it is served
   only once the session has drained its queue: every event already
   queued, and every event those macrosteps queue to the session itself,
   is processed first, and a chart reads the refreshed entries from the
@@ -1037,6 +1040,89 @@ defmodule Statifier.Session do
              | {:ioprocessors_entry, String.t(), Exception.t()}
              | term()}
   def refresh_ioprocessors(server), do: GenServer.call(server, :refresh_ioprocessors)
+
+  @doc """
+  Replaces this session's registration for one registered send type and
+  recomputes that type's `_ioprocessors` entry from it, in one call
+  (ADR-0069's Amendment of 2026-10-09). `registration` is a
+  `Statifier.Send.Processor` module or `{module, opts}`, as a
+  `:send_types` value of `start_link/2` is. A host whose front moved a
+  registration's options while the session runs (a new `:base_url` for
+  `Statifier.Send.BasicHTTP`, or a rotated location) hands the session the
+  new registration here, and the chart reads the new entry from the next
+  event it processes.
+
+  The set of registered types does not change: `type` must be one the
+  session was started with, and no type is added or dropped. The entry is
+  recomputed as the session computed it at start: asked of a processor
+  that exports `c:Statifier.Send.Processor.ioprocessors_entry/2` with the
+  type, the session id and the new registration's options, else the
+  processor's `c:Statifier.Send.Processor.ioprocessors_entry/1` value. The
+  SCXML entry and every other type's entry are left as they are; a host
+  that also wants those asked again calls `refresh_ioprocessors/1`. Every
+  later `<send>` of `type` is delivered and cancelled through the new
+  registration, and a child this session starts afterwards under
+  `:inherit_send_types` is started with it. A child already running keeps
+  the registration it started with.
+
+  Answers `:ok`, or, changing nothing (the registration, the entries and
+  the position stay as they were):
+
+    - `{:error, :not_running}` - the session has halted (`:done`,
+      `:cancelled` or `:budget_exhausted`), as `refresh_ioprocessors/1`
+      answers it.
+    - `{:error, :recorded_session}` - the session was started with
+      `record: true`, as `refresh_ioprocessors/1` answers it: a recording
+      has no entry for a registration that moved.
+    - `{:error, {:unknown_send_type, type}}` - the session does not
+      register `type`, including a session that registers nothing.
+    - `{:error, {:send_types, {:invalid_registration, type, reason}}}` -
+      the new registration's processor exports
+      `c:Statifier.Send.Processor.check_registration/2` and answered
+      `{:error, reason}`, spelled as `start_link/2` spells the same
+      refusal at a fresh start. This differs from `refresh_ioprocessors/1`,
+      which answers a processor's refusal as the bare `{:error, reason}`.
+      A check that raises, throws, exits or answers outside its contract
+      refuses nothing, as at a fresh start.
+    - `{:error, {:ioprocessors_entry, type, exception}}` - the new
+      registration's processor raised `exception` while its entry was
+      computed (or answered something other than a string-keyed map,
+      raised as an `ArgumentError`), as `refresh_ioprocessors/1` answers
+      it. The session keeps running at the position it held before the
+      call.
+
+  The checks run in that order. `type` must be a string and
+  `registration` a module or `{module, opts}` with a keyword-list shape;
+  any other argument is outside the call's input and raises
+  `FunctionClauseError` in the caller, before the session is asked.
+
+  Like `refresh_ioprocessors/1`, this is a call served once the session has
+  drained its queue, and it waits `GenServer.call/2`'s default 5 seconds:
+  a timeout does not withdraw the request, so a replacement that succeeds
+  is stored though its answer is lost. A running, unrecorded session
+  resumed from a state built by hand without an `_ioprocessors` map is
+  outside this call's input, and the call exits it, as
+  `refresh_ioprocessors/1` does.
+  """
+  @spec replace_send_type(
+          server :: server(),
+          type :: String.t(),
+          registration :: SendTypes.registration()
+        ) ::
+          :ok
+          | {:error,
+             :not_running
+             | :recorded_session
+             | {:unknown_send_type, String.t()}
+             | {:send_types, {:invalid_registration, String.t(), term()}}
+             | {:ioprocessors_entry, String.t(), Exception.t()}}
+  def replace_send_type(server, type, registration)
+      when is_binary(type) and
+             (is_atom(registration) or
+                (is_tuple(registration) and tuple_size(registration) == 2 and
+                   is_atom(elem(registration, 0)) and is_list(elem(registration, 1)))) do
+    GenServer.call(server, {:replace_send_type, type, registration})
+  end
 
   @doc """
   A small status projection - `session_id`, `status`, `configuration` (as
@@ -1166,6 +1252,27 @@ defmodule Statifier.Session do
     case opts |> Keyword.get(:send_types, %{}) |> built_in_send_types() do
       [] -> init_boot(machine, opts, resume)
       built_ins -> {:stop, {:send_types, {:built_in_types, built_ins}}}
+    end
+  end
+
+  # `replace_send_type/3` replaces a type the session registers and adds
+  # none, so the set the core classifies against never changes mid-run.
+  @spec registered_send_type(state :: State.t(), type :: String.t()) ::
+          :ok | {:error, {:unknown_send_type, String.t()}}
+  defp registered_send_type(%State{send_types: send_types}, type) do
+    if Map.has_key?(send_types, type), do: :ok, else: {:error, {:unknown_send_type, type}}
+  end
+
+  # The new registration asked as a fresh start asks it
+  # (`Statifier.Send.Types.check_registration/2`), and refused in the
+  # spelling `start_link/2` gives; a check that breaks its contract
+  # (`:unanswered`) refuses nothing, as at a fresh start.
+  @spec accepted_registration(type :: String.t(), registration :: SendTypes.registration()) ::
+          :ok | {:error, {:send_types, {:invalid_registration, String.t(), term()}}}
+  defp accepted_registration(type, registration) do
+    case SendTypes.check_registration(type, SendTypes.split(registration)) do
+      {:error, reason} -> {:error, {:send_types, {:invalid_registration, type, reason}}}
+      _ok_or_unanswered -> :ok
     end
   end
 
@@ -1690,6 +1797,40 @@ defmodule Statifier.Session do
 
   def handle_call(:refresh_ioprocessors, _from, state) do
     {:reply, {:error, :recorded_session}, state}
+  end
+
+  def handle_call(
+        {:replace_send_type, _type, _registration},
+        _from,
+        %State{halted: halted} = state
+      )
+      when halted != nil do
+    {:reply, {:error, :not_running}, state}
+  end
+
+  def handle_call(
+        {:replace_send_type, _type, _registration},
+        _from,
+        %State{recording: recording} = state
+      )
+      when recording != nil do
+    {:reply, {:error, :recorded_session}, state}
+  end
+
+  # The session's `send_types` map and its `%MachineState{}` stamp are
+  # replaced together, and only once the processor has accepted the
+  # registration and its entry has been computed, so an answer other than
+  # `:ok` leaves both, and the position, as they were.
+  def handle_call({:replace_send_type, type, registration}, _from, state) do
+    with :ok <- registered_send_type(state, type),
+         :ok <- accepted_registration(type, registration),
+         {:ok, machine_state} <-
+           MachineState.replace_send_type(state.machine_state, type, registration) do
+      send_types = Map.put(state.send_types, type, registration)
+      {:reply, :ok, %{state | machine_state: machine_state, send_types: send_types}}
+    else
+      {:error, _reason} = error -> {:reply, error, state}
+    end
   end
 
   def handle_call(:invocations, _from, state) do

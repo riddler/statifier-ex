@@ -71,16 +71,16 @@ each registered string, and both hold the same location: the base URL, a
 ```
 
 The session writes the entries when it starts, and they persist with the
-datamodel; after that only a host's refresh (below) rewrites them, so a
-resumed session reads the location it started with unless the host
-refreshed it.
+datamodel; after that only a host's refresh or replacement (below)
+rewrites them, so a resumed session reads the location it started with
+unless the host refreshed it.
 
 ### When the base URL moves, or a location rotates
 
 The library never rewrites the location on its own, and a resume does
 not either. Keeping the location current is the host's step, through one
-of two calls that recompute every registered entry from the registration
-and leave the SCXML entry as it is:
+of three calls that recompute a registered entry from a registration and
+leave the SCXML entry as it is:
 
 - **Across a resume.** A host whose base URL moved re-stamps the
   position with the new registration and refreshes it before it starts
@@ -113,11 +113,10 @@ and leave the SCXML entry as it is:
 
 - **On a live session.** `Statifier.Session.refresh_ioprocessors/1` asks
   every registered processor again from the registration the session
-  holds. A running session's registration cannot change, so for Basic
-  HTTP, whose location is built from the registration's `:base_url` and
-  the session id alone, the call recomputes the location the session
-  already carries: a moved base URL reaches a Basic HTTP location only
-  across a resume, above. The live call is for a processor of your own
+  holds. For Basic HTTP, whose location is built from the registration's
+  `:base_url` and the session id alone, the call recomputes the location
+  the session already carries: a moved base URL reaches a live session
+  through the replacement below. The refresh is for a processor of your own
   whose entry reads a value that can move while the session runs, such
   as a location its front rotated. It answers `:ok`;
   `{:error, {:missing_option, :base_url}}` when the registration has no
@@ -127,6 +126,30 @@ and leave the SCXML entry as it is:
   registered processor whose entry raises during the refresh
   answers `{:error, {:ioprocessors_entry, type, exception}}`, and the
   session keeps running. Every error changes nothing.
+
+- **A moved base URL on a live session.**
+  `Statifier.Session.replace_send_type/3` hands a running session a new
+  registration for one type it already registers and recomputes that
+  type's entry from it in the same call:
+
+  ```elixir
+  :ok =
+    Statifier.Session.replace_send_type(
+      session,
+      "basichttp",
+      {Statifier.Send.BasicHTTP, base_url: new_base_url}
+    )
+  ```
+
+  The chart reads the new location from the next event it processes, and
+  later Basic HTTP sends go through the new registration. The call answers
+  `{:error, {:send_types, {:invalid_registration, "basichttp",
+  {:missing_option, :base_url}}}}` for a registration without
+  `:base_url`, as `start_link/2` spells that refusal;
+  `{:error, {:unknown_send_type, type}}` for a type the session does not
+  register; and `{:error, :not_running}` and
+  `{:error, :recorded_session}` as the refresh does. Every error changes
+  nothing. Other types' entries are left as they are.
 
 ## The front you write around `decode/1`
 

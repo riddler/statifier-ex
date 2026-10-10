@@ -235,6 +235,39 @@ defmodule Statifier.Evaluator.SystemVariables do
     end)
   end
 
+  # `ioprocessors` with `type`'s entry recomputed from `send_types`, the
+  # set its registration was just replaced in, as `initial/3` computes a
+  # registered entry: asked of a processor that exports
+  # `ioprocessors_entry/2` with the type, `session_id` and the
+  # registration's options, else the `ioprocessors_entry/1` value the set
+  # holds. Only a key `ioprocessors` already has is rewritten, so no key is
+  # added or dropped, as a refresh adds or drops none. An entry that raises,
+  # or is not a string-keyed map, raises here; the caller answers it.
+  # Internal: `Statifier.MachineState`'s replace step is its one caller,
+  # hence `@doc false`.
+  @doc false
+  @spec replaced_ioprocessors(
+          ioprocessors :: %{String.t() => map()},
+          send_types :: Types.t(),
+          type :: String.t(),
+          session_id :: String.t()
+        ) :: %{String.t() => map()}
+  def replaced_ioprocessors(
+        ioprocessors,
+        %Types{entries: entries, processors: processors},
+        type,
+        session_id
+      )
+      when is_map(ioprocessors) and is_binary(type) and is_binary(session_id) do
+    if Map.has_key?(ioprocessors, type) do
+      {module, opts} = Map.fetch!(processors, type)
+      entry = session_entry(module, type, opts, session_id, Map.fetch!(entries, type))
+      Map.put(ioprocessors, type, entry)
+    else
+      ioprocessors
+    end
+  end
+
   @spec rejected({type :: String.t(), processor :: {module(), keyword()}}) ::
           {:error, term()} | nil
   defp rejected({type, processor}) do

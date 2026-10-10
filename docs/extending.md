@@ -808,7 +808,8 @@ keyed by its URI and holding the session's `location`, is unchanged, and a
 session with no `:send_types` carries that entry alone.
 
 The session writes the entries when it starts, and they persist with the
-datamodel; after that only a host's refresh (below) rewrites them. A
+datamodel; after that only a host's refresh or replacement (below)
+rewrites them. A
 resumed session reads the entries it started with, unless the host
 refreshed them: the driver's re-stamp of `send_types` on a resume replaces
 the classifier's set and does not rewrite `_ioprocessors`. Re-stamp the
@@ -819,11 +820,13 @@ reopen it.
 The same set with different options (a moved base URL, say) is a host's
 refresh, not a new registration: re-stamp the position with the new
 options and call `Statifier.MachineState.refresh_ioprocessors/1` before
-resuming it. A running session's registration cannot change, so new
-options reach the entries only that way; on a live session,
+resuming it. On a running session, `Statifier.Session.replace_send_type/3`
+replaces one registered type's registration and recomputes that type's
+entry from the new options in the same call, adding and dropping no
+type. On a live session,
 `Statifier.Session.refresh_ioprocessors/1` asks again from the
 registration the session holds, for an entry that reads a value that
-changes while the session runs (a location your front rotated). Both ask
+changes while the session runs (a location your front rotated). Both refreshes ask
 every processor that exports `ioprocessors_entry/2`, for a type
 `_ioprocessors` already has a key for, for its entry again and change no
 other entry and no key.
