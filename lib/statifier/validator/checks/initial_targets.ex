@@ -8,12 +8,15 @@ defmodule Statifier.Validator.Checks.InitialTargets do
   1. `{:initial_on_atomic_state, id}`: a state carrying
      `initial` or `initial_element` that has nothing to default into - an
      empty `states` list, or a `:parallel`, `:final`, or `:history` kind.
+     `id` is the state's own id, `nil` for a state with no `id`.
      Fires first and **suppresses every other reason for that state**: an
      atomic state's initial cannot be resolved, checked for descendancy, or
      anything else, so reporting more than this one error would be two
      errors for one mistake.
   2. `{:unresolved_initial, id}`: an id in `State.initial` or
-     `Document.initial` absent from `Context.states`. An `<initial>`
+     `Document.initial` absent from `Context.states`. `id` is that missing
+     target, so a containing state with no `id` reports it the same way.
+     An `<initial>`
      element's own transition targets are **not** re-checked here for
      existence - check 2 already owns that; this check only
      asks `Context.states` the same question check 2 already answered, so
@@ -26,8 +29,9 @@ defmodule Statifier.Validator.Checks.InitialTargets do
      wrong). A containing state with no `id` has no entry in that id-keyed
      ancestry, so it is tested by the tree's structure instead and the
      reported `parent_id` is `nil`, the rule the History check keeps for a
-     parent with no `id`. Such a state answers only this reason: the two
-     above carry the state's own id. This check has **no analog** for
+     parent with no `id`. Such a state answers every reason here: only
+     `initial_on_atomic_state` carries the state's own id, and for it that
+     id is `nil` too. This check has **no analog** for
      `Document.initial`: spec 3.11's
      "additional requirement" ("all the states MUST be descendants of the
      containing `<state>` or `<parallel>` element") is written for `<state>`
@@ -73,17 +77,6 @@ defmodule Statifier.Validator.Checks.InitialTargets do
     Enum.flat_map(states, fn state -> [state | flatten(state.states)] end)
   end
 
-  # A state with no id answers only the descendancy question: the atomic
-  # and unresolved reasons carry the state's own id, so those two cases
-  # report nothing for it, as they did before such a state was checked.
-  defp check_state(%State{id: nil} = state, context) do
-    if carries_initial?(state) and not atomic_for_initial?(state) do
-      check_initial_attribute(state, context) ++ check_initial_element(state, context)
-    else
-      []
-    end
-  end
-
   defp check_state(%State{} = state, context) do
     cond do
       not carries_initial?(state) ->
@@ -119,7 +112,7 @@ defmodule Statifier.Validator.Checks.InitialTargets do
     Enum.flat_map(initial, fn id ->
       cond do
         not Map.has_key?(context.states, id) ->
-          unresolved_errors(id, state, location)
+          [Error.unresolved_initial(id, location)]
 
         outside?(id, state, context) ->
           [Error.initial_not_descendant(id, state.id, location)]
@@ -141,9 +134,6 @@ defmodule Statifier.Validator.Checks.InitialTargets do
       |> Enum.map(&Error.initial_not_descendant(&1, state.id, location))
     end)
   end
-
-  defp unresolved_errors(_id, %State{id: nil}, _location), do: []
-  defp unresolved_errors(id, %State{}, location), do: [Error.unresolved_initial(id, location)]
 
   # `target` resolves (both callers test that first). A state with an id
   # keeps the id test, `Context.descendant?/3`; only a state with no id is
