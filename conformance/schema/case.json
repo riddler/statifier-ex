@@ -126,7 +126,7 @@
               },
               "datamodel": {
                 "type": "object",
-                "description": "Every datamodel variable by name, with its value as JSON, the system variables _event, _ioprocessors, _name and _sessionid left out. A variable with no value is null."
+                "description": "Every datamodel variable by name, with its value as JSON, the system variables _event, _ioprocessors and _sessionid left out, and _name left out unless the document's scxml element carries a name attribute. A variable with no value is null."
               }
             },
             "required": [

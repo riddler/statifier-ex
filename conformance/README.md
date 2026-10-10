@@ -235,8 +235,10 @@ members, and `schema/case.json` requires all of them:
   that owns its `<invoke>` and the `<invoke>`'s index among that state's
   own, without the invocation's id;
 - `running`: false once the chart has reached a top-level final state;
-- `datamodel`: every variable with its value, `_event`, `_ioprocessors`,
-  `_name` and `_sessionid` left out, an unset value written `null`.
+- `datamodel`: every variable with its value, `_event`, `_ioprocessors`
+  and `_sessionid` left out, and `_name` left out too unless the
+  document's `<scxml>` carries a `name` attribute; an unset value written
+  `null`.
 
 Every array of state ids is sorted, and the runner compares each member
 as a JSON value: numbers by value (a float `2.0` agrees with a `2`),
