@@ -354,6 +354,9 @@ defmodule Statifier.SessionTest do
     # (no explicit `:catch_up` key, so the default applies) returns
     # `{:error, :not_recorded}` on this non-recording session instead of
     # `:ok`, reddening the second assertion. Reverted and confirmed green.
+    # sabotage: the halt instruction notifies `{:halted, reason}` twice ->
+    # the relay's `rest` holds a second halted message, so the `refute`
+    # fails. Reverted and confirmed green.
     test "catch_up: false is subscribe/2" do
       machine = compile!(final_on_event_doc())
       {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
@@ -365,10 +368,18 @@ defmodule Statifier.SessionTest do
       assert :ok = Session.subscribe(session, relay, [])
 
       Session.send_event(session, "finish")
-      assert_receive {:statifier, ^session_id, {:halted, :done}}
 
-      suffix = drain_late(session_id)
-      assert Enum.count(suffix, &(&1 == {:halted, :done})) == 1
+      # The status/1 reply is sent after the cast's drain has notified every
+      # subscriber, so the halted message is already in this mailbox: no
+      # receive timeout to lose under a loaded machine.
+      assert %{status: :done} = Session.status(session)
+      assert_received {:statifier, ^session_id, {:halted, :done}}
+
+      # The relay forwards on its own schedule, so its copy gets an explicit
+      # bound; anything after it must not be a second halted message.
+      assert_receive {:late, {:statifier, ^session_id, {:halted, :done}}}, 1_000
+      rest = drain_late(session_id)
+      refute {:halted, :done} in rest
     end
 
     # sabotage: `handle_call({:subscribe, pid, :catch_up}, ...)` snapshots
