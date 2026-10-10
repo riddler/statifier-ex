@@ -1,8 +1,8 @@
-# Upgrading from 2.5 to 2.12.1: what a host changes
+# Upgrading from 2.5 to 2.13.0: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.12.1 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.13.0 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 The [Changelog](../CHANGELOG.md) says what the library changed; this page
@@ -21,7 +21,12 @@ compound state with no `id` naming a target outside that state, a host
 that reads the entries of a document already refused for a shared `id`,
 a host that holds predicator at 9.0 to 9.3, and a chart with a `\u` or
 `\U` escape in a string literal. 2.12.1 changes documentation only, and
-its "must change" is NONE.
+its "must change" is NONE. 2.13.0 changes some answers, and its "must
+change" names the hosts each one reaches: a host whose charts carry an
+`initial` on a `<state>` with no `id` that names a missing state or sits
+on a state with no children, a host that reads the entries of a document
+already refused for a shared `id`, and a host that waited for a further
+halted message after reporting a budget-halted session's failed send.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
@@ -405,3 +410,69 @@ file under `lib/` differs from 2.12.0.
 **A host may start:** nothing new. The conformance corpus does not change,
 so a sibling implementation that vendored it at the `v2.12.0` tag has
 nothing to re-vendor.
+
+## 2.13.0
+
+**A host must change:** only where one of these reaches it. A
+`{:statifier, "~> 2.12"}` requirement already accepts 2.13.0.
+
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, refuses
+  two documents whose `<state>` has no `id`: one whose `initial` names a
+  missing state, reported as `{:unresolved_initial, missing_id}`, and one
+  with no child states that carries an `initial`, reported as
+  `{:initial_on_atomic_state, nil}`. Before 2.13.0 both validated and
+  `Statifier.compile/2` raised `KeyError`. If your host rescued the raise,
+  match the refusal instead, and if it matches
+  `initial_on_atomic_state`'s id as a binary, handle `nil` too, as 2.12.0
+  asked for `initial_not_descendant`'s parent id.
+- `Statifier.Validator.validate/2`, and so `Statifier.compile/2`, decides
+  whether a `<state>`'s `initial` target is its descendant by the
+  document's structure for every state, as 2.12.0 began doing for a
+  `<history>` default target. A document where two states share an `id`
+  and one's `initial` names a state under the other was already refused
+  for that `id` (`{:duplicate_id, id}`); it now also reports
+  `{:initial_not_descendant, target, id}`. No document that validated
+  before is refused, and none is accepted that was refused.
+- A session halted `:budget_exhausted` that is handed a miss through
+  `Statifier.Session.failed_send/3` drops it without stepping, as a
+  session halted `:done` or `:cancelled` does. Before 2.13.0 it stepped
+  the halted chart again and sent its subscribers another
+  `{:halted, :budget_exhausted}` for every miss. A host that waited for
+  that further message after reporting a miss no longer receives it; the
+  miss is the host's dead letter. A session halted `:done` or `:cancelled`
+  is unchanged.
+
+`Statifier.Testing.HandlerCase`'s check that a handler exception
+propagates now waits up to ten seconds for the session's exit instead of
+one, so a host's generated handler test no longer fails on a loaded
+machine; a passing run returns as soon as the exit arrives. This is not a
+host step.
+
+**A host may start:** replacing a running session's registration for one
+send type. Requires `{:statifier, "~> 2.13"}`.
+
+- `Statifier.Session.replace_send_type/3` takes a session, a send type the
+  session already registers and a new registration (a module or
+  `{module, opts}`, as a `:send_types` value of `start_link/2` is), and
+  recomputes that type's `_ioprocessors` entry in the same call. A host
+  whose front moved a registration's options while the session runs (a
+  new `:base_url` for `Statifier.Send.BasicHTTP`, or a rotated location)
+  hands the session the new registration, the chart reads the new entry
+  from its next event, and later sends of the type go through the new
+  registration. It answers `:ok`, or changes nothing and answers
+  `{:error, :not_running}` for a halted session,
+  `{:error, :recorded_session}` for a session started with
+  `record: true`, `{:error, {:unknown_send_type, type}}` for a type the
+  session does not register,
+  `{:error, {:send_types, {:invalid_registration, type, reason}}}` when
+  the processor's `check_registration/2` refuses the registration (as
+  `start_link/2` spells that refusal), and
+  `{:error, {:ioprocessors_entry, type, exception}}` when the entry
+  raises, the session keeping its position. ADR-0069's Amendment of
+  2026-10-09 records the call.
+
+The conformance corpus's hash does not move: no case changes. The case
+schema's descriptions and the corpus README now say that a step's
+expected datamodel keeps `_name` for a document whose `<scxml>` carries a
+`name` attribute, and that the corpus writes each array of state ids
+sorted while the schema does not check the order; no verdict changes.
