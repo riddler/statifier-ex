@@ -1150,3 +1150,40 @@ says so.
 `Statifier.MachineState.refresh_ioprocessors/1`'s and
 `Statifier.Session.refresh_ioprocessors/1`'s documentation each name
 this Note.
+
+## Note (2026-10-09): the Note of 2026-10-04 on delayed sends under `:budget_exhausted`, narrowed on spec 6.2 and on a send the session targets at itself
+
+This Note decides nothing new and changes no answer. It narrows two
+sentences of the Note of 2026-10-04, "under `:budget_exhausted` the
+session's own delayed sends stay armed and this processor's are
+discarded" (ruled by the operator, 2026-10-06). The behaviour below was
+read on `main` at `202e21a9` and by running it.
+
+**Spec 6.2 does not say "only".** That Note says "spec 6.2 discards a
+delayed message only when the session terminates". Spec 6.2.3 says "If
+the SCXML session terminates before the delay interval has elapsed, the
+SCXML Processor MUST discard the message without attempting to deliver
+it": it requires the discard on termination and does not make
+termination the one case; the same passage also discards a message
+whose arguments fail to evaluate. Read that sentence without "only". The
+point it carries stands: the budget halt does not terminate the session
+in 6.2's sense (ADR-0019), so 6.2 does not require the discard, and
+`Statifier.Session`'s private `discard_pending_timers/2` leaves the
+session's timers armed under `:budget_exhausted`.
+
+**A send the session targets at itself is enqueued, not drained.** That
+Note says the session's own delayed sends "stay armed and deliver when
+they fire". They stay armed and fire. A fired send whose target is
+another session is delivered to it, the answer
+`Statifier.Send.BasicHTTPSessionTest` pins. A fired send whose target is
+the session itself is enqueued on the session's own inbox, as any event
+sent to it is (`Statifier.Session`'s private `deliver_fired/4`), and a
+halted session drains no queued event (`Statifier.Session`'s
+`handle_continue/2`), so under `:budget_exhausted` that event is
+enqueued but not drained while the session stays halted. "Deliver" is
+exact for a send to another session. The contrast the Note draws is
+between a timer the session keeps armed and a timer this processor ends
+on the halt notice, and it stands.
+
+`Statifier.Session`'s moduledoc, in its section on `:done` idling the
+session, says the same.
