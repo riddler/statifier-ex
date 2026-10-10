@@ -811,8 +811,8 @@ send type it already registers, a module or `{module, opts}` as a
 `:send_types` value is, and recomputes that type's `_ioprocessors` entry
 from it in the same call. The session's own `:send_types` map, which
 plans and performs its sends, and its `%MachineState{}` stamp are
-replaced together, so every later `<send>` of the type is delivered and
-cancelled through the new registration, and a child started afterwards
+replaced together, so every later `<send>` of the type is delivered
+through the new registration, and a child started afterwards
 under `:inherit_send_types` is started with it (`Statifier.Session`'s
 `handle_call/3` for the call, this change). The entry is computed as the
 session computed it at start: asked of a processor exporting
@@ -822,6 +822,16 @@ else the processor's `ioprocessors_entry/1` value
 change). The SCXML entry, every other type's entry, and the set of keys
 are left as they are; a host that wants every entry asked again calls
 `refresh_ioprocessors/1` as well.
+
+A `<cancel>` reaches a processor holding a delayed send through the
+registration the session holds when the cancel runs: the session keeps
+only the type of each held send (`Statifier.Session.Effects.register_held_send/3`),
+and the cancel is planned through the type's current registration
+(`Statifier.Session.Effects.plan/2`). So a delayed send handed over
+before the call is cancelled through the new registration's `cancel/2`,
+with the new options, and a host that replaces the module cancels the
+old processor's held sends itself. The held-send map is left as it is
+because `Statifier.Replay` keeps the same map by the same rule.
 
 **What does not change.** The set of registered types: the call replaces
 a type the session registers and adds none, so the set the core
@@ -854,9 +864,12 @@ start (`Statifier.Send.Types.check_registration/2`). The raising entry is
 answered as `refresh_ioprocessors/1` answers it, the session running on
 at the position it held (`Statifier.MachineState.replace_send_type/3`, an
 internal step, this change). A `type` that is not a string, or a
-`registration` that is not a module or `{module, opts}` with a keyword
-list, raises `FunctionClauseError` in the caller, before the session is
-asked (`Statifier.Session.replace_send_type/3`, this change).
+`registration` that is neither an atom nor a two-element tuple of an
+atom and a list, raises `FunctionClauseError` in the caller, before the
+session is asked (`Statifier.Session.replace_send_type/3`, this change).
+The guard checks that shape only, the shapes `start_link/2` accepts: an
+atom that names no module is accepted and stored, and the next `<send>`
+of the type exits the session.
 
 **What changes for a host.** One new call; no existing call's answer
 changes.
@@ -866,4 +879,6 @@ new Basic HTTP location after the call and the chart's read of it, a
 later send delivered through the new registration, a processor exporting
 only `ioprocessors_entry/1` taking its new module's entry, each refusal
 in the table with the position unchanged, the registration kept after a
-raising entry, and the caller-side raise for a malformed registration.
+raising entry, the caller-side raise for a malformed registration, a
+delayed send held before the call cancelled through the new
+registration, and an atom naming no module accepted and stored.

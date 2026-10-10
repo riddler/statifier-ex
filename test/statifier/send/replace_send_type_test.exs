@@ -31,7 +31,14 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
          ]}
 
     @impl Statifier.Send.Processor
-    def cancel(_cancel, _ctx), do: {:ok, []}
+    def cancel(cancel, %{opts: opts}),
+      do:
+        {:ok,
+         [
+           {:handler, __MODULE__,
+            {Keyword.fetch!(opts, :notify), Keyword.fetch!(opts, :desk),
+             {:cancel, cancel.send_id}}}
+         ]}
 
     @impl Statifier.Send.Processor
     def perform({notify, desk, name}, _ctx) do
@@ -42,6 +49,31 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
     @impl Statifier.Send.Processor
     def ioprocessors_entry(_type, %{session_id: session_id, opts: opts}),
       do: %{"location" => "notice:" <> Keyword.fetch!(opts, :desk) <> "/" <> session_id}
+  end
+
+  defmodule LateNotice do
+    @moduledoc false
+    # A second notice processor, so a test can replace the module and see
+    # which one a `<cancel>` reaches.
+    @behaviour Statifier.Send.Processor
+
+    @impl Statifier.Send.Processor
+    def deliver(_effect, _event, _ctx), do: {:ok, []}
+
+    @impl Statifier.Send.Processor
+    def cancel(cancel, %{opts: opts}),
+      do:
+        {:ok,
+         [{:handler, __MODULE__, {Keyword.fetch!(opts, :notify), {:cancel, cancel.send_id}}}]}
+
+    @impl Statifier.Send.Processor
+    def perform({notify, what}, _ctx) do
+      send(notify, {__MODULE__, what})
+      :ok
+    end
+
+    @impl Statifier.Send.Processor
+    def ioprocessors_entry(_type, _context), do: %{"location" => "late-notice:desk"}
   end
 
   defmodule JammedNotice do
@@ -101,6 +133,12 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
           </transition>
           <transition event="ready">
             <send type="myapp:notice" event="hold.ready" target="patron-42"/>
+          </transition>
+          <transition event="remind">
+            <send id="reminder" type="myapp:notice" event="hold.reminder" target="patron-42" delay="60s"/>
+          </transition>
+          <transition event="unremind">
+            <cancel sendid="reminder"/>
           </transition>
           <transition event="collect" target="collected"/>
         </state>
@@ -186,7 +224,7 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
       assert ioprocessors(session)["myapp:notice"] == %{"location" => "notice:desk-2/" <> sid}
 
       :ok = Session.send_event(session, "ready")
-      assert_receive {Notice, "desk-2", "hold.ready"}
+      assert_receive {Notice, "desk-2", "hold.ready"}, 5_000
       refute_received {Notice, "desk-1", _name}
     end
 
@@ -200,6 +238,42 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
 
       assert Session.replace_send_type(session, "myapp:catalog", AnnexCatalog) == :ok
       assert ioprocessors(session)["myapp:catalog"] == %{"shelf" => "catalog:annex"}
+    end
+  end
+
+  describe "what a replacement does not carry over" do
+    # sabotage: the success arm of the `{:replace_send_type, ...}` clause
+    # keeps the session's old `send_types` map -> the cancel is planned
+    # through `Notice` with desk-1, and the `assert_receive` on
+    # `LateNotice` reddens. Confirmed red and reverted.
+    test "a delayed send held before the call is cancelled through the new registration",
+         %{machine: machine} do
+      session = start!(machine, send_types: send_types("desk-1"))
+      :ok = Session.send_event(session, "remind")
+      assert_receive {Notice, "desk-1", "hold.reminder"}, 5_000
+
+      assert Session.replace_send_type(session, "myapp:notice", {LateNotice, notify: self()}) ==
+               :ok
+
+      :ok = Session.send_event(session, "unremind")
+      assert_receive {LateNotice, {:cancel, "reminder"}}, 5_000
+      refute_received {Notice, _desk, {:cancel, _send_id}}
+    end
+
+    # sabotage: `accepted_registration/2` refuses a module that does not
+    # load -> the call answers an `:invalid_registration` error instead of
+    # `:ok`, and the equality reddens. Confirmed red and reverted.
+    @tag :capture_log
+    test "an atom that names no module is stored, and the next send of the type exits the session",
+         %{machine: machine} do
+      session = start!(machine, send_types: send_types("desk-1"))
+      ref = Process.monitor(session)
+
+      assert replace(session, "myapp:notice", :no_such_notice_processor) == :ok
+      assert ioprocessors(session)["myapp:notice"] == %{}
+
+      Session.send_event(session, "ready")
+      assert_receive {:DOWN, ^ref, :process, ^session, {:undef, _stacktrace}}, 5_000
     end
   end
 
@@ -298,7 +372,7 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
       assert position(session) == before
 
       :ok = Session.send_event(session, "ready")
-      assert_receive {Notice, "desk-1", "hold.ready"}
+      assert_receive {Notice, "desk-1", "hold.ready"}, 5_000
     end
 
     # sabotage: the guard on `replace_send_type/3` is dropped -> the
