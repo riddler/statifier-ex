@@ -107,3 +107,25 @@ docs).
 - `docs/workflow.md`'s release protocol (assemble fragments, delete them
   in the release commit, tag) has now run once for real; the satellites
   copy it rather than invent their own.
+
+## Note (2026-10-09): the human-publish sentence describes the 2.0.0 publish
+
+This note decides nothing and edits no accepted text. It points a reader
+from one sentence in decision 1 to the rule that governs a publish today.
+No decision or consequence changes, and the record's Status is untouched.
+
+Decision 1 says "`mix hex.publish` is a human action performed by the
+operator, who holds the package credentials." That sentence describes how
+2.0.0 was published, the release this record decided. It is not the
+standing rule for later releases.
+
+Since ADR-0077, a release publishes through the release workflow on the
+tag push. `.github/workflows/release.yml` runs only on the push of a tag
+matching `v*.*.*`, checks the tagged commit, and its publish step is the one place the
+repository runs `mix hex.publish`, with the Hex key held as a
+repository secret.
+`v2.12.1` was the first version published that way. An agent or a
+session never runs `mix hex.publish`, and a failed workflow is re-run
+from its Actions page; `CLAUDE.md`'s release row states the same rule.
+ADR-0077's Status says it amends no earlier record, and that stays true:
+this note is the pointer, and ADR-0077 is not edited by it.
