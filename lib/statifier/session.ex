@@ -1060,10 +1060,18 @@ defmodule Statifier.Session do
   processor's `c:Statifier.Send.Processor.ioprocessors_entry/1` value. The
   SCXML entry and every other type's entry are left as they are; a host
   that also wants those asked again calls `refresh_ioprocessors/1`. Every
-  later `<send>` of `type` is delivered and cancelled through the new
-  registration, and a child this session starts afterwards under
-  `:inherit_send_types` is started with it. A child already running keeps
-  the registration it started with.
+  later `<send>` of `type` is delivered through the new registration, and a
+  child this session starts afterwards under `:inherit_send_types` is
+  started with it. A child already running keeps the registration it
+  started with.
+
+  A `<cancel>` reaches the processor holding a delayed send through the
+  registration the session holds when the cancel runs, not the one the
+  send was handed to: a delayed send of `type` handed over before this call
+  is cancelled through the new registration's
+  `c:Statifier.Send.Processor.cancel/2`, with the new options. A host that
+  replaces the module, not only the options, cancels the old processor's
+  held sends itself, or has the new module cancel them.
 
   Answers `:ok`, or, changing nothing (the registration, the entries and
   the position stay as they were):
@@ -1091,10 +1099,14 @@ defmodule Statifier.Session do
       it. The session keeps running at the position it held before the
       call.
 
-  The checks run in that order. `type` must be a string and
-  `registration` a module or `{module, opts}` with a keyword-list shape;
-  any other argument is outside the call's input and raises
-  `FunctionClauseError` in the caller, before the session is asked.
+  The checks run in that order. A `type` that is not a string, or a
+  `registration` that is neither an atom nor a two-element tuple of an
+  atom and a list, is outside the call's input and raises
+  `FunctionClauseError` in the caller, before the session is asked. The
+  guard checks that shape only, as `start_link/2` accepts the same shapes:
+  an atom that names no module is accepted and stored, with an empty
+  `_ioprocessors` entry, and the next `<send>` of the type then exits the
+  session.
 
   Like `refresh_ioprocessors/1`, this is a call served once the session has
   drained its queue, and it waits `GenServer.call/2`'s default 5 seconds:

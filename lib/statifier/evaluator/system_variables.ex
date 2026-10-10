@@ -43,7 +43,7 @@ defmodule Statifier.Evaluator.SystemVariables do
 
   `_sessionid`, `_name`, and `_ioprocessors` are session-lifetime and are
   never rewritten afterward, except a registered `_ioprocessors` entry a
-  host refreshes (see below) - `_sessionid` stays stable for the session's
+  host refreshes or replaces (see below) - `_sessionid` stays stable for the session's
   whole lifetime (ADR-0008). `_event` is different: it is seeded here to
   `:undefined` and thereafter written only by `MachineState.put_event/2`.
 
@@ -82,14 +82,14 @@ defmodule Statifier.Evaluator.SystemVariables do
   they were written, and a resumed session reads the entries it started
   with. `MachineState.put_send_types/2`, the driver's re-stamp on a resume
   (ADR-0064), replaces the classifier's set and does not rewrite
-  `_ioprocessors`. The registration is fixed for the session's lifetime
-  (ADR-0069 decision 2), and a host that re-stamps the set it started with
+  `_ioprocessors`. The set of registered types is fixed for the session's
+  lifetime (ADR-0069 decision 2), and a host that re-stamps the set it started with
   reads the same entries it would have written; a set that changes across a
   resume is a mid-session registration, which ADR-0069 names as a trigger
   that would reopen that record.
 
-  The one rewrite is a host's explicit refresh (ADR-0075's Amendment of
-  2026-10-02): `Statifier.MachineState.refresh_ioprocessors/1`, and
+  Two host calls rewrite entries. The first is a host's explicit refresh
+  (ADR-0075's Amendment of 2026-10-02): `Statifier.MachineState.refresh_ioprocessors/1`, and
   `Statifier.Session.refresh_ioprocessors/1` for a live session, ask every
   registered processor that exports
   `c:Statifier.Send.Processor.ioprocessors_entry/2` for its entry again,
@@ -99,6 +99,16 @@ defmodule Statifier.Evaluator.SystemVariables do
   entry from a processor that exports only
   `c:Statifier.Send.Processor.ioprocessors_entry/1`, and the set of keys
   stay as they were, so the registered type set stays fixed.
+
+  The second is `Statifier.Session.replace_send_type/3` on a running
+  session (ADR-0069's Amendment of 2026-10-09), which replaces one
+  registered type's registration, its module and options, and rewrites
+  that type's entry from the new registration as this function writes it
+  at start: from `c:Statifier.Send.Processor.ioprocessors_entry/2` when the
+  new module exports it, else from its
+  `c:Statifier.Send.Processor.ioprocessors_entry/1` value, so an entry from
+  a processor that exports only the `/1` callback changes too. The SCXML
+  entry, every other type's entry and the set of keys stay as they were.
 
   ## Why `_event` is seeded rather than left absent
 
