@@ -12,7 +12,11 @@ defmodule Statifier.Validator.Context do
   re-walk. The list carries no order contract: membership is the whole of
   what anything reads, and `walk/3` builds it innermost-first to avoid an
   append per tree level. A state with a `nil` id cannot be named by anything,
-  so it is absent from both maps.
+  so it is absent from both maps. No check reads `ancestors` or calls
+  `descendant?/3` any more - both descendancy checks place a target by the
+  tree's structure, `inside?/3` - but the field and the function stay: the
+  struct and `descendant?/3` are documented, so removing either waits for a
+  major version.
 
   `parents` maps **every** state struct (nameless ones included) to its
   immediate parent - another `State.t()`, or the `Document.t()` for a
@@ -101,8 +105,7 @@ defmodule Statifier.Validator.Context do
   # `ancestor` is on it. A state with no id has no entry in the id-keyed
   # `ancestors` map `descendant?/3` reads, so an id test cannot place a
   # state under it, and two states that share an id cannot be told apart
-  # by it. Check 3 uses this for an ancestor with no id; check 5 uses it for
-  # every ancestor.
+  # by it. Checks 3 and 5 use this for every ancestor.
   @spec inside?(context :: t(), state :: State.t(), ancestor :: State.t()) :: boolean()
   def inside?(%__MODULE__{parents: parents} = context, %State{} = state, %State{} = ancestor) do
     case Map.fetch!(parents, state) do
