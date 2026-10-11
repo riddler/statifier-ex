@@ -78,6 +78,25 @@ defmodule Mix.Statifier.Corpus.HostCase do
   processor (`with_event_io_processors/2`). The front is stopped when the
   case ends. The item set is closed; its one member is the Basic HTTP
   Event I/O Processor, `Statifier.Send.BasicHTTP`.
+
+  Every wait above is bounded by the wall clock, on purpose. A
+  configuration is read at most four seconds after the step that led to it
+  (`@configuration_deadline_ms`), a pending library timer gets a window of
+  100 milliseconds to fire before the next event (`@settle_window_ms`),
+  and each `Statifier.Session.status/1` and `Statifier.Session.snapshot/1`
+  call the wait makes carries `GenServer.call/2`'s default timeout of five
+  seconds. The reason is that every case must end with a verdict: a chart
+  that keeps running, or a session that does not answer, would otherwise
+  hold the corpus stage open, so the runner bounds the wait by the clock
+  rather than waiting on the session, and the bounds sit far above what a
+  committed case takes on an idle machine. The cost is that a session held
+  longer than a bound makes the case fail whatever its document does: a
+  session inside a Basic HTTP POST, which the default transport bounds at
+  five seconds of its own (`Statifier.Send.BasicHTTP.Transport.Httpc`), can
+  outlast the deadline and leave a stale configuration to compare, or
+  outlast a call's timeout and exit the runner. Such a failure under heavy
+  load is the machine's, not the case's; running the case again on an idle
+  machine tells the two apart.
   """
 
   alias Mix.Statifier.BasicHTTPFront
