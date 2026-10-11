@@ -387,3 +387,40 @@ Premise surface: this record's decision 4 and the
 both as of `469f7a9`, plus statifier_persistence `sp-ADR-0011` as accepted on
 2026-09-13, read on that repo's `main`. If that record is later amended away
 from the noun cited here, this note is the only thing that has to change.
+
+## Note (2026-10-11): the timer half - an undecodable delayed-send row cancels silently
+
+This note answers the question the decision note of 2026-08-29 left open
+in its paragraph "**Not decided here: the timer half.**": whether an
+undecodable *delayed-send* payload has a report analogous to this
+record's door. It changes no decision of this record, edits no accepted
+text, and leaves the record's Status untouched. Ruled by the operator,
+2026-10-10.
+
+**The answer: the silent cancel stays.** A durable host that finds a
+stored delayed-send row it can never decode cancels that timer, and
+nothing reaches the chart: no event, no `error.communication` of any
+spelling, and no new event name. The engine gains nothing for it.
+
+The reasons:
+
+- A lost timer row is indistinguishable from one that has not fired
+  yet.
+- A fire may already find its execution not live and discard the message
+  without delivering it (ADR-0054 decision 4, the fire-time liveness
+  check), so a delayed send that never arrives is an outcome a chart can
+  already meet.
+- A delayed send has no invocation, no `invoke_id` and no door of this
+  record's shape, as the timer-half paragraph already notes, so there is
+  no door to report through.
+
+**What a host sees.** The chart never receives the event it armed. The
+durable host's own job record and job event are its signal: the job is
+cancelled with the reason undecodable. statifier_oban's
+`StatifierOban.Timer.Worker` cancels such a row with
+`{:undecodable, reason}` (read on that repository's `main` at `e1ab9512`),
+so the job row reads cancelled and the job event reports that cancel.
+
+statifier_oban's half of this answer, on its own record and in the
+`StatifierOban.Timer.Worker` moduledoc, is that repository's own change.
+Every claim about this repository in this Note was read at `904eee94`.
