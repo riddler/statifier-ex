@@ -70,7 +70,7 @@
           },
           "expect_position": {
             "type": "object",
-            "description": "Optional, on a statifier case only (ADR-0076): the position the chart holds once this step's configuration agrees, as the string-id export of it, with the fields an implementation need not share left out. Every member is required. A case that carries one on any step has an id on every state of its document. The corpus writes each array of state ids sorted ascending (this schema does not check the order), and the runner compares every member exactly, order included.",
+            "description": "Optional, on a statifier case only (ADR-0076): the position the chart holds once this step's configuration agrees, as the string-id export of it, with the fields an implementation need not share left out. Every member is required. A case that carries one on any step has an id on every state of its document. The corpus writes each array of state ids sorted ascending (this schema does not check the order), and the runner compares every member as a JSON value: numbers by value (a float 2.0 agrees with a 2), arrays in order, objects member by member, and anything else exactly.",
             "properties": {
               "configuration": {
                 "type": "array",
@@ -101,7 +101,7 @@
               },
               "active_invocations": {
                 "type": "array",
-                "description": "One item per active invocation, sorted by state and then by index. The invocation's id is not stated.",
+                "description": "One item per active invocation. The corpus writes the items sorted by state and then by index; this schema does not check the order. The invocation's id is not stated.",
                 "items": {
                   "type": "object",
                   "properties": {
