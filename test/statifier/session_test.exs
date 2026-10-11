@@ -87,6 +87,23 @@ defmodule Statifier.SessionTest do
     """
   end
 
+  # `livelock_doc/0` under a parent whose entry schedules the given delayed
+  # sends, each firing after the budget halt.
+  defp livelock_with_sends_doc(sends) do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+        <state id="p">
+            <onentry>
+                #{sends}
+            </onentry>
+            <state id="a">
+                <transition target="a"/>
+            </state>
+        </state>
+    </scxml>
+    """
+  end
+
   defp named_doc do
     """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="my-session" initial="a">
@@ -818,6 +835,159 @@ defmodule Statifier.SessionTest do
       assert status.status == :cancelled
       assert status.queued_events == 2
       refute_received {:statifier, ^session_id, {:halted, _}}
+    end
+  end
+
+  describe "a delayed send fired after a budget halt" do
+    # Starts `xml` under a budget that halts it, takes the recording and the
+    # snapshot as the halt left them, and waits for every pending delayed
+    # send to fire. `status/1` is a call, so each fired timer has been
+    # handled, and any message it sent is in this mailbox, when it returns.
+    defp halt_then_fire(xml, opts \\ []) do
+      machine = compile!(xml)
+
+      {:ok, session} =
+        Session.start_link(
+          machine,
+          Keyword.merge([max_macrostep_rounds: 5, subscribers: [self()], record: true], opts)
+        )
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:halted, :budget_exhausted}}
+      {:ok, recording} = Session.recording(session)
+      snapshot = Session.snapshot(session)
+
+      status = wait_for_status(session, fn s -> s.pending_timers == 0 end, 200)
+      {session, session_id, recording, snapshot, status}
+    end
+
+    defp halted_messages(session_id) do
+      receive do
+        {:statifier, ^session_id, {:halted, reason}} -> [reason | halted_messages(session_id)]
+        {:statifier, ^session_id, _message} -> halted_messages(session_id)
+      after
+        0 -> []
+      end
+    end
+
+    # sabotage: the fired-timer `handle_info/2` clause for a
+    # `:budget_exhausted` session never matches (every fire goes on to the
+    # ordinary clause) -> the `#_internal` delivery drives the halted core
+    # again and a second `{:halted, :budget_exhausted}` arrives, reddening
+    # the halted-message equality. Reverted and confirmed green.
+    test "an #_internal target is dropped without driving the core, unrecorded" do
+      {session, session_id, recording, snapshot, status} =
+        halt_then_fire(
+          livelock_with_sends_doc(
+            ~s(<send event="tick" delay="100ms" targetexpr="'#_internal'"/>)
+          )
+        )
+
+      assert halted_messages(session_id) == []
+      assert Session.recording(session) == {:ok, recording}
+      assert Session.snapshot(session) == snapshot
+      assert status.status == :budget_exhausted
+      assert status.queued_events == 0
+    end
+
+    # sabotage: `halted_fired_delivery/2` answers a registry miss on a
+    # `{:session, sid}` route with `:inbox` instead of `:drop` -> the fire
+    # is recorded, reddening the recording equality; a second check gave an
+    # unreachable `:parent` route `:inbox` the same way, with the same red.
+    # Reverted and confirmed green.
+    test "a route unreachable at fire time is dropped without driving the core, unrecorded" do
+      sends = """
+      <send event="tick" delay="100ms" target="#_scxml_no-such-session"/>
+      <send event="tock" delay="100ms" target="#_parent"/>
+      """
+
+      {session, session_id, recording, snapshot, status} =
+        halt_then_fire(livelock_with_sends_doc(sends))
+
+      assert halted_messages(session_id) == []
+      assert Session.recording(session) == {:ok, recording}
+      assert Session.snapshot(session) == snapshot
+      assert status.status == :budget_exhausted
+      assert status.queued_events == 0
+    end
+
+    # sabotage: `halted_fired_delivery/2` answers `:drop` for the `:self`
+    # route -> that fire is neither recorded nor queued, and the match on
+    # two timer entries reddens; a second check did the same for this
+    # session's own `{:session, sid}`, with the same red. Reverted and
+    # confirmed green.
+    test "a self-targeted fire is recorded and enqueued on the inbox, not drained" do
+      sends = """
+      <send event="tick" delay="100ms"/>
+      <send event="tock" delay="100ms" targetexpr="'#_scxml_' + _sessionid"/>
+      """
+
+      {session, session_id, recording, _snapshot, status} =
+        halt_then_fire(livelock_with_sends_doc(sends))
+
+      assert halted_messages(session_id) == []
+      {:ok, after_fire} = Session.recording(session)
+      fired = Recording.entries(after_fire) -- Recording.entries(recording)
+
+      assert [
+               {:timer, _tick_id, %Event{}, _tick_routes},
+               {:timer, _tock_id, %Event{}, _tock_routes}
+             ] =
+               fired
+
+      assert fired
+             |> Enum.map(fn {:timer, _send_id, event, _routes} -> event.name end)
+             |> Enum.sort() ==
+               ["tick", "tock"]
+
+      assert status.status == :budget_exhausted
+      assert status.queued_events == 2
+    end
+
+    # sabotage: `halted_fired_delivery/2` answers `:drop` for a
+    # `{:session, sid}` route the registry finds -> the receiver never
+    # gets "go" and the wait on its configuration flunks. Reverted and
+    # confirmed green.
+    test "a fire to another live session is delivered to it and recorded" do
+      receiver_id = "sess_budget-halted-receiver-#{System.unique_integer([:positive])}"
+      {:ok, receiver} = Session.start_link(compile!(two_state_doc()), session_id: receiver_id)
+
+      {session, session_id, recording, _snapshot, status} =
+        halt_then_fire(
+          livelock_with_sends_doc(
+            ~s(<send event="go" delay="100ms" target="#_scxml_#{receiver_id}"/>)
+          )
+        )
+
+      wait_for_status(receiver, fn s -> s.configuration == MapSet.new(["b"]) end)
+      assert halted_messages(session_id) == []
+      {:ok, after_fire} = Session.recording(session)
+
+      assert [{:timer, _send_id, %Event{name: "go"}, _routes}] =
+               Recording.entries(after_fire) -- Recording.entries(recording)
+
+      assert status.status == :budget_exhausted
+      assert status.queued_events == 0
+    end
+
+    # sabotage: the fired-timer `handle_info/2` clause for a
+    # `:budget_exhausted` session never matches -> the `#_internal`
+    # delivery drives the core into a second budget halt ahead of the
+    # cancel, reddening the halted-message equality. Reverted and confirmed
+    # green.
+    test "cancel/1 after a dropped fire halts the session :cancelled" do
+      {session, session_id, _recording, _snapshot, _status} =
+        halt_then_fire(
+          livelock_with_sends_doc(
+            ~s(<send event="tick" delay="100ms" targetexpr="'#_internal'"/>)
+          )
+        )
+
+      :ok = Session.cancel(session)
+      wait_for_status(session, fn s -> s.status == :cancelled end)
+
+      assert halted_messages(session_id) == [:cancelled]
+      assert Session.status(session).queued_events == 0
     end
   end
 

@@ -1,0 +1,3 @@
+### Fixed
+
+- A delayed send fired while a `Statifier.Session` is halted `:budget_exhausted`, to an internal target (a `targetexpr` evaluating to `#_internal`) or to a route unreachable at fire time, is now dropped without stepping: the core is not driven, nothing is recorded, and no further message reaches a subscriber, as a budget-halted sender's miss reported through `Statifier.Session.failed_send/3` is dropped. It used to drive the halted core again and send another `{:halted, :budget_exhausted}`. A fired send to the session itself is still enqueued on its inbox, and one to another live session is still delivered to it. A session halted `:done` or `:cancelled` is unchanged.

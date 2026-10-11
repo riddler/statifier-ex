@@ -85,6 +85,23 @@ defmodule Statifier.ReplayRoundTripTest do
     """
   end
 
+  # `livelock_doc/0` under a parent whose entry schedules a delayed send to
+  # the internal queue, which fires after the budget halt.
+  defp livelock_with_internal_send_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+        <state id="p">
+            <onentry>
+                <send event="tick" delay="50ms" targetexpr="'#_internal'"/>
+            </onentry>
+            <state id="a">
+                <transition target="a"/>
+            </state>
+        </state>
+    </scxml>
+    """
+  end
+
   defp final_chain_doc do
     """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -388,6 +405,31 @@ defmodule Statifier.ReplayRoundTripTest do
                {:cancel, %Routes{}}
              ] = Recording.entries(recording)
 
+      assert List.last(stream) == {:halted, :cancelled}
+      assert Enum.count(stream, &match?({:halted, :budget_exhausted}, &1)) == 1
+      assert result.status == :cancelled
+    end
+  end
+
+  describe "a cancel/1 run past a delayed send dropped under a budget halt" do
+    # sabotage: `Statifier.Session`'s fired-timer `handle_info/2` clause for
+    # a `:budget_exhausted` session never matches -> the fire is recorded
+    # as a timer entry and an internal entry ahead of the cancel, reddening
+    # the entries match. Reverted and confirmed green.
+    test "the dropped fire leaves no entry and the replay matches the live run" do
+      machine = compile!(livelock_with_internal_send_doc())
+
+      {recording, stream, result} =
+        round_trip(machine, [max_macrostep_rounds: 5], fn session ->
+          wait_for_status(session, fn s ->
+            s.status == :budget_exhausted and s.pending_timers == 0
+          end)
+
+          :ok = Session.cancel(session)
+          wait_for_status(session, fn s -> s.status == :cancelled end)
+        end)
+
+      assert [{:cancel, %Routes{}}] = Recording.entries(recording)
       assert List.last(stream) == {:halted, :cancelled}
       assert Enum.count(stream, &match?({:halted, :budget_exhausted}, &1)) == 1
       assert result.status == :cancelled
