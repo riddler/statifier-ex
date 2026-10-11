@@ -169,8 +169,20 @@ defmodule Statifier.Invoke.SyncHandler.AdapterTest do
     {:ok, session} =
       Session.start_link(compile!(call_doc(type)), invoke_handlers: Handler.invoke_handlers())
 
-    on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+    on_exit(fn -> stop_session(session) end)
     session
+  end
+
+  # sabotage: n/a - teardown plumbing; it asserts no lib/ behaviour.
+  # The session is linked to the test process, which has already exited
+  # when `on_exit/1` runs, so the session can exit at any moment here: a
+  # liveness check before the stop still races it, and the stop then exits
+  # `:noproc` (or with the session's own exit reason). A session that is
+  # already gone is what this teardown wants, so its exit is not a failure.
+  defp stop_session(session) do
+    Session.stop(session)
+  catch
+    :exit, _session_already_gone -> :ok
   end
 
   describe "the derived registrations" do
