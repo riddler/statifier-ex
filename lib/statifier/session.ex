@@ -67,6 +67,9 @@ defmodule Statifier.Session do
   fired send that targets another session is delivered to it, while one
   that targets this session itself is enqueued on its inbox, like any
   event sent to it, and is not drained while the session stays halted.
+  One that targets the internal queue, or a route unreachable when it
+  fires, is dropped without driving the core and is not recorded, as a
+  budget-halted sender's miss reported through `failed_send/3` is.
 
   ## One subscriber stream
 
@@ -2040,9 +2043,9 @@ defmodule Statifier.Session do
   # `Process.cancel_timer/1`'s reach, so it lands here instead - discarded
   # per the same 6.2 sentence, unrecorded (a discarded message is not an
   # input; a halted recording's live suffix stays empty) and undelivered.
-  # `:budget_exhausted` deliberately falls through to the ordinary clause
-  # below: the interpreter has not exited (`discard_pending_timers/2`'s own
-  # comment), so its fired timers still deliver.
+  # `:budget_exhausted` has a clause of its own, the second below: the
+  # interpreter has not exited (`discard_pending_timers/2`'s own comment),
+  # so its fired timers still deliver where delivering does not step it.
   #
   # The ordinary clause below is the fired-timer path (spec 6.2): forget the
   # reference - a fired timer is gone whether or not this session is
@@ -2064,6 +2067,38 @@ defmodule Statifier.Session do
        | timers: Timers.forget(state.timers, ref),
          timer_refs: Map.delete(state.timer_refs, ref)
      }}
+  end
+
+  # A `:budget_exhausted` session is halted, and the moduledoc's halted
+  # message is the last one its subscribers receive. A fire to `:internal`
+  # or to a route unreachable now would reach `deliver_internal/6` and
+  # drive the core with a fresh budget, halting it again, so that fire is
+  # dropped the way `failed_send/3`'s budget-halted clause drops a miss:
+  # the reference is forgotten, and the core is not called, nothing is
+  # recorded and nothing is notified. Any other route is decided here
+  # once (`halted_fired_delivery/2`), recorded as the ordinary clause
+  # records it, and delivered without a second lookup, so a target that
+  # goes away between the two cannot turn a delivery into a miss.
+  def handle_info({:statifier_delayed_send, ref, send_id, route, event, _effect}, state)
+      when state.halted == :budget_exhausted do
+    state = %{
+      state
+      | timers: Timers.forget(state.timers, ref),
+        timer_refs: Map.delete(state.timer_refs, ref)
+    }
+
+    case halted_fired_delivery(route, state) do
+      :drop ->
+        {:noreply, state}
+
+      delivery ->
+        state = stamp(state)
+
+        state =
+          record(state, &Recording.put_timer(&1, send_id, event, state.machine_state.routes))
+
+        {:noreply, deliver_halted_fire(delivery, event, state), {:continue, :drain}}
+    end
   end
 
   def handle_info({:statifier_delayed_send, ref, send_id, route, event, effect}, state) do
@@ -2990,6 +3025,56 @@ defmodule Statifier.Session do
   end
 
   defp deliver_fired(route, event, effect, state), do: deliver(route, event, effect, state, nil)
+
+  # The budget-halted fired-timer clause's resolver: the same routes
+  # `deliver_fired/4` and `deliver/5` resolve, answered without delivering.
+  # This session itself (`:self`, or its own `{:session, sid}`) is the
+  # inbox; a live target is the pid to send to; `:internal` and every
+  # miss, the routes `deliver/5` would take into `deliver_internal/6`, are
+  # `:drop`.
+  @spec halted_fired_delivery(route :: Target.route(), state :: State.t()) ::
+          :inbox | {:send, pid()} | {:parent, pid(), String.t()} | :drop
+  defp halted_fired_delivery(:self, _state), do: :inbox
+  defp halted_fired_delivery({:session, sid}, %State{session_id: sid}), do: :inbox
+
+  defp halted_fired_delivery({:session, sid}, _state) do
+    case registry_lookup(sid) do
+      [{pid, _value}] -> {:send, pid}
+      [] -> :drop
+    end
+  end
+
+  defp halted_fired_delivery(:parent, %State{invoked_by: {parent_pid, invoke_id}}),
+    do: {:parent, parent_pid, invoke_id}
+
+  defp halted_fired_delivery({:invoke, invoke_id}, state) do
+    case Invocations.fetch(state.invocations, invoke_id) do
+      {:ok, %{pid: pid}} -> {:send, pid}
+      :error -> :drop
+    end
+  end
+
+  defp halted_fired_delivery(_internal_or_unreachable, _state), do: :drop
+
+  # Delivers a resolved fire the way `deliver_fired/4` and `deliver/5`
+  # deliver the same route.
+  @spec deliver_halted_fire(
+          delivery :: :inbox | {:send, pid()} | {:parent, pid(), String.t()},
+          event :: Event.t(),
+          state :: State.t()
+        ) :: State.t()
+  defp deliver_halted_fire(:inbox, event, state),
+    do: %{state | inbox: Inbox.enqueue_event(state.inbox, event)}
+
+  defp deliver_halted_fire({:send, pid}, event, state) do
+    send_event(pid, event)
+    state
+  end
+
+  defp deliver_halted_fire({:parent, parent_pid, invoke_id}, event, state) do
+    send_invoked_event(parent_pid, invoke_id, %{event | invokeid: invoke_id})
+    state
+  end
 
   # `Registry.lookup/2` raises `ArgumentError` when `Statifier.Registry`
   # itself is not running (no ETS table backs a registry nobody started),
