@@ -68,7 +68,7 @@ raises `error.execution`.
    send. Routing a `<cancel>` for a send handed over before the position
    was saved is yours, as re-arming timers after a resume already is.
 
-The guide is the "`<send>` half" of
+The guide is the section "The `<send>` half: host-registered send types" of
 [How to extend Statifier: `<invoke>` handlers and `<send>` types](extending.md).
 
 ## 2.6.1
