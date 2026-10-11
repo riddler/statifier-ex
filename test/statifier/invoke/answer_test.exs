@@ -3,7 +3,7 @@ defmodule Statifier.Invoke.AnswerTest do
 
   # `async: false` for `test/statifier/session/invoke_handler_test.exs`'s own
   # reason: the byte-identity block below drives a real `Statifier.Session`
-  # process to quiescence, registers a named listener for its handler, and
+  # process to quiescence, registers a per-test listener for its handler, and
   # drains the subscriber stream.
   #
   # The contract under test (ADR-0068's own "what would reopen this record"
@@ -15,7 +15,18 @@ defmodule Statifier.Invoke.AnswerTest do
   # half - a second construction site that merely *resembled*
   # `Statifier.Session`'s own would be the defect, not the feature.
 
-  alias Statifier.{Compiler, Effect, Event, Lowering, Parser, Session, StreamOrder, Validator}
+  alias Statifier.{
+    Compiler,
+    Effect,
+    Event,
+    Lowering,
+    MachineState,
+    Parser,
+    Session,
+    StreamOrder,
+    Validator
+  }
+
   alias Statifier.Effect.Invoke
   alias Statifier.Evaluator.SystemVariables
   alias Statifier.Invoke.Answer
@@ -274,10 +285,16 @@ defmodule Statifier.Invoke.AnswerTest do
     def forward(invoke_id, event, _ctx), do: {:ok, [{:forward, invoke_id, event}]}
 
     @impl Statifier.Invoke.Handler
-    def perform(message, _ctx) do
-      send(:invoke_answer_test_listener, message)
+    def perform(message, %{session_id: session_id}) do
+      :global.send(listener_name(session_id), message)
       :ok
     end
+
+    # Each test registers its own process under a name built from the
+    # session id it starts its session with, so no two tests share a name
+    # and a previous test's process still exiting never holds this one.
+    @spec listener_name(session_id :: String.t()) :: {module(), :listener, String.t()}
+    def listener_name(session_id), do: {__MODULE__, :listener, session_id}
   end
 
   defp answer_doc do
@@ -317,10 +334,11 @@ defmodule Statifier.Invoke.AnswerTest do
   end
 
   defp start_armed_session(caller_context) do
-    Process.register(self(), :invoke_answer_test_listener)
+    session_id = register_listener()
 
     {:ok, session} =
       Session.start_link(compile!(armed_doc()),
+        session_id: session_id,
         trace: true,
         subscribers: [self()],
         invoke_handlers: %{"test:answer" => AnswerHandler}
@@ -334,10 +352,11 @@ defmodule Statifier.Invoke.AnswerTest do
   end
 
   defp start_lifecycle_session do
-    Process.register(self(), :invoke_answer_test_listener)
+    session_id = register_listener()
 
     {:ok, session} =
       Session.start_link(compile!(answer_doc()),
+        session_id: session_id,
         trace: true,
         subscribers: [self()],
         invoke_handlers: %{"test:answer" => AnswerHandler}
@@ -346,6 +365,16 @@ defmodule Statifier.Invoke.AnswerTest do
     wait_for_status(session, fn s -> s.configuration == MapSet.new(["a"]) end)
     assert_receive {:start, "inv1"}, 1_000
     session
+  end
+
+  # sabotage: n/a - test setup plumbing; it asserts no lib/ behaviour.
+  # A fresh session id per test, and this test's process registered under
+  # the name `AnswerHandler.perform/2` derives from it: the name is unique
+  # to the test, so a repeated or parallel run cannot find it taken.
+  defp register_listener do
+    session_id = MachineState.generate_session_id()
+    :yes = :global.register_name(AnswerHandler.listener_name(session_id), self())
+    session_id
   end
 
   # The delivered `%Event{}` itself, off the trace stream, so the comparison
