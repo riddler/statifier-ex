@@ -163,7 +163,12 @@ defmodule Statifier.Publish do
   its timer fires. An `<invoke idlocation>` declares no id, a registered or
   unsupported `type` is not judged, and a `targetexpr` or a `typeexpr` is
   left to the runtime, as is a session id or `#_parent`, which depend on
-  who started the execution. It needs no declaration.
+  who started the execution. A target naming the id the engine generates
+  for an `<invoke>` with no `id` (`<state id>.inv_<n>`) is reported as
+  well, although a send made once that invocation has started reaches it
+  at run time: the chart declares no such id, and relying on a generated
+  id is fragile, since its number depends on how many invocations the
+  execution has started. It needs no declaration.
 
   Row S6 reads every `<invoke>` whose `type` is a literal, the rule the
   runtime applies before the invocation starts: a type

@@ -350,8 +350,9 @@ defmodule Statifier.PublishTest do
                Publish.findings(invoke_chart(~s(<send target="#_holds" delay="1s" event="e"/>)))
     end
 
-    # An `idlocation` invoke's id is generated when it starts; no literal
-    # can name it.
+    # An `idlocation` invoke declares no id: the engine generates one when
+    # it starts, and `#_holds` names the location the id is written to,
+    # not the id.
     # sabotage: "S3" dropped from `@rows` -> red
     test "an <invoke idlocation> declares no id" do
       machine =
@@ -369,6 +370,29 @@ defmodule Statifier.PublishTest do
         """)
 
       assert [%{row: "S3", data: %{target: "#_holds"}}] = Publish.findings(machine)
+    end
+
+    # The engine generates `lending.inv_1` for the id-less invoke, and a
+    # send made once it has started reaches that id at run time, but the
+    # chart declares no such id and relying on a generated id is fragile,
+    # so the literal is reported.
+    # sabotage: the S3 clause skips a target shaped `<state id>.inv_<n>`
+    # -> red
+    test "a target naming a generated invoke id is reported" do
+      machine =
+        chart("""
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+               initial="lending" datamodel="predicator">
+          <state id="lending">
+            <invoke type="scxml">
+              <content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="done"/></scxml></content>
+            </invoke>
+            <onentry><send target="#_lending.inv_1" event="e"/></onentry>
+          </state>
+        </scxml>
+        """)
+
+      assert [%{row: "S3", data: %{target: "#_lending.inv_1"}}] = Publish.findings(machine)
     end
 
     # sabotage: `@rows` reordered to put "S3" before "S1" -> red
