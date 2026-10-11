@@ -10,6 +10,28 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.14.0] 2026-10-11
+
+A minor release with one Breaking entry. `Statifier.Validator.validate/3`,
+and so `Statifier.compile/2`, refuses a document that writes one attribute
+twice on one element, with the new error reason
+`{:duplicate_attribute, element, attribute}`, where it compiled the
+document using the first occurrence's value; the Changed bullet says what
+a host does about it. Two answers of a session halted `:budget_exhausted`
+change too: `Statifier.Session.cancel/1` now reaches it past queued events
+and halts it `:cancelled`, and a delayed send fired to an internal target
+or to a route unreachable at fire time is dropped without stepping. A
+session halted `:done` or `:cancelled` is unchanged.
+
+### Changed
+
+- **Breaking** for a host that compiles a document writing one attribute twice on one element, or that matches `Statifier.Validator.Error`'s reasons exhaustively: `Statifier.Validator.validate/3`, and so `Statifier.compile/2`, now refuses such a document with the error reason `{:duplicate_attribute, element, attribute}` (code `:duplicate_attribute`), located at the repeated occurrence, where it compiled the document using the first occurrence's value. XML does not allow the repeat: remove it from the document, and add a clause for the new reason wherever you match the validator's reasons.
+
+### Fixed
+
+- `Statifier.Session.cancel/1` sent to a session halted `:budget_exhausted` with events queued (by `Statifier.Session.send_event/2`, or by a delayed send to the session itself fired after the halt) now reaches it and halts it `:cancelled`, discarding the queued events, so `{:halted, :cancelled}` follows the budget halt as the session's documentation promises; the cancel used to stay queued behind those events and the session stayed `:budget_exhausted`. A session halted `:done` or `:cancelled` is unchanged.
+- A delayed send fired while a `Statifier.Session` is halted `:budget_exhausted`, to an internal target (a `targetexpr` evaluating to `#_internal`) or to a route unreachable at fire time, is now dropped without stepping: the core is not driven, nothing is recorded, and no further message reaches a subscriber, as a budget-halted sender's miss reported through `Statifier.Session.failed_send/3` is dropped. It used to drive the halted core again and send another `{:halted, :budget_exhausted}`. A fired send to the session itself is still enqueued on its inbox, and one to another live session is still delivered to it. A session halted `:done` or `:cancelled` is unchanged.
+
 ## [2.13.0] 2026-10-09
 
 A minor release. `Statifier.Session.replace_send_type/3` replaces a
