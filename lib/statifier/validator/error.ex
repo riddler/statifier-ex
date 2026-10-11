@@ -5,7 +5,7 @@ defmodule Statifier.Validator.Error do
   `location`) with character-identical field names, so a future common
   diagnostic protocol can adopt both without either layer's reason union
   leaking into the other's. The two layers' error lists are never observed
-  together - `Statifier.Validator.validate/2` only ever receives a document
+  together - `Statifier.Validator.validate/3` only ever receives a document
   lowering already accepted - so sharing the *shape* rather than the type is
   enough.
 
