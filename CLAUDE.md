@@ -304,14 +304,23 @@ decision and not a constant.
 - **Project-level gap** (`gate.project_level_skips`) - a real hole in what this
   project checks, standing open on every run. It does not block a commit, since
   gating on it would refuse every commit forever, but it stays named in every
-  report so it does not go quiet. The list is empty today: Doctor was its only
-  member, and st-1xz decided it rather than declaring it inapplicable -
-  `:doctor` is now a dev dependency, `.doctor.exs` holds 100% thresholds on
-  every axis, and `mix quality` reports Doctor as a real stage instead of the
-  standing skip line. The category and its manifest key stay, because the next
-  stage this project checks nothing for belongs here rather than in the
-  not-applicable list. Do not move a pattern here into the not-applicable list
-  to quiet a report.
+  report so it does not go quiet. Doctor was its first member, and st-1xz
+  decided it rather than declaring it inapplicable - `:doctor` is now a dev
+  dependency, `.doctor.exs` holds 100% thresholds on every axis, and
+  `mix quality` reports Doctor as a real stage instead of the standing skip
+  line. The category and its manifest key stay, because the next stage this
+  project checks nothing for belongs here rather than in the not-applicable
+  list. Do not move a pattern here into the not-applicable list to quiet a
+  report.
+
+  The list holds one pattern today, the Diataxis stage's opt-in skip
+  (`^opt-in; set (diataxis): ...`). The stage arrived with ex_quality 0.16 and
+  is opt-in: it reads each documentation page for language cues of another
+  documentation type than the page declares. It stays off here because
+  nothing has decided to gate the guides on it, so no run checks that today.
+  That is a real gap in what this project checks, not an inapplicable stage -
+  the guides it would read exist - so it belongs in this list. The sibling
+  packages' manifests carry the same pattern.
 - **Run-level** - neither list matches, and the gate is red. The stage should
   have run and could not.
 
