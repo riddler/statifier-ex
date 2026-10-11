@@ -4,7 +4,7 @@
     "test/mix/**/*_test.exs",
     "test/statifier/**/*_test.exs"
   ],
-  "last_updated": "2026-10-02",
+  "last_updated": "2026-10-11",
   "scion_tests": [
     "test/scion_tests/action_send/send1_test.exs",
     "test/scion_tests/action_send/send2_test.exs",
@@ -149,6 +149,7 @@
     "conformance/cases/library/loan_position_records_history.json",
     "conformance/cases/library/loan_renew_refused_at_max.json",
     "conformance/cases/library/loan_renew_refused_by_hold.json",
+    "conformance/cases/library/loan_renew_refused_by_standing.json",
     "conformance/cases/library/loan_renew_within_limit.json",
     "conformance/cases/library/loan_returned_sends_copy_available.json",
     "conformance/cases/library/patron_checkout_allowed.json",
