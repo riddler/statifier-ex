@@ -622,3 +622,45 @@ the counter or by changing the span, is not decided here. It will be
 answered once for both this engine and the TypeScript engine. Every
 claim in this Note was read at `b5e77403`, where a budget-halted
 session's `failed_send/3` still takes the ordinary clause.
+
+## Note (2026-10-11): the `:internal` macrostep span carries no event and holds no other event
+
+This note decides nothing and changes no answer. It records what the
+macrostep span that the ADR-0039 re-entry path opens carries today, which
+the event contract above does not state for the `:internal` trigger. No
+decision, consequence or table entry changes, and no telemetry changes.
+It was decided by the conductor under a standing consent, 2026-10-10, as
+a dated Note, the same route the operator ruled on 2026-10-06 for this
+path's `macrostep` counter (the Note of 2026-10-09 above).
+
+- **The span names no event.** `Statifier.Session`'s `deliver_internal/6`
+  opens it with `in_macrostep/4`, passing `nil` as the event, so its
+  `[:statifier, :session, :macrostep, :start]` and `:stop` carry
+  `event_name: nil` (`Statifier.Telemetry`'s `event_name/1`) and
+  `caller_context: nil`. The delivery does have an event: the name the
+  core raises onto its internal queue, which `deliver_internal/6` hands to
+  `Statifier.Interpreter.deliver_internal/5`.
+- **The span holds no other event.** Since ADR-0044 decision 1, the
+  effects that core call returns are queued on the session's deferred
+  list and performed by `drain_deferred/1` after the span closes, so their
+  effect and trace events arrive after its `:stop`. Inside a `perform/3`
+  fold they fall in the enclosing span. Outside one, nothing encloses
+  them: a fired delayed send reaches `deliver_internal/6` from
+  `handle_info/2`, and a host's `Statifier.Session.failed_send/3` from
+  `handle_cast/2`, and neither opens a span of its own (for the fired
+  send, the code records this as accepted under ADR-0044). Either way the
+  `:internal` span opens and closes with nothing between.
+
+Why `nil` stays for now: each gap leaves the span uncorrelated to its
+cause without the other. An event name on an empty span still says
+nothing of what the delivery did, and contents placed inside a span that
+names no event still cannot be traced to the delivery that caused them.
+Filling the event alone would also change what a consumer reads off both
+span events (opentelemetry_statifier's handler sets its
+`statifier.event_name` attribute from `event_name`, and omits it when
+`nil`). Both gaps are revisited with the question the Note of 2026-10-09
+leaves open, whether a re-entry delivery is a macrostep of its own, which
+will be answered once for both this engine and the TypeScript engine.
+
+Every claim about this repository in this Note was read at `904eee94`;
+the opentelemetry_statifier claim at that repository's `f52241ec`.
