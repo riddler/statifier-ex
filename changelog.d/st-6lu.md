@@ -1,0 +1,3 @@
+### Changed
+
+- **Breaking** for a host that compiles a document writing one attribute twice on one element, or that matches `Statifier.Validator.Error`'s reasons exhaustively: `Statifier.Validator.validate/3`, and so `Statifier.compile/2`, now refuses such a document with the error reason `{:duplicate_attribute, element, attribute}` (code `:duplicate_attribute`), located at the repeated occurrence, where it compiled the document using the first occurrence's value. XML does not allow the repeat: remove it from the document, and add a clause for the new reason wherever you match the validator's reasons.
