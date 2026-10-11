@@ -13,6 +13,29 @@ Adding an entry is not permission to weaken a check. ADR-0011 says a genuinely
 wrong check is a human call, and this file is where that call is recorded, not
 where an agent grants itself one.
 
+## 2026-10-11 - st-gvxj
+
+Approved-by: JohnnyT (the operator's campaign consent of 2026-10-10, which
+pre-approves exactly this change: the `ex_quality ~> 0.16` dev dependency
+requirement and the README stage at `:error`)
+
+- .quality.exs: enables the README stage
+  (`readme: [enabled: :auto, severity: :error]`), with a comment giving what
+  it checks and where its line ceiling comes from
+- mix.exs: the dev dependency requirement moves from
+  `{:ex_quality, "~> 0.15", ...}` to `{:ex_quality, "~> 0.16", ...}`, options
+  unchanged, because the README stage first ships in ex_quality 0.16.0
+
+Reason: the README was rewritten as an introduction with a map (what, why,
+install, one basic-usage snippet, the links grouped by the reader's
+question) while ex_quality 0.16.0 was not yet on Hex, so nothing checked
+that it keeps that shape. The README stage checks it, with the line ceiling
+from `readme_max_lines` in `.claude/diataxis.md`, and its findings fail the
+gate. It runs in CI unchanged, since CI's one job runs `mix gate.verify`.
+The block is the one statifier_oban's `.quality.exs` already carries. Adds
+a stage; loosens nothing, skips no existing check, and lowers no threshold.
+It is not in the loop profile's `stages:` allow-list.
+
 ## 2026-09-29 - st-1kyb
 
 Approved-by: JohnnyT (in session, 2026-09-27, for exactly this: the

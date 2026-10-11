@@ -40,6 +40,11 @@
   # `:auto` runs both whenever ex_doc is installed, which it is in dev.
   docs: [enabled: :auto],
   doc_links: [enabled: :auto],
+  # The README stage checks the README keeps the shape of an introduction
+  # and a map: what, why, install, one basic-usage snippet, and the links
+  # grouped by the reader's question. Findings fail the gate. The line
+  # ceiling comes from `readme_max_lines` in `.claude/diataxis.md`.
+  readme: [enabled: :auto, severity: :error],
   
   # Disabled by default (and so absent from both a bare `mix quality` and
   # `--profile loop`) because it makes real `claude` CLI calls; the :merge
