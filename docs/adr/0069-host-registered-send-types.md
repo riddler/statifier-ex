@@ -934,3 +934,35 @@ send, and the two documentation changes that ADR-0075's two Notes of
 under `:budget_exhausted`) change none of the answers above: a
 budget-halted session is halted, and the call answers it
 `{:error, :not_running}`.
+
+## Note (2026-10-11): two cases the replace call's answers leave out
+
+This Note adds two cases to the Amendment of 2026-10-09 "a running
+session's registration for one type can be replaced". It decides
+nothing, changes no answer, and edits no line above. Anchors were read
+on `main` at `9a10054b` unless they name this change.
+
+**A type with no `_ioprocessors` key.** The Amendment says the call
+recomputes the type's `_ioprocessors` entry; it rewrites only a key
+`_ioprocessors` already has
+(`Statifier.Evaluator.SystemVariables.replaced_ioprocessors/4`). A
+session resumed with the type among its `:send_types` from a position
+whose datamodel was written before the type was registered holds no key
+for it, because a resume stamps the registration without rewriting
+`_ioprocessors` (`Statifier.MachineState.put_send_types/2`). For that
+session the call answers `:ok` and stores the new registration, so every
+later `<send>` of the type goes through it, but adds no entry, and the
+chart still reads none.
+
+**A throw or an exit out of the entry.** The table's last row answers an
+entry that raises. Only an exception is answered
+(`Statifier.MachineState.replace_send_type/3`, whose `rescue` takes
+exceptions only): a throw or an exit out of the processor's
+`ioprocessors_entry/2`, or its `ioprocessors_entry/1`, is not answered,
+and does what it does under `refresh_ioprocessors/1`
+(`Statifier.Session.refresh_ioprocessors/1`'s documentation): an exit
+exits the session, and a throw is taken by `GenServer` as the session's
+return from the call.
+
+`Statifier.Session.replace_send_type/3`'s documentation states both
+cases (this change).
