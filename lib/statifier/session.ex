@@ -1090,6 +1090,13 @@ defmodule Statifier.Session do
   started with it. A child already running keeps the registration it
   started with.
 
+  Only a key `_ioprocessors` already has is rewritten. A session whose
+  `_ioprocessors` holds no key for `type` (one resumed with `type` among
+  its `:send_types` from a position whose datamodel was written before
+  `type` was registered) answers `:ok` and stores the new registration,
+  so later `<send>`s of `type` go through it, but no entry is added: the
+  chart still reads no `_ioprocessors` entry for `type`.
+
   A `<cancel>` reaches the processor holding a delayed send through the
   registration the session holds when the cancel runs, not the one the
   send was handed to: a delayed send of `type` handed over before this call
@@ -1122,7 +1129,12 @@ defmodule Statifier.Session do
       computed (or answered something other than a string-keyed map,
       raised as an `ArgumentError`), as `refresh_ioprocessors/1` answers
       it. The session keeps running at the position it held before the
-      call.
+      call. Only an exception is answered: a throw or an exit out of the
+      processor's `c:Statifier.Send.Processor.ioprocessors_entry/2` (or
+      `c:Statifier.Send.Processor.ioprocessors_entry/1`) is not, and does
+      what `refresh_ioprocessors/1` says it does: an exit exits the
+      session, and a throw is taken by `GenServer` as the session's return
+      from this call.
 
   The checks run in that order. A `type` that is not a string, or a
   `registration` that is neither an atom nor a two-element tuple of an
