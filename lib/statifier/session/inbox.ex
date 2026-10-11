@@ -80,6 +80,24 @@ defmodule Statifier.Session.Inbox do
     end
   end
 
+  # Removes the first cancel marker wherever it sits, leaving every other
+  # entry in its order: `{:ok, inbox}` when one was waiting, `:none` when
+  # none was. The drain of a session halted `:budget_exhausted` takes its
+  # cancel this way, ahead of the ordinary events queued before it, since
+  # those are never drained while the session stays halted
+  # (`Statifier.Session`'s `handle_continue(:drain, _)` and
+  # `Statifier.Replay`'s mirror of it). Internal, hence `@doc false`.
+  @doc false
+  @spec take_cancel(inbox :: t()) :: {:ok, t()} | :none
+  def take_cancel(%__MODULE__{queue: queue}) do
+    entries = :queue.to_list(queue)
+
+    case Enum.split_while(entries, &(&1 != :cancel)) do
+      {_before, []} -> :none
+      {before, [:cancel | rest]} -> {:ok, %__MODULE__{queue: :queue.from_list(before ++ rest)}}
+    end
+  end
+
   @doc "Appendix D's `isCancelEvent/1`: true only for the cancel marker itself."
   @spec cancel_event?(entry :: entry()) :: boolean()
   def cancel_event?(:cancel), do: true
