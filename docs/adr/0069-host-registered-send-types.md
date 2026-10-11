@@ -966,3 +966,32 @@ return from the call.
 
 `Statifier.Session.replace_send_type/3`'s documentation states both
 cases (this change).
+
+## Note (2026-10-11): why the held-send map keeps its shape
+
+This Note gives one more reason for a sentence of the Amendment of
+2026-10-09 "a running session's registration for one type can be
+replaced". It decides nothing, changes no answer, and edits no line above.
+Anchors were read on `main` at `c2c69ef7`.
+
+The Amendment's paragraph on `<cancel>` ends: "The held-send map is left
+as it is because `Statifier.Replay` keeps the same map by the same rule."
+That is true (`Statifier.Replay`'s `plan_context/1` hands `plan/2` its own
+`held_sends`, kept by `Statifier.Session.Effects.register_held_send/3`),
+but it is not the stronger reason. The stronger reason is that the map is
+part of a public type: `held_sends` is an optional key of the plan context
+`Statifier.Session.Effects.plan/2` takes (`t:Statifier.Session.Effects.context/0`),
+and its value is `t:Statifier.Session.Effects.held_sends/0`, a map from
+send id to the sorted list of types holding it. A host that plans through
+`plan/2` itself supplies that map (`docs/extending.md`, "The `<send>` half:
+host-registered send types"). Recording the registration in the map's values
+would change a type such a host codes against.
+
+A held send's cancel is planned through the registration the plan
+context's `send_processors` names for the type when the cancel runs
+(`Statifier.Session.Effects.plan/2`'s cancel arm), so after a replace it
+goes to the new registration, as the Amendment says. Routing it instead to
+the registration recorded when the send was handed over would not need the
+map to change: a new optional key of the plan context could carry that
+registration beside `held_sends`. That routing is not decided here, and
+the behaviour the Amendment states stands.
