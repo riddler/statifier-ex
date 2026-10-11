@@ -216,6 +216,21 @@ defmodule Mix.Statifier.AdrGuardTest do
              ]) == []
     end
 
+    # The window is the flagged line and the one directly above it, on
+    # purpose: a citation above a function head does not reach the flagged
+    # call in its body. Widening the window is a change to what the gate
+    # accepts (ADR-0011), not a fix.
+    # sabotage: have parse_line/2 carry every earlier line of the hunk in
+    #           `previous`, widening the window -> red
+    test "a citation two lines above the flagged line does not clear it" do
+      assert [%{line: 12, check: "adr-0003-effects"}] =
+               analyze("lib/statifier/document.ex", [
+                 "  # ADR-0003: deviation, the reply is awaited in place",
+                 "  defp await_reply(ref) do",
+                 "    receive do"
+               ])
+    end
+
     # sabotage: loosen @escape_pattern to any `#` comment -> red
     test "a comment that cites nothing clears nothing" do
       assert [%{check: "adr-0003-effects"}] =
@@ -458,6 +473,19 @@ defmodule Mix.Statifier.AdrGuardTest do
                "    # ADR-0018-exempt: named for git blame",
                "    # st-af3 replaces this function's body"
              ]) == []
+    end
+
+    # The marker is read in the same window as an ADR citation, and no
+    # further up.
+    # sabotage: have parse_line/2 carry every earlier line of the hunk in
+    #           `previous`, widening the window -> red
+    test "the ADR-0018-exempt marker two lines above does not clear the finding" do
+      assert [%{line: 12, check: "adr-0018-bead-id"}] =
+               analyze("lib/statifier/document.ex", [
+                 "    # ADR-0018-exempt: named for git blame",
+                 "    value = compute(input)",
+                 "    # st-af3 replaces this function's body"
+               ])
     end
 
     # This is the exact accident ADR-0018's Consequences document at e2524fc:

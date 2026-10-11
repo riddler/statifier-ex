@@ -8,8 +8,17 @@ defmodule Mix.Statifier.AdrGuard do
   comments), and ADR-0058 (ADR number collisions). Each of the first five
   checks is a name or call-site pattern over the lines a diff adds -
   deliberately not an AST pass - so a false positive is cleared the way this
-  project already clears an Appendix D deviation: an inline comment on or
-  above the flagged line naming an ADR or the word "deviation".
+  project already clears an Appendix D deviation: an inline comment naming an
+  ADR or the word "deviation", on the flagged line itself or on the line
+  directly above it in the same hunk.
+
+  That two-line window is the whole of what the guard reads, and it is kept
+  that narrow on purpose: a wider one would make the guard easier to satisfy
+  by accident, and widening it is a change to what the gate accepts, so
+  ADR-0011 makes it a human call. A citation two or more lines above the
+  flagged line clears nothing - for instance one written above a
+  `defp ... do` line whose first body line is the flagged call. Put the
+  citation on the flagged line, or on the line directly above it.
 
   ADR-0058's tree-local checks, `adr-0058-duplicate-number` and
   `adr-0058-readme-index`, are different in kind from all five: they are
@@ -50,8 +59,10 @@ defmodule Mix.Statifier.AdrGuard do
   kind of line ADR-0018's Consequences show clearing itself by accident (a
   legitimate ADR citation that happens to sit beside an unrelated bead
   mention), so this check has its own marker, `ADR-0018-exempt`, and nothing
-  else clears it. Being line-based rather than AST-based, it can only tell a
-  comment/doc line from a code line by shape: a `#` line, a single-line
+  else clears it. The marker is read in the same two-line window: on the
+  flagged line or the line directly above it, and nowhere further up. Being
+  line-based rather than AST-based, it can only tell a comment/doc line from
+  a code line by shape: a `#` line, a single-line
   `@moduledoc`/`@doc`/`@typedoc "..."`, a `test "..." do` description, or a
   line inside a `\"""` doc heredoc. A doc heredoc's extent is read from the
   file's post-image text carried on `source` (populated by `collect/1`), not
@@ -198,7 +209,8 @@ defmodule Mix.Statifier.AdrGuard do
 
   A finding is dropped when the line it fires on, or the line above it in the
   same hunk, cites an ADR number or the word "deviation" - the same inline
-  justification CLAUDE.md already asks for.
+  justification CLAUDE.md already asks for. A citation two or more lines
+  above the flagged line does not clear it (see the moduledoc).
   """
   @spec analyze(source :: source()) :: [finding()]
   def analyze(source) do
@@ -774,7 +786,8 @@ defmodule Mix.Statifier.AdrGuard do
 
   # Only added lines are checked: a check about what the code now does has
   # nothing to say about a line the diff removes. `previous` is the line above
-  # in the same hunk, which is where an inline citation usually sits.
+  # in the same hunk, and it is the only line above a flagged line that the
+  # escape checks read: the citation window is that line and the flagged one.
   defp parse_diff(diff) do
     {_path, _line, _previous, acc} =
       diff

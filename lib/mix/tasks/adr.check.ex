@@ -14,11 +14,13 @@ defmodule Mix.Tasks.Adr.Check do
   It runs as the `ADR guard` custom stage of `mix quality`, so drift from an
   accepted decision is a named gate failure rather than something review has to
   catch. Every finding names the ADR it is about. The ADR-0002/0003/0004/0008
-  findings clear with an inline comment on or above the line citing that ADR or
-  the word "deviation" - the same justification CLAUDE.md already asks for. The
-  ADR-0018 bead-ID finding does not: an ADR citation is exactly what it is
-  checking against, so it clears only with its own marker, `ADR-0018-exempt`,
-  placed on or above the line.
+  findings clear with an inline comment citing that ADR or the word
+  "deviation", on the flagged line or on the line directly above it - the same
+  justification CLAUDE.md already asks for. The ADR-0018 bead-ID finding does
+  not: an ADR citation is exactly what it is checking against, so it clears
+  only with its own marker, `ADR-0018-exempt`, placed in the same place. A
+  citation two or more lines above the flagged line clears neither kind of
+  finding.
 
   The ADR-0058 numbering findings (`adr-0058-duplicate-number`,
   `adr-0058-readme-index`, `adr-0058-base-number`) clear on neither escape
