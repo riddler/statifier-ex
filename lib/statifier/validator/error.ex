@@ -81,6 +81,7 @@ defmodule Statifier.Validator.Error do
           | {:send_param_and_content}
           | {:cancel_sendid_and_sendidexpr}
           | {:cancel_no_sendid}
+          | {:duplicate_attribute, element :: binary(), attribute :: binary()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -961,6 +962,25 @@ defmodule Statifier.Validator.Error do
     %__MODULE__{
       reason: {:cancel_no_sendid},
       message: "<cancel> must specify exactly one of sendid or sendidexpr",
+      location: location
+    }
+  end
+
+  @doc """
+  XML 1.0 3.1, well-formedness constraint "Unique Att Spec": "An attribute
+  name MUST NOT appear more than once in the same start-tag or
+  empty-element tag." `attribute` is written more than once on one
+  `element` tag; both are the raw qualified names as written, prefix
+  included. Reported at each repeated occurrence's own attribute span,
+  never at the first, canonical one.
+  """
+  @spec duplicate_attribute(element :: binary(), attribute :: binary(), location :: Location.t()) ::
+          t()
+  def duplicate_attribute(element, attribute, %Location{} = location)
+      when is_binary(element) and is_binary(attribute) do
+    %__MODULE__{
+      reason: {:duplicate_attribute, element, attribute},
+      message: "duplicate attribute #{inspect(attribute)} on <#{element}>",
       location: location
     }
   end

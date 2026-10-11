@@ -47,6 +47,7 @@ defmodule Statifier.Validator do
     Data,
     DefaultEntry,
     Donedata,
+    DuplicateAttributes,
     Enums,
     Final,
     FinalParent,
@@ -84,7 +85,8 @@ defmodule Statifier.Validator do
     &Script.check/2,
     &Invoke.check/2,
     &Send.check/2,
-    &Cancel.check/2
+    &Cancel.check/2,
+    &DuplicateAttributes.check/2
   ]
 
   @warning_checks [
@@ -92,7 +94,7 @@ defmodule Statifier.Validator do
   ]
 
   @doc """
-  Runs all twenty `@checks` and the `@warning_checks` against `document`,
+  Runs every check in `@checks` and in `@warning_checks` against `document`,
   collecting every finding on each channel rather than stopping at the
   first one, and returns `{:ok, document, warnings}` when no error fired or
   `{:error, errors, warnings}` otherwise - both arms carry `warnings` per
