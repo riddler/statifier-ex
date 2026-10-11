@@ -95,6 +95,30 @@ defmodule Corpus.CorpusFilesTest do
              )
     end
 
+    # sabotage: n/a - asserts the committed case files, no lib/ behavior;
+    # swapping the two send types, or dropping library:route, in one
+    # committed library case -> red
+    test "every library-world case with a host registers library:timer then library:route" do
+      # conformance/README.md, "The library world": the cases under
+      # library/, accepts/ and diff/ share the world, and every one whose
+      # chart sends registers both send types, in this order.
+      hosts =
+        "conformance/cases/{library,accepts,diff}/*.json"
+        |> Path.wildcard()
+        |> Enum.sort()
+        |> Enum.map(&{&1, &1 |> File.read!() |> JSON.decode!()})
+        |> Enum.filter(fn {_path, authored} -> Map.has_key?(authored, "host") end)
+
+      assert hosts != [], "no library-world case with a host, so nothing is checked"
+
+      mismatched =
+        for {path, %{"host" => host}} <- hosts,
+            host["send_types"] != ["library:timer", "library:route"],
+            do: {path, host["send_types"]}
+
+      assert mismatched == []
+    end
+
     # sabotage: Emitter.generated_path/2 dropping the conformance segment -> red
     test "each suite's cases are exactly its generated test modules, one for one" do
       manifest = "conformance/manifest.json" |> File.read!() |> JSON.decode!()
