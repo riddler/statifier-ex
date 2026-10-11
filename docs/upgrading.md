@@ -1,14 +1,15 @@
-# Upgrading from 2.5 to 2.13.0: what a host changes
+# Upgrading from 2.5 to 2.14.0: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.13.0 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.14.0 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 The [Changelog](../CHANGELOG.md) says what the library changed; this page
 does not repeat it.
 
-No release in this range has a Breaking entry in the CHANGELOG. Every
+Of the releases in this range, only 2.14.0 has a Breaking entry in the
+CHANGELOG. Every
 "must change" from 2.6.0 to 2.10.0 is NONE. 2.11.0 changes some answers,
 and its "must change" names the hosts each one reaches: a host whose
 charts carry a `<send>` `<param>` with both `expr` and `location`, a host
@@ -27,6 +28,12 @@ change" names the hosts each one reaches: a host whose charts carry an
 on a state with no children, a host that reads the entries of a document
 already refused for a shared `id`, and a host that waited for a further
 halted message after reporting a budget-halted session's failed send.
+2.14.0 changes some answers, and its "must change" names the hosts each
+one reaches: a host whose documents write one attribute twice on one
+element, or that matches the validator's reasons exhaustively (the
+Breaking entry); a host that cancels a budget-halted session with events
+queued; and a host that waited for a further halted message after a
+delayed send fired into a budget-halted session.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
@@ -476,3 +483,53 @@ schema's descriptions and the corpus README now say that a step's
 expected datamodel keeps `_name` for a document whose `<scxml>` carries a
 `name` attribute, and that the corpus writes each array of state ids
 sorted while the schema does not check the order; no verdict changes.
+
+## 2.14.0
+
+**A host must change:** only where one of these reaches it. A
+`{:statifier, "~> 2.13"}` requirement already accepts 2.14.0.
+
+- **Breaking:** `Statifier.Validator.validate/3`, and so
+  `Statifier.compile/2`, refuses a document that writes one attribute
+  twice on one element, with the error reason
+  `{:duplicate_attribute, element, attribute}` (code
+  `:duplicate_attribute`), located at the repeated occurrence. Before
+  2.14.0 such a document compiled using the first occurrence's value. XML
+  does not allow the repeat: remove it from the document. If your host
+  matches `Statifier.Validator.Error`'s reasons exhaustively, add a clause
+  for the new reason.
+- `Statifier.Session.cancel/1` sent to a session halted
+  `:budget_exhausted` with events queued (by
+  `Statifier.Session.send_event/2`, or by a delayed send to the session
+  itself fired after the halt) reaches it and halts it `:cancelled`,
+  discarding the queued events, so `{:halted, :cancelled}` follows the
+  budget halt as the session's documentation promises. Before 2.14.0 the
+  cancel stayed queued behind those events and the session stayed
+  `:budget_exhausted`.
+- A delayed send fired while a session is halted `:budget_exhausted`, to
+  an internal target (a `targetexpr` evaluating to `#_internal`) or to a
+  route unreachable at fire time, is dropped without stepping: the core
+  is not driven, nothing is recorded, and no further message reaches a
+  subscriber, as a budget-halted sender's miss reported through
+  `Statifier.Session.failed_send/3` is dropped since 2.13.0. Before 2.14.0
+  it drove the halted core again and sent another
+  `{:halted, :budget_exhausted}`. A host that waited for that further
+  message no longer receives it. A fired send to the session itself is
+  still enqueued on its inbox, and one to another live session is still
+  delivered to it.
+
+A session halted `:done` or `:cancelled` is unchanged by either session
+change.
+
+**A host may start:** nothing new.
+
+The conformance corpus changes too. The statifier suite gains two
+library cases, `loan_renew_refused_by_standing` and
+`loan_dispute_restores_late_shallowly`, and `conformance/registry.json`
+claims both. The corpus hash in `conformance/manifest.json` moves, so a
+sibling implementation that vendors the corpus re-vendors it at the
+`v2.14.0` tag, which is not a host step. No case repeats an attribute on
+one element, so the new refusal moves no case. The case schema's
+descriptions now say that a step's `expect_position` members are compared
+as JSON values, and that the corpus writes `active_invocations` sorted
+while the schema does not check the order; no verdict changes.
