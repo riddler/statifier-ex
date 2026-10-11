@@ -366,6 +366,10 @@ defmodule Statifier.SessionTest do
     # `{:subscribe, pid, :catch_up}, %State{recording: recording}` first,
     # replies `{:ok, nil}`, and *is* subscribed) -> the
     # `{:error, :not_recorded}` match fails. Reverted and confirmed green.
+    # sabotage: the halt instruction's `notify(state, {:halted, reason})`
+    # is removed -> `status/1` still answers `:done`, but the
+    # `assert_received` of `{:halted, :done}` fails. Reverted and
+    # confirmed green.
     test "catch_up: true on a session without record: true returns :not_recorded and does not subscribe" do
       machine = compile!(final_on_event_doc())
       {:ok, session} = Session.start_link(machine, trace: true, subscribers: [self()])
@@ -376,7 +380,8 @@ defmodule Statifier.SessionTest do
       assert {:error, :not_recorded} = Session.subscribe(session, relay, catch_up: true)
 
       Session.send_event(session, "finish")
-      assert_receive {:statifier, ^session_id, {:halted, :done}}
+      _done = wait_for_status(session, fn s -> s.status == :done end)
+      assert_received {:statifier, ^session_id, {:halted, :done}}
 
       assert drain_late(session_id) == []
 
