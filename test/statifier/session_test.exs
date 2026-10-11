@@ -70,6 +70,23 @@ defmodule Statifier.SessionTest do
     """
   end
 
+  # `livelock_doc/0` under a parent whose entry schedules a delayed send to
+  # this session itself, so the send fires after the budget halt.
+  defp livelock_with_delayed_send_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+        <state id="p">
+            <onentry>
+                <send event="tick" delay="50ms"/>
+            </onentry>
+            <state id="a">
+                <transition target="a"/>
+            </state>
+        </state>
+    </scxml>
+    """
+  end
+
   defp named_doc do
     """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" name="my-session" initial="a">
@@ -704,6 +721,103 @@ defmodule Statifier.SessionTest do
       :ok = Session.cancel(session)
       assert_receive {:statifier, ^session_id, {:halted, :cancelled}}
       assert Session.status(session).status == :cancelled
+    end
+
+    # sabotage: `drain_halted/1`'s `:budget_exhausted` clause is removed,
+    # so the drain stops at the queued "go" event -> the cancel
+    # stays queued behind it and the `{:halted, :cancelled}` assertion
+    # below reddens. Reverted and confirmed green.
+    test "cancel/1 reaches a budget-halted session past an event queued by send_event/2" do
+      machine = compile!(livelock_doc())
+      {:ok, session} = Session.start_link(machine, max_macrostep_rounds: 5, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:effect, {:budget_exhausted, _}}}
+      assert_receive {:statifier, ^session_id, {:halted, :budget_exhausted}}
+
+      Session.send_event(session, "go")
+      :ok = Session.cancel(session)
+
+      assert_receive {:statifier, ^session_id, {:effect, {:done, %Effect.Done{}}}}
+      assert_receive {:statifier, ^session_id, {:halted, :cancelled}}
+
+      # The queued event was never drained: draining it would have driven
+      # the livelock again and sent a second budget halt.
+      refute_received {:statifier, ^session_id, {:effect, {:budget_exhausted, _}}}
+      refute_received {:statifier, ^session_id, {:halted, :budget_exhausted}}
+
+      status = Session.status(session)
+      assert status.status == :cancelled
+      assert status.queued_events == 1
+    end
+
+    # sabotage: `drain_halted/1`'s `:budget_exhausted` clause is removed,
+    # so the drain stops at the fired "tick" event -> the cancel
+    # stays queued behind it and the `{:halted, :cancelled}` assertion
+    # below reddens. Reverted and confirmed green.
+    test "cancel/1 reaches a budget-halted session past a fired self-targeted delayed send" do
+      machine = compile!(livelock_with_delayed_send_doc())
+      {:ok, session} = Session.start_link(machine, max_macrostep_rounds: 5, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+      assert_receive {:statifier, ^session_id, {:effect, {:budget_exhausted, _}}}
+      assert_receive {:statifier, ^session_id, {:halted, :budget_exhausted}}
+
+      # The delayed send fires after the halt and is queued, not drained.
+      wait_for_status(session, fn s -> s.queued_events == 1 and s.pending_timers == 0 end)
+
+      :ok = Session.cancel(session)
+
+      assert_receive {:statifier, ^session_id, {:effect, {:done, %Effect.Done{}}}}
+      assert_receive {:statifier, ^session_id, {:halted, :cancelled}}
+      refute_received {:statifier, ^session_id, {:effect, {:budget_exhausted, _}}}
+      refute_received {:statifier, ^session_id, {:halted, :budget_exhausted}}
+
+      status = Session.status(session)
+      assert status.status == :cancelled
+      assert status.queued_events == 1
+    end
+
+    # sabotage: `drain_halted/1`'s `:budget_exhausted` clause is widened to
+    # any halted session, so a `:done` session takes the cancel queued
+    # behind its event -> `queued_events` reads 1, reddening the assertion
+    # below. Reverted and confirmed green.
+    test "a :done session keeps a cancel queued behind an event, as before" do
+      machine = compile!(final_on_event_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+      Session.send_event(session, "finish")
+      assert_receive {:statifier, ^session_id, {:halted, :done}}
+
+      Session.send_event(session, "go")
+      :ok = Session.cancel(session)
+
+      status = Session.status(session)
+      assert status.status == :done
+      assert status.queued_events == 2
+      refute_received {:statifier, ^session_id, {:halted, _}}
+    end
+
+    # sabotage: `drain_halted/1`'s `:budget_exhausted` clause is widened to
+    # any halted session, so a `:cancelled` session takes the second
+    # cancel queued behind its event -> `queued_events` reads 1, reddening
+    # the assertion below. Reverted and confirmed green.
+    test "a :cancelled session keeps a cancel queued behind an event, as before" do
+      machine = compile!(cancel_doc())
+      {:ok, session} = Session.start_link(machine, subscribers: [self()])
+
+      session_id = Session.session_id(session)
+      :ok = Session.cancel(session)
+      assert_receive {:statifier, ^session_id, {:halted, :cancelled}}
+
+      Session.send_event(session, "go")
+      :ok = Session.cancel(session)
+
+      status = Session.status(session)
+      assert status.status == :cancelled
+      assert status.queued_events == 2
+      refute_received {:statifier, ^session_id, {:halted, _}}
     end
   end
 

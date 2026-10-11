@@ -75,6 +75,16 @@ defmodule Statifier.ReplayRoundTripTest do
     """
   end
 
+  defp livelock_doc do
+    """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+        <state id="a">
+            <transition target="a"/>
+        </state>
+    </scxml>
+    """
+  end
+
   defp final_chain_doc do
     """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -353,6 +363,34 @@ defmodule Statifier.ReplayRoundTripTest do
       # equality this asserts covers that emptying, not just the position
       # reached before the cancel.
       assert result.machine_state.configuration == MapSet.new()
+    end
+  end
+
+  describe "a cancel/1 run past an event queued after a budget halt" do
+    # sabotage: `Statifier.Replay`'s `drain_halted/1` `:budget_exhausted`
+    # clause is removed while the live session keeps its own -> the replayed run stops
+    # at the queued event and never appends the live run's cancel effects
+    # and `{:halted, :cancelled}`, reddening `round_trip/3`'s own
+    # `result.stream == stream` assertion. Reverted and confirmed green.
+    test "the replay takes the cancel past the queued event as the live session does" do
+      machine = compile!(livelock_doc())
+
+      {recording, stream, result} =
+        round_trip(machine, [max_macrostep_rounds: 5], fn session ->
+          wait_for_status(session, fn s -> s.status == :budget_exhausted end)
+          Session.send_event(session, "go")
+          :ok = Session.cancel(session)
+          wait_for_status(session, fn s -> s.status == :cancelled end)
+        end)
+
+      assert [
+               {:event, %Event{name: "go"}, %Routes{}},
+               {:cancel, %Routes{}}
+             ] = Recording.entries(recording)
+
+      assert List.last(stream) == {:halted, :cancelled}
+      assert Enum.count(stream, &match?({:halted, :budget_exhausted}, &1)) == 1
+      assert result.status == :cancelled
     end
   end
 

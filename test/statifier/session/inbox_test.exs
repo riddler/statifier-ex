@@ -38,6 +38,33 @@ defmodule Statifier.Session.InboxTest do
     end
   end
 
+  describe "take_cancel/1" do
+    # sabotage: `take_cancel/1` drops every entry after the cancel marker
+    # (`before` instead of `before ++ rest`) -> the remaining-order
+    # assertion reddens
+    test "removes the first cancel marker and keeps every other entry in order" do
+      inbox =
+        Inbox.new()
+        |> Inbox.enqueue_event(event("a"))
+        |> Inbox.enqueue_cancel()
+        |> Inbox.enqueue_event(event("b"))
+        |> Inbox.enqueue_cancel()
+
+      assert {:ok, inbox} = Inbox.take_cancel(inbox)
+      assert {:ok, {:event, %Event{name: "a"}}, inbox} = Inbox.next(inbox)
+      assert {:ok, {:event, %Event{name: "b"}}, inbox} = Inbox.next(inbox)
+      assert {:ok, :cancel, inbox} = Inbox.next(inbox)
+      assert Inbox.next(inbox) == :empty
+    end
+
+    # sabotage: `take_cancel/1` answers `{:ok, inbox}` when no cancel marker
+    # is waiting -> the `:none` assertion reddens
+    test "is :none when no cancel marker is waiting" do
+      assert Inbox.take_cancel(Inbox.new()) == :none
+      assert Inbox.take_cancel(Inbox.enqueue_event(Inbox.new(), event("a"))) == :none
+    end
+  end
+
   describe "pending_events/1" do
     # sabotage: `pending_events/1` keeps `:cancel` entries in the returned
     # list instead of dropping them -> the length assertion reddens

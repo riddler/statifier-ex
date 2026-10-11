@@ -58,13 +58,15 @@ defmodule Statifier.Session do
   `cancel/1` still works from a budget-halted session, since the
   underlying `%MachineState{}` is still `running` and the inbox's cancel
   entry is checked before any drive of the core - a queued ordinary event
-  is not. One asymmetry: because the interpreter has *not* exited under
-  `:budget_exhausted`, its already-scheduled delayed sends stay armed and
-  still fire; they are discarded only when the eventual `cancel/1` halts
-  it `:cancelled`. A fired send that targets another session is delivered
-  to it, while one that targets this session itself is enqueued on its
-  inbox, like any event sent to it, and is not drained while the session
-  stays halted.
+  is not. While the session is halted `:budget_exhausted`, the drain takes
+  a cancel entry ahead of the ordinary events queued before it, and the
+  cancel's exit discards them as a `:cancelled` halt does. One asymmetry:
+  because the interpreter has *not* exited under `:budget_exhausted`, its
+  already-scheduled delayed sends stay armed and still fire; they are
+  discarded only when the eventual `cancel/1` halts it `:cancelled`. A
+  fired send that targets another session is delivered to it, while one
+  that targets this session itself is enqueued on its inbox, like any
+  event sent to it, and is not drained while the session stays halted.
 
   ## One subscriber stream
 
@@ -1736,7 +1738,13 @@ defmodule Statifier.Session do
   # `:cancel` entry is always drained, even while halted (a budget-halted
   # `%MachineState{}` is still `running`, so `Interpreter.cancel/1` still
   # succeeds) - an ordinary event is drained only while not halted, so it
-  # stays queued rather than being silently dropped.
+  # stays queued rather than being silently dropped. A session halted
+  # `:budget_exhausted` takes its cancel ahead of the ordinary events queued
+  # before it (`Inbox.take_cancel/1`), since those events are never drained
+  # while it stays halted and the cancel would otherwise never be reached;
+  # the cancel halts it `:cancelled`, and the events it passed stay queued
+  # and undrained, as events reaching a `:cancelled` session do. A session
+  # halted `:done` or `:cancelled` keeps the queue order.
   @impl GenServer
   def handle_continue(:drain, state) do
     case Inbox.next(state.inbox) do
@@ -1749,7 +1757,7 @@ defmodule Statifier.Session do
 
       {:ok, entry, _inbox}
       when state.halted != nil and elem(entry, 0) in [:event, :invoked_event] ->
-        {:noreply, state}
+        drain_halted(state)
 
       {:ok, {:invoked_event, invoke_id, event}, inbox} ->
         if Invocations.live?(state.invocations, invoke_id) do
@@ -1981,8 +1989,8 @@ defmodule Statifier.Session do
   # the state untouched, so the core is not called, nothing is recorded,
   # nothing is queued and nothing is notified. The dead letter is the
   # host's here too. Nothing is queued on purpose: an event on the inbox
-  # would sit ahead of a later `cancel/1`'s entry, which
-  # `handle_continue(:drain, _)` would then never reach.
+  # would never be drained while the session stays halted, and a later
+  # `cancel/1` would leave it queued behind the `:cancelled` halt.
   def handle_cast({:failed_send, _send, _failure}, state)
       when state.halted in [:done, :cancelled] do
     {:noreply, state}
@@ -2184,6 +2192,27 @@ defmodule Statifier.Session do
       end
     end)
   end
+
+  # `handle_continue(:drain, _)`'s arm for a halted session whose front
+  # entry is an ordinary event. Halted `:budget_exhausted`, a cancel waiting
+  # anywhere behind that event is taken and drained, and the drain goes on
+  # (it then stops at the event, the session now halted `:cancelled`). With
+  # no cancel waiting, or halted `:done` or `:cancelled`, the drain stops and
+  # the queue is left as it is.
+  @spec drain_halted(state :: State.t()) ::
+          {:noreply, State.t()} | {:noreply, State.t(), {:continue, :drain}}
+  defp drain_halted(%State{halted: :budget_exhausted} = state) do
+    case Inbox.take_cancel(state.inbox) do
+      {:ok, inbox} ->
+        state = %{state | inbox: inbox} |> drain_cancel()
+        {:noreply, state, {:continue, :drain}}
+
+      :none ->
+        {:noreply, state}
+    end
+  end
+
+  defp drain_halted(state), do: {:noreply, state}
 
   @spec drain_event(state :: State.t(), event :: Event.t()) :: State.t()
   defp drain_event(state, event) do

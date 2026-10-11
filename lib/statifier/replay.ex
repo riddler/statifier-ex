@@ -415,7 +415,7 @@ defmodule Statifier.Replay do
 
       {:ok, entry, _inbox}
       when state.halted != nil and elem(entry, 0) in [:event, :invoked_event] ->
-        state
+        drain_halted(state)
 
       {:ok, {:event, event}, inbox} ->
         %{state | inbox: inbox} |> drain_event(event) |> drain()
@@ -427,6 +427,19 @@ defmodule Statifier.Replay do
         %{state | inbox: inbox} |> drain_event(event) |> drain()
     end
   end
+
+  # Mirrors `Statifier.Session`'s `drain_halted/1`: halted
+  # `:budget_exhausted`, a cancel waiting behind the front event is taken
+  # and drained; otherwise the drain stops with the queue as it is.
+  @spec drain_halted(state :: State.t()) :: State.t()
+  defp drain_halted(%State{halted: :budget_exhausted} = state) do
+    case Inbox.take_cancel(state.inbox) do
+      {:ok, inbox} -> %{state | inbox: inbox} |> drain_cancel() |> drain()
+      :none -> state
+    end
+  end
+
+  defp drain_halted(state), do: state
 
   @spec drain_cancel(state :: State.t()) :: State.t()
   defp drain_cancel(state) do

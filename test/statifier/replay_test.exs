@@ -406,6 +406,26 @@ defmodule Statifier.ReplayTest do
       assert Enum.count(result.stream, &match?({:halted, :budget_exhausted}, &1)) == 1
     end
 
+    # sabotage: `drain_halted/1`'s `:budget_exhausted` clause is removed, so
+    # the drain stops at the queued event -> the cancel entry behind it is never
+    # reached, `result.status` stays `:budget_exhausted` and no
+    # `{:halted, :cancelled}` is appended, reddening the assertions below.
+    # Reverted and confirmed green.
+    test "a cancel entry behind an event queued after a budget halt halts :cancelled" do
+      machine = compile!(livelock_doc())
+
+      recording =
+        machine
+        |> Recording.new(session_id: "sess_replay_test", max_macrostep_rounds: 5)
+        |> Recording.put_event(event("ignored"), nil)
+        |> Recording.put_cancel(nil)
+
+      assert {:ok, result} = Replay.run(recording)
+      assert result.status == :cancelled
+      assert Enum.count(result.stream, &match?({:halted, :budget_exhausted}, &1)) == 1
+      assert List.last(result.stream) == {:halted, :cancelled}
+    end
+
     # sabotage: `perform/3`'s `Enum.reduce/3` is changed from `Effects.plan()
     # |> Enum.reduce(...)` to `Effects.plan() |> Enum.reverse() |>
     # Enum.reduce(...)`, reversing instruction order within one batch -> the
