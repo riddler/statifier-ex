@@ -894,10 +894,13 @@ defmodule Statifier.Session do
   process that is gone is dropped. The library absorbs nothing, so the
   host MUST record the miss itself as a dead letter keyed by the send's
   dedup key (ADR-0054 decision 3's components read off `send`, with the
-  host's session scope), with its reason, and never drop it silently. A
-  host learns the sender has finished from the `{:halted, reason}` a
-  subscriber receives, or from `status/1`. A processor whose route creates
-  its target on a miss (get-or-create) has no miss to report.
+  host's session scope), with its reason, and never drop it silently. Two
+  halts finish a sender, `:done` and `:cancelled`, and a host learns of
+  either from the `{:halted, :done}` or `{:halted, :cancelled}` a
+  subscriber receives, or from `status/1`. A `:budget_exhausted` halt does
+  not finish a sender, but since 2.13.0 its failed-send miss is dropped
+  all the same (below). A processor whose route creates its target on a
+  miss (get-or-create) has no miss to report.
 
   **A budget-halted sender.** A sender halted `:budget_exhausted` is still
   running, but it does not step on a miss either: the call writes nothing,
