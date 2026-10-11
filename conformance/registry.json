@@ -1,6 +1,6 @@
 {
   "implementation": "statifier-ex",
-  "corpus_hash": "sha256:419ea995f973999db030c978049ad0511014d6eba23f1514359dab875f7ed481",
+  "corpus_hash": "sha256:7440f9a34a84b0657cb3bde11f96cf1707db08fb05e202c1e0249ab965517cc8",
   "claims": ["scion","statifier","w3c-mandatory","w3c-optional"],
   "entries": [
     {"case_id":"scion/actionSend/send1","suite":"scion"},
@@ -137,6 +137,7 @@
     {"case_id":"statifier/library/hold_queue_collected_cancels_timer","suite":"statifier"},
     {"case_id":"statifier/library/hold_queue_expiry_moves_to_next","suite":"statifier"},
     {"case_id":"statifier/library/hold_queue_head_gets_pickup_timer","suite":"statifier"},
+    {"case_id":"statifier/library/loan_dispute_restores_late_shallowly","suite":"statifier"},
     {"case_id":"statifier/library/loan_dispute_returns_to_history","suite":"statifier"},
     {"case_id":"statifier/library/loan_due_soon_then_overdue","suite":"statifier"},
     {"case_id":"statifier/library/loan_lost_after_timer","suite":"statifier"},
