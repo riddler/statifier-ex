@@ -1,6 +1,6 @@
 {
   "implementation": "statifier-ex",
-  "corpus_hash": "sha256:324ad1bc630382dc168111c3a56ae37689ba96c85b20af288cdf22f28ad668a4",
+  "corpus_hash": "sha256:419ea995f973999db030c978049ad0511014d6eba23f1514359dab875f7ed481",
   "claims": ["scion","statifier","w3c-mandatory","w3c-optional"],
   "entries": [
     {"case_id":"scion/actionSend/send1","suite":"scion"},
@@ -144,6 +144,7 @@
     {"case_id":"statifier/library/loan_position_records_history","suite":"statifier"},
     {"case_id":"statifier/library/loan_renew_refused_at_max","suite":"statifier"},
     {"case_id":"statifier/library/loan_renew_refused_by_hold","suite":"statifier"},
+    {"case_id":"statifier/library/loan_renew_refused_by_standing","suite":"statifier"},
     {"case_id":"statifier/library/loan_renew_within_limit","suite":"statifier"},
     {"case_id":"statifier/library/loan_returned_sends_copy_available","suite":"statifier"},
     {"case_id":"statifier/library/patron_checkout_allowed","suite":"statifier"},
