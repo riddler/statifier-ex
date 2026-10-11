@@ -142,6 +142,7 @@
     "conformance/cases/library/hold_queue_collected_cancels_timer.json",
     "conformance/cases/library/hold_queue_expiry_moves_to_next.json",
     "conformance/cases/library/hold_queue_head_gets_pickup_timer.json",
+    "conformance/cases/library/loan_dispute_restores_late_shallowly.json",
     "conformance/cases/library/loan_dispute_returns_to_history.json",
     "conformance/cases/library/loan_due_soon_then_overdue.json",
     "conformance/cases/library/loan_lost_after_timer.json",

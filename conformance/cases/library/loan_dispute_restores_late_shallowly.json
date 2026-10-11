@@ -1,0 +1,75 @@
+{
+  "description": "due_soon and overdue are children of a compound late state, so the shallow history h remembers late, not which of its children was active. The loan goes overdue, a dispute takes it out of active, and the resolution re-enters late at its initial due_soon rather than at overdue: overdue's lost-item timer is sent once, on the way in, and not again. A deep history would restore overdue and send that timer a second time, so this case tells the two history types apart where a case whose remembered child is a leaf cannot.",
+  "initial_configuration": [
+    "on_loan"
+  ],
+  "steps": [
+    {
+      "event": {
+        "name": "loan.due_soon"
+      },
+      "configuration": [
+        "due_soon"
+      ]
+    },
+    {
+      "event": {
+        "name": "loan.due"
+      },
+      "configuration": [
+        "overdue"
+      ]
+    },
+    {
+      "event": {
+        "name": "copy.disputed"
+      },
+      "configuration": [
+        "held_for_review"
+      ]
+    },
+    {
+      "event": {
+        "name": "dispute.resolved"
+      },
+      "configuration": [
+        "due_soon"
+      ]
+    }
+  ],
+  "host": {
+    "send_types": [
+      "library:timer",
+      "library:route"
+    ],
+    "expect_sends": [
+      {
+        "type": "library:timer",
+        "target": "loan",
+        "event": {
+          "name": "loan.due"
+        },
+        "delay_ms": 1814400000,
+        "send_id": "due"
+      },
+      {
+        "type": "library:timer",
+        "target": "loan",
+        "event": {
+          "name": "loan.due_soon"
+        },
+        "delay_ms": 1555200000,
+        "send_id": "due_soon"
+      },
+      {
+        "type": "library:timer",
+        "target": "loan",
+        "event": {
+          "name": "loan.lost"
+        },
+        "delay_ms": 2419200000,
+        "send_id": "lost"
+      }
+    ]
+  }
+}
