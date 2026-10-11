@@ -115,9 +115,14 @@ defmodule Statifier.Session do
     - `{:halted, :done | :cancelled | :budget_exhausted}` - one lifecycle
       message, following the effects that caused it, and the **last**
       message this session sends its subscribers for the run (ADR-0044
-      decision 2). A budget-halted session handed a further miss through
-      `failed_send/3` drops it without stepping, so the message stays the
-      last one.
+      decision 2), with one exception: a later `cancel/1` reaches a
+      budget-halted session and halts it `:cancelled`, so a
+      `{:halted, :budget_exhausted}` is followed by that exit's effects
+      and the `{:halted, :cancelled}` closing them. Short of that cancel,
+      a budget-halted session keeps its halted message the last one in
+      two ways: a further miss handed it through `failed_send/3` is
+      dropped without stepping, and so is a fired delayed send that
+      targets the internal queue or a route unreachable when it fires.
 
   A late subscriber catches up by replaying the recording, not from any
   buffer this session retains (ADR-0049). `subscribe/3` with
