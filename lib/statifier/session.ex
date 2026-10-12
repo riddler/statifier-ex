@@ -355,6 +355,7 @@ defmodule Statifier.Session do
 
   alias Statifier.{Effect, Event, Interpreter, Machine, MachineState, Position}
   alias Statifier.Effect.{Done, Invoke}
+  alias Statifier.Evaluator.Functions
   alias Statifier.Event.Cause
   alias Statifier.Invoke.{Answer, Source}
   alias Statifier.Invoke.Types, as: InvokeTypes
@@ -604,6 +605,23 @@ defmodule Statifier.Session do
       map and `inherit_send_types: true` of its own. Default `false`, which
       starts children registering no send type. The `<send>` counterpart of
       `:inherit_invoke_handlers`, on the same start-time terms.
+    - `:function_providers` - a list of `Predicator.FunctionProvider`
+      modules whose functions every `cond` and `expr` of this session's
+      chart may call beside `In/1` and the builtins (ADR-0078). Default
+      `nil`, which registers none. The session stamps them onto its
+      `%MachineState{}` at a fresh start through
+      `Statifier.MachineState.new/2` and at a resume through
+      `Statifier.MachineState.put_function_providers/2`, since a persisted
+      position carries none, and `record: true` records the list so
+      `Statifier.Replay` evaluates with the same functions. A list that does
+      not resolve, or that names a function `In/1` or a builtin answers to,
+      is refused before the session boots with
+      `{:error, {:function_providers, reason}}`
+      (`Statifier.Evaluator.Functions.from_providers/1` names each
+      `reason`). Each function must be pure: it reads its arguments and
+      the context's `host` term only, and does no I/O and reads no clock,
+      so a replay or a resume evaluates it to the same value. A child
+      session started for an `<invoke>` does not inherit the list.
     - `:resume` - boots this session at a persisted position (ADR-0060)
       instead of running `Statifier.Interpreter.initialize/2`. Accepts
       either a `Statifier.Position.to_binary/1` blob (decoded via
@@ -684,9 +702,25 @@ defmodule Statifier.Session do
   def start_link(%Machine{} = machine, opts \\ []) do
     {gen_opts, opts} = Keyword.split(opts, [:name])
 
-    case rejected_registration(opts) do
-      nil -> GenServer.start_link(__MODULE__, {machine, opts}, gen_opts)
-      {type, reason} -> {:error, {:send_types, {:invalid_registration, type, reason}}}
+    with {:ok, _functions} <- checked_function_providers(opts) do
+      case rejected_registration(opts) do
+        nil -> GenServer.start_link(__MODULE__, {machine, opts}, gen_opts)
+        {type, reason} -> {:error, {:send_types, {:invalid_registration, type, reason}}}
+      end
+    end
+  end
+
+  # ADR-0078: a `:function_providers` list that does not resolve is refused
+  # here, in the caller, before any process is spawned, at a fresh start
+  # and a resume alike - `MachineState.new/2` and
+  # `MachineState.put_function_providers/2` would otherwise raise inside
+  # `init/1`.
+  @spec checked_function_providers(opts :: keyword()) ::
+          {:ok, Functions.registered() | nil} | {:error, {:function_providers, term()}}
+  defp checked_function_providers(opts) do
+    case Functions.from_providers(Keyword.get(opts, :function_providers)) do
+      {:ok, functions} -> {:ok, functions}
+      {:error, reason} -> {:error, {:function_providers, reason}}
     end
   end
 
@@ -1529,7 +1563,8 @@ defmodule Statifier.Session do
 
   # The one branch point ADR-0060's "Key Discoveries" names: a fresh start
   # calls `Interpreter.initialize/2` exactly as before; a resume stamps
-  # `routes`/`invoke_types`/`send_types` onto the persisted position and performs no
+  # `routes`/`invoke_types`/`send_types` and the host functions
+  # (`:function_providers`) onto the persisted position and performs no
   # entry at all (`effects: []` - the non-restoration ADR-0060 decisions 1
   # and 4 describe, expressed in code). Both arms return the same five-tuple
   # so `init_boot/3` above has one tail regardless of which ran.
@@ -1566,6 +1601,10 @@ defmodule Statifier.Session do
       # constructor - `nil` when the map is empty, which is the snapshot a
       # session registering no send type has always carried.
       |> Keyword.put(:send_types, SendTypes.from_send_types(send_types))
+      # ADR-0078: the host functions every `cond` and `expr` may call,
+      # stamped by `MachineState.new/2` from the list itself, which also
+      # rides along so `Recording.new/3` records it.
+      |> Keyword.put(:function_providers, Keyword.get(opts, :function_providers))
 
     {machine_state, effects} = Interpreter.initialize(machine, machine_opts)
     {machine_state, effects, machine_opts, :initialize, nil}
@@ -1574,18 +1613,21 @@ defmodule Statifier.Session do
   defp boot(
          {:resumed, machine_state},
          _machine,
-         _opts,
+         opts,
          session_id,
          invoked_by,
          invoke_handlers,
          send_types
        ) do
+    function_providers = Keyword.get(opts, :function_providers)
+
     machine_state =
       machine_state
       |> stamp_session_id(session_id)
       |> MachineState.put_routes(init_routes(session_id, invoked_by))
       |> MachineState.put_invoke_types(InvokeTypes.from_handlers(invoke_handlers))
       |> MachineState.put_send_types(SendTypes.from_send_types(send_types))
+      |> MachineState.put_function_providers(function_providers)
 
     # `resolve_resume/2` already refused a non-quiescent, unidentified, or
     # otherwise unencodable position, so `to_binary/1`'s error arm is
@@ -1601,7 +1643,8 @@ defmodule Statifier.Session do
       routes: machine_state.routes,
       invoke_types: machine_state.invoke_types,
       invoke_handlers: invoke_handlers,
-      send_types: machine_state.send_types
+      send_types: machine_state.send_types,
+      function_providers: function_providers
     ]
 
     {machine_state, [], machine_opts, :resume, anchor}

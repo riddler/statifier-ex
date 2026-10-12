@@ -1,12 +1,14 @@
-# How to extend Statifier: `<invoke>` handlers and `<send>` types
+# How to extend Statifier: `<invoke>` handlers, `<send>` types and host functions
 
 This is a guide for a host application author who wants to reach real
 computation - a database call, a background job, an LLM agent loop, an
 external API - from an SCXML document's `<invoke>` element. It does not
 re-explain the interpreter's architecture; see `docs/architecture.md` for
-that. It shows you how to write and register a handler. The last section,
-"The `<send>` half", covers registering a host Event I/O Processor type for
-`<send type="...">`.
+that. It shows you how to write and register a handler. "The `<send>`
+half" covers registering a host Event I/O Processor type for
+`<send type="...">`, and the last section, "Host functions for `cond` and
+`expr`", covers registering named functions a chart calls from its
+expressions.
 
 ## What the seam is for
 
@@ -880,3 +882,93 @@ It is not a `Statifier.Validator` check, deliberately: ADR-0069 decision 3
 places it outside, because `Statifier.Validator.validate/3` judges a
 document against the spec and takes no deployment state. A chart is not
 invalid for naming a processor this deployment has not registered.
+
+## Host functions for `cond` and `expr`
+
+A guard often needs a fact the event does not carry: how many paths a
+change touches, whether a timestamp falls in business hours, whether two
+intervals overlap. Rather than computing every such fact into the event
+payload, register the function and call it from the chart:
+
+```xml
+<transition event="change" cond="blast_radius(_event.data.paths) &lt; 10" target="auto"/>
+```
+
+### Writing a provider
+
+A provider is a module implementing `Predicator.FunctionProvider`. Its
+`functions/0` maps each name to `{arity, atom}`, where the atom names a
+public function on the same module taking the argument list and the
+evaluation context:
+
+```elixir
+defmodule MyApp.Guards do
+  @behaviour Predicator.FunctionProvider
+
+  @impl Predicator.FunctionProvider
+  def functions, do: %{"blast_radius" => {1, :blast_radius}}
+
+  def blast_radius([paths], _context) when is_list(paths),
+    do: {:ok, paths |> Enum.map(&Path.dirname/1) |> Enum.uniq() |> length()}
+
+  def blast_radius([_other], _context), do: {:error, "blast_radius expects a list"}
+end
+```
+
+Return `{:ok, value}` or `{:error, message}`. An error becomes
+`error.execution` at the call, like any other evaluation failure, and a
+guard that errors is false.
+
+A name may not be one the chart already has: `In` and predicator's
+builtins (`len`, `Math.abs`, `Date.now` and the rest) cannot be
+replaced. A provider that names one is refused.
+
+### A function must be pure
+
+A registered function reads only its arguments, and the context's `host`
+term if it needs it. It does no I/O, reads no clock and no random source,
+and keeps no state of its own. The library evaluates a guard again when it
+replays a recording, and a resumed session evaluates later guards against
+the position it was saved at; a function that answered differently the
+second time would make a replay disagree with the run it records. Read
+anything that changes - the time, a database row - before the event is
+sent, and put it in the event data.
+
+### Registering the providers
+
+Pass the same list when you compile the chart and when you run it:
+
+```elixir
+providers = [MyApp.Guards]
+
+{:ok, machine} = Statifier.compile(source, function_providers: providers)
+{:ok, session} = Statifier.Session.start_link(machine, function_providers: providers)
+```
+
+`Statifier.compile/2` checks every call the chart makes. A call to a name
+that is not `In`, a builtin or a registered function fails the compile
+with a `Statifier.Compiler.Error` whose reason is
+`{:unknown_function, name, source}`. The compile only checks names; the
+session evaluates with the functions its own option registers.
+
+A tool that checks charts without loading your modules declares the names
+instead: `Statifier.compile(source, function_names: ["blast_radius"])`.
+The compiled chart persists the declared names, so a `Statifier.Chart`
+blob recompiles without the modules.
+
+`Statifier.Session.start_link/2` refuses a list that does not resolve
+before the session starts, with `{:error, {:function_providers, reason}}`.
+A host driving `Statifier.Interpreter` directly passes the option to
+`Statifier.MachineState.new/2` (through `Statifier.initialize/2`).
+
+### After a resume
+
+A persisted position does not carry the functions. A session started with
+`:resume` stamps the list you pass it, so pass the same list as at the
+start. A host that resumes a position itself re-stamps it with
+`Statifier.MachineState.put_function_providers/2` before the first drive.
+A recording keeps the list, and `Statifier.Replay` uses it; replaying a
+recording needs the provider modules loaded.
+
+A child session started for an `<invoke>` does not inherit the list, and
+a chart given as `<invoke>` content cannot call a host function.

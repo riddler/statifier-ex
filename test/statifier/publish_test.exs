@@ -1752,7 +1752,7 @@ defmodule Statifier.PublishTest do
     # answers `[]` -> red
     test "an empty <finalize> judges each namelist entry and <param location> it writes" do
       invoke = """
-      <invoke type="scxml" src="child.scxml" namelist="copies f()">
+      <invoke type="scxml" src="child.scxml" namelist="copies trim(copies)">
           <finalize/>
       </invoke>
       <invoke type="scxml" src="child.scxml">
@@ -1762,7 +1762,7 @@ defmodule Statifier.PublishTest do
       """
 
       assert [
-               %{kind: :not_assignable, data: %{attribute: :namelist, source: "f()"}},
+               %{kind: :not_assignable, data: %{attribute: :namelist, source: "trim(copies)"}},
                %{kind: :not_assignable, data: %{attribute: :location, source: "-slot"}}
              ] = s19(writes("", invoke))
     end
@@ -1771,12 +1771,12 @@ defmodule Statifier.PublishTest do
     # `<finalize>` holds -> red
     test "a populated or absent <finalize> writes no namelist entry, so none is judged" do
       populated = """
-      <invoke type="scxml" src="child.scxml" namelist="f()">
+      <invoke type="scxml" src="child.scxml" namelist="trim(copies)">
           <finalize><assign location="slot" expr="1"/></finalize>
       </invoke>
       """
 
-      absent = ~s|<invoke type="scxml" src="child.scxml" namelist="f()"/>|
+      absent = ~s|<invoke type="scxml" src="child.scxml" namelist="trim(copies)"/>|
 
       assert s19(writes("", populated)) == []
       assert s19(writes("", absent)) == []

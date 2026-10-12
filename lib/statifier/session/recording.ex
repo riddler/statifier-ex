@@ -115,7 +115,8 @@ defmodule Statifier.Session.Recording do
       chart failure surfaces wrapped as `{:error, {:chart, reason}}` rather
       than flattened, so the caller always knows which decoder refused.
     - `opts` - the normalized session options, with `:invoke_handlers`
-      and `:send_types` written as module name strings rather than atoms.
+      and `:send_types` written as module name strings rather than atoms,
+      and `:function_providers` as a list of module name strings.
     - `entries` - written in `entries/1`'s append order, not the struct
       field's internal reversed order; that reversal is a prepend-list
       storage optimization this module alone knows about (decision 1 is what
@@ -134,6 +135,8 @@ defmodule Statifier.Session.Recording do
   `String.to_existing_atom/1`, collecting every failure - not just the first
   - into `{:error, {:unknown_handler_modules, names}}`, sorted, so a host
   learns the whole set of modules it needs to load in one round trip.
+  `:function_providers` (ADR-0078) crosses the same way, as a list of
+  module names, and a name that does not resolve joins the same list.
 
   A `{module, opts}` `:send_types` registration (ADR-0075 decision 8,
   point b) crosses the same way, with its options as strings too: the
@@ -204,7 +207,8 @@ defmodule Statifier.Session.Recording do
     :routes,
     :invoke_types,
     :invoke_handlers,
-    :send_types
+    :send_types,
+    :function_providers
   ]
 
   @format_version 5
@@ -247,6 +251,12 @@ defmodule Statifier.Session.Recording do
   code, under ADR-0057 decision 5's rule for `:invoke_handlers` (see the
   moduledoc's "The binary contract" section).
 
+  `:function_providers` is the session's list of
+  `Predicator.FunctionProvider` modules (ADR-0078), kept as the list so
+  `Statifier.Replay` stamps the same host functions the live session
+  evaluated with. It is kept only when non-empty, like `:send_types`, and
+  `to_binary/1` writes it as module name strings.
+
   `opts[:session_id]` should be the id the session actually resolved to
   (`machine_state.datamodel["_sessionid"]`), not merely whatever the caller
   passed when starting it - see the moduledoc's "`:session_id` is resolved,
@@ -269,6 +279,7 @@ defmodule Statifier.Session.Recording do
       |> Keyword.put_new(:invoke_types, nil)
       |> Keyword.put_new(:invoke_handlers, %{})
       |> drop_empty_send_types()
+      |> drop_empty_function_providers()
       |> Enum.sort()
 
     %__MODULE__{machine: machine, opts: normalized, entries: [], anchor: anchor}
@@ -282,6 +293,16 @@ defmodule Statifier.Session.Recording do
     case Keyword.get(opts, :send_types) do
       send_types when is_map(send_types) and map_size(send_types) > 0 -> opts
       _none -> Keyword.delete(opts, :send_types)
+    end
+  end
+
+  # A `:function_providers` of `nil` or `[]` registers no host function and
+  # is not kept, for the same reason an empty `:send_types` is not.
+  @spec drop_empty_function_providers(opts :: keyword()) :: keyword()
+  defp drop_empty_function_providers(opts) do
+    case Keyword.get(opts, :function_providers) do
+      [_first | _rest] -> opts
+      _none -> Keyword.delete(opts, :function_providers)
     end
   end
 
@@ -646,6 +667,10 @@ defmodule Statifier.Session.Recording do
     opts
     |> Keyword.replace_lazy(:invoke_handlers, &module_names/1)
     |> Keyword.replace_lazy(:send_types, &registration_names/1)
+    |> Keyword.replace_lazy(
+      :function_providers,
+      &Enum.map(&1, fn module -> Atom.to_string(module) end)
+    )
   end
 
   defp module_names(map),
@@ -681,9 +706,40 @@ defmodule Statifier.Session.Recording do
         end
       end)
 
+    {opts, unknown} = decode_function_providers(opts, unknown)
+
     case unknown do
       [] -> {:ok, opts}
       names -> {:error, {:unknown_handler_modules, Enum.sort(names)}}
+    end
+  end
+
+  # `:function_providers` is a list of module names rather than a map; a
+  # name that does not resolve joins the same unknown list the handler
+  # maps report into.
+  @spec decode_function_providers(opts :: keyword(), unknown :: [String.t()]) ::
+          {keyword(), [String.t()]}
+  defp decode_function_providers(opts, unknown) do
+    case Keyword.fetch(opts, :function_providers) do
+      {:ok, names} when is_list(names) ->
+        {modules, missing} = Enum.reduce(names, {[], []}, &resolve_provider/2)
+
+        {Keyword.put(opts, :function_providers, Enum.reverse(modules)), missing ++ unknown}
+
+      {:ok, other} ->
+        {opts, [handler_name(other) | unknown]}
+
+      :error ->
+        {opts, unknown}
+    end
+  end
+
+  @spec resolve_provider(name :: term(), acc :: {[module()], [String.t()]}) ::
+          {[module()], [String.t()]}
+  defp resolve_provider(name, {modules, missing}) do
+    case existing_atom(name) do
+      {:ok, module} -> {[module | modules], missing}
+      :error -> {modules, [handler_name(name) | missing]}
     end
   end
 

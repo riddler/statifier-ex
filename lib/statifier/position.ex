@@ -54,7 +54,10 @@ defmodule Statifier.Position do
   omitted the same way from `to_binary/1`'s payload, and `from_binary/2`
   blanks all three to `nil` on decode regardless of what the blob carries
   (ADR-0064): the omission is common to both vocabularies, not particular
-  to the export one.
+  to the export one. `functions`, the host functions stamped from a
+  `:function_providers` list, is dropped and blanked on all four paths
+  the same way and for the same reason: a driver re-stamps it with
+  `Statifier.MachineState.put_function_providers/2`.
   """
 
   alias Statifier.{Machine, MachineState}
@@ -117,7 +120,7 @@ defmodule Statifier.Position do
     payload =
       machine_state
       |> Map.from_struct()
-      |> Map.drop([:machine, :routes, :invoke_types, :send_types, :last_selection])
+      |> Map.drop([:machine, :routes, :invoke_types, :send_types, :functions, :last_selection])
 
     {:ok, :erlang.term_to_binary({:statifier_position, @format_version, identity, payload})}
   end
@@ -178,7 +181,7 @@ defmodule Statifier.Position do
           upgraded_payload =
             version
             |> upgrade_payload(payload)
-            |> Map.drop([:routes, :invoke_types, :send_types, :last_selection])
+            |> Map.drop([:routes, :invoke_types, :send_types, :functions, :last_selection])
 
           {:ok, struct!(MachineState, Map.put(upgraded_payload, :machine, machine))}
         end
@@ -547,7 +550,8 @@ defmodule Statifier.Position do
       max_macrostep_rounds: exported.max_macrostep_rounds,
       routes: nil,
       invoke_types: nil,
-      send_types: nil
+      send_types: nil,
+      functions: nil
     }
 
     {:ok, machine_state}

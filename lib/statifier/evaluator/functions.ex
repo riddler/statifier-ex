@@ -11,6 +11,11 @@ defmodule Statifier.Evaluator.Functions do
   and refreshes it per site with `Predicator.Context.put_host/2` - see that
   module's moduledoc for why this dissolves the "not a resumable position"
   ground the closure used to force.
+
+  It also resolves a host's `:function_providers` list
+  (`from_providers/1`) into the full dispatch map a session stamps onto
+  `Statifier.MachineState`'s `functions` field, which `Statifier.Evaluator.context/1` then
+  uses in place of the constant's own map (ADR-0078).
   """
 
   @behaviour Predicator.FunctionProvider
@@ -76,6 +81,121 @@ defmodule Statifier.Evaluator.Functions do
   """
   @spec base_context() :: Predicator.Context.t()
   def base_context, do: @base_context
+
+  @typedoc """
+  A resolved dispatch map: function name to `{arity, {module, atom}}`, the
+  shape `Predicator.Context` keeps in its `functions` field. The map
+  `from_providers/1` returns holds every name `base_context/0` holds plus
+  each host provider's names.
+  """
+  @type registered :: %{String.t() => {Predicator.Evaluator.function_arity(), {module(), atom()}}}
+
+  @doc """
+  The names every chart can call without registering anything: `In` and
+  the builtin providers' names, sorted. `Statifier.compile/2` adds the
+  names of its `:function_providers` to this set before it checks the
+  calls a chart makes.
+  """
+  @spec base_names() :: [String.t()]
+  def base_names, do: @base_context.functions |> Map.keys() |> Enum.sort()
+
+  @doc """
+  Resolves a host's `:function_providers` list into the dispatch map an
+  evaluation context uses: `base_context/0`'s map with every provider's
+  functions merged in.
+
+  `nil` and `[]` both answer `{:ok, nil}`, which means "no host function":
+  `Statifier.Evaluator.context/1` then uses `base_context/0` unchanged.
+
+  Refuses, without raising, with:
+
+    - `{:error, {:not_a_list, value}}` - the option is not a list.
+    - `{:error, {:invalid_provider, module, message}}` - a list entry is
+      not an atom, or names a module that does not load, export
+      `functions/0`, or export each named function at arity 2.
+      `Predicator.Context.resolve_functions/1` does the check, and
+      `message` is its text.
+    - `{:error, {:shadowed_names, names}}` - a provider names a function
+      the base set already has (`base_names/0`), so `In` and the
+      builtins always mean the same thing. `names` is sorted.
+  """
+  @spec from_providers(providers :: [module()] | nil) ::
+          {:ok, registered() | nil}
+          | {:error,
+             {:not_a_list, term()}
+             | {:invalid_provider, term(), String.t()}
+             | {:shadowed_names, [String.t()]}}
+  def from_providers(nil), do: {:ok, nil}
+  def from_providers([]), do: {:ok, nil}
+
+  def from_providers(providers) when is_list(providers) do
+    with {:ok, host} <- resolve(providers) do
+      case host |> Map.keys() |> Enum.filter(&Map.has_key?(@base_context.functions, &1)) do
+        [] -> {:ok, Map.merge(@base_context.functions, host)}
+        shadowed -> {:error, {:shadowed_names, Enum.sort(shadowed)}}
+      end
+    end
+  end
+
+  def from_providers(other), do: {:error, {:not_a_list, other}}
+
+  @doc """
+  `from_providers/1`, raising `ArgumentError` on a refusal. The form
+  `Statifier.MachineState.new/2` and `put_function_providers/2` use: a bad
+  provider list is host misuse, refused the way a bad `:datamodel` is.
+  """
+  @spec from_providers!(providers :: [module()] | nil) :: registered() | nil
+  def from_providers!(providers) do
+    case from_providers(providers) do
+      {:ok, registered} -> registered
+      {:error, reason} -> raise ArgumentError, "invalid :function_providers: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  The names a `:function_providers` list registers, sorted, after the same
+  checks `from_providers/1` makes. `nil` and `[]` answer `{:ok, []}`.
+  """
+  @spec provider_names(providers :: [module()] | nil) ::
+          {:ok, [String.t()]} | {:error, term()}
+  def provider_names(providers) do
+    case from_providers(providers) do
+      {:ok, nil} ->
+        {:ok, []}
+
+      {:ok, registered} ->
+        {:ok,
+         registered |> Map.drop(Map.keys(@base_context.functions)) |> Map.keys() |> Enum.sort()}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # Each entry is checked on its own first, through predicator's own
+  # validation (`Predicator.Context.resolve_functions/1`, which memoizes
+  # it), so a refusal names the module at fault; the whole list is then
+  # resolved once, with `builtins: false`, so only the host's own entries
+  # come back, a later provider shadowing an earlier one as predicator
+  # orders them.
+  @spec resolve(providers :: list()) ::
+          {:ok, registered()} | {:error, {:invalid_provider, term(), String.t()}}
+  defp resolve(providers) do
+    case Enum.find_value(providers, &invalid_provider/1) do
+      nil -> {:ok, Predicator.Context.resolve_functions(builtins: false, providers: providers)}
+      refusal -> {:error, refusal}
+    end
+  end
+
+  @spec invalid_provider(provider :: term()) :: {:invalid_provider, term(), String.t()} | nil
+  defp invalid_provider(provider) when is_atom(provider) do
+    _resolved = Predicator.Context.resolve_functions(builtins: false, providers: [provider])
+    nil
+  rescue
+    error in ArgumentError -> {:invalid_provider, provider, Exception.message(error)}
+  end
+
+  defp invalid_provider(provider), do: {:invalid_provider, provider, "not a module name"}
 
   # The `In(stateId)` host function: true when `stateId` names a state
   # currently in the context's host configuration. Spec 5.9.1 is the clause

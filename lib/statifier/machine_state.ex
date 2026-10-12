@@ -398,7 +398,7 @@ defmodule Statifier.MachineState do
   view of the queue; no code outside this module touches `:queue` directly.
   """
 
-  alias Statifier.Evaluator.SystemVariables
+  alias Statifier.Evaluator.{Functions, SystemVariables}
   alias Statifier.{Event, Machine}
   alias Statifier.Event.Cause
   alias Statifier.Invoke.Types, as: InvokeTypes
@@ -439,7 +439,8 @@ defmodule Statifier.MachineState do
     max_macrostep_rounds: 10_000,
     routes: nil,
     invoke_types: nil,
-    send_types: nil
+    send_types: nil,
+    functions: nil
   ]
 
   @typedoc """
@@ -512,6 +513,20 @@ defmodule Statifier.MachineState do
   @type send_types :: SendTypes.t() | nil
 
   @typedoc """
+  The dispatch map for the host functions a chart may call from `cond` and
+  `expr` (`Statifier.Evaluator.Functions.from_providers/1`), or `nil`.
+  `nil` means "no host function": every evaluation context is
+  `Statifier.Evaluator.Functions.base_context/0` itself, `In/1` and the
+  builtins only. A non-`nil` map holds those same entries plus each
+  registered provider's. Stamped once per session from the
+  `:function_providers` option, like
+  `t:Statifier.MachineState.invoke_types/0`, and dropped from a persisted
+  position the same way: a resumed position comes back `nil` and the driver
+  re-stamps it with `put_function_providers/2` before the next drive.
+  """
+  @type functions :: Statifier.Evaluator.Functions.registered() | nil
+
+  @typedoc """
   Whether the last external event selected any transition: `:selected` or
   `:none`, and `nil` before any external event has been handled.
 
@@ -560,7 +575,8 @@ defmodule Statifier.MachineState do
           max_macrostep_rounds: max_macrostep_rounds(),
           routes: routes(),
           invoke_types: invoke_types(),
-          send_types: send_types()
+          send_types: send_types(),
+          functions: functions()
         }
 
   @doc """
@@ -577,7 +593,10 @@ defmodule Statifier.MachineState do
   `nil` means), `:invoke_types` (default `nil`, ADR-0051 - see the
   `t:Statifier.MachineState.invoke_types/0` typedoc for what `nil` means), and
   `:send_types` (default `nil`, ADR-0069 - see the
-  `t:Statifier.MachineState.send_types/0` typedoc). All four system variables
+  `t:Statifier.MachineState.send_types/0` typedoc), and `:function_providers`
+  (default `nil` - a list of `Predicator.FunctionProvider` modules whose
+  functions every `cond` and `expr` may call; see the
+  `t:Statifier.MachineState.functions/0` typedoc). All four system variables
   (`SystemVariables.initial/3`) are merged **over** the `:datamodel` option's
   map, so author-supplied data can never shadow a system variable;
   `_ioprocessors` carries an entry for each type `:send_types` registers.
@@ -593,6 +612,11 @@ defmodule Statifier.MachineState do
   A `nil` value anywhere in `:datamodel` means predicator's null (ADR-0037);
   an embedder that means "declared, no value yet" passes `:undefined`
   instead.
+
+  `:function_providers` is checked by
+  `Statifier.Evaluator.Functions.from_providers/1`: raises `ArgumentError`
+  for a list that is not one of loadable provider modules, or that names a
+  function `In/1` or a builtin already answers to.
   """
   @spec new(machine :: Machine.t(), opts :: keyword()) :: t()
   def new(%Machine{} = machine, opts \\ []) do
@@ -626,7 +650,8 @@ defmodule Statifier.MachineState do
       max_macrostep_rounds: Keyword.get(opts, :max_macrostep_rounds, 10_000),
       routes: Keyword.get(opts, :routes),
       invoke_types: Keyword.get(opts, :invoke_types),
-      send_types: Keyword.get(opts, :send_types)
+      send_types: Keyword.get(opts, :send_types),
+      functions: Functions.from_providers!(Keyword.get(opts, :function_providers))
     }
   end
 
@@ -956,6 +981,24 @@ defmodule Statifier.MachineState do
   @spec put_send_types(machine_state :: t(), send_types :: send_types()) :: t()
   def put_send_types(%__MODULE__{} = machine_state, send_types),
     do: %{machine_state | send_types: send_types}
+
+  @doc """
+  Stamps the host functions `providers` registers onto `machine_state`,
+  replacing whatever was stamped before: the driver's re-stamp after a
+  resume, since a persisted position carries none
+  (`t:Statifier.MachineState.functions/0`). `providers` is a
+  `:function_providers` list, resolved through
+  `Statifier.Evaluator.Functions.from_providers!/1`, so `nil` or `[]`
+  stamps "no host function" and a bad list raises `ArgumentError`, as
+  `new/2` does.
+
+  A host re-stamps the same list it started with: a chart that calls a
+  host function evaluates against whatever this stamps, and a missing
+  function is an `error.execution` at the call.
+  """
+  @spec put_function_providers(machine_state :: t(), providers :: [module()] | nil) :: t()
+  def put_function_providers(%__MODULE__{} = machine_state, providers),
+    do: %{machine_state | functions: Functions.from_providers!(providers)}
 
   @doc """
   Recomputes the registered `_ioprocessors` entries from the registration
