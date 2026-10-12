@@ -1,8 +1,8 @@
-# Upgrading from 2.5 to 2.14.0: what a host changes
+# Upgrading from 2.5 to 2.15.0: what a host changes
 
 This page is for a host: the application that compiles charts, starts
 executions and supplies the services a chart reaches through `<invoke>` and
-`<send>`. For each release from 2.6.0 to 2.14.0 it says what a host must
+`<send>`. For each release from 2.6.0 to 2.15.0 it says what a host must
 change to take the release, and then what a host may start doing with it.
 Where a host must change nothing, the page says NONE.
 The [Changelog](../CHANGELOG.md) says what the library changed; this page
@@ -34,6 +34,10 @@ element, or that matches the validator's reasons exhaustively (the
 Breaking entry); a host that cancels a budget-halted session with events
 queued; and a host that waited for a further halted message after a
 delayed send fired into a budget-halted session.
+2.15.0 changes one answer, and its "must change" names the hosts it
+reaches: a host whose charts call a function from `cond` or `expr` that
+is not `In`, a predicator builtin or a function the host declares, and a
+host that matches the compiler's error reasons exhaustively.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
@@ -533,3 +537,43 @@ one element, so the new refusal moves no case. The case schema's
 descriptions now say that a step's `expect_position` members are compared
 as JSON values, and that the corpus writes `active_invocations` sorted
 while the schema does not check the order; no verdict changes.
+
+## 2.15.0
+
+**A host must change:** only where this reaches it. A
+`{:statifier, "~> 2.14"}` requirement already accepts 2.15.0.
+
+- `Statifier.compile/2` refuses a chart whose expressions call a function
+  that is not `In`, a predicator builtin or a function the host declares,
+  with a `Statifier.Compiler.Error` whose reason is
+  `{:unknown_function, name, source}`, located at the element that holds
+  the call. Before 2.15.0 such a chart compiled, and every evaluation of
+  the call raised `error.execution`. Register the function with
+  `:function_providers`, or declare its name with `:function_names`. If
+  your host matches `Statifier.Compiler.Error`'s reasons exhaustively, add
+  a clause for the new reason.
+
+**A host may start:** registering named functions a chart may call from
+`cond` and `expr` (ADR-0078). Requires `{:statifier, "~> 2.15"}`.
+
+1. Write a `Predicator.FunctionProvider` module per family of functions.
+   A function reads only its arguments and the host term: it does no I/O,
+   reads no clock and no random source, and keeps no state, so a replay or
+   a resume evaluates it the same.
+2. Pass the list as `:function_providers` to `Statifier.compile/2`,
+   `Statifier.MachineState.new/2` and `Statifier.Session.start_link/2`.
+   A provider may not replace `In` or a predicator builtin. A list that
+   does not resolve makes `Statifier.Session.start_link/2` refuse with
+   `{:error, {:function_providers, reason}}` before it starts anything.
+3. A tool that checks a chart without loading the modules passes
+   `:function_names`, the names alone, to `Statifier.compile/2`.
+4. A session started with `:resume` stamps the list it is given, and a
+   recording keeps it for `Statifier.Replay`. A host that resumes a
+   position itself re-stamps the list with
+   `Statifier.MachineState.put_function_providers/2`.
+5. A child session started for an `<invoke>` does not inherit the list.
+
+The guide is the section "Host functions for `cond` and `expr`" of
+[How to extend Statifier: `<invoke>` handlers, `<send>` types and host functions](extending.md).
+
+The conformance corpus does not change in 2.15.0.
