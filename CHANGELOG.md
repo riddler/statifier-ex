@@ -10,6 +10,24 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.15.0] 2026-10-12
+
+A minor release. A host registers named functions a chart may call from
+`cond` and `expr` with the new `:function_providers` option, and
+`Statifier.compile/2` now refuses a chart whose expressions call a
+function nothing declares, with the new `Statifier.Compiler.Error` reason
+`{:unknown_function, name, source}`. Such a chart used to compile and
+raise `error.execution` at every evaluation of the call; the Changed
+bullet says what a host does about it.
+
+### Added
+
+- A host registers named functions a chart may call from `cond` and `expr` with the `:function_providers` option, a list of `Predicator.FunctionProvider` modules, on `Statifier.compile/2`, `Statifier.MachineState.new/2` and `Statifier.Session.start_link/2`. A resumed session stamps the list it is given, a recording keeps it for `Statifier.Replay`, and `Statifier.MachineState.put_function_providers/2` re-stamps it on a position a host resumes itself. A provider may not replace `In` or a predicator builtin. `Statifier.compile/2` also accepts `:function_names`, the names alone, for a tool that does not load the modules. See "Host functions for `cond` and `expr`" in `docs/extending.md`.
+
+### Changed
+
+- `Statifier.compile/2` refuses a chart whose expressions call a function that is not `In`, a predicator builtin or a declared host function, with a `Statifier.Compiler.Error` whose reason is `{:unknown_function, name, source}`. Such a chart used to compile and raise `error.execution` at every evaluation of the call. Register the function with `:function_providers`, or declare its name with `:function_names`.
+
 ## [2.14.0] 2026-10-11
 
 A minor release with one Breaking entry. `Statifier.Validator.validate/3`,
