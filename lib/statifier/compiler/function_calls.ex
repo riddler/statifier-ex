@@ -8,7 +8,7 @@ defmodule Statifier.Compiler.FunctionCalls do
   It reads the compiled `Statifier.Machine` rather than the document: every
   `cond`, `expr`, `<script>` and other predicator source has already been
   compiled to a `%Predicator.Compiled{}` by then, and a call is one
-  `["call", name, arity]` instruction in it. A name outside the known set
+  top-level `["call", name, arity]` instruction in it. A name outside the known set
   becomes one `Statifier.Compiler.Error` with reason
   `{:unknown_function, name, source}`, reported at the location of the
   element whose expression makes the call.
@@ -72,12 +72,16 @@ defmodule Statifier.Compiler.FunctionCalls do
 
   defp walk(_other, _location, acc), do: acc
 
-  # A call is `["call", name, arity]`; any other instruction is searched for
-  # nested instruction lists, so a call inside one is found too.
-  @spec calls(term :: term(), acc :: [String.t()]) :: [String.t()]
-  defp calls(["call", name, arity], acc) when is_binary(name) and is_integer(arity),
-    do: [name | acc]
-
-  defp calls(list, acc) when is_list(list), do: Enum.reduce(list, acc, &calls/2)
-  defp calls(_other, acc), do: acc
+  # A call is one top-level `["call", name, arity]` instruction. The
+  # instruction list is flat - no opcode carries a nested instruction list
+  # (`Predicator.Instructions.opcodes/0`) - so only the top level is read: an
+  # operand is data, and a literal list that happens to look like a call
+  # (`["lit", ["call", "x", 1]]`) is not one.
+  @spec calls(instructions :: list(), acc :: [String.t()]) :: [String.t()]
+  defp calls(instructions, acc) do
+    Enum.reduce(instructions, acc, fn
+      ["call", name, arity], acc when is_binary(name) and is_integer(arity) -> [name | acc]
+      _instruction, acc -> acc
+    end)
+  end
 end

@@ -164,7 +164,8 @@ defmodule Statifier.Chart do
   Returns `{:error, :not_a_statifier_blob}` for anything that is not this
   module's tagged envelope - a foreign `term_to_binary` blob, garbage bytes,
   or a well-formed envelope whose source is not a binary or whose opts are
-  not a keyword list.
+  not a keyword list, carry `:function_providers`, or carry a
+  `:function_names` that is not a list of strings.
   """
   @spec from_binary(blob :: binary()) ::
           {:ok, Machine.t()}
@@ -176,7 +177,8 @@ defmodule Statifier.Chart do
     case safe_decode(blob) do
       {:ok, {:statifier_chart, version, identity, source, opts}}
       when is_binary(source) and is_list(opts) ->
-        with :ok <- check_version(version),
+        with :ok <- check_opts(opts),
+             :ok <- check_version(version),
              {:ok, machine} <- recompile(source, opts) do
           check_identity(identity, machine)
         end
@@ -874,6 +876,24 @@ defmodule Statifier.Chart do
             do: {:targets, targets}
 
       {work, MapSet.put(entered, index)}
+    end
+  end
+
+  # `to_binary/1` writes `compile_opts`, whose one list-valued entry is
+  # `:function_names` (ADR-0078) and which never holds `:function_providers`.
+  # A blob carrying either in another shape is not one this module wrote,
+  # and `Statifier.compile/2` would raise on it rather than answer, so it is
+  # refused here as not a blob - and a blob can never name a module for the
+  # recompile to call.
+  @spec check_opts(opts :: list()) :: :ok | {:error, :not_a_statifier_blob}
+  defp check_opts(opts) do
+    names = Keyword.get(opts, :function_names, [])
+
+    if Keyword.has_key?(opts, :function_providers) or not is_list(names) or
+         not Enum.all?(names, &is_binary/1) do
+      {:error, :not_a_statifier_blob}
+    else
+      :ok
     end
   end
 
