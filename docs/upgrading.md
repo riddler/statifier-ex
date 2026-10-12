@@ -37,7 +37,10 @@ delayed send fired into a budget-halted session.
 2.15.0 changes one answer, and its "must change" names the hosts it
 reaches: a host whose charts call a function from `cond` or `expr` that
 is not `In`, a predicator builtin or a function the host declares, and a
-host that matches the compiler's error reasons exhaustively.
+host that matches the compiler's error reasons exhaustively. 2.15.0's
+CHANGELOG lists that refusal under Changed, not as a Breaking entry: it
+refuses only a chart that calls a function no evaluation context holds,
+a call that raised `error.execution` whenever it was evaluated.
 A dependency requirement of `{:statifier,
 "~> 2.5"}` already accepts every version on this page. Raise it only when
 your host calls a function a later release added: each section names the
@@ -551,7 +554,9 @@ while the schema does not check the order; no verdict changes.
   the call raised `error.execution`. Register the function with
   `:function_providers`, or declare its name with `:function_names`. If
   your host matches `Statifier.Compiler.Error`'s reasons exhaustively, add
-  a clause for the new reason.
+  a clause for the new reason. This includes a chart a host stored before
+  2.15.0 and recompiles under it, from its source or from a
+  `Statifier.Chart` blob.
 
 **A host may start:** registering named functions a chart may call from
 `cond` and `expr` (ADR-0078). Requires `{:statifier, "~> 2.15"}`.
@@ -564,14 +569,17 @@ while the schema does not check the order; no verdict changes.
    `Statifier.MachineState.new/2` and `Statifier.Session.start_link/2`.
    A provider may not replace `In` or a predicator builtin. A list that
    does not resolve makes `Statifier.Session.start_link/2` refuse with
-   `{:error, {:function_providers, reason}}` before it starts anything.
+   `{:error, {:function_providers, reason}}` before it starts anything,
+   and makes `Statifier.compile/2` and `Statifier.MachineState.new/2`
+   raise `ArgumentError`.
 3. A tool that checks a chart without loading the modules passes
    `:function_names`, the names alone, to `Statifier.compile/2`.
 4. A session started with `:resume` stamps the list it is given, and a
    recording keeps it for `Statifier.Replay`. A host that resumes a
    position itself re-stamps the list with
    `Statifier.MachineState.put_function_providers/2`.
-5. A child session started for an `<invoke>` does not inherit the list.
+5. A child session started for an `<invoke>` does not inherit the list,
+   and a chart given as `<invoke>` content cannot call a host function.
 
 The guide is the section "Host functions for `cond` and `expr`" of
 [How to extend Statifier: `<invoke>` handlers, `<send>` types and host functions](extending.md).
