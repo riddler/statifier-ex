@@ -151,7 +151,10 @@ defmodule Statifier.Evaluator do
   and layers in this call's two moving parts: `host` via
   `Predicator.Context.put_host/2`, set to `machine_state.machine` and
   `machine_state.configuration` as they stand right now, and `data` via a
-  `bind/3` fold over each of `machine_state.datamodel`'s top-level roots. No
+  `bind/3` fold over each of `machine_state.datamodel`'s top-level roots.
+  When `machine_state.functions` is stamped (the `:function_providers`
+  option), that map replaces the constant's `functions` field first, so a
+  host function is callable beside `In/1` and the builtins. No
   whole-map `Predicator.Context` construction, and therefore no function
   resolution pass, happens here - see `Statifier.Evaluator.Functions`'s
   moduledoc for why that resolution is a compile-time constant instead.
@@ -177,10 +180,21 @@ defmodule Statifier.Evaluator do
   """
   @spec context(machine_state :: MachineState.t()) :: Predicator.Context.t()
   def context(%MachineState{machine: machine, configuration: configuration} = machine_state) do
-    Functions.base_context()
+    machine_state.functions
+    |> base_context()
     |> Predicator.Context.put_host({machine, configuration})
     |> bind_roots(machine_state.datamodel)
   end
+
+  # The functions half of `context/1`: the compile-time constant when no
+  # host function is stamped, and that constant with its `functions` field
+  # swapped for the stamped map otherwise - one field write, no
+  # `Predicator.Context.new/2` and no resolution pass, because
+  # `Statifier.Evaluator.Functions.from_providers/1` resolved the map once,
+  # when it was stamped (`t:Statifier.MachineState.functions/0`).
+  @spec base_context(functions :: MachineState.functions()) :: Predicator.Context.t()
+  defp base_context(nil), do: Functions.base_context()
+  defp base_context(functions), do: %{Functions.base_context() | functions: functions}
 
   # Folds `bind/3` over `datamodel`'s top-level roots. `bind/3` hands off to
   # `Predicator.Context.bind/3`, which applies `normalize_value/1` - so this

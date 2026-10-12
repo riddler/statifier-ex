@@ -1,18 +1,24 @@
 defmodule Statifier.Compiler.Error do
   @moduledoc """
-  The compiler's own error shape: `{reason, message, location}`,
-  character-identical in style to `Statifier.Lowering.Error`
-  (`lib/statifier/lowering/error.ex:21-36`).
+    The compiler's own error shape: `{reason, message, location}`,
+    character-identical in style to `Statifier.Lowering.Error`
+    (`lib/statifier/lowering/error.ex:21-36`).
 
-  This union is deliberately small. `Statifier.Validator` owns every
-  non-expression failure mode exclusively (checks 1-11 at
-  `lib/statifier/validator.ex:47-59`): every id `Statifier.Compiler` looks
-  up is guaranteed present by the time it gets there, so an unresolved
-  reference reaching the compiler is a validator bug, left to raise rather
-  than converted into a value of this type. The one failure mode that *is*
-  the compiler's own - a `cond`/`expr`/`<content>` source that fails to
-  compile - is `:expression_compile_error`, built by
+    This union is deliberately small. `Statifier.Validator` owns every
+    non-expression failure mode exclusively (checks 1-11 at
+    `lib/statifier/validator.ex:47-59`): every id `Statifier.Compiler` looks
+    up is guaranteed present by the time it gets there, so an unresolved
+    reference reaching the compiler is a validator bug, left to raise rather
+    than converted into a value of this type. The one failure mode that *is*
+    the compiler's own - a `cond`/`expr`/`<content>` source that fails to
+    compile - is `:expression_compile_error`, built by
   `Statifier.Compiler.Expressions.compile/3` on its failure path.
+
+  `:unknown_function` is the other: an expression that compiles but calls a
+  function no evaluation context will hold - not `In/1`, not a predicator
+  builtin, and not a function `Statifier.compile/2`'s `:function_providers`
+  registers. `Statifier.Compiler.FunctionCalls.check/2` builds it, after
+  the compiler has run.
   """
 
   alias Predicator.Errors.ParseError
@@ -30,6 +36,7 @@ defmodule Statifier.Compiler.Error do
   @type reason ::
           {:expression_compile_error, Expressions.owner_ref(), source :: String.t(),
            ParseError.t()}
+          | {:unknown_function, name :: String.t(), source :: String.t()}
 
   @enforce_keys [:reason, :message, :location]
   defstruct [:reason, :message, :location]
@@ -71,6 +78,24 @@ defmodule Statifier.Compiler.Error do
       message:
         "failed to compile expression #{inspect(source)}: #{parse_error.message} " <>
           "(predicator line #{line}, column #{column})",
+      location: location
+    }
+  end
+
+  @doc """
+  An expression calls `name`, a function the chart cannot be evaluated
+  with. `source` is the expression's whole predicator source and
+  `location` the element that holds it.
+  """
+  @spec unknown_function(name :: String.t(), source :: String.t(), location :: Location.t()) ::
+          t()
+  def unknown_function(name, source, %Location{} = location)
+      when is_binary(name) and is_binary(source) do
+    %__MODULE__{
+      reason: {:unknown_function, name, source},
+      message:
+        "expression #{inspect(source)} calls #{name}(), which is not a known function: " <>
+          "register a provider for it with the :function_providers option",
       location: location
     }
   end

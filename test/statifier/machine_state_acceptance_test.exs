@@ -86,7 +86,8 @@ defmodule Statifier.MachineStateAcceptanceTest do
     :max_macrostep_rounds,
     :routes,
     :invoke_types,
-    :send_types
+    :send_types,
+    :functions
   ]
 
   # AC: "machine_state holds machine, configuration (full, MapSet of
@@ -123,14 +124,17 @@ defmodule Statifier.MachineStateAcceptanceTest do
   # declaration was made - see that field's own `t:invoke_types/0` typedoc.
   # `send_types` is the ADR-0069 caller-declared registered send-type set,
   # `nil` when no declaration was made - see its own `t:send_types/0` typedoc.
+  # `functions` is the dispatch map of host functions stamped from the
+  # `:function_providers` option, `nil` when none was - see its own
+  # `t:functions/0` typedoc.
   # `last_selection` is whether the last external event selected any
   # transition, `nil` before one - see its own `t:last_selection/0` typedoc.
   #
   # sabotage: add `foo: nil` to `MachineState`'s `defstruct` in
-  # lib/statifier/machine_state.ex - the struct then grows a twenty-fourth
+  # lib/statifier/machine_state.ex - the struct then grows a twenty-fifth
   # key, and this equality assertion reddens for exactly the "someone adds
   # a field without updating the docs" failure the plan calls out.
-  test "machine_state holds the twenty-three fields, and the struct has no others" do
+  test "machine_state holds the twenty-four fields, and the struct has no others" do
     ms = MachineState.new(machine())
 
     assert MapSet.new(Map.keys(Map.from_struct(ms))) == MapSet.new(@expected_fields)

@@ -55,7 +55,8 @@ defmodule Statifier.Interpreter do
   `from_binary/2` restores every durable field of the position, but three
   fields are deliberately per-driver snapshots rather than durable position
   state (`Statifier.Position.import/2`'s own docs give the same reason) and
-  come back `nil`: re-stamp all three before the first drive.
+  come back `nil`: re-stamp all three before the first drive, and the host
+  functions too when the chart calls any (ADR-0078).
 
       {:ok, machine_state} = Statifier.Position.from_binary(blob, machine)
 
@@ -64,6 +65,7 @@ defmodule Statifier.Interpreter do
         |> Statifier.MachineState.put_routes(routes)
         |> Statifier.MachineState.put_invoke_types(invoke_types)
         |> Statifier.MachineState.put_send_types(send_types)
+        |> Statifier.MachineState.put_function_providers(function_providers)
 
       {:ok, machine_state, effects} = Interpreter.handle_event(machine_state, event)
 

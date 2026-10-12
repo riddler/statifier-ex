@@ -265,7 +265,8 @@ defmodule Statifier.Replay do
   # `Recording.anchor/1`'s two branches (moduledoc's "Anchored recordings"
   # cross-reference, ADR-0060 decision 6): `nil` replays from scratch exactly
   # as before this decision existed; a blob decodes the persisted position
-  # instead, re-stamping `:invoke_types` and `:send_types` the way
+  # instead, re-stamping `:invoke_types`, `:send_types` and the recorded
+  # `:function_providers` (ADR-0078) the way
   # `Statifier.Interpreter`'s own "Rehydrating a position" moduledoc section
   # documents for a live resume, and performing no effects - a resumed
   # session's own boot performs none either.
@@ -293,6 +294,9 @@ defmodule Statifier.Replay do
               machine_state
               |> MachineState.put_invoke_types(invoke_types)
               |> MachineState.put_send_types(send_types(recording))
+              |> MachineState.put_function_providers(
+                Keyword.get(Recording.opts(recording), :function_providers)
+              )
 
             {:ok, machine_state, []}
 

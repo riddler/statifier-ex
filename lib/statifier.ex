@@ -26,6 +26,8 @@ defmodule Statifier do
   """
 
   alias Statifier.{Compiler, Effect, Event, Interpreter, Lowering}
+  alias Statifier.Compiler.FunctionCalls
+  alias Statifier.Evaluator.Functions
   alias Statifier.{Machine, MachineState, Parser, Session, Validator}
   alias Statifier.Machine.Identity
 
@@ -44,9 +46,11 @@ defmodule Statifier do
   # decoding refuses to create atoms a blob names, so an embedder's own
   # unrecognized option key could make a blob this library wrote undecodable.
   # Every option this function recognizes is either listed here or provably
-  # inert for compilation - adding a fourth recognized option means deciding
-  # which it is. See ADR-0052.
-  @persisted_compile_opts [:invoke_content_markup, :chart_name, :chart_version]
+  # inert for compilation - adding a recognized option means deciding which
+  # it is. See ADR-0052. `:function_providers` is the one recognized option
+  # persisted in another form: as the `:function_names` it declares, strings
+  # a `:safe` decode can read (ADR-0078).
+  @persisted_compile_opts [:invoke_content_markup, :chart_name, :chart_version, :function_names]
 
   @doc """
   Compiles SCXML source into a `Statifier.Machine`.
@@ -91,6 +95,26 @@ defmodule Statifier do
   field (`Statifier.Machine.identity/1`) alongside the content hash
   `compile/2` always takes over `source`.
 
+  Two options declare the functions a chart's expressions may call beyond
+  `In/1` and predicator's builtins (ADR-0078). `:function_providers` is a
+  list of `Predicator.FunctionProvider` modules; each name their
+  `functions/0` answers is declared. `:function_names` is a list of name
+  strings, declared as they are, for a caller that knows the names but
+  does not load the modules (a tool that only checks a chart). Every
+  `["call", name, arity]` instruction in the compiled chart must name a
+  declared function, `In`, or a builtin; any other name fails the compile
+  with a `Statifier.Compiler.Error` whose reason is
+  `{:unknown_function, name, source}`
+  (`Statifier.Compiler.FunctionCalls.check/2`). A provider list that does
+  not resolve, or that names a function `In/1` or a builtin answers to, is
+  host misuse and raises `ArgumentError`
+  (`Statifier.Evaluator.Functions.from_providers/1`). The names declared by
+  both options are persisted together, sorted, as `:function_names`, so a
+  `Statifier.Chart` blob recompiles without the provider modules. These
+  options only declare names: a session evaluates the chart with the
+  functions its own `:function_providers` option stamps
+  (`Statifier.Session.start_link/2`, `Statifier.MachineState.new/2`).
+
   A successful compile also stamps `source` (the exact bytes passed in) and
   `compile_opts` (`opts` filtered through the closed
   `@persisted_compile_opts` allowlist, in the allowlist's own order) onto the
@@ -100,10 +124,13 @@ defmodule Statifier do
   """
   @spec compile(source :: binary(), opts :: keyword()) :: {:ok, Machine.t()} | {:error, [error()]}
   def compile(source, opts \\ []) when is_binary(source) and is_list(opts) do
+    opts = declare_function_names(opts)
+
     with {:ok, root} <- parse(source),
          {:ok, document} <- Lowering.lower(root, source),
          {:ok, document, warnings} <- Validator.validate(document, source, opts),
-         {:ok, machine} <- Compiler.compile(document) do
+         {:ok, machine} <- Compiler.compile(document),
+         :ok <- check_function_calls(machine, opts) do
       {:ok,
        %Machine{
          machine
@@ -115,6 +142,52 @@ defmodule Statifier do
     else
       {:error, errors, _warnings} -> {:error, errors}
       other -> other
+    end
+  end
+
+  # `:function_providers` and `:function_names` both declare names a chart
+  # may call; this folds them into one sorted `:function_names` list, the
+  # form the check below reads and the form `compile_opts` persists, and
+  # drops the key when nothing is declared, so a chart compiled without
+  # either option persists exactly the options it did before ADR-0078.
+  @spec declare_function_names(opts :: keyword()) :: keyword()
+  defp declare_function_names(opts) do
+    provider_names =
+      case Functions.provider_names(Keyword.get(opts, :function_providers)) do
+        {:ok, names} ->
+          names
+
+        {:error, reason} ->
+          raise ArgumentError, "invalid :function_providers: #{inspect(reason)}"
+      end
+
+    case Enum.uniq(Enum.sort(provider_names ++ checked_function_names(opts))) do
+      [] -> Keyword.delete(opts, :function_names)
+      names -> Keyword.put(opts, :function_names, names)
+    end
+  end
+
+  @spec checked_function_names(opts :: keyword()) :: [String.t()]
+  defp checked_function_names(opts) do
+    case Keyword.get(opts, :function_names, []) do
+      names when is_list(names) ->
+        if Enum.all?(names, &is_binary/1),
+          do: names,
+          else: raise(ArgumentError, "invalid :function_names: #{inspect(names)}")
+
+      other ->
+        raise ArgumentError, "invalid :function_names: #{inspect(other)}"
+    end
+  end
+
+  @spec check_function_calls(machine :: Machine.t(), opts :: keyword()) ::
+          :ok | {:error, [Compiler.Error.t()]}
+  defp check_function_calls(machine, opts) do
+    known = MapSet.new(Functions.base_names() ++ Keyword.get(opts, :function_names, []))
+
+    case FunctionCalls.check(machine, known) do
+      [] -> :ok
+      errors -> {:error, errors}
     end
   end
 
