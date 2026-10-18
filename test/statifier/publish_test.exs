@@ -215,8 +215,8 @@ defmodule Statifier.PublishTest do
       assert Publish.findings(send_chart("")) == []
     end
 
-    # sabotage: `built_in_type?/1`'s catch-all answers `true` -> red (the
-    # registered send's opaque route is reported)
+    # sabotage: `built_in_type?/1`'s `{:static, type}` clause answers `true` -> red
+    # (the registered send's opaque route is reported)
     test "a registered type's target is the processor's route and is not judged" do
       registered = Send.Types.from_send_types(%{"library:notices" => Statifier.Send.Processor})
 
@@ -227,6 +227,8 @@ defmodule Statifier.PublishTest do
 
     # sabotage: the S2 clause's `target: {:static, target}` pattern widened
     # to `target: target` -> red (a targetexpr is judged)
+    # sabotage: `built_in_type?/1`'s catch-all answers `true` -> red (a
+    # typeexpr send's target is judged)
     test "a targetexpr or a typeexpr is left to the runtime" do
       assert Publish.findings(send_chart(~s(targetexpr="'overdue_notice'"))) == []
       assert Publish.findings(send_chart(~s(typeexpr="'scxml'" target="overdue_notice"))) == []
