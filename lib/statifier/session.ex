@@ -166,7 +166,9 @@ defmodule Statifier.Session do
   inbox (`Statifier.Session.Inbox.enqueue_cancel/1`), so a cancellation is
   recorded in the same ordered queue as every event
   (`docs/observability.md` constraint 6) rather than racing ahead of it
-  through a side channel. Draining it runs `Statifier.Interpreter.cancel/1`
+  through a side channel, except while the session is halted
+  `:budget_exhausted`, where the cancel is taken ahead of the queued events,
+  which are never drained. Draining it runs `Statifier.Interpreter.cancel/1`
   - Appendix D's `running = false` followed by `exitInterpreter()` - and
   halts the session `:cancelled`, even though the `{:done, _}` effect that
   walk produces is still forwarded to subscribers exactly as natural
@@ -1008,7 +1010,9 @@ defmodule Statifier.Session do
   Enqueues the cancel marker onto this session's external inbox - a queue
   entry, not an out-of-band call, so a cancellation is recorded in the same
   ordered queue as every event: one queued behind several events is
-  processed in that order, not ahead of them. Draining it runs
+  processed in that order, not ahead of them, except while the session is
+  halted `:budget_exhausted`, where the cancel is taken ahead of the queued
+  events, which are never drained. Draining it runs
   `Statifier.Interpreter.cancel/1` - Appendix D's `running = false`
   followed by `exitInterpreter()` - and halts this session `:cancelled`.
   """
