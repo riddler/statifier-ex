@@ -9,7 +9,7 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
   # that exports only `ioprocessors_entry/1`.
 
   alias Statifier.Send.BasicHTTP
-  alias Statifier.Session
+  alias Statifier.{Session, SessionTeardown}
 
   @old_front "http://branch-north.test/basichttp"
   @new_front "http://branch-south.test/basichttp"
@@ -167,7 +167,7 @@ defmodule Statifier.Send.ReplaceSendTypeTest do
 
   defp start!(machine, opts) do
     {:ok, session} = Statifier.start_session(machine, opts)
-    on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+    on_exit(fn -> SessionTeardown.stop(session) end)
     session
   end
 

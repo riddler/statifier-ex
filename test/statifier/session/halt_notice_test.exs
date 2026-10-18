@@ -8,8 +8,7 @@ defmodule Statifier.Session.HaltNoticeTest do
   # in the halted session's own process through `:sys.replace_state/2`,
   # which runs the function there and answers only after it returns.
 
-  alias Statifier.Session
-  alias Statifier.Session.HaltNotice
+  alias Statifier.{Session, Session.HaltNotice, SessionTeardown}
 
   @returned """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="on_loan">
@@ -41,7 +40,7 @@ defmodule Statifier.Session.HaltNoticeTest do
     test "the watched process is sent the halted notice at once" do
       {:ok, machine} = Statifier.compile(@returned)
       {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
       session_id = Session.session_id(session)
 
       assert_receive {:statifier, ^session_id, {:halted, :done}}, 5_000

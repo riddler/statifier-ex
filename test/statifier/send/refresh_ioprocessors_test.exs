@@ -8,7 +8,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
   # URL, a courier processor whose location its front rotates, and a locker
   # processor that exports only `ioprocessors_entry/1`.
 
-  alias Statifier.{MachineState, Position, Replay, Session}
+  alias Statifier.{MachineState, Position, Replay, Session, SessionTeardown}
   alias Statifier.Send.{BasicHTTP, Types}
 
   @scxml_uri "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
@@ -119,7 +119,7 @@ defmodule Statifier.Send.RefreshIoprocessorsTest do
 
   defp start!(machine, opts) do
     {:ok, session} = Statifier.start_session(machine, opts)
-    on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+    on_exit(fn -> SessionTeardown.stop(session) end)
     session
   end
 

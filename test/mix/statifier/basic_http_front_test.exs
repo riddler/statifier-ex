@@ -10,6 +10,7 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
   alias Mix.Statifier.BasicHTTPFront
   alias Statifier.Send.BasicHTTP
   alias Statifier.Send.BasicHTTP.Transport.Httpc
+  alias Statifier.SessionTeardown
 
   @uri "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
 
@@ -31,7 +32,7 @@ defmodule Mix.Statifier.BasicHTTPFrontTest do
       """)
 
     {:ok, session} = Statifier.start_session(machine, send_types: send_types(front))
-    on_exit(fn -> if Process.alive?(session), do: Statifier.Session.stop(session) end)
+    on_exit(fn -> SessionTeardown.stop(session) end)
     {session, Statifier.Session.snapshot(session).datamodel["_sessionid"]}
   end
 
