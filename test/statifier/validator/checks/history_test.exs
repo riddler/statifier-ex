@@ -227,9 +227,11 @@ defmodule Statifier.Validator.Checks.HistoryTest do
       assert {:ok, _document, _warnings} = validate!(xml)
     end
 
-    # sabotage: target_descendancy_errors/3's Enum.reject(&Context.descendant?/3)
-    # becomes Enum.filter (keeps descendants instead of dropping them) ->
-    # the non-descendant target below is silently dropped, reddening this
+    # sabotage: target_descendancy_errors/3's
+    # Enum.filter(&resolved_outside?/3) becomes Enum.reject (keeps the
+    # targets inside the parent instead of the ones outside it) -> the
+    # outside target below is silently dropped, so validate!/1 answers
+    # {:ok, ...} and the error match below goes red
     test "a default target outside the history's parent is reported against the parent" do
       xml = """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
