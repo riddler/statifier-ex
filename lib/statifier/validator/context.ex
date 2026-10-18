@@ -1,6 +1,6 @@
 defmodule Statifier.Validator.Context do
   @moduledoc """
-  The throwaway index the checks share, built once per `Statifier.Validator.validate/2`
+  The throwaway index the checks share, built once per `Statifier.Validator.validate/3`
   call and discarded afterward. It must never be returned, cached, or handed
   to the compiler: `Statifier.Compiler` builds the real interned index, and
   sharing this one would couple two layers the architecture keeps

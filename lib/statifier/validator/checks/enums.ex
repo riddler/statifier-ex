@@ -6,7 +6,7 @@ defmodule Statifier.Validator.Checks.Enums do
   attribute's default rather than erroring, so `type="sideways"` lowers to
   `:external` and `binding="whenever"` lowers to `:early` - indistinguishable
   on the struct from the valid spellings that produce the same atom. Only the
-  source text can tell them apart, which is what `validate/2`'s `source`
+  source text can tell them apart, which is what `validate/3`'s `source`
   argument exists for: the written attribute's span is sliced
   back out and compared against the range.
 

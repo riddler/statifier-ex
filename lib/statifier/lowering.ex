@@ -107,7 +107,7 @@ defmodule Statifier.Lowering do
   `<scxml>` root - into a typed `%Statifier.Document{}` tree, in one
   traversal that dispatches every child through `Statifier.Lowering.Builders`
   by element name. `source` is the same source binary
-  `Statifier.Validator.validate/2` takes; it is seeded into `ctx` under
+  `Statifier.Validator.validate/3` takes; it is seeded into `ctx` under
   `:source` for the one builder that slices bytes out of it.
 
   Returns `{:ok, document}` only when the whole walk accumulated no errors;

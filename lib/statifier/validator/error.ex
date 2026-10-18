@@ -14,9 +14,9 @@ defmodule Statifier.Validator.Error do
   add a constructor per reason rather than reopening the type, following
   `Statifier.Lowering.Error`'s own precedent.
 
-  `code/1` returns the reason tuple's tag atom - the stable error code the
-  bead's acceptance criteria ask for - while `reason` itself keeps carrying
-  the offending ids as data, the way the rest of the repo does.
+  `code/1` returns the reason tuple's tag atom, the stable error code, while
+  `reason` itself keeps carrying the offending ids as data, the way the rest
+  of the repo does.
   """
 
   alias Statifier.Lowering.Namespace
