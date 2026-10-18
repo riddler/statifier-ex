@@ -21,12 +21,12 @@ defmodule Statifier.Validator do
   2. **Document-order sort.** The accumulated error list, and separately the
      accumulated warning list, is sorted by `location.start_offset` before
      it is returned, regardless of which check happened to report first.
-  3. **Never a partial result.** `validate/2` returns `{:ok, document, warnings}`
+  3. **Never a partial result.** `validate/3` returns `{:ok, document, warnings}`
      only when the accumulated error list is empty, and `document` is always
      the caller's own input, unchanged - the validator never rewrites what it
      is given (contrast v1's source rewriting at
      `../statifier/lib/statifier/parser/scxml.ex:76-103`).
-  4. **`source` must be the document's own binary.** `validate/2` takes the
+  4. **`source` must be the document's own binary.** `validate/3` takes the
      exact source `document` was parsed from, guarded by `is_binary/1`.
      Passing a different binary produces wrong `Location.slice/2` results in
      any check that reads it, not a crash - there is no arity-1 convenience

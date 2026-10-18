@@ -909,7 +909,7 @@ defmodule Statifier.Interpreter.ExitEntry do
   # id-less parent should never reach this point through the ordinary
   # Parser -> Lowering -> Validator -> Compiler pipeline. The guard stays
   # anyway because `Statifier.Compiler.compile/1` is public and reachable
-  # without going through `Statifier.Validator.validate/2`
+  # without going through `Statifier.Validator.validate/3`
   # (`docs/architecture.md` principle 4 makes the validator the only gate in
   # the *pipeline*, not a type-level guarantee about every caller), and
   # `Machine.id/2`'s return type still admits `nil`. Then, when `parent`'s

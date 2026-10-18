@@ -319,5 +319,5 @@ session boundary preserves:
 The last row is a seam of one link, not an omission: a validator finding is
 produced before a `Machine` exists, so none of the trace vocabulary above
 reaches it. There is no trace effect, no `Logger` call, and no `:telemetry`
-event for a validator finding - the return value `validate/2` hands back and
+event for a validator finding - the return value `validate/3` hands back and
 the field `compile/1` stamps it onto *are* the channel, end to end.
