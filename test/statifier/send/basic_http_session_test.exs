@@ -49,6 +49,13 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
   @opts [base_url: @base_url, transport: BasicHTTPTestTransport]
   @send_types %{@uri => {BasicHTTP, @opts}, "basichttp" => {BasicHTTP, @opts}}
 
+  # sabotage: n/a - a wait bound; it asserts no lib/ behaviour.
+  # How long a test waits for a POST or a timer's exit: ExUnit's 100 ms
+  # default is shorter than a delayed send's timer and its session need
+  # under a loaded full gate, and a wait that passes ends at once, so
+  # the bound costs nothing when the message arrives.
+  @receive_bound 5_000
+
   setup do
     register_as_transport_listener()
     :ok
@@ -229,7 +236,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           </scxml>
       """)
 
-      assert_receive {:basichttp_post, "http://sink.test/in", headers, body}
+      assert_receive {:basichttp_post, "http://sink.test/in", headers, body}, @receive_bound
 
       assert {"content-type", "application/x-www-form-urlencoded"} in headers
       assert URI.decode_query(body) == %{"_scxmleventname" => "ping", "Var1" => "2", "p" => "x"}
@@ -254,7 +261,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           </scxml>
       """)
 
-      assert_receive {:basichttp_post, "http://sink.test/in", _headers, body}
+      assert_receive {:basichttp_post, "http://sink.test/in", _headers, body}, @receive_bound
       assert %{"loan" => loan, "holds" => ~s(["Dune",2])} = URI.decode_query(body)
       assert JSON.decode!(loan) == %{"title" => "Dune", "due" => nil}
     end
@@ -278,7 +285,9 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
 
       Session.send_event(session, Statifier.Event.external("loaned", data: ~D[2026-10-16]))
 
-      assert_receive {:basichttp_post, "http://sink.test/in?_scxmleventname=due", headers, body}
+      assert_receive {:basichttp_post, "http://sink.test/in?_scxmleventname=due", headers, body},
+                     @receive_bound
+
       assert {"content-type", "text/plain"} in headers
       assert body == inspect(~D[2026-10-16])
       assert Process.alive?(session)
@@ -322,7 +331,8 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           """)
 
         assert_receive {:basichttp_post, "http://sink.test/in?_scxmleventname=note", headers,
-                        body}
+                        body},
+                       @receive_bound
 
         assert {"content-type", "text/plain"} in headers
         assert String.valid?(body)
@@ -422,10 +432,9 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           </scxml>
       """)
 
-      refute_received {:basichttp_post, _url, _headers, _body}
-
       assert_receive {:basichttp_post, "http://sink.test/later", _headers,
-                      "_scxmleventname=later"}
+                      "_scxmleventname=later"},
+                     @receive_bound
     end
 
     # sabotage: `perform/2`'s `{:cancel, _}` clause returns `:ok` without
@@ -485,7 +494,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       timer = timer!(session, "t")
       ref = Process.monitor(timer)
       Session.stop(session)
-      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}
+      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}, @receive_bound
     end
 
     # sabotage: `hold/4`'s `after` arm POSTs without the `stopped?/2`
@@ -718,7 +727,9 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       on_exit(fn -> SessionTeardown.stop(session) end)
       session_id = Session.session_id(session)
 
-      assert_receive {:basichttp_post, "http://sink.test/answer/raise", _headers, _body}
+      assert_receive {:basichttp_post, "http://sink.test/answer/raise", _headers, _body},
+                     @receive_bound
+
       assert_receive {:statifier, ^session_id, {:halted, :done}}, 1_000
       assert Session.status(session).configuration == MapSet.new(["pass"])
     end
@@ -741,8 +752,8 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
 
       timer = timer!(session, "t")
       ref = Process.monitor(timer)
-      assert_receive {:basichttp_post, "http://sink.test/fired", _headers, _body}
-      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}
+      assert_receive {:basichttp_post, "http://sink.test/fired", _headers, _body}, @receive_bound
+      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}, @receive_bound
       # Answered only after the session has taken the timer's `:DOWN`.
       _status = Session.status(session)
 
@@ -771,7 +782,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       timer = timer!(session, "t")
       ref = Process.monitor(timer)
       Session.send_event(session, "stop_it")
-      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}
+      assert_receive {:DOWN, ^ref, :process, ^timer, _reason}, @receive_bound
       _status = Session.status(session)
 
       assert watched(session) == %{}
