@@ -4,7 +4,7 @@ defmodule StatifierTest do
   alias Statifier.{Event, Machine}
   alias Statifier.Validator.Warning
 
-  # sabotage: in `Statifier.compile/1`, swap `Compiler.compile(document)` for
+  # sabotage: in `Statifier.compile/2`, swap `Compiler.compile(document)` for
   # `{:ok, document}` (return the uncompiled document instead of running the
   # compiler) -> the `%Machine{}` pattern match below goes red because the
   # returned struct is a `%Statifier.Document{}`, not a `%Statifier.Machine{}`
@@ -22,7 +22,7 @@ defmodule StatifierTest do
     assert %{"a" => _a_index, "b" => _b_index} = id_to_index
   end
 
-  # sabotage: in `Statifier.compile/1`'s private `parse/1` helper, change the
+  # sabotage: in `Statifier.compile/2`'s private `parse/1` helper, change the
   # error clause to `{:error, error} -> {:error, error}` (drop the
   # one-element-list wrap) -> the `[%Statifier.Parser.ParseError{}]` pattern
   # below goes red because the error comes back bare, not wrapped in a list
@@ -34,8 +34,8 @@ defmodule StatifierTest do
     assert [%Statifier.Parser.ParseError{}] = errors
   end
 
-  # sabotage: in `Statifier.compile/1`, swap the `with` clause order so
-  # `Validator.validate/2` runs before `Lowering.lower/2` (pass the DOM
+  # sabotage: in `Statifier.compile/2`, swap the `with` clause order so
+  # `Validator.validate/3` runs before `Lowering.lower/2` (pass the DOM
   # root straight to the validator) -> this test reddens with a
   # FunctionClauseError instead of the expected [%Lowering.Error{}] match,
   # because the validator never receives a %Statifier.Document{}
@@ -47,7 +47,7 @@ defmodule StatifierTest do
     assert [%Statifier.Lowering.Error{}] = errors
   end
 
-  # sabotage: in `Statifier.compile/1`, drop the `Validator.validate/2` step
+  # sabotage: in `Statifier.compile/2`, drop the `Validator.validate/3` step
   # from the `with` chain (feed the lowered document straight to
   # `Compiler.compile/1`) -> this test reddens because the transition to an
   # unknown target no longer fails validation and the pipeline instead
@@ -66,10 +66,10 @@ defmodule StatifierTest do
     assert [%Statifier.Validator.Error{}] = errors
   end
 
-  # sabotage: in `Statifier.compile/1`, replace the final `Compiler.compile(document)`
+  # sabotage: in `Statifier.compile/2`, replace the final `Compiler.compile(document)`
   # call with `{:ok, %Machine{states: {}, id_to_index: %{}, transitions: {},
   # contents: {}, location: document.location}}` (fabricate a Machine instead
-  # of compiling) -> this test reddens because compile/1 now returns {:ok, _}
+  # of compiling) -> this test reddens because compile/2 now returns {:ok, _}
   # instead of the expected list of Compiler.Error for the broken expression
   test "an uncompilable expression fails at the compiler stage with a list of Compiler.Error" do
     xml = """
@@ -157,7 +157,7 @@ defmodule StatifierTest do
              errors
   end
 
-  # sabotage: in `Statifier.compile/1`, drop the `%Machine{machine | warnings:
+  # sabotage: in `Statifier.compile/2`, drop the `%Machine{machine | warnings:
   # warnings}` stamp and return `Compiler.compile(document)` directly as the
   # `with`'s do-block value -> this test reddens because `machine.warnings`
   # comes back `[]` instead of the one expected finalize_forbidden_content
@@ -179,7 +179,7 @@ defmodule StatifierTest do
     assert %Warning{reason: {:finalize_forbidden_content, "raise"}} = warning
   end
 
-  # sabotage: in `Statifier.compile/1`, change `warnings: warnings` to
+  # sabotage: in `Statifier.compile/2`, change `warnings: warnings` to
   # `warnings: ["fake" | warnings]` (stamp a synthesized extra finding rather
   # than the validator's list as-is) -> this test reddens because
   # `machine.warnings` comes back non-empty for a document the validator
@@ -452,7 +452,7 @@ defmodule StatifierTest do
 
     # sabotage: `Checks.Param.check/2`'s `++ send_params(document)` arm is
     # dropped -> the `<param>` carrying both attributes compiles again (taking `location`),
-    # `Statifier.compile/1` answers {:ok, %Machine{}} and the {:error, _}
+    # `Statifier.compile/2` answers {:ok, %Machine{}} and the {:error, _}
     # match reddens
     test "a <param> with both attributes is refused" do
       xml = loan_chart(~s(<param name="copies" expr="2" location="stock"/>))
@@ -462,7 +462,7 @@ defmodule StatifierTest do
     end
 
     # sabotage: `Checks.Param`'s `send_params/1` maps every `<send>` `<param>`
-    # to a `param_no_value` error -> `Statifier.compile/1` refuses this
+    # to a `param_no_value` error -> `Statifier.compile/2` refuses this
     # well-formed chart and the {:ok, machine} match reddens
     test "a <param> with only expr or only location compiles and sends its value" do
       xml =
