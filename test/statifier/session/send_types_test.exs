@@ -138,15 +138,22 @@ defmodule Statifier.Session.SendTypesTest do
     # `&(SendTypes.classify(nil, &1) == :registered)` (never true against no
     # declaration) -> every built-in spelling is let through, the session
     # boots, and this `{:error, _}` match reddens. Confirmed red and reverted.
+    # sabotage: the `Enum.sort()` is removed from `built_in_send_types/1` ->
+    # the refusal lists the spellings in `Map.keys/1` order, which differs
+    # from term order on this map, and the list match reddens. Confirmed red
+    # and reverted.
     test "every built-in spelling is named, sorted, in one refusal" do
       uri = "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+      built_ins = [nil, uri, "scxml"]
 
-      send_types = %{
-        "scxml" => SinkProcessor,
-        nil => SinkProcessor,
-        uri => SinkProcessor,
-        "myapp:sink" => SinkProcessor
-      }
+      # A map of more than 32 keys is a hash-array map, whose `Map.keys/1`
+      # order is not term order; a small map would list its keys sorted
+      # already and make the sort unobservable.
+      host_types = Map.new(1..40, &{"myapp:sink#{&1}", SinkProcessor})
+      send_types = Enum.reduce(built_ins, host_types, &Map.put(&2, &1, SinkProcessor))
+
+      natural = send_types |> Map.keys() |> Enum.filter(&(&1 in built_ins))
+      assert natural != Enum.sort(natural), "the map must not list its built-ins sorted already"
 
       assert {:error, {:send_types, {:built_in_types, [nil, ^uri, "scxml"]}}} =
                Session.start_link(compile!(@chart), send_types: send_types)
