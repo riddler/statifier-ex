@@ -39,7 +39,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
 
   import Statifier.Testing.Case, only: [test_scxml: 5]
 
-  alias Statifier.{BasicHTTPTestTransport, CrashReportProbe, Session}
+  alias Statifier.{BasicHTTPTestTransport, CrashReportProbe, Session, SessionTeardown}
   alias Statifier.Send.BasicHTTP
   alias Statifier.Send.BasicHTTPSessionTest.Blocker
   alias Statifier.Session.HaltNotice
@@ -96,7 +96,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
   defp start!(xml, send_types \\ @send_types) do
     {:ok, machine} = Statifier.compile(xml)
     {:ok, session} = Statifier.start_session(machine, send_types: send_types)
-    on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+    on_exit(fn -> SessionTeardown.stop(session) end)
     session
   end
 
@@ -204,7 +204,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
                  send_types: %{"basichttp" => BasicHTTP}
                )
 
-      on_exit(fn -> if Process.alive?(resumed), do: Session.stop(resumed) end)
+      on_exit(fn -> SessionTeardown.stop(resumed) end)
 
       assert Session.snapshot(resumed).datamodel["_ioprocessors"]["basichttp"] ==
                started.datamodel["_ioprocessors"]["basichttp"]
@@ -586,7 +586,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       {:ok, session} =
         Statifier.start_session(machine, send_types: @send_types, max_macrostep_rounds: 5)
 
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
 
       assert Session.status(session).status == :budget_exhausted
       refute_receive {:basichttp_post, _url, _headers, _body}, 300
@@ -626,7 +626,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
           subscribers: [self()]
         )
 
-      on_exit(fn -> if Process.alive?(reader), do: Session.stop(reader) end)
+      on_exit(fn -> SessionTeardown.stop(reader) end)
 
       {:ok, machine} =
         Statifier.compile("""
@@ -647,7 +647,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       {:ok, session} =
         Statifier.start_session(machine, send_types: @send_types, max_macrostep_rounds: 5)
 
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
 
       assert Session.status(session).status == :budget_exhausted
 
@@ -715,7 +715,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
       {:ok, session} =
         Statifier.start_session(machine, send_types: @send_types, subscribers: [self()])
 
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
       session_id = Session.session_id(session)
 
       assert_receive {:basichttp_post, "http://sink.test/answer/raise", _headers, _body}
@@ -798,7 +798,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
         """)
 
       {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
       session_id = Session.session_id(session)
 
       assert_receive {:statifier, ^session_id, {:halted, :done}}, 1_000
@@ -835,7 +835,7 @@ defmodule Statifier.Send.BasicHTTPSessionTest do
         """)
 
       {:ok, session} = Statifier.start_session(machine, subscribers: [self()])
-      on_exit(fn -> if Process.alive?(session), do: Session.stop(session) end)
+      on_exit(fn -> SessionTeardown.stop(session) end)
       session_id = Session.session_id(session)
 
       assert_receive {:statifier, ^session_id, {:halted, :done}}, 1_000
