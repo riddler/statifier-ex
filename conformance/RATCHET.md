@@ -261,7 +261,9 @@ invocation's id), `running` and `datamodel` (every variable but `_event`,
 `null`); `schema/case.json` states each shape. Every array of state ids
 is sorted. A runner honours it by reading its own position after the
 step and writing it in that form; the step agrees only when every member
-is exactly the expectation's. Every state of a case that carries it has
+agrees with the expectation's as a JSON value: numbers by value (a float
+`2.0` agrees with a `2`), arrays in order, objects member by member, and
+anything else exactly. Every state of a case that carries it has
 an id. An implementation that does not export positions leaves such a
 case out of its registry, as it leaves any case it cannot pass.
 
