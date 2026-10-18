@@ -221,26 +221,19 @@ defmodule Corpus.CorpusFilesTest do
     end
 
     # sabotage: n/a - asserts the committed generated file, no lib/ behavior;
-    # changing one entry's suite in conformance/registry.json -> red
-    test "every entry is a corpus case with the same suite, none from an internal glob" do
-      every_case = all_cases() ++ cases("statifier")
-      suites = Map.new(every_case, &{&1["id"], &1["suite"]})
+    # changing one entry's suite in conformance/registry.json -> red.
+    # The registry holds only corpus case ids and suites, never a path, and a
+    # corpus case maps to a path under conformance/ or the generated suite
+    # trees, so no internal glob check can fail here; that guard is the
+    # emitter test "no entry derives from an internal_tests glob".
+    test "every entry is a corpus case with the same suite" do
+      suites = Map.new(all_cases() ++ cases("statifier"), &{&1["id"], &1["suite"]})
       registry = "conformance/registry.json" |> File.read!() |> JSON.decode!()
-      {:ok, ratchet} = RegressionRegistry.load()
-
-      internal =
-        ratchet
-        |> RegressionRegistry.expand(:internal)
-        |> elem(0)
-        |> MapSet.new()
 
       assert registry["entries"] != []
 
       for %{"case_id" => id, "suite" => suite} <- registry["entries"] do
         assert Map.fetch(suites, id) == {:ok, suite}, id
-
-        corpus_case = Enum.find(every_case, &(&1["id"] == id))
-        refute MapSet.member?(internal, Emitter.ratchet_path(corpus_case, ".")), id
       end
 
       manifest = "conformance/manifest.json" |> File.read!() |> JSON.decode!()
