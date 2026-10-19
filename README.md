@@ -122,7 +122,7 @@ show each one.
 ## Compatibility
 
 - Elixir `~> 1.18`.
-- Runtime dependencies: `predicator ~> 9.4`, `saxy ~> 1.6`,
+- Runtime dependencies: `predicator ~> 9.5`, `saxy ~> 1.6`,
   `telemetry ~> 1.3`.
 - Releases follow [SemVer](https://semver.org). Persisted position and
   recording blobs refuse with a typed error on a format-version or

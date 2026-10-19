@@ -6,7 +6,7 @@ defmodule Statifier.StringLiteralEscapeTest do
   # What a chart sees for a `\u` or `\U` escape inside a string literal, as
   # docs/upgrading.md's 2.12.0 section states it (the bullet that opens
   # "With the same move, a string literal holding a `\u` or `\U` escape").
-  # The answers come from the locked predicator, 9.4.2, whose lexer refuses
+  # The answers come from the locked predicator, 9.5.0, whose lexer refuses
   # both escapes: an expression the compiler checks at load refuses the
   # document, a deferred one raises `error.execution` when it runs and is
   # reported under `Statifier.Publish.findings/2`'s row S13, and text read
