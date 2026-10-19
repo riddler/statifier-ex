@@ -7,8 +7,9 @@ defmodule Statifier.Compiler.FunctionCalls do
 
   It reads the compiled `Statifier.Machine` rather than the document: every
   `cond`, `expr`, `<script>` and other predicator source has already been
-  compiled to a `%Predicator.Compiled{}` by then, and a call is one
-  top-level `["call", name, arity]` instruction in it. A name outside the known set
+  compiled to a `%Predicator.Compiled{}` by then, and its calls are the ones
+  `Predicator.Analysis.calls/1` lists for it, nested and namespaced calls
+  included, a namespaced name as written. A name outside the known set
   becomes one `Statifier.Compiler.Error` with reason
   `{:unknown_function, name, source}`, reported at the location of the
   element whose expression makes the call.
@@ -42,10 +43,10 @@ defmodule Statifier.Compiler.FunctionCalls do
   # `term`, carrying the innermost enclosing struct's `location` down so
   # each call is reported at the element that holds it.
   @spec walk(term :: term(), location :: Location.t(), acc :: list()) :: list()
-  defp walk({tag, %Predicator.Compiled{instructions: instructions}, source}, location, acc)
+  defp walk({tag, %Predicator.Compiled{} = compiled, source}, location, acc)
        when tag in [:compiled, :program] and is_binary(source) do
-    instructions
-    |> calls([])
+    compiled
+    |> calls()
     |> Enum.reduce(acc, fn name, acc -> [{name, source, location} | acc] end)
   end
 
@@ -72,16 +73,17 @@ defmodule Statifier.Compiler.FunctionCalls do
 
   defp walk(_other, _location, acc), do: acc
 
-  # A call is one top-level `["call", name, arity]` instruction. The
-  # instruction list is flat - no opcode carries a nested instruction list
-  # (`Predicator.Instructions.opcodes/0`) - so only the top level is read: an
-  # operand is data, and a literal list that happens to look like a call
-  # (`["lit", ["call", "x", 1]]`) is not one.
-  @spec calls(instructions :: list(), acc :: [String.t()]) :: [String.t()]
-  defp calls(instructions, acc) do
-    Enum.reduce(instructions, acc, fn
-      ["call", name, arity], acc when is_binary(name) and is_integer(arity) -> [name | acc]
-      _instruction, acc -> acc
-    end)
+  # The names of every call in `compiled`, in source order, as
+  # `Predicator.Analysis.calls/1` lists them: an operand is data, so a literal
+  # list that happens to look like a call (`["lit", ["call", "x", 1]]`) is not
+  # one. Only the name is kept. The match is on `{:ok, _}` alone: every
+  # envelope a compiled `Statifier.Machine` holds came from predicator's own
+  # compiler, and the analysis refuses only an instruction outside its opcode
+  # table or an operand of the wrong shape, which that compiler does not
+  # emit, so any other answer is a bug to surface, not a chart to pass.
+  @spec calls(compiled :: Predicator.Compiled.t()) :: [String.t()]
+  defp calls(compiled) do
+    {:ok, calls} = Predicator.Analysis.calls(compiled)
+    Enum.map(calls, fn %{name: name} -> name end)
   end
 end
