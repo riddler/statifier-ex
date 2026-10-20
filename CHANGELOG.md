@@ -10,6 +10,18 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ex/blob/v2.9.0
 into the section below at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [2.16.0] 2026-10-19
+
+A minor release. The package now requires `{:predicator, "~> 9.5"}` where
+it required `~> 9.4`, so a host that holds predicator at 9.4 moves to 9.5
+with it. A host that also depends on `statifier_blocks` takes 0.43.1 or
+later, which admits predicator 9.5; 0.43.0 caps predicator below it. Every
+answer `Statifier.compile/2` gives is unchanged.
+
+### Changed
+
+- Requires `{:predicator, "~> 9.5"}`, where it required `~> 9.4`: the compile-time check that a chart calls only known functions reads each expression's calls through `Predicator.Analysis.calls/1`, which predicator 9.5.0 adds. A host that holds predicator at 9.4 moves to 9.5 with it (`mix deps.update predicator`); every answer `Statifier.compile/2` gives is unchanged.
+
 ## [2.15.0] 2026-10-12
 
 A minor release. A host registers named functions a chart may call from
