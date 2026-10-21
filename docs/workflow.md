@@ -2,6 +2,7 @@
 
 **Read this to:** pick up a bead, run it in a worktree, and land it without
 colliding with parallel work.
+
 **Short version:** `bd` tracks all work. Each issue gets a worktree. Beads
 batch only when their `area:` label sets are disjoint. Merges are rebase-only,
 so ask GitHub whether a branch landed, never git.

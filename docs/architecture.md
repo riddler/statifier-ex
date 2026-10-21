@@ -1,6 +1,7 @@
 # Architecture
 
 **Read this to:** learn how the engine is built before you change it.
+
 **Short version:** the engine is a literal port of the W3C algorithm. It is a
 pure function that returns effects as data. A `Machine` is valid by
 construction.

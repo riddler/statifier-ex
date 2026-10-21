@@ -2,6 +2,7 @@
 
 **Read this to:** write a declarative test for an SCXML document that your
 application drives.
+
 **Short version:** `use Statifier.Testing.Case`, then call `test_scxml/4` with a
 document, an initial configuration, and `{event, expected configuration}`
 steps.

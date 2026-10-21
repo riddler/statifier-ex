@@ -2,6 +2,7 @@
 
 **Read this to:** connect an SCXML document to your own code, through
 `<invoke>`, `<send type="...">`, or functions in `cond` and `expr`.
+
 **Short version:** write a module for the seam (`Statifier.Invoke.Handler`,
 `Statifier.Send.Processor`, or `Predicator.FunctionProvider`). Register it per
 session. Planning callbacks stay pure. Your host does the I/O and reports the

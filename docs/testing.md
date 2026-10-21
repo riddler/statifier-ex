@@ -1,6 +1,7 @@
 # Testing strategy
 
 **Read this to:** write, run, or gate tests in this repo.
+
 **Short version:** the conformance corpus is the contract. Every new test of
 `lib/` behavior needs a sabotage note. The regression ratchet only moves
 forward. `mix quality` must be green before you commit.

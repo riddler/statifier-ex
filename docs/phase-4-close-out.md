@@ -2,6 +2,7 @@
 
 **Read this to:** find out if a piece of Phase 4 shipped, shipped differently
 than planned, or is still owed.
+
 **Short version:** all scope items of the `st-cmq` epic shipped. Five open items
 remain, and a bead holds each one.
 

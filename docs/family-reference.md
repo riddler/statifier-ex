@@ -2,6 +2,7 @@
 
 **Read this to:** decide what to copy from this repo into a sibling repo, and
 what to rewrite or leave out.
+
 **Short version:** copy the `CLAUDE.md` shell-command section and the
 ExQuality block verbatim. Adapt the authority, beads, and `.claude/wurk/`
 sections. Copy none of the custom gate stages. Point `gate.attest` at

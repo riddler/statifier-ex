@@ -2,6 +2,7 @@
 
 **Read this to:** keep the seams that let step tooling (a debugger, live
 visualization, replay, time travel) attach to the core without rework.
+
 **Short version:** six constraints bind code that is written anyway. Keep each
 microstep a resumable value, make trace events effects, keep locations on the
 Machine, count and stamp steps, keep the pure queries callable, and observe and

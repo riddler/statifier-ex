@@ -2,6 +2,7 @@
 
 **Read this to:** decide what your chart does when an external resource says it
 is unavailable.
+
 **Short version:** the host decides the verdict and sends it as an event. The
 chart routes on it with explicit arrows. Park and retry for a temporary
 refusal. Fail fast for a permanent one.

@@ -2,6 +2,7 @@
 
 **Read this to:** send and receive events over HTTP from a chart, and write the
 front that receives the POSTs.
+
 **Short version:** register `Statifier.Send.BasicHTTP` with a base URL. Run an
 HTTP endpoint at that URL. Pass each request to `decode/1`, then enqueue the
 event it returns. Delivery is at-least-once, so deduplicate on the

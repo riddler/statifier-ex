@@ -2,6 +2,7 @@
 
 **Read this to:** save an execution and load it again without resuming the
 wrong state.
+
 **Short version:** a position stores interned integer state indexes, which
 mean nothing across two chart builds. Statifier stamps each blob with the
 chart identity and refuses a mismatch. Persist the SCXML source, the

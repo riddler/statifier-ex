@@ -2,6 +2,7 @@
 
 **Read this to:** drive a chart from your own job or handler, with no
 `Statifier.Session` process.
+
 **Short version:** the pure core is a fold. Give `Statifier.Interpreter` a
 `%Statifier.MachineState{}` and an event. It returns a new
 `%MachineState{}` and a list of effects. You perform the effects, and you

@@ -2,6 +2,7 @@
 
 **Read this to:** find the publish-time check that catches a defect before
 a chart runs, for one of three packages.
+
 **Short version:** a runtime refusal for something a literal in the source
 could have told us is a bug in the publish check. Find your refusal in a
 table. Its Twin column names the function that finds the same defect first.

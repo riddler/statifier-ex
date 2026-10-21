@@ -2,6 +2,7 @@
 
 **Read this to:** learn what datamodel the engine uses, what it provides, and
 how expressions are evaluated.
+
 **Short version:** the datamodel is predicator
 ([predicator-ex](https://github.com/riddler/predicator-ex), `~> 9.5`). It has no
 `eval`. Every evaluation returns `{:ok, value} | {:error, reason}`, and the

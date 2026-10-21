@@ -2,6 +2,7 @@
 
 **Read this to:** make a `<send delay="...">` survive a node restart, a deploy,
 or a crash. You are a host application author.
+
 **Short version:** consume the `SendDelayed` and `Cancel` effects, store them
 under the keys below, and check that the session is live before you deliver a
 fired event.

@@ -2,6 +2,7 @@
 
 **Read this to:** learn what your host must change to take each release from
 2.6.0 to 2.16.0, and what the release lets you start to do.
+
 **Short version:** only 2.14.0 has a Breaking entry in the CHANGELOG. Every
 "must change" from 2.6.0 to 2.10.0 is NONE. Later releases reach only the
 hosts named in each section.

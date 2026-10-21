@@ -2,6 +2,7 @@
 
 **Read this to:** build or review the OpenTelemetry bridge for the
 `[:statifier, :session, ...]` telemetry contract.
+
 **Short version:** the bridge is a separate package, `opentelemetry_statifier`.
 It turns each macrostep into one span. Effect and trace events become span
 events. This repo adds no OTel code.
