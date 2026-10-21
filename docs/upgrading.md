@@ -149,8 +149,9 @@ URI without its trailing slash, now starts an SCXML child session. Before
 - A host that needs the new behaviour requires
   `{:statifier, "~> 2.8 and >= 2.8.1"}`.
 
-**A host may start:** nothing new. A sibling implementation re-vendors
-the corpus at the `v2.8.1` tag.
+**A host may start:** nothing new. The corpus changes follow the rule of
+2.6.1: a sibling implementation re-vendors the corpus at the `v2.8.1` tag.
+That is not a host step.
 
 ## 2.9.0
 
@@ -213,7 +214,7 @@ Guide: [The Basic HTTP Event I/O Processor](basichttp.md).
 
 **Conformance corpus.** It claims the W3C documents of the processor, and
 its case schema gains `host.event_io_processors`. A sibling implementation
-re-vendors it at the `v2.10.0` tag.
+re-vendors it at the `v2.10.0` tag. That is not a host step.
 
 Decision: ADR-0075
 
@@ -364,7 +365,7 @@ takes, not its name alone. The step of a `statifier` case can carry an
 optional `expect_position`, the position that the chart holds after that
 step (ADR-0076). The release adds three library cases. The corpus hash in
 `conformance/manifest.json` moves, so a sibling implementation re-vendors
-it at the `v2.11.0` tag.
+it at the `v2.11.0` tag. That is not a host step.
 
 ## 2.12.0
 
@@ -417,7 +418,7 @@ it at the `v2.11.0` tag.
     was usually not valid UTF-8.
 - **Escapes.** With the same move, a string literal that holds a `\u` or
   `\U` escape no longer reads as its letters with the backslash dropped.
-  Before 2.12.0 `'café'` read as `cafu00e9`. Write the character
+  Before 2.12.0 `'caf\u00e9'` read as `cafu00e9`. Write the character
   itself instead. What a chart sees depends on where the literal sits:
   - In an expression that the compiler checks at load (a transition's
     `cond`, a `<log expr>` or a `<send>` `<content expr>`, for example),
@@ -444,13 +445,15 @@ anything but an array of unique, non-empty state ids. The library case
 `loan_lost_after_timer` states the position after the step that stops its
 chart: `running` false, an empty configuration and `lost` still in
 `states_to_invoke`. The corpus hash in `conformance/manifest.json` moves,
-so a sibling implementation re-vendors it at the `v2.12.0` tag.
+so a sibling implementation re-vendors it at the `v2.12.0` tag. That is not
+a host step.
 
 The conformance runner compares the numbers of a position by JSON value. A
 float that the chart holds agrees with an expected integer of the same
 value (`2.0` with `2`). Before, they disagreed, and the message named no
 member. A number that differs in value still disagrees, and the message
-names the member. A sibling runner compares the same way.
+names the member. A sibling runner compares the same way. That is not a
+host step either.
 
 ## 2.12.1
 
@@ -584,7 +587,8 @@ change.
 `loan_renew_refused_by_standing` and `loan_dispute_restores_late_shallowly`,
 and `conformance/registry.json` claims both. The corpus hash in
 `conformance/manifest.json` moves, so a sibling implementation re-vendors
-it at the `v2.14.0` tag. No case repeats an attribute on one element, so the new refusal moves no case.
+it at the `v2.14.0` tag. That is not a host step. No case repeats an
+attribute on one element, so the new refusal moves no case.
 The descriptions of the case schema now say two things. The runner compares
 the `expect_position` members of a step as JSON values. The corpus writes
 `active_invocations` sorted, while the schema does not check the order. No

@@ -18,13 +18,13 @@ same.
 
 ## The verdict is the host's; the chart just routes
 
-The engine never decides if a resource is temporarily or permanently
-unavailable. Only the host knows if a refusal means "paused by an
+The chart cannot tell "temporarily unavailable" from "permanently unavailable".
+The engine never makes that call on behalf of the chart. Only the host knows if a refusal means "paused by an
 administrator, try later" or "revoked, never again". That knowledge is in the
 host's response codes, its configuration, and its own records.
 
-The host delivers the verdict as events. The chart routes on them. Two shapes
-work equally well:
+The host renders the verdict and delivers it as events. The whole job of the
+chart is to route on them. Two shapes work equally well:
 
 - **Distinct event names.** The host's handler (or the code it enqueued)
   reports back with `capture.deferred` or `card.revoked`. It uses
@@ -33,7 +33,8 @@ work equally well:
   stays legible in the document.
 - **One event, payload routed by `cond`.** The host sends a single
   `capture.unavailable` event. Its payload carries the verdict. The chart
-  splits with `cond="_event.data.verdict == 'deferred'"` arrows. Use distinct
+  splits with `cond="_event.data.verdict == 'deferred'"` arrows. This is the
+  same pattern with one more level of indirection. Use distinct
   names unless the verdict vocabulary is open-ended.
 
 **Engine error events.** The engine's own errors follow the same rule:
@@ -43,8 +44,9 @@ work equally well:
 - A registered handler that tried to communicate and failed raises
   `error.communication`.
 
-These are events like any other. Give them explicit arrows. The engine discards
-an unhandled error event, so a chart without the arrow decides silently that
+These are events like any other. Give them explicit arrows. Errors are events,
+never silent defaults. This posture of ADR-0004 runs through the whole engine.
+The engine discards an unhandled error event, so a chart without the arrow decides silently that
 failure changes nothing. Add an arrow to a state whose name says what you
 decided.
 
@@ -106,8 +108,8 @@ See `docs/durable-timers.md`.
 ## Pattern 2: fail fast, on an explicit arrow
 
 A permanently unavailable resource (revoked, unauthorized, deleted) gets no
-retry loop. A retry of a revoked credential is noise, and it is often harmful
-(lockouts, alarms).
+retry loop. A retry of a revoked credential is not persistence. It is noise, and it is
+often actively harmful (lockouts, alarms).
 
 1. Add one explicit arrow from every state that can receive the verdict to a
    `<final>` state.
@@ -194,15 +196,17 @@ Two error events also fail fast, each on its own explicit arrow:
   attempt. Typically each state like `capturing` has an `<onentry>` `<send>`
   that signals the host. Alternatively, the whole region sits under an
   `<invoke type="myapp:capture">`. The host answers with one of the verdict
-  events. This page omits that half.
+  events. This page omits that half, so that the routing stays the whole
+  document. The routing is the pattern.
 
 ## Testing both arms
 
 The chart above runs as written. Use the same declarative runner that this
 repository uses for its own tests (`docs/testing-charts.md`). The delayed sends
 route the test through a real `Statifier.Session` automatically. The verdict
-events are ordinary external events, so you need no special machinery to
-simulate the host's verdict:
+events are ordinary external events. That is the premise of the pattern: you
+need no special machinery to simulate the verdict of the host, because it is
+just events:
 
 ```elixir
 defmodule MyApp.CaptureVerdictChartTest do
@@ -238,9 +242,11 @@ The expected configuration of each `capture.deferred` step is the next attempt
 state, not the park state. The runner waits for the short retry timer of the
 park state to fire before it compares. All three tests end in
 `["needs_attention"]`. They reach the same final state through three different
-arrows, and the tests pin that property.
+arrows, and the tests pin that property. That property is the one worth
+pinning.
 
-The third test shows `failed_invocation/3` arriving as an ordinary event.
+The third test shows the ADR-0068 function `failed_invocation/3` arriving as an
+ordinary event.
 Nothing in the chart names that function. The chart routes on the event that
 the function delivers. The event matches the plain `error.communication` arrow
 by prefix.

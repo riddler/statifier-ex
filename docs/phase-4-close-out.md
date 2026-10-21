@@ -75,8 +75,8 @@ them unused. Both landed.
 
 ## Remaining, and the bead that holds each
 
-Every open item in the scope of the epic already has a bead. This audit filed
-none.
+Nothing in the scope of the epic is open without a bead. Every item below
+already has one. This audit filed none.
 
 | Remaining item | Bead | Note |
 |---|---|---|
@@ -84,7 +84,7 @@ none.
 | Corpus exclusion policy for `<invoke src/srcexpr>` with no resolver, and for unsupported `<send type>` (BasicHTTP) | `st-lz1c` (P3, open) | Both classes are documented non-goals (ADR-0038 for `src`; `Send.Target.supported_type?/1` for the processor scope). This is a policy decision about the ratchet, not engine work. The text of the bead still cites the old name `Statifier.Session.Target.supported_type?/1`. Since PR #176 the module is `Statifier.Send.Target` |
 | Whether an undecodable delayed-send row surfaces into the chart or cancels silently | `st-i7y8` (P3, open) | The timer half of `st-uumw`. This repository decides the event vocabulary. `statifier_oban` consumes the answer |
 | The `:internal` macrostep span passes `event: nil`, so a nested span cannot be correlated back to the causing effect | `st-aos7` (P3, open) | A telemetry metadata question against the contract of ADR-0040 |
-| Extracting heartbeats into a reusable keep-alive library | `st-ewd7` (P4, open) | Not a Phase 4 gap. By standing decision, the charter waits for demand. This table lists it so that a future reader does not find it again and mistake it for a gap |
+| Extracting heartbeats into a reusable keep-alive library | `st-ewd7` (P4, open) | Explicitly not a Phase 4 gap. By standing decision, the charter waits for demand. This table lists it so that a future reader does not find it again and mistake it for a gap |
 
 ## Conclusion
 

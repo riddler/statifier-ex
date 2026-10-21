@@ -49,11 +49,14 @@ ADR-shaped work, spec interpretation, and corpus strategy. It routes this work t
 a Fable subagent.
 
 - This subagent has no stage skill of its own. `/wurk:work` composes its prompt
-  directly and does not dispatch it through the Skill tool. The prompt shape is
-  in step 3 of the installed `wurk:work` skill.
-- Statifier ADRs carry no `proposed` state. The author writes them directly as
-  `Status: accepted (<date>)`. The human gate is the review of the branch that
-  the ADR lands on. There is no separate promotion step.
+  directly and does not dispatch it through the Skill tool, because none of the
+  existing skills produce a decision. They produce a plan or an implementation.
+  The prompt shape is in step 3 of the installed `wurk:work` skill.
+- That prompt genericizes the project convention on one point: Statifier ADRs
+  carry no `proposed` state. The author writes them directly as
+  `Status: accepted (<date>)`. A second status would need something to sweep for
+  drafts that were never promoted. The human gate is the review of the branch
+  that the ADR lands on, not a separate promotion step.
 
 ## Issue tracking: beads
 
@@ -94,7 +97,9 @@ One skill automates the path from pickup to worktree:
 The picker does not size the job. Every seeded session launches `--model opus`
 running `/wurk:work <id> --auto`, whichever bead was picked. `/wurk:work` then
 sizes the job **in the worktree**, where the codebase is readable. It drives the
-research, plan, and implement stages as subagents on the tiers above.
+research, plan, and implement stages as subagents on the tiers above. The seed
+is a constant for this reason: the decision that it used to carry needed a
+checkout to make.
 
 `/wurk:branch` appends a fixed instruction to every seeded prompt: finish with
 `/wurk:commit --auto`, not with a raw `git commit`. The Refs-trailer and
@@ -105,7 +110,8 @@ sessions.
 whose [area label](#area-labels) sets are pairwise disjoint, highest priority
 first. `/wurk:next` claims all of them. It then runs `/wurk:branch` once per
 bead. `n` is a ceiling, not a target. A short batch means that the rest of the
-ready queue collided. The skill reports what it skipped and why.
+ready queue collided. The skill reports what it skipped and why, so a short
+batch does not look like an empty queue.
 
 Rules that make parallelism safe:
 
@@ -114,6 +120,8 @@ Rules that make parallelism safe:
   the worktree.
   - Several small issues that touch the same files can share a branch as
     separate commits, one issue per commit. This is often the better split.
+    Forcing them into parallel worktrees creates the rebase conflicts that the
+    module boundaries exist to prevent.
   - `/wurk:cleanup` closes beads from the `Refs:` trailers in the commits of the
     merged PR, not from the branch name. A branch that carries several beads
     closes all of them.
@@ -206,14 +214,15 @@ work. `/wurk:refresh` repairs this failure.
 
 **No area label.** `upstream` beads change no files in this repo. Their work
 happens in predicator. They collide with nothing here, so they carry no area
-label. When such a bead lands and bumps `mix.lock`, that bump is `area:build`
+label. A label on them would block batches for no reason. When such a bead lands and bumps `mix.lock`, that bump is `area:build`
 work and gets its own bead.
 
 ## Wurk manifest decisions
 
 This section records a review of the remaining schema fields of
 `.claude/wurk.json` against the "Per-repo starting values" table in wurk
-`docs/manifest.md`. It shows where we looked and chose the default.
+`docs/manifest.md`. It lets a future reader tell "we looked and chose the
+default" from "nobody looked".
 
 | Field | Decision | Reason |
 |---|---|---|
@@ -230,15 +239,16 @@ open.
 
 ## Merge policy: rebase only
 
-GitHub allows **rebase merging only**. It determines how every downstream tool
-detects that a branch landed.
+GitHub allows **rebase merging only**. This is not a style preference. It
+determines how every downstream tool detects that a branch landed, so this
+document records it and does not leave it in the repo settings.
 
 Rebase replays the commits of a branch onto `main` as new SHAs. The branch tip
 therefore **never becomes an ancestor of `main`**. Two results follow:
 
 - **`git branch --merged origin/main` never lists a merged feature branch,** and
   `git merge-base --is-ancestor` never confirms one. Automation built on git
-  ancestry silently does nothing. Verified on PRs #2, #3 and #6.
+  ancestry silently does nothing, forever, while it appears to work. Verified on PRs #2, #3 and #6.
 - **`git branch -d` refuses to delete a merged branch,** so deletion needs `-D`.
   `-D` also discards a branch that is genuinely unmerged, without warning.
 
@@ -248,7 +258,7 @@ not only for detection. `/wurk:cleanup` and the bead close-on-merge trigger shar
 it.
 
 Rebase preserves every commit and its message. A branch can carry as many
-commits as the work needed. No squash or cleanup pass is required before you
+commits as the work needed. `/wurk:commit --auto` works well with this. No squash or cleanup pass is required before you
 open a PR.
 
 ## Change flow
@@ -267,7 +277,8 @@ open a PR.
    that the test goes red. Revert. Record the mutation in a one-line comment above
    the test (`# sabotage: ... -> red`). See
    [Sabotage testing](testing.md#sabotage-testing) for the format and the
-   exemptions.
+   exemptions. This step costs real time. It decides whether the internal suite
+   is worth running.
 5. **Changelog.** If the change is user-facing, write a fragment
    (`changelog.d/<issue-id>.md`). Most changes need none. See
    `changelog.d/README.md` for when a fragment is needed.
@@ -316,8 +327,9 @@ A fragment is needed for any user-visible change:
 - anything breaking
 
 `CHANGELOG.md` carries the `0.1.0` to `1.9.0` history, because the Hex package
-is the same through 2.0.0. The `[2.0.0]` section is a migration document for 1.x
-users. Later sections are ordinary release notes.
+is the same through 2.0.0, so upgraders keep one continuous record. The
+`[2.0.0]` section is a migration document for 1.x users, not a transcript of
+the rewrite. Later sections are ordinary release notes.
 
 The release workflow publishes to Hex on the tag push. An agent or a session
 never runs `mix hex.publish`. Re-run a failed workflow from its Actions page. A

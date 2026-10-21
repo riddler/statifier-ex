@@ -308,7 +308,8 @@ documents this.
   crash.
 - The host must re-establish the processes behind the ids in
   `active_invocations` through the invoke handler registry (ADR-0051). This
-  page does not track that work item.
+  page does not track that work item. The divergence exists because that
+  work is not yet done.
 
 ### Refusals
 
@@ -336,7 +337,8 @@ telemetry, and the `opts[:session_id]` contract of `Recording.new/2`).
 
 Reuse the id and do not mint a new one. The same id keeps
 `#_scxml_<sessionid>` addressing and any external reference to the session
-working across the deploy or crash that made the resume necessary.
+working across the deploy or crash that made the resume necessary. A fresh
+id would sever the continuity that a resume exists to preserve.
 
 ### `resume:` plus `record: true`
 

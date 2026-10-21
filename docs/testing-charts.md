@@ -9,7 +9,8 @@ steps.
 This guide is for a chart author outside this repository. You depend on
 `statifier` and you want to test the SCXML documents that your application
 drives. It shows you how to write a chart test in the same way this engine
-tests itself. For the interpreter's design, see `docs/architecture.md`.
+tests itself. This page does not re-explain the architecture of the
+interpreter. For that, see `docs/architecture.md`.
 
 ## What this gives you
 
@@ -89,7 +90,7 @@ test then fails and names the feature. The test never skips. An unimplemented
 feature cannot look like a passing test.
 
 Every feature that the detector recognizes is now `:supported` or `:partial`,
-so you are unlikely to hit this path today. For the current list and status,
+so this path is a guarantee for the future. You are unlikely to hit it today. For the current list and status,
 see `Statifier.Testing.FeatureDetector.feature_registry/0`.
 
 ## Charts with timers, delayed sends, or `<invoke>`

@@ -49,6 +49,8 @@ Decision: [ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/
   2. One `{:datamodel_change, %Statifier.Effect.DatamodelChange{}}` for each
      `<data>` that it binds.
 
+  The session emits the baseline once per session.
+
   A subscriber can rebuild the whole datamodel from the stream alone. It seeds
   from the baseline and applies each binding at its `location_path`. This works
   under both `binding="early"` and `binding="late"`, including a state-scoped
@@ -116,7 +118,8 @@ data to and from other types: `Statifier.EventData.coerce/1`. `<param>`,
 **When a bad expression fails.** Spec 5.9.4 permits either choice: "The SCXML
 Processor MAY reject documents containing syntactically ill-formed expressions
 at document load time, or it MAY wait and place 'error.execution' in the
-internal event queue at runtime". Both halves conform. This engine makes the
+internal event queue at runtime". Both halves conform. The clause frames the
+choice as one policy for the whole processor. This engine currently makes the
 choice for each element class.
 
 - **Defers to runtime:** `<data expr>`, `<assign expr>`, `<script>`, and a
@@ -130,7 +133,7 @@ The engine captures a `<data expr>` or `<assign expr>` that does not compile as
 execution time. `<script>` gets the same treatment for a body outside the
 statement grammar of predicator.
 
-**Why.** The difference is deliberate.
+**Why.** The difference is deliberate, not an oversight.
 
 - `test/scion_tests/data/data_invalid_test.exs` declares an unparseable
   `<data expr="{p1: 'v1'"/>`. It asserts `pass` by catching the resulting
@@ -229,12 +232,14 @@ seam in implementation.
      interval. The "once per evaluation site" rule in "Evaluation contract" is
      unchanged. The site is still the whole block or selection round, not the
      individual write and not the whole macrostep. No context is stored on
-     `MachineState`. Widening the interval that far remains future work.
+     `MachineState`. Widening the interval that far remains future work, on the
+     grounds of ADR-0030.
    - **Predicator 8.0.** Upstream memoizes the fixed term that `base_context/0`
      hoists. Statifier keeps the compile-time hoist anyway. The memo removes
      re-validation. It does not remove the per-call stamp-and-allocate cost
-     that `new/2` still pays. Statifier does not take the `normalize: false`
-     seam that sits beside the memo. It would help a whole-map `new/2` call,
+     that `new/2` still pays, so the constant stays cheaper. The
+     `normalize: false` seam that sits beside the memo also exists as of 8.0.
+     Statifier does not take it. It would help a whole-map `new/2` call,
      but this path binds for each root and does not construct for each build.
      The amendment to ADR-0030 records this.
 2. **Auto-vivifying path assignment.** Path resolution exists
@@ -285,8 +290,8 @@ seam in implementation.
 7. **Numeric-type builtins.** Not landed. `Math.pow` (and possibly `Math.sqrt`)
    return floats even for integer-exact results. `===` stays type-strict.
    `Math.pow(2, 3) === 8` is therefore `false` under the single-Number-type
-   assumption of ECMAScript. The engine does not coerce numeric types at the
-   statifier boundary. A mirror bead is filed in predicator-ex. The three
+   assumption of ECMAScript. ADR-0023 keeps the fix upstream in predicator. The
+   engine does not coerce numeric types at the statifier boundary. A mirror bead is filed in predicator-ex. The three
    `test/scion_tests/targetless_transition` files stay failing until the
    dependency is bumped. Decision:
    [ADR-0023](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0023-numeric-type-fixes-upstream-not-boundary-coercion.md).

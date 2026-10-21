@@ -49,8 +49,8 @@ six.
 
 In exchange, an execution survives node death, a step is a database
 transaction, and the progress of a chart is a row instead of a process.
-`statifier_persistence` is this driver, built once. See "What you do not
-have to build" at the end.
+`statifier_persistence` is this driver, built once so most hosts do not have
+to build it. See "What you do not have to build" at the end.
 
 ## The loop
 
@@ -484,20 +484,22 @@ A driver that persists after a completed advance entry is quiescent by
 construction. A driver that persists between `microstep/1` calls is not. If
 you step, fold before you write.
 
-A terminated execution is also quiescent. `exit_interpreter/1` discards the
-remaining internal queue at the end of the exit walk, so a `:done`
-machine_state is quiescent by construction
-(`lib/statifier/machine_state.ex:263-275`). Sibling `done.state.*` events
-that a top-level `<final>` leaves queued are unreachable, not pending:
-nothing can dequeue an internal event after the loop stops. A driver can
-always persist an execution as completed.
+A terminated execution is also quiescent. A chart that reaches a top-level
+`<final>` can leave sibling `done.state.*` events queued. That used to make a
+terminated execution permanently unpersistable. `exit_interpreter/1` now
+discards the remaining internal queue at the end of the exit walk, so a
+`:done` machine_state is quiescent by construction
+(`lib/statifier/machine_state.ex:263-275`). Those queued events are
+unreachable, not pending: nothing can dequeue an internal event after the
+loop stops. A driver can always persist an execution as completed.
 
 [Persistence](persistence.md)'s "Refusals" table lists two related refusals:
 
 - `:position_not_running`: a `running: false` position has nothing left for
   a driver to do with it.
 - `{:identity_mismatch, expected, actual}`: the position was saved against a
-  different chart revision (`lib/statifier/position.ex:105-110`).
+  different chart revision. This is the entire reason the library stamps
+  identity (`lib/statifier/position.ex:105-110`).
 
 ## Telemetry: naming your driver
 
@@ -560,7 +562,8 @@ your storage. `statifier_persistence` follows this split: its storage
 vocabulary (`run_id`, locks, adapter calls) travels on a second family,
 `[:statifier_persistence, ...]`. Decisions: ADR-0067 decisions 4 and 6.
 
-**Worked example.** `statifier_persistence` 0.5.x uses `:persistence`. Its
+**Worked example.** `statifier_persistence` 0.5.x picked `:persistence` and
+froze it. Its
 [docs/telemetry.md](https://github.com/riddler/statifier_persistence/blob/main/docs/telemetry.md)
 shows a driver that does everything in this section. It has a per-event
 applicability table at its emit sites, and it reads the `session_id` from
@@ -583,4 +586,5 @@ These packages already do most of the work above:
   tells them apart.
 
 Write your own driver only if the transaction, locking, or scheduling model
-of your host does not fit these packages. Otherwise, use them.
+of your host does not fit these packages. Otherwise, use them and spend the
+time on your chart.

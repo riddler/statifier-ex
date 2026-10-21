@@ -55,8 +55,9 @@ the options form. Its options:
   peers against the system CA store and limits each request with a timeout. When
   `:ssl` or `:public_key` cannot be loaded, the default adapter answers
   `{:error, {:not_loadable, module, reason}}` instead of making the request. The
-  processor reports the miss to the sender like any other failed delivery. For an
-  adapter on `req`, see "A transport on `req`" at the end of this page.
+  processor reports the miss to the sender like any other failed delivery. The
+  package adds no dependency for the default adapter. For an adapter on `req`,
+  see "A transport on `req`" at the end of this page.
 
 Neither type string is a built-in spelling, so the registration redirects no
 built-in send.
@@ -226,8 +227,8 @@ end
 
 This repository has a loopback front for its conformance runs:
 `Mix.Statifier.BasicHTTPFront`. It is repository tooling on OTP's `:inets`
-httpd, not part of the package. It lives for one test run and does not
-deduplicate.
+httpd, not part of the package. It is a small model of the steps above. It lives
+for one test run and does not deduplicate.
 
 ## At-least-once delivery and the `scxml-send-key` header
 
@@ -302,7 +303,8 @@ A `<content>` body that is a list is written the same way and is still sent as
 
 **Failure.** The processor makes one attempt. A transport error, or a status
 outside 2xx, reaches the sender as `error.communication` that carries the send
-id, through `Statifier.Session.failed_send/3`.
+id, through `Statifier.Session.failed_send/3`. Every request also carries the
+`scxml-send-key` header described above.
 
 **Delayed sends.** The processor's own timer holds a `<send delay>`.
 

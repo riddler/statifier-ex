@@ -9,12 +9,15 @@ sections. Copy none of the custom gate stages. Point `gate.attest` at
 
 This repo is the reference for the agent-facing conventions of the family:
 `CLAUDE.md`, `.claude/wurk/`, and the quality-gate documentation. The copies
-drift, so this document states what to copy.
+drift, so this document states what to copy. That status was implicit until this
+document wrote it down.
 
 The family is **seven published packages across seven repos**: `statifier`
 (this repo), `predicator`, `statifier_ui`, `statifier_persistence`,
 `statifier_oban`, `opentelemetry_statifier`, and `statifier_blocks`. All seven
-are on Hex as of 2026-08-27.
+are on Hex as of 2026-08-27. This is the fact that most changes how this
+document reads. See "Attestation is the one exception" below, whose premise used
+to be that the packages were not on Hex.
 
 Beads in the other repos say some version of "copy statifier-ex's, adapted
 down". That instruction is safe only if this document records what to copy and
@@ -29,6 +32,7 @@ and hope.
 - **adapt-per-repo.** The *structure* is the reference and the *content* is
   not. An adopter keeps the shape and rewrites the specifics. If an adopter
   copies the words, it silently changes something that it decided for itself.
+  This is the failure that this document exists to prevent.
 
 A third marking is **not reference**. Such a section is machinery for this repo
 only. An adopter that copies it takes on machinery that it has nothing to
@@ -230,7 +234,7 @@ project declares no attestation command. `/wurk:commit` then refuses to
 proceed. A repo without attestation has a broken unattended commit path. This
 is a mechanical problem, not a stylistic one. On 2026-08-22, the user ruled
 that the other repos adopt attestation. The beads are px-591, sui-4py, sp-7cu,
-sob-ehl, and ots-4l6.
+sob-ehl, and ots-4l6. What they adopt has since changed.
 
 **Why it is an exception.**
 
@@ -243,6 +247,7 @@ sob-ehl, and ots-4l6.
   corpus, no ADRs, no ledger.
 - Attestation **adds no stage to `.quality.exs`**. The statement "deliberately
   smaller than statifier-ex's gate" stays true in those repos after adoption.
+  This is why attestation is an exception and not a hole in the rule above.
 
 **The current instruction: set `gate.attest` to `["mix", "quality.verify"]`.**
 ex_quality 0.14 ships `Mix.Tasks.Quality.Verify`. Any repo on that version

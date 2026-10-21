@@ -145,18 +145,35 @@ Decision: [ADR-0051](https://github.com/riddler/statifier-ex/blob/main/docs/adr/
 
 - Registration is per session, not global. A session that drives a different
   chart, or a different tenant, can register a different set. No handler is
-  reachable from every session in the process.
+  reachable from every session in the process. A multi-tenant host that runs
+  different chart deployments for different tenants gives each session its own
+  set.
 - The set is fixed for the whole lifetime of the session, like
   `:max_macrostep_rounds`. You cannot add or remove a handler in a session that
   already runs. Start a new session with a different `:invoke_handlers` map.
+
+A session that drives a different chart registers a different set. A signup
+wizard that runs an A/B test needs variant assignment and conversion recording,
+not anything to do with cards:
+
+```elixir
+Statifier.Session.start_link(wizard_machine,
+  invoke_handlers: %{
+    "myapp:assign_variant" => MyApp.AssignVariantHandler,
+    "myapp:signup" => MyApp.SignupStepHandler,
+    "myapp:conversion" => MyApp.ConversionHandler
+  }
+)
+```
 
 ### Nested charts: `:inherit_invoke_handlers`
 
 Per-session registration stops at the session boundary. A chart that uses
 `<invoke type="scxml">` to start another chart crosses that boundary. A child
 session starts with an empty registry by default. If the nested chart has its
-own `<invoke type="myapp:authorize">`, the child raises `error.execution` and
-plans nothing, even though the root registered the handler.
+own `<invoke type="myapp:authorize">`, the child raises `error.execution` there,
+plans nothing, and parks at that state, even though the root registered the
+handler.
 
 The `:inherit_invoke_handlers` option of `start_link/2` closes that gap. It is
 opt-in:
@@ -171,18 +188,22 @@ Statifier.Session.start_link(root_machine,
 `true` gives every child that this session starts for an `<invoke>` two
 things: this session's `:invoke_handlers` map, and `inherit_invoke_handlers:
 true`. One opt-in at the root registers the same handlers down the whole invoke
-tree. The default is `false`.
+tree. The default is `false`, which starts children exactly as before.
 
-It is opt-in because an upgrade must not run a host's handlers inside child
-charts that nobody registered them for.
+It is opt-in for the same reason as `:inherit_observers` (ADR-0050 decision 2).
+A default-on inheritance would run a host's handlers inside child charts that
+nobody registered them for, on an upgrade, when no caller asked for it.
 
 Inheritance is a hand-off at start time. It is not a shared registry.
 
 - The child fixes its dispatch map and its `%MachineState{}` `invoke_types`
-  stamp when it boots, from the map that it received.
+  stamp when it boots, from the map that it received. The per-session rule of
+  ADR-0051 decision 2 therefore does not change.
 - Two roots with different sets each give their own subtrees their own set.
-- Handlers pass down independently of `:invoke_source` and
-  `:inherit_observers`.
+- Handlers pass down independently of `:invoke_source`, which ADR-0038 leaves
+  to its own option.
+- Handlers pass down independently of `:inherit_observers`, which is an
+  observation option, not a registration option.
 
 Decision: [ADR-0050](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md)
 decision 2, [ADR-0051](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0051-invoke-handlers-are-registered-per-session.md)
@@ -256,9 +277,10 @@ Validate first, or compile from source with `Statifier.compile/2`.
 - To add a type, add one line in one handler module.
 
 **Errors.** `{:error, reason}` from `handle/3` is permanent. A sync handler has
-no retry policy, so this differs from a `perform/2` error under the general
-behaviour. The adapter reports the error through `failed_invocation/3`, and
-`reason` reaches the chart as `_event.data.reason`. If a chart must branch on the failure class, name each
+retry policy behind it: the call was made and it answered. This differs from a
+`perform/2` error under the general behaviour. The adapter reports the error
+straight through `failed_invocation/3`, and `reason` reaches the chart as
+`_event.data.reason`. If a chart must branch on the failure class, name each
 class with a string. The adapter passes any other term through `inspect/1`.
 
 **When to use the full behaviour.** Use `Statifier.Invoke.Handler` itself when:
@@ -299,7 +321,8 @@ is never a child session, because a handler-backed invocation has no child
 session.
 
 The function builds `done.invoke.<invoke_id>` from `donedata` and delivers it
-as an ordinary invoked event. If the invocation was cancelled before the event
+as an ordinary invoked event. It has the same discard at drain time as any
+other invocation-tagged entry. If the invocation was cancelled before the event
 is dequeued, the library drops the event, per spec 6.4.3.
 
 ## Reading a child's outcome
@@ -344,7 +367,8 @@ non-boolean cond is false and also raises an `error.execution` (spec 5.9.1).
 The routing does not change. A parent that must not see that error event writes
 its conds with `===`.
 
-This convention changes no engine behavior. A test pins it:
+This section sets a convention over the existing channel. It changes no engine
+behavior, and a host has nothing to opt into. A test pins it:
 `test/statifier/session/invoke_child_outcome_test.exs`.
 
 ## Reporting permanent failure
@@ -380,8 +404,8 @@ library does not interpret any of them:
 
 A host can find that the stored arguments of a started invocation will never
 decode again. Causes are a retired codec version, a rotated key, or a corrupt
-row. This is a permanent failure. Report it with `failed_invocation/3`, with
-`reason: "undecodable"`:
+row. This is a permanent failure of an invocation that already started. Report
+it through `failed_invocation/3`, with `reason: "undecodable"`:
 
 ```elixir
 Statifier.Session.failed_invocation(session, "inv_3",
@@ -397,9 +421,9 @@ Statifier.Session.failed_invocation(session, "inv_3",
 | `:attempts` | as the host counted them, typically `1` | one decode was attempted and it will not become decodable by attempting it again |
 | `:detail` | the codec's typed error, verbatim | uninterpreted by the library, exactly like any other `:detail` |
 
-A chart can wait on `error.communication.invoke.inv_3` and read
-`_event.data.reason` to tell an undecodable payload from an exhausted gateway
-retry.
+A chart that invokes `myapp:capture` to take a payment can park that invocation
+on `error.communication.invoke.inv_3`. It reads `_event.data.reason` to tell an
+undecodable payload from an exhausted gateway retry.
 
 The decision note of 2026-08-29 in ADR-0068 (st-uumw) records why this uses the
 invoke-failure family and not a new family. It does not decide the timer case,
@@ -468,8 +492,9 @@ produces the byte-identical instruction again. A handler that implements
 
 The library cannot deduplicate. It has no view of the durable store of your
 host, so it has no database and no job queue to check a prior attempt against.
-It gives you `invoke_id` as the idempotency key. The key is stable by
-construction, so you can safely key your own dedup table on it.
+It gives you `invoke_id` as the idempotency key for this reason. The key is
+stable by construction (see above), not only by convention, so you can safely
+key your own dedup table on it.
 
 ## What an unregistered type does
 
@@ -533,15 +558,22 @@ Each check is also a public function on the module. The module documentation
 gives the contract of each check.
 
 **What the case does not check.** It generates no check for permanent failure.
-The host's retry layer calls `failed_invocation/3`, not the handler. Write that
-test where your retry policy lives. It must show that the policy reaches
-`failed_invocation/3` when it gives up.
+The host's retry layer calls `failed_invocation/3`, not the handler. A
+handler-scoped case cannot see whether your retry policy reaches that function
+when it gives up. Write that test where your retry policy lives.
+
+The case does cover the one failure path that a handler owns outright:
+`{:error, _}` from `start/2` becomes `error.execution`.
 
 ## A naming note
 
 `Statifier.Invoke.Handler` (and its registration) is not `Statifier.Registry`.
 `Statifier.Registry` is the session registry that the embedder places, keyed by
 session id. It does `#_scxml_<sessionid>` routing, not `<invoke>` dispatch.
+
+The two are unrelated concepts. They share the word "registry" in casual
+conversation. Do not confuse the per-session handler registration in this guide
+with looking up a session by id.
 
 Decision: [ADR-0027](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0027-embedder-placed-session-runtime.md)
 
@@ -562,7 +594,8 @@ The library does not do two things on behalf of a handler:
   raises. It does not turn the exception into `error.execution` or
   `error.communication`. The exception crashes the session process. This is
   intentional, for the same reason as the idempotency requirement above. The
-  session does not rescue a handler exception into a default value.
+  session does not rescue a handler exception into a default value (the
+  moduledoc gives the same reasoning).
 
 Two rules about return values:
 
@@ -573,7 +606,7 @@ Two rules about return values:
   must observe an `{:error, term()}` from it (log it, retry it, or raise it).
   The session does not recover from it and does not turn it into an event.
 
-When your retry policy has given up, call
+These rules are about return values, not about failure in general. When your retry policy has given up, call
 `Statifier.Session.failed_invocation/3` (above). The library infers nothing.
 You decide when the invocation is over.
 
@@ -957,7 +990,8 @@ decision 3.
 ## Host functions for `cond` and `expr`
 
 A guard often needs a fact that the event does not carry. Examples are how many
-paths a change touches, or whether a timestamp is in business hours. Register a
+paths a change touches, whether a timestamp is in business hours, or whether
+two intervals overlap. Register a
 function and call it from the chart, instead of computing the fact into the
 event payload:
 

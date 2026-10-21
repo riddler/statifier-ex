@@ -5,8 +5,11 @@
 pure function that returns effects as data. A `Machine` is valid by
 construction.
 
-Statifier rewrites [statifier](https://github.com/riddler/statifier) (read-only
-copy in `../statifier`). The reasoning for each decision is in `docs/adr/`.
+Statifier is a ground-up rewrite of
+[statifier](https://github.com/riddler/statifier) (the original, kept as a
+read-only reference in `../statifier`). The rewrite fixes structural problems
+that the original could only patch around. The reasoning for each major decision
+is in `docs/adr/`.
 
 ## Design principles
 
@@ -22,7 +25,8 @@ copy in `../statifier`). The reasoning for each decision is in `docs/adr/`.
    - When a conformance test fails, diff the function against the pseudocode.
      Do not tune a heuristic.
    - Diff against the cached text, not against memory. Run
-     `mise run spec:fetch`. The cache is in
+     `mise run spec:fetch`. It fills the cache with `appendix-d.txt` and the
+     full `scxml-rec.html`. The cache is in
      `$(git rev-parse --path-format=absolute --git-common-dir)/spec-cache/`.
      See [`tools/spec/README.md`](https://github.com/riddler/statifier-ex/blob/main/tools/spec/README.md).
    - Decision: [ADR-0002](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0002-literal-w3c-appendix-d-port.md).
@@ -34,12 +38,13 @@ copy in `../statifier`). The reasoning for each decision is in `docs/adr/`.
      log/trace entries as effect data.
    - A GenServer session, a test harness, or an iex user runs the effects
      outside the core.
-   - The same document has the same semantics through every API.
+   - The same document has the same semantics through every API. No API can
+     turn a delayed send into an immediate one.
    - Decision: [ADR-0003](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0003-pure-core-with-effects.md).
 
 3. **Treat errors as events.**
-   - SCXML says an evaluation failure raises `error.execution` on the internal
-     queue.
+   - SCXML defines an error model. An evaluation failure raises
+     `error.execution` on the internal queue.
    - Every evaluation in the core returns `{:ok, value} | {:error, reason}`.
      The interpreter decides what the error means.
    - Do not use `rescue`-to-`false` at the leaves.
@@ -81,8 +86,10 @@ Statifier.Session (GenServer) | test harness | embedding application
 - The parser makes a generic DOM node: `name`, `attributes`, `children`,
   `location`.
 - A separate pass lowers the DOM to typed structs.
-- To add an element, change one builder.
-- Every DOM node has a source location from the start.
+- To add an element, change one builder. No clause matrix exists, with one
+  clause for each pair of element type and parent context.
+- Source locations are a property of every DOM node. They are not bolted-on
+  bookkeeping.
 
 ### Machine: interned and indexed
 
@@ -90,8 +97,9 @@ Statifier.Session (GenServer) | test harness | embedding application
 - It stores states in a flat array. Each state has a parent pointer and a
   descendant index range in document order.
 - Ancestor checks, descendant checks, LCCA, and exit-set computation are
-  integer comparisons.
-- The compiler compiles each expression once into one type:
+  integer comparisons. No precomputed cache module is needed, and one way
+  fetches ancestors.
+- The compiler compiles each expression once into one sum type:
 
       @type expr :: {:static, term()} | {:compiled, Predicator.Compiled.t(), source :: String.t()}
 
@@ -103,9 +111,11 @@ Statifier.Session (GenServer) | test harness | embedding application
 `Statifier.MachineState` is the `state` in `{state, [effect]}`.
 `Statifier.Effect` is the `effect`.
 
-- The interpreter stores the full active configuration, ancestors included
+- The interpreter stores the full active configuration, ancestors included, as
+  the spec's algorithm assumes
   ([ADR-0005](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0005-full-configuration-and-interned-state-indexes.md)).
-  "Leaf states" is a view that the engine derives on demand.
+  "Leaf states" is a view that the engine derives on demand. It is not the
+  storage model.
 - A `running` flag provides real termination. Entry to a top-level `<final>`
   stops the machine, runs `<donedata>`, and emits the terminal effect.
 - The interpreter generates `done.state.<id>` events for compound and parallel
@@ -120,31 +130,41 @@ Statifier.Session (GenServer) | test harness | embedding application
 
 Do not persist a `MachineState` without reading
 [docs/persistence.md](persistence.md). Its configuration is interned integer
-indexes, and they are stable only within one `Machine` build.
+indexes, and they are stable only within one `Machine` build. That document
+covers how to persist and reload one safely, across a chart revision or not.
+This document does not.
 
 ### Executable content
 
 - `Statifier.ExecutableContent` is a node protocol:
   `execute(node, context) -> {:ok, context, [effect]} | {:error, reason} | {:error, context, reason}`.
-  `context` is a `Statifier.ExecutableContent.Context`.
-- `Statifier.Interpreter.Content` runs a block. It walks the nodes in document
-  order and stops at the first error.
-- It is the only place that turns a node error into `error.execution`. This
-  includes the non-fatal spec-5.9.1 channel in `context.pending_errors`.
+  `context` is a `Statifier.ExecutableContent.Context`. No central dispatcher
+  with per-struct clauses exists, and no parallel summary function must stay in
+  sync with one.
+- `Statifier.Interpreter.Content` is the block runner. It walks the nodes of a
+  block in document order and stops at the first error.
+- It is the only place that turns a node error into `error.execution`. The
+  error can be fatal, or it can come from the non-fatal spec-5.9.1 channel in
+  `context.pending_errors`.
 - To add an element, add a `Statifier.Machine.Content.*` struct and a `defimpl`
-  in the same file. Do not change the runner or the interpreter.
-- ADRs govern the error model. Decision 5 of
+  in the same file. Never change the runner or the interpreter.
+- The error model is separate from the code of an element, and ADRs govern it.
+  The error model is the shape of `result()` and what the runner drains.
+  Decision 5 of
   `docs/plans/260813-st-af3.5-if-elseif-else-conditional-executable-content.md`
   explains why it was widened once.
 
 ### Sessions and invoke
 
 **What the session owns.** `Statifier.Session` is the GenServer effect
-interpreter. It owns the `while running` loop, the waiting external events, the
-delayed-send timers, the effect of `<cancel>`, and the fan-out of effects to
-subscribers.
+interpreter (ADR-0003). It owns the outer `while running` loop, the waiting
+external events, the delayed-send timers, the effect of `<cancel>`, and the
+fan-out of the effect stream to subscribers.
 
-A host can take over the timers. See [docs/durable-timers.md](durable-timers.md)
+The session's ownership of the delayed-send timers is replaceable. It is not
+load-bearing. A host can take over scheduling by consuming the
+`SendDelayed`/`Cancel` effect pair instead. See
+[docs/durable-timers.md](durable-timers.md)
 and [ADR-0054](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md).
 
 **What the core does for `<invoke>`:**
@@ -155,7 +175,10 @@ and [ADR-0054](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0054-d
   ([ADR-0032](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0032-round-budget-spans-the-invoke-re-entry.md)
   covers the round budget after re-entry).
 - Runs `<finalize>` before transition selection.
-- Emits `{:invoke, _}`, `{:cancel_invoke, _}`, and `{:autoforward, _}`.
+- Emits `{:invoke, _}`, `{:cancel_invoke, _}`, and `{:autoforward, _}` effects
+  for the session to act on.
+
+`Statifier.Session` performs all three effects.
 
 **What the session does for `{:invoke, _}`:**
 
@@ -172,25 +195,29 @@ and [ADR-0054](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0054-d
   decided. `Statifier.Supervisor` holds a `Statifier.Registry` and a flat
   `Statifier.SessionSupervisor` (`:rest_for_one`).
 - `:inherit_observers` on `Statifier.Session.start_link/2` passes the parent
-  `:trace` and subscribers to the child
+  `:trace` and subscribers to the child. The opt-in applies to that same child
+  start
   ([ADR-0050](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0050-invoked-children-inherit-observation-by-opt-in.md)).
-  `Statifier.Session.invocations/1` lists the live children.
+  `Statifier.Session.invocations/1` names the live children of a session, for an
+  observer that attaches after the fact.
 
 **Routing:**
 
 | Target | Resolves through |
 |---|---|
-| `#_parent`, `_parent` | the `invoked_by` link |
-| `done.invoke.<invokeid>` of a live invocation | the `invoked_by` link |
-| `#_<invokeid>` | `Statifier.Session.Invocations.fetch/2`. A live entry gets the event in its external queue. |
-| an `invokeid` with no live invocation | the `error.communication` path (st-xcgr) |
+| `#_parent`, `_parent` | the `invoked_by` link directly, with no registry lookup |
+| `done.invoke.<invokeid>` of a live invocation, with its donedata | the `invoked_by` link directly, with no registry lookup |
+| `#_<invokeid>` | the invocation table, `Statifier.Session.Invocations.fetch/2`, not the registry. The `pid` of a live entry gets the event in its external queue directly. |
+| an `invokeid` with no live invocation (never one, or since cancelled or exited) | the ordinary `error.communication` path (st-xcgr) |
 
 **Autoforward.** `{:autoforward, _}` copies every external event that the
 parent removes from its queue to each autoforwarding invocation, unmodified.
+This happens at the point where the finalize/autoforward pass of the core runs.
 
 **Cancel.** `{:cancel_invoke, _}` stops the child with `Session.cancel/1`, not
 `stop/2`, so its `<onexit>` handlers run. It pops the table entry before the
-stop.
+stop. The drain-time discard below is therefore correct for events queued
+before the cancel or after it.
 
 **The drain-time discard.** The session drops a queued entry that an invocation
 delivered, if that invocation is no longer live. Spec 6.4.3: "MUST NOT insert
@@ -200,11 +227,13 @@ them into the external event queue".
   `Statifier.Session.Inbox`. Only the child-to-parent direction sets it.
 - It does not read the `invokeid` field of the event. Spec 6.4.2 requires an
   autoforwarded copy to keep every 5.10.1 field. A copy sent down to a child
-  carries the id of a sibling invocation. A discard keyed on that field would
+  carries the id of a sibling invocation into a session that has never had
+  one. A discard keyed on that field would
   drop a copy that 6.4.2 requires the engine to deliver.
 
 **Not yet supported.** Inline `<content><scxml>...</scxml></content>` does not
-lower. It is deferred to st-53ys. A `<content>` with markup as a text/CDATA
+lower yet. This is a parser-layer decision about a layer boundary, and it is
+deferred to st-53ys. A `<content>` with markup as a text/CDATA
 binary works today.
 
 **Custom invoke types.** A host registers a `Statifier.Invoke.Handler` per
@@ -217,20 +246,22 @@ The built-in `Statifier.Invoke.Handler.Scxml` uses the same interface. See
 ([ADR-0008](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0008-uxid-for-identifiers.md)).
 
 - Outside the core, the engine mints the session id. It is sortable, prefixed
-  `sess_`, and stable for the session.
+  `sess_`, and stable for the session. It does not change between expression
+  evaluations.
 - Inside the core, an id is a deterministic value derived from
-  `%MachineState{}` alone. The core cannot read the wall clock or a CSPRNG
+  `%MachineState{}` alone. An entropy-based id reads the wall clock and a CSPRNG.
+  The contract of the core admits neither
   ([ADR-0003](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0003-pure-core-with-effects.md)).
 - Today only the invoke id is minted inside the core. Spec 6.4.1 fixes its
   shape: the id of the invoking state, a dot, then `inv_` and a session-global
   counter. With no state id, the shape is `inv_<counter>`.
 - A future `<send idlocation>` generator follows the same no-entropy rule.
 
-## Out of scope
+## What is deliberately out of scope
 
 - **ECMAScript datamodel.** The datamodel is predicator
   ([ADR-0004](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0004-predicator-as-the-datamodel.md)).
-  No JS engine, no `eval`, no raw Elixir in documents. Use `<invoke>` for real
-  computation.
+  No JS engine, no `eval`, no raw Elixir in documents. Safety is the point.
+  `<invoke>` is the escape hatch for real computation.
 - **v1 API compatibility.** The conformance corpus is the compatibility
   contract, not the v1 module surface.

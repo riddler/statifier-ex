@@ -47,10 +47,12 @@ Instead:
   resumable position.
 - **`microstep/1` is the unit of progress.**
   `microstep(machine_state) -> {machine_state, [effect]} | :quiescent`.
-  `Statifier.Interpreter.macrostep/1` is a fold over it.
+  `Statifier.Interpreter.macrostep/1` is a fold over it. The fold function
+  started private (`macrostep/2`). Publishing it as `macrostep/1` took no
+  rework, because no fused loop needed dismantling.
 - **The port stays literal.** The pseudocode's functions map one-to-one. Only
   the storage of loop state moves onto the struct. That deviation gets its
-  mechanical-reason comment.
+  mechanical-reason comment, as ADR-0002 requires.
 
 The result: a step debugger is `microstep/1` in a REPL. Pausing, inspecting, and
 resuming need no support code in the core.
@@ -78,19 +80,24 @@ The set is the commitment.
 | finalize/autoforward pass | `apply_invoke_passes` finished for one external event: which invocation(s) it ran `<finalize>` for and which it autoforwarded the event to (spec 6.4/6.5) |
 | conds evaluated | either selection function returned having evaluated at least one *written* `cond` through `Statifier.Evaluator`: which transitions were guarded, what each guard answered, and why a failing one failed (`conditionMatch`, spec 5.9.1) |
 
-The last three rows arrived after the first seven. Each is a phase boundary that
-Appendix D itself names inside `mainEventLoop`. They do not broaden what counts
-as a phase boundary. They fill in rows that the first port did not yet need.
+The last two rows of the first nine (`invoke pass` and `finalize/autoforward
+pass`) arrived with `<invoke>` support. `conds evaluated` is a third later row.
+Each is a phase boundary that Appendix D itself names inside `mainEventLoop`.
+They do not broaden what counts as a phase boundary. The line above ("The set is
+the commitment") says that the shapes are settled at implementation. It does not
+close the table to boundaries that the first port was not far enough along to
+need.
 
-**Why `conds evaluated` exists.** `conditionMatch` is a function that Appendix D
-names. Predicator is the datamodel that evaluates the guard, and it emits no
-telemetry. Without this row, a guard that failed left no trace anywhere in the
+**Why `conds evaluated` exists.** It is the row that the family had no other way
+to see. `conditionMatch` is a function that Appendix D names. Predicator is the
+datamodel that evaluates the guard, and it is deliberately telemetry-silent
+(ADR-0016). Without this row, a guard that failed left no trace anywhere in the
 family. The same was true of a guard that quietly disabled a transition that an
 author expected to fire. The only exception was the `error.execution` that a
 *failing* guard raises.
 
-`Statifier.Effect.Trace.CondsEvaluated` is the engine-side answer. It differs
-from "transitions selected" in two ways:
+`Statifier.Effect.Trace.CondsEvaluated` is the engine-side answer. ADR-0040's
+amendment contracts it. It differs from "transitions selected" in two ways:
 
 - **One effect per round, not per guard.** The effect carries the evaluations of
   the round as a list, with `size` as its measurement. `exit set`, `entry set`,
@@ -134,7 +141,7 @@ Decision: ADR-0040 amendment.
   that reports quiescence therefore carries an effect list of its own. It is not
   a bare atom.
 - **Exit set and entry set payloads.** These rows carry the *resulting*
-  configuration (full configuration, ancestors included), not only the
+  configuration (full configuration, ancestors included, ADR-0005), not only the
   `indexes` delta. `configuration` is the configuration after every state named
   by `indexes` has left (exit set) or been added (entry set).
   - The step counters are still stamped from the state at the phase boundary
@@ -142,7 +149,8 @@ Decision: ADR-0040 amendment.
     entering" describes that boundary. Only `configuration` is read after the
     exit or entry.
   - A consumer can render the active configuration after every microstep. It
-    does not fold deltas.
+    does not fold deltas. It does not re-derive the whole-configuration sweep
+    of `exit_interpreter` either.
   - At `exit_interpreter`, the `configuration` of the exit set is the empty
     set. `Trace.Done` carries the configuration as it stood at exit.
 
@@ -150,8 +158,8 @@ Decision: ADR-0040 amendment.
 
 The Document layer carries source locations. Compiled expressions keep their
 source string next to predicator's compiled envelope. The envelope carries the
-span table with the instructions (`{:compiled, %Predicator.Compiled{}, source}`).
-The compiler pass is where locations are lost by default, because the runtime
+span table with the instructions (`{:compiled, %Predicator.Compiled{}, source}`,
+ADR-0014 item 2). The compiler pass is where locations are lost by default, because the runtime
 does not need them. Keep them anyway:
 
 - **Element locations.** States, transitions, and executable-content nodes on the
@@ -178,7 +186,9 @@ does not need them. Keep them anyway:
   `d_index`, dense from 0. The compiler assigns it with `t_index` and `c_index`
   (`Statifier.Compiler`). `Statifier.Machine.data/2` resolves it back to its
   `%Statifier.Machine.Data{}`, which carries its own `location` and
-  `value_location` (st-1xwh).
+  `value_location`. This completes an enumeration that the compiler had already
+  outgrown. `d_index` existed on `Machine.Data` and cited ADR-0012 before this
+  list named it (st-1xwh).
 - **No upkeep.** Locations and indexes are compile-time-immutable Machine data.
   They cost only memory. They need no invalidation.
 - **Expression locations.** Expression-level locations are in scope, not only

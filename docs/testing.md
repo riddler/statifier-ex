@@ -113,9 +113,22 @@ that is opt-in and runs only in the `:merge` profile.
 Sources: `Mix.Statifier.AdrJudge` moduledoc and the Phase 4 measurement
 section of `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`.
 
-The `:subtle` tier has fourteen fixtures (seven per-registry-entry pairs). It
-was measured on 2026-08-18 with three runs per model at seeds 101/202/303. The
-verdict of a fixture is the majority of its three runs.
+The `:subtle` tier joined the corpus alongside the original eight `:blatant`
+fixtures (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`). It
+has fourteen fixtures (seven per-registry-entry pairs). It was measured on
+2026-08-18 under Decision 2 of that plan: three runs per model at seeds
+101/202/303. The verdict of a fixture is the majority of its three runs.
+
+Two ADR-0012 pairs came later:
+
+- A sixth pair (st-xsb1) separates a payload field that is stamped from the
+  wrong state from one that is deliberately read after the mutation. It came
+  with an amendment to the text of ADR-0012. The amendment required a partial
+  re-measurement, which is row 3 below.
+- A seventh pair (st-6f7h) separates a `Trace.ExitSet` stamp that is wrongly
+  taken after the mutation from a `Trace.Done` stamp that is rightly taken after
+  it. Both trace calls are visible in the same hunk. It was measured on
+  2026-08-19, which is row 4 below.
 
 | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
 |---|---|---|---|---|---|
@@ -127,23 +140,30 @@ verdict of a fixture is the majority of its three runs.
 How to read rows three and four. Neither replaces a row above it.
 
 - **Row 3 (st-xsb1).** A partial re-measurement of the six ADR-0012 rows on one
-  model. An amendment to the text of ADR-0012 invalidated the earlier ADR-0012
-  numbers. The amendment moved two violation rows from false negative to
-  caught. It caused no false positive on either clean row.
+  model. The two rows above it cover the whole ten-fixture tier on two models
+  and still stand. This row exists because the amendment to the text of
+  ADR-0012 invalidated the earlier ADR-0012 numbers without saying in which
+  direction. The amendment moved two violation rows from false negative to
+  caught. One of them is the row that st-ntf5 measured by hand as a false
+  negative against the unamended rubric. The amendment caused no false positive
+  on either clean row.
   `0012_location_precision_one_caller.diff` is still missed. Phase 5 of
   `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md` has the per-fixture
   matrix. It also shows that this row points to the wording of the ADR, not to
   the judge.
 - **Row 4 (st-6f7h).** A first measurement of the site-B `exit_interpreter/1`
-  pair, on `claude-sonnet-5` only. It covers a two-fixture slice, so it
-  re-measures nothing above it.
+  pair that st-6f7h Phase 1 added, on `claude-sonnet-5` only. It covers a
+  two-fixture slice. The rows above it cover wider slices (ten and six
+  fixtures), so this row re-measures nothing above it.
   - The judge missed the violation row
     (`0012_exit_sweep_stamp_swapped_beside_done.diff`) in all runs across seeds
     101/202/303. The propose step returned no candidate, so the miss is a
     failure to propose, not an over-rejection by the refute pass. One cell was
-    a real miss whose assertion text was not recorded.
+    not captured. It was a real miss whose assertion text was not recorded.
   - The judge acquitted the clean row (`0012_done_trace_stamped_post_sweep.diff`)
     in all runs.
+  - The plan predicted the inverse: it expected the clean row, not the
+    violation row, to be the likely miss.
   - Open question: does content, hunk width, or production site explain the
     miss?
   - Matrix and provenance: Phase 5 of the st-2ts plan above and
@@ -218,6 +238,7 @@ Assume a note that proposes `x || fallback` against one of these sentinel
 values. The mutated line runs and produces the same value as before, and the
 suite stays green. This green result does not mean that the test verified
 anything. You cannot tell it from a note whose mutation ran and was reverted.
+That is the failure this section exists to prevent.
 
 The sabotage scan of `mix quality` cannot catch this. It checks only that a
 `# sabotage:` note exists above the test. It does not check that the mutation
@@ -247,8 +268,9 @@ pattern match that maps the sentinel to the fallback.
   looks.
 
 **Exempt.** Generated corpus files (`test/scion_tests/`, `test/scxml_tests/`)
-are machine-emitted and carry no notes. A broken interpreter shows up at once
-as a failing conformance test. Harness plumbing that asserts no `lib/`
+are machine-emitted and carry no notes. The corpus is sabotage-proof by
+construction: a broken interpreter shows up at once as a failing conformance
+test. Harness plumbing that asserts no `lib/`
 behavior is also exempt. Examples are helper round-trips, the tag table in
 `feature_detector_test.exs`, and fixture loaders. State the exemption in the
 file:
@@ -271,8 +293,9 @@ Run `MIX_ENV=test mix compile --force` after the mutation and again after the
 revert. A red result that survives a forced recompile on clean source is the
 real signal.
 
-**Cost.** Sabotage makes writing a test much slower, on purpose. The internal
-suite is worth its cost only if each test can fail. One minute per test to
+**Cost.** Sabotage makes writing a test much slower, on purpose. The conformance
+corpus tells you whether the engine is right. The internal suite is worth its
+cost only if each test can fail. One minute per test to
 learn which tests can fail is cheaper than finding a vacuous suite after a
 year of trust.
 
@@ -295,7 +318,7 @@ year of trust.
     would shrink the ratchet, and the ratchet exists to prevent that.
   - It is part of `mix quality` as the `Regression ratchet` custom stage
     (`.quality.exs`). The `:loop` profile does not include it. A regression is
-    therefore a named failure on a bare `mix quality`.
+    therefore a named failure on a bare `mix quality`, not a buried test count.
 - `mix test.baseline` - runs every conformance test that the registry does not
   track yet, one file at a time, and reports which tests now pass.
   - `--add` adds those tests to the ratchet.
@@ -357,7 +380,9 @@ test compute identical paths and race on `rm_rf!`/`mkdir_p!`.
 **Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead.** It has the same
 `tmp_dir` context key and the same directory shape. `root/0` always ends in a
 `System.pid()` segment, so two concurrent OS processes cannot resolve to the
-same scratch path.
+same scratch path, even if they agree on everything else. The old
+`test/statifier/tmp_dir_test.exs` did exactly that: it changed
+`STATIFIER_TMP_ROOT` for the whole process in the middle of a run.
 
 - `STATIFIER_TMP_ROOT` (default `"tmp"`) only chooses where the pid-scoped tree
   of a run lives, for readability. `mix test.regression` sets it to

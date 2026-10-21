@@ -13,7 +13,7 @@ cardinality. It is the st-cmq.2 design note.
 
 Read it with `docs/observability.md` (the constraints behind the telemetry
 surface). OpenTracing is not a target. It merged into OpenTelemetry and is
-archived.
+archived. OTel is the only tracing API that this page considers.
 
 Decisions:
 [ADR-0040](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0040-session-telemetry-event-contract.md),
@@ -37,10 +37,11 @@ These constraints come from st-cmq.2. Read the decisions below against them:
 
 Decision: [ADR-0062](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0062-opentelemetry-bridge-is-a-separate-package.md)
 
-The BEAM ecosystem has one common pattern. A library emits `:telemetry` events
-and has no OTel dependencies. A separate `opentelemetry_<lib>` package holds the
-bridge. Most of these packages are in
-`open-telemetry/opentelemetry-erlang-contrib`.
+The BEAM ecosystem settled this question some time ago. A library emits
+`:telemetry` events and has no OTel dependencies. A separate
+`opentelemetry_<lib>` package holds the bridge. Most of these packages are in
+`open-telemetry/opentelemetry-erlang-contrib`. The table below is the survey
+that the bead asked for.
 
 | Library | Bridge | In-library OTel? |
 |---|---|---|
@@ -71,8 +72,10 @@ wins over the `statifier_*` family convention, so users find it next to
 land in the same package as optional per-library setup calls. An in-library
 module cannot do this.
 
-**Publishing.** statifier 2.0.0 is on Hex. The bridge package publishes on its
-own schedule.
+**Publishing.** The original clause of ADR-0062 on why the bridge stayed
+unpublished pinned `main` SHAs (ADR-0061) until `statifier` itself was on Hex.
+That clause is resolved. statifier 2.0.0 is published, and the bridge package
+publishes on its own schedule.
 Decisions:
 [ADR-0061](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0061-sha-pinning-contract-until-2-0-0.md),
 [ADR-0066](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0066-publishes-2-0-0-ending-the-sha-pinning-contract.md).
@@ -85,8 +88,9 @@ and `[..., :stop]` events fit this. Both carry `span_ref` (the
 
 1. On `:start`, the bridge opens a span.
 2. On the `:stop` with the matching `span_ref`, the bridge closes it.
-3. The bridge never pairs events on `(session_id, macrostep)`. Re-entry nests
-   spans, and `macrostep` is authoritative only on the stop half.
+3. The bridge never pairs events on `(session_id, macrostep)`. The module doc
+   explains that this pairing is unusable: re-entry nests spans (ADR-0039), and
+   `macrostep` is authoritative only on the stop half.
 
 Decision:
 [ADR-0039](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0039-session-detected-send-failures-re-enter-the-core.md)
@@ -140,7 +144,8 @@ Decision: [ADR-0067](https://github.com/riddler/statifier-ex/blob/main/docs/adr/
 - A driver must emit both halves of a macrostep span within one driver
   invocation. It must never open a span before a persist and close it after a
   later load. `span_ref` is a `make_ref/0` reference. It is local to the node
-  and the VM, so it cannot cross a persist boundary.
+  and the VM, so it cannot cross a persist boundary. This rule keeps the spans of
+  a durable driver under the rule above, so they need no rule of their own.
 - A macrostep stepped without a `Statifier.Session` process stitches exactly as
   a session's macrostep does. Per-macrostep traces link through the bridge's
   last-span-context table.
@@ -287,7 +292,8 @@ contract freeze that ADR-0040 already states. After `opentelemetry_statifier`
 ships against the 28 event names and their shapes, a change to one of them is a
 breaking change for a real consumer.
 
-`[:statifier, :session, :trace, :conds_evaluated]` is one of the 28. It is the
+The count was 27 until `[:statifier, :session, :trace, :conds_evaluated]`
+joined the trace family. It is one of the 28. It is the
 guard seam, an amendment to ADR-0040. It fires only under `trace: true` and has
 the shape of the existing trace family. The bridge needs no change for it
 except the name.

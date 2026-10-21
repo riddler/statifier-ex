@@ -22,9 +22,12 @@ timer wheel and is tied to the session process. It dies with the node.
   problem. A deploy or a crash between scheduling and firing drops the send
   silently.
 
-ADR-0003 (Consequences) allows you to supply your own effect interpreter, for
-example one that queues delayed sends into Oban. This guide teaches that
-substitution. Read ADR-0054 with this guide for the reason behind each rule.
+ADR-0003 (Consequences) allowed this substitution on the day the effect
+boundary was decided: "Embedders can supply their own effect interpreter (e.g.
+queue delayed sends into Oban instead of process timers)." That sentence named
+the destination. This guide and ADR-0054 are the way there. ADR-0054 is the
+contract that this guide teaches. Read it once with this guide for the reason
+behind each rule, not only the rule.
 
 Decision: [ADR-0003](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0003-pure-core-with-effects.md),
 [ADR-0054](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0054-durable-timers-consume-the-effect-vocabulary.md).
@@ -93,12 +96,15 @@ Two fields on both structs need a rule:
 
   Decision: ADR-0063 decision 6.
 
+These two effects are the only things that a durable-timer host reads.
+
 **Do not read the instruction vocabulary.** The atoms `{:schedule, ...}` and
 `{:cancel_timers, ...}` (`@type instruction` in `Statifier.Session.Effects`)
-are internal. `Statifier.Session` uses them to perform `Process.send_after/3`
-and `Process.cancel_timer/1`. If you see them in a stack trace or a
-`:telemetry` payload, do not intercept them. Consume the effect, not the
-instruction.
+are internal. Their names look like an obvious match for "schedule a timer" and
+"cancel a timer", but they are not yours to read. `Statifier.Session` uses them
+to perform `Process.send_after/3` and `Process.cancel_timer/1`. If you see them
+in a stack trace or a `:telemetry` payload, do not intercept them. Consume the
+effect, not the instruction.
 The general rule is in `docs/extending.md:58-59`: "The instruction vocabulary
 a planning callback returns is opaque outside the library." ADR-0054
 decision 1 applies it to timers by name.
@@ -118,8 +124,9 @@ resolves `send.target` into a route:
 - `{:session, id}` for `#_scxml_<id>`
 - `{:invoke, id}` for any other `#_`-prefixed target
 
-The route travels on the opaque `{:schedule, ...}` instruction. It never
-appears on the `%SendDelayed{}` effect. On the struct, `target` is the raw
+The route travels on the opaque `{:schedule, ...}` instruction (ADR-0054
+decision 1 forbids you to read it). It never appears on the `%SendDelayed{}`
+effect. On the struct, `target` is the raw
 string the author wrote, or `nil`. No string means "self" the way `nil` does.
 
 **Who delivers.** `deliver_fired/4` (`lib/statifier/session.ex`) handles
@@ -243,7 +250,9 @@ read the same two effects from the `[effect]` half of the interpreter's return
 value. You do not subscribe to anything. `SendDelayed` and `Cancel` appear in
 the returned list in the same order as in the subscriber stream of a live
 session. `docs/extending.md:44-50` describes the same audience for `<invoke>`
-handlers.
+handlers: "This is what lets a durable host that drives `Statifier.Interpreter`
+directly, with no `Statifier.Session` process at all, plan invocations the same
+way `Statifier.Session` does."
 
 The fired event is the input to the next drive of your host. No function call
 delivers it, because no running process exists to call.
@@ -278,9 +287,11 @@ Decision: ADR-0054 decision 3.
 **Session scope.** For a live session, it is `ctx.session_id` (spec 5.10's
 `_sessionid`). For a process-less host, it is your own durable execution id.
 You must scope the key. `send_counter` restarts at 0 for every
-`%MachineState{}`. Without a scope, `send_1` from one execution collides with
-`send_1` from an unrelated execution. The library cannot supply the scope,
-because it has no view of your store. Decide it first.
+`%MachineState{}` (`Statifier.MachineState`, "`send_counter` is the
+session-global `send_` id sequence"). Without a scope, `send_1` from one
+execution collides with `send_1` from an unrelated execution. The library
+cannot supply the scope, because it has no view of your store. It is your first
+design decision, not the library's.
 Decision: ADR-0035.
 
 **`c_index` and `owner`.** These fields of `Statifier.Effect.SendDelayed` are
@@ -302,7 +313,9 @@ author wrote the id) the same `send_id`, all from the same microstep. Only
 
 The library mints `ordinal` from `machine_state.timer_counter`. This
 session-global counter advances on every `%SendDelayed{}` or `%Cancel{}`
-construction. It replays deterministically, because it is pure fold state.
+construction. It replays deterministically for the same reason that
+`send_counter` does: it is pure fold state (the argument of ADR-0035, decided
+by ADR-0059).
 
 **Cancels.** `%Cancel{}` carries the same `ordinal` for the same reason. Two
 cancels of the same `send_id` from two iterations are distinct effects. Your
@@ -343,14 +356,16 @@ library timer table across the three ways an execution identity can change.
 - A `<cancel sendid="x"/>` executed after a resume still emits a
   `%Statifier.Effect.Cancel{send_id: "x"}` on the effect stream, although the
   resumed timer table never held anything under "x". The pure core emits the
-  cancel effect when it executes the content of the chart. It does not check
-  whether a timer table is populated. Your store cancels the pre-resume row on
+  cancel effect when it executes the `<onexit>` or `<onentry>` content of the
+  chart. It does not know or check whether a timer table is populated. Your store cancels the pre-resume row on
   this effect. `test/statifier/session/resume_test.exs` pins this behavior.
 
 **Chart revision.** The key does not move. Migrating a position across chart
 revisions (the export/import process in [persistence.md](persistence.md)) does
 not change `{session scope, send_id}`. Send ids are author-written and carry
-no state index. A key holds only components that are relevant to identity and
+no state index, and chart identity is not a component of the key. ADR-0063
+decision 6 makes the same "row data, never a key component" argument for
+`caller_context`. A key holds only components that are relevant to identity and
 deterministic on replay. The identity check on the position does gate a
 revision change, at resume time. It decides whether the position can resume at
 all. It does not affect the timer key.
@@ -388,7 +403,8 @@ down. You can enforce the guarantee only at delivery time.
 - Reaching `:done` sets `state.halted`, but it does not stop the session
   process (`lib/statifier/session.ex`, "`:done` idles the session"). The
   library discards its own in-process timers at the halt
-  (`discard_pending_timers/2`). That discard does not reach a durable store.
+  (`discard_pending_timers/2`), because an idled process may never reach
+  `terminate/2`. That discard does not reach a durable store.
 - `handle_continue(:drain, ...)` does not drain onto a halted session. An
   event fed to a halted session stays queued and is not discarded.
 - `:budget_exhausted` halts the session while the core is still `running` and
@@ -476,8 +492,11 @@ non-decreasing `(macrostep, round)` order. The effects of a re-entry never
 arrive before the outer batch that triggered it
 (`Statifier.Session`, "One subscriber stream", ADR-0044 decision 1).
 
-`round` is an `@enforce_keys` field on every `%SendDelayed{}` you read, because
-every core effect carries `round` (ADR-0046). The dedup key depends on this.
+That section once carried a caveat: `round` was stamped only on
+`Statifier.Effect.Trace.*` and `Statifier.Effect.BudgetExhausted`. ADR-0046
+withdrew it ("every core effect carries `round`"), so it does not apply to what
+you store. `round` is an `@enforce_keys` field on every `%SendDelayed{}` you
+read. The dedup key depends on this.
 
 `{:halted, reason}` is the end of the stream. See "Route A" above.
 
