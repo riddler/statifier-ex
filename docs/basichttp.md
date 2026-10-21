@@ -1,24 +1,30 @@
 # The Basic HTTP Event I/O Processor
 
-SCXML appendix C.2 defines the Basic HTTP Event I/O Processor: a `<send>`
-whose `type` names it is delivered as an HTTP POST, and a session that runs
-it accepts POSTs at an address of its own and raises each one as an
-external event. Statifier ships it as `Statifier.Send.BasicHTTP`, a
-`Statifier.Send.Processor` a host registers per session like any other send
-type (see "The `<send>` half" in [Extending Statifier](extending.md)). A
-session that does not register it sees none of this page: no request is
-made, nothing is started, and `_ioprocessors` holds the SCXML processor's
-entry alone.
+**Read this to:** send and receive events over HTTP from a chart, and write the
+front that receives the POSTs.
+**Short version:** register `Statifier.Send.BasicHTTP` with a base URL. Run an
+HTTP endpoint at that URL. Pass each request to `decode/1`, then enqueue the
+event it returns. Delivery is at-least-once, so deduplicate on the
+`scxml-send-key` header.
 
-The decisions behind the processor are
+SCXML appendix C.2 defines the Basic HTTP Event I/O Processor. A `<send>` whose
+`type` names it is delivered as an HTTP POST. A session that runs it accepts
+POSTs at an address of its own and raises each one as an external event.
+
+Statifier ships it as `Statifier.Send.BasicHTTP`. A host registers it per
+session, like any other send type. See "The `<send>` half" in
+[Extending Statifier](extending.md). A session that does not register it makes no
+request and starts nothing. `_ioprocessors` holds the SCXML processor's entry
+alone.
+
+Decision:
 [ADR-0075](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0075-basichttp-event-io-processor.md)
-and its Amendment of 2026-09-30, which adds the `scxml-send-key` header
-below.
+and its Amendment of 2026-09-30, which adds the `scxml-send-key` header.
 
 ## Registering it
 
-Register the processor under both of its type strings, the spec's URI and
-the short form `basichttp`, with the base URL your own front answers at:
+Register the processor under both of its type strings: the spec's URI and the
+short form `basichttp`. Give it the base URL that your own front answers at:
 
 ```elixir
 base = "https://example.org/scxml"
@@ -32,37 +38,35 @@ Statifier.Session.start_link(chart,
 )
 ```
 
-A `:send_types` value is a bare module or `{module, opts}`; this processor
-needs the options form. Its options:
+A `:send_types` value is a bare module or `{module, opts}`. This processor needs
+the options form. Its options:
 
-- `:base_url` (required) - the address your front answers at. A
-  registration from which no entry can be built (no `:base_url`, or a
-  value that is not a string) is refused when the session starts fresh,
-  with
-  `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`
-  before any session process is spawned, so with no crash report. A
-  resumed session is not refused: its position
-  carries the `_ioprocessors` entries it started with.
-- `:transport` - the module the POSTs go through, a
+- **`:base_url` (required).** The address your front answers at. When the
+  session starts fresh, the processor refuses a registration from which it
+  cannot build an entry (no `:base_url`, or a value that is not a string). The
+  error is
+  `{:error, {:send_types, {:invalid_registration, type, {:missing_option, :base_url}}}}`.
+  It returns before the session process starts, so there is no crash report. A
+  resumed session is not refused, because its position carries the
+  `_ioprocessors` entries it started with.
+- **`:transport`.** The module the POSTs go through, a
   `Statifier.Send.BasicHTTP.Transport`. The default is
-  `Statifier.Send.BasicHTTP.Transport.Httpc`, on OTP's `:httpc`, which
-  verifies TLS peers against the system CA store and bounds each request
-  with a timeout. The package adds no dependency for it; the last section
-  below shows an adapter on `req`. When `:ssl` or `:public_key` cannot be
-  loaded, the default adapter answers
-  `{:error, {:not_loadable, module, reason}}` instead of making the
-  request, and the processor reports the miss to the sender like any
-  other failed delivery.
+  `Statifier.Send.BasicHTTP.Transport.Httpc`, on OTP's `:httpc`. It verifies TLS
+  peers against the system CA store and limits each request with a timeout. When
+  `:ssl` or `:public_key` cannot be loaded, the default adapter answers
+  `{:error, {:not_loadable, module, reason}}` instead of making the request. The
+  processor reports the miss to the sender like any other failed delivery. For an
+  adapter on `req`, see "A transport on `req`" at the end of this page.
 
-Neither type string is a built-in spelling, so the registration redirects
-no built-in send.
+Neither type string is a built-in spelling, so the registration redirects no
+built-in send.
 
 ## The location
 
-C.2.3 asks for an `_ioprocessors` entry holding a `location` that external
-entities can use to reach the session. The session carries one entry under
-each registered string, and both hold the same location: the base URL, a
-`/`, and the session's `_sessionid`.
+C.2.3 asks for an `_ioprocessors` entry that holds a `location`. External
+entities use it to reach the session. The session carries one entry under each
+registered string. Both entries hold the same location: the base URL, a `/`, and
+the session's `_sessionid`.
 
 ```xml
 <send type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
@@ -70,106 +74,116 @@ each registered string, and both hold the same location: the base URL, a
       event="ping"/>
 ```
 
-The session writes the entries when it starts, and they persist with the
-datamodel; after that only a host's refresh or replacement (below)
-rewrites them, so a resumed session reads the location it started with
-unless the host refreshed it.
+The session writes the entries when it starts. They persist with the datamodel.
+Only a host's refresh or replacement (below) rewrites them. A resumed session
+reads the location it started with, unless the host refreshed it.
 
 ### When the base URL moves, or a location rotates
 
-The library never rewrites the location on its own, and a resume does
-not either. Keeping the location current is the host's step, through one
-of three calls that recompute a registered entry from a registration and
-leave the SCXML entry as it is:
+Neither the library nor a resume rewrites the location. The host must keep it
+current. It has three calls for this. Each call recomputes a registered entry
+from a registration and leaves the SCXML entry as it is.
 
-- **Across a resume.** A host whose base URL moved re-stamps the
-  position with the new registration and refreshes it before it starts
-  the session:
+**Across a resume.** A host whose base URL moved re-stamps the position with the
+new registration and refreshes it before it starts the session:
 
-  ```elixir
-  {:ok, position} = Statifier.Position.from_binary(blob, machine)
-  send_types = %{"basichttp" => {Statifier.Send.BasicHTTP, base_url: new_base_url}}
+```elixir
+{:ok, position} = Statifier.Position.from_binary(blob, machine)
+send_types = %{"basichttp" => {Statifier.Send.BasicHTTP, base_url: new_base_url}}
 
-  {:ok, position} =
-    position
-    |> Statifier.MachineState.put_send_types(Statifier.Send.Types.from_send_types(send_types))
-    |> Statifier.MachineState.refresh_ioprocessors()
+{:ok, position} =
+  position
+  |> Statifier.MachineState.put_send_types(Statifier.Send.Types.from_send_types(send_types))
+  |> Statifier.MachineState.refresh_ioprocessors()
 
-  {:ok, session} =
-    Statifier.start_session(machine, resume: position, send_types: send_types)
-  ```
+{:ok, session} =
+  Statifier.start_session(machine, resume: position, send_types: send_types)
+```
 
-  The chart then reads the new location. A session started this way with
-  `record: true` records the refreshed position as its starting point, so
-  a replay reads the same location.
+- The chart then reads the new location.
+- A session started this way with `record: true` records the refreshed position
+  as its starting point. A replay then reads the same location.
+- The refresh builds the location from the `_sessionid` of the position. A
+  resume that passes a different `:session_id` rewrites `_sessionid` but not
+  `_ioprocessors`. The location then still ends in the id of the position,
+  while the session is registered under the new id.
+- A host that resumes under a new id and is not recording must call the live
+  refresh below after the session runs. The live refresh reads the new
+  `_sessionid`.
 
-  The refresh builds the location from the position's own `_sessionid`.
-  A resume that passes a `:session_id` other than the position's rewrites
-  `_sessionid` but not `_ioprocessors`, so the location still ends in the
-  position's id, refreshed or not, while the session is registered under
-  the new one. A host that resumes under a new id and is not recording
-  calls the live refresh below once the session is running; it reads the
-  new `_sessionid`.
+**On a live session.** `Statifier.Session.refresh_ioprocessors/1` asks every
+registered processor again, from the registration the session holds. For Basic
+HTTP, the location depends only on the registration's `:base_url` and the
+session id. The call therefore recomputes the location the session already
+carries. To apply a moved base URL to a live session, use the replacement below.
 
-- **On a live session.** `Statifier.Session.refresh_ioprocessors/1` asks
-  every registered processor again from the registration the session
-  holds. For Basic HTTP, whose location is built from the registration's
-  `:base_url` and the session id alone, the call recomputes the location
-  the session already carries: a moved base URL reaches a live session
-  through the replacement below. The refresh is for a processor of your own
-  whose entry reads a value that can move while the session runs, such
-  as a location its front rotated. It answers `:ok`;
-  `{:error, {:missing_option, :base_url}}` when the registration has no
-  `:base_url`; `{:error, :not_running}` once the session has halted;
-  and `{:error, :recorded_session}` for a session started with
-  `record: true`, whose recording has no place for a refresh. A
-  registered processor whose entry raises during the refresh
-  answers `{:error, {:ioprocessors_entry, type, exception}}`, and the
-  session keeps running. Every error changes nothing.
+Use the refresh for a processor of your own whose entry reads a value that can
+move while the session runs, such as a location that its front rotates. The call
+answers:
 
-- **A moved base URL on a live session.**
-  `Statifier.Session.replace_send_type/3` hands a running session a new
-  registration for one type it already registers and recomputes that
-  type's entry from it in the same call:
+- `:ok`
+- `{:error, {:missing_option, :base_url}}` when the registration has no
+  `:base_url`
+- `{:error, :not_running}` after the session has halted
+- `{:error, :recorded_session}` for a session started with `record: true`. Its
+  recording has no place for a refresh.
+- `{:error, {:ioprocessors_entry, type, exception}}` when the entry of a
+  registered processor raises during the refresh. The session keeps running.
 
-  ```elixir
-  :ok =
-    Statifier.Session.replace_send_type(
-      session,
-      "basichttp",
-      {Statifier.Send.BasicHTTP, base_url: new_base_url}
-    )
-  ```
+Every error changes nothing.
 
-  The chart reads the new location from the next event it processes, and
-  later Basic HTTP sends go through the new registration. The call answers
-  `{:error, {:send_types, {:invalid_registration, "basichttp",
-  {:missing_option, :base_url}}}}` for a registration without
-  `:base_url`, as `start_link/2` spells that refusal;
-  `{:error, {:unknown_send_type, type}}` for a type the session does not
-  register; and `{:error, :not_running}` and
-  `{:error, :recorded_session}` as the refresh does. Every error changes
-  nothing. Other types' entries are left as they are.
+**A moved base URL on a live session.** `Statifier.Session.replace_send_type/3`
+gives a running session a new registration for one type that it already
+registers. It recomputes the entry of that type from the registration in the
+same call:
+
+```elixir
+:ok =
+  Statifier.Session.replace_send_type(
+    session,
+    "basichttp",
+    {Statifier.Send.BasicHTTP, base_url: new_base_url}
+  )
+```
+
+The chart reads the new location from the next event it processes. Later Basic
+HTTP sends go through the new registration. The call answers:
+
+- `{:error, {:send_types, {:invalid_registration, "basichttp",
+  {:missing_option, :base_url}}}}` for a registration without `:base_url`, as
+  `start_link/2` spells that refusal
+- `{:error, {:unknown_send_type, type}}` for a type the session does not
+  register
+- `{:error, :not_running}` and `{:error, :recorded_session}`, as the refresh does
+- `{:error, {:ioprocessors_entry, type, exception}}` when the new registration's
+  processor raises while it computes the entry, as the refresh does
+
+Every error changes nothing. The entries of other types stay as they are.
 
 ## The front you write around `decode/1`
 
-The library receives nothing on its own. Your host runs the HTTP endpoint
-at the base URL, and for each request it:
+Your host runs the HTTP endpoint at the base URL. The library receives nothing
+on its own. For each request, the host does these steps:
 
-1. resolves the path after the base URL to a session id, and that id to a
-   running session;
-2. hands the request to `Statifier.Send.BasicHTTP.decode/1`, a pure
-   function that knows no session;
-3. unless it has already enqueued a request carrying the same
-   `scxml-send-key` header value (next section), enqueues the event the
-   decoder answers as an external event, for example with
-   `Statifier.Session.send_event/2`;
-4. answers by the status rule below.
+1. Resolve the path after the base URL to a session id, and that id to a running
+   session.
+2. Give the request to `Statifier.Send.BasicHTTP.decode/1`. This is a pure
+   function that knows no session.
+3. Enqueue the event that the decoder answers as an external event, for example
+   with `Statifier.Session.send_event/2`. Do not enqueue it if the host already
+   enqueued a request with the same `scxml-send-key` header value (next
+   section).
+4. Answer with the status rule below.
 
-`decode/1` takes a map of the request's `:method`, `:content_type` (`nil`
-when absent), `:body` and `:query` (`nil` when the URL has none), and
-optionally `:send_key`, the `scxml-send-key` header's value. It answers
-`{:ok, event}` or `{:error, reason}`. The status rule:
+`decode/1` takes a map with these keys:
+
+- `:method`
+- `:content_type` (`nil` when absent)
+- `:body`
+- `:query` (`nil` when the URL has none)
+- optionally `:send_key`, the value of the `scxml-send-key` header
+
+It answers `{:ok, event}` or `{:error, reason}`. The status rule:
 
 | `decode/1` answers | The front answers |
 |---|---|
@@ -179,8 +193,8 @@ optionally `:send_key`, the `scxml-send-key` header's value. It answers
 | any other `{:error, _}` | 400 |
 | (the path names no session the front can reach) | 404 |
 
-A front on Plug might read (text, not compiled; Plug is not a dependency of
-this package):
+This is a front on Plug (text, not compiled; Plug is not a dependency of this
+package):
 
 ```elixir
 def call(%Plug.Conn{path_info: [session_id]} = conn, _opts) do
@@ -210,43 +224,51 @@ def call(%Plug.Conn{path_info: [session_id]} = conn, _opts) do
 end
 ```
 
-This repository's own loopback front, which its conformance runs deliver
-through, is `Mix.Statifier.BasicHTTPFront`: repository tooling on OTP's
-`:inets` httpd, not part of the package, and a small model of the steps
-above. It lives only as long as one test run and does not deduplicate.
+This repository has a loopback front for its conformance runs:
+`Mix.Statifier.BasicHTTPFront`. It is repository tooling on OTP's `:inets`
+httpd, not part of the package. It lives for one test run and does not
+deduplicate.
 
 ## At-least-once delivery and the `scxml-send-key` header
 
-The processor makes one POST each time an instruction is performed, and
-keeps no memory between performs. A host that performs the same
-instruction twice - after a crash and a retry, for example - POSTs
-twice, so delivery is at-least-once. To let the receiver deliver each
-send once, every POST the processor makes, immediate or delayed and
-whatever its body, carries the send's deduplication key in a request
-header:
+The processor makes one POST each time an instruction is performed. It keeps no
+memory between performs. A host can perform the same instruction twice, for
+example after a crash and a retry. The POST then happens twice, so delivery is
+at-least-once.
+
+To let the receiver deliver each send once, every POST carries the deduplication
+key of the send in a request header. This applies to immediate and delayed POSTs,
+whatever their body:
 
 - **Name:** `scxml-send-key`.
-- **Value:** eight fields joined by `/`: the session scope (the
-  sender's `_sessionid` for a live session), the send id, `macrostep`,
-  `microstep`, `round`, `c_index`, `owner` and `ordinal`. The session
-  scope and the send id are percent-encoded, so neither carries a `/`;
-  the counters are decimal integers; `owner` is spelled `onentry.S.B`,
-  `onexit.S.B`, `finalize.S.B` or `transition.T` with its indexes. A
-  field the send does not carry is the empty string.
+- **Value:** eight fields joined by `/`: the session scope (the sender's
+  `_sessionid` for a live session), the send id, `macrostep`, `microstep`,
+  `round`, `c_index`, `owner`, and `ordinal`.
+  - The session scope and the send id are percent-encoded, so neither carries a
+    `/`.
+  - The counters are decimal integers.
+  - `owner` is spelled `onentry.S.B`, `onexit.S.B`, `finalize.S.B`, or
+    `transition.T`, with its indexes.
+  - A field that the send does not carry is the empty string.
 
-Every field is a deterministic counter or a static position, so a
-re-performed send carries a byte-identical value. A front that enqueues
-a request only when it has not already enqueued one with the same value
-delivers each send once; a front that ignores the header sees
-at-least-once delivery. The decoder does not deduplicate: it is pure and
-remembers nothing, so the front keeps the record of the values it has
-enqueued, and answers a repeat 204 with nothing enqueued.
+Every field is a deterministic counter or a static position. A send that is
+performed again therefore carries a byte-identical value.
 
-`decode/1` only checks the value's shape. It sets no field of the event
-from it, and a value that is not eight `/`-separated fields whose second
-field percent-decodes to UTF-8 is
-`{:error, {:malformed_send_key, value}}`, which the front answers 400. A
-request without the header decodes as before.
+- A front that enqueues a request only when it has not already enqueued one with
+  the same value delivers each send once.
+- A front that ignores the header sees at-least-once delivery.
+- The decoder is pure and does not deduplicate. The front must keep the record
+  of the values it has enqueued. It answers a repeat with 204 and enqueues
+  nothing.
+
+`decode/1` checks only the shape of the value. It sets no field of the event
+from it. A value is `{:error, {:malformed_send_key, value}}` when either of
+these is true:
+
+- It is not eight `/`-separated fields.
+- Its second field (the send id) does not percent-decode to UTF-8.
+
+The front answers 400. A request without the header decodes as before.
 
 ## The mapping, both ways
 
@@ -262,27 +284,36 @@ Outbound, a `<send>` to the processor becomes one POST (C.2.2):
 | a `<content expr>` that evaluates to a struct (a `Date`, for example) | the struct's `inspect/1` text as the body, sent as `text/plain`; a struct is never form-encoded |
 | neither `target` nor `targetexpr` | no request: `error.communication` on the sender's internal queue, carrying the send id |
 
-A parameter value is written as text: a string as it is, a number or a
-boolean as its literal, `nil` as `null`, and an undefined value as the
-empty string. A list or a map is written as JSON text, so the list
-`['Dune', 2]` travels as `["Dune",2]` and an undefined value inside it as
-`null`, when everything inside it has a JSON form: a UTF-8 string, a
-number, a boolean, `nil`, an undefined value, a list, or a map whose keys
-are all strings. A list or a map holding anything else, and any other
-value, is written as its Elixir `inspect/1` text, whole. A `<content>`
-body that is a list is written the same way and still sent as
-`text/plain`. ADR-0075's Amendment on list and map values records the
-rule. The processor makes one attempt. A transport error, or a
-status outside 2xx, reaches the sender as `error.communication` carrying
-the send id, through `Statifier.Session.failed_send/3`. Every request also
-carries the `scxml-send-key` header above. A `<send delay>` is
-held by the processor's own timer, and a `<cancel>` naming the send cancels
-it while it has not fired: a cancel the timer has received before its POST
-always wins. The timer never calls the session, so a session busy when the
-delay passes still has the send POSTed, and a session that has halted
-(`:done`, `:cancelled` or `:budget_exhausted`) or stopped discards it. A
-delayed send whose transport raises reaches the sender as
-`error.communication`, as any other miss does.
+The processor writes a parameter value as text:
+
+- A string stays as it is.
+- A number or a boolean becomes its literal.
+- `nil` becomes `null`.
+- An undefined value becomes the empty string.
+- A list or a map becomes JSON text when everything inside it has a JSON form. A
+  JSON form exists for a UTF-8 string, a number, a boolean, `nil`, an undefined
+  value, a list, or a map whose keys are all strings. The list `['Dune', 2]`
+  travels as `["Dune",2]`. An undefined value inside it travels as `null`.
+- A list or a map that holds anything else, and any other value, becomes its
+  Elixir `inspect/1` text, whole.
+
+A `<content>` body that is a list is written the same way and is still sent as
+`text/plain`. Decision: ADR-0075 Amendment on list and map values.
+
+**Failure.** The processor makes one attempt. A transport error, or a status
+outside 2xx, reaches the sender as `error.communication` that carries the send
+id, through `Statifier.Session.failed_send/3`.
+
+**Delayed sends.** The processor's own timer holds a `<send delay>`.
+
+- A `<cancel>` that names the send cancels it while it has not fired. A cancel
+  that the timer has received before its POST always wins.
+- The timer never calls the session. If the session is busy when the delay
+  passes, the send is still POSTed.
+- If the session has halted (`:done`, `:cancelled` or `:budget_exhausted`) or
+  stopped, the timer discards the send.
+- A delayed send whose transport raises reaches the sender as
+  `error.communication`, as any other miss does.
 
 Inbound, `decode/1` turns one request into one event (C.2.1):
 
@@ -294,56 +325,57 @@ Inbound, `decode/1` turns one request into one event (C.2.1):
 | a body of any other content type | the body as `_event.data`; the query string gives the name only |
 | (always) | the processor URI as `origintype`, and no `sendid` or `origin` |
 
-Each value is read as a `<content>` body's text is: a predicator literal
-becomes that value, so `2` reads as the number 2, and anything else stays
-a string. A JSON body is a body of another content type, so a JSON object
-or array that is also a predicator literal reads as a map or a list. A
-list or a map parameter this processor writes as JSON is not promised to
-read back as the value that was sent: the text rung reads predicator
-literals, not JSON. No charset is read: a body or a parameter that is not
-UTF-8 is refused as `{:error, {:not_utf8, :body}}` (or `:query`), which
-the front answers 400, whatever charset the content type names. A front
-whose senders use another charset transcodes the body before it calls
-`decode/1`.
+**Value types.** The decoder reads each value as it reads the text of a
+`<content>` body. A predicator literal becomes that value, so `2` reads as the
+number 2. Anything else stays a string. A JSON body is a body of another content
+type. A JSON object or array that is also a predicator literal reads as a map or
+a list. The text rung reads predicator literals, not JSON, so a list or a map
+parameter that this processor writes as JSON does not always read back as the
+value that was sent.
+
+**Charset.** The decoder reads no charset. It refuses a body or a parameter that
+is not UTF-8 as `{:error, {:not_utf8, :body}}` (or `:query`), whatever charset
+the content type names. The front answers 400. A front whose senders use another
+charset must transcode the body before it calls `decode/1`.
 
 ## What is not supported
 
-- A charset other than UTF-8 inbound: such a body is refused, not
-  transcoded.
-- `_event.origin` on an inbound event: the decoder has no address a reply
-  could be sent to. A sender that wants a reply puts its own location in a
-  parameter, `<param name="replyto"
-  expr="_ioprocessors['basichttp']['location']"/>`, and the receiver
-  replies with `targetexpr="_event.data.replyto"`.
-- `_event.sendid` on an inbound event, even for a send whose author named
-  its `id`: the `scxml-send-key` header carries a named id and a generated
-  one alike, so the decoder cannot tell them apart. A receiver that needs
-  the id gets it in a parameter.
-- A location that follows a moved base URL on its own: a resume keeps the
-  location the session started with until the host refreshes it, as
-  "When the base URL moves, or a location rotates" above shows.
-- Authentication of inbound POSTs: C.2 defines none, and a front that
-  needs it adds it itself.
-- A session that is persisted and not running: the location reaches a
-  live registered session only. A durable host's front resolves the
-  location to its own execution.
+- **A charset other than UTF-8 inbound.** The decoder refuses such a body. It
+  does not transcode it.
+- **`_event.origin` on an inbound event.** The decoder has no address to send a
+  reply to. A sender that wants a reply puts its own location in a parameter,
+  `<param name="replyto" expr="_ioprocessors['basichttp']['location']"/>`. The
+  receiver replies with `targetexpr="_event.data.replyto"`.
+- **`_event.sendid` on an inbound event,** even for a send whose author named its
+  `id`. The `scxml-send-key` header carries a named id and a generated id in the
+  same way, so the decoder cannot tell them apart. A receiver that needs the id
+  gets it in a parameter.
+- **A location that follows a moved base URL on its own.** A resume keeps the
+  location the session started with until the host refreshes it. See "When the
+  base URL moves, or a location rotates" above.
+- **Authentication of inbound POSTs.** C.2 defines none. A front that needs it
+  must add it.
+- **A session that is persisted and not running.** The location reaches a live
+  registered session only. The front of a durable host resolves the location to
+  its own execution.
 
 ## In the conformance corpus
 
-The W3C documents that need the processor are in the corpus, each with a
-`host` object whose `event_io_processors` names the processor's URI; a
-runner registers it under both type strings and delivers through a
-loopback front (`conformance/RATCHET.md`, "The `host` object"). Eleven of
-them are claimed. `test201` is in the corpus and unclaimed: it expects an
-event sent through the processor to arrive ahead of a `<send>` the same
-step appends to the session's own external queue, and a delivery from
-outside the session never can.
+The corpus holds the W3C documents that need the processor. Each has a `host`
+object whose `event_io_processors` names the URI of the processor. A runner
+registers the processor under both type strings and delivers through a loopback
+front (`conformance/RATCHET.md`, "The `host` object"). Eleven of these documents
+are claimed.
+
+`test201` is in the corpus and is not claimed. It expects an event sent through
+the processor to arrive before a `<send>` that the same step appends to the
+session's own external queue. A delivery from outside the session cannot do
+this.
 
 ## A transport on `req`
 
-A host that already uses `req` writes an adapter of its own and passes it
-as `:transport`. As text, not compiled; this package does not depend on
-`req`:
+A host that already uses `req` can pass an adapter of its own as `:transport`.
+This is text, not compiled. This package does not depend on `req`:
 
 ```elixir
 defmodule MyApp.ReqTransport do
@@ -359,11 +391,15 @@ defmodule MyApp.ReqTransport do
 end
 ```
 
-`retry: false` keeps the one attempt the processor makes: retrying is not
-the transport's job, and a status outside 2xx is answered as
-`{:ok, status}`, not as an error, so the processor reports it as a miss.
+`retry: false` keeps the one attempt that the processor makes. The adapter
+answers a status outside 2xx as `{:ok, status}`, not as an error, so the
+processor reports it as a miss.
+
+Register it with the `:transport` option:
 
 ```elixir
 registration =
   {Statifier.Send.BasicHTTP, base_url: base, transport: MyApp.ReqTransport}
 ```
+
+Next: [Extending Statifier](extending.md) for the other send and invoke seams.

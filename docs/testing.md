@@ -1,184 +1,190 @@
 # Testing strategy
 
-The conformance corpus is the contract for this rewrite. v1's most valuable asset is
-its test infrastructure, and it ports almost for free: the generated SCION/W3C test files
-touch no library internals - everything goes through one `Statifier.Testing.Case`
-module (generated files still say `Statifier.Case`, a `test/support` shim over it -
-ADR-0053)
-([ADR-0006](adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)).
+**Read this to:** write, run, or gate tests in this repo.
+**Short version:** the conformance corpus is the contract. Every new test of
+`lib/` behavior needs a sabotage note. The regression ratchet only moves
+forward. `mix quality` must be green before you commit.
+
+The generated SCION/W3C test files use no library internals. They all go
+through one `Statifier.Testing.Case` module. Generated files still say
+`Statifier.Case`, a `test/support` shim over it.
+
+Decision: [ADR-0006](adr/0006-reuse-conformance-corpus-and-regression-ratchet.md),
+ADR-0053.
 
 ## The three suites
 
-1. **Internal tests** (`test/statifier/...`) - unit tests for parser, machine
-   compiler, interpreter functions, datamodel. Written fresh for v2, pattern-matching
-   style. Run by default with `mix test`.
-2. **SCION suite** (`test/scion_tests/`, tag `:scion`) - 119 emitted tests out of
-   127 native upstream SCION cases; the rest are excluded at generation time,
-   with the count and the reason per case in `tools/corpus/scion/exclusions.exs`
-   (see `tools/corpus/README.md`). Excluded by default.
-3. **W3C suite** (`test/scxml_tests/`, tag `:scxml_w3`) - 168 emitted tests (154
-   mandatory + 14 optional) out of 193 upstream W3C cases. Excluded by default.
-   Dependency documents an `<invoke>` loads at runtime (manifest `<dep>`
-   entries) are not emitted as standalone tests - see `tools/corpus/README.md`.
+| Suite | Path | Tag | Size | Default run |
+|---|---|---|---|---|
+| Internal | `test/statifier/...` | none | unit tests for the parser, machine compiler, interpreter functions, and datamodel, in pattern-matching style | included |
+| SCION | `test/scion_tests/` | `:scion` | 119 emitted tests out of 127 native upstream cases | excluded |
+| W3C | `test/scxml_tests/` | `:scxml_w3` | 168 emitted tests (154 mandatory, 14 optional) out of 193 upstream cases | excluded |
 
-`Statifier.Testing.Case.test_scxml/4` needs exactly four things from the library:
-parse, build/initialize, synchronous send-event, and the active leaf-state set. That
-is the whole coupling surface; keep it that way.
+- Generation excludes the rest of the SCION cases. The count and the reason for
+  each case are in `tools/corpus/scion/exclusions.exs`.
+- Generation does not emit a dependency document that an `<invoke>` loads at
+  runtime (manifest `<dep>` entries) as a standalone W3C test.
+- Details: `tools/corpus/README.md`.
+
+`Statifier.Testing.Case.test_scxml/4` needs four things from the library:
+parse, build/initialize, synchronous send-event, and the active leaf-state
+set. These four things are the whole coupling surface. Keep it that way.
 
 ### A fourth, hand-run suite: the ADR judge corpus
 
-`Mix.Statifier.AdrJudge` (`lib/mix/statifier/adr_judge.ex`) judges a branch's diff
-against a registry of ADRs using two real `claude` CLI calls per candidate
-(propose, then an adversarial refute). Nothing in the ordinary suite can tell
-whether a prompt change to that module helped or hurt, so
-`test/mix/statifier/adr_judge_corpus_test.exs` exists as a fourth suite, separate
-from the three above in kind, not just in tag:
+`Mix.Statifier.AdrJudge` (`lib/mix/statifier/adr_judge.ex`) judges the diff of
+a branch against a registry of ADRs. For each candidate it makes two real
+`claude` CLI calls: a proposal, then an adversarial refutation. The ordinary
+suite cannot show whether a prompt change to that module helped or hurt, so
+`test/mix/statifier/adr_judge_corpus_test.exs` exists as a fourth suite. It
+differs from the three above in kind, not only in tag.
 
-- **What it is.** A manifest (`test/fixtures/adr_judge/manifest.exs`) binds each
-  hand-written unified-diff fixture (`test/fixtures/adr_judge/*.diff`) to the
-  judged-ADR key it targets and the verdict it should produce - `:violation` or
-  `:clean` - with at least one of each per registry entry. One generated ExUnit
-  test per manifest row calls `AdrJudge.analyze/2` with
-  `caller: &AdrJudge.call_claude_cli/1` passed explicitly, so it is the one place
-  in the suite that deliberately reaches the real CLI.
-- **Why it is excluded.** Real CLI calls, real spend, and ~15-20 minutes for the
-  full corpus (roughly two model round trips per fixture). Tagged
-  `:adr_judge_corpus` and excluded in `test/test_helper.exs` the same way `:scion`
-  and `:scxml_w3` are. There is a further reason on top: `:test`'s
-  `@default_caller` still raises on a forgotten `opts[:caller]` everywhere else,
-  and this module's own tests keep injecting stubs - only the corpus test module
-  opts into the real caller, visibly, at its own call site.
-- **How to run it.** `mix test --only adr_judge_corpus`. A cheap, caller-free
-  companion, `test/mix/statifier/adr_judge_corpus_shape_test.exs`, runs in the
-  ordinary suite and keeps the corpus from rotting between hand-runs: every
-  manifest file exists, every key is real, every registry entry has both a
-  violating and a clean fixture in every tier it has a row in, every tier is
-  `:blatant` or `:subtle`, every fixture's diff lands in its own scope and
-  not a differing one, and no fixture contains the literal `@tag :skip` (which
-  would trip `Mix.Statifier.GateGuard`'s skip-tag scan, since fixtures live under
-  `test/`).
-- **Tiers.** Every manifest row carries a `:tier`. `:blatant` is a deletion or
-  omission the deterministic guards (`AdrGuard`, `GateGuard`) would also
-  catch or a reviewer would spot on sight; `:subtle` is a violation that
-  preserves the shape of the change it fakes and breaks only its meaning.
-  The recorded scores below are all on the `:blatant` tier - it is the
-  original eight-fixture corpus. Two selection commands run a slice instead
-  of the whole paid corpus: `mix test --only tier:subtle` runs one tier, and
-  `mix test --only fixture:<name>` runs one fixture - useful while wording a
-  new fixture, since it costs one model round trip instead of the whole
-  corpus's.
-- **How to read a failure.** Each corpus test's failure message names which of
-  three things went wrong: a **false negative** (a known-violating fixture
-  produced no surviving finding), a **false positive** (a known-clean fixture
-  produced one anyway), or a **wrong-ADR attribution** (a violation survived
-  under the wrong registry key).
-- **Recorded scores**, `claude-haiku-4-5-20251001` unless noted, 8 fixtures
-  (4 violating, 4 clean) each run:
+**What it is.** A manifest (`test/fixtures/adr_judge/manifest.exs`) binds each
+hand-written unified-diff fixture (`test/fixtures/adr_judge/*.diff`) to two
+things: the judged-ADR key that it targets, and the verdict that it must
+produce (`:violation` or `:clean`).
 
-  | Run | False negatives | False positives | Wall time |
-  |---|---|---|---|
-  | Baseline (2026-08-08, unmodified `refute_prompt/1`) | 4/4 | 0/4 | 357.9s |
-  | Phase 2 (grounded `refute_prompt/1`, hunks shown) | 0/4 | 0/4 | 272.4s |
-  | Phase 4, `claude-sonnet-5` (same grounded prompt) | 0/4 | 0/4 | 91.4s |
+- Each registry entry has at least one fixture of each verdict.
+- Each manifest row generates one ExUnit test.
+- The test calls `AdrJudge.analyze/2` with `caller: &AdrJudge.call_claude_cli/1`
+  passed explicitly. It is the one place in the suite that deliberately uses
+  the real CLI.
 
-  The prompt rework (st-6f7 Phase 2) closed every false negative; Phase 4
-  measured `claude-sonnet-5` against the same corpus and found it equally
-  accurate. With no accuracy difference to decide it, `@default_model` is
-  `claude-sonnet-5` on wall time - 91.4s against haiku's 272.4s here, and 19.6s
-  against 54.4s on a real three-entry `mix adr.judge`. That trades token cost
-  for gate time on a `:merge`-profile-only, opt-in stage. See
-  `Mix.Statifier.AdrJudge`'s moduledoc and
-  `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`'s Phase 4
-  measurement section for the full per-fixture numbers and the decision.
+**Why it is excluded.**
 
-  A `:subtle` tier (fourteen fixtures, seven per-registry-entry pairs) joined
-  the corpus alongside the original eight `:blatant` fixtures
-  (st-2ts, `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`) and was
-  measured on 2026-08-18 under that plan's Decision 2 - three runs per model at
-  seeds 101/202/303, a fixture's verdict being the majority of its three. A
-  sixth ADR-0012 pair landed later (st-xsb1) isolating a payload field stamped
-  from the wrong state from one deliberately read after the mutation, and
-  brought an amendment to ADR-0012's text with it; the partial re-measurement
-  that amendment obliged is the third row below. A seventh ADR-0012 pair
-  landed later still (st-6f7h), separating a wrongly post-mutation `Trace.ExitSet`
-  stamp from a rightly post-mutation `Trace.Done` stamp, both trace calls
-  visible in the same hunk; it was measured on 2026-08-19 (the fourth row
-  below).
+- It makes real CLI calls and costs real money.
+- The full corpus takes about 15-20 minutes (about two model round trips per
+  fixture).
+- The tag is `:adr_judge_corpus`. `test/test_helper.exs` excludes it as it
+  does `:scion` and `:scxml_w3`.
+- The `@default_caller` of `:test` still raises on a missing `opts[:caller]`
+  everywhere else. The tests of this module keep injecting stubs. Only the
+  corpus test module uses the real caller, at its own call site.
 
-  | Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
-  |---|---|---|---|---|---|
-  | subtle | `claude-sonnet-5` | 3/5 | 0/5 | 3/10 | 145.7s |
-  | subtle | `claude-haiku-4-5-20251001` | 1/5 | 0/5 | 3/10 | 890.6s |
-  | ADR-0012 subtle only, 6 rows (partial, st-xsb1) | `claude-sonnet-5` | 1/3 | 0/3 | 0/6 | 21.5s |
-  | ADR-0012 subtle, 2 new rows, first measurement (st-6f7h) | `claude-sonnet-5` | 1/2 | 0/2 | 0/2 | 17.9s |
+**How to run it.**
 
-  The third row is a **partial re-measurement and supersedes nothing**. The two
-  rows above it were measured over the whole ten-fixture tier on two models and
-  still stand; the st-xsb1 row covers only the six ADR-0012 rows on one model,
-  bought because amending ADR-0012's text invalidated the prior ADR-0012 numbers
-  without saying which way. It moved two violation rows from false negative to
-  caught - including the one st-ntf5 hand-measured as a false negative against
-  the unamended rubric - and introduced no false positive on either clean row.
-  `0012_location_precision_one_caller.diff` remains missed, as it was before the
-  amendment; the plan's Phase 5 holds the per-fixture matrix and the reason that
-  row indicts the ADR's wording rather than the judge.
+- `mix test --only adr_judge_corpus` runs the paid corpus.
+- `mix test --only tier:subtle` runs one tier.
+- `mix test --only fixture:<name>` runs one fixture. Use it while you word a
+  new fixture. It costs one model round trip, not the whole corpus.
+- `test/mix/statifier/adr_judge_corpus_shape_test.exs` needs no caller. It runs
+  in the ordinary suite and keeps the corpus from decaying between hand-runs.
+  It checks these conditions:
+  - Every manifest file exists.
+  - Every key is real.
+  - Every registry entry has a violating fixture and a clean fixture in every
+    tier where it has a row.
+  - Every tier is `:blatant` or `:subtle`.
+  - The diff of every fixture lands in its own scope and not in another one.
+  - No fixture contains the literal `@tag :skip`. That text would trigger the
+    skip-tag scan of `Mix.Statifier.GateGuard`, because fixtures live under
+    `test/`.
 
-  The fourth row is a **first measurement of two new rows and supersedes
-  nothing**; it is not a re-measurement of anything above it, and the three
-  rows above it were measured over wider tiers (ten- and six-fixture slices)
-  than this two-fixture pair. It covers the site-B `exit_interpreter/1` pair
-  st-6f7h Phase 1 added, on `claude-sonnet-5` only: the violation row
-  (`0012_exit_sweep_stamp_swapped_beside_done.diff`) missed unanimously across
-  seeds 101/202/303 (one cell uncaptured - a real miss whose assertion text
-  was not recorded), and the clean row
-  (`0012_done_trace_stamped_post_sweep.diff`) was acquitted unanimously. That
-  is the inverse of what the plan predicted: it expected the clean row, not
-  the violation row, to be the likely miss. The judge's propose step returned
-  no candidate at all on the violation row, so the miss is a failure to
-  propose rather than a refute-pass over-rejection. The full matrix, the
-  provenance note, and the open question of whether content, hunk width, or
-  production site explains the miss are in
-  `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md`'s Phase 5 subsection
-  and `docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md`.
+**Tiers.** Every manifest row has a `:tier`.
 
-  Two things follow, and the plan's Phase 5 holds the per-fixture matrices
-  behind both. First, the subtle tier separates the two models where the
-  blatant tier does not, which is what the tier was added for. Second, it
-  separates them **against** the current `@default_model`: haiku is the more
-  accurate of the two here, at roughly six times the wall time, so the
-  accuracy tie the `claude-sonnet-5` default was chosen under no longer holds.
-  The attribute is deliberately left where it is; the recommendation to
-  reconsider it is recorded in that plan's findings, and
-  `STATIFIER_ADR_JUDGE_MODEL` overrides it either way.
+- `:blatant`: a deletion or omission that the deterministic guards (`AdrGuard`,
+  `GateGuard`) would also catch, or that a reviewer would see at once.
+- `:subtle`: a violation that keeps the shape of the change it fakes and
+  breaks only its meaning.
 
-  Read the blatant-tier rows above as single-run observations rather than a
-  reproducible floor: the 2026-08-18 control runs (one per model, seed 101)
-  each produced one false positive on a known-clean fixture - sonnet on
-  `0015_mechanics_only.diff`, haiku on `0014_span_preserving_refactor.diff` -
-  where the recorded baseline is 0/4. Neither run re-measured the tier under
-  the majority-of-three policy, which is what re-recording that table would
-  take.
+**How to read a failure.** The failure message names one of three problems:
+
+- A false negative: a known-violating fixture produced no surviving finding.
+- A false positive: a known-clean fixture produced a finding.
+- A wrong-ADR attribution: a violation survived under the wrong registry key.
+
+**Recorded scores.** All scores in the first table are on the `:blatant` tier
+(the original eight fixtures: 4 violating, 4 clean). Model:
+`claude-haiku-4-5-20251001` unless noted.
+
+| Run | False negatives | False positives | Wall time |
+|---|---|---|---|
+| Baseline (2026-08-08, unmodified `refute_prompt/1`) | 4/4 | 0/4 | 357.9s |
+| Phase 2 (grounded `refute_prompt/1`, hunks shown) | 0/4 | 0/4 | 272.4s |
+| Phase 4, `claude-sonnet-5` (same grounded prompt) | 0/4 | 0/4 | 91.4s |
+
+The prompt rework (st-6f7 Phase 2) closed every false negative. Accuracy is
+equal on both models. `@default_model` is `claude-sonnet-5` because of wall
+time: 91.4s against 272.4s here, and 19.6s against 54.4s on a real
+three-entry `mix adr.judge`. This trades token cost for gate time on a stage
+that is opt-in and runs only in the `:merge` profile.
+`STATIFIER_ADR_JUDGE_MODEL` overrides the default.
+
+Sources: `Mix.Statifier.AdrJudge` moduledoc and the Phase 4 measurement
+section of `docs/plans/260808-st-6f7-adr-judge-refute-grounding.md`.
+
+The `:subtle` tier has fourteen fixtures (seven per-registry-entry pairs). It
+was measured on 2026-08-18 with three runs per model at seeds 101/202/303. The
+verdict of a fixture is the majority of its three runs.
+
+| Tier | Model | False negatives | False positives | Flaps | Wall (mean) |
+|---|---|---|---|---|---|
+| subtle | `claude-sonnet-5` | 3/5 | 0/5 | 3/10 | 145.7s |
+| subtle | `claude-haiku-4-5-20251001` | 1/5 | 0/5 | 3/10 | 890.6s |
+| ADR-0012 subtle only, 6 rows (partial, st-xsb1) | `claude-sonnet-5` | 1/3 | 0/3 | 0/6 | 21.5s |
+| ADR-0012 subtle, 2 new rows, first measurement (st-6f7h) | `claude-sonnet-5` | 1/2 | 0/2 | 0/2 | 17.9s |
+
+How to read rows three and four. Neither replaces a row above it.
+
+- **Row 3 (st-xsb1).** A partial re-measurement of the six ADR-0012 rows on one
+  model. An amendment to the text of ADR-0012 invalidated the earlier ADR-0012
+  numbers. The amendment moved two violation rows from false negative to
+  caught. It caused no false positive on either clean row.
+  `0012_location_precision_one_caller.diff` is still missed. Phase 5 of
+  `docs/plans/260818-st-2ts-adr-judge-harder-fixtures.md` has the per-fixture
+  matrix. It also shows that this row points to the wording of the ADR, not to
+  the judge.
+- **Row 4 (st-6f7h).** A first measurement of the site-B `exit_interpreter/1`
+  pair, on `claude-sonnet-5` only. It covers a two-fixture slice, so it
+  re-measures nothing above it.
+  - The judge missed the violation row
+    (`0012_exit_sweep_stamp_swapped_beside_done.diff`) in all runs across seeds
+    101/202/303. The propose step returned no candidate, so the miss is a
+    failure to propose, not an over-rejection by the refute pass. One cell was
+    a real miss whose assertion text was not recorded.
+  - The judge acquitted the clean row (`0012_done_trace_stamped_post_sweep.diff`)
+    in all runs.
+  - Open question: does content, hunk width, or production site explain the
+    miss?
+  - Matrix and provenance: Phase 5 of the st-2ts plan above and
+    `docs/plans/260819-st-6f7h-interpreter-exitset-trace-coverage.md`.
+
+**What the scores mean.**
+
+- The subtle tier separates the two models where the blatant tier does not.
+  This is the reason the tier exists.
+- It separates them against the current `@default_model`. Haiku is the more
+  accurate model here, at about six times the wall time. The accuracy tie that
+  justified the `claude-sonnet-5` default no longer holds. The attribute stays
+  unchanged on purpose. The findings of the st-2ts plan recommend that you
+  reconsider it.
+- Read the blatant-tier rows as single-run observations, not as a reproducible
+  floor. In the control runs of 2026-08-18 (one per model, seed 101), each
+  model produced one false positive on a known-clean fixture: sonnet on
+  `0015_mechanics_only.diff`, haiku on `0014_span_preserving_refactor.diff`.
+  The recorded baseline is 0/4. Neither run used the majority-of-three policy.
+  To re-record that table, re-measure under that policy.
 
 ## Sabotage testing
 
-A test that passes on its first run has proven nothing yet. It might be asserting
-real behavior, or it might be asserting a tautology, exercising a branch its setup
-never reaches, or checking a variable the code never touches. The only way to tell
-the two apart is to break the code and watch what happens.
+A test that passes on its first run proves nothing yet. It can assert real
+behavior. It can also assert a tautology, run a branch that its setup never
+reaches, or check a variable that the code never touches. To tell these apart,
+break the code and watch what happens.
 
-So every new or changed test that asserts `lib/` behavior gets sabotaged before it
-is considered done:
+Every new or changed test that asserts `lib/` behavior must pass a sabotage
+check before you consider it done:
 
 1. Get the test green.
-2. Break the implementation it covers - one edit, in `lib/`, in the code path the
-   test claims to cover.
-3. Run the test. It must fail, and the failure must be about the thing the test is
-   for.
-4. Revert the sabotage; confirm green again.
+2. Break the implementation that the test covers. Make one edit, in `lib/`, in
+   the code path that the test claims to cover.
+3. Run the test. It must fail, and the failure must be about the thing that the
+   test is for.
+4. Revert the sabotage. Confirm that the test is green again.
 5. Record the mutation in a one-line comment directly above the test.
 
-The comment is the artifact. Without it, the next reader cannot tell a test that was
-verified from one that merely passed:
+The comment is the record. Without it, the next reader cannot tell a verified
+test from a test that only passed:
 
 ```elixir
 # sabotage: enter_states/2 skips the initial child -> red
@@ -187,31 +193,38 @@ test "compound state enters its initial descendant" do
 end
 ```
 
-Format: `# sabotage: <what was broken> -> red`. One line, present tense, naming the
-function and the mutation. It sits above the `test` line, above any `@tag`.
+Format: `# sabotage: <what was broken> -> red`. Use one line in the present
+tense. Name the function and the mutation. Put the line above the `test` line
+and above any `@tag`.
 
-**What counts as a valid mutation.** It has to be a change a reasonable person could
-make by mistake: invert a condition, drop a clause, skip a recursive call, return the
-input unchanged, use the wrong set operation, off-by-one a boundary. Deleting the
-function body or raising is not sabotage - everything fails, so nothing is learned.
-A mutation also has to actually fire: the note must name a change that demonstrably
-alters behavior for the case under test, not one that type-checks against the code
-but leaves every value it touches unchanged.
+**A valid mutation.** It must be a change that a reasonable person could make
+by mistake.
 
-**The truthy-sentinel trap.** `||` is the most common way to write a mutation that
-never fires. Elixir's `||` falls back to its right side only when the left side is
-`nil` or `false` - every other value, including `:undefined`, `:none`, `0`, and `""`,
-is truthy and short-circuits the fallback. A note that proposes `x || fallback`
-against a value that is one of these sentinels is a no-op: the mutated line runs,
-produces the exact same value as before, and the suite stays green - not because the
-test verified anything, but because nothing changed. That result is indistinguishable
-after the fact from a note whose mutation genuinely ran and was reverted, which is
-exactly the failure this section exists to prevent, and `mix quality`'s sabotage scan
-cannot catch it: the scan only checks that a `# sabotage:` note exists above the test,
-never that the mutation it names would actually change the value under test.
+- Good examples: invert a condition, drop a clause, skip a recursive call,
+  return the input unchanged, use the wrong set operation, change a boundary
+  by one.
+- Not sabotage: deleting the function body, or raising. Everything fails, so
+  you learn nothing.
+- The mutation must also fire. The note must name a change that alters
+  behavior for the case under test. A change that type-checks but leaves every
+  value it touches unchanged does not fire.
 
-A real case: a note claimed to break `resolve_params/2` by defaulting its params with
-`params || %{}`, where the incoming `params` was `:undefined`.
+**The truthy-sentinel trap.** The `||` operator is the most common cause of a
+mutation that never fires. In Elixir, `||` uses its right side only when the
+left side is `nil` or `false`. Every other value is truthy and skips the
+fallback. This includes `:undefined`, `:none`, `0`, and `""`.
+
+Assume a note that proposes `x || fallback` against one of these sentinel
+values. The mutated line runs and produces the same value as before, and the
+suite stays green. This green result does not mean that the test verified
+anything. You cannot tell it from a note whose mutation ran and was reverted.
+
+The sabotage scan of `mix quality` cannot catch this. It checks only that a
+`# sabotage:` note exists above the test. It does not check that the mutation
+would change the value under test.
+
+A real case: a note claimed to break `resolve_params/2` by defaulting its
+params with `params || %{}`, where the incoming `params` was `:undefined`.
 
 ```elixir
 # does NOT fire - :undefined is truthy, `||` never reaches the fallback
@@ -221,155 +234,161 @@ params || %{}
 if params == :undefined, do: %{}, else: params
 ```
 
-Before writing a `||`-shaped mutation, check what the left side actually is for the
-case under test. If it can be a truthy sentinel, use an explicit `if` or pattern match
-that maps the sentinel to the fallback instead.
+Before you write a mutation with `||`, check what the left side is for the
+case under test. If it can be a truthy sentinel, use an explicit `if` or a
+pattern match that maps the sentinel to the fallback.
 
-**Two failures worth catching.** If the test stays green, it is not testing what its
-name says; fix the test, do not weaken the sabotage. If a single mutation reddens
-twenty tests, they are all asserting one thing through twenty doors - note it and
-consider whether the coverage is as broad as it looks.
+**Two failures to catch.**
 
-**Exempt.** Generated corpus files (`test/scion_tests/`, `test/scxml_tests/`) are
-machine-emitted and carry no notes; the corpus is sabotage-proof by construction,
-since a broken interpreter shows up as a failing conformance test immediately.
-Harness plumbing that asserts no `lib/` behavior - helper round-trips, the tag table
-in `feature_detector_test.exs`, fixture loaders - is exempt too, but the exemption is
-stated, not silent. A test covering `Statifier.Testing.*` asserts `lib/` behavior and
-is **not** exempt, no matter that it reads like harness plumbing:
+- If the test stays green, it does not test what its name says. Fix the test.
+  Do not weaken the sabotage.
+- If one mutation turns twenty tests red, they all assert one thing through
+  twenty doors. Note this, and check whether the coverage is as broad as it
+  looks.
+
+**Exempt.** Generated corpus files (`test/scion_tests/`, `test/scxml_tests/`)
+are machine-emitted and carry no notes. A broken interpreter shows up at once
+as a failing conformance test. Harness plumbing that asserts no `lib/`
+behavior is also exempt. Examples are helper round-trips, the tag table in
+`feature_detector_test.exs`, and fixture loaders. State the exemption in the
+file:
 
 ```elixir
 # sabotage: n/a - asserts the sample table matches the registry, no lib/ behavior
 ```
 
-**Stale beam after revert.** If step 4's "confirm green again" comes back red on a
-tree with correct source and a clean `git status`, do not read it as a failed
-revert. `mix`'s staleness check is mtime-based, so a mutate -> compile -> revert
-cycle that finishes inside one second can leave the *mutated* beam loaded instead
-of recompiling. Left uninvestigated, every later mutation in the session gets
-judged against that stale module, and its reds prove nothing. Run
-`MIX_ENV=test mix compile --force` after the mutation and again after the
-revert; treat a red that survives a forced recompile on clean source as the real
-signal.
+A test that covers `Statifier.Testing.*` asserts `lib/` behavior and is not
+exempt, even if it looks like harness plumbing.
 
-**Cost.** This makes writing a test meaningfully slower, and that is the trade being
-made deliberately: the conformance corpus tells us whether the engine is right, and
-the internal suite only earns its keep if each test can fail. Spending a minute per
-test to know which ones can is cheaper than discovering a vacuous suite after it has
-been trusted for a year.
+**Stale beam after revert.** In step 4, "confirm green again" can come back red
+on a tree with correct source and a clean `git status`. This is not a failed
+revert. The staleness check of `mix` uses file modification times. If a
+mutate, compile, revert cycle finishes within one second, `mix` can keep the
+*mutated* beam loaded and not recompile. Every later mutation in the session
+is then judged against that stale module, and its red results prove nothing.
+
+Run `MIX_ENV=test mix compile --force` after the mutation and again after the
+revert. A red result that survives a forced recompile on clean source is the
+real signal.
+
+**Cost.** Sabotage makes writing a test much slower, on purpose. The internal
+suite is worth its cost only if each test can fail. One minute per test to
+learn which tests can fail is cheaper than finding a vacuous suite after a
+year of trust.
 
 ## The regression ratchet
 
-- `test/passing_tests.json` - the registry of tests that must always pass. Four
-  lists (`internal_tests`, `scion_tests`, `w3c_tests`, `statifier_tests`), whose
-  entries are literal paths or globs. The internal list is globbed, so unit tests are
-  covered the moment they are written; the conformance lists start empty and are
-  grown one verified test at a time. A `statifier_tests` entry is an authored
-  conformance case's JSON file under `conformance/cases/`: the case has no test
-  module, so both tasks below run it through `Mix.Statifier.Corpus.Runner`, as
-  `mix statifier.corpus` runs it, instead of `mix test`.
-- `mix test.regression` - runs exactly what the registry expands to, including the
-  tags the excluded-by-default suites need. Any failure is a blocking regression, and
-  an entry that matches no file on disk fails the run too: silently dropping a deleted
-  entry would shrink the ratchet, which is the one thing it exists to prevent. Wired
-  into `mix quality` as the `Regression ratchet` custom stage (`.quality.exs`), absent
-  from the `:loop` profile so a regression is a named failure on a bare `mix quality`
-  rather than a buried test count.
-- `mix test.baseline` - runs every conformance test the registry does not track yet,
-  one file at a time, and reports which now pass. `--add` ratchets those in;
-  `mix test.baseline add <files>` verifies specific files and is all-or-nothing.
-  Nothing enters the registry without passing first.
+- `test/passing_tests.json` - the registry of tests that must always pass.
+  - It has four lists: `internal_tests`, `scion_tests`, `w3c_tests`,
+    `statifier_tests`. Entries are literal paths or globs.
+  - The internal list uses globs, so unit tests are covered when you write
+    them. The conformance lists start empty, and you add one verified test at
+    a time.
+  - A `statifier_tests` entry is the JSON file of an authored conformance case
+    under `conformance/cases/`. The case has no test module. Both tasks below
+    run it through `Mix.Statifier.Corpus.Runner`, as `mix statifier.corpus`
+    does, not through `mix test`.
+- `mix test.regression` - runs exactly what the registry expands to, including
+  the tags that the excluded-by-default suites need.
+  - Any failure is a blocking regression.
+  - An entry that matches no file on disk also fails the run. A silent drop
+    would shrink the ratchet, and the ratchet exists to prevent that.
+  - It is part of `mix quality` as the `Regression ratchet` custom stage
+    (`.quality.exs`). The `:loop` profile does not include it. A regression is
+    therefore a named failure on a bare `mix quality`.
+- `mix test.baseline` - runs every conformance test that the registry does not
+  track yet, one file at a time, and reports which tests now pass.
+  - `--add` adds those tests to the ratchet.
+  - `mix test.baseline add <files>` verifies specific files and is
+    all-or-nothing. No test enters the registry before it passes.
+
+The ratchet only moves forward. A feature PR that makes tests pass adds them in
+the same PR. A test that passed before and fails now is a regression. Fix it.
+Never delete its line.
+
+Both tasks are thin wrappers over `Mix.Statifier.RegressionRegistry`. That
+module holds the load, expand, categorize, and add logic. It writes the JSON
+back with sorted keys and one entry per line, so adding a test to the ratchet
+is a one-line diff.
 
 ### Per-corpus coverage figures
 
-Both tasks report per-corpus coverage - SCION, W3C and the authored `statifier`
-cases separately, passing/total and a percentage - but each uses a different
-numerator. `mix test.baseline`'s
-figure is the measured one: ratcheted tests plus every newly-passing candidate
-found in that scan. `mix test.regression`'s figure is the floor: ratcheted
-tests only, since that task never runs a file outside the registry. Both are
-computed by `Mix.Statifier.RegressionRegistry.corpus_stats/3`.
+Both tasks report coverage per corpus (SCION, W3C, and the authored
+`statifier` cases) as passing/total and a percentage. Each task uses a
+different numerator:
 
-These figures print when the tasks are run directly - `mix test.baseline` or
-`mix test.regression` from the shell - not in `mix quality`'s stage summary.
-The `Regression ratchet` stage shells out to `mix test.regression` and reports
-only pass/fail for the stage as a whole; a passing command stage renders as
-one line in the gate's output regardless of what the underlying command
-printed. Surfacing the figures there would need a JSON summary mode for the
-task plus a guarded `.quality.exs` edit with its own ledger entry (see the
-"Which skipped stages" discipline in `CLAUDE.md`) - both out of scope here.
+- `mix test.baseline` reports the measured figure: the ratcheted tests plus
+  every newly passing candidate found in that scan.
+- `mix test.regression` reports the floor: the ratcheted tests only, because
+  it never runs a file outside the registry.
 
-The denominator behind both figures is the emitted corpus: 119 SCION and 168
-W3C files on disk today (`test/scion_tests/`, `test/scxml_tests/` - the W3C
-figure is 154 `mandatory/` plus 14 `optional/`), not the upstream suites (127
-native SCION cases, 193 W3C cases). The emitted count is
-the only one 100% is reachable against - some upstream cases have no
-predicator equivalent and are excluded at generation time (script tags, list
-concatenation, an `<invoke src>` the library never dereferences, and more), so no build
-of this engine could ever pass every upstream case under the predicator
-datamodel commitment (docs/datamodel.md). `tools/corpus/README.md` documents
-the exclusion counts and reasons; a future edit to those exclusions changes
-what these tasks read as the denominator.
+`Mix.Statifier.RegressionRegistry.corpus_stats/3` computes both.
 
-Both tasks are thin wrappers over `Mix.Statifier.RegressionRegistry`, which holds the
-load/expand/categorize/add logic and writes the JSON back with sorted keys and one
-entry per line, so ratcheting a test in is a one-line diff.
+**Where the figures print.** They print when you run the tasks directly from
+the shell. They do not print in the stage summary of `mix quality`. The
+`Regression ratchet` stage reports only pass or fail, and a passing command
+stage renders as one line whatever the command printed. To show the figures
+there, the project would need a JSON summary mode for the task and a guarded
+`.quality.exs` edit with its own ledger entry (see the "Which skipped stages"
+discipline in `CLAUDE.md`). Both are out of scope.
 
-The ratchet only moves forward. A feature PR that makes tests pass adds them in the
-same PR; a test that used to pass and now does not is a regression to fix, never a
-line to delete.
+**The denominator.** It is the emitted corpus: 119 SCION files and 168 W3C
+files on disk today. The W3C figure is 154 `mandatory/` files plus 14
+`optional/` files. It is not the upstream suites (127 native SCION cases, 193
+W3C cases). Only the emitted count can reach 100%.
 
-v2 starts from zero because it has no engine yet. v1's final baseline - **90/127
-SCION, 27/59 W3C** - is the reference target to beat, not a seed to copy in. Both
-denominators there are v1's own *emitted* corpus (`../statifier/test/scion_tests`
-holds 127 `_test.exs` files, `../statifier/test/scxml_tests` holds 59), the same
-kind of figure this section describes above, not the upstream suite sizes - so
-the comparison to v2's figures is like-for-like, emitted corpus against emitted
-corpus.
+- Some upstream cases have no predicator equivalent, and generation excludes
+  them. Examples are script tags, list concatenation, and an `<invoke src>`
+  that the library never dereferences.
+- No build of this engine can pass every upstream case under the predicator
+  datamodel commitment ([datamodel.md](datamodel.md)).
+- `tools/corpus/README.md` documents the exclusion counts and reasons. A future
+  edit to those exclusions changes the denominator.
 
 ### Scratch directories in tests
 
 `mix quality` runs the `Regression ratchet` (`mix test.regression`) and the
-built-in `Tests` stage concurrently, in the same working directory, and
-`test/passing_tests.json`'s globs mean both stages execute largely the same
-modules. ExUnit's `@tag :tmp_dir` hardcodes its scratch root to `tmp/`
-relative to the process's cwd with no way to configure it, so two concurrent
-runs of the same test compute byte-identical paths and race on
-`rm_rf!`/`mkdir_p!`.
+built-in `Tests` stage concurrently, in the same working directory. The globs
+in `test/passing_tests.json` make both stages run mostly the same modules. The
+`@tag :tmp_dir` of ExUnit fixes its scratch root to `tmp/` relative to the cwd
+of the process, and you cannot configure it. Two concurrent runs of the same
+test compute identical paths and race on `rm_rf!`/`mkdir_p!`.
 
-Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead - same `tmp_dir`
-context key, same directory shape, but `root/0` always ends in a
+**Use `@tag :isolated_tmp_dir` (`Statifier.TmpDir`) instead.** It has the same
+`tmp_dir` context key and the same directory shape. `root/0` always ends in a
 `System.pid()` segment, so two concurrent OS processes cannot resolve to the
-same scratch path even if they somehow agree on everything else
-(`test/statifier/tmp_dir_test.exs` itself used to do exactly that, mutating
-`STATIFIER_TMP_ROOT` process-globally mid-run). `STATIFIER_TMP_ROOT` (default
-`"tmp"`) still exists, but only to choose where a run's pid-scoped tree lives
-for readability - `mix test.regression` sets it to `tmp/regression` so the
-ratchet's directories are easy to pick out by eye, not because isolation
-depends on it. ExUnit's own `@tag :tmp_dir` / `@describetag :tmp_dir` is
-banned repo-wide; `test/statifier/tmp_dir_test.exs` enforces it by scanning
-`test/**/*.exs` and failing with the offending file names.
+same scratch path.
 
-Directories accumulate: each OS process leaves its own `tmp/<root>/<pid>/`
-subtree behind rather than being swept, so a failure stays inspectable and no
-`setup` callback risks deleting a tree a concurrent run is still using. Clear
-`tmp/` by hand between sessions if that bothers you.
+- `STATIFIER_TMP_ROOT` (default `"tmp"`) only chooses where the pid-scoped tree
+  of a run lives, for readability. `mix test.regression` sets it to
+  `tmp/regression`. Isolation does not depend on it.
+- The repo bans the `@tag :tmp_dir` and `@describetag :tmp_dir` of ExUnit.
+  `test/statifier/tmp_dir_test.exs` enforces the ban. It scans
+  `test/**/*.exs` and fails with the names of the offending files.
+
+Directories accumulate. Each OS process leaves its own `tmp/<root>/<pid>/`
+subtree and nothing sweeps it. A failure stays inspectable, and no `setup`
+callback can delete a tree that a concurrent run still uses. Clear `tmp/` by
+hand between sessions if the accumulation is a problem.
 
 ## Corpus generation
 
-v1's corpus was a frozen artifact - machine-converted test files with no committed
-generator. v2 keeps the generator in-repo under `tools/corpus/`, seeded from
-ex_statechart's Makefile + `cases.exs` scripts (which already do the bulk of the
-work: cloning the SCION scxml-test-framework, fetching W3C TXML and transforming via
-saxon, and emitting test files from the JSON case descriptions).
+The generator lives in the repo under `tools/corpus/`. It starts from the
+Makefile and `cases.exs` scripts of ex_statechart. These scripts clone the
+SCION scxml-test-framework, fetch W3C TXML and transform it with saxon, and
+emit test files from the JSON case descriptions.
 
-`mise run corpus` is the single entrypoint for regeneration; the stages behind it
-and the scratch layout are documented in `tools/corpus/README.md`. Upstream
-downloads land in the gitignored `tools/corpus/scratch/`. What is committed is
-what the pipeline derives from them: the language-neutral corpus under
-`conformance/` (ADR-0070), which holds the upstream documents under the
-licences in `conformance/LICENSES/`, and the generated test modules. The corpus
-is the source the generators read:
+`mise run corpus` is the single entrypoint for regeneration. The stages behind
+it and the scratch layout are in `tools/corpus/README.md`. Upstream downloads
+go to the gitignored `tools/corpus/scratch/`. The repo commits what the
+pipeline derives from them:
+
+- The language-neutral corpus under `conformance/`. It holds the upstream
+  documents under the licences in `conformance/LICENSES/`.
+  Decision: ADR-0070.
+- The generated test modules.
+
+The generators read the corpus as their source:
 
     upstream corpora (SCION json/scxml, W3C txml)
       -> tools/corpus fetch + transform (gitignored scratch/)
@@ -379,52 +398,63 @@ is the source the generators read:
       -> checked in (conformance/ and the generated modules are committed;
          regeneration is a diffable PR)
 
-The full gate keeps the committed pieces in step without the upstream tree.
-Its `Conformance corpus` stage runs `mix statifier.corpus --check`, which fails
-when a committed corpus file, the manifest, the exclusions or the registry
-differs from what `mix statifier.corpus` writes from the committed inputs, and
-when `conformance/corpus/` is absent or empty. `test/corpus/corpus_files_test.exs`
-fails when a committed generated module differs from what its generator writes
-from the corpus, so a hand edit of either is a red gate.
+The full gate keeps the committed pieces consistent without the upstream tree.
+Its `Conformance corpus` stage runs `mix statifier.corpus --check`. This
+command fails in two cases:
 
-Unsupported-feature tests **fail, not skip** (v1's FeatureDetector rule, kept): a
-test that depends on an unsupported feature flunks with the feature named, so it can
-never masquerade as passing. Feature detection lives in `lib/` under
-`Statifier.Testing`, where it is test-side surface for chart authors rather than
-engine (ADR-0053, amending ADR-0006). The load-bearing half of the old rule is
-kept in namespace terms: **no module in `lib/` outside `Statifier.Testing.*` may
-reference anything inside it.** The engine's semantics come from the Appendix D
-port (ADR-0002); an unsupported feature surfaces as a real error or a real
-conformance failure, never as a detection-gated branch.
+- A committed corpus file, the manifest, the exclusions, or the registry
+  differs from what `mix statifier.corpus` writes from the committed inputs.
+- `conformance/corpus/` is absent or empty.
 
-The W3C corpus also has a recorded exclusion set: tests whose `.txml` templates
-have no predicator equivalent (ADR-0004), listed with a reason atom in
-`tools/corpus/scxml_w3/exclusions.exs`. That file is the source of truth; this
-paragraph does not duplicate its entries.
+`test/corpus/corpus_files_test.exs` fails when a committed generated module
+differs from what its generator writes from the corpus. A hand edit of either
+makes the gate red.
 
-The SCION corpus has its own recorded exclusion set for the same reason
-(ADR-0004), plus SCION's own untransformed duplicate of the W3C IRP suite,
-listed with a reason atom in `tools/corpus/scion/exclusions.exs`. That file
-is the source of truth; this paragraph does not duplicate its entries.
+**Unsupported features fail, not skip.** A test that depends on an unsupported
+feature calls `flunk` and names the feature, so it can never look like a pass.
+
+- Feature detection lives in `lib/` under `Statifier.Testing`. It is test-side
+  surface for chart authors, not engine.
+- No module in `lib/` outside `Statifier.Testing.*` may reference anything
+  inside it.
+- Engine semantics come from the Appendix D port. An unsupported feature
+  appears as a real error or a real conformance failure. It never appears as a
+  branch that detection gates.
+
+Decision: ADR-0053 (amends ADR-0006), ADR-0002.
+
+**Exclusion sets.** Each set is the source of truth. Do not copy its entries
+into prose.
+
+- W3C: the tests whose `.txml` templates have no predicator equivalent, each
+  with a reason atom, in `tools/corpus/scxml_w3/exclusions.exs`.
+- SCION: tests excluded for the same reason, plus the untransformed duplicate
+  of the W3C IRP suite in SCION, each with a reason atom, in
+  `tools/corpus/scion/exclusions.exs`.
+
+Decision: ADR-0004.
 
 ## Quality gate
 
-- `mix quality --profile loop` - inner loop: format, compile, credo, changed-scope
-  tests. Use between edits.
-- `mix quality` - full gate: adds dialyzer, deps audit, full suite with coverage,
-  regression stage, conformance corpus stage. Required green before commit;
-  enforced in CI.
-- Coverage: the gate fails below **90%** (`coveralls.json`); 95%+ is the target to
-  aim at. Raising the floor as the suite grows is a decision for a human, and
-  lowering it is not a way to go green.
-- Coverage measures `lib/` only, which now includes `Statifier.Testing` -
+- `mix quality --profile loop` - inner loop: format, compile, credo, and
+  changed-scope tests. Use it between edits.
+- `mix quality` - full gate. It adds dialyzer, deps audit, the full suite with
+  coverage, the regression stage, and the conformance corpus stage. It must be
+  green before commit. CI enforces it.
+- Coverage: the gate fails below **90%** (`coveralls.json`). The target is 95%
+  or more. Raising the floor as the suite grows is a decision for a human.
+  Lowering it is not a way to get a green gate.
+- Coverage measures `lib/` only. This includes `Statifier.Testing`:
   `Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector` count toward
-  the floor like any other library module (ADR-0053). `coveralls.json` still
-  skips `test/support/`, which now holds only the two compatibility shims
-  (`Statifier.Case`, `Statifier.FeatureDetector`) and five private harness
-  modules (`ContextRecorder`, `TestContent`, `StreamOrder`, `TmpDir`,
-  `Mix.Statifier.AdrJudgeCorpus`) that stay out of `lib/` on their own merits
-  (ADR-0053 decision 4). The harness is still tested directly
-  (`feature_detector_test.exs`, `case_test.exs`) - it is just not what the floor
-  is set for, and counting `test/support/` would let its own line count move a
-  number that exists to describe the engine.
+  the floor like any other library module.
+- `coveralls.json` skips `test/support/`. That directory holds two
+  compatibility shims (`Statifier.Case`, `Statifier.FeatureDetector`) and five
+  private harness modules (`ContextRecorder`, `TestContent`, `StreamOrder`,
+  `TmpDir`, `Mix.Statifier.AdrJudgeCorpus`). They stay out of `lib/` for their
+  own reasons. Tests still cover the harness directly
+  (`feature_detector_test.exs`, `case_test.exs`). If `test/support/` counted,
+  its own line count could move a number that exists to describe the engine.
+
+Decision: ADR-0053 decision 4.
+
+Next: run `mix quality --profile loop` between edits.

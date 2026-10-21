@@ -1,20 +1,28 @@
 # How to test your own charts
 
-This is a guide for a chart author outside this repository - someone who
-depends on `statifier` and wants to test the SCXML documents their own
-application drives. It does not re-explain the interpreter's architecture;
-see `docs/architecture.md` for that. It shows you how to write a declarative
-chart test the same way this engine tests itself.
+**Read this to:** write a declarative test for an SCXML document that your
+application drives.
+**Short version:** `use Statifier.Testing.Case`, then call `test_scxml/4` with a
+document, an initial configuration, and `{event, expected configuration}`
+steps.
+
+This guide is for a chart author outside this repository. You depend on
+`statifier` and you want to test the SCXML documents that your application
+drives. It shows you how to write a chart test in the same way this engine
+tests itself. For the interpreter's design, see `docs/architecture.md`.
 
 ## What this gives you
 
-`Statifier.Testing.Case` is the test case template that drives every SCION and
-W3C conformance test in this repository: an expected initial configuration,
-then a list of `{event, expected configuration}` steps. `Statifier.Testing.FeatureDetector` is
-what keeps a document that uses an SCXML feature the engine does not support
-from silently passing. Both are public API, versioned with the engine
-(ADR-0053), so you get the same runner without copying any file out of this
-repository.
+- `Statifier.Testing.Case` is the test case template that drives every SCION
+  and W3C conformance test in this repository. A test gives an expected initial
+  configuration, then a list of `{event, expected configuration}` steps.
+- `Statifier.Testing.FeatureDetector` stops a document from passing silently
+  when it uses an SCXML feature that the engine does not support.
+
+Both modules are public API, versioned with the engine. You get the same runner
+without a copy of any file from this repository.
+
+Decision: [ADR-0053](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0053-chart-test-helpers-ship-in-lib-under-statifier-testing.md).
 
 ## Add the dependency
 
@@ -22,11 +30,11 @@ repository.
 {:statifier, "~> 2.0"}
 ```
 
-No `only: :test` companion dependency is needed. `Statifier.Testing.Case` and
-`Statifier.Testing.FeatureDetector` ship in `lib/`, the same shape as
-`Plug.Test` and `Phoenix.ConnTest` in their own ecosystems, and ExUnit ships
-with Elixir itself. The two modules compile in every environment, including
-`:prod` - they simply go unused there.
+You do not need an `only: :test` companion dependency.
+`Statifier.Testing.Case` and `Statifier.Testing.FeatureDetector` ship in
+`lib/`, in the same way as `Plug.Test` and `Phoenix.ConnTest` in their own
+ecosystems. ExUnit ships with Elixir itself. The two modules compile in every
+environment, including `:prod`, where nothing uses them.
 
 ## Write a test
 
@@ -51,47 +59,54 @@ end
 ```
 
 `use Statifier.Testing.Case, async: true` gives the test module `test_scxml/4`.
-Run it with `mix test` exactly like any other ExUnit case.
+Run the test with `mix test`, as for any other ExUnit case.
 
 ## What `test_scxml/4` asserts
 
-The four arguments are the XML document, a description string (used only in
-failure messages), the expected initial configuration, and the list of
-`{event_map, expected_configuration}` steps.
+The four arguments are:
 
-`test_scxml/4` asserts the active leaf-state configuration - by state id -
-after `initialize`, then again after each event is sent. A chart that
-terminates asserts against the configuration it held at exit, not the empty
-configuration a terminated chart has by construction: the runner restores the
-terminal position from the interpreter's own `:done` effect before comparing.
+1. The XML document.
+2. A description string. The runner uses it only in failure messages.
+3. The expected initial configuration.
+4. The list of `{event_map, expected_configuration}` steps.
+
+`test_scxml/4` asserts the active leaf-state configuration, by state id. It
+asserts after `initialize` and again after each event it sends.
+
+A chart that terminates has an empty configuration by construction. The test
+asserts against the configuration that the chart held at exit. To do this, the
+runner restores the terminal position from the interpreter's own `:done`
+effect before it compares.
+
+Decision: [ADR-0006](https://github.com/riddler/statifier-ex/blob/main/docs/adr/0006-reuse-conformance-corpus-and-regression-ratchet.md)
+defines this fixture shape for the conformance corpus. A fixture in that shape
+runs against your own chart without translation.
 
 ## Fail, never skip
 
-A document that uses an SCXML feature the engine does not yet support flunks
-the test, naming the feature - it never skips. An unimplemented feature can
-never look like a passing test this way. For the authoritative, up-to-date
-list of what is detected and its support status, see
-`Statifier.Testing.FeatureDetector.feature_registry/0`.
+A document can use an SCXML feature that the engine does not yet support. The
+test then fails and names the feature. The test never skips. An unimplemented
+feature cannot look like a passing test.
 
-As of this writing, every feature the detector recognizes is `:supported` or
-`:partial`, so this path is a guarantee for the future rather than something
-you are likely to hit today.
+Every feature that the detector recognizes is now `:supported` or `:partial`,
+so you are unlikely to hit this path today. For the current list and status,
+see `Statifier.Testing.FeatureDetector.feature_registry/0`.
 
 ## Charts with timers, delayed sends, or `<invoke>`
 
-A document whose semantics depend on wall-clock timers, delivery to an
-external queue, or child sessions needs a running `Statifier.Session` rather
-than the synchronous driving path - `test_scxml/4` detects this
-(`session_required?/1`) and routes automatically; no action is needed at the
-call site for the common case.
+A document can depend on wall-clock timers, delivery to an external queue, or
+child sessions. It then needs a running `Statifier.Session`. The synchronous
+driving path is not enough. `test_scxml/4` detects this (`session_required?/1`)
+and routes the test automatically. In the common case, you do not change the
+call site.
 
-Two options tune the session path's timing for a chart whose load-bearing
-delays exceed what this repository's own conformance corpus needed:
+Two options tune the timing of the session path. Use them for a chart with
+delays longer than this repository's own conformance corpus needed:
 
-- `:settle_window_ms` (default `100`) - how long to wait for pending timers to
-  drain before sending the next event.
-- `:configuration_deadline_ms` (default `4_000`) - the upper bound on waiting
-  for a session to reach an expected configuration.
+- `:settle_window_ms` (default `100`): how long to wait for pending timers to
+  drain before the runner sends the next event.
+- `:configuration_deadline_ms` (default `4_000`): the maximum time to wait for
+  a session to reach an expected configuration.
 
 Pass them as a keyword list after the events:
 
@@ -102,10 +117,4 @@ test_scxml(xml, "slow chart", ["idle"], steps,
 )
 ```
 
-## Where the fixture format comes from
-
-The shape `test_scxml/4` takes - a document, an expected initial
-configuration, and a list of `{event, expected configuration}` steps - is the
-same shape ADR-0006 defines for this repository's own conformance corpus. A
-fixture already written in that shape is executable against your own chart
-with no translation.
+Next: see a full chart and its tests in `docs/chart-patterns.md`.
